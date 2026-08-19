@@ -9,9 +9,11 @@ Torrent _source({
   required String name,
   required String source,
   StreamType type = StreamType.torrent,
+  String? hash,
+  String? coverage,
 }) => Torrent(
   rowid: 0,
-  infohash: 'a' * 40,
+  infohash: hash ?? 'a' * 40,
   name: name,
   sizeBytes: 2 * 1024 * 1024 * 1024,
   createdUnix: 0,
@@ -21,10 +23,39 @@ Torrent _source({
   scrapedDate: 0,
   source: source,
   streamType: type,
+  coverageType: coverage,
   directUrl: type == StreamType.directUrl
-      ? 'https://example.test/stream'
+      ? 'https://example.test/stream-$name'
       : null,
 );
+
+/// Owns the source list the way the player screen does: [SourceSheet] hands
+/// merged lists back through onSourcesMerged and re-reads widget.sources.
+class _Host extends StatefulWidget {
+  final List<Torrent> initial;
+  final SeriesSourceFetcher fetcher;
+  const _Host({required this.initial, required this.fetcher});
+  @override
+  State<_Host> createState() => _HostState();
+}
+
+class _HostState extends State<_Host> {
+  late List<Torrent> sources = widget.initial;
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    home: SourceSheet(
+      sources: sources,
+      currentSourceIndex: 0,
+      resolveSource: (_) async => 'https://example.test/resolved',
+      onSourceSelected: (_, _) {},
+      onClose: () {},
+      seriesFetcher: widget.fetcher,
+      currentSeason: 1,
+      currentEpisode: 2,
+      onSourcesMerged: (merged) => setState(() => sources = merged),
+    ),
+  );
+}
 
 void main() {
   testWidgets('groups by add-on while retaining original selection indexes', (
@@ -183,6 +214,152 @@ void main() {
     await tester.pump();
 
     expect(closed, isTrue);
+  });
+
+  testWidgets(
+    'a zero-result addon shows as a group whose Fetch merges direct links '
+    'instantly, with NO pack probe for a direct-only addon',
+    (tester) async {
+      var packProbes = 0;
+      final fetcher = SeriesSourceFetcher(
+        season: 1,
+        episode: 2,
+        searchPacks: (_, _) async => <Torrent>[],
+        searchEpisodes: (_, _) async => <Torrent>[],
+        packsFetched: true,
+        episodesFetched: true,
+        listAddons: () async => const [SourceAddonRef('comet-id', 'Comet')],
+        fetchAddonEpisodes: (addonId, s, e) async {
+          expect(addonId, 'comet-id');
+          expect((s, e), (1, 2));
+          return [
+            _source(
+              name: 'Comet direct S01E02',
+              source: 'stremio:comet',
+              type: StreamType.directUrl,
+              hash: '',
+            ),
+          ];
+        },
+        fetchAddonPacks: (_, _) async {
+          packProbes++;
+          return <Torrent>[];
+        },
+      );
+      await tester.pumpWidget(
+        _Host(
+          initial: [_source(name: 'Pinned pack', source: 'pinned')],
+          fetcher: fetcher,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // The placeholder group exists despite zero Comet results.
+      expect(find.text('Comet'), findsOneWidget);
+      await tester.tap(find.text('Comet'));
+      await tester.pump();
+      expect(find.text('Fetch results'), findsOneWidget);
+
+      await tester.tap(find.text('Fetch results'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Comet direct S01E02'), findsOneWidget);
+      expect(packProbes, 0, reason: 'direct-only results must not probe packs');
+    },
+  );
+
+  testWidgets(
+    'magnet-bearing episode results trigger the lazy season-pack probe',
+    (tester) async {
+      final fetcher = SeriesSourceFetcher(
+        season: 1,
+        episode: 2,
+        searchPacks: (_, _) async => <Torrent>[],
+        searchEpisodes: (_, _) async => <Torrent>[],
+        packsFetched: true,
+        episodesFetched: true,
+        listAddons: () async => const [
+          SourceAddonRef('torrentio-id', 'Torrentio'),
+        ],
+        fetchAddonEpisodes: (_, _, _) async => [
+          _source(
+            name: 'Torrentio S01E02 1080p',
+            source: 'stremio:torrentio',
+            hash: 'b' * 40,
+          ),
+        ],
+        fetchAddonPacks: (addonId, s) async {
+          expect((addonId, s), ('torrentio-id', 1));
+          return [
+            _source(
+              name: 'Torrentio S01 Complete',
+              source: 'stremio:torrentio',
+              hash: 'c' * 40,
+              coverage: 'seasonPack',
+            ),
+          ];
+        },
+      );
+      await tester.pumpWidget(
+        _Host(
+          initial: [_source(name: 'Pinned pack', source: 'pinned')],
+          fetcher: fetcher,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.text('Torrentio'));
+      await tester.pump();
+      await tester.tap(find.text('Fetch results'));
+      // Episode merge lands first; the pack probe is a separate later merge.
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Torrentio S01E02 1080p'), findsOneWidget);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Torrentio S01 Complete'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a failed per-addon fetch keeps the row as a retry', (
+    tester,
+  ) async {
+    var calls = 0;
+    final fetcher = SeriesSourceFetcher(
+      season: 1,
+      episode: 2,
+      searchPacks: (_, _) async => <Torrent>[],
+      searchEpisodes: (_, _) async => <Torrent>[],
+      packsFetched: true,
+      episodesFetched: true,
+      listAddons: () async => const [SourceAddonRef('comet-id', 'Comet')],
+      fetchAddonEpisodes: (_, _, _) async {
+        calls++;
+        return null;
+      },
+    );
+    await tester.pumpWidget(
+      _Host(
+        initial: [_source(name: 'Pinned pack', source: 'pinned')],
+        fetcher: fetcher,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('Comet'));
+    await tester.pump();
+    await tester.tap(find.text('Fetch results'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Fetch failed — try again'), findsOneWidget);
+    await tester.tap(find.text('Fetch failed — try again'));
+    await tester.pump();
+    expect(calls, 2);
   });
 
   testWidgets('uses horizontal DPAD navigation for compact add-ons', (

@@ -44,6 +44,7 @@ import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
+import 'stremio_service.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
 import 'stream_url_validator.dart';
@@ -1924,6 +1925,36 @@ class TorrentPlaybackService {
           return null;
         }
       },
+      listAddons: () async => [
+        for (final addon in await StremioService.instance
+            .applicableStreamingAddons(type: 'series', contentId: imdbId))
+          SourceAddonRef(addon.id, addon.name),
+      ],
+      fetchAddonEpisodes: (addonId, s, e) async {
+        try {
+          return await StremioService.instance.retryAddonStreams(
+            addonId: addonId,
+            type: 'series',
+            imdbId: imdbId,
+            season: s,
+            episode: e,
+          );
+        } catch (_) {
+          // Null = fetch failed; the sheet keeps the Fetch row for a retry.
+          return null;
+        }
+      },
+      fetchAddonPacks: (addonId, s) async {
+        try {
+          return await StremioService.instance.fetchAddonSeasonPacks(
+            addonId: addonId,
+            imdbId: imdbId,
+            season: s,
+          );
+        } catch (_) {
+          return null;
+        }
+      },
     );
   }
 
@@ -1979,6 +2010,22 @@ class TorrentPlaybackService {
           );
         } catch (_) {
           // Engine search failed — null keeps "Load more" for retry.
+          return null;
+        }
+      },
+      listAddons: () async => [
+        for (final addon in await StremioService.instance
+            .applicableStreamingAddons(type: 'movie', contentId: imdbId))
+          SourceAddonRef(addon.id, addon.name),
+      ],
+      fetchAddonEpisodes: (addonId, _, __) async {
+        try {
+          return await StremioService.instance.retryAddonStreams(
+            addonId: addonId,
+            type: 'movie',
+            imdbId: imdbId,
+          );
+        } catch (_) {
           return null;
         }
       },

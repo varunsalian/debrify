@@ -12,6 +12,32 @@ typedef SeriesSourceSearch = Future<List<Torrent>?> Function(
 /// One search for a movie's full source list (no episode targeting).
 typedef MovieSourceSearch = Future<List<Torrent>?> Function();
 
+/// The applicable Stremio addons for this play — every one the sheets should
+/// show as a group, zero-result ones included.
+typedef AddonListing = Future<List<SourceAddonRef>> Function();
+
+/// One addon's episode-scoped fetch (movies ignore season/episode). Null =
+/// the fetch itself failed; empty = the addon genuinely has nothing.
+typedef AddonEpisodeSearch =
+    Future<List<Torrent>?> Function(String addonId, int season, int episode);
+
+/// One addon's season-pack probe — the lazy follow-up run only after its
+/// episode results contained torrent magnets.
+typedef AddonPackSearch =
+    Future<List<Torrent>?> Function(String addonId, int season);
+
+/// An applicable addon, as the sheets' rail needs it.
+class SourceAddonRef {
+  final String id;
+  final String name;
+  const SourceAddonRef(this.id, this.name);
+
+  /// Matches `Torrent.source` for this addon's converted results — the
+  /// sheets' group id, so a placeholder group and the addon's fetched rows
+  /// land in the same bucket.
+  String get sourceKey => 'stremio:$name'.toLowerCase();
+}
+
 /// On-demand fetcher for the in-player "Load more sources" action.
 ///
 /// A bound/pinned play reaches the player with only what was already resolved:
@@ -33,6 +59,9 @@ class SeriesSourceFetcher {
     required this.episode,
     this.packsFetched = false,
     this.episodesFetched = false,
+    this.listAddons,
+    this.fetchAddonEpisodes,
+    this.fetchAddonPacks,
   })  : _searchPacks = searchPacks,
         _searchEpisodes = searchEpisodes,
         _searchMovie = null,
@@ -42,13 +71,25 @@ class SeriesSourceFetcher {
   SeriesSourceFetcher.movie({
     required MovieSourceSearch searchMovie,
     this.movieFetched = false,
+    this.listAddons,
+    this.fetchAddonEpisodes,
   })  : _searchMovie = searchMovie,
         _searchPacks = null,
         _searchEpisodes = null,
+        fetchAddonPacks = null,
         season = 0,
         episode = 0,
         packsFetched = true,
         episodesFetched = true;
+
+  /// Per-addon fetch, for the sheets' all-addons rail: every applicable
+  /// addon shows as a group even with zero results, and an empty/failed
+  /// group offers "Fetch results" — episode-scoped first (direct links show
+  /// instantly), then the lazy pack probe when magnets appeared. All three
+  /// are optional; older launch sites simply don't get the affordance.
+  final AddonListing? listAddons;
+  final AddonEpisodeSearch? fetchAddonEpisodes;
+  final AddonPackSearch? fetchAddonPacks;
 
   static const String modePacks = 'packs';
   static const String modeEpisodes = 'episodes';

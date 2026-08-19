@@ -1003,33 +1003,9 @@ class StremioService {
     }
 
     // Filter addons that support the content type AND the content ID prefix
-    final applicableAddons = addons.where((a) {
-      // Check content type support. An addon that declares NO types is treated
-      // as unrestricted — the same rule the `else` branch below already used,
-      // and the one Stremio itself follows. Without it, movie and series were
-      // the only queries that could silently drop an addon for saying nothing.
-      // "Saying nothing" is common, not exotic: manifests that use the
-      // object form of `resources` put their types inside the resource and
-      // leave the top level empty (StremThru Torz does), and fromManifest
-      // deliberately leaves those unread — hoisting them would narrow the
-      // filters that treat empty as unrestricted. Fixing it HERE also rescues
-      // addons already stored with empty types, with no re-add needed.
-      bool supportsType = true;
-      if (type == 'movie') {
-        supportsType = a.supportsMovies || a.types.isEmpty;
-      } else if (type == 'series') {
-        supportsType = a.supportsSeries || a.types.isEmpty;
-      }
-      // For other types (anime, tv, channel, etc.), allow if addon declares that type
-      else {
-        supportsType = a.types.contains(type) || a.types.isEmpty;
-      }
-
-      // Check if addon supports the content ID prefix (smart routing)
-      final supportsId = a.supportsContentId(imdbId);
-
-      return supportsType && supportsId;
-    }).toList();
+    final applicableAddons = addons
+        .where((a) => _isApplicable(a, type, imdbId))
+        .toList();
 
     if (applicableAddons.isEmpty) {
       final prefix = StremioAddon.extractIdPrefix(imdbId);
@@ -1111,6 +1087,83 @@ class StremioService {
       'addonCounts': addonCounts,
       'addonErrors': addonErrors,
     }, applicableAddons, addonCounts, addonErrors);
+  }
+
+  /// Whether [addon] would be queried for [type]/[contentId] — the stream
+  /// search's applicability rule, shared with [applicableStreamingAddons].
+  ///
+  /// An addon that declares NO types is treated as unrestricted — the same
+  /// rule Stremio itself follows. "Saying nothing" is common, not exotic:
+  /// manifests that use the object form of `resources` put their types inside
+  /// the resource and leave the top level empty (StremThru Torz does), and
+  /// fromManifest deliberately leaves those unread — hoisting them would
+  /// narrow the filters that treat empty as unrestricted. Handling it HERE
+  /// also rescues addons already stored with empty types, with no re-add
+  /// needed.
+  bool _isApplicable(StremioAddon a, String type, String contentId) {
+    bool supportsType = true;
+    if (type == 'movie') {
+      supportsType = a.supportsMovies || a.types.isEmpty;
+    } else if (type == 'series') {
+      supportsType = a.supportsSeries || a.types.isEmpty;
+    } else {
+      // Other types (anime, tv, channel, etc.): allow if declared.
+      supportsType = a.types.contains(type) || a.types.isEmpty;
+    }
+    return supportsType && a.supportsContentId(contentId);
+  }
+
+  /// The enabled streaming addons a search for [type]/[contentId] would
+  /// query — public so the players' source sheets can show EVERY applicable
+  /// addon as a group, zero-result and failed ones included.
+  Future<List<StremioAddon>> applicableStreamingAddons({
+    required String type,
+    required String contentId,
+  }) async {
+    final addons = await getStreamingAddons();
+    return [
+      for (final addon in addons)
+        if (_isApplicable(addon, type, contentId)) addon,
+    ];
+  }
+
+  /// Season packs from ONE addon — the lazy half of the sheets' per-addon
+  /// fetch, run only after its episode results proved it serves torrents.
+  /// A bare-id fetch plus a single S{season}E1 probe (the multi-season probe
+  /// ladder belongs to the full search's smart fallback), filtered to packs.
+  /// Best-effort by design: a failed half contributes nothing rather than
+  /// failing the probe — the episodes tab has already delivered.
+  Future<List<Torrent>> fetchAddonSeasonPacks({
+    required String addonId,
+    required String imdbId,
+    required int season,
+    Duration? timeout,
+  }) async {
+    StremioAddon? addon;
+    for (final candidate in await getStreamingAddons()) {
+      if (candidate.id == addonId) {
+        addon = candidate;
+        break;
+      }
+    }
+    if (addon == null) return const <Torrent>[];
+    final results = await Future.wait([
+      _fetchStreamsFromAddon(
+        addon,
+        'series',
+        imdbId,
+        timeout: timeout,
+      ).catchError((_) => <StremioStream>[]),
+      _fetchStreamsFromAddon(
+        addon,
+        'series',
+        _buildStreamId(imdbId, season, 1),
+        timeout: timeout,
+      ).catchError((_) => <StremioStream>[]),
+    ]);
+    return _filterToPacksOnly(
+      _convertToTorrents([...results[0], ...results[1]]),
+    );
   }
 
   /// Attaches the structured per-addon outcome list — built from the
