@@ -1267,8 +1267,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _showIptvStartupOverlay = false;
       return;
     }
-    if (_showIptvStartupOverlay)
+    if (_showIptvStartupOverlay) {
       setState(() => _showIptvStartupOverlay = false);
+    }
   }
 
   /// BACK / timeout during the startup launch. Cancels the attempt itself —

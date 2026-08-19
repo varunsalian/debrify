@@ -79,7 +79,7 @@ class AdvancedSearchSelection {
     }
     final seasonLabel = season!.toString().padLeft(2, '0');
     final episodeLabel = episode!.toString().padLeft(2, '0');
-    return '$title S${seasonLabel}E${episodeLabel}';
+    return '$title S${seasonLabel}E$episodeLabel';
   }
 
   String get formattedLabel {
@@ -90,7 +90,7 @@ class AdvancedSearchSelection {
     if (isSeries && season != null && episode != null) {
       final seasonLabel = season!.toString().padLeft(2, '0');
       final episodeLabel = episode!.toString().padLeft(2, '0');
-      buffer.write(' • S${seasonLabel}E${episodeLabel}');
+      buffer.write(' • S${seasonLabel}E$episodeLabel');
     }
     return buffer.toString();
   }

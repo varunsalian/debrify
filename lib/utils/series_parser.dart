@@ -248,13 +248,16 @@ class SeriesParser {
     if (RegExp(
       r'^[Ss]\d{1,2}[\s\-]+[Ee]pisode',
       caseSensitive: false,
-    ).hasMatch(title))
+    ).hasMatch(title)) {
       return false;
+    }
     if (RegExp(r'^\d{1,2}[xX]\d{1,3}').hasMatch(title)) return false;
-    if (RegExp(r'^[Ss]eason\s+\d', caseSensitive: false).hasMatch(title))
+    if (RegExp(r'^[Ss]eason\s+\d', caseSensitive: false).hasMatch(title)) {
       return false;
-    if (RegExp(r'^[Ee]pisode\s+\d', caseSensitive: false).hasMatch(title))
+    }
+    if (RegExp(r'^[Ee]pisode\s+\d', caseSensitive: false).hasMatch(title)) {
       return false;
+    }
 
     // Reject titles that are mostly quality/codec tags
     final qualityTagCount = RegExp(
