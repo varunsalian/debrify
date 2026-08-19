@@ -1090,7 +1090,16 @@ class _DetailShowcaseState extends State<DetailShowcase> {
           child: IgnorePointer(
             ignoring: opening,
             child: AnimatedOpacity(
-              opacity: opening ? 0 : 1,
+              // Near-zero, never zero, while opening: at exactly 0 the
+              // framework SKIPS painting the subtree, so none of the warmed
+              // images got their GPU textures uploaded behind the skeleton —
+              // the reveal's first frame then painted the whole page and
+              // uploaded ~26 textures at once, which IS the reveal hitch on
+              // a weak TV GPU. At alpha 1/255 the page paints invisibly
+              // under the opaque cover and each texture lands as its decode
+              // completes, spread across the warm frames — the smoothing the
+              // opening gate always intended.
+              opacity: opening ? (1 / 255) : 1,
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               child: ListView(
