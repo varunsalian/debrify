@@ -45,6 +45,12 @@ enum ParallaxShape {
 abstract final class ParallaxTravel {
   static const Duration _rapid = Duration(milliseconds: 220);
 
+  /// The broader cadence window for "the cursor is TRAVELLING": consecutive
+  /// moves at normal stepping pace, not just held-key repeat. The TV hybrid
+  /// keys off this — a 220ms window only ever caught key repeat, so ordinary
+  /// stepping still paid the full rich body on every move.
+  static const Duration _travel = Duration(milliseconds: 450);
+
   /// A note older than this is not this arrival's — the focus change came from
   /// somewhere else (a tap, a restore) and must not inherit a stale lean.
   static const Duration _stale = Duration(milliseconds: 400);
@@ -53,6 +59,7 @@ abstract final class ParallaxTravel {
   static Duration _at = -_stale;
   static Duration _prev = -_stale;
   static bool _rapidNow = false;
+  static bool _travelNow = false;
 
   static final Stopwatch _clock = Stopwatch()..start();
 
@@ -68,6 +75,7 @@ abstract final class ParallaxTravel {
     // note and the card reading it — focus arrives within a frame, so the
     // latter is always ~0 and would call every single step rapid.
     _rapidNow = (now - _prev) < _rapid;
+    _travelNow = (now - _prev) < _travel;
     _prev = now;
     _dir = dir;
     _at = now;
@@ -78,6 +86,9 @@ abstract final class ParallaxTravel {
   /// and the one losing it — so it must not consume the pending note the
   /// way [take] does.
   static bool get isRapid => _rapidNow && (clock() - _at) < _stale;
+
+  /// Non-consuming, like [isRapid], over the broader [_travel] window.
+  static bool get isTravelling => _travelNow && (clock() - _at) < _stale;
 
   /// The pending arrival, consumed by the card that gains focus.
   ///
@@ -96,6 +107,7 @@ abstract final class ParallaxTravel {
     _at = -_stale;
     _prev = -const Duration(days: 1);
     _rapidNow = false;
+    _travelNow = false;
     clock = () => _clock.elapsed;
   }
 }
@@ -349,7 +361,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // short ease-out lands (a static highlight appearing at rest, not a
     // mid-motion style change).
     final lite = PlatformUtil.isAndroidTvCached &&
-        (!widget.richTv || ParallaxTravel.isRapid);
+        (!widget.richTv || ParallaxTravel.isTravelling);
     if (lite != _lite) setState(() => _lite = lite);
     if (lite) {
       _c
@@ -367,6 +379,21 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           setState(() => _lite = false);
         }
       });
+      return;
+    }
+
+    // Android TV rich, at STEP cadence: keep the tilt and the glare but
+    // drive them with a short ease-out instead of the settle spring. The
+    // spring's ~1s tail kept BOTH cards of every step animating between
+    // moves — at a normal stepping pace the board never stopped rastering
+    // rich frames, which is most of what "Home still feels heavy" was.
+    // The tilt rides controller velocity, so the brief curve still leans.
+    if (PlatformUtil.isAndroidTvCached) {
+      _c.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      );
       return;
     }
 

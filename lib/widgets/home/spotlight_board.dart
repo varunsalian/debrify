@@ -13,7 +13,6 @@ import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
 import '../../utils/dominant_color.dart';
-import '../../utils/home_perf.dart';
 import 'row_tag_pill.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
@@ -693,14 +692,6 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   @override
   void initState() {
     super.initState();
-    // DBRF-PERF: temporary instrumentation marks (see HomePerf).
-    if (widget.dpad) {
-      HomePerf.install();
-      HomePerf.mark(
-        'board mount rows=${widget.sections.length} '
-        'cards=${widget.sections.fold<int>(0, (n, s) => n + s.items.length)}',
-      );
-    }
     _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
     widget.heroNode.addListener(_onHeroFocus);
     _scroll.addListener(_onBoardScrolled);
@@ -713,11 +704,6 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   @override
   void didUpdateWidget(SpotlightBoard old) {
     super.didUpdateWidget(old);
-    if (widget.dpad && old.sections.length != widget.sections.length) {
-      HomePerf.mark(
-        'board update rows=${old.sections.length}to${widget.sections.length}',
-      );
-    }
     // The reel can change under us as sections load. Keep the parked item if
     // it is still present; otherwise fall back to the head rather than to a
     // stale index pointing at a different title.
@@ -811,7 +797,6 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   @override
   void dispose() {
-    if (widget.dpad) HomePerf.mark('board dispose');
     widget.heroNode.removeListener(_onHeroFocus);
     if (_rolling) widget.onTrailerStop?.call();
     _cadence?.cancel();

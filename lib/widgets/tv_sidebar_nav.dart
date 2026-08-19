@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
-import '../utils/home_perf.dart';
 import '../utils/platform_util.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -144,9 +143,6 @@ class TvSidebarNavState extends State<TvSidebarNav>
     super.initState();
     _initFocusNodes();
     _focusedIndex = widget.currentIndex;
-    // DBRF-PERF: temporary jank instrumentation (see HomePerf). The sidebar
-    // mounts on every TV tab, so this is the earliest shell-wide hook.
-    HomePerf.install();
     _expandController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
@@ -210,10 +206,6 @@ class TvSidebarNavState extends State<TvSidebarNav>
   }
 
   void _onExpandStatus(AnimationStatus status) {
-    // DBRF-PERF: every transition of the drawer tween, with the style — a
-    // style-specific cost (e.g. a blur) shows itself as jank bracketed by
-    // forward/completed under one style and not another.
-    HomePerf.mark('sidebar ${status.name} style=$_style');
     if (status == AnimationStatus.dismissed) _showPill();
   }
 
@@ -530,6 +522,14 @@ class TvSidebarNavState extends State<TvSidebarNav>
           // and returning a bare SizedBox here unmounted them: the sidebar
           // could never open because there was nothing to focus.
           if (t <= 0.01) return SizedBox(width: width, child: child);
+          // The panel is laid out ONCE at its full expanded width and the
+          // tween reveals it through an animating clip. Animating the panel's
+          // own width re-laid-out and re-painted the whole rail subtree —
+          // pucks, labels, glass, a 34px-blur shadow — on every frame, which
+          // a Mali box renders at ~10fps whatever is behind it (measured
+          // 2026-08-19; the content RepaintBoundary alone moved nothing).
+          // Items sit behind their own boundary so per-frame paint is the
+          // decoration and the clip, not the list.
           final panel = Container(
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
@@ -548,21 +548,29 @@ class TvSidebarNavState extends State<TvSidebarNav>
                 ),
               ],
             ),
-            child: child,
+            child: RepaintBoundary(child: child),
           );
           return SizedBox(
             width: width,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 14, 6, 14),
-              child: PlatformUtil.isTvOS
-                  ? ClipRRect(
-                      borderRadius: app.shape.br(18),
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                        child: panel,
-                      ),
-                    )
-                  : panel,
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.centerLeft,
+                minWidth: _expandedW,
+                maxWidth: _expandedW,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 14, 6, 14),
+                  child: PlatformUtil.isTvOS
+                      ? ClipRRect(
+                          borderRadius: app.shape.br(18),
+                          child: BackdropFilter(
+                            filter:
+                                ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                            child: panel,
+                          ),
+                        )
+                      : panel,
+                ),
+              ),
             ),
           );
         }
