@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -421,45 +421,50 @@ class ProfileRegistry {
             entry.value: row[entry.key]!,
         };
         final chunkWhere = chunkKey.keys.map((c) => '$c = ?').join(' AND ');
-        await db.delete(
-          chunkTable,
-          where: chunkWhere,
-          whereArgs: chunkKey.values.toList(growable: false),
-        );
-        // ONE INSERT..SELECT per row, sliced by a recursive counter
-        // (SQLite ≥ 3.8.3; the OS floor is 3.9). The slices are produced and
-        // consumed natively — nothing here returns result rows, so nothing
-        // crosses a CursorWindow OR the platform channel. Pulling the value
-        // out slice-by-slice through rawQuery did the same repair with a
-        // full re-materialization of the cell per round trip, which for the
-        // motivating 50MB playlist was gigabytes of churn inside the
-        // exclusive upgrade transaction — a first-boot hang for exactly the
-        // stranded install this repair exists to rescue. substr() is
-        // 1-based.
-        final chunkColumns = [
-          ...chunkKey.keys,
-          'seq',
-          'chunk',
-        ].join(', ');
-        final keyPlaceholders = chunkKey.keys.map((_) => '?').join(', ');
-        await db.execute(
-          '''WITH RECURSIVE seq(i) AS (
-               SELECT 0
-               UNION ALL
-               SELECT i + 1 FROM seq WHERE i + 1 < $chunkCount
-             )
-             INSERT INTO $chunkTable ($chunkColumns)
-             SELECT $keyPlaceholders, i,
-                    substr((SELECT sealed_secret_payload FROM $sourceTable
-                            WHERE $where),
-                           i * $_envelopeChunkChars + 1, $_envelopeChunkChars)
-             FROM seq''',
-          <Object?>[...chunkKey.values, ...whereArgs],
-        );
-        await db.rawUpdate(
-          'UPDATE $sourceTable SET sealed_secret_payload = ? WHERE $where',
-          <Object>['$_envelopeChunkMarkerPrefix$chunkCount', ...whereArgs],
-        );
+        // One unrepairable row must not fail the whole upgrade. This runs
+        // during bootstrap, so a throw here escapes to main() and the user
+        // gets the startup-failure screen instead of an app — a total
+        // lockout in exchange for a row that was ALREADY unreadable before
+        // this repair existed. Leaving the payload inline is exactly the
+        // state v4 shipped: still broken on Android's CursorWindow, still
+        // perfectly readable everywhere else. Strictly better than refusing
+        // to start, so each row is attempted independently.
+        //
+        // A skipped row is not stranded forever even though the schema
+        // version does bump past this migration: every write path spills
+        // through [_writeEnvelopeChunks], so the next rewrite of that
+        // resource (a re-import, a credential rotation) chunks it properly.
+        try {
+          await _repairOneInlineEnvelope(
+            db,
+            sourceTable: sourceTable,
+            chunkTable: chunkTable,
+            chunkColumns: [...chunkKey.keys, 'seq', 'chunk'].join(', '),
+            chunkKey: chunkKey,
+            chunkWhere: chunkWhere,
+            where: where,
+            whereArgs: whereArgs,
+            chunkCount: chunkCount,
+          );
+        } catch (error) {
+          debugPrint(
+            'ProfileRegistry: v5 chunk repair skipped a row in '
+            '$sourceTable (${error.runtimeType})',
+          );
+          // The marker is written last, so the payload is still inline here.
+          // Drop any chunks this attempt inserted, or the row would carry a
+          // half-written body that no later read expects.
+          try {
+            await db.delete(
+              chunkTable,
+              where: chunkWhere,
+              whereArgs: chunkKey.values.toList(growable: false),
+            );
+          } catch (_) {
+            // The database itself is refusing writes; the upgrade will fail
+            // on its own and retry next launch.
+          }
+        }
       }
     }
 
@@ -477,6 +482,57 @@ class ProfileRegistry {
         'restore_id': 'restore_id',
         'backup_id': 'backup_id',
       },
+    );
+  }
+
+  /// Move ONE oversized inline envelope into [chunkTable]. Split out so the
+  /// caller can attempt each row independently; see its call site for why a
+  /// failure here is survivable.
+  static Future<void> _repairOneInlineEnvelope(
+    DatabaseExecutor db, {
+    required String sourceTable,
+    required String chunkTable,
+    required String chunkColumns,
+    required Map<String, Object?> chunkKey,
+    required String chunkWhere,
+    required String where,
+    required List<Object> whereArgs,
+    required int chunkCount,
+  }) async {
+    await db.delete(
+      chunkTable,
+      where: chunkWhere,
+      whereArgs: chunkKey.values.toList(growable: false),
+    );
+    // ONE INSERT..SELECT per row, sliced by a recursive counter
+    // (SQLite ≥ 3.8.3; the OS floor is 3.9). The slices are produced and
+    // consumed natively — nothing here returns result rows, so nothing
+    // crosses a CursorWindow OR the platform channel. Pulling the value
+    // out slice-by-slice through rawQuery did the same repair with a
+    // full re-materialization of the cell per round trip, which for the
+    // motivating 50MB playlist was gigabytes of churn inside the
+    // exclusive upgrade transaction — a first-boot hang for exactly the
+    // stranded install this repair exists to rescue. substr() is 1-based.
+    final keyPlaceholders = chunkKey.keys.map((_) => '?').join(', ');
+    await db.execute(
+      '''WITH RECURSIVE seq(i) AS (
+           SELECT 0
+           UNION ALL
+           SELECT i + 1 FROM seq WHERE i + 1 < $chunkCount
+         )
+         INSERT INTO $chunkTable ($chunkColumns)
+         SELECT $keyPlaceholders, i,
+                substr((SELECT sealed_secret_payload FROM $sourceTable
+                        WHERE $where),
+                       i * $_envelopeChunkChars + 1, $_envelopeChunkChars)
+         FROM seq''',
+      <Object?>[...chunkKey.values, ...whereArgs],
+    );
+    // Last, so every earlier failure leaves the payload inline and the row
+    // exactly as v4 left it (see the caller's recovery path).
+    await db.rawUpdate(
+      'UPDATE $sourceTable SET sealed_secret_payload = ? WHERE $where',
+      <Object>['$_envelopeChunkMarkerPrefix$chunkCount', ...whereArgs],
     );
   }
 
