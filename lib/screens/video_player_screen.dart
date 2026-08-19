@@ -5853,7 +5853,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // the one-time notification ask lives here explicitly — fire-and-
         // forget, so an unanswered dialog can't delay the capture.
         unawaited(LiveRecordingService.ensureNotificationPermission());
-        final resource = _currentRecordingResource();
+        final resource = await _currentRecordingResource();
+        if (!mounted) return;
         final result = await LiveRecordingService.start(
           url: recordUrl,
           fileName: _recordingFileName(channel.name),
@@ -5938,13 +5939,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // main(), which is still alive when this screen isn't, and the revision
       // listener repaints the button. A screen-scoped callback would only
       // duplicate the toast while the player happens to be open.
+      final resource = await _currentRecordingResource();
+      if (!mounted) return;
       final capture = await DesktopRecordingService.instance.start(
         url: recordUrl,
         path: path,
         channelName: channel.name,
         headers: channel.playbackHeaders,
-        connectionResourceId: _currentRecordingResource()?.id,
-        resourceAuthorizationRevision: _currentRecordingResource()?.revision,
+        connectionResourceId: resource?.id,
+        resourceAuthorizationRevision: resource?.revision,
       );
       if (!mounted) return;
       if (capture == null) {
@@ -6066,13 +6069,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return '${base}_$stamp.ts';
   }
 
-  ({String id, int revision})? _currentRecordingResource() {
+  Future<({String id, int revision})?> _currentRecordingResource() async {
     final channel = _currentIptvChannel;
     final sourceId =
         channel?.attributes['source_playlist_id'] ??
         channel?.attributes['series_playlist_id'] ??
         widget.iptvSourceId;
     if (sourceId == null) return null;
+    // Fresh read first: the launch payload's revision predates any sources
+    // edit made while this player lives (PiP, background), and every edit
+    // bumps every source's revision — a stale one would be refused at start.
+    try {
+      final playlists = await StorageService.getIptvPlaylists(
+        forSettings: false,
+      );
+      for (final playlist in playlists) {
+        if (playlist.id != sourceId) continue;
+        final id = playlist.connectionResourceId;
+        final revision = playlist.connectionResourceRevision;
+        if (id != null && id.isNotEmpty && revision != null) {
+          return (id: id, revision: revision);
+        }
+      }
+    } catch (_) {
+      // Storage unavailable mid-session: fall through to the launch payload.
+    }
     for (final source in widget.iptvSources ?? const <Map<String, dynamic>>[]) {
       if (source['id'] != sourceId) continue;
       final id = source['connectionResourceId']?.toString();
