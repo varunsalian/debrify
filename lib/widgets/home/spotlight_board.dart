@@ -2470,20 +2470,21 @@ class _CardState extends State<_Card> {
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
                     memCacheWidth: decodeW,
-                    // Android TV pops, no fade. The package defaults are a
-                    // 500ms image fade over a 1000ms placeholder fade —
-                    // fine for one image, but a board entry lands 20-30
-                    // posters inside a few seconds, and that many
-                    // concurrent per-frame opacity composites is exactly
-                    // the first-seconds jank a MiBox reports. Fades never
-                    // run again once the memory cache is warm, which is
-                    // why the page "becomes smooth" — this makes the first
-                    // seconds behave like every second after them.
+                    // Android TV used to POP (Duration.zero): a board mount
+                    // once landed 20-30 posters inside a few seconds, and
+                    // that many concurrent per-frame opacity composites was
+                    // the first-seconds jank a MiBox reports. The lazy board
+                    // ended that era — only the on-screen shelves' art lands
+                    // at once now — and the bare pop reads as art snapping
+                    // in. A short fade over the plate is the soft landing;
+                    // still well under the package's 500/1000 defaults,
+                    // whose long placeholder cross-fade is the part a weak
+                    // GPU actually pays for.
                     fadeInDuration: PlatformUtil.isAndroidTvCached
-                        ? Duration.zero
+                        ? const Duration(milliseconds: 220)
                         : const Duration(milliseconds: 500),
                     fadeOutDuration: PlatformUtil.isAndroidTvCached
-                        ? Duration.zero
+                        ? const Duration(milliseconds: 180)
                         : const Duration(milliseconds: 1000),
                     placeholder: (_, __) => const SizedBox.shrink(),
                     errorWidget: (_, __, ___) =>
@@ -2495,7 +2496,8 @@ class _CardState extends State<_Card> {
                             fit: c.shape.fit,
                             cacheManager: DebrifyImageCache.manager,
                             memCacheWidth: decodeW,
-                            fadeInDuration: Duration.zero,
+                            fadeInDuration:
+                                const Duration(milliseconds: 220),
                             placeholder: (_, __) => const SizedBox.shrink(),
                             errorWidget: (_, __, ___) =>
                                 const SizedBox.shrink(),

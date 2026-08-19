@@ -94,14 +94,18 @@ class HomeTheme {
   // ("a saveLayer per poster janks the weak GPU when a whole grid fills in
   // at once") applies to shelves on an Amlogic box too. Apple TV keeps the
   // 150ms board fade; pointer devices keep the long one.
+  // Android TV used to pop (zero) to spare a texture-burst-era GPU dozens of
+  // concurrent opacity composites; the boards load far fewer images at once
+  // now (right-sized decodes, lazy Spotlight), and the bare pop reads as art
+  // snapping in. A short fade is the soft landing at negligible cost.
   static Duration imageFadeIn(bool isTelevision) => isTelevision
       ? (PlatformUtil.isAndroidTvCached
-          ? Duration.zero
+          ? const Duration(milliseconds: 220)
           : const Duration(milliseconds: 150))
       : const Duration(milliseconds: 500);
   static Duration imageFadeOut(bool isTelevision) => isTelevision
       ? (PlatformUtil.isAndroidTvCached
-          ? Duration.zero
+          ? const Duration(milliseconds: 180)
           : const Duration(milliseconds: 150))
       : const Duration(milliseconds: 1000);
 
