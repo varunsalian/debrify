@@ -79,6 +79,18 @@ class DeviceJobStore {
     presentExternalJobIds: presentExternalJobIds.toSet(),
   );
 
+  /// [allowRevisionDrift] is for validating a job REPLAYED from a durable
+  /// record (a queued download, a recording schedule). Revisions are bumped
+  /// far more often than anything is actually revoked: a collection save
+  /// bumps every retained resource's revision AND the owner profile's, so
+  /// values persisted at enqueue/schedule time go stale on any unrelated
+  /// edit — treating them as authorization tokens there turns "edited one
+  /// source" into "every pending job dies". With drift allowed the stored
+  /// revisions only prove what the job was bound to; the live checks
+  /// (profile present, enabled and allowing the feature; resource present
+  /// and enabled; grant with the required permission) remain the gate, so
+  /// real revocation still refuses. Callers validating values they JUST
+  /// read must keep this false.
   static Future<bool> validateAuthorization({
     required String profileId,
     required int profileAuthorizationRevision,
@@ -86,6 +98,7 @@ class DeviceJobStore {
     String? resourceId,
     int? resourceAuthorizationRevision,
     ResourcePermission requiredResourcePermission = ResourcePermission.download,
+    bool allowRevisionDrift = false,
   }) async {
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
       return profileId == 'legacy-admin-v1';
@@ -94,7 +107,8 @@ class DeviceJobStore {
     final profileValid =
         profile != null &&
         profile.isEnabled &&
-        profile.authorizationRevision == profileAuthorizationRevision &&
+        (allowRevisionDrift ||
+            profile.authorizationRevision == profileAuthorizationRevision) &&
         profile.allows(feature);
     if (!profileValid) return false;
     if (resourceId == null) return resourceAuthorizationRevision == null;
@@ -106,7 +120,8 @@ class DeviceJobStore {
     );
     return resource != null &&
         resource.enabled &&
-        resource.authorizationRevision == resourceAuthorizationRevision &&
+        (allowRevisionDrift ||
+            resource.authorizationRevision == resourceAuthorizationRevision) &&
         grant != null &&
         grant.allows(requiredResourcePermission);
   }

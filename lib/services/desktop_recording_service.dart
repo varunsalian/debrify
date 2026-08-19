@@ -110,12 +110,16 @@ class DesktopRecordingCapture {
       return true;
     }
     _lastAuthorizationCheck = now;
+    // Drift-tolerant: this re-runs for the whole capture against a revision
+    // captured at start, and saving any IPTV source bumps every revision —
+    // strict equality would kill a running recording over an unrelated edit.
     return DeviceJobStore.validateAuthorization(
       profileId: ownerProfileId,
       profileAuthorizationRevision: profileAuthorizationRevision,
       feature: ProfileFeature.recordings,
       resourceId: connectionResourceId,
       resourceAuthorizationRevision: resourceAuthorizationRevision,
+      allowRevisionDrift: true,
     );
   }
 
@@ -356,6 +360,12 @@ class DesktopRecordingService {
       resourceId: connectionResourceId,
       resourceAuthorizationRevision: resourceAuthorizationRevision,
       feature: ProfileFeature.recordings,
+      // The revision arrives from a fired schedule or the player's launch
+      // payload, either of which can predate a sources edit that bumped
+      // every revision. Refusing here returns null, which the schedule path
+      // reads as "re-queue and retry forever". Live resource/grant/profile
+      // checks still refuse real revocation.
+      allowRevisionDrift: true,
     )) {
       return null;
     }
