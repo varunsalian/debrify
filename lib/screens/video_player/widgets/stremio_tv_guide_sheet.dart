@@ -38,14 +38,14 @@ class StremioTvGuideSheet extends StatefulWidget {
   final VoidCallback onClose;
 
   const StremioTvGuideSheet({
-    Key? key,
+    super.key,
     required this.channels,
     this.currentChannelId,
     this.guideDataProvider,
     required this.channelSwitchProvider,
     required this.onChannelSwitched,
     required this.onClose,
-  }) : super(key: key);
+  });
 
   @override
   State<StremioTvGuideSheet> createState() => _StremioTvGuideSheetState();
@@ -462,14 +462,14 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                 child: _frost(
                   Container(
                     decoration: BoxDecoration(
-                      color: _surfaceDark.withOpacity(0.97),
+                      color: _surfaceDark.withValues(alpha: 0.97),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(28),
                         bottomLeft: Radius.circular(28),
                       ),
                       border: Border(
                         left: BorderSide(
-                          color: Colors.white.withOpacity(0.06),
+                          color: Colors.white.withValues(alpha: 0.06),
                           width: 0.5,
                         ),
                       ),
@@ -513,7 +513,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.35),
+                  color: Colors.black.withValues(alpha: 0.35),
                   blurRadius: 16,
                   spreadRadius: 2,
                 ),
@@ -540,7 +540,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                 Text(
                   '${_filteredChannels.length} of ${_allChannels.length} channels',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.35),
+                    color: Colors.white.withValues(alpha: 0.35),
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
                   ),
@@ -558,13 +558,13 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                 ),
                 child: Icon(
                   Icons.close_rounded,
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   size: 18,
                 ),
               ),
@@ -590,14 +590,14 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           color: hasFocus
-              ? Colors.white.withOpacity(0.08)
-              : Colors.white.withOpacity(0.04),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.04),
           border: Border.all(
-            color: hasFocus ? _accent.withOpacity(0.4) : Colors.transparent,
+            color: hasFocus ? _accent.withValues(alpha: 0.4) : Colors.transparent,
             width: 1.5,
           ),
           boxShadow: hasFocus
-              ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16)]
+              ? [BoxShadow(color: _accent.withValues(alpha: 0.08), blurRadius: 16)]
               : [],
         ),
         child: TvTextField(
@@ -611,7 +611,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
           decoration: InputDecoration(
             hintText: 'Search channels...',
             hintStyle: TextStyle(
-              color: Colors.white.withOpacity(0.25),
+              color: Colors.white.withValues(alpha: 0.25),
               fontSize: 13,
               fontWeight: FontWeight.w400,
             ),
@@ -621,8 +621,8 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                 hasQuery ? Icons.filter_list_rounded : Icons.search_rounded,
                 key: ValueKey(hasQuery),
                 color: hasFocus
-                    ? _accent.withOpacity(0.7)
-                    : Colors.white.withOpacity(0.3),
+                    ? _accent.withValues(alpha: 0.7)
+                    : Colors.white.withValues(alpha: 0.3),
                 size: 20,
               ),
             ),
@@ -630,7 +630,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
                 ? IconButton(
                     icon: Icon(
                       Icons.clear_rounded,
-                      color: Colors.white.withOpacity(0.4),
+                      color: Colors.white.withValues(alpha: 0.4),
                       size: 18,
                     ),
                     onPressed: () {
@@ -667,15 +667,15 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
       margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.12),
+        color: Colors.red.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.red.withOpacity(0.2)),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
           Icon(
             Icons.error_outline_rounded,
-            color: Colors.red.withOpacity(0.7),
+            color: Colors.red.withValues(alpha: 0.7),
             size: 16,
           ),
           const SizedBox(width: 8),
@@ -683,7 +683,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
             child: Text(
               _errorMessage!,
               style: TextStyle(
-                color: Colors.red.withOpacity(0.9),
+                color: Colors.red.withValues(alpha: 0.9),
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -706,12 +706,12 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.03),
+                color: Colors.white.withValues(alpha: 0.03),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.satellite_alt_rounded,
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 size: 32,
               ),
             ),
@@ -719,7 +719,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
             Text(
               'No channels found',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -728,7 +728,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
             Text(
               'Try a different search term',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 fontSize: 12,
               ),
             ),
@@ -768,7 +768,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
     final letter = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final color = _avatarColor(name);
     return Container(
-      color: color.withOpacity(0.15),
+      color: color.withValues(alpha: 0.15),
       alignment: Alignment.center,
       child: Text(
         letter,
@@ -921,8 +921,8 @@ class _ChannelTile extends StatelessWidget {
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    Colors.white.withOpacity(0.12),
-                    Colors.white.withOpacity(0.06),
+                    Colors.white.withValues(alpha: 0.12),
+                    Colors.white.withValues(alpha: 0.06),
                   ],
                 )
               : isCurrent
@@ -930,8 +930,8 @@ class _ChannelTile extends StatelessWidget {
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    _accent.withOpacity(0.10),
-                    _accent.withOpacity(0.03),
+                    _accent.withValues(alpha: 0.10),
+                    _accent.withValues(alpha: 0.03),
                   ],
                 )
               : null,
@@ -939,21 +939,21 @@ class _ChannelTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isFocused
-                ? _accent.withOpacity(0.5)
+                ? _accent.withValues(alpha: 0.5)
                 : isCurrent
-                ? _accent.withOpacity(0.12)
+                ? _accent.withValues(alpha: 0.12)
                 : Colors.transparent,
             width: isFocused ? 1.5 : 1,
           ),
           boxShadow: isFocused
               ? [
                   BoxShadow(
-                    color: _accent.withOpacity(0.12),
+                    color: _accent.withValues(alpha: 0.12),
                     blurRadius: 16,
                     spreadRadius: 2,
                   ),
                   BoxShadow(
-                    color: _accent.withOpacity(0.06),
+                    color: _accent.withValues(alpha: 0.06),
                     blurRadius: 24,
                     spreadRadius: 4,
                   ),
@@ -989,10 +989,10 @@ class _ChannelTile extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isCurrent
-                      ? _accent.withOpacity(0.8)
+                      ? _accent.withValues(alpha: 0.8)
                       : isFocused
-                      ? Colors.white.withOpacity(0.5)
-                      : Colors.white.withOpacity(0.18),
+                      ? Colors.white.withValues(alpha: 0.5)
+                      : Colors.white.withValues(alpha: 0.18),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -1022,7 +1022,7 @@ class _ChannelTile extends StatelessWidget {
                                 ? _accent
                                 : isFocused
                                 ? Colors.white
-                                : Colors.white.withOpacity(0.85),
+                                : Colors.white.withValues(alpha: 0.85),
                             fontSize: 12,
                             fontWeight: isFocused || isCurrent
                                 ? FontWeight.w600
@@ -1048,7 +1048,7 @@ class _ChannelTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.25),
+                        color: Colors.white.withValues(alpha: 0.25),
                         fontSize: 10,
                         fontWeight: FontWeight.w400,
                       ),
@@ -1064,7 +1064,7 @@ class _ChannelTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(2),
                         boxShadow: [
                           BoxShadow(
-                            color: _accent.withOpacity(0.3),
+                            color: _accent.withValues(alpha: 0.3),
                             blurRadius: 6,
                           ),
                         ],
@@ -1073,11 +1073,11 @@ class _ChannelTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(2),
                         child: LinearProgressIndicator(
                           value: channel.nowPlayingProgress!.clamp(0.0, 1.0),
-                          backgroundColor: Colors.white.withOpacity(0.06),
+                          backgroundColor: Colors.white.withValues(alpha: 0.06),
                           valueColor: AlwaysStoppedAnimation<Color>(
                             isCurrent
-                                ? _accent.withOpacity(0.7)
-                                : _accent.withOpacity(0.3),
+                                ? _accent.withValues(alpha: 0.7)
+                                : _accent.withValues(alpha: 0.3),
                           ),
                         ),
                       ),
@@ -1116,7 +1116,7 @@ class _ChannelTile extends StatelessWidget {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    _accent.withOpacity(0.7),
+                    _accent.withValues(alpha: 0.7),
                   ),
                 ),
               )
@@ -1133,13 +1133,13 @@ class _ChannelTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         typeLabel == 'MOVIE' ? 'MOVIE' : 'SERIES',
         style: TextStyle(
-          color: isCurrent ? _accent : Colors.white.withOpacity(0.35),
+          color: isCurrent ? _accent : Colors.white.withValues(alpha: 0.35),
           fontSize: 8,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.4,
@@ -1151,8 +1151,9 @@ class _ChannelTile extends StatelessWidget {
   Widget _buildNowPlayingRichText() {
     final parts = <String>[];
     if (channel.nowPlayingTitle != null) parts.add(channel.nowPlayingTitle!);
-    if (channel.nowPlayingYear != null)
+    if (channel.nowPlayingYear != null) {
       parts.add('(${channel.nowPlayingYear})');
+    }
 
     final baseText = parts.join(' ');
     final hasRating =
@@ -1165,8 +1166,8 @@ class _ChannelTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: isFocused
-              ? Colors.white.withOpacity(0.7)
-              : Colors.white.withOpacity(0.5),
+              ? Colors.white.withValues(alpha: 0.7)
+              : Colors.white.withValues(alpha: 0.5),
           fontSize: 11,
           fontWeight: FontWeight.w400,
         ),
@@ -1176,8 +1177,8 @@ class _ChannelTile extends StatelessWidget {
     final ratingText =
         ' \u2605 ${channel.nowPlayingRating!.toStringAsFixed(1)}';
     final textColor = isFocused
-        ? Colors.white.withOpacity(0.7)
-        : Colors.white.withOpacity(0.5);
+        ? Colors.white.withValues(alpha: 0.7)
+        : Colors.white.withValues(alpha: 0.5);
 
     return RichText(
       maxLines: 1,
@@ -1222,19 +1223,19 @@ class _ChannelTile extends StatelessWidget {
       height: 72,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         border: Border.all(
           color: isCurrent
-              ? _accent.withOpacity(0.15)
+              ? _accent.withValues(alpha: 0.15)
               : isFocused
-              ? Colors.white.withOpacity(0.08)
-              : Colors.white.withOpacity(0.03),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.03),
         ),
         boxShadow: [
           if (isCurrent)
-            BoxShadow(color: _accent.withOpacity(0.1), blurRadius: 10),
+            BoxShadow(color: _accent.withValues(alpha: 0.1), blurRadius: 10),
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1266,7 +1267,7 @@ class _ChannelTile extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.4)],
+                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.4)],
                   ),
                 ),
               ),
@@ -1287,14 +1288,14 @@ class _ChannelTile extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [color.withOpacity(0.25), color.withOpacity(0.1)],
+          colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.1)],
         ),
       ),
       alignment: Alignment.center,
       child: Text(
         letter,
         style: TextStyle(
-          color: color.withOpacity(0.85),
+          color: color.withValues(alpha: 0.85),
           fontSize: 17,
           fontWeight: FontWeight.w700,
         ),
@@ -1311,14 +1312,14 @@ class _ChannelTile extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                _accent.withOpacity(0.8 + pulseAnim.value * 0.2),
-                _accentAlt.withOpacity(0.6 + pulseAnim.value * 0.2),
+                _accent.withValues(alpha: 0.8 + pulseAnim.value * 0.2),
+                _accentAlt.withValues(alpha: 0.6 + pulseAnim.value * 0.2),
               ],
             ),
             borderRadius: BorderRadius.circular(6),
             boxShadow: [
               BoxShadow(
-                color: _accent.withOpacity(0.2 + pulseAnim.value * 0.1),
+                color: _accent.withValues(alpha: 0.2 + pulseAnim.value * 0.1),
                 blurRadius: 10,
               ),
             ],

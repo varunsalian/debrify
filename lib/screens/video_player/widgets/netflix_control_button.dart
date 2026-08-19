@@ -9,13 +9,13 @@ class NetflixControlButton extends StatelessWidget {
   final bool isCompact;
 
   const NetflixControlButton({
-    Key? key,
+    super.key,
     required this.icon,
     required this.label,
     required this.onPressed,
     this.isPrimary = false,
     this.isCompact = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -33,13 +33,13 @@ class NetflixControlButton extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               color: isPrimary
-                  ? const Color(0xFFE50914).withOpacity(0.9)
-                  : Colors.black.withOpacity(0.6),
+                  ? const Color(0xFFE50914).withValues(alpha: 0.9)
+                  : Colors.black.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isPrimary
                     ? const Color(0xFFE50914)
-                    : Colors.white.withOpacity(0.2),
+                    : Colors.white.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),

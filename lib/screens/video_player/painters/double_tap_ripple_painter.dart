@@ -6,7 +6,7 @@ class DoubleTapRipplePainter extends CustomPainter {
   DoubleTapRipplePainter(this.ripple);
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withOpacity(0.15);
+    final paint = Paint()..color = Colors.white.withValues(alpha: 0.15);
     canvas.drawCircle(ripple.center, 80, paint);
     final tp = TextPainter(
       text: TextSpan(

@@ -13,8 +13,7 @@ class PikPakRetryOverlay extends StatelessWidget {
   /// height so this never sits inside a taller dock.
   final double bottom;
 
-  const PikPakRetryOverlay({Key? key, required this.message, this.bottom = 80})
-    : super(key: key);
+  const PikPakRetryOverlay({super.key, required this.message, this.bottom = 80});
 
   @override
   Widget build(BuildContext context) {
@@ -26,9 +25,9 @@ class PikPakRetryOverlay extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.75),
+            color: Colors.black.withValues(alpha: 0.75),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

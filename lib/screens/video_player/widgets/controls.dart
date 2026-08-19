@@ -113,7 +113,7 @@ class Controls extends StatelessWidget {
   final void Function(double, int)? onInfoPanelExtent;
 
   const Controls({
-    Key? key,
+    super.key,
     required this.title,
     required this.subtitle,
     required this.enhancedMetadata,
@@ -173,7 +173,7 @@ class Controls extends StatelessWidget {
     this.onFullscreen,
     this.geometryGeneration = 0,
     this.infoPanelGeneration = 0,
-  }) : super(key: key);
+  });
 
   String _getAspectRatioName() {
     switch (aspectMode) {
@@ -314,9 +314,9 @@ class Controls extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -489,7 +489,7 @@ class Controls extends StatelessWidget {
                                             0xFFE50914,
                                           ),
                                           inactiveTrackColor: Colors.white
-                                              .withOpacity(0.3),
+                                              .withValues(alpha: 0.3),
                                           thumbShape:
                                               const RoundSliderThumbShape(
                                                 enabledThumbRadius: 6,

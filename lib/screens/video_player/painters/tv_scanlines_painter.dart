@@ -12,7 +12,7 @@ class TvScanlinesPatternPainter extends CustomPainter {
 
     // Draw horizontal scan lines with slight white overlay
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.05)
+      ..color = Colors.white.withValues(alpha: 0.05)
       ..strokeWidth = 1;
 
     // Draw lines every 4 pixels with animated offset
