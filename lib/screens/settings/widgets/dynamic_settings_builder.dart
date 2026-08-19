@@ -4,7 +4,6 @@ import '../../../models/engine_config/engine_config.dart';
 import '../../../services/engine/settings_manager.dart';
 import '../../../services/engine/engine_registry.dart';
 import '../../../services/profiles/profile_preferences.dart';
-import 'settings_widgets.dart';
 import '../../../theme/app_theme_scope.dart';
 
 /// Discrete choices replacing a former slider's min..max range. Small ranges

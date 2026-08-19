@@ -4276,8 +4276,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Play a single video file
   Future<void> _playVideoFile(RDFileNode fileNode) async {
     if ((_currentTorrent == null && _currentWebDownload == null) ||
-        fileNode.isFolder)
+        fileNode.isFolder) {
       return;
+    }
 
     final files = _currentFiles;
     // Find corresponding TorboxFile
@@ -4650,8 +4651,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Copy file download link
   Future<void> _copyFileLink(RDFileNode node) async {
     if ((_currentTorrent == null && _currentWebDownload == null) ||
-        node.isFolder)
+        node.isFolder) {
       return;
+    }
 
     final files = _currentFiles;
     if (node.linkIndex >= 0 && node.linkIndex < files.length) {
@@ -4881,8 +4883,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final key = _apiKey;
     if (key == null ||
         key.isEmpty ||
-        (_currentTorrent == null && _currentWebDownload == null))
+        (_currentTorrent == null && _currentWebDownload == null)) {
       return;
+    }
 
     final videoFiles = files.where((file) {
       if (file.zipped) return false;
@@ -5531,8 +5534,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   /// Set view mode and refresh display
   void _setViewMode(_FolderViewMode mode) {
     if ((_currentTorrent == null && _currentWebDownload == null) ||
-        _currentFolderNode == null)
+        _currentFolderNode == null) {
       return;
+    }
 
     // Get raw nodes based on current path
     // Always rebuild tree from scratch to handle virtual folders

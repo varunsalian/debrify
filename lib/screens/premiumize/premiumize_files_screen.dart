@@ -1639,8 +1639,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildBody() {
     if (_isSearchActive) return _buildSearchResults();
-    if (_selectedView == _PremiumizeView.transfers)
+    if (_selectedView == _PremiumizeView.transfers) {
       return _buildTransfersList();
+    }
     // Folder navigation clears _items, so a fetch with nothing to show gets
     // the shimmer skeleton. Pull-to-refresh keeps its items and never hits
     // this branch — the RefreshIndicator spinner covers it.
