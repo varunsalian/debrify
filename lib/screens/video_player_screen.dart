@@ -3801,6 +3801,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             return currentEpisode.episodeInfo!.title!;
           } else if (currentEpisode.seriesInfo.season != null &&
               currentEpisode.seriesInfo.episode != null) {
+            // Catalog singleton without TVMaze data yet: the clean catalog
+            // title beats a bare "Episode N".
+            final contentTitle = _effectiveContentTitle;
+            if (_activePlaylist!.length == 1 &&
+                contentTitle != null &&
+                contentTitle.isNotEmpty &&
+                _effectiveStremioTvChannels == null) {
+              return contentTitle;
+            }
             return 'Episode ${currentEpisode.seriesInfo.episode}';
           }
         } catch (e) {
@@ -3812,6 +3821,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Stremio TV: use dynamic title when a channel switch has occurred
     if (_hasStremioTvGuide && _dynamicTitle.isNotEmpty) {
       return _dynamicTitle;
+    }
+
+    // Catalog single stream (Quick Play / Sources tap): prefer the clean
+    // content title over the release filename. Packs are handled by the
+    // series branch above; Debrify TV, IPTV and Stremio TV keep their
+    // dynamic titles.
+    final contentTitle = _effectiveContentTitle;
+    if (contentTitle != null &&
+        contentTitle.isNotEmpty &&
+        widget.requestMagicNext == null &&
+        _effectiveIptvChannels == null &&
+        _effectiveStremioTvChannels == null &&
+        (_activePlaylist == null || _activePlaylist!.length <= 1)) {
+      return contentTitle;
     }
 
     // Fallback to the current playlist entry title
@@ -3856,8 +3879,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Return series name and season/episode info as subtitle
           if (currentEpisode.seriesInfo.season != null &&
               currentEpisode.seriesInfo.episode != null) {
-            final seriesName = seriesPlaylist.seriesTitle;
-            return '$seriesName • Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
+            // Catalog singleton: the filename-parsed series name can be a
+            // mangled release string; the clean catalog title is authoritative.
+            // While TVMaze hasn't supplied an episode title yet, the title line
+            // is already showing the catalog name — don't repeat it here.
+            final contentTitle = _effectiveContentTitle;
+            final isCatalogSingleton =
+                _activePlaylist!.length == 1 &&
+                contentTitle != null &&
+                contentTitle.isNotEmpty &&
+                _effectiveStremioTvChannels == null;
+            final seasonEpisode =
+                'Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
+            if (isCatalogSingleton) {
+              final hasEpisodeTitle =
+                  currentEpisode.episodeInfo?.title?.isNotEmpty == true;
+              return hasEpisodeTitle
+                  ? '$contentTitle • $seasonEpisode'
+                  : seasonEpisode;
+            }
+            return '${seriesPlaylist.seriesTitle} • $seasonEpisode';
           }
         } catch (e) {}
       }
@@ -3869,6 +3910,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
       return iptvChannels[_currentIptvIndex].group ?? 'IPTV';
+    }
+
+    // Catalog single stream: when the title shows the clean content name,
+    // surface the episode identity (and the release detail line) here.
+    final contentTitle = _effectiveContentTitle;
+    if (contentTitle != null &&
+        contentTitle.isNotEmpty &&
+        widget.requestMagicNext == null &&
+        _effectiveStremioTvChannels == null &&
+        (_activePlaylist == null || _activePlaylist!.length <= 1)) {
+      final season = _effectiveContentSeason;
+      final episode = _effectiveContentEpisode;
+      final parts = <String>[
+        if (season != null && episode != null)
+          'Season $season, Episode $episode',
+        if (widget.subtitle != null && widget.subtitle!.trim().isNotEmpty)
+          widget.subtitle!,
+      ];
+      if (parts.isNotEmpty) return parts.join(' • ');
     }
 
     // Fallback to the current subtitle or widget subtitle

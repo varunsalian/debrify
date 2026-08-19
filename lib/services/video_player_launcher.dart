@@ -4055,10 +4055,18 @@ class _AndroidTvPlaybackPayloadBuilder {
         );
       }
 
-      // Use TVMaze episode title if available, otherwise fallback to entry title
+      // Use TVMaze episode title if available, otherwise fallback to entry
+      // title. Catalog singles (Quick Play / Sources tap) never get TVMaze
+      // enrichment, so prefer the clean content title over the release name.
+      // Stremio TV is excluded: there entry.title is the current program
+      // title while contentTitle is the generic catalog name.
       final displayTitle = episodeInfo.episodeInfo?.title?.isNotEmpty == true
           ? episodeInfo.episodeInfo!.title!
-          : entry.title;
+          : (preparedEntries.length == 1 &&
+                    args.stremioTvChannels == null &&
+                    (args.contentTitle?.isNotEmpty ?? false)
+                ? args.contentTitle!
+                : entry.title);
 
       items.add(
         _AndroidTvPlaybackItem(
