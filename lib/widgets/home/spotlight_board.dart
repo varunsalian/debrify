@@ -13,6 +13,7 @@ import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
 import '../../utils/dominant_color.dart';
+import '../../utils/home_perf.dart';
 import 'row_tag_pill.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
@@ -692,6 +693,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   @override
   void initState() {
     super.initState();
+    // DBRF-PERF: temporary instrumentation marks (see HomePerf).
+    if (widget.dpad) {
+      HomePerf.install();
+      HomePerf.mark(
+        'board mount rows=${widget.sections.length} '
+        'cards=${widget.sections.fold<int>(0, (n, s) => n + s.items.length)}',
+      );
+    }
     _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
     widget.heroNode.addListener(_onHeroFocus);
     _scroll.addListener(_onBoardScrolled);
@@ -704,6 +713,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   @override
   void didUpdateWidget(SpotlightBoard old) {
     super.didUpdateWidget(old);
+    if (widget.dpad && old.sections.length != widget.sections.length) {
+      HomePerf.mark(
+        'board update rows=${old.sections.length}to${widget.sections.length}',
+      );
+    }
     // The reel can change under us as sections load. Keep the parked item if
     // it is still present; otherwise fall back to the head rather than to a
     // stale index pointing at a different title.
@@ -735,6 +749,32 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       // applies its own gates (focus on DPAD, pref, dwell callback), so an
       // uncalled-for restart is a no-op, not a stolen cadence.
       _restartCadence();
+    }
+    // The cursor bookkeeping is positional, but tracker rows FRONT-INSERT:
+    // after `rows=9to11` every `_col[i]` describes a different shelf than it
+    // was recorded for, and a stale column pointing outside the target row's
+    // built cells makes the next DOWN/UP focus a detached node — a silently
+    // eaten keypress. Re-key both by shelf IDENTITY across the update.
+    if (!identical(old.sections, widget.sections)) {
+      int remap(int oldIndex) {
+        if (oldIndex < 0 || oldIndex >= old.sections.length) return -1;
+        final id = old.sections[oldIndex].id;
+        if (id == null) return oldIndex;
+        return widget.sections.indexWhere((s) => s.id == id);
+      }
+
+      final remappedCols = <int, int>{};
+      for (final entry in _col.entries) {
+        final ni = remap(entry.key);
+        if (ni >= 0) remappedCols[ni] = entry.value;
+      }
+      _col
+        ..clear()
+        ..addAll(remappedCols);
+      if (_row >= 0) {
+        final ni = remap(_row);
+        if (ni >= 0) _row = ni;
+      }
     }
     // A board reload can shrink or reorder the shelves under a parked cursor.
     // `_row` is positional, so without this the next arrow key indexes past
@@ -771,6 +811,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   @override
   void dispose() {
+    if (widget.dpad) HomePerf.mark('board dispose');
     widget.heroNode.removeListener(_onHeroFocus);
     if (_rolling) widget.onTrailerStop?.call();
     _cadence?.cancel();
@@ -962,12 +1003,52 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _focusRow(_row, const Offset(0, -1));
   }
 
-  void _focusRow(int row, Offset dir) {
+  void _focusRow(int row, Offset dir, {bool retried = false}) {
     if (row < 0 || row >= widget.sections.length) return;
     final nodes = widget.sections[row].nodes;
     if (nodes.isEmpty) return;
     final col = (_col[row] ?? 0).clamp(0, nodes.length - 1);
-    _go(nodes[col], dir);
+    bool attached(FocusNode n) => n.context?.mounted ?? false;
+    final target = nodes[col];
+    if (attached(target)) {
+      _go(target, dir);
+      return;
+    }
+    // The remembered column's CELL isn't built — the row is parked at a
+    // different offset (its ListView only builds near its own scroll
+    // position), or a stale column survived a shelf insert. Focusing a
+    // detached node is a silent no-op, which read as "DOWN sometimes does
+    // nothing". Land on the nearest BUILT cell instead; the remembered
+    // column follows so the next vertical move starts from reality.
+    FocusNode? nearest;
+    var bestDistance = 1 << 30;
+    for (var i = 0; i < nodes.length; i++) {
+      final d = (i - col).abs();
+      if (d < bestDistance && attached(nodes[i])) {
+        bestDistance = d;
+        nearest = nodes[i];
+        _col[row] = i;
+      }
+    }
+    if (nearest != null) {
+      _go(nearest, dir);
+      return;
+    }
+    // The whole row is outside the lazy build window. Nudge the board's
+    // scroll toward it so the builder mounts it, then finish the move next
+    // frame — once only, so a row that stays unbuildable can't loop.
+    if (retried || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    final step = (dir.dy >= 0 ? 1.0 : -1.0) * 300.0;
+    position.moveTo(
+      (position.pixels + step).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusRow(row, dir, retried: true);
+    });
   }
 
   /// Where the cursor ACTUALLY is in [nodes].

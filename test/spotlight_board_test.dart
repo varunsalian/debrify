@@ -271,6 +271,59 @@ void main() {
         reason: 'the shelf below the insert must keep its element subtree');
   });
 
+  testWidgets('DOWN reaches a row whose remembered cell is not built',
+      (tester) async {
+    // The intermittent dead-DOWN: the target row sits parked at a far
+    // horizontal offset, so the cell the board remembers for it is outside
+    // the row's build window — a detached FocusNode, and requestFocus on it
+    // is a silent no-op. The walk must land on the nearest BUILT cell.
+    final nodesA = _rowNodes(2);
+    final nodesB = _rowNodes(20);
+    addTearDown(() {
+      for (final n in [...nodesA, ...nodesB]) {
+        n.dispose();
+      }
+    });
+    Widget board() => host([_meta('tt1', 'Alpha')], [
+          SpotlightShelf(
+            title: 'A',
+            id: 'a',
+            nodes: nodesA,
+            items: [
+              for (var c = 0; c < 2; c++)
+                SpotlightCard(title: 'A-C$c', onOpen: _noop),
+            ],
+          ),
+          SpotlightShelf(
+            title: 'B',
+            id: 'b',
+            nodes: nodesB,
+            items: [
+              for (var c = 0; c < 20; c++)
+                SpotlightCard(title: 'B-C$c', onOpen: _noop),
+            ],
+          ),
+        ]);
+    await tester.pumpWidget(board());
+    await tester.pumpAndSettle();
+
+    nodesA[0].requestFocus();
+    await tester.pumpAndSettle();
+
+    // Park row B far to the right WITHOUT the board's bookkeeping knowing —
+    // a touch drag, exactly what a restored scroll offset also produces.
+    await tester.drag(find.text('B-C1'), const Offset(-1400, 0));
+    await tester.pumpAndSettle();
+    expect(nodesB[0].context?.mounted ?? false, isFalse,
+        reason: 'setup: the remembered column-0 cell must be UNBUILT');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+
+    expect(nodesB.any((n) => n.hasFocus), isTrue,
+        reason: 'DOWN must land somewhere in row B, never die silently');
+  });
+
   testWidgets('the reel NEVER advances on its own — only a deliberate move '
       'pages it', (tester) async {
     // This pins the removal of auto-advance (user call, every device): the
