@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -340,9 +341,9 @@ void main() {
     for (var i = 0; i < 4; i++) {
       await _press(tester, LogicalKeyboardKey.arrowDown);
     }
-    // An empty Sources band is not an empty state to hide — "Find sources" is
+    // An empty Sources band is not an empty state to hide — "Pin source" is
     // exactly what someone with no bound sources needs to see.
-    expect(find.text('＋  Find sources', skipOffstage: false), findsOneWidget);
+    expect(find.text('＋  Pin source', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('trackers are READOUT in the meta line, never focusable', (
@@ -450,5 +451,39 @@ void main() {
     await _press(tester, LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(depths.last, isFalse);
+  });
+
+  testWidgets('action circles name themselves on focus', (tester) async {
+    await tester.pumpWidget(_host(_model()));
+    await tester.pumpAndSettle();
+
+    // The trailer button carries a theater mark, not a play glyph — play is
+    // the primary button's promise, and two of them read as two players.
+    final trailerIcon = find.byIcon(Icons.theaters_rounded);
+    expect(trailerIcon, findsOneWidget);
+    expect(find.text('Trailer'), findsNothing);
+
+    final focusWidget = tester.widget<Focus>(
+      find.ancestor(of: trailerIcon, matching: find.byType(Focus)).first,
+    );
+    focusWidget.focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.text('Trailer'), findsOneWidget);
+  });
+
+  testWidgets('action circles name themselves on hover too', (tester) async {
+    await tester.pumpWidget(_host(_model()));
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(find.byIcon(Icons.theaters_rounded)));
+    await tester.pumpAndSettle();
+    expect(find.text('Trailer'), findsOneWidget);
+
+    await gesture.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(find.text('Trailer'), findsNothing);
   });
 }

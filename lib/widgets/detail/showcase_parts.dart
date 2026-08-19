@@ -505,6 +505,7 @@ class ShowcaseIdentity extends StatelessWidget {
         icon: m.inMyWatchlist
             ? Icons.bookmark_rounded
             : Icons.bookmark_add_outlined,
+        label: m.inMyWatchlist ? 'In Watchlist' : 'Watchlist',
         onTap: m.onToggleMyWatchlist!,
       ));
     }
@@ -515,6 +516,7 @@ class ShowcaseIdentity extends StatelessWidget {
       actions.add(_Circle.mark(
         node: next(),
         mark: m.hasTrakt ? const TraktMark() : const SimklMark(),
+        label: m.hasTrakt ? 'Trakt' : 'Simkl',
         onTap: m.onTrackers!,
       ));
     }
@@ -524,18 +526,20 @@ class ShowcaseIdentity extends StatelessWidget {
       actions.add(_Circle.mark(
         node: next(),
         mark: const SimklMark(),
+        label: 'Simkl',
         onTap: m.onTrackersSecondary!,
       ));
     }
     if (m.hasTrailer && i < actionNodes.length) {
       actions.add(_Circle(
         node: next(),
-        icon: Icons.play_arrow_rounded,
+        icon: Icons.theaters_rounded,
+        label: 'Trailer',
         onTap: m.onTrailer,
       ));
     }
     // The movie source BROWSE — the full searchable list, where a tap plays.
-    // Distinct from the Sources band below, whose cards and "Find sources"
+    // Distinct from the Sources band below, whose cards and "Pin source"
     // tile land on the title-level BINDING manager. Series don't mount it:
     // their episode list is the picker. Every other layout kept this button
     // (detail_identity.dart, Stage); Showcase shipped without it, which left
@@ -544,6 +548,7 @@ class ShowcaseIdentity extends StatelessWidget {
       actions.add(_Circle(
         node: next(),
         icon: Icons.layers_rounded,
+        label: 'Sources',
         onTap: m.onBrowse!,
       ));
     }
@@ -551,6 +556,7 @@ class ShowcaseIdentity extends StatelessWidget {
       actions.add(_Circle(
         node: next(),
         icon: Icons.more_horiz_rounded,
+        label: 'More',
         onTap: m.onAppMenu!,
       ));
     }
@@ -1101,17 +1107,20 @@ class _Circle extends StatefulWidget {
   final FocusNode node;
   final IconData? icon;
   final Widget? mark;
+  final String label;
   final VoidCallback onTap;
 
   const _Circle({
     required this.node,
     required IconData this.icon,
+    required this.label,
     required this.onTap,
   }) : mark = null;
 
   const _Circle.mark({
     required this.node,
     required Widget this.mark,
+    required this.label,
     required this.onTap,
   }) : icon = null;
 
@@ -1121,6 +1130,7 @@ class _Circle extends StatefulWidget {
 
 class _CircleState extends State<_Circle> {
   bool _f = false;
+  bool _h = false;
 
   @override
   Widget build(BuildContext context) => Focus(
@@ -1132,29 +1142,79 @@ class _CircleState extends State<_Circle> {
         // Without this the tracker, trailer and More buttons focus correctly
         // and do NOTHING on a remote.
         onKeyEvent: (_, e) => _activate(e, widget.onTap),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Builder(builder: (context) {
-            final m = ShowcaseMetrics.of(context);
-            final compact = m.compact;
-            final d = compact ? 44.0 : 26.0 * m.k;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              width: d,
-              height: d,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: _f ? _ink : _ink.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: widget.mark ??
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _h = true),
+          onExit: (_) => setState(() => _h = false),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: Builder(builder: (context) {
+              final m = ShowcaseMetrics.of(context);
+              final compact = m.compact;
+              final d = compact ? 44.0 : 26.0 * m.k;
+              // Hover and focus both light the pill: DPAD/keyboard land on
+              // `_f`, a desktop pointer on `_h` — same treatment either way.
+              final lit = _f || _h;
+              final glyph = widget.mark ??
                   Icon(
                     widget.icon,
                     size: compact ? 20 : 13 * m.k,
-                    color: _f ? Colors.black : _ink,
-                  ),
-            );
-          }),
+                    color: lit ? Colors.black : _ink,
+                  );
+              // Lit (non-compact): the circle stretches into a pill that
+              // names itself — the tooltip a DPAD user can actually read.
+              // Compact stays a plain circle — touch has no dwell, and a pill
+              // popping under a finger would just shove its siblings — so it
+              // falls back to the platform's long-press Tooltip below.
+              final labelled = lit && !compact;
+              final body = AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                height: d,
+                decoration: BoxDecoration(
+                  color: lit ? _ink : _ink.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(d / 2),
+                ),
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.centerLeft,
+                  child: labelled
+                      ? Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 10 * m.k),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              glyph,
+                              SizedBox(width: 6 * m.k),
+                              Text(
+                                widget.label,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 11 * m.k,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : SizedBox(
+                          width: d,
+                          height: d,
+                          child: Center(child: glyph),
+                        ),
+                ),
+              );
+              if (!compact) return body;
+              return Tooltip(
+                message: widget.label,
+                triggerMode: TooltipTriggerMode.longPress,
+                child: body,
+              );
+            }),
+          ),
         ),
       );
 }
@@ -1893,7 +1953,7 @@ class ShowcaseSources extends StatelessWidget {
   final VoidCallback? onOpen;
 
   /// Movie only: the full browse/search source list (a tap there PLAYS).
-  /// When non-null the band gets a second entry card after "Find sources",
+  /// When non-null the band gets a second entry card after "Pin source",
   /// and the layout supplies one extra node — topology always matches
   /// rendering.
   final VoidCallback? onBrowseAll;
@@ -1949,7 +2009,9 @@ class _SourceCard extends StatefulWidget {
   final SeriesSource? source;
   final bool add;
 
-  /// The add-style card's label. Defaults to the binding manager's wording.
+  /// The add-style card's label. Defaults to the binding manager's wording —
+  /// a tap there PINS a source to the title, it doesn't play one, so the tile
+  /// says "Pin source"; "Find sources" oversold it as a search.
   final String addLabel;
   final VoidCallback? onTap;
 
@@ -1958,7 +2020,7 @@ class _SourceCard extends StatefulWidget {
     required this.onTap,
     this.source,
     this.add = false,
-    this.addLabel = '＋  Find sources',
+    this.addLabel = '＋  Pin source',
   });
 
   @override
