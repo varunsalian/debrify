@@ -2221,6 +2221,17 @@ class _CardState extends State<_Card> {
     final app = AppThemeScope.of(context);
     final c = widget.card;
     final w = widget.height * c.shape.aspect;
+    // Decode at the card's own PHYSICAL width plus the 10% focus growth —
+    // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
+    // on a TV board, and the TV image cache is byte-capped (56MB, see
+    // _capImageCache): measured on the Mi Box 2026-08-19, oversized
+    // landscape stills meant the cache held 39 images while 47 were live,
+    // so every DPAD step into an evicted row re-decoded and re-uploaded —
+    // the sometimes-laggy navigation. Right-sizing fits a screenful with
+    // headroom and makes each upload cheaper.
+    final decodeW = (w * MediaQuery.devicePixelRatioOf(context) * 1.1)
+        .round()
+        .clamp(100, 1000);
     final url = c.image;
     final fallbackUrl = c.fallbackImage;
     final contained = c.shape.fit == BoxFit.contain;
@@ -2327,10 +2338,7 @@ class _CardState extends State<_Card> {
                     imageUrl: url,
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
-                    // A wide card renders about twice a poster's width, and a
-                    // backdrop decoded at poster resolution shows soft.
-                    memCacheWidth:
-                        c.shape == SpotlightCardShape.wide ? 800 : 400,
+                    memCacheWidth: decodeW,
                     // Android TV pops, no fade. The package defaults are a
                     // 500ms image fade over a 1000ms placeholder fade —
                     // fine for one image, but a board entry lands 20-30
@@ -2355,8 +2363,7 @@ class _CardState extends State<_Card> {
                             imageUrl: fallbackUrl,
                             fit: c.shape.fit,
                             cacheManager: DebrifyImageCache.manager,
-                            memCacheWidth:
-                                c.shape == SpotlightCardShape.wide ? 800 : 400,
+                            memCacheWidth: decodeW,
                             fadeInDuration: Duration.zero,
                             placeholder: (_, __) => const SizedBox.shrink(),
                             errorWidget: (_, __, ___) =>
