@@ -2557,6 +2557,9 @@ class TorrentPlaybackService {
       leechers: 0,
       completed: 0,
       scrapedDate: 0,
+      // Both players' source sheets group by this field; empty filed the
+      // binding under "Other sources". Both sheets label 'pinned' explicitly.
+      source: 'pinned',
       magnetUrl:
           'magnet:?xt=urn:btih:${s.torrentHash}&dn=${Uri.encodeComponent(s.torrentName)}',
       hasRealInfoHash: true,

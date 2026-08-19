@@ -173,6 +173,8 @@ class TvSourceBrowserController(
 
     private fun sourceLabel(raw: String): String {
         if (raw.isEmpty()) return "Other sources"
+        // The title-level binding (Dart stamps 'pinned' on bound plays).
+        if (raw.equals("pinned", ignoreCase = true)) return "Pinned source"
         val label = if (raw.startsWith("stremio:", ignoreCase = true)) raw.substring(8) else raw
         return label.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }

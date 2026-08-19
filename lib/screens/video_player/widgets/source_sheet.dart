@@ -109,6 +109,8 @@ class _SourceSheetState extends State<SourceSheet> {
   String _groupLabel(Torrent torrent) {
     var source = torrent.source.trim();
     if (source.isEmpty) return 'Other sources';
+    // The title-level binding (torrent_playback_service._torrentFromSource).
+    if (source.toLowerCase() == 'pinned') return 'Pinned source';
     if (source.toLowerCase().startsWith('stremio:')) {
       source = source.substring('stremio:'.length);
     }
