@@ -209,6 +209,27 @@ void main() {
     expect(rows[0][0].hasFocus, isFalse);
   });
 
+  testWidgets('a title card wears its rating on the caption meta line',
+      (tester) async {
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [
+      SpotlightShelf(
+        title: 'Top',
+        nodes: rows[0],
+        items: [
+          SpotlightCard(title: 'Rated', rating: 8.06, onOpen: _noop),
+          // Zero means "no rating carried" (common on catalog list items) —
+          // an empty star would read as a zero score.
+          SpotlightCard(title: 'Unrated', rating: 0, onOpen: _noop),
+        ],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('★ 8.1'), findsOneWidget,
+        reason: 'one decimal, star-prefixed, on the caption meta line');
+    expect(find.textContaining('★ 0'), findsNothing);
+  });
+
   testWidgets('the board is LAZY — off-screen shelves do not build at mount',
       (tester) async {
     // A Column of shelves inside the vertical list once defeated its

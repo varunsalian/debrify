@@ -39,6 +39,11 @@ class SpotlightCard {
   /// by beyond its name.
   final String? subtitle;
 
+  /// IMDb rating (0–10) for TITLE cards, drawn as "★ 8.1" on the caption's
+  /// meta line. Null or non-positive draws nothing — catalog list items
+  /// frequently omit the rating, and an empty star would read as a zero.
+  final double? rating;
+
   /// 0..100, or null.
   final double? progress;
 
@@ -63,6 +68,7 @@ class SpotlightCard {
     this.image,
     this.fallbackImage,
     this.subtitle,
+    this.rating,
     this.progress,
     this.onOptions,
     this.shape = SpotlightCardShape.poster,
@@ -2359,7 +2365,13 @@ class _CardState extends State<_Card> {
     final url = c.image;
     final fallbackUrl = c.fallbackImage;
     final contained = c.shape.fit == BoxFit.contain;
-    final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
+    // The caption's second line — kind and/or rating, dot-joined. One line
+    // whatever it carries, so the caption bed math stays two-state.
+    final metaLine = [
+      if ((c.subtitle ?? '').isNotEmpty) c.subtitle!,
+      if ((c.rating ?? 0) > 0) '★ ${c.rating!.toStringAsFixed(1)}',
+    ].join(' · ');
+    final hasSubtitle = metaLine.isNotEmpty;
     final preview = c.previewBuilder;
     // Exactly one card owns the decoder: desktop follows the pointer, TV
     // follows the remote cursor. The preview is unmounted immediately when it
@@ -2407,7 +2419,7 @@ class _CardState extends State<_Card> {
                       ),
                       if (hasSubtitle)
                         Text(
-                          c.subtitle!,
+                          metaLine,
                           maxLines: 1,
                           textAlign: TextAlign.center,
                           overflow: TextOverflow.ellipsis,

@@ -1498,7 +1498,15 @@ class ShowcaseEpisodeCell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('EPISODE ${episode.number}',
+                // Rating rides the eyebrow in the same small-caps monochrome
+                // grammar (the _SeverityMark rule: no colored chips against
+                // the artwork). Trakt backfills ratings addons omit — see
+                // EpisodesPanel._enrichEpisodeRatings — and 0 means unrated.
+                Text(
+                    (episode.rating ?? 0) > 0
+                        ? 'EPISODE ${episode.number} · ★ '
+                            '${episode.rating!.toStringAsFixed(1)}'
+                        : 'EPISODE ${episode.number}',
                     style:
                         _t(9.5 * m.k, a: 0.55).copyWith(letterSpacing: 0.4)),
                 const SizedBox(height: 2),
@@ -1695,6 +1703,12 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                         ] else if ((episode.firstAired ?? '').isNotEmpty)
                           Text(episode.firstAired!.split('T').first,
                               style: _t(11.5, a: 0.5)),
+                        // Same monochrome footer grammar as the runtime.
+                        if ((episode.rating ?? 0) > 0) ...[
+                          const SizedBox(width: 8),
+                          Text('★ ${episode.rating!.toStringAsFixed(1)}',
+                              style: _t(11.5, a: 0.7)),
+                        ],
                         const Spacer(),
                         _KebabButton(onTap: onOptions),
                       ],

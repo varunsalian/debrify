@@ -5878,6 +5878,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
               fallbackImage: _homeLandscapeCards ? m.poster : null,
               title: m.name,
+              rating: m.imdbRating,
               shape: _homeLandscapeCards
                   ? SpotlightCardShape.wide
                   : SpotlightCardShape.poster,
@@ -5917,6 +5918,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
             fallbackImage: _homeLandscapeCards ? m.poster : null,
             title: m.name,
+            rating: m.imdbRating,
             shape: _homeLandscapeCards
                 ? SpotlightCardShape.wide
                 : SpotlightCardShape.poster,
@@ -5988,6 +5990,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     : item.poster,
                 fallbackImage: _homeLandscapeCards ? item.poster : null,
                 title: item.name,
+                rating: item.imdbRating,
                 subtitle: isMovies ? 'MOVIE' : 'SERIES',
                 shape: _homeLandscapeCards
                     ? SpotlightCardShape.wide
@@ -6071,6 +6074,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     : null,
                 title: ch.displayName,
                 subtitle: 'STREMIO TV',
+                // The now-playing TITLE's rating — the card wears title art,
+                // so the rating follows the title, not the channel.
+                rating: _stvNowPlaying(ch)?.item.imdbRating,
                 // Title art, not a channel logo: follow the user's Spotlight
                 // title-card orientation instead of containing it as a square
                 // station mark.
