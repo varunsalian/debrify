@@ -88,6 +88,8 @@ SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
   onOpenDetailTheme: _noop,
   parentsGuideStyleLabel: 'Compass',
   onOpenParentsGuideStyle: _noop,
+  profileAppearanceLabel: 'Marquee',
+  onOpenProfileAppearance: _noop,
   onOpenRecordings: _noop,
   onOpenIptvSettings: _noop,
   showSupportDonation: false,

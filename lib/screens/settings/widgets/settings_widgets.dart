@@ -199,6 +199,11 @@ abstract final class SettingsRows {
     title: 'Sidebar Style',
     subtitle: '',
   );
+  static const profileAppearance = SettingsRowContent(
+    icon: Icons.switch_account_rounded,
+    title: 'Profile Picker',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen brightness) — passed per call site.
   static const textBrightness = SettingsRowContent(
     icon: Icons.brightness_6_rounded,

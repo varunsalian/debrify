@@ -119,6 +119,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDetailTheme;
   final String parentsGuideStyleLabel;
   final Future<void> Function() onOpenParentsGuideStyle;
+  final String profileAppearanceLabel;
+  final Future<void> Function() onOpenProfileAppearance;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -195,6 +197,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDetailTheme,
     required this.parentsGuideStyleLabel,
     required this.onOpenParentsGuideStyle,
+    required this.profileAppearanceLabel,
+    required this.onOpenProfileAppearance,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -319,7 +323,8 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 14 — Looks from the theme work and Hero Artwork Quality from the
+  /// exactly 16 — Looks from the theme work, Profile Picker, and Hero Artwork
+  /// Quality from the
   /// player-dock merge, less Details Theme (App Theme covers it) and Theme Lab
   /// (a tool, not a setting); About has up to 6 with the conditional donation
   /// row;
@@ -330,7 +335,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 15;
+  static const int _kMaxCategoryRows = 16;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -818,7 +823,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
         //
         // `_paneNodes` is indexed POSITIONALLY and `_paneKey` wires Up/Down as
         // index ± 1, so the numbering has to stay contiguous across the group
-        // boundaries: 0..14 top to bottom, headers excluded. Section headers
+        // boundaries: 0..15 top to bottom, headers excluded. Section headers
         // are plain text and take no focus, so DPAD steps over them.
         return [
           SettingsLookHero(
@@ -919,6 +924,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenParentsGuideStyle,
                 focusNode: _paneNodes[11],
               ),
+              SettingsTile.spec(
+                SettingsRows.profileAppearance,
+                subtitle: widget.profileAppearanceLabel,
+                onTap: widget.onOpenProfileAppearance,
+                focusNode: _paneNodes[12],
+              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -932,19 +943,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[13],
               ),
               SettingsTile.spec(
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[13],
+                focusNode: _paneNodes[14],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHeroArtworkQuality,
                 subtitle: widget.tvHeroArtworkQualityLabel,
                 onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[14],
+                focusNode: _paneNodes[15],
               ),
             ],
           ),

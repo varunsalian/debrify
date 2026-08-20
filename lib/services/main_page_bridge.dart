@@ -53,6 +53,7 @@ class MainPageBridge {
   /// silently retargeted so the legacy behavior stays visible and greppable.
 
   static VoidCallback? showProfilePicker;
+  static ValueChanged<String>? switchProfile;
 
   /// Re-reads the ACTIVE profile's policy into MainPage's tab gating and the
   /// ProfilePolicyGuard sync mirror. Editing screens call this after saving

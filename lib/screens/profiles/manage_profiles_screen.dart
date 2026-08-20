@@ -11,7 +11,6 @@ import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_registry.dart';
 import '../../services/profiles/native_profile_projection.dart';
 import '../../services/profiles/profile_runtime.dart';
-import '../../services/tvos_top_shelf_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 // DEV-ONLY, delete with lib/{services,screens}/profiles/dev/.
@@ -40,7 +39,6 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
   );
   late ProfileAuthorizationContext _authorization = widget.authorization;
   List<UserProfile>? _profiles;
-  bool _topShelfEnabled = false;
   bool _initialLoadFailed = false;
 
   @override
@@ -63,15 +61,10 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
       throw StateError('Profile management is not authorized');
     }
     final profiles = await widget.registry.listProfiles(includeDisabled: true);
-    final topShelfEnabled = PlatformUtil.isTvOS
-        ? await TvosTopShelfService.instance
-              .multiProfilePersonalizationEnabled()
-        : false;
     await NativeProfileProjection.publish(ProfileRuntime.capture());
     if (mounted) {
       setState(() {
         _profiles = profiles;
-        _topShelfEnabled = topShelfEnabled;
       });
     }
   }
@@ -166,8 +159,6 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
     if (changed) await _load();
   }
 
-
-
   Future<UserProfile> _validateManagingAdmin(
     ProfileAuthorizationContext context,
   ) async {
@@ -177,20 +168,6 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
       throw StateError('Profile management is not authorized');
     }
     return actor;
-  }
-
-  Future<void> _setTopShelfEnabled(bool enabled) async {
-    try {
-      await TvosTopShelfService.instance.setMultiProfilePersonalizationEnabled(
-        enabled,
-      );
-      if (mounted) setState(() => _topShelfEnabled = enabled);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Top Shelf setting could not be changed')),
-      );
-    }
   }
 
   /// DEV-ONLY. Opens the per-profile key/value browser.
@@ -268,15 +245,6 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
             )
           : Column(
               children: <Widget>[
-                if (PlatformUtil.isTvOS && profiles.length > 1)
-                  SwitchListTile(
-                    value: _topShelfEnabled,
-                    title: const Text('Personalized Top Shelf'),
-                    subtitle: const Text(
-                      'Show the unlocked active profile on the Apple TV Home Screen. Off is the privacy default.',
-                    ),
-                    onChanged: _setTopShelfEnabled,
-                  ),
                 Expanded(
                   child: ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),

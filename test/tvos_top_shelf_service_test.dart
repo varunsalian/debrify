@@ -1,9 +1,47 @@
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/tvos_top_shelf_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('Top Shelf personalization authority', () {
+    test('allows only an Admin with profile-management permission', () {
+      expect(
+        TvosTopShelfService.canManageMultiProfilePersonalization(
+          _profile(UserProfileRole.admin),
+        ),
+        isTrue,
+      );
+      expect(
+        TvosTopShelfService.canManageMultiProfilePersonalization(
+          _profile(UserProfileRole.member),
+        ),
+        isFalse,
+      );
+      expect(
+        TvosTopShelfService.canManageMultiProfilePersonalization(
+          _profile(UserProfileRole.child),
+        ),
+        isFalse,
+      );
+      expect(
+        TvosTopShelfService.canManageMultiProfilePersonalization(
+          _profile(
+            UserProfileRole.admin,
+            policy: const ProfilePolicy(enabled: <ProfileFeature>{}),
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        TvosTopShelfService.canManageMultiProfilePersonalization(null),
+        isFalse,
+      );
+    });
+  });
+
   group('TvosTopShelfService.buildSnapshot', () {
     test('exports Spotlight metadata and derives missing wide artwork', () {
       const meta = StremioMeta(
@@ -160,4 +198,23 @@ void main() {
       MainPageBridge.setActiveTvTab(0);
     });
   });
+}
+
+UserProfile _profile(UserProfileRole role, {ProfilePolicy? policy}) {
+  final now = DateTime.utc(2026, 8, 20);
+  return UserProfile(
+    id: role.name,
+    name: role.name,
+    role: role,
+    policy: policy ?? ProfilePolicy.defaultsFor(role),
+    authorizationRevision: 1,
+    lifecycle: UserProfileLifecycle.active,
+    visibleDataGeneration: 1,
+    setupComplete: true,
+    pinResetRequired: false,
+    hasPin: false,
+    lockOnResume: false,
+    createdAt: now,
+    updatedAt: now,
+  );
 }
