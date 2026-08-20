@@ -202,6 +202,7 @@ flutter:
   assets:
     - assets/app_icon.png
     - assets/app_icon_foreground.png
+    - assets/images/profile_gate_lighthouse.png
     - assets/splash_logo.png
     - assets/config/app_remote_config.json
     - assets/config/engines/
