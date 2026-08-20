@@ -10,6 +10,7 @@ import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
 import 'connection_resource_service.dart';
 import 'profile_collection_resource_facade.dart';
+import 'profile_lock_controller.dart';
 import 'profile_preferences.dart';
 import 'profile_bootstrap.dart';
 import 'profile_runtime.dart';
@@ -41,6 +42,19 @@ class NativeProfileProjection {
   static Future<void> publish(
     ProfileScope scope,
   ) => _serializePublication(() async {
+    // A locked session must never gain an `active` native snapshot — the
+    // lock bridge routes locked-session work to [invalidate] for exactly that
+    // reason, and this guard holds the same line for callers that arrive at
+    // [publish] directly (a PIN unlock's own registry bookkeeping publishes
+    // here BEFORE the lock lifts). Without it, the addon read below threw
+    // `Profile session is locked` from deep inside the snapshot build and
+    // aborted the caller's unlock with a correct PIN (observed on tvOS
+    // 2026-08-20 after a profile restore). Denying is a success for the
+    // caller: the unlock's own completion republishes the full snapshot.
+    if (ProfileLockController.instance.lockedProfileId.value != null) {
+      await _invalidateBody();
+      return;
+    }
     // Build the complete snapshot inside the publication queue. If an older
     // build were allowed to await registry reads outside this queue, it
     // could finish after a newer mutation and overwrite the newer native
@@ -49,6 +63,7 @@ class NativeProfileProjection {
       scope,
       CapturedProfilePreferenceAccess.nativeProjectionReadOnly,
     );
+    final raw = await SharedPreferences.getInstance();
     final values = <String, Object?>{};
     for (final key in logicalKeys) {
       final value = profile.get(key);
@@ -91,7 +106,6 @@ class NativeProfileProjection {
         addons.map(_nativeAddonRecord).toList(growable: false),
       );
     }
-    final raw = await SharedPreferences.getInstance();
     final authorization = <String, Object?>{};
     int? activeAuthorizationRevision;
     for (final item in await ProfileBootstrap.registry.listProfiles(
@@ -162,6 +176,16 @@ class NativeProfileProjection {
       throw StateError('Could not invalidate previous native profile view');
     }
     await debugAfterInvalidation?.call(sequence);
+    // Re-checked at the last awaited gap before the snapshot lands, not just
+    // at entry: a session that locked while the snapshot was being built must
+    // not gain an `active` publication in the window before the lock
+    // bridge's queued invalidation runs. Sitting after the sequence bump is
+    // safe — an advanced sequence with no matching snapshot reads as denied,
+    // which is exactly what a locked session should read as.
+    if (ProfileLockController.instance.lockedProfileId.value != null) {
+      await _invalidateBody();
+      return;
+    }
     if (!await raw.setString(deviceKey, jsonEncode(projection))) {
       throw StateError('Could not publish native profile view');
     }
@@ -226,7 +250,12 @@ class NativeProfileProjection {
   /// Invalidates native authority before a registry mutation or profile
   /// switch can reduce it. A later [publish] rolls forward to a complete
   /// snapshot; failure leaves native readers safely denied.
-  static Future<void> invalidate() => _serializePublication(() async {
+  static Future<void> invalidate() => _serializePublication(_invalidateBody);
+
+  /// The queue-internal body of [invalidate], shared with [publish]'s
+  /// locked-session guard — which runs INSIDE the publication queue and would
+  /// deadlock waiting on a nested [_serializePublication] entry.
+  static Future<void> _invalidateBody() async {
     final raw = await SharedPreferences.getInstance();
     final sequence = (raw.getInt(sequenceKey) ?? 0) + 1;
     if (!await raw.setInt(sequenceKey, sequence)) {
@@ -240,7 +269,7 @@ class NativeProfileProjection {
         'publication': sequence,
       }),
     );
-  });
+  }
 
   static Future<T> _serializePublication<T>(Future<T> Function() action) {
     final completer = Completer<T>();
