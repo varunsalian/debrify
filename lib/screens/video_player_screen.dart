@@ -10994,6 +10994,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int episode,
     int token,
   ) async {
+    if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) return false;
+    if (!mounted || token != _playlistIdentityToken) return true;
     List<PlaylistEntry>? playlist;
     try {
       playlist = await widget.resolveSourceToPlaylist!(t);

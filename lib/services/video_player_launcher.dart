@@ -2313,6 +2313,8 @@ class VideoPlayerLauncher {
           // target episode? (1-entry unparseable streams count — they get the
           // target identity stamped on.)
           Future<bool> candidateHasTarget(Torrent t) async {
+            if (!await seriesFetcher.allowsCandidate(t)) return false;
+            if (stale()) return false;
             List<PlaylistEntry>? entries;
             try {
               entries = await resolveSourceToPlaylist(t);

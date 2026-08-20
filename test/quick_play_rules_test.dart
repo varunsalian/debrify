@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/quick_play_rules.dart';
@@ -7,6 +9,7 @@ import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
@@ -32,6 +35,61 @@ Torrent _torrent(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Adjacent episode direct-link validation', () {
+    test('series fetcher rejects a positively dead direct stream', () async {
+      SharedPreferences.setMockInitialValues({});
+      final realFactory = StreamUrlValidator.clientFactory;
+      addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
+      StreamUrlValidator.clientFactory = () => MockClient(
+        (_) async => http.Response('gone', 404),
+      );
+      final fetcher = TorrentPlaybackService.seriesFetcherFor(
+        meta: const PlaybackMeta(
+          imdbId: 'tt1234567',
+          contentType: 'series',
+          season: 1,
+          episode: 1,
+          title: 'Show',
+        ),
+      );
+
+      expect(fetcher, isNotNull);
+      expect(
+        await fetcher!.allowsCandidate(
+          _torrent('dead', type: StreamType.directUrl),
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+      'series fetcher leaves torrent candidates to normal resolution',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final realFactory = StreamUrlValidator.clientFactory;
+        addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
+        StreamUrlValidator.clientFactory = () => MockClient(
+          (_) async =>
+              throw StateError('torrent candidate must not make HTTP'),
+        );
+        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+          meta: const PlaybackMeta(
+            imdbId: 'tt1234567',
+            contentType: 'series',
+            season: 1,
+            episode: 1,
+            title: 'Show',
+          ),
+        );
+
+        expect(
+          await fetcher!.allowsCandidate(_torrent('pack')),
+          isTrue,
+        );
+      },
+    );
+  });
 
   group('Debrify default compatibility contract', () {
     test('movie defaults preserve the pre-profile behavior', () {

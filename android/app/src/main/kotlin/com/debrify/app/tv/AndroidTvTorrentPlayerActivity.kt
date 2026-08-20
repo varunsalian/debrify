@@ -1696,6 +1696,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val guideJson = payloadJson.optJSONObject("stremioTvGuide")
             if (guideJson != null) {
                 initStremioTvGuide(guideJson)
+                updateCatalogEpisodeControls()
             }
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Stremio TV guide init failed", e)
@@ -1810,6 +1811,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (model.contentType.lowercase(Locale.US) == "series") {
                             rebuildPlaylistContent()
                             seriesPlaylistAdapter?.setActiveIndex(currentIndex)
+                            updateCatalogEpisodeControls()
                         }
                     }
                 }
@@ -3286,14 +3288,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         nextButton?.onFocusChangeListener = extendTimerOnFocus
 
-        // Previous-episode button — IPTV episode lists only (GONE by default in
-        // the layout; shown via updateIptvEpisodeControls when a previous
-        // episode exists).
+        // Previous episode: IPTV walks its episode list; catalog series use the
+        // current playlist first, then fetch across its boundary from the full
+        // guide without leaving the native player.
         prevButton?.setOnClickListener {
             hideControlsMenu()
-            prevIptvEpisode()?.let { switchToIptvChannel(it) }
+            if (isIptvMode) {
+                prevIptvEpisode()?.let { switchToIptvChannel(it) }
+            } else {
+                playPrevious()
+            }
         }
         prevButton?.onFocusChangeListener = extendTimerOnFocus
+        updateCatalogEpisodeControls()
 
         randomButton?.setOnClickListener {
             hideControlsMenu()
@@ -3349,6 +3356,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         cancelPikPakRetry()
 
         currentIndex = index
+        updateCatalogEpisodeControls()
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
@@ -3889,6 +3897,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /** Previous for catalog series, including a single direct-link episode.
+     * Existing playlist navigation wins; at its boundary the full guide names
+     * the adjacent episode and Flutter resolves it in place. */
+    private fun playPrevious() {
+        val model = payload ?: return
+        val prevIndex = getPrevPlayableIndex(currentIndex)
+        if (prevIndex != null) {
+            playItem(prevIndex)
+            return
+        }
+        val currentItem = model.items.getOrNull(currentIndex)
+        if (model.contentType == "series" && hasPlaylistResolver) {
+            val previousTarget = guideAdjacent(model, currentItem, -1)
+            if (previousTarget != null) {
+                requestEpisodeFetch(previousTarget.season, previousTarget.episode)
+                return
+            }
+        }
+        Toast.makeText(this, "Beginning of playlist", Toast.LENGTH_SHORT).show()
+    }
+
+    /** The IPTV Previous control is shared by catalog playback. Keep it hidden
+     * for movies/first episodes, and reveal it when either the current source
+     * or the asynchronously delivered full-show guide has a predecessor. */
+    private fun updateCatalogEpisodeControls() {
+        if (isIptvMode) return
+        val model = payload
+        val currentItem = model?.items?.getOrNull(currentIndex)
+        val hasPrevious = model != null && model.contentType == "series" &&
+            !isStremioTvMode &&
+            (getPrevPlayableIndex(currentIndex) != null ||
+                (hasPlaylistResolver &&
+                    guideAdjacent(model, currentItem, -1) != null))
+        iptvPrevButton?.visibility = if (hasPrevious) View.VISIBLE else View.GONE
     }
 
     private fun playRandom() {

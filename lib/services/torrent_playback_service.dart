@@ -1985,12 +1985,31 @@ class TorrentPlaybackService {
     }
     final label = meta.title ?? '';
     Future<String?> effectiveProvider() => _effectiveFetchProvider(provider);
+    final directValidationCache = <String, bool>{};
 
     return SeriesSourceFetcher(
       season: season,
       episode: episode,
       packsFetched: packsFetched,
       episodesFetched: episodesFetched,
+      validateCandidate: (source) async {
+        if (source.streamType != StreamType.directUrl) return true;
+        final url = source.directUrl;
+        if (url == null || url.isEmpty) return false;
+        final cached = directValidationCache[url];
+        if (cached != null) return cached;
+        final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        if (!rules.validateDirectLinks) return true;
+        // Match initial series Quick Play: lenient HEAD validation rejects
+        // positive evidence of death without penalising HEAD-hostile CDNs.
+        final alive = await StreamUrlValidator.isPlayableVideoUrl(
+          url,
+          minBytes: 10 * 1024 * 1024,
+          lenient: true,
+        );
+        directValidationCache[url] = alive;
+        return alive;
+      },
       // The (s, e) the fetch passes in is the episode CURRENTLY playing — a
       // season-pack playlist auto-advances inside one player session, so the
       // launch episode captured above is only the fallback.

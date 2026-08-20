@@ -33,6 +33,11 @@ typedef AddonEpisodeSearch =
 typedef AddonPackSearch =
     Future<List<Torrent>?> Function(String addonId, int season);
 
+/// Preflight for a source the automatic adjacent-episode ladder is about to
+/// resolve. Manual source browsing intentionally exposes every result, while
+/// automatic Next/Previous must skip a direct URL that is positively dead.
+typedef SeriesSourceCandidateValidator = Future<bool> Function(Torrent source);
+
 /// An applicable addon, as the sheets' rail needs it.
 class SourceAddonRef {
   final String id;
@@ -78,6 +83,7 @@ class SeriesSourceFetcher {
     this.fetchAddonEpisodes,
     this.fetchAddonPacks,
     this.fetchEngine,
+    this.validateCandidate,
   }) : _searchPacks = searchPacks,
        _searchEpisodes = searchEpisodes,
        _searchMovie = null,
@@ -91,6 +97,7 @@ class SeriesSourceFetcher {
     this.listEngines,
     this.fetchAddonEpisodes,
     this.fetchEngine,
+    this.validateCandidate,
   }) : _searchMovie = searchMovie,
        _searchPacks = null,
        _searchEpisodes = null,
@@ -111,6 +118,11 @@ class SeriesSourceFetcher {
   final AddonPackSearch? fetchAddonPacks;
   final EngineSourceSearch? fetchEngine;
 
+  /// Optional automatic-play preflight. A missing validator preserves the
+  /// behavior of older/custom fetchers; callers should use [allowsCandidate]
+  /// rather than reading this directly.
+  final SeriesSourceCandidateValidator? validateCandidate;
+
   static const String modePacks = 'packs';
   static const String modeEpisodes = 'episodes';
   static const String modeMovie = 'movie';
@@ -121,6 +133,17 @@ class SeriesSourceFetcher {
 
   /// Whether this is the movie flavor (flat list, [modeMovie] only).
   bool get isMovie => _searchMovie != null;
+
+  /// Whether [source] may enter an automatic adjacent-episode resolve.
+  Future<bool> allowsCandidate(Torrent source) async {
+    try {
+      return await validateCandidate?.call(source) ?? true;
+    } catch (_) {
+      // Validation is an extra safety gate, not a new reason to lose playback.
+      // A prefs/network failure gives no positive evidence that the URL is dead.
+      return true;
+    }
+  }
 
   /// The LAUNCH episode — the fallback search target when the caller doesn't
   /// say what is currently playing. A season-pack playlist can auto-advance
