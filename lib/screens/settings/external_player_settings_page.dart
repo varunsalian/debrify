@@ -1304,7 +1304,7 @@ class _ExternalPlayerSettingsPageState
 
   // Aspect labels
   List<String> get _aspectLabels => _isAndroidTv
-      ? ['Fit', 'Fill', 'Zoom']
+      ? ['Fit', 'Fill', 'Zoom', 'Cinema Zoom']
       : [
           'Contain',
           'Cover',
@@ -1316,6 +1316,7 @@ class _ExternalPlayerSettingsPageState
           '1:1',
           '3:2',
           '5:4',
+          'Cinema Zoom',
         ];
 
   static const List<String> _nightModeLabels = [

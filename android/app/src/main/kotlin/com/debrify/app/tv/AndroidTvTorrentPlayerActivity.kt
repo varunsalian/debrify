@@ -1170,10 +1170,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val resizeModes = arrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
         AspectRatioFrameLayout.RESIZE_MODE_FILL,
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+        AspectRatioFrameLayout.RESIZE_MODE_FIT
     )
 
-    private val resizeModeLabels = arrayOf("Fit", "Fill", "Zoom")
+    private val resizeModeLabels = arrayOf("Fit", "Fill", "Zoom", "Cinema Zoom")
 
     private val playbackSpeeds = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private val playbackSpeedLabels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x")
@@ -2467,7 +2468,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         applySubtitleSettings()
 
         playerView.setControllerAutoShow(false)
-        playerView.resizeMode = resizeModes[resizeModeIndex]
+        applyResizeMode()
         playerView.requestFocus()
 
         if (isIptvMode) {
@@ -13212,7 +13213,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val col3 = resizeModeLabels.mapIndexed { i, l ->
             mrow(l, selected = i == resizeModeIndex, onOk = {
                 resizeModeIndex = i.coerceIn(0, resizeModes.lastIndex)
-                playerView.resizeMode = resizeModes[resizeModeIndex]
+                applyResizeMode()
                 updateAspectButtonLabel()
             })
         }
@@ -14016,9 +14017,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Aspect ratio
     private fun cycleAspectRatio() {
         resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
-        playerView.resizeMode = resizeModes[resizeModeIndex]
+        applyResizeMode()
         updateAspectButtonLabel()
         Toast.makeText(this, "Aspect: ${resizeModeLabels[resizeModeIndex]}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun applyResizeMode() {
+        playerView.resizeMode = resizeModes[resizeModeIndex]
+        val content = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
+            ?: playerView.videoSurfaceView
+        val scale = if (resizeModeIndex == 3) 4f / 3f else 1f
+        content?.scaleX = scale
+        content?.scaleY = scale
     }
 
     // Playback speed
@@ -14079,7 +14089,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun loadPlayerDefaults() {
         try {
             // Load aspect index for TV (separate from mobile)
-            // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
+            // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
             resizeModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
                 .getLong(this, "player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)

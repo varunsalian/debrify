@@ -23,8 +23,9 @@ class AspectModeUtils {
         return '3:2';
       case AspectMode.aspect5_4:
         return '5:4';
+      case AspectMode.cinemaZoom:
+        return 'cinemaZoom';
       case AspectMode.contain:
-      default:
         return 'contain';
     }
   }
@@ -50,6 +51,8 @@ class AspectModeUtils {
         return AspectMode.aspect3_2;
       case '5:4':
         return AspectMode.aspect5_4;
+      case 'cinemaZoom':
+        return AspectMode.cinemaZoom;
       case 'contain':
       default:
         return AspectMode.contain;
@@ -77,6 +80,11 @@ class AspectModeUtils {
     }
   }
 
+  /// Uniform scale used for modes that crop baked-in bars inside the frame.
+  static double getScaleForMode(AspectMode mode) {
+    return mode == AspectMode.cinemaZoom ? 4.0 / 3.0 : 1.0;
+  }
+
   /// Gets the BoxFit value for a given AspectMode
   static BoxFit getBoxFitForMode(AspectMode mode) {
     switch (mode) {
@@ -88,6 +96,8 @@ class AspectModeUtils {
         return BoxFit.fitWidth;
       case AspectMode.fitHeight:
         return BoxFit.fitHeight;
+      case AspectMode.cinemaZoom:
+        return BoxFit.contain;
       case AspectMode.aspect16_9:
       case AspectMode.aspect4_3:
       case AspectMode.aspect21_9:

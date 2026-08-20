@@ -2267,6 +2267,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
     unawaited(_installDecoderObservers(instanceGeneration, player));
+    unawaited(_applyAspectVideoZoom());
+  }
+
+  Future<void> _applyAspectVideoZoom() async {
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final scale = AspectModeUtils.getScaleForMode(_aspectMode);
+    final zoom = math.log(scale) / math.ln2;
+    try {
+      await platform.setProperty('video-zoom', zoom.toStringAsFixed(6));
+    } catch (e) {
+      debugPrint('VideoPlayer: aspect zoom apply failed: $e');
+    }
   }
 
   /// Serializes live passthrough flips: each runs WHOLE, in order. Without
@@ -9178,6 +9191,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _playbackSpeed = speed;
       }
       _aspectMode = AspectModeUtils.stringToAspectMode(aspect);
+      await _applyAspectVideoZoom();
     }
 
     if (dur <= Duration.zero) return;
@@ -10342,6 +10356,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         modeIcon = Icons.aspect_ratio_rounded;
         break;
       case AspectMode.aspect5_4:
+        newMode = AspectMode.cinemaZoom;
+        modeName = 'Cinema Zoom';
+        modeIcon = Icons.zoom_in_map_rounded;
+        break;
+      case AspectMode.cinemaZoom:
         newMode = AspectMode.contain;
         modeName = 'Contain';
         modeIcon = Icons.crop_free_rounded;
@@ -10351,6 +10370,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _aspectMode = newMode;
     });
+    unawaited(_applyAspectVideoZoom());
 
     // Show elegant HUD feedback
     _aspectRatioHud.value = AspectRatioHudState(
@@ -10513,6 +10533,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _setAspectModeDirect(AspectMode m) {
     if (m == _aspectMode) return;
     setState(() => _aspectMode = m);
+    unawaited(_applyAspectVideoZoom());
     _saveResume();
   }
 

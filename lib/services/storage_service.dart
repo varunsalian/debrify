@@ -7535,7 +7535,7 @@ class StorageService {
   // Debrify Player Default Settings
 
   /// Get default aspect ratio index for Flutter/mobile player
-  /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4
+  /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4, 10=CinemaZoom
   /// Default: 2 (Fit Width)
   static Future<int> getPlayerDefaultAspectIndex() async {
     final prefs = await ProfilePreferences.instance();
@@ -7549,7 +7549,7 @@ class StorageService {
   }
 
   /// Get default aspect ratio index for Android TV player
-  /// 0=Fit, 1=Fill, 2=Zoom
+  /// 0=Fit, 1=Fill, 2=Zoom, 3=CinemaZoom
   /// Default: 0 (Fit)
   static Future<int> getPlayerDefaultAspectIndexTv() async {
     final prefs = await ProfilePreferences.instance();

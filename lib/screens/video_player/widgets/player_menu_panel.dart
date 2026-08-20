@@ -486,6 +486,7 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
     AspectMode.aspect1_1 => '1:1',
     AspectMode.aspect3_2 => '3:2',
     AspectMode.aspect5_4 => '5:4',
+    AspectMode.cinemaZoom => 'Cinema Zoom',
   };
 
   // ── Subtitle slot fetch (ported from TracksSheet.show) ──

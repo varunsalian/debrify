@@ -491,6 +491,7 @@ class _TvControlsState extends State<TvControls> {
     AspectMode.aspect1_1 => '1:1',
     AspectMode.aspect3_2 => '3:2',
     AspectMode.aspect5_4 => '5:4',
+    AspectMode.cinemaZoom => 'Cinema Zoom',
   };
 
   /// The ±10 buttons exist for discoverability; the remote's LEFT/RIGHT does

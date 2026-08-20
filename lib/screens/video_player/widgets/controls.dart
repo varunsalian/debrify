@@ -197,6 +197,8 @@ class Controls extends StatelessWidget {
         return '3:2';
       case AspectMode.aspect5_4:
         return '5:4';
+      case AspectMode.cinemaZoom:
+        return 'Cinema Zoom';
     }
   }
 
