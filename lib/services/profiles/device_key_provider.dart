@@ -16,6 +16,10 @@ class DeviceKeyProvider {
   static const String linuxStateKey = 'profiles_linux_wrapped_key_v1';
   static DeviceSecretCipher? _cipher;
   static bool _initialized = false;
+  @visibleForTesting
+  static bool? debugLinuxOverride;
+
+  static bool get isLinux => debugLinuxOverride ?? Platform.isLinux;
 
   static bool get isInitialized => _initialized;
   static bool get isUnlocked => _cipher != null;
@@ -25,19 +29,19 @@ class DeviceKeyProvider {
   static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    if (Platform.isLinux) return;
+    if (isLinux) return;
     final platform = PlatformDeviceSecretCipher();
     await platform.initialize();
     _cipher = platform;
   }
 
   static Future<bool> linuxHasWrappedKey() async {
-    if (!Platform.isLinux) return false;
+    if (!isLinux) return false;
     return (await SharedPreferences.getInstance()).containsKey(linuxStateKey);
   }
 
   static Future<void> createLinuxVault(String passphrase) async {
-    if (!Platform.isLinux) throw UnsupportedError('Linux only');
+    if (!isLinux) throw UnsupportedError('Linux only');
     final prefs = await SharedPreferences.getInstance();
     if (prefs.containsKey(linuxStateKey)) {
       throw StateError('Linux vault already exists');
@@ -51,7 +55,7 @@ class DeviceKeyProvider {
   }
 
   static Future<void> unlockLinuxVault(String passphrase) async {
-    if (!Platform.isLinux) throw UnsupportedError('Linux only');
+    if (!isLinux) throw UnsupportedError('Linux only');
     final source = (await SharedPreferences.getInstance()).getString(
       linuxStateKey,
     );
@@ -80,11 +84,11 @@ class DeviceKeyProvider {
   static void lockLinuxVault() {
     final provider = _cipher;
     if (provider is PassphraseDeviceSecretCipher) provider.lock();
-    if (Platform.isLinux) _cipher = null;
+    if (isLinux) _cipher = null;
   }
 
   static Future<void> destroy() async {
-    if (Platform.isLinux) {
+    if (isLinux) {
       await (await SharedPreferences.getInstance()).remove(linuxStateKey);
     } else {
       await const MethodChannel(
@@ -99,6 +103,7 @@ class DeviceKeyProvider {
   static void debugReset() {
     _cipher = null;
     _initialized = false;
+    debugLinuxOverride = null;
   }
 
   @visibleForTesting
@@ -122,7 +127,7 @@ class PlatformDeviceSecretCipher implements DeviceSecretCipher {
 
   @override
   Future<void> initialize() async {
-    if (Platform.isLinux) {
+    if (DeviceKeyProvider.isLinux) {
       throw StateError('Linux device vault requires an unlocked passphrase');
     }
     final ready = await _channel.invokeMethod<bool>('initialize');

@@ -72,6 +72,8 @@ class ProfileBootstrap {
 
   static ProfileRegistry? _registry;
   static _LinuxPendingBootstrap? _linuxPending;
+  static bool _linuxCommittedAwaitingUnlock = false;
+  static bool? _linuxVaultConfigured;
   static ProfileRegistry get registry =>
       _registry ?? (throw StateError('ProfileBootstrap is not initialized'));
 
@@ -81,22 +83,19 @@ class ProfileBootstrap {
   }
 
   static bool get requiresLinuxVault =>
-      Platform.isLinux &&
-      (_linuxPending != null ||
-          (ProfileRuntime.isInitialized &&
-              ProfileRuntime.isProfileCommitted &&
-              !DeviceKeyProvider.isUnlocked));
+      DeviceKeyProvider.isLinux &&
+      (_linuxPending != null || _linuxCommittedAwaitingUnlock);
 
   static bool get linuxVaultAlreadyConfigured =>
-      _linuxPending?.hasWrappedKey ??
-      (Platform.isLinux &&
-          ProfileRuntime.isInitialized &&
-          ProfileRuntime.isProfileCommitted);
+      _linuxPending?.hasWrappedKey ?? _linuxVaultConfigured ?? false;
 
   static Future<void> initialize({bool? enabled}) async {
     if (ProfileRuntime.isInitialized) return;
     // Every run re-decides; a reason may only describe THIS launch.
     legacyReason = null;
+    _linuxPending = null;
+    _linuxCommittedAwaitingUnlock = false;
+    _linuxVaultConfigured = null;
     final legacyPreferences = await SharedPreferences.getInstance();
     // CFPreferences aborts the entire tvOS process when UserDefaults grows too
     // large. Discard only rebuildable TVMaze responses before any bootstrap
@@ -197,6 +196,14 @@ class ProfileBootstrap {
         ),
       );
       await _repairRuntimeMirror();
+      if (DeviceKeyProvider.isLinux && !DeviceKeyProvider.isUnlocked) {
+        _linuxCommittedAwaitingUnlock = true;
+        _linuxVaultConfigured = await DeviceKeyProvider.linuxHasWrappedKey();
+        // A projection from the previous process must not remain authoritative
+        // while this process is waiting for the device-vault passphrase.
+        await NativeProfileProjection.invalidate();
+        return;
+      }
       await NativeProfileProjection.publish(ProfileRuntime.capture());
       return;
     }
@@ -269,7 +276,7 @@ class ProfileBootstrap {
         _hasLegacyDeviceJobAuthority(legacy) ||
         await _hasLegacyFileAuthority() ||
         await _hasLegacyNativeJobAuthority();
-    if (Platform.isLinux && !DeviceKeyProvider.isUnlocked) {
+    if (DeviceKeyProvider.isLinux && !DeviceKeyProvider.isUnlocked) {
       _linuxPending = _LinuxPendingBootstrap(
         existingInstall: isExistingInstall,
         hasWrappedKey: await DeviceKeyProvider.linuxHasWrappedKey(),
@@ -454,7 +461,7 @@ class ProfileBootstrap {
     if (openedBeforeFailure != null) await openedBeforeFailure.close();
 
     await DeviceKeyProvider.initialize();
-    if (Platform.isLinux && !DeviceKeyProvider.isUnlocked) {
+    if (DeviceKeyProvider.isLinux && !DeviceKeyProvider.isUnlocked) {
       final passphrase = linuxVaultPassphrase;
       if (passphrase == null || passphrase.isEmpty) {
         throw StateError(
@@ -501,13 +508,26 @@ class ProfileBootstrap {
   /// Completes the interactive Linux bootstrap without exposing a partially
   /// migrated profile tree. The app child has not mounted while this runs.
   static Future<void> completeLinuxVault(String passphrase) async {
-    if (!Platform.isLinux) throw UnsupportedError('Linux only');
+    if (!DeviceKeyProvider.isLinux) throw UnsupportedError('Linux only');
     if (!DeviceKeyProvider.isUnlocked) {
       if (await DeviceKeyProvider.linuxHasWrappedKey()) {
         await DeviceKeyProvider.unlockLinuxVault(passphrase);
       } else {
         await DeviceKeyProvider.createLinuxVault(passphrase);
       }
+    }
+    if (_linuxCommittedAwaitingUnlock) {
+      if (!ProfileRuntime.isInitialized ||
+          !ProfileRuntime.isProfileCommitted ||
+          _registry == null) {
+        throw StateError('Committed Linux profile bootstrap is unavailable');
+      }
+      final scope = ProfileRuntime.capture();
+      await _repairRuntimeMirror();
+      await NativeProfileProjection.publish(scope);
+      _linuxCommittedAwaitingUnlock = false;
+      _linuxVaultConfigured = null;
+      return;
     }
     final pending = _linuxPending;
     if (pending == null) return;
@@ -518,7 +538,7 @@ class ProfileBootstrap {
     UserProfile profile;
     if (pending.existingInstall) {
       // No ProfilePreferenceBudgetExceeded handler here, unlike the tvOS path
-      // above: this method is guarded by Platform.isLinux and the budget is
+      // above: this method is guarded by the Linux platform check and the budget is
       // only enforced on tvOS, so the two can never both hold. Enforcing the
       // budget on any other platform means handling it here too.
       profile = await ProfileMigrationService(
@@ -547,6 +567,7 @@ class ProfileBootstrap {
     );
     ProfileRuntime.promoteLegacyToCommitted(scope);
     _linuxPending = null;
+    _linuxVaultConfigured = null;
     await _repairRuntimeMirror();
     await NativeProfileProjection.publish(scope);
   }
@@ -606,6 +627,9 @@ class ProfileBootstrap {
     _registry = null;
     if (opened != null) await opened.close();
     TvOsProfileRecoveryStore.checkpointCallback = null;
+    _linuxPending = null;
+    _linuxCommittedAwaitingUnlock = false;
+    _linuxVaultConfigured = null;
   }
 }
 
