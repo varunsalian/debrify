@@ -148,9 +148,7 @@ class ProfileRegistry {
   /// cannot add.
   static Future<void> _addPinRecoveryColumns(DatabaseExecutor db) async {
     await db.execute('ALTER TABLE user_profiles ADD COLUMN recovery_hash BLOB');
-    await db.execute(
-      'ALTER TABLE user_profiles ADD COLUMN recovery_salt BLOB',
-    );
+    await db.execute('ALTER TABLE user_profiles ADD COLUMN recovery_salt BLOB');
     await db.execute(
       'ALTER TABLE user_profiles ADD COLUMN recovery_params_json TEXT',
     );
@@ -1283,6 +1281,52 @@ class ProfileRegistry {
         'user_profiles',
         <String, Object?>{
           'profile_setup_complete': setupComplete ? 1 : 0,
+          'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+        },
+        where:
+            "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+        whereArgs: <Object>[profileId],
+      );
+    });
+    if (changed != 1) throw StateError('Active profile is unavailable');
+    await checkpointTvOsRecovery();
+    return (await getProfile(profileId))!;
+  }
+
+  /// Changes only the unlocked active profile's display identity.
+  ///
+  /// This deliberately does not share [updateProfile]: that method is an
+  /// Admin boundary capable of changing roles, policy and lock behavior. A
+  /// self-service caller cannot name another target, and name/avatar changes
+  /// do not bump the authorization revision because they grant no authority.
+  Future<UserProfile> updateActiveProfileIdentity({
+    required String profileId,
+    required String name,
+    required String? avatarKey,
+    required int actingAuthorizationRevision,
+    required int actingSessionEpoch,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || trimmedName.length > 40) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Name must contain 1–40 characters',
+      );
+    }
+    var changed = 0;
+    await _db.transaction((txn) async {
+      await _assertActiveSessionActor(
+        txn,
+        profileId: profileId,
+        authorizationRevision: actingAuthorizationRevision,
+        sessionEpoch: actingSessionEpoch,
+      );
+      changed = await txn.update(
+        'user_profiles',
+        <String, Object?>{
+          'name': trimmedName,
+          'avatar_key': avatarKey,
           'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
         },
         where:
@@ -3256,6 +3300,97 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
+  /// Replaces the unlocked active profile's PIN only when the credential the
+  /// caller confirmed is still current. The target is necessarily the actor;
+  /// Admin reset of another profile remains on [setPinRecord].
+  Future<void> setActiveProfilePinRecordIfUnchanged({
+    required String profileId,
+    required ProfilePinRecord expected,
+    required List<int>? hash,
+    required List<int>? salt,
+    required String? paramsJson,
+    required List<int>? recoveryHash,
+    required List<int>? recoverySalt,
+    required String? recoveryParamsJson,
+    required int actingAuthorizationRevision,
+    required int actingSessionEpoch,
+  }) async {
+    if ((hash == null) != (salt == null) ||
+        (hash == null) != (paramsJson == null) ||
+        (recoveryHash == null) != (recoverySalt == null) ||
+        (recoveryHash == null) != (recoveryParamsJson == null) ||
+        (recoveryHash != null && hash == null)) {
+      throw ArgumentError('Incomplete PIN or recovery credential');
+    }
+    try {
+      await authorityWillChangeCallback?.call();
+      var changed = false;
+      await _db.transaction((txn) async {
+        await _assertActiveSessionActor(
+          txn,
+          profileId: profileId,
+          authorizationRevision: actingAuthorizationRevision,
+          sessionEpoch: actingSessionEpoch,
+        );
+        final rows = await txn.query(
+          'user_profiles',
+          columns: const <String>[
+            'pin_hash',
+            'pin_salt',
+            'pin_params_json',
+            'pin_reset_required',
+            'recovery_hash',
+            'recovery_salt',
+            'recovery_params_json',
+          ],
+          where:
+              "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+          whereArgs: <Object>[profileId],
+          limit: 1,
+        );
+        if (rows.isEmpty ||
+            !_pinAndRecoveryRecordMatches(rows.single, expected)) {
+          return;
+        }
+        final count = await txn.update(
+          'user_profiles',
+          <String, Object?>{
+            'pin_hash': hash == null ? null : Uint8List.fromList(hash),
+            'pin_salt': salt == null ? null : Uint8List.fromList(salt),
+            'pin_params_json': paramsJson,
+            'recovery_hash': recoveryHash == null
+                ? null
+                : Uint8List.fromList(recoveryHash),
+            'recovery_salt': recoverySalt == null
+                ? null
+                : Uint8List.fromList(recoverySalt),
+            'recovery_params_json': recoveryParamsJson,
+            'pin_reset_required': 0,
+            'failed_pin_attempts': 0,
+            'locked_until_ms': null,
+            'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+          },
+          where: 'id = ?',
+          whereArgs: <Object>[profileId],
+        );
+        changed = count == 1;
+      });
+      if (!changed) throw StateError('PIN authorization changed');
+      await checkpointTvOsRecovery();
+    } catch (error, stackTrace) {
+      // `authorityWillChangeCallback` denies native readers before the
+      // transaction. Any rejection or publication failure must republish the
+      // currently active authority, not leave a stale session's denial live.
+      try {
+        await authorityChangedCallback?.call();
+      } catch (_) {
+        // Preserve the initiating failure. A later lifecycle publication can
+        // retry, while callers still resolve whether their DB write committed.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
   /// Records a failed attempt only if the PIN credential observed by the
   /// verifier is still current. An Admin reset racing the KDF must not lock
   /// the replacement credential.
@@ -4563,6 +4698,22 @@ class ProfileRegistry {
         (row['pin_reset_required'] == 1) == expected.resetRequired;
   }
 
+  static bool _pinAndRecoveryRecordMatches(
+    Map<String, Object?> row,
+    ProfilePinRecord expected,
+  ) {
+    return _pinRecordMatches(row, expected) &&
+        _bytesEqual(
+          row['recovery_hash'] as Uint8List?,
+          expected.recoveryHash,
+        ) &&
+        _bytesEqual(
+          row['recovery_salt'] as Uint8List?,
+          expected.recoverySalt,
+        ) &&
+        row['recovery_params_json'] == expected.recoveryParamsJson;
+  }
+
   static bool _bytesEqual(List<int>? first, List<int>? second) {
     if (identical(first, second)) return true;
     if (first == null || second == null || first.length != second.length) {
@@ -4911,7 +5062,9 @@ class ProfilePinRecord {
   bool get isCorrupt =>
       (hash != null || salt != null || paramsJson != null) && !hasPin;
   bool get hasRecoveryCode =>
-      recoveryHash != null && recoverySalt != null && recoveryParamsJson != null;
+      recoveryHash != null &&
+      recoverySalt != null &&
+      recoveryParamsJson != null;
 }
 
 extension<T> on List<T> {

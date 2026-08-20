@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/screens/settings/profiles_settings_page.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_lock_controller.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -18,6 +20,7 @@ void main() {
   late Directory temporaryDirectory;
   late ProfileRegistry registry;
   late String adminId;
+  late String memberId;
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -34,7 +37,10 @@ void main() {
       name: 'Boss',
       role: UserProfileRole.admin,
     )).id;
-    await registry.createProfile(name: 'Maya', role: UserProfileRole.child);
+    memberId = (await registry.createProfile(
+      name: 'Maya',
+      role: UserProfileRole.child,
+    )).id;
     await registry.commitBootstrap(
       activeProfileId: adminId,
       migratedLegacyInstall: false,
@@ -47,6 +53,7 @@ void main() {
   });
 
   tearDown(() async {
+    ProfileLockController.instance.dispose();
     ProfileRuntime.debugReset();
     ProfileBootstrap.debugInstallRegistry(null);
     await registry.close();
@@ -134,6 +141,35 @@ void main() {
     expect(find.byKey(const ValueKey('profiles-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('profiles-create')), findsOneWidget);
     expect(find.byKey(const ValueKey('profiles-always-ask')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a non-admin can open only the active-profile self editor', (
+    tester,
+  ) async {
+    late UserProfile member;
+    await tester.runAsync(() async {
+      await registry.setActiveProfile(memberId);
+      member = (await registry.getProfile(memberId))!;
+    });
+    ProfileRuntime.publish(
+      ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+    );
+    ProfileLockController.instance.unlock(member);
+
+    await pumpHub(tester, size: const Size(390, 844));
+
+    expect(find.byKey(const ValueKey('profiles-edit-self')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profiles-edit-current')), findsNothing);
+    expect(find.byKey(const ValueKey('profiles-create')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('profiles-edit-self')));
+    await settle(tester);
+
+    expect(find.text('Edit your profile'), findsOneWidget);
+    expect(find.byKey(const ValueKey('self-profile-name')), findsOneWidget);
+    expect(find.text('ROLE'), findsNothing);
+    expect(find.text('Permissions'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

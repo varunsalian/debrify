@@ -32,7 +32,39 @@ class ProfilePinVerification {
   final ProfilePinResult result;
   final DateTime? lockedUntil;
 
-  const ProfilePinVerification(this.result, {this.lockedUntil});
+  /// The exact credential atomically accepted by a successful verification.
+  /// This differs from the originally read record when verification upgraded
+  /// its KDF parameters. Callers performing a follow-up conditional mutation
+  /// must use this record rather than rereading an unverified credential.
+  final ProfilePinRecord? verifiedCredential;
+
+  const ProfilePinVerification(
+    this.result, {
+    this.lockedUntil,
+    this.verifiedCredential,
+  });
+}
+
+/// A self-service PIN mutation could not confirm the profile's current PIN.
+/// The UI can present the same locked/reset/invalid distinctions as unlock.
+class ProfileCurrentPinException implements Exception {
+  final ProfilePinVerification verification;
+
+  const ProfileCurrentPinException(this.verification);
+}
+
+/// SQLite accepted a self-service PIN mutation, but the complete profile
+/// checkpoint could not be republished. On tvOS that checkpoint is the durable
+/// authority, so callers must not report ordinary success. A newly generated
+/// recovery code remains attached because it can never be reconstructed.
+class ProfilePinDurabilityException implements Exception {
+  final String? recoveryCode;
+  final Object cause;
+
+  const ProfilePinDurabilityException({
+    required this.recoveryCode,
+    required this.cause,
+  });
 }
 
 class ProfilePinService {
@@ -105,6 +137,166 @@ class ProfilePinService {
     return recoveryCode;
   }
 
+  /// Sets or replaces the unlocked active profile's own PIN.
+  ///
+  /// Existing protection must first be confirmed. The registry then binds the
+  /// write to both the active session and the exact credential that was
+  /// verified, closing profile-switch and concurrent-reset races.
+  Future<String> setOwnPin({
+    required ProfileAuthorizationContext actor,
+    required String newPin,
+    String? currentPin,
+  }) async {
+    _validatePin(newPin);
+    final expected = await _confirmOwnCurrentPin(actor, currentPin);
+    final salt = _randomBytes(16);
+    final hash = await _derive(newPin, salt, params);
+    final recoveryCode = _generateRecoveryCode();
+    final recoverySalt = _randomBytes(16);
+    final recoveryHash = await _derive(
+      _normalizeRecoveryCode(recoveryCode),
+      recoverySalt,
+      params,
+    );
+    final paramsJson = jsonEncode(params.toJson());
+    await actor.validate(registry);
+    try {
+      await registry.setActiveProfilePinRecordIfUnchanged(
+        profileId: actor.profileId,
+        expected: expected,
+        hash: hash,
+        salt: salt,
+        paramsJson: paramsJson,
+        recoveryHash: recoveryHash,
+        recoverySalt: recoverySalt,
+        recoveryParamsJson: paramsJson,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+    } catch (error, stackTrace) {
+      final committed = await _matchesCredential(
+        actor.profileId,
+        hash: hash,
+        salt: salt,
+        paramsJson: paramsJson,
+        recoveryHash: recoveryHash,
+        recoverySalt: recoverySalt,
+        recoveryParamsJson: paramsJson,
+      );
+      if (!committed) Error.throwWithStackTrace(error, stackTrace);
+      try {
+        await registry.checkpointTvOsRecovery();
+      } catch (checkpointError, checkpointStackTrace) {
+        Error.throwWithStackTrace(
+          ProfilePinDurabilityException(
+            recoveryCode: recoveryCode,
+            cause: checkpointError,
+          ),
+          checkpointStackTrace,
+        );
+      }
+    }
+    return recoveryCode;
+  }
+
+  /// Removes the unlocked active profile's own PIN after confirming it.
+  Future<void> removeOwnPin({
+    required ProfileAuthorizationContext actor,
+    required String currentPin,
+  }) async {
+    final expected = await _confirmOwnCurrentPin(actor, currentPin);
+    if (!expected.hasPin) return;
+    await actor.validate(registry);
+    try {
+      await registry.setActiveProfilePinRecordIfUnchanged(
+        profileId: actor.profileId,
+        expected: expected,
+        hash: null,
+        salt: null,
+        paramsJson: null,
+        recoveryHash: null,
+        recoverySalt: null,
+        recoveryParamsJson: null,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+    } catch (error, stackTrace) {
+      final current = await registry.getPinRecord(actor.profileId);
+      if (current == null ||
+          current.hasPin ||
+          current.hasRecoveryCode ||
+          current.resetRequired) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      try {
+        await registry.checkpointTvOsRecovery();
+      } catch (checkpointError, checkpointStackTrace) {
+        Error.throwWithStackTrace(
+          ProfilePinDurabilityException(
+            recoveryCode: null,
+            cause: checkpointError,
+          ),
+          checkpointStackTrace,
+        );
+      }
+    }
+  }
+
+  Future<bool> _matchesCredential(
+    String profileId, {
+    required List<int> hash,
+    required List<int> salt,
+    required String paramsJson,
+    required List<int> recoveryHash,
+    required List<int> recoverySalt,
+    required String recoveryParamsJson,
+  }) async {
+    final current = await registry.getPinRecord(profileId);
+    return current != null &&
+        current.hasPin &&
+        current.hasRecoveryCode &&
+        _constantTimeEquals(current.hash!, hash) &&
+        _constantTimeEquals(current.salt!, salt) &&
+        current.paramsJson == paramsJson &&
+        _constantTimeEquals(current.recoveryHash!, recoveryHash) &&
+        _constantTimeEquals(current.recoverySalt!, recoverySalt) &&
+        current.recoveryParamsJson == recoveryParamsJson &&
+        !current.resetRequired;
+  }
+
+  Future<ProfilePinRecord> _confirmOwnCurrentPin(
+    ProfileAuthorizationContext actor,
+    String? currentPin,
+  ) async {
+    final profile = await actor.validate(registry);
+    final observed = await registry.getPinRecord(profile.id);
+    if (observed == null) throw StateError('Active profile is unavailable');
+    if (observed.resetRequired || profile.pinResetRequired) {
+      throw const ProfileCurrentPinException(
+        ProfilePinVerification(ProfilePinResult.resetRequired),
+      );
+    }
+    if (observed.hasPin) {
+      if (currentPin == null || currentPin.isEmpty) {
+        throw const ProfileCurrentPinException(
+          ProfilePinVerification(ProfilePinResult.invalid),
+        );
+      }
+      final verification = await verify(profile.id, currentPin);
+      if (verification.result != ProfilePinResult.verified) {
+        throw ProfileCurrentPinException(verification);
+      }
+      final verifiedCredential = verification.verifiedCredential;
+      if (verifiedCredential == null) {
+        throw StateError('Verified PIN credential is unavailable');
+      }
+      await actor.validate(registry);
+      return verifiedCredential;
+    }
+    await actor.validate(registry);
+    return observed;
+  }
+
   /// Self-service escape hatch for a forgotten PIN: a matching recovery code
   /// removes the PIN entirely (and spends the code), letting the user in to
   /// set a fresh one. Deliberately NOT throttled by the PIN lock — the code
@@ -118,9 +310,7 @@ class ProfilePinService {
     if (record == null) throw StateError('Profile does not exist');
     // Admin-reset state is a deliberate lockdown (possibly a compromised
     // PIN); the pre-reset recovery code must not quietly undo it.
-    if (record.resetRequired ||
-        !record.hasPin ||
-        !record.hasRecoveryCode) {
+    if (record.resetRequired || !record.hasPin || !record.hasRecoveryCode) {
       return ProfileRecoveryResult.notConfigured;
     }
     final normalized = _normalizeRecoveryCode(code);
@@ -288,7 +478,26 @@ class ProfilePinService {
           : jsonEncode(params.toJson()),
     );
     if (!completed) throw StateError('PIN authorization changed');
-    return const ProfilePinVerification(ProfilePinResult.verified);
+    return ProfilePinVerification(
+      ProfilePinResult.verified,
+      verifiedCredential: ProfilePinRecord(
+        hash: replacementHash == null
+            ? record.hash
+            : Uint8List.fromList(replacementHash),
+        salt: replacementSalt == null
+            ? record.salt
+            : Uint8List.fromList(replacementSalt),
+        paramsJson: replacementHash == null
+            ? record.paramsJson
+            : jsonEncode(params.toJson()),
+        failedAttempts: 0,
+        lockedUntilMs: null,
+        resetRequired: record.resetRequired,
+        recoveryHash: record.recoveryHash,
+        recoverySalt: record.recoverySalt,
+        recoveryParamsJson: record.recoveryParamsJson,
+      ),
+    );
   }
 
   Future<ProfilePinVerification> _failed(

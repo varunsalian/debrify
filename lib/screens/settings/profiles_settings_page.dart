@@ -20,6 +20,7 @@ import '../profiles/profile_wall_screen.dart';
 import '../profiles/profile_row_actions.dart';
 import '../profiles/profile_setup_flow.dart';
 import 'widgets/settings_widgets.dart';
+import 'self_profile_settings_page.dart';
 
 /// Settings → Profiles: the household hub.
 ///
@@ -122,6 +123,23 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
       ),
     );
     if (changed == true) await _load();
+  }
+
+  Future<void> _editSelf(UserProfile profile) async {
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    if (!mounted || authorization.profileId != profile.id) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => SelfProfileSettingsPage(
+          registry: registry,
+          pins: ProfilePinService(registry: registry),
+          authorization: authorization,
+          profile: profile,
+        ),
+      ),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _create() async {
@@ -345,14 +363,17 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
         subtitle: 'Choose who is watching now',
         onTap: () async => _switchProfile(),
       ),
-      if (_mayManage)
-        SettingsTile(
-          key: const ValueKey('profiles-edit-current'),
-          icon: Icons.edit_rounded,
-          title: 'Edit profile',
-          subtitle: 'Name, avatar, PIN and access',
-          onTap: () => _edit(active),
+      SettingsTile(
+        key: ValueKey(
+          _mayManage ? 'profiles-edit-current' : 'profiles-edit-self',
         ),
+        icon: Icons.edit_rounded,
+        title: _mayManage ? 'Edit profile' : 'Edit your profile',
+        subtitle: _mayManage
+            ? 'Name, avatar, PIN and access'
+            : 'Name, avatar and PIN',
+        onTap: () => _mayManage ? _edit(active) : _editSelf(active),
+      ),
     ],
   );
 

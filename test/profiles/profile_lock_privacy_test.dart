@@ -55,6 +55,28 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect((calls.last.arguments as Map)['sensitive'], isTrue);
   });
+
+  test('metadata refresh preserves a lock and rejects another profile', () {
+    final original = _profile(lockOnResume: true, hasPin: false);
+    ProfileLockController.instance.activate(original, unlocked: true);
+    ProfileLockController.instance.lock();
+
+    expect(
+      ProfileLockController.instance.refreshProfileIfCurrent(
+        _profile(lockOnResume: true, hasPin: true),
+      ),
+      isTrue,
+    );
+    expect(ProfileLockController.instance.lockedProfileId.value, original.id);
+
+    expect(
+      ProfileLockController.instance.refreshProfileIfCurrent(
+        _profileWithId('profile-b'),
+      ),
+      isFalse,
+    );
+    expect(ProfileLockController.instance.lockedProfileId.value, original.id);
+  });
 }
 
 UserProfile _profile({required bool lockOnResume, required bool hasPin}) {
@@ -71,6 +93,25 @@ UserProfile _profile({required bool lockOnResume, required bool hasPin}) {
     pinResetRequired: false,
     hasPin: hasPin,
     lockOnResume: lockOnResume,
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+UserProfile _profileWithId(String id) {
+  final now = DateTime.utc(2026, 1, 1);
+  return UserProfile(
+    id: id,
+    name: 'Other',
+    role: UserProfileRole.member,
+    policy: ProfilePolicy.allAllowedFor(UserProfileRole.member),
+    authorizationRevision: 1,
+    lifecycle: UserProfileLifecycle.active,
+    visibleDataGeneration: 1,
+    setupComplete: true,
+    pinResetRequired: false,
+    hasPin: false,
+    lockOnResume: false,
     createdAt: now,
     updatedAt: now,
   );

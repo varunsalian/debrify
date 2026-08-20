@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_lock_controller.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -52,6 +54,7 @@ void main() {
   });
 
   tearDown(() async {
+    ProfileLockController.instance.dispose();
     ProfileRuntime.debugReset();
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
@@ -64,6 +67,291 @@ void main() {
       pin: pin,
     );
   }
+
+  Future<ProfileAuthorizationContext> activateMember() async {
+    await registry.setActiveProfile(profileId);
+    ProfileRuntime.publish(
+      ProfileScope(profileId: profileId, dataGeneration: 1, sessionEpoch: 2),
+    );
+    ProfileLockController.instance.unlock(
+      (await registry.getProfile(profileId))!,
+    );
+    return ProfileAuthorizationContext.capture(registry);
+  }
+
+  test('Member can set, replace and remove only their own PIN', () async {
+    final actor = await activateMember();
+    final firstRecovery = await pins.setOwnPin(actor: actor, newPin: '4826');
+    expect(firstRecovery, isNotEmpty);
+    expect(
+      (await pins.verify(profileId, '4826')).result,
+      ProfilePinResult.verified,
+    );
+
+    final secondRecovery = await pins.setOwnPin(
+      actor: actor,
+      currentPin: '4826',
+      newPin: '9151',
+    );
+    expect(secondRecovery, isNot(firstRecovery));
+    expect(
+      (await pins.verify(profileId, '9151')).result,
+      ProfilePinResult.verified,
+    );
+
+    await pins.removeOwnPin(actor: actor, currentPin: '9151');
+    expect((await registry.getPinRecord(profileId))?.hasPin, isFalse);
+  });
+
+  test('self-service PIN replacement requires the current PIN', () async {
+    await setMemberPin('4826');
+    final actor = await activateMember();
+
+    await expectLater(
+      pins.setOwnPin(actor: actor, currentPin: '0000', newPin: '9151'),
+      throwsA(isA<ProfileCurrentPinException>()),
+    );
+    expect(
+      (await pins.verify(profileId, '4826')).result,
+      ProfilePinResult.verified,
+    );
+    expect(
+      (await pins.verify(profileId, '9151')).result,
+      ProfilePinResult.invalid,
+    );
+  });
+
+  test(
+    'self-service cannot overwrite a credential changed after verification',
+    () async {
+      await setMemberPin('4826');
+      final actor = await activateMember();
+      var injectReset = true;
+      registry.authorityChangedCallback = () async {
+        if (!injectReset) return;
+        injectReset = false;
+        final current = await registry.getPinRecord(profileId);
+        if (current == null) return;
+        await registry.markPinResetRequiredIfUnchanged(
+          profileId: profileId,
+          expected: current,
+        );
+      };
+
+      await expectLater(
+        pins.setOwnPin(actor: actor, currentPin: '4826', newPin: '9151'),
+        throwsStateError,
+      );
+
+      final record = await registry.getPinRecord(profileId);
+      expect(record?.resetRequired, isTrue);
+      expect(
+        (await pins.verify(profileId, '9151')).result,
+        ProfilePinResult.resetRequired,
+      );
+    },
+  );
+
+  test(
+    'self-service conditional writes include recovery credentials',
+    () async {
+      await setMemberPin('4826');
+      final actor = await activateMember();
+      final actual = (await registry.getPinRecord(profileId))!;
+      final unverified = ProfilePinRecord(
+        hash: actual.hash,
+        salt: actual.salt,
+        paramsJson: actual.paramsJson,
+        resetRequired: actual.resetRequired,
+        recoveryHash: Uint8List.fromList(List<int>.filled(32, 7)),
+        recoverySalt: actual.recoverySalt,
+        recoveryParamsJson: actual.recoveryParamsJson,
+      );
+
+      await expectLater(
+        registry.setActiveProfilePinRecordIfUnchanged(
+          profileId: profileId,
+          expected: unverified,
+          hash: null,
+          salt: null,
+          paramsJson: null,
+          recoveryHash: null,
+          recoverySalt: null,
+          recoveryParamsJson: null,
+          actingAuthorizationRevision: actor.authorizationRevision,
+          actingSessionEpoch: actor.sessionEpoch,
+        ),
+        throwsStateError,
+      );
+      expect((await registry.getPinRecord(profileId))?.hasPin, isTrue);
+      expect((await registry.getPinRecord(profileId))?.hasRecoveryCode, isTrue);
+    },
+  );
+
+  test(
+    'a switched self-service session cannot change the old profile PIN',
+    () async {
+      final actor = await activateMember();
+      await registry.setActiveProfile(adminId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: adminId, dataGeneration: 1, sessionEpoch: 3),
+      );
+      var invalidations = 0;
+      var republications = 0;
+      registry.authorityWillChangeCallback = () async {
+        invalidations++;
+      };
+      registry.authorityChangedCallback = () async {
+        republications++;
+      };
+
+      await expectLater(
+        pins.setOwnPin(actor: actor, newPin: '4826'),
+        throwsStateError,
+      );
+      expect((await registry.getPinRecord(profileId))?.hasPin, isFalse);
+      expect(invalidations, 0);
+      expect(republications, 0);
+
+      final expected = (await registry.getPinRecord(profileId))!;
+      await expectLater(
+        registry.setActiveProfilePinRecordIfUnchanged(
+          profileId: profileId,
+          expected: expected,
+          hash: null,
+          salt: null,
+          paramsJson: null,
+          recoveryHash: null,
+          recoverySalt: null,
+          recoveryParamsJson: null,
+          actingAuthorizationRevision: actor.authorizationRevision,
+          actingSessionEpoch: actor.sessionEpoch,
+        ),
+        throwsStateError,
+      );
+      expect(invalidations, 1);
+      expect(republications, 1);
+    },
+  );
+
+  test(
+    'a committed self PIN retries publication before returning success',
+    () async {
+      final actor = await activateMember();
+      var publicationAttempts = 0;
+      registry.authorityChangedCallback = () async {
+        publicationAttempts++;
+        if (publicationAttempts <= 2) {
+          throw StateError('native publication temporarily unavailable');
+        }
+      };
+
+      final recoveryCode = await pins.setOwnPin(actor: actor, newPin: '4826');
+
+      expect(recoveryCode, isNotEmpty);
+      expect(publicationAttempts, 3);
+      final committed = await registry.getPinRecord(profileId);
+      expect(committed?.hasPin, isTrue);
+      expect(committed?.hasRecoveryCode, isTrue);
+
+      registry.authorityChangedCallback = null;
+      expect(
+        await pins.verifyRecoveryCode(profileId, recoveryCode),
+        ProfileRecoveryResult.cleared,
+      );
+    },
+  );
+
+  test('a persistently unpublishable PIN is not reported as success and keeps '
+      'its recovery code', () async {
+    final actor = await activateMember();
+    registry.authorityChangedCallback = () async {
+      throw StateError('native publication unavailable');
+    };
+
+    ProfilePinDurabilityException? failure;
+    try {
+      await pins.setOwnPin(actor: actor, newPin: '4826');
+    } on ProfilePinDurabilityException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(failure?.recoveryCode, isNotEmpty);
+    expect((await registry.getPinRecord(profileId))?.hasPin, isTrue);
+    registry.authorityChangedCallback = null;
+    expect(
+      await pins.verifyRecoveryCode(profileId, failure!.recoveryCode!),
+      ProfileRecoveryResult.cleared,
+    );
+  });
+
+  test('a committed PIN removal retries publication before success', () async {
+    await setMemberPin('4826');
+    final actor = await activateMember();
+    var publicationAttempts = 0;
+    registry.authorityWillChangeCallback = () async {
+      registry.authorityChangedCallback = () async {
+        publicationAttempts++;
+        if (publicationAttempts <= 2) {
+          throw StateError('native publication temporarily unavailable');
+        }
+      };
+    };
+
+    await pins.removeOwnPin(actor: actor, currentPin: '4826');
+
+    expect(publicationAttempts, 3);
+    expect((await registry.getPinRecord(profileId))?.hasPin, isFalse);
+  });
+
+  test(
+    'a persistently unpublishable PIN removal reports a durability error',
+    () async {
+      await setMemberPin('4826');
+      final actor = await activateMember();
+      registry.authorityWillChangeCallback = () async {
+        registry.authorityChangedCallback = () async {
+          throw StateError('native publication unavailable');
+        };
+      };
+
+      await expectLater(
+        pins.removeOwnPin(actor: actor, currentPin: '4826'),
+        throwsA(isA<ProfilePinDurabilityException>()),
+      );
+      expect((await registry.getPinRecord(profileId))?.hasPin, isFalse);
+    },
+  );
+
+  test(
+    'a concurrent reset is not mistaken for a committed PIN removal',
+    () async {
+      await setMemberPin('4826');
+      final actor = await activateMember();
+      var injectReset = true;
+      registry.authorityChangedCallback = () async {
+        if (!injectReset) return;
+        injectReset = false;
+        final current = await registry.getPinRecord(profileId);
+        if (current == null) return;
+        await registry.markPinResetRequiredIfUnchanged(
+          profileId: profileId,
+          expected: current,
+        );
+      };
+
+      await expectLater(
+        pins.removeOwnPin(actor: actor, currentPin: '4826'),
+        throwsStateError,
+      );
+
+      final record = await registry.getPinRecord(profileId);
+      expect(record?.resetRequired, isTrue);
+      expect(record?.hasPin, isFalse);
+      expect(record?.hasRecoveryCode, isFalse);
+    },
+  );
 
   test('sets and verifies a numeric PIN without storing it', () async {
     await setMemberPin('4826');
@@ -103,7 +391,10 @@ void main() {
       targetProfileId: profileId,
       pin: '4826',
     );
-    expect(code, matches(RegExp(r'^[A-HJ-KM-NP-Z2-9]{5}-[A-HJ-KM-NP-Z2-9]{5}$')));
+    expect(
+      code,
+      matches(RegExp(r'^[A-HJ-KM-NP-Z2-9]{5}-[A-HJ-KM-NP-Z2-9]{5}$')),
+    );
 
     expect(
       await pins.verifyRecoveryCode(profileId, 'AAAAA-AAAAA'),
@@ -154,10 +445,7 @@ void main() {
       actor: await ProfileAuthorizationContext.capture(registry),
       targetProfileId: profileId,
     );
-    expect(
-      (await registry.getPinRecord(profileId))?.hasRecoveryCode,
-      isFalse,
-    );
+    expect((await registry.getPinRecord(profileId))?.hasRecoveryCode, isFalse);
     expect(
       await pins.verifyRecoveryCode(profileId, second),
       ProfileRecoveryResult.notConfigured,
