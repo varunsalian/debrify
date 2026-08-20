@@ -107,7 +107,21 @@ class ProfileBootstrap {
     final hasRegistry = await ProfileRegistry.defaultRegistryExists();
     final registryCommitted =
         hasRegistry && await ProfileRegistry.defaultAuthorityIsCommitted();
-    final tvOsRecovery = await TvOsProfileRecoveryStore.read();
+    // A recovery envelope that EXISTS but cannot be read (manifest present,
+    // shards missing or hash-mismatched — seen in the wild on 2026-08-20 when
+    // tvOS dropped all ten shards of a committed generation) must land on the
+    // recovery screen exactly like a missing one. Letting the
+    // PlatformException escape here bypasses the ProfileBootstrapRecoveryRequired
+    // routing below and bricks startup on the generic failure screen instead.
+    String? tvOsRecovery;
+    try {
+      tvOsRecovery = await TvOsProfileRecoveryStore.read();
+    } on PlatformException catch (error) {
+      throw ProfileBootstrapRecoveryRequired(
+        'The tvOS profile recovery envelope is unreadable',
+        cause: error,
+      );
+    }
     final device = await DevicePreferences.instance();
     final committedOnce = device.getBool('profiles_committed_once_v1') ?? false;
     final hasAuthority = registryCommitted || tvOsRecovery != null;
