@@ -12051,6 +12051,26 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
   }) async {
+    final resolving = preferTraktResume
+        ? TorrentPlaybackService.showResolvingOverlay(
+            context,
+            meta: PlaybackMeta(
+              imdbId: item.effectiveImdbId,
+              contentType: item.type,
+              title: item.name,
+              posterUrl: item.poster,
+              year: item.year,
+              addonId: addon.id,
+            ),
+            title: item.name,
+          )
+        : null;
+    Future<void> launch(AdvancedSearchSelection selection) async {
+      resolving?.dismiss();
+      await _playSelection(selection);
+    }
+
+    try {
     // Set the active addon before any early return so a movie play carries the
     // right addon id into meta.addonId (addon-stream resume/next), instead of a
     // stale one left over from a previously-browsed series.
@@ -12079,7 +12099,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             .selectionForItem(cw);
         if (!mounted) return;
         if (sel != null) {
-          _playSelection(sel);
+          await launch(sel);
           return;
         }
       } else if (item.type == 'series') {
@@ -12097,7 +12117,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               );
           if (!mounted) return;
           if (sel != null) {
-            _playSelection(sel);
+            await launch(sel);
             return;
           }
         }
@@ -12113,7 +12133,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final simkl = await _simklResumeFor(item);
       if (!mounted) return;
       if (simkl != null) {
-        _playSelection(
+        await launch(
           AdvancedSearchSelection(
             imdbId: item.effectiveImdbId ?? item.id,
             isSeries: true,
@@ -12195,7 +12215,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       // Keep the detail page underneath — the cinematic loading overlay covers
       // it, and after playback Back returns to the detail (like Home).
-      _playSelection(
+      await launch(
         _movieSelection(
           item,
           isTraktSource: isTraktSource,
@@ -12268,7 +12288,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     if (!mounted) return;
 
-    _playSelection(
+    await launch(
       AdvancedSearchSelection(
         imdbId: playId,
         isSeries: true,
@@ -12281,6 +12301,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         traktSource: isTraktSource,
       ),
     );
+    } finally {
+      resolving?.dismiss();
+    }
   }
 
   /// Read-only mirror of [_onCatalogPlay]'s resume resolution, used to label the

@@ -1023,10 +1023,14 @@ class TorrentPlaybackService {
       _snack(context, 'No IMDb match to find sources for "$label".');
       return;
     }
+    final resolving = showResolvingOverlay(context, meta: meta, title: label);
     final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
     if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
     var activeRules = rules;
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      resolving.dismiss();
+      return;
+    }
 
     // Any non-`tt` id can't be resolved by the torrent engines — they key on
     // `tt…` ids — so addon-enabled profiles resolve these through the addon's
@@ -1039,12 +1043,14 @@ class TorrentPlaybackService {
     // already handled above.)
     if (!imdbId.startsWith('tt')) {
       if (!allowsAddonSearch(rules)) {
+        resolving.dismiss();
         _snack(
           context,
           'Torrent engines can’t search "$label" without an IMDb ID. Choose a source mode that allows addons.',
         );
         return;
       }
+      resolving.dismiss();
       await _playAddonStream(
         context,
         imdbId,
@@ -1071,6 +1077,7 @@ class TorrentPlaybackService {
         bound.isNotEmpty &&
         (isMovie || (meta.season != null && meta.episode != null));
     if (boundUsable) {
+      resolving.dismiss();
       final played = await _playViaBound(
         context,
         imdbId,
@@ -1094,6 +1101,7 @@ class TorrentPlaybackService {
       isMovie: isMovie,
       hasPreferredProvider: preferredProvider != null,
     )) {
+      resolving.dismiss();
       final fallBackToEngines =
           rules.sourceMode == QuickPlaySourceMode.addonsThenTorrents;
       final handled = await _playAddonStream(
@@ -1118,6 +1126,7 @@ class TorrentPlaybackService {
       );
     }
 
+    resolving.dismiss();
     final provider = preferredProvider ?? await _pickProvider(context);
     if (!context.mounted) return;
     if (provider == _cancelled) return;
@@ -5619,6 +5628,8 @@ class TorrentPlaybackService {
 
   static String _label(String provider) {
     switch (provider) {
+      case 'preparing':
+        return 'Preparing';
       case 'debrid':
         return 'Real-Debrid';
       case 'torbox':
@@ -5641,6 +5652,8 @@ class TorrentPlaybackService {
   /// Two-letter provider glyph for the Pipeline loader's provider chip.
   static String _providerCode(String provider) {
     switch (provider) {
+      case 'preparing':
+        return '···';
       case 'debrid':
         return 'RD';
       case 'torbox':
@@ -5694,6 +5707,19 @@ class TorrentPlaybackService {
       onCancel: onCancel,
     );
   }
+
+  /// Immediate feedback while Quick Play resolves preferences, resume data,
+  /// and pinned sources before the provider-specific pipeline can begin.
+  static PipelineLoadingOverlay showResolvingOverlay(
+    BuildContext context, {
+    required PlaybackMeta? meta,
+    required String title,
+  }) => _showPipeline(
+    context,
+    provider: 'preparing',
+    meta: meta,
+    title: title,
+  );
 
   // ── Minimal UI feedback ────────────────────────────────────────────────────
 
