@@ -11,6 +11,7 @@ import 'analytics_service.dart';
 import 'iptv_epg_service.dart';
 import 'storage_service.dart';
 import 'movie_metadata_service.dart';
+import 'next_episode_service.dart';
 import 'stremio_iptv_service.dart';
 import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
@@ -604,11 +605,36 @@ class AndroidTvPlayerBridge {
           if (episodeFetchProvider == null) return null;
           final episodeFetchArgs = call.arguments;
           if (episodeFetchArgs is! Map) return null;
-          final fetchSeason = episodeFetchArgs['season'] as int?;
-          final fetchEpisode = episodeFetchArgs['episode'] as int?;
-          if (fetchSeason == null || fetchEpisode == null) return null;
+          var fetchSeason = episodeFetchArgs['season'] as int?;
+          var fetchEpisode = episodeFetchArgs['episode'] as int?;
+          // Native may reach the end of its one-entry/direct-link playlist
+          // before the asynchronous full-show guide arrives. Resolve the next
+          // identity here, then feed it through the exact same in-player
+          // candidate ladder instead of closing/relaunching the player.
           try {
-            final result = await episodeFetchProvider(fetchSeason, fetchEpisode);
+            if (fetchSeason == null || fetchEpisode == null) {
+              final imdbId = episodeFetchArgs['imdbId'] as String?;
+              final currentSeason = episodeFetchArgs['currentSeason'] as int?;
+              final currentEpisode = episodeFetchArgs['currentEpisode'] as int?;
+              final direction = episodeFetchArgs['direction'] as int? ?? 1;
+              if (direction == 1 &&
+                  imdbId != null &&
+                  currentSeason != null &&
+                  currentEpisode != null) {
+                final next = await NextEpisodeService.findNextEpisode(
+                  imdbId,
+                  currentSeason,
+                  currentEpisode,
+                );
+                fetchSeason = next?.season;
+                fetchEpisode = next?.episode;
+              }
+            }
+            if (fetchSeason == null || fetchEpisode == null) return null;
+            final result = await episodeFetchProvider(
+              fetchSeason,
+              fetchEpisode,
+            );
             if (result == null) {
               throw PlatformException(
                 code: 'episode_fetch_failed',

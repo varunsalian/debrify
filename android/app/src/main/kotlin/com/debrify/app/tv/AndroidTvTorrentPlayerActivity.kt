@@ -1206,10 +1206,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // ~100% and scrobble the item as fully watched. Both reset per item.
     private var maxStableDurationMs: Long = 0L
     private var lastRealPositionMs: Long = 0L
-    // One local-threshold report per playlist item. Flutter owns the durable
+    // One local-threshold report per content identity. Flutter owns the durable
     // completed state; this only prevents sending a write-trigger on every
     // five-second progress pulse after the threshold has been crossed.
-    private val locallyCompletedItemIndices = mutableSetOf<Int>()
+    // A fetched direct episode replaces the one-entry playlist in place, so
+    // its index is always 0. Deduplicate completion by episode identity rather
+    // than index or only the first direct episode could cross the threshold.
+    private val locallyCompletedItemKeys = mutableSetOf<String>()
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
@@ -1477,10 +1480,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null) {
                             val nextTarget = guideAdjacent(model, currentItem, 1)
                             if (nextTarget != null && hasPlaylistResolver) {
-                                requestEpisodeFetch(nextTarget.season, nextTarget.episode)
+                                requestEpisodeFetch(
+                                    nextTarget.season,
+                                    nextTarget.episode,
+                                    autoAdvance = true,
+                                )
                                 return
                             }
                             if (model.imdbId != null) {
+                                if (hasPlaylistResolver) {
+                                    requestAdjacentEpisodeFetch(
+                                        model.imdbId!!,
+                                        currentItem.season,
+                                        currentItem.episode,
+                                        autoAdvance = true,
+                                    )
+                                    return
+                                }
                                 requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
                             }
                         }
@@ -3316,7 +3332,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // [suppressTrakt]: a source switch resumes the captured live position and
     // must not let the per-episode tracker percent override it. The parameter
     // retains its legacy name because the payload field does too.
-    private fun playItem(index: Int, suppressTrakt: Boolean = false) {
+    private fun playItem(
+        index: Int,
+        suppressTrakt: Boolean = false,
+        suppressResume: Boolean = false,
+    ) {
         // A sleep stop wins over anything already queued: the auto-advance
         // arms a 1.5s postDelayed before starting the next item, and a
         // countdown expiring inside that window would otherwise be undone by
@@ -3366,9 +3386,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // switch on the same content (must honour the captured live position).
         val autoAdvance = isAutoAdvancing
         isAutoAdvancing = false
-        pendingSeekMs = item.resumePositionMs
+        pendingSeekMs = if (suppressResume) 0L else item.resumePositionMs
         pendingItemTraktPercent =
-            if (autoAdvance || suppressTrakt) 0.0 else (item.traktProgressPercent ?: 0.0)
+            if (autoAdvance || suppressTrakt || suppressResume) 0.0 else (item.traktProgressPercent ?: 0.0)
 
         // Check if URL needs to be resolved (lazy loading)
         if (item.url.isBlank()) {
@@ -3888,8 +3908,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     return
                 }
                 if (model.imdbId != null) {
-                    requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
-                    finish()
+                    if (hasPlaylistResolver) {
+                        requestAdjacentEpisodeFetch(
+                            model.imdbId!!,
+                            currentItem.season,
+                            currentItem.episode,
+                        )
+                    } else {
+                        requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                        finish()
+                    }
                 } else {
                     Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
                 }
@@ -3906,7 +3934,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val model = payload ?: return
         val prevIndex = getPrevPlayableIndex(currentIndex)
         if (prevIndex != null) {
-            playItem(prevIndex)
+            // Match the Dart player's manual Previous semantics: selecting an
+            // already-present episode starts it fresh. Guide-fetched Previous
+            // remains resumable, as it does in Dart.
+            playItem(prevIndex, suppressResume = true)
             return
         }
         val currentItem = model.items.getOrNull(currentIndex)
@@ -14227,12 +14258,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             model.movieCompletionThreshold
         }
+        val completionKey = if (
+            model.contentType == "series" && item.season != null && item.episode != null
+        ) {
+            "series:${item.season}:${item.episode}"
+        } else {
+            "index:$currentIndex"
+        }
         val localCompleted =
             model.localCompletionTracking &&
             duration > 0L &&
             position > 0L &&
             position.toDouble() * 100.0 / duration.toDouble() >= completionThreshold &&
-            locallyCompletedItemIndices.add(currentIndex)
+            locallyCompletedItemKeys.add(completionKey)
 
         // Update the item's progress in the payload for live UI updates
         val updatedItem = item.copy(
@@ -14324,7 +14362,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** In-player quick play of an episode that isn't in the playlist: asks
      * Flutter to find + resolve a source (existing packs → episode fetch →
      * pack fetch) and swaps playlists in place — no activity relaunch. */
-    private fun requestEpisodeFetch(season: Int, episode: Int) {
+    private fun requestEpisodeFetch(
+        season: Int,
+        episode: Int,
+        autoAdvance: Boolean = false,
+    ) {
         if (episodeFetchInFlight) return
         val label = String.format(java.util.Locale.US, "S%02dE%02d", season, episode)
         val channel = MainActivity.getAndroidTvPlayerChannel()
@@ -14356,6 +14398,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             items,
                             targetSeason = season,
                             targetEpisode = episode,
+                            suppressTargetResume = autoAdvance,
                         )
                     }
                 }
@@ -14372,6 +14415,78 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     runOnUiThread {
                         episodeFetchInFlight = false
                         showStatusPillTransient("Couldn't fetch $label")
+                    }
+                }
+            }
+        )
+    }
+
+    /** Guide-not-ready Next for a catalog series. Flutter resolves the next
+     * identity and runs the normal in-player episode source ladder. */
+    private fun requestAdjacentEpisodeFetch(
+        imdbId: String,
+        currentSeason: Int,
+        currentEpisode: Int,
+        autoAdvance: Boolean = false,
+    ) {
+        if (episodeFetchInFlight) return
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            showStatusPillTransient("Couldn't fetch next episode")
+            return
+        }
+        episodeFetchInFlight = true
+        val token = ++stremioResolutionToken
+        showStatusPillTransient("Finding next episode…")
+        channel.invokeMethod(
+            "requestEpisodeFetch",
+            hashMapOf<String, Any>(
+                "imdbId" to imdbId,
+                "currentSeason" to currentSeason,
+                "currentEpisode" to currentEpisode,
+                "direction" to 1,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        val map = result as? Map<*, *>
+                        val items = map?.get("items") as? List<*>
+                        val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
+                        if (map == null || items.isNullOrEmpty() || fetchedSourceIndex == null) {
+                            showStatusPillTransient("No playable next episode found")
+                            return@runOnUiThread
+                        }
+                        val targetSeason = (map["targetSeason"] as? Number)?.toInt()
+                        val targetEpisode = (map["targetEpisode"] as? Number)?.toInt()
+                        if (targetSeason == null || targetEpisode == null) {
+                            showStatusPillTransient("No playable next episode found")
+                            return@runOnUiThread
+                        }
+                        adoptSourceList(map)
+                        switchToSourcePlaylist(
+                            fetchedSourceIndex,
+                            items,
+                            targetSeason = targetSeason,
+                            targetEpisode = targetEpisode,
+                            suppressTargetResume = autoAdvance,
+                        )
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        showStatusPillTransient("No playable next episode found")
+                    }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        showStatusPillTransient("Couldn't fetch next episode")
                     }
                 }
             }
@@ -14880,6 +14995,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         rawItems: List<*>,
         targetSeason: Int? = null,
         targetEpisode: Int? = null,
+        suppressTargetResume: Boolean = false,
     ) {
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
 
@@ -14936,6 +15052,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no items parsed successfully")
             showStatusPillTransient("Source unavailable")
             return
+        }
+
+        // A singleton direct stream has no pack filenames from which Flutter
+        // can infer an episode. Preserve the catalog identity across a manual
+        // source switch as well as an adjacent-episode fetch.
+        if (contentType == "series" && newItems.size == 1 &&
+            (newItems[0].season == null || newItems[0].episode == null) &&
+            resumeSeason != null && resumeEpisode != null) {
+            newItems[0] = newItems[0].copy(
+                season = resumeSeason,
+                episode = resumeEpisode,
+            )
         }
 
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
@@ -15035,7 +15163,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // and must keep its own per-episode tracker resume, matching the Dart
         // player's landedOnSameContent behaviour.
         percentSeekApplied = true
-        playItem(targetIndex, suppressTrakt = matchedSameContent)
+        playItem(
+            targetIndex,
+            suppressTrakt = matchedSameContent,
+            suppressResume = suppressTargetResume,
+        )
 
         // Report the switch outcome once playback settles
         watchSourceSwitchOutcome(sourceIndex)
@@ -15309,7 +15441,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } ?: emptyList()
             addonFetchState.clear()
             addonPackProbing.clear()
-            locallyCompletedItemIndices.clear()
+            locallyCompletedItemKeys.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 

@@ -270,8 +270,7 @@ class StorageService {
       'home_continue_watching_enabled';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
-  static const String _homeCardOrientationKey =
-      'home_card_orientation';
+  static const String _homeCardOrientationKey = 'home_card_orientation';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -2809,15 +2808,35 @@ class StorageService {
   ) async {
     final map = await _getPlaybackStateMap();
 
-    // Find series entry with matching imdbId, track most recent video fallback
-    Map<String, dynamic>? seriesData;
+    // Merge every legacy title-keyed series entry with this IMDb id. Older
+    // builds could save the same show under multiple release-derived titles;
+    // stopping at the first record silently hid episodes from the others.
+    final seriesResult = <String, Map<String, dynamic>>{};
     Map<String, dynamic>? videoFallback;
     int videoFallbackUpdatedAt = -1;
     for (final entry in map.values) {
       if (entry is Map<String, dynamic> && entry['imdbId'] == imdbId) {
         if (entry['type'] == 'series') {
-          seriesData = entry;
-          break;
+          final seasons = entry['seasons'];
+          if (seasons is! Map) continue;
+          for (final seasonEntry in seasons.entries) {
+            final episodes = seasonEntry.value;
+            if (episodes is! Map) continue;
+            for (final episodeEntry in episodes.entries) {
+              final episodeData = episodeEntry.value;
+              if (episodeData is! Map) continue;
+              final episodeKey = '${seasonEntry.key}_${episodeEntry.key}';
+              final candidate = Map<String, dynamic>.from(episodeData);
+              final existing = seriesResult[episodeKey];
+              final candidateUpdatedAt =
+                  (candidate['updatedAt'] as num?)?.toInt() ?? 0;
+              final existingUpdatedAt =
+                  (existing?['updatedAt'] as num?)?.toInt() ?? -1;
+              if (candidateUpdatedAt >= existingUpdatedAt) {
+                seriesResult[episodeKey] = candidate;
+              }
+            }
+          }
         } else if (entry['type'] == 'video') {
           final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
           if (updatedAt > videoFallbackUpdatedAt) {
@@ -2828,22 +2847,7 @@ class StorageService {
       }
     }
 
-    if (seriesData != null) {
-      final seasons = seriesData['seasons'];
-      if (seasons == null) return {};
-
-      final result = <String, Map<String, dynamic>>{};
-      for (final seasonEntry in seasons.entries) {
-        final season = seasonEntry.key;
-        final episodes = seasonEntry.value as Map<String, dynamic>;
-        for (final episodeEntry in episodes.entries) {
-          final episode = episodeEntry.key;
-          final episodeData = episodeEntry.value as Map<String, dynamic>;
-          result['${season}_$episode'] = episodeData;
-        }
-      }
-      return result;
-    }
+    if (seriesResult.isNotEmpty) return seriesResult;
 
     // Fallback: single-file video entry — parse season/episode from title
     if (videoFallback != null) {
