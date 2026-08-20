@@ -107,6 +107,10 @@ class StremioService {
   static const String _addonsKey = 'stremio_addons_v1';
   static const Duration _requestTimeout = Duration(seconds: 15);
 
+  /// User-initiated retries can wait longer than the automatic search without
+  /// making every source lookup block on a slow addon.
+  static const Duration manualRetryTimeout = Duration(minutes: 1);
+
   // Singleton pattern
   static final StremioService _instance = StremioService._internal();
   static StremioService get instance => _instance;
@@ -1829,41 +1833,6 @@ class StremioService {
         continue;
       }
 
-      // Determine stream type and get unique key
-      String? uniqueKey;
-      StreamType streamType;
-      String? directUrl;
-
-      if (stream.isTorrent) {
-        // Torrent stream - has infoHash
-        uniqueKey = stream.infoHash!.toLowerCase();
-        streamType = StreamType.torrent;
-        withInfoHash++;
-      } else if (stream.isExternalUrl) {
-        // External URL - opens in browser
-        uniqueKey =
-            'ext:${stream.externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
-        streamType = StreamType.externalUrl;
-        directUrl = stream.externalUrl;
-        withExternalUrl++;
-      } else if (stream.isDirectUrl) {
-        // Direct URL - playable without debrid
-        uniqueKey =
-            'url:${stream.url.hashCode.toRadixString(16).padLeft(40, '0')}';
-        streamType = StreamType.directUrl;
-        directUrl = stream.url;
-        withDirectUrl++;
-      } else {
-        skipped++;
-        continue;
-      }
-
-      // Parse seeders from title - only for actual torrents
-      // Direct/external links should have 0 seeders so they sort to bottom
-      final seeders = streamType == StreamType.torrent
-          ? (stream.seedersFromTitle ?? 0)
-          : 0;
-
       // Parse size - try behaviorHints.videoSize first, then title
       int sizeBytes = 0;
       if (stream.behaviorHints != null) {
@@ -1890,34 +1859,106 @@ class StremioService {
         }
       }
 
-      // Create torrent object with stream type info
-      final torrent = Torrent(
-        rowid: 0,
-        infohash: stream.infoHash?.toLowerCase() ?? uniqueKey,
-        name: name,
-        sizeBytes: sizeBytes,
-        createdUnix: 0,
-        seeders: seeders,
-        leechers: 0,
-        completed: 0,
-        scrapedDate: 0,
-        source: 'stremio:${stream.source}',
-        streamType: streamType,
-        directUrl: directUrl,
-      );
-
-      // Exact addon mode preserves every returned playable entry, including
-      // intentional duplicates. The default path keeps its historic dedupe:
-      // highest-seeder duplicate for torrents, first direct/external URL.
-      if (preserveOrder) {
-        orderedTorrents.add(torrent);
+      // A debrid addon may return a ready-to-play URL while retaining the
+      // source torrent hash in `infoHash` or `behaviorHints.bingeGroup`.
+      // Preserve both transports as separate rows: the URL row plays through
+      // the addon, while the hash row remains available to Debrify's provider.
+      final variants =
+          <
+            ({
+              String uniqueKey,
+              String infohash,
+              StreamType streamType,
+              String? directUrl,
+              bool hasRealInfoHash,
+              int seeders,
+            })
+          >[];
+      final playableUrl = stream.url;
+      if (stream.isTorrent) {
+        if (playableUrl != null && playableUrl.isNotEmpty) {
+          final urlKey =
+              'url:${playableUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+          variants.add((
+            uniqueKey: urlKey,
+            infohash: urlKey,
+            streamType: StreamType.directUrl,
+            directUrl: playableUrl,
+            hasRealInfoHash: false,
+            seeders: 0,
+          ));
+          withDirectUrl++;
+        }
+        final hash = stream.infoHash!.toLowerCase();
+        variants.add((
+          uniqueKey: hash,
+          infohash: hash,
+          streamType: StreamType.torrent,
+          directUrl: null,
+          hasRealInfoHash: true,
+          seeders: stream.seedersFromTitle ?? 0,
+        ));
+        withInfoHash++;
+      } else if (stream.isExternalUrl) {
+        final externalUrl = stream.externalUrl!;
+        final externalKey =
+            'ext:${externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+        variants.add((
+          uniqueKey: externalKey,
+          infohash: externalKey,
+          streamType: StreamType.externalUrl,
+          directUrl: externalUrl,
+          hasRealInfoHash: false,
+          seeders: 0,
+        ));
+        withExternalUrl++;
+      } else if (playableUrl != null && playableUrl.isNotEmpty) {
+        final urlKey =
+            'url:${playableUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+        variants.add((
+          uniqueKey: urlKey,
+          infohash: urlKey,
+          streamType: StreamType.directUrl,
+          directUrl: playableUrl,
+          hasRealInfoHash: false,
+          seeders: 0,
+        ));
+        withDirectUrl++;
+      } else {
+        skipped++;
         continue;
       }
-      final existing = uniqueTorrents[uniqueKey];
-      if (existing == null ||
-          (streamType == StreamType.torrent &&
-              torrent.seeders > existing.seeders)) {
-        uniqueTorrents[uniqueKey] = torrent;
+
+      for (final variant in variants) {
+        final torrent = Torrent(
+          rowid: 0,
+          infohash: variant.infohash,
+          name: name,
+          sizeBytes: sizeBytes,
+          createdUnix: 0,
+          seeders: variant.seeders,
+          leechers: 0,
+          completed: 0,
+          scrapedDate: 0,
+          source: 'stremio:${stream.source}',
+          streamType: variant.streamType,
+          directUrl: variant.directUrl,
+          hasRealInfoHash: variant.hasRealInfoHash,
+        );
+
+        // Exact addon mode preserves every returned playable entry, including
+        // intentional duplicates. The default path keeps its historic dedupe:
+        // highest-seeder duplicate for torrents, first direct/external URL.
+        if (preserveOrder) {
+          orderedTorrents.add(torrent);
+          continue;
+        }
+        final existing = uniqueTorrents[variant.uniqueKey];
+        if (existing == null ||
+            (variant.streamType == StreamType.torrent &&
+                torrent.seeders > existing.seeders)) {
+          uniqueTorrents[variant.uniqueKey] = torrent;
+        }
       }
     }
 

@@ -637,18 +637,20 @@ class TorrentPlaybackService {
     // pick may be another direct (instant play again) or a torrent now
     // holding the best playable tier (falls through to the probe path).
     final bool tiered = ladder != null && ladder.isActive;
-    var selectable = torrents;
-    var direct = selectDirect(selectable, ladder).$1;
-    while (direct != null) {
-      if (cancelled()) return; // e.g. Cancel during a caller's await
-      if (await directLooksAlive(direct)) {
-        if (cancelled()) return;
-        await playDirect(direct);
-        return;
+    if (shouldTryDirectBeforeTorrent(rules)) {
+      var selectable = torrents;
+      var direct = selectDirect(selectable, ladder).$1;
+      while (direct != null) {
+        if (cancelled()) return; // e.g. Cancel during a caller's await
+        if (await directLooksAlive(direct)) {
+          if (cancelled()) return;
+          await playDirect(direct);
+          return;
+        }
+        final dead = direct;
+        selectable = selectable.where((t) => !identical(t, dead)).toList();
+        direct = selectDirect(selectable, ladder).$1;
       }
-      final dead = direct;
-      selectable = selectable.where((t) => !identical(t, dead)).toList();
-      direct = selectDirect(selectable, ladder).$1;
     }
 
     // Every direct link VALIDATED dead and nothing probeable exists: a
@@ -1589,6 +1591,14 @@ class TorrentPlaybackService {
   @visibleForTesting
   static int directValidationBudgetForRules(QuickPlayRules? _) => 5;
 
+  /// Whether direct-addon rows should be attempted before torrent acquisition.
+  /// A torrent-first source plan tries the torrent twin first and retains the
+  /// direct row as the existing no-provider/dead-end rescue.
+  @visibleForTesting
+  static bool shouldTryDirectBeforeTorrent(QuickPlayRules? rules) =>
+      rules?.sourceMode != QuickPlaySourceMode.torrentsThenAddons &&
+      rules?.sourceMode != QuickPlaySourceMode.torrentsOnly;
+
   /// Whether a Quick Play result can be attempted automatically. External
   /// links are useful in a manual source list but cannot satisfy an addon-first
   /// auto-play search, so they must not suppress the engine fallback.
@@ -2054,6 +2064,7 @@ class TorrentPlaybackService {
             imdbId: imdbId,
             season: s,
             episode: e,
+            timeout: StremioService.manualRetryTimeout,
           );
         } catch (_) {
           // Null = fetch failed; the sheet keeps the Fetch row for a retry.
@@ -2066,6 +2077,7 @@ class TorrentPlaybackService {
             addonId: addonId,
             imdbId: imdbId,
             season: s,
+            timeout: StremioService.manualRetryTimeout,
           );
         } catch (_) {
           return null;
@@ -2148,6 +2160,7 @@ class TorrentPlaybackService {
             addonId: addonId,
             type: 'movie',
             imdbId: imdbId,
+            timeout: StremioService.manualRetryTimeout,
           );
         } catch (_) {
           return null;

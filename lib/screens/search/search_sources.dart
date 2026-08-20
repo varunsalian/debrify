@@ -1051,6 +1051,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         imdbId: sel.imdbId,
         season: sel.season,
         episode: sel.episode,
+        timeout: StremioService.manualRetryTimeout,
       );
       if (!mounted || token != _searchToken) return;
       setState(() {

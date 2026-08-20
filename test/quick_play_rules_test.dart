@@ -244,6 +244,43 @@ void main() {
       },
     );
 
+    test('Comet URL and binge-group hash become separate source rows', () {
+      final hash = 'c' * 40;
+      final stream = StremioStream.fromJson({
+        'name': '[TB] Comet 1080p',
+        'description': 'Movie.1080p.WEB-DL 👤 42',
+        'url': 'https://comet.example/stream',
+        'behaviorHints': {
+          'bingeGroup': 'comet|torbox|$hash',
+          'filename': 'Movie.1080p.WEB-DL.mkv',
+          'videoSize': 1234,
+        },
+      }, 'Comet | TB');
+
+      final converted = StremioService.instance.convertStreamsForTesting([
+        stream,
+      ], preserveOrder: true);
+
+      expect(converted, hasLength(2));
+      final direct = converted[0];
+      expect(direct.streamType, StreamType.directUrl);
+      expect(direct.directUrl, 'https://comet.example/stream');
+      expect(direct.infohash, startsWith('url:'));
+      expect(direct.hasRealInfoHash, isFalse);
+
+      final torrent = converted[1];
+      expect(torrent.streamType, StreamType.torrent);
+      expect(torrent.directUrl, isNull);
+      expect(torrent.infohash, hash);
+      expect(torrent.hasRealInfoHash, isTrue);
+
+      final normalSearch = StremioService.instance.convertStreamsForTesting([
+        stream,
+      ]);
+      expect(normalSearch, hasLength(2));
+      expect(normalSearch.map((row) => row.infohash).toSet(), hasLength(2));
+    });
+
     test('exact addon conversion preserves repeated returned entries', () {
       final streams = [
         StremioStream(
@@ -411,6 +448,23 @@ void main() {
         TorrentPlaybackService.directValidationBudgetForRules(tenAttempts),
         5,
       );
+    });
+
+    test('source preference selects the dual-source transport order', () {
+      final torrentFirst = QuickPlayRules.debrifyDefault(isMovie: true);
+      final addonFirst = torrentFirst.copyWith(
+        sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+      );
+
+      expect(
+        TorrentPlaybackService.shouldTryDirectBeforeTorrent(torrentFirst),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldTryDirectBeforeTorrent(addonFirst),
+        isTrue,
+      );
+      expect(TorrentPlaybackService.shouldTryDirectBeforeTorrent(null), isTrue);
     });
 
     test('external links do not count as addon-first autoplay results', () {
