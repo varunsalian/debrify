@@ -164,9 +164,18 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
     _loadCacheConfig();
-    _loadSourcePriority();
-    _load();
+    unawaited(_initializeSources());
     if (_seasonChipVisible) unawaited(_loadSeasons());
+  }
+
+  Future<void> _initializeSources() async {
+    // Priority must be known before the first engine batch lands. Loading it
+    // beside the search and rebuilding afterwards used the toolbar's
+    // user-interaction path, which froze streaming and parked every later
+    // batch behind the "+N new sources" pill.
+    await Future.wait([_loadSourcePriority(), _reloadBound()]);
+    if (!mounted) return;
+    await _runSearch();
   }
 
   Future<void> _loadSourcePriority() async {
@@ -176,12 +185,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       );
       final aliases = await SourcePriority.engineAliases();
       if (!mounted) return;
-      if (rules.sourcePriority.isEmpty && aliases.isEmpty) return;
-      setState(() {
-        _sourcePriority = rules.sourcePriority;
-        _sourceAliases = aliases;
-      });
-      _rebuildVisible();
+      _sourcePriority = rules.sourcePriority;
+      _sourceAliases = aliases;
     } catch (_) {}
   }
 
@@ -273,11 +278,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         : await SeriesSourceService.getSources(_imdbId);
     if (!mounted) return;
     setState(() => _bound = bound);
-  }
-
-  Future<void> _load() async {
-    await _reloadBound();
-    await _runSearch();
   }
 
   /// Series pack/bind post-filter — ported verbatim from the old Home
