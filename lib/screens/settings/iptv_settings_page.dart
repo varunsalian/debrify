@@ -2280,7 +2280,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                         // doing nothing reads as broken.
                         ? 'Nothing watched yet — starts on the first '
                               'channel, then remembers what you watch.'
-                        : 'Currently: ${_lastLiveChannelLabel}',
+                        : 'Currently: $_lastLiveChannelLabel',
                   ),
                   value: StorageService.startupIptvModeLast,
                   groupValue: _startupMode,

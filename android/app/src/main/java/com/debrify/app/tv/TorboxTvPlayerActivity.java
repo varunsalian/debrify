@@ -342,12 +342,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final int[] resizeModes = new int[] {
             AspectRatioFrameLayout.RESIZE_MODE_FIT,
             AspectRatioFrameLayout.RESIZE_MODE_FILL,
-            AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+            AspectRatioFrameLayout.RESIZE_MODE_FIT
     };
     private final String[] resizeModeLabels = new String[] {
             "Fit",
             "Fill",
-            "Zoom"
+            "Zoom",
+            "Cinema Zoom"
     };
 
     private boolean startFromRandom;
@@ -853,7 +855,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         playerView.setUseController(true);
         playerView.setControllerAutoShow(true);
         playerView.setControllerShowTimeoutMs(4000);
-        playerView.setResizeMode(resizeModes[resizeModeIndex]);
+        applyResizeMode();
         if (subtitleOverlay != null) {
             subtitleOverlay.setApplyEmbeddedStyles(false);
             subtitleOverlay.setApplyEmbeddedFontSizes(false);
@@ -1399,7 +1401,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void loadPlayerDefaults() {
         try {
             // Load aspect index for TV (separate from mobile)
-            // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
+            // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
             resizeModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
                 .getLong(this, "player_default_aspect_index_tv", 0);
             resizeModeIndex = Math.max(0, Math.min(resizeModeIndex, resizeModes.length - 1));
@@ -3959,7 +3961,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     .onOk(() -> {
                         resizeModeIndex = Math.max(0, Math.min(target, resizeModes.length - 1));
                         if (playerView != null) {
-                            playerView.setResizeMode(resizeModes[resizeModeIndex]);
+                            applyResizeMode();
                         }
                         updateAspectButtonLabel();
                     })
@@ -4755,11 +4757,20 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     private void cycleAspectRatio() {
         resizeModeIndex = (resizeModeIndex + 1) % resizeModes.length;
-        if (playerView != null) {
-            playerView.setResizeMode(resizeModes[resizeModeIndex]);
-        }
+        applyResizeMode();
         updateAspectButtonLabel();
         showToast("Aspect: " + resizeModeLabels[resizeModeIndex]);
+    }
+
+    private void applyResizeMode() {
+        if (playerView == null) return;
+        playerView.setResizeMode(resizeModes[resizeModeIndex]);
+        View content = playerView.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        if (content == null) content = playerView.getVideoSurfaceView();
+        if (content == null) return;
+        float scale = resizeModeIndex == 3 ? 4f / 3f : 1f;
+        content.setScaleX(scale);
+        content.setScaleY(scale);
     }
 
     private List<TrackOption> collectTrackOptions(int trackType) {

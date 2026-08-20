@@ -30,7 +30,6 @@ import '../widgets/detail/detail_model.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/artwork_accent.dart';
 import '../widgets/detail/theme/detail_theme.dart';
-import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/horizontal_mouse_wheel.dart';
@@ -70,7 +69,7 @@ class MergedDetailScreen extends StatefulWidget {
 
   /// Primary play action. Series: resume-and-play (last-played → S01E01).
   /// Movie: play the movie. Mirrors the detail screen's "Play".
-  final VoidCallback onResume;
+  final Future<void> Function() onResume;
 
   /// Resolves whether the title has prior progress and, for a series, the
   /// season/episode [onResume] would land on — so the button can read
@@ -85,7 +84,7 @@ class MergedDetailScreen extends StatefulWidget {
   /// Episode terminal callbacks — the exact ones the Search tab passes to
   /// `EpisodesScreen` today (`_playSelection` / `_browseSelection`).
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
-  final void Function(AdvancedSearchSelection selection)? onQuickPlay;
+  final Future<void> Function(AdvancedSearchSelection selection)? onQuickPlay;
 
   /// Host-owned source binding.
   final int Function(StremioMeta show)? boundSourceCount;
@@ -141,7 +140,7 @@ class MergedDetailScreen extends StatefulWidget {
   /// sole episode source, [onPlayEpisode] plays a URL-backed episode on top of
   /// this page, [watchProgressLoader] replaces the IMDb-keyed progress merge.
   final Future<List<TraktSeason>> Function()? seasonsLoader;
-  final void Function(TraktEpisode episode)? onPlayEpisode;
+  final Future<void> Function(TraktEpisode episode)? onPlayEpisode;
   final Future<Map<String, double>> Function()? watchProgressLoader;
 
   const MergedDetailScreen({
@@ -210,6 +209,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   /// Guards against a double-launch while a trailer's streams resolve.
   bool _trailerLoading = false;
+
+  /// One playback launch at a time for the whole merged page. Every visual
+  /// theme delegates its primary action here, and the hosted episode panel is
+  /// wrapped by the same gate below. The modal resolving route usually absorbs
+  /// a second tap, but it is presentation rather than synchronization: two OK
+  /// events can otherwise enter the async resume/source resolution together.
+  bool _playLaunching = false;
 
   /// Whether OTT-style trailer autoplay behind the backdrop is on (settings).
   /// Always false on Android TV — the Home hero owns ambient trailers there.
@@ -436,6 +442,44 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     });
   }
 
+  Future<void> _guardPlay(Future<void> Function() launch) async {
+    if (_playLaunching || !mounted) return;
+    // Rebuild immediately so HeroTrailerBackdrop disables and tears down its
+    // engine at the button press. The resolving loader is a RawDialogRoute,
+    // which the app's PageRoute observer deliberately does not see; waiting
+    // for the eventual player-handoff signal lets the delayed trailer start
+    // (or keep playing) behind source resolution.
+    setState(() => _playLaunching = true);
+    try {
+      await launch();
+    } finally {
+      if (mounted) {
+        // A cancelled/failed resolve may resume autoplay after its normal
+        // delay. A successful launch remains off because the backdrop's
+        // content-player signal has independently latched _canPlay false.
+        setState(() => _playLaunching = false);
+      } else {
+        _playLaunching = false;
+      }
+    }
+  }
+
+  void _playPrimary() {
+    unawaited(_guardPlay(widget.onResume));
+  }
+
+  void _quickPlayEpisode(AdvancedSearchSelection selection) {
+    final play = widget.onQuickPlay;
+    if (play == null) return;
+    unawaited(_guardPlay(() => play(selection)));
+  }
+
+  void _playDirectEpisode(TraktEpisode episode) {
+    final play = widget.onPlayEpisode;
+    if (play == null) return;
+    unawaited(_guardPlay(() => play(episode)));
+  }
+
   Future<void> _loadShowcaseOpeningData() async {
     try {
       await Future.wait<void>([
@@ -538,7 +582,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final loader = widget.traktStatusLoader;
     if (loader == null) return;
     try {
-      final status = await loader();
+      final status = (await loader())?.preserveWatchedFrom(_traktStatus);
       if (!mounted || status == null) return;
       setState(() => _traktStatus = status);
     } catch (_) {
@@ -1003,7 +1047,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 startDelay: widget.isTelevision
                     ? const Duration(milliseconds: 3200)
                     : const Duration(milliseconds: 1400),
-                enabled: _trailerAutoplayEnabled,
+                // Suspend at the Play press, before source/resume resolution.
+                // The pipeline loader is a PopupRoute rather than a PageRoute,
+                // so RouteAware.didPushNext cannot provide this lifecycle beat.
+                enabled: _trailerAutoplayEnabled && !_playLaunching,
                 ambientVolume: _trailerAmbientVolume,
                 foreground: _trailerForeground,
                 onRequestClose: _exitTrailerForeground,
@@ -1228,7 +1275,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       simklLabel: _simklPillLabel,
       simklRating: _simklStatus?.rating,
       showPrimary: widget.showQuickPlay,
-      onPrimary: widget.onResume,
+      onPrimary: _playPrimary,
       // A movie browses the full source list the host supplies; a series
       // browses season packs — the same search the More menu's "Search
       // season packs" row opens, promoted to a first-class button. Gated on
@@ -1237,11 +1284,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onBrowse: _isMovie
           ? widget.onBrowse
           : (widget.onTraktAction != null &&
-                  _appMenuOptions.any(
-                    (o) => o.action == TraktItemMenuAction.searchPacks,
-                  ))
-              ? () => widget.onTraktAction!(TraktItemMenuAction.searchPacks)
-              : null,
+                _appMenuOptions.any(
+                  (o) => o.action == TraktItemMenuAction.searchPacks,
+                ))
+          ? () => widget.onTraktAction!(TraktItemMenuAction.searchPacks)
+          : null,
       onTrailer: _playTrailer,
       onSelectSource: widget.onSelectSource == null
           ? null
@@ -1885,7 +1932,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return s != null &&
         (s.inWatchlist ||
             s.inCollection ||
-            s.watched == true ||
+            s.titleWatched == true ||
             s.rating != null);
   }
 
@@ -1911,9 +1958,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final parts = <String>[
       if (s.inWatchlist) 'Watchlist',
       if (s.inCollection) 'Collected',
-      if (s.watched == true) 'Watched',
+      if (s.titleWatched == true) 'Watched',
     ];
-    if (parts.isEmpty) return s.rating != null ? 'Rated' : 'Not tracked';
+    if (parts.isEmpty) {
+      if (s.rating != null) return 'Rated';
+      return s.titleWatched == null ? 'Status unavailable' : 'Not tracked';
+    }
     return parts.take(2).join(' · ');
   }
 
@@ -2027,7 +2077,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           _PrimaryButton(
             label: _primaryLabel,
             icon: Icons.play_arrow_rounded,
-            onTap: widget.onResume,
+            onTap: _playPrimary,
             focusNode: _leftEntryFocusNode,
             autofocus: widget.isTelevision && _isMovie,
             glow: _accent,
@@ -2332,7 +2382,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // Quick-play deliberately does NOT pop: the host pushes the player on
       // top of this screen (same as the hero Resume), so playback pops back to
       // the episode list here — didPopNext then refreshes the ticks.
-      onQuickPlay: widget.onQuickPlay,
+      onQuickPlay: widget.onQuickPlay == null ? null : _quickPlayEpisode,
       boundSourceCount: widget.boundSourceCount,
       onSelectSource: widget.onSelectSource,
       showChrome: false,
@@ -2346,7 +2396,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onBack: () => Navigator.of(context).maybePop(),
       // Direct-source mode (Xtream IPTV series) — pass-throughs.
       seasonsLoader: widget.seasonsLoader,
-      onPlayEpisode: widget.onPlayEpisode,
+      onPlayEpisode: widget.onPlayEpisode == null ? null : _playDirectEpisode,
       watchProgressLoader: widget.watchProgressLoader,
     );
   }

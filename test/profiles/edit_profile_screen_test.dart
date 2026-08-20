@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/screens/profiles/edit_profile_screen.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_avatar_policy.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/utils/app_storage.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -88,6 +90,8 @@ void main() {
 
     setUp(() async {
       ProfileRuntime.debugReset();
+      PlatformUtil.debugSetAndroidTvCached(null);
+      ProfileAvatarPolicy.debugSetUserImagesSupported(null);
       SharedPreferences.setMockInitialValues(<String, Object>{});
       root = await Directory.systemTemp.createTemp('edit-profile-');
       AppStorage.debugOverride(documents: root, support: root, cache: root);
@@ -116,6 +120,8 @@ void main() {
       ProfileBootstrap.debugInstallRegistry(null);
       ProfileRuntime.debugReset();
       AppStorage.debugReset();
+      PlatformUtil.debugSetAndroidTvCached(null);
+      ProfileAvatarPolicy.debugSetUserImagesSupported(null);
       if (await root.exists()) await root.delete(recursive: true);
     });
 
@@ -156,5 +162,65 @@ void main() {
       expect(find.byType(TextField), findsWidgets); // name
       expect(find.text('Member'), findsOneWidget); // role card
     });
+
+    testWidgets(
+      'TV editor uses section pages and a remote-friendly lock field',
+      (tester) async {
+        PlatformUtil.debugSetAndroidTvCached(true);
+        ProfileAvatarPolicy.debugSetUserImagesSupported(true);
+        // Many 1080p Android TVs expose a 960x540 logical Flutter viewport.
+        await tester.binding.setSurfaceSize(const Size(960, 540));
+        addTearDown(() async {
+          PlatformUtil.debugSetAndroidTvCached(null);
+          ProfileAvatarPolicy.debugSetUserImagesSupported(null);
+          await tester.binding.setSurfaceSize(null);
+        });
+
+        await pumpEditor(tester);
+
+        for (final section in const <String>[
+          'PROFILE',
+          'LOCK',
+          'ACCESS',
+          'DATA',
+        ]) {
+          expect(find.text(section), findsOneWidget, reason: section);
+        }
+        expect(find.text('Choose an avatar'), findsOneWidget);
+        expect(find.text('Choose image or GIF'), findsOneWidget);
+        expect(find.byType(DropdownButtonFormField<int>), findsNothing);
+
+        final nameField = find.byType(TextField);
+        expect(nameField, findsOneWidget);
+        await tester.enterText(nameField, 'Living Room');
+        await tester.pump();
+        final preview = tester.widget<Text>(
+          find.byKey(const Key('tv-profile-name-preview')),
+        );
+        expect(preview.data, 'Living Room');
+
+        await tester.tap(find.text('LOCK'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Profile lock'), findsOneWidget);
+        expect(find.text('Auto-lock'), findsOneWidget);
+        expect(find.text('Never'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Never'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Never'));
+        await tester.pump();
+        expect(find.text('After 5 minutes'), findsOneWidget);
+
+        await tester.tap(find.text('ACCESS'));
+        await tester.pumpAndSettle();
+        expect(find.text('Profile access'), findsOneWidget);
+
+        await tester.tap(find.text('DATA'));
+        await tester.pumpAndSettle();
+        expect(find.text('Profile data'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

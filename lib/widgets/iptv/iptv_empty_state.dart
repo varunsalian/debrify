@@ -25,7 +25,7 @@ class IptvEmptyState extends StatelessWidget {
             Icon(
               hasPlaylists ? Icons.live_tv : Icons.playlist_add,
               size: 80,
-              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 24),
             Text(

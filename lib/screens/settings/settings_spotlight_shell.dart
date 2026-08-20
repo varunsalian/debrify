@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/main_page_bridge.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
@@ -79,6 +80,18 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
   bool _compactDetailOpen = false;
 
   @override
+  void initState() {
+    super.initState();
+    MainPageBridge.registerTabBackHandler('settings', _handleTabBack);
+  }
+
+  @override
+  void dispose() {
+    MainPageBridge.unregisterTabBackHandler('settings', _handleTabBack);
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(SettingsSpotlightShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_selected >= widget.categories.length) {
@@ -98,6 +111,12 @@ class _SettingsSpotlightShellState extends State<SettingsSpotlightShell> {
   void _closeCompactDetail() {
     if (!_compactDetailOpen) return;
     setState(() => _compactDetailOpen = false);
+  }
+
+  bool _handleTabBack() {
+    if (!_compactDetailOpen) return false;
+    _closeCompactDetail();
+    return true;
   }
 
   @override

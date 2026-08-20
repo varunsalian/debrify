@@ -53,7 +53,7 @@ void main() {
     // visible rather than silently exempted.
     final weak = baseline.values.where((s) => s.ratio < floor).toList();
     // ignore: avoid_print
-    print('legacy sites below ${floor}:1 (pre-existing, exempted): '
+    print('legacy sites below $floor:1 (pre-existing, exempted): '
         '${weak.map((s) => '${s.label} ${s.ratio.toStringAsFixed(2)}').join(", ")}');
   });
 

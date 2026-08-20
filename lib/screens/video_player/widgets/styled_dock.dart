@@ -11,7 +11,6 @@
 /// See `design/plans/PLAYER_DOCK_STYLES_PLAN.md` §3.
 library;
 
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 

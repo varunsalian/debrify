@@ -16,6 +16,7 @@ import '../models/quick_play_rules.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/torrent.dart';
+import '../models/indexer_manager_config.dart';
 import '../screens/video_player/models/playlist_entry.dart';
 import '../models/torrent_filter_state.dart';
 import '../theme/app_theme_scope.dart';
@@ -636,18 +637,20 @@ class TorrentPlaybackService {
     // pick may be another direct (instant play again) or a torrent now
     // holding the best playable tier (falls through to the probe path).
     final bool tiered = ladder != null && ladder.isActive;
-    var selectable = torrents;
-    var direct = selectDirect(selectable, ladder).$1;
-    while (direct != null) {
-      if (cancelled()) return; // e.g. Cancel during a caller's await
-      if (await directLooksAlive(direct)) {
-        if (cancelled()) return;
-        await playDirect(direct);
-        return;
+    if (shouldTryDirectBeforeTorrent(rules)) {
+      var selectable = torrents;
+      var direct = selectDirect(selectable, ladder).$1;
+      while (direct != null) {
+        if (cancelled()) return; // e.g. Cancel during a caller's await
+        if (await directLooksAlive(direct)) {
+          if (cancelled()) return;
+          await playDirect(direct);
+          return;
+        }
+        final dead = direct;
+        selectable = selectable.where((t) => !identical(t, dead)).toList();
+        direct = selectDirect(selectable, ladder).$1;
       }
-      final dead = direct;
-      selectable = selectable.where((t) => !identical(t, dead)).toList();
-      direct = selectDirect(selectable, ladder).$1;
     }
 
     // Every direct link VALIDATED dead and nothing probeable exists: a
@@ -1023,10 +1026,26 @@ class TorrentPlaybackService {
       _snack(context, 'No IMDb match to find sources for "$label".');
       return;
     }
-    final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
-    if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
+    var cancelled = false;
+    final resolving = showResolvingOverlay(
+      context,
+      meta: meta,
+      title: label,
+      onCancel: () => cancelled = true,
+    );
+    late final QuickPlayRules rules;
+    try {
+      rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+      if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
+    } catch (_) {
+      resolving.dismiss();
+      rethrow;
+    }
     var activeRules = rules;
-    if (!context.mounted) return;
+    if (!context.mounted || cancelled) {
+      resolving.dismiss();
+      return;
+    }
 
     // Any non-`tt` id can't be resolved by the torrent engines — they key on
     // `tt…` ids — so addon-enabled profiles resolve these through the addon's
@@ -1039,12 +1058,14 @@ class TorrentPlaybackService {
     // already handled above.)
     if (!imdbId.startsWith('tt')) {
       if (!allowsAddonSearch(rules)) {
+        resolving.dismiss();
         _snack(
           context,
           'Torrent engines can’t search "$label" without an IMDb ID. Choose a source mode that allows addons.',
         );
         return;
       }
+      resolving.dismiss();
       await _playAddonStream(
         context,
         imdbId,
@@ -1062,8 +1083,17 @@ class TorrentPlaybackService {
     // Bound-source reuse: if the user pinned a source for this title, play it
     // directly and skip the torrent search entirely. A series binding is only
     // usable when a concrete season+episode is requested (to land in the pack).
-    final bound = await SeriesSourceService.getSources(imdbId);
-    if (!context.mounted) return;
+    late final List<SeriesSource> bound;
+    try {
+      bound = await SeriesSourceService.getSources(imdbId);
+    } catch (_) {
+      resolving.dismiss();
+      rethrow;
+    }
+    if (!context.mounted || cancelled) {
+      resolving.dismiss();
+      return;
+    }
     // A series binding needs a concrete season+episode to land inside the pack.
     // Gate on the same fields _launch forwards to the player (meta.*), so the
     // requested episode is guaranteed to reach findOriginalIndexBySeasonEpisode.
@@ -1071,6 +1101,7 @@ class TorrentPlaybackService {
         bound.isNotEmpty &&
         (isMovie || (meta.season != null && meta.episode != null));
     if (boundUsable) {
+      resolving.dismiss();
       final played = await _playViaBound(
         context,
         imdbId,
@@ -1094,6 +1125,7 @@ class TorrentPlaybackService {
       isMovie: isMovie,
       hasPreferredProvider: preferredProvider != null,
     )) {
+      resolving.dismiss();
       final fallBackToEngines =
           rules.sourceMode == QuickPlaySourceMode.addonsThenTorrents;
       final handled = await _playAddonStream(
@@ -1118,6 +1150,7 @@ class TorrentPlaybackService {
       );
     }
 
+    resolving.dismiss();
     final provider = preferredProvider ?? await _pickProvider(context);
     if (!context.mounted) return;
     if (provider == _cancelled) return;
@@ -1558,6 +1591,14 @@ class TorrentPlaybackService {
   @visibleForTesting
   static int directValidationBudgetForRules(QuickPlayRules? _) => 5;
 
+  /// Whether direct-addon rows should be attempted before torrent acquisition.
+  /// A torrent-first source plan tries the torrent twin first and retains the
+  /// direct row as the existing no-provider/dead-end rescue.
+  @visibleForTesting
+  static bool shouldTryDirectBeforeTorrent(QuickPlayRules? rules) =>
+      rules?.sourceMode != QuickPlaySourceMode.torrentsThenAddons &&
+      rules?.sourceMode != QuickPlaySourceMode.torrentsOnly;
+
   /// Whether a Quick Play result can be attempted automatically. External
   /// links are useful in a manual source list but cannot satisfy an addon-first
   /// auto-play search, so they must not suppress the engine fallback.
@@ -1944,12 +1985,31 @@ class TorrentPlaybackService {
     }
     final label = meta.title ?? '';
     Future<String?> effectiveProvider() => _effectiveFetchProvider(provider);
+    final directValidationCache = <String, bool>{};
 
     return SeriesSourceFetcher(
       season: season,
       episode: episode,
       packsFetched: packsFetched,
       episodesFetched: episodesFetched,
+      validateCandidate: (source) async {
+        if (source.streamType != StreamType.directUrl) return true;
+        final url = source.directUrl;
+        if (url == null || url.isEmpty) return false;
+        final cached = directValidationCache[url];
+        if (cached != null) return cached;
+        final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        if (!rules.validateDirectLinks) return true;
+        // Match initial series Quick Play: lenient HEAD validation rejects
+        // positive evidence of death without penalising HEAD-hostile CDNs.
+        final alive = await StreamUrlValidator.isPlayableVideoUrl(
+          url,
+          minBytes: 10 * 1024 * 1024,
+          lenient: true,
+        );
+        directValidationCache[url] = alive;
+        return alive;
+      },
       // The (s, e) the fetch passes in is the episode CURRENTLY playing — a
       // season-pack playlist auto-advances inside one player session, so the
       // launch episode captured above is only the fallback.
@@ -1999,10 +2059,22 @@ class TorrentPlaybackService {
         }
       },
       listAddons: () async => [
-        for (final addon in await StremioService.instance
-            .applicableStreamingAddons(type: 'series', contentId: imdbId))
-          SourceAddonRef(addon.id, addon.name),
+        for (final addon
+            in await StremioService.instance.applicableStreamingAddons(
+              type: 'series',
+              contentId: imdbId,
+            ))
+          if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
+            SourceAddonRef(addon.id, addon.name),
       ],
+      listEngines: _sourceEngineListing,
+      fetchEngine: (engineId, s, e) => _fetchOneEngine(
+        engineId,
+        imdbId: imdbId,
+        isMovie: false,
+        season: s,
+        episode: e,
+      ),
       fetchAddonEpisodes: (addonId, s, e) async {
         try {
           return await StremioService.instance.retryAddonStreams(
@@ -2011,6 +2083,7 @@ class TorrentPlaybackService {
             imdbId: imdbId,
             season: s,
             episode: e,
+            timeout: StremioService.manualRetryTimeout,
           );
         } catch (_) {
           // Null = fetch failed; the sheet keeps the Fetch row for a retry.
@@ -2023,6 +2096,7 @@ class TorrentPlaybackService {
             addonId: addonId,
             imdbId: imdbId,
             season: s,
+            timeout: StremioService.manualRetryTimeout,
           );
         } catch (_) {
           return null;
@@ -2088,22 +2162,71 @@ class TorrentPlaybackService {
         }
       },
       listAddons: () async => [
-        for (final addon in await StremioService.instance
-            .applicableStreamingAddons(type: 'movie', contentId: imdbId))
-          SourceAddonRef(addon.id, addon.name),
+        for (final addon
+            in await StremioService.instance.applicableStreamingAddons(
+              type: 'movie',
+              contentId: imdbId,
+            ))
+          if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
+            SourceAddonRef(addon.id, addon.name),
       ],
+      listEngines: _sourceEngineListing,
+      fetchEngine: (engineId, _, __) =>
+          _fetchOneEngine(engineId, imdbId: imdbId, isMovie: true),
       fetchAddonEpisodes: (addonId, _, __) async {
         try {
           return await StremioService.instance.retryAddonStreams(
             addonId: addonId,
             type: 'movie',
             imdbId: imdbId,
+            timeout: StremioService.manualRetryTimeout,
           );
         } catch (_) {
           return null;
         }
       },
     );
+  }
+
+  static Future<List<SourceEngineRef>> _sourceEngineListing() async {
+    final engines = await TorrentService.getImdbSearchEngines();
+    final refs = <SourceEngineRef>[];
+    for (final engine in engines) {
+      if (!await TorrentService.isEngineEnabled(engine.name)) continue;
+      final source = IndexerManagerConfig.isIndexerManagerEngine(engine.name)
+          ? engine.displayName
+          : engine.name;
+      refs.add(
+        SourceEngineRef(engine.name, engine.displayName, source.toLowerCase()),
+      );
+    }
+    return refs;
+  }
+
+  static Future<List<Torrent>?> _fetchOneEngine(
+    String engineId, {
+    required String imdbId,
+    required bool isMovie,
+    int? season,
+    int? episode,
+  }) async {
+    try {
+      final engines = await TorrentService.getImdbSearchEngines();
+      final states = <String, bool>{for (final e in engines) e.name: false};
+      states[engineId] = true;
+      final result = await TorrentService.searchByImdb(
+        imdbId,
+        engineStates: states,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+      );
+      final errors = result['engineErrors'] as Map<String, String>? ?? const {};
+      if (errors.containsKey(engineId)) return null;
+      return result['torrents'] as List<Torrent>? ?? const <Torrent>[];
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Curate torrent candidates before probing, mirroring the old Home engine:
@@ -2446,6 +2569,9 @@ class TorrentPlaybackService {
       isCancelled: () => cancel.cancelled,
       ladder: ladder,
       rules: rules,
+      seriesFetcher: isMovie
+          ? movieFetcherFor(meta: meta)
+          : seriesFetcherFor(meta: meta, episodesFetched: true),
     );
     return true;
   }
@@ -2891,8 +3017,9 @@ class TorrentPlaybackService {
     String? fallbackHint;
 
     for (final source in usable) {
-      if (cancel.cancelled)
+      if (cancel.cancelled) {
         return true; // Cancel already dismissed the overlay.
+      }
 
       // Cheap skip: a bound DEBRID source whose name is a single specific
       // episode can only serve that episode — skip it (no debrid round-trip)
@@ -4888,8 +5015,9 @@ class TorrentPlaybackService {
           fileName: '$torrentName.zip',
           torrentName: torrentName,
         );
-        if (context.mounted)
+        if (context.mounted) {
           _snack(context, 'ZIP download queued successfully.');
+        }
       }
     } catch (_) {
       if (context.mounted) {
@@ -5617,6 +5745,8 @@ class TorrentPlaybackService {
 
   static String _label(String provider) {
     switch (provider) {
+      case 'preparing':
+        return 'Preparing';
       case 'debrid':
         return 'Real-Debrid';
       case 'torbox':
@@ -5639,6 +5769,8 @@ class TorrentPlaybackService {
   /// Two-letter provider glyph for the Pipeline loader's provider chip.
   static String _providerCode(String provider) {
     switch (provider) {
+      case 'preparing':
+        return '···';
       case 'debrid':
         return 'RD';
       case 'torbox':
@@ -5692,6 +5824,21 @@ class TorrentPlaybackService {
       onCancel: onCancel,
     );
   }
+
+  /// Immediate feedback while Quick Play resolves preferences, resume data,
+  /// and pinned sources before the provider-specific pipeline can begin.
+  static PipelineLoadingOverlay showResolvingOverlay(
+    BuildContext context, {
+    required PlaybackMeta? meta,
+    required String title,
+    VoidCallback? onCancel,
+  }) => _showPipeline(
+    context,
+    provider: 'preparing',
+    meta: meta,
+    title: title,
+    onCancel: onCancel,
+  );
 
   // ── Minimal UI feedback ────────────────────────────────────────────────────
 

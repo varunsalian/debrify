@@ -693,8 +693,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   String _emptyMessage() {
     if (!_connected) return 'Connect MDBList in Settings to browse your lists';
-    if (_error)
+    if (_error) {
       return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
+    }
     if (_selected == null) {
       if (_category == 'top') return 'No top lists available right now';
       return 'You have no MDBList lists yet';

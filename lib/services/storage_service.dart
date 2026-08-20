@@ -270,8 +270,7 @@ class StorageService {
       'home_continue_watching_enabled';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
-  static const String _homeCardOrientationKey =
-      'home_card_orientation';
+  static const String _homeCardOrientationKey = 'home_card_orientation';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -316,6 +315,7 @@ class StorageService {
   // Network tuning (Debrify player). 'standard' = leave the player's own
   // defaults completely untouched — see NetworkTuning.
   static const String _networkConnectPatienceKey = 'network_connect_patience';
+  static const String _iptvDecoderModeKey = 'iptv_decoder_mode';
   static const String _networkBufferSizeKey = 'network_buffer_size';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
@@ -2808,15 +2808,35 @@ class StorageService {
   ) async {
     final map = await _getPlaybackStateMap();
 
-    // Find series entry with matching imdbId, track most recent video fallback
-    Map<String, dynamic>? seriesData;
+    // Merge every legacy title-keyed series entry with this IMDb id. Older
+    // builds could save the same show under multiple release-derived titles;
+    // stopping at the first record silently hid episodes from the others.
+    final seriesResult = <String, Map<String, dynamic>>{};
     Map<String, dynamic>? videoFallback;
     int videoFallbackUpdatedAt = -1;
     for (final entry in map.values) {
       if (entry is Map<String, dynamic> && entry['imdbId'] == imdbId) {
         if (entry['type'] == 'series') {
-          seriesData = entry;
-          break;
+          final seasons = entry['seasons'];
+          if (seasons is! Map) continue;
+          for (final seasonEntry in seasons.entries) {
+            final episodes = seasonEntry.value;
+            if (episodes is! Map) continue;
+            for (final episodeEntry in episodes.entries) {
+              final episodeData = episodeEntry.value;
+              if (episodeData is! Map) continue;
+              final episodeKey = '${seasonEntry.key}_${episodeEntry.key}';
+              final candidate = Map<String, dynamic>.from(episodeData);
+              final existing = seriesResult[episodeKey];
+              final candidateUpdatedAt =
+                  (candidate['updatedAt'] as num?)?.toInt() ?? 0;
+              final existingUpdatedAt =
+                  (existing?['updatedAt'] as num?)?.toInt() ?? -1;
+              if (candidateUpdatedAt >= existingUpdatedAt) {
+                seriesResult[episodeKey] = candidate;
+              }
+            }
+          }
         } else if (entry['type'] == 'video') {
           final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
           if (updatedAt > videoFallbackUpdatedAt) {
@@ -2827,22 +2847,7 @@ class StorageService {
       }
     }
 
-    if (seriesData != null) {
-      final seasons = seriesData['seasons'];
-      if (seasons == null) return {};
-
-      final result = <String, Map<String, dynamic>>{};
-      for (final seasonEntry in seasons.entries) {
-        final season = seasonEntry.key;
-        final episodes = seasonEntry.value as Map<String, dynamic>;
-        for (final episodeEntry in episodes.entries) {
-          final episode = episodeEntry.key;
-          final episodeData = episodeEntry.value as Map<String, dynamic>;
-          result['${season}_$episode'] = episodeData;
-        }
-      }
-      return result;
-    }
+    if (seriesResult.isNotEmpty) return seriesResult;
 
     // Fallback: single-file video entry — parse season/episode from title
     if (videoFallback != null) {
@@ -3663,13 +3668,13 @@ class StorageService {
       final String torboxId = torboxIdRaw.toString();
       final dynamic singleFileId = item['torboxFileId'];
       if (singleFileId != null) {
-        final fileKey = 'torbox:${torboxId}:file:${singleFileId.toString()}';
+        final fileKey = 'torbox:$torboxId:file:${singleFileId.toString()}';
         return '$provider|${fileKey.toLowerCase()}';
       }
       final dynamic multiFileIds = item['torboxFileIds'];
       if (multiFileIds is List && multiFileIds.isNotEmpty) {
         final joined = multiFileIds.map((e) => e.toString()).join(',');
-        final filesKey = 'torbox:${torboxId}:files:$joined';
+        final filesKey = 'torbox:$torboxId:files:$joined';
         return '$provider|${filesKey.toLowerCase()}';
       }
       return '$provider|torbox:${torboxId.toLowerCase()}';
@@ -3704,7 +3709,7 @@ class StorageService {
         (item['url'] as String?)?.trim() ??
         '';
     final String title = (item['title'] as String?)?.trim() ?? '';
-    final legacyKey = '${source}|${title}'.toLowerCase();
+    final legacyKey = '$source|$title'.toLowerCase();
     return '$provider|$legacyKey';
   }
 
@@ -5694,6 +5699,30 @@ class StorageService {
     await prefs.setInt(_youtubeMaxHeightKey, height);
   }
 
+  /// Android TV IPTV video decoder: 'auto' | 'hardware' | 'software'.
+  ///
+  /// Some TV boxes (MediaTek/Amlogic especially) freeze the picture while
+  /// audio keeps playing when their hardware decoder is handed a live stream
+  /// it mishandles — a device defect no app can work around reliably, which
+  /// is why every IPTV player ships this switch. 'software' puts Android's
+  /// own software codecs (c2.android.* / OMX.google.*) first; 'auto' leaves
+  /// the platform's decoder order untouched.
+  static const List<String> iptvDecoderModes = ['auto', 'hardware', 'software'];
+
+  static Future<String> getIptvDecoderMode() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString(_iptvDecoderModeKey) ?? 'auto';
+    return iptvDecoderModes.contains(value) ? value : 'auto';
+  }
+
+  static Future<void> setIptvDecoderMode(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _iptvDecoderModeKey,
+      iptvDecoderModes.contains(value) ? value : 'auto',
+    );
+  }
+
   // Network tuning (Debrify player)
   /// 'standard' | 'extended' | 'patient'. Standard = player defaults untouched.
   static Future<String> getNetworkConnectPatience() async {
@@ -7510,7 +7539,7 @@ class StorageService {
   // Debrify Player Default Settings
 
   /// Get default aspect ratio index for Flutter/mobile player
-  /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4
+  /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4, 10=CinemaZoom
   /// Default: 2 (Fit Width)
   static Future<int> getPlayerDefaultAspectIndex() async {
     final prefs = await ProfilePreferences.instance();
@@ -7524,7 +7553,7 @@ class StorageService {
   }
 
   /// Get default aspect ratio index for Android TV player
-  /// 0=Fit, 1=Fill, 2=Zoom
+  /// 0=Fit, 1=Fill, 2=Zoom, 3=CinemaZoom
   /// Default: 0 (Fit)
   static Future<int> getPlayerDefaultAspectIndexTv() async {
     final prefs = await ProfilePreferences.instance();

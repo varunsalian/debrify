@@ -313,8 +313,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: status == 'Ended'
-                                  ? Colors.red.withOpacity(0.2)
-                                  : Colors.green.withOpacity(0.2),
+                                  ? Colors.red.withValues(alpha: 0.2)
+                                  : Colors.green.withValues(alpha: 0.2),
                               borderRadius: app.shape.br(4),
                             ),
                             child: Text(
@@ -512,7 +512,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                             children: [
                               Icon(
                                 Icons.error_outline,
-                                color: Colors.red.withOpacity(0.7),
+                                color: Colors.red.withValues(alpha: 0.7),
                                 size: 48,
                               ),
                               const SizedBox(height: 12),

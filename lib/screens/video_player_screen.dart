@@ -36,7 +36,6 @@ import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
 import '../utils/iptv_player_paging.dart';
-import '../services/episode_info_service.dart';
 import '../services/movie_metadata_service.dart';
 import '../models/iptv_playlist.dart';
 import '../services/stremio_iptv_service.dart';
@@ -47,7 +46,6 @@ import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/next_episode_service.dart';
 
-import '../widgets/series_browser.dart';
 import '../widgets/tv_text_field.dart';
 import '../widgets/video_output_lease.dart';
 import 'package:media_kit/media_kit.dart' as mk;
@@ -58,21 +56,16 @@ import 'video_player/models/playlist_entry.dart';
 import 'video_player/models/gesture_state.dart';
 import 'video_player/models/hud_state.dart';
 import 'video_player/painters/double_tap_ripple_painter.dart';
-import 'video_player/painters/tv_scanlines_painter.dart';
-import 'video_player/painters/tv_vignette_painter.dart';
 import 'video_player/utils/gesture_helpers.dart';
 import 'video_player/utils/language_mapping.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/constants/timing_constants.dart';
-import 'video_player/constants/color_constants.dart';
 import 'video_player/widgets/seek_hud.dart';
 import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
-import 'video_player/widgets/netflix_radio_tile.dart';
 import 'video_player/widgets/controls.dart';
 import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
-import 'video_player/widgets/tv_tappable.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
@@ -284,7 +277,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final List<StremioSubtitle>? initialSubtitles;
 
   const VideoPlayerScreen({
-    Key? key,
+    super.key,
     required this.videoUrl,
     this.audioUrl,
     required this.title,
@@ -340,8 +333,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.simklScrobble = false,
     this.simklProgressPercent,
     this.initialSubtitles,
-  }) : assert(randomStartMaxPercent >= 0),
-       super(key: key);
+  }) : assert(randomStartMaxPercent >= 0);
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -2275,6 +2267,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
     unawaited(_installDecoderObservers(instanceGeneration, player));
+    unawaited(_applyAspectVideoZoom());
+  }
+
+  Future<void> _applyAspectVideoZoom() async {
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final scale = AspectModeUtils.getScaleForMode(_aspectMode);
+    final zoom = math.log(scale) / math.ln2;
+    try {
+      await platform.setProperty('video-zoom', zoom.toStringAsFixed(6));
+    } catch (e) {
+      debugPrint('VideoPlayer: aspect zoom apply failed: $e');
+    }
   }
 
   /// Serializes live passthrough flips: each runs WHOLE, in order. Without
@@ -7586,8 +7591,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (seriesPlaylist == null ||
         !seriesPlaylist.isSeries ||
-        seriesPlaylist.seriesTitle == null)
+        seriesPlaylist.seriesTitle == null) {
       return;
+    }
     _currentEpisodeMarkedAsFinished = true;
     try {
       // Find the current episode info
@@ -9185,6 +9191,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _playbackSpeed = speed;
       }
       _aspectMode = AspectModeUtils.stringToAspectMode(aspect);
+      await _applyAspectVideoZoom();
     }
 
     if (dur <= Duration.zero) return;
@@ -9439,7 +9446,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 imdbId: seriesPlaylist.imdbId ?? widget.contentImdbId,
               );
               debugPrint(
-                '✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=${_currentIndex}) filename="${currentEntry.title}"',
+                '✅ Collection Save: title="${seriesPlaylist.seriesTitle}" S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')} (index=$_currentIndex) filename="${currentEntry.title}"',
               );
             } else {
               debugPrint(
@@ -10349,6 +10356,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         modeIcon = Icons.aspect_ratio_rounded;
         break;
       case AspectMode.aspect5_4:
+        newMode = AspectMode.cinemaZoom;
+        modeName = 'Cinema Zoom';
+        modeIcon = Icons.zoom_in_map_rounded;
+        break;
+      case AspectMode.cinemaZoom:
         newMode = AspectMode.contain;
         modeName = 'Contain';
         modeIcon = Icons.crop_free_rounded;
@@ -10358,6 +10370,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _aspectMode = newMode;
     });
+    unawaited(_applyAspectVideoZoom());
 
     // Show elegant HUD feedback
     _aspectRatioHud.value = AspectRatioHudState(
@@ -10520,6 +10533,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _setAspectModeDirect(AspectMode m) {
     if (m == _aspectMode) return;
     setState(() => _aspectMode = m);
+    unawaited(_applyAspectVideoZoom());
     _saveResume();
   }
 
@@ -10980,6 +10994,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int episode,
     int token,
   ) async {
+    if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) return false;
+    if (!mounted || token != _playlistIdentityToken) return true;
     List<PlaylistEntry>? playlist;
     try {
       playlist = await widget.resolveSourceToPlaylist!(t);
@@ -11537,11 +11553,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 vertical: 12,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.7),
+                                color: Colors.black.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
+                                    color: Colors.black.withValues(alpha: 0.3),
                                     blurRadius: 12,
                                     offset: const Offset(0, 4),
                                   ),
@@ -11594,7 +11610,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 vertical: 10,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.7),
+                                color: Colors.black.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(22),
                               ),
                               child: Text(

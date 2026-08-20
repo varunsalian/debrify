@@ -26,6 +26,8 @@ import 'screens/premiumize/premiumize_files_screen.dart';
 import 'screens/alldebrid/alldebrid_files_screen.dart';
 import 'screens/webdav/webdav_files_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/settings/profiles_settings_page.dart';
+import 'screens/settings/widgets/settings_widgets.dart' show pushSettingsPage;
 import 'screens/profiles/profile_gate.dart';
 import 'screens/profiles/linux_vault_screen.dart';
 import 'screens/profiles/profile_recovery_screen.dart';
@@ -906,10 +908,16 @@ class _DebrifyAppState extends State<DebrifyApp> {
 
     // Set up restart callback for remote config (when TV receives setup from phone)
     RemoteCommandRouter().setRestartCallback(() {
-      _navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AppInitializer()),
-        (_) => false,
-      );
+      // Keep the existing root ProfileGate alive. Mounting a replacement
+      // before the old route's exit animation disposes can let the old gate
+      // revoke the new gate's global lock timer and remote lease.
+      _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      unawaited(() async {
+        final profiles = await ProfileBootstrap.registry.listProfiles();
+        if (profiles.length < 2) return;
+        await WidgetsBinding.instance.endOfFrame;
+        MainPageBridge.showProfilePicker?.call();
+      }());
     });
 
     return MaterialApp(
@@ -1267,8 +1275,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _showIptvStartupOverlay = false;
       return;
     }
-    if (_showIptvStartupOverlay)
+    if (_showIptvStartupOverlay) {
       setState(() => _showIptvStartupOverlay = false);
+    }
   }
 
   /// BACK / timeout during the startup launch. Cancels the attempt itself —
@@ -1399,6 +1408,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return 'torbox';
       case 6:
         return 'pikpak';
+      case 8:
+        return 'settings';
       case 10:
         return 'webdav';
       case 11:
@@ -1705,6 +1716,19 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (!ProfileRuntime.isProfileCommitted) return true;
     final profile = _profilePolicy;
     return profile != null && profile.allows(feature);
+  }
+
+  Future<void> _openProfilesFromNavigation() async {
+    if (!ProfileRuntime.isProfileCommitted || _profilePolicy == null) return;
+    await pushSettingsPage(context, const ProfilesSettingsPage());
+    if (!mounted || !ProfileRuntime.isProfileCommitted) return;
+    await _loadProfilePolicy();
+    if (!mounted) return;
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) MainPageBridge.requestTvContentFocus();
+      });
+    }
   }
 
   List<int> _applyProfilePolicy(List<int> indices) {
@@ -3551,6 +3575,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                   _onItemTapped(actualIndex);
                                   // Focus is handled by sidebar via MainPageBridge
                                 },
+                                profile: _profilePolicy,
+                                onProfileTap: _profilePolicy == null
+                                    ? null
+                                    : () => unawaited(
+                                        _openProfilesFromNavigation(),
+                                      ),
                                 onFocusContent: () {
                                   // Fallback for screens without registered handler
                                   FocusScope.of(context).nextFocus();
@@ -3723,6 +3753,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               ),
                             );
                           },
+                          profile: _profilePolicy,
+                          onProfileTap: _profilePolicy == null
+                              ? null
+                              : () => unawaited(_openProfilesFromNavigation()),
                         )
                       : null,
                   body: Stack(
@@ -3790,6 +3824,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               final actualIndex = nonTvIndices[relativeIndex];
                               _onItemTapped(actualIndex);
                             },
+                            profile: _profilePolicy,
+                            onProfileTap: _profilePolicy == null
+                                ? null
+                                : () =>
+                                      unawaited(_openProfilesFromNavigation()),
                           ),
                         ),
                       // Full-screen layer, but hit-testable only at the
@@ -3813,6 +3852,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               final actualIndex = nonTvIndices[relativeIndex];
                               _onItemTapped(actualIndex);
                             },
+                            profile: _profilePolicy,
+                            onProfileTap: _profilePolicy == null
+                                ? null
+                                : () =>
+                                      unawaited(_openProfilesFromNavigation()),
                           ),
                         ),
                       if (!isDesktopWide &&
@@ -3839,6 +3883,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               ),
                             );
                           },
+                          profile: _profilePolicy,
+                          onProfileTap: _profilePolicy == null
+                              ? null
+                              : () => unawaited(_openProfilesFromNavigation()),
                         ),
                     ],
                   ),

@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/profiles/native_profile_projection.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -77,6 +79,91 @@ void main() {
 
       expect(ProfileRuntime.isProfileCommitted, isTrue);
       expect(ProfileRuntime.capture().profileId, admin.id);
+    },
+  );
+
+  test(
+    'committed Linux registry waits for vault unlock before publishing',
+    () async {
+      DeviceKeyProvider.debugLinuxOverride = true;
+      const passphrase = 'correct horse battery staple';
+      await DeviceKeyProvider.createLinuxVault(passphrase);
+
+      final registry = await ProfileRegistry.open();
+      final admin = await registry.createProfile(
+        name: 'Admin',
+        role: UserProfileRole.admin,
+      );
+      await registry.commitBootstrap(
+        activeProfileId: admin.id,
+        migratedLegacyInstall: true,
+      );
+      await registry.close();
+
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        NativeProfileProjection.deviceKey,
+        jsonEncode(<String, Object?>{
+          'version': 2,
+          'state': 'active',
+          'publication': 1,
+        }),
+      );
+      DeviceKeyProvider.lockLinuxVault();
+
+      await ProfileBootstrap.initialize();
+
+      expect(ProfileRuntime.isProfileCommitted, isTrue);
+      expect(ProfileBootstrap.requiresLinuxVault, isTrue);
+      expect(ProfileBootstrap.linuxVaultAlreadyConfigured, isTrue);
+      expect(DeviceKeyProvider.isUnlocked, isFalse);
+      expect(
+        jsonDecode(
+          preferences.getString(NativeProfileProjection.deviceKey)!,
+        )['state'],
+        'denied',
+      );
+
+      await ProfileBootstrap.completeLinuxVault(passphrase);
+
+      expect(DeviceKeyProvider.isUnlocked, isTrue);
+      expect(ProfileBootstrap.requiresLinuxVault, isFalse);
+      expect(
+        jsonDecode(
+          preferences.getString(NativeProfileProjection.deviceKey)!,
+        )['profileId'],
+        admin.id,
+      );
+    },
+  );
+
+  test(
+    'committed Linux registry without a wrapped key requests vault creation',
+    () async {
+      DeviceKeyProvider.debugLinuxOverride = true;
+      const passphrase = 'new Linux vault passphrase';
+
+      final registry = await ProfileRegistry.open();
+      final admin = await registry.createProfile(
+        name: 'Admin',
+        role: UserProfileRole.admin,
+      );
+      await registry.commitBootstrap(
+        activeProfileId: admin.id,
+        migratedLegacyInstall: true,
+      );
+      await registry.close();
+
+      await ProfileBootstrap.initialize();
+
+      expect(ProfileBootstrap.requiresLinuxVault, isTrue);
+      expect(ProfileBootstrap.linuxVaultAlreadyConfigured, isFalse);
+
+      await ProfileBootstrap.completeLinuxVault(passphrase);
+
+      expect(DeviceKeyProvider.isUnlocked, isTrue);
+      expect(await DeviceKeyProvider.linuxHasWrappedKey(), isTrue);
+      expect(ProfileBootstrap.requiresLinuxVault, isFalse);
     },
   );
 

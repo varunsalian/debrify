@@ -603,6 +603,7 @@ void main() {
       final imported = (await registry.listProfiles()).singleWhere(
         (profile) => profile.id != profileId,
       );
+      expect(report.importedProfileIds, <String>[imported.id]);
       expect(imported.lifecycle, UserProfileLifecycle.active);
       final evidence = await registry.profileGenerationManifest(
         profileId: imported.id,

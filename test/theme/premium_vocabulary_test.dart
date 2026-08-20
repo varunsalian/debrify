@@ -9,7 +9,6 @@ import 'package:debrify/theme/app_motion.dart';
 import 'package:debrify/theme/app_surface.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/premium_looks.dart';
-import 'package:debrify/theme/theme_spec.dart';
 import 'package:debrify/screens/settings/detail_theme_page.dart'
     show kDetailThemesShipped;
 import 'package:debrify/services/storage_service.dart';

@@ -206,7 +206,7 @@
 
             <!-- ══ RIGHT GROUP ══ -->
 
-            <!-- Previous Episode (IPTV series only; shown at runtime) -->
+            <!-- Previous Episode (shown at runtime when a predecessor exists) -->
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_prev_button"
                 style="@style/CinemaControlButton"

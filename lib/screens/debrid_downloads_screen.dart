@@ -689,8 +689,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _loadMoreDownloads() async {
-    if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads)
+    if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads) {
       return;
+    }
 
     if (mounted) {
       setState(() {
@@ -5878,8 +5879,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Play all videos in a folder with a playlist
   Future<void> _playFolder(RDFileNode folder) async {
-    if (_apiKey == null || _currentTorrentId == null || _currentTorrent == null)
+    if (_apiKey == null || _currentTorrentId == null || _currentTorrent == null) {
       return;
+    }
 
     try {
       // Show loading dialog

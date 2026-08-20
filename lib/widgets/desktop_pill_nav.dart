@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_motion.dart';
 import '../theme/app_theme_scope.dart';
+import '../models/profiles/user_profile.dart';
+import 'profiles/profile_avatar_view.dart';
 import 'desktop_sidebar_nav.dart' show DesktopNavEntry;
 
 /// The pointer-world sibling of the TV rail's 'pill' style: no rail at all —
@@ -31,6 +33,8 @@ class DesktopPillNav extends StatefulWidget {
 
   /// Finger-sized targets (touch tablets — iPad / Android tablet).
   final bool expanded;
+  final UserProfile? profile;
+  final VoidCallback? onProfileTap;
 
   const DesktopPillNav({
     super.key,
@@ -38,6 +42,8 @@ class DesktopPillNav extends StatefulWidget {
     required this.entries,
     required this.onTap,
     this.expanded = false,
+    this.profile,
+    this.onProfileTap,
   });
 
   /// Handles for tests.
@@ -65,8 +71,7 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
 
   /// Escape-to-close. Requested on open, released on close, so the page's
   /// own keyboard handling is untouched while the menu is shut.
-  final FocusNode _panelFocus =
-      FocusNode(debugLabel: 'desktop-pill-panel');
+  final FocusNode _panelFocus = FocusNode(debugLabel: 'desktop-pill-panel');
 
   /// Whatever held keyboard focus when the panel opened (a search field,
   /// mid-word). Restored on the close paths that stay on the same tab —
@@ -116,8 +121,8 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
     // A bare scope means nothing real was focused — nothing to give back.
     _restoreFocus =
         (prev != null && prev != _panelFocus && prev is! FocusScopeNode)
-            ? prev
-            : null;
+        ? prev
+        : null;
     setState(() {
       _open = true;
       _scrimBlocking = true;
@@ -222,8 +227,10 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
     final motion = AppMotion.of(context);
     final entry = widget.entries.isEmpty
         ? null
-        : widget.entries[
-            widget.currentIndex.clamp(0, widget.entries.length - 1)];
+        : widget.entries[widget.currentIndex.clamp(
+            0,
+            widget.entries.length - 1,
+          )];
     if (entry == null) return const SizedBox.shrink();
     final lit = _labelUp || _pillHovered;
     final pad = widget.expanded ? 14.0 : 11.0;
@@ -249,8 +256,7 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
           duration: motion.scaled(const Duration(milliseconds: 180)),
           child: Container(
             key: DesktopPillNav.pillKey,
-            padding:
-                EdgeInsets.symmetric(horizontal: pad, vertical: vpad),
+            padding: EdgeInsets.symmetric(horizontal: pad, vertical: vpad),
             decoration: BoxDecoration(
               color: app.shell.railBg,
               borderRadius: BorderRadius.circular(999),
@@ -266,15 +272,16 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(entry.icon,
-                    size: widget.expanded ? 22 : 19,
-                    color: app.shell.navAccent),
+                Icon(
+                  entry.icon,
+                  size: widget.expanded ? 22 : 19,
+                  color: app.shell.navAccent,
+                ),
                 // The label collapses to nothing when the capsule quiets —
                 // AnimatedSize so the pill shrinks around it instead of
                 // clipping mid-word.
                 AnimatedSize(
-                  duration:
-                      motion.scaled(const Duration(milliseconds: 180)),
+                  duration: motion.scaled(const Duration(milliseconds: 180)),
                   curve: Curves.easeOut,
                   alignment: Alignment.centerLeft,
                   child: lit
@@ -284,9 +291,7 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
                             entry.label,
                             maxLines: 1,
                             style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface,
+                              color: Theme.of(context).colorScheme.onSurface,
                               fontSize: widget.expanded ? 13.5 : 12.5,
                               fontWeight: FontWeight.w600,
                             ),
@@ -312,12 +317,8 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
       if (lastSection != null && e.section != lastSection) {
         children.add(
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
-            child: Container(
-              height: 1,
-              color: app.fade(app.core.tx, 0.06),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+            child: Container(height: 1, color: app.fade(app.core.tx, 0.06)),
           ),
         );
       }
@@ -335,8 +336,7 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
     return Focus(
       focusNode: _panelFocus,
       onKeyEvent: (_, e) {
-        if (e is KeyDownEvent &&
-            e.logicalKey == LogicalKeyboardKey.escape) {
+        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.escape) {
           _close();
           return KeyEventResult.handled;
         }
@@ -347,9 +347,7 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
         width: width,
         decoration: BoxDecoration(
           color: app.shell.railBg,
-          border: Border(
-            right: BorderSide(color: app.fade(app.core.tx, 0.08)),
-          ),
+          border: Border(right: BorderSide(color: app.fade(app.core.tx, 0.08))),
           boxShadow: const [
             BoxShadow(
               color: Color(0x73000000),
@@ -391,7 +389,117 @@ class _DesktopPillNavState extends State<DesktopPillNav> {
                   children: children,
                 ),
               ),
+              if (widget.profile != null && widget.onProfileTap != null)
+                _PanelProfile(
+                  profile: widget.profile!,
+                  expanded: widget.expanded,
+                  onTap: () {
+                    _close(restoreFocus: false);
+                    widget.onProfileTap!();
+                  },
+                ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelProfile extends StatefulWidget {
+  final UserProfile profile;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _PanelProfile({
+    required this.profile,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  State<_PanelProfile> createState() => _PanelProfileState();
+}
+
+class _PanelProfileState extends State<_PanelProfile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Padding(
+      key: const ValueKey('desktop-pill-profile'),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 14),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: AppMotion.of(
+              context,
+            ).scaled(const Duration(milliseconds: 130)),
+            padding: EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: widget.expanded ? 11 : 9,
+            ),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? app.fade(app.core.tx, 0.06)
+                  : Colors.transparent,
+              borderRadius: app.shape.br(12),
+              border: Border.all(color: app.fade(app.core.tx, 0.08)),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: ClipOval(
+                    child: ProfileAvatarView(
+                      profileId: widget.profile.id,
+                      avatarKey: widget.profile.avatarKey,
+                      role: widget.profile.role,
+                      name: widget.profile.name,
+                      animateWhenIdle: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.profile.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: widget.expanded ? 13.5 : 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        widget.profile.isAdmin ? 'Admin' : 'Profile',
+                        style: TextStyle(
+                          color: app.fade(app.core.tx, 0.48),
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: app.fade(app.core.tx, 0.45),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -461,8 +569,7 @@ class _PanelItemState extends State<_PanelItem> {
             ),
             child: Row(
               children: [
-                Icon(widget.icon,
-                    size: widget.expanded ? 24 : 21, color: fg),
+                Icon(widget.icon, size: widget.expanded ? 24 : 21, color: fg),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(

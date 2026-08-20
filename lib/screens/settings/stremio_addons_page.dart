@@ -276,12 +276,32 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     if (_addons.isEmpty || _isDeletingAll) return;
 
     final count = _addons.length;
+    final int sharedCount;
+    try {
+      sharedCount = await _stremioService.sharedAddonCount();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to check addon sharing: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final hasSharedAddons = sharedCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete all addons?'),
         content: Text(
-          'This will remove all $count installed Stremio addon${count == 1 ? '' : 's'} from Debrify.',
+          hasSharedAddons
+              ? '$sharedCount addon${sharedCount == 1 ? ' is' : 's are'} '
+                    'shared with other profiles. Deleting all addons will '
+                    'also remove those addons from every shared profile.'
+              : 'This will remove all $count installed Stremio '
+                    'addon${count == 1 ? '' : 's'} from Debrify.',
         ),
         actions: [
           TextButton(
@@ -304,7 +324,9 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     });
 
     try {
-      await _stremioService.clearAllAddons();
+      await _stremioService.clearAllAddons(
+        revokeSharedProfiles: hasSharedAddons,
+      );
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -394,11 +416,34 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
   }
 
   Future<void> _deleteAddon(StremioAddon addon) async {
+    final int borrowerCount;
+    try {
+      borrowerCount = await _stremioService.addonBorrowerCount(
+        addon.manifestUrl,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to check addon sharing: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final isShared = borrowerCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Addon'),
-        content: Text('Remove "${addon.name}" from your addons?'),
+        content: Text(
+          isShared
+              ? '"${addon.name}" is shared with $borrowerCount other '
+                    'profile${borrowerCount == 1 ? '' : 's'}. Removing it '
+                    'will also remove it from those shared profiles.'
+              : 'Remove "${addon.name}" from your addons?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -416,7 +461,10 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     if (confirmed != true) return;
 
     try {
-      await _stremioService.removeAddon(addon.manifestUrl);
+      await _stremioService.removeAddon(
+        addon.manifestUrl,
+        revokeSharedProfiles: isShared,
+      );
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -1430,11 +1478,34 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   }
 
   Future<void> _deleteAddon(StremioAddon addon) async {
+    final int borrowerCount;
+    try {
+      borrowerCount = await _stremioService.addonBorrowerCount(
+        addon.manifestUrl,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to check addon sharing: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final isShared = borrowerCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Addon'),
-        content: Text('Remove "${addon.name}" from your addons?'),
+        content: Text(
+          isShared
+              ? '"${addon.name}" is shared with $borrowerCount other '
+                    'profile${borrowerCount == 1 ? '' : 's'}. Removing it '
+                    'will also remove it from those shared profiles.'
+              : 'Remove "${addon.name}" from your addons?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1452,7 +1523,10 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     if (confirmed != true) return;
 
     try {
-      await _stremioService.removeAddon(addon.manifestUrl);
+      await _stremioService.removeAddon(
+        addon.manifestUrl,
+        revokeSharedProfiles: isShared,
+      );
       // Note: _loadAddons() is called automatically via the addons changed listener
 
       if (mounted) {

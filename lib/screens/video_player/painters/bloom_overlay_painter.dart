@@ -23,8 +23,8 @@ class BloomOverlayPainter extends CustomPainter {
       center: Alignment.center,
       radius: 0.9,
       colors: [
-        Colors.white.withOpacity(opacity),
-        Colors.white.withOpacity(0.0),
+        Colors.white.withValues(alpha: opacity),
+        Colors.white.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 1.0],
     );

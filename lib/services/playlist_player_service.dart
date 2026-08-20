@@ -11,7 +11,6 @@ import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'webdav_service.dart';
 import 'alldebrid_service.dart';
-import '../models/alldebrid_file.dart';
 import '../models/premiumize_file.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
@@ -214,8 +213,9 @@ class PlaylistPlayerService {
         final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
         final allFiles = (info['files'] as List<dynamic>? ?? const []);
         if (allFiles.isEmpty) {
-          if (context.mounted && Navigator.of(context).canPop())
+          if (context.mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();
+          }
           return;
         }
 
@@ -227,8 +227,9 @@ class PlaylistPlayerService {
             .toList();
         final filesToUse = selectedFiles.isNotEmpty ? selectedFiles : allFiles;
         if (filesToUse.length > 1 && links.length == 1) {
-          if (context.mounted && Navigator.of(context).canPop())
+          if (context.mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();
+          }
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -247,8 +248,9 @@ class PlaylistPlayerService {
         final videoFiles = RDFolderTreeBuilder.collectVideoFiles(rootNode);
 
         if (videoFiles.isEmpty) {
-          if (context.mounted && Navigator.of(context).canPop())
+          if (context.mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();
+          }
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -362,8 +364,9 @@ class PlaylistPlayerService {
           }
         }
 
-        if (context.mounted && Navigator.of(context).canPop())
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
+        }
         if (entries.isEmpty) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -405,8 +408,9 @@ class PlaylistPlayerService {
           ),
         );
       } catch (e) {
-        if (context.mounted && Navigator.of(context).canPop())
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
+        }
         if (torrentHash != null && torrentHash.isNotEmpty) {
           await _attemptRecovery(context, item);
         }
@@ -2244,20 +2248,23 @@ class PlaylistPlayerService {
           newTorrentId.isNotEmpty &&
           newLinks.isNotEmpty) {
         await _updatePlaylistItemWithNewTorrent(item, newTorrentId, newLinks);
-        if (context.mounted && Navigator.of(context).canPop())
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
+        }
         await play(context, item);
       } else {
-        if (context.mounted && Navigator.of(context).canPop())
+        if (context.mounted && Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
+        }
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Content no longer available')),
         );
       }
     } catch (e) {
-      if (context.mounted && Navigator.of(context).canPop())
+      if (context.mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Content no longer available')),
@@ -2725,8 +2732,9 @@ class PlaylistPlayerService {
   }) {
     if (!isSeriesCollection) return fallback;
     final cleanSeries = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
-    if (cleanSeries != null && cleanSeries.isNotEmpty)
+    if (cleanSeries != null && cleanSeries.isNotEmpty) {
       return '$cleanSeries $episodeLabel';
+    }
     return fallback;
   }
 
@@ -2759,8 +2767,9 @@ class PlaylistPlayerService {
   }) {
     if (!isSeriesCollection) return fallback;
     final cleanSeries = seriesTitle?.replaceAll(RegExp(r'[._\-]+$'), '').trim();
-    if (cleanSeries != null && cleanSeries.isNotEmpty)
+    if (cleanSeries != null && cleanSeries.isNotEmpty) {
       return '$cleanSeries $episodeLabel';
+    }
     return fallback;
   }
 
@@ -2776,8 +2785,9 @@ class PlaylistPlayerService {
     final lowerName = folderName.toLowerCase();
     for (final pattern in patterns) {
       final match = pattern.firstMatch(lowerName);
-      if (match != null && match.groupCount >= 1)
+      if (match != null && match.groupCount >= 1) {
         return int.tryParse(match.group(1)!);
+      }
     }
     return null;
   }
@@ -2785,8 +2795,9 @@ class PlaylistPlayerService {
   static int? _extractLeadingNumber(String filename) {
     final pattern = RegExp(r'^(\d+)[\s._-]');
     final match = pattern.firstMatch(filename);
-    if (match != null && match.groupCount >= 1)
+    if (match != null && match.groupCount >= 1) {
       return int.tryParse(match.group(1)!);
+    }
     return null;
   }
 }

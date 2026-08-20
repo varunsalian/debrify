@@ -164,4 +164,73 @@ void main() {
       expect(movie.movieFetched, isTrue);
     });
   });
+
+  group('SeriesSourceFetcher automatic candidate validation', () {
+    test(
+      'defaults to allowing candidates for backward compatibility',
+      () async {
+        final fetcher = SeriesSourceFetcher(
+          season: 1,
+          episode: 1,
+          searchPacks: (s, e) async => <Torrent>[],
+          searchEpisodes: (s, e) async => <Torrent>[],
+        );
+
+        expect(
+          await fetcher.allowsCandidate(
+            t('direct', directUrl: 'https://x/1.mp4'),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'delegates automatic candidates to the configured preflight',
+      () async {
+        final seen = <String>[];
+        final fetcher = SeriesSourceFetcher(
+          season: 1,
+          episode: 1,
+          searchPacks: (s, e) async => <Torrent>[],
+          searchEpisodes: (s, e) async => <Torrent>[],
+          validateCandidate: (source) async {
+            seen.add(source.name);
+            return source.name != 'dead';
+          },
+        );
+
+        expect(
+          await fetcher.allowsCandidate(
+            t('dead', directUrl: 'https://x/dead.mp4'),
+          ),
+          isFalse,
+        );
+        expect(
+          await fetcher.allowsCandidate(
+            t('alive', directUrl: 'https://x/alive.mp4'),
+          ),
+          isTrue,
+        );
+        expect(seen, ['dead', 'alive']);
+      },
+    );
+
+    test('validation failure is fail-open', () async {
+      final fetcher = SeriesSourceFetcher(
+        season: 1,
+        episode: 1,
+        searchPacks: (s, e) async => <Torrent>[],
+        searchEpisodes: (s, e) async => <Torrent>[],
+        validateCandidate: (_) async => throw StateError('prefs unavailable'),
+      );
+
+      expect(
+        await fetcher.allowsCandidate(
+          t('unknown', directUrl: 'https://x/unknown.mp4'),
+        ),
+        isTrue,
+      );
+    });
+  });
 }

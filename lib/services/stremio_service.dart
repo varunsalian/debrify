@@ -14,10 +14,10 @@ import 'profiles/profile_async_authorization.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 
-/// One addon's outcome for a single stream search — drives the source list's
-/// per-addon status strip, which shows EVERY applicable addon including the
-/// ones that failed or returned nothing (the count maps alone lose zero-count
-/// addons once counts are rebuilt from the final rows).
+/// One addon's outcome for a single stream search — lets the source provider
+/// row retain retry controls for addons that failed or returned nothing (the
+/// count maps alone lose zero-count addons once counts are rebuilt from the
+/// final rows).
 ///
 /// [sourceKey] matches `Torrent.source` (`stremio:<name>` lowercased);
 /// [count] is the addon's RAW stream count before cross-addon dedupe, so
@@ -106,6 +106,10 @@ class StremioAddonRefreshResult {
 class StremioService {
   static const String _addonsKey = 'stremio_addons_v1';
   static const Duration _requestTimeout = Duration(seconds: 15);
+
+  /// User-initiated retries can wait longer than the automatic search without
+  /// making every source lookup block on a slow addon.
+  static const Duration manualRetryTimeout = Duration(minutes: 1);
 
   // Singleton pattern
   static final StremioService _instance = StremioService._internal();
@@ -222,7 +226,7 @@ class StremioService {
     }
 
     if (ProfileCollectionResourceFacade.active) {
-      final read = () => ProfileCollectionResourceFacade.read(
+      Future<List<Map<String, dynamic>>> read() => ProfileCollectionResourceFacade.read(
         types: const <ConnectionResourceType>{
           ConnectionResourceType.stremioAddon,
         },
@@ -458,6 +462,7 @@ class StremioService {
   Future<List<StremioAddon>> _saveAddons(
     List<StremioAddon> addons, {
     ProfileAsyncAuthorization? initiatingAuthorization,
+    bool revokeSharedProfiles = false,
   }) async {
     Future<List<StremioAddon>> persist() async {
       if (ProfileCollectionResourceFacade.active) {
@@ -483,6 +488,7 @@ class StremioService {
           // profile-local and a disabled resource is still part of the saved
           // collection (and may be returned to the management caller).
           forSettings: true,
+          revokeBorrowers: revokeSharedProfiles,
         );
         return rows.map(StremioAddon.fromJson).toList(growable: false);
       } else {
@@ -690,8 +696,42 @@ class StremioService {
     );
   }
 
-  /// Remove an addon by its manifest URL
-  Future<void> removeAddon(String manifestUrl) async {
+  Future<int> addonBorrowerCount(String manifestUrl) async {
+    final addons = await getAddonsForManagement();
+    final target = addons
+        .where((a) => a.manifestUrl == manifestUrl)
+        .firstOrNull;
+    final resourceId = target?.connectionResourceId;
+    if (resourceId == null) return 0;
+    return ProfileCollectionResourceFacade.ownedBorrowerCount(
+      resourceId: resourceId,
+      feature: ProfileFeature.addonsAndEngines,
+    );
+  }
+
+  Future<int> sharedAddonCount() async {
+    if (!ProfileCollectionResourceFacade.active) return 0;
+    final addons = await getAddonsForManagement();
+    var count = 0;
+    for (final addon in addons) {
+      final resourceId = addon.connectionResourceId;
+      if (!addon.canManage || resourceId == null) continue;
+      final borrowers =
+          await ProfileCollectionResourceFacade.ownedBorrowerCount(
+            resourceId: resourceId,
+            feature: ProfileFeature.addonsAndEngines,
+          );
+      if (borrowers > 0) count++;
+    }
+    return count;
+  }
+
+  /// Remove an addon by its manifest URL. Shared profile access is revoked
+  /// only after the caller has explicitly confirmed that destructive impact.
+  Future<void> removeAddon(
+    String manifestUrl, {
+    bool revokeSharedProfiles = false,
+  }) async {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
@@ -708,6 +748,20 @@ class StremioService {
       throw const ResourceAuthorizationException(
         'A shared addon can only be managed by its owner',
       );
+    }
+    final resourceId = target?.connectionResourceId;
+    if (resourceId != null && ProfileCollectionResourceFacade.active) {
+      await ProfileCollectionResourceFacade.deleteOwned(
+        resourceId: resourceId,
+        revokeBorrowers: revokeSharedProfiles,
+      );
+      if (authorization != null && !authorization.isCurrentlyActive) {
+        throw StateError('Profile session changed before addon publication');
+      }
+      invalidateCache();
+      _notifyAddonsChanged();
+      debugPrint('StremioService: Removed addon');
+      return;
     }
     addons.removeWhere((a) => a.manifestUrl == manifestUrl);
     await _saveAddons(addons, initiatingAuthorization: authorization);
@@ -876,11 +930,15 @@ class StremioService {
   }
 
   /// Clear all addons
-  Future<void> clearAllAddons() async {
+  Future<void> clearAllAddons({bool revokeSharedProfiles = false}) async {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    await _saveAddons([], initiatingAuthorization: authorization);
+    await _saveAddons(
+      [],
+      initiatingAuthorization: authorization,
+      revokeSharedProfiles: revokeSharedProfiles,
+    );
     debugPrint('StremioService: Cleared all addons');
   }
 
@@ -1188,7 +1246,7 @@ class StremioService {
     return result;
   }
 
-  /// Re-runs the stream fetch for ONE addon — the status strip's Retry.
+  /// Re-runs the stream fetch for ONE addon — the provider pill's Retry.
   /// Returns the converted rows (empty when the addon genuinely has nothing).
   /// The series smart fallback is deliberately not replayed: a single-addon
   /// retry probes the one streamId the current scope implies, which covers
@@ -1829,41 +1887,6 @@ class StremioService {
         continue;
       }
 
-      // Determine stream type and get unique key
-      String? uniqueKey;
-      StreamType streamType;
-      String? directUrl;
-
-      if (stream.isTorrent) {
-        // Torrent stream - has infoHash
-        uniqueKey = stream.infoHash!.toLowerCase();
-        streamType = StreamType.torrent;
-        withInfoHash++;
-      } else if (stream.isExternalUrl) {
-        // External URL - opens in browser
-        uniqueKey =
-            'ext:${stream.externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
-        streamType = StreamType.externalUrl;
-        directUrl = stream.externalUrl;
-        withExternalUrl++;
-      } else if (stream.isDirectUrl) {
-        // Direct URL - playable without debrid
-        uniqueKey =
-            'url:${stream.url.hashCode.toRadixString(16).padLeft(40, '0')}';
-        streamType = StreamType.directUrl;
-        directUrl = stream.url;
-        withDirectUrl++;
-      } else {
-        skipped++;
-        continue;
-      }
-
-      // Parse seeders from title - only for actual torrents
-      // Direct/external links should have 0 seeders so they sort to bottom
-      final seeders = streamType == StreamType.torrent
-          ? (stream.seedersFromTitle ?? 0)
-          : 0;
-
       // Parse size - try behaviorHints.videoSize first, then title
       int sizeBytes = 0;
       if (stream.behaviorHints != null) {
@@ -1890,34 +1913,106 @@ class StremioService {
         }
       }
 
-      // Create torrent object with stream type info
-      final torrent = Torrent(
-        rowid: 0,
-        infohash: stream.infoHash?.toLowerCase() ?? uniqueKey,
-        name: name,
-        sizeBytes: sizeBytes,
-        createdUnix: 0,
-        seeders: seeders,
-        leechers: 0,
-        completed: 0,
-        scrapedDate: 0,
-        source: 'stremio:${stream.source}',
-        streamType: streamType,
-        directUrl: directUrl,
-      );
-
-      // Exact addon mode preserves every returned playable entry, including
-      // intentional duplicates. The default path keeps its historic dedupe:
-      // highest-seeder duplicate for torrents, first direct/external URL.
-      if (preserveOrder) {
-        orderedTorrents.add(torrent);
+      // A debrid addon may return a ready-to-play URL while retaining the
+      // source torrent hash in `infoHash` or `behaviorHints.bingeGroup`.
+      // Preserve both transports as separate rows: the URL row plays through
+      // the addon, while the hash row remains available to Debrify's provider.
+      final variants =
+          <
+            ({
+              String uniqueKey,
+              String infohash,
+              StreamType streamType,
+              String? directUrl,
+              bool hasRealInfoHash,
+              int seeders,
+            })
+          >[];
+      final playableUrl = stream.url;
+      if (stream.isTorrent) {
+        if (playableUrl != null && playableUrl.isNotEmpty) {
+          final urlKey =
+              'url:${playableUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+          variants.add((
+            uniqueKey: urlKey,
+            infohash: urlKey,
+            streamType: StreamType.directUrl,
+            directUrl: playableUrl,
+            hasRealInfoHash: false,
+            seeders: 0,
+          ));
+          withDirectUrl++;
+        }
+        final hash = stream.infoHash!.toLowerCase();
+        variants.add((
+          uniqueKey: hash,
+          infohash: hash,
+          streamType: StreamType.torrent,
+          directUrl: null,
+          hasRealInfoHash: true,
+          seeders: stream.seedersFromTitle ?? 0,
+        ));
+        withInfoHash++;
+      } else if (stream.isExternalUrl) {
+        final externalUrl = stream.externalUrl!;
+        final externalKey =
+            'ext:${externalUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+        variants.add((
+          uniqueKey: externalKey,
+          infohash: externalKey,
+          streamType: StreamType.externalUrl,
+          directUrl: externalUrl,
+          hasRealInfoHash: false,
+          seeders: 0,
+        ));
+        withExternalUrl++;
+      } else if (playableUrl != null && playableUrl.isNotEmpty) {
+        final urlKey =
+            'url:${playableUrl.hashCode.toRadixString(16).padLeft(40, '0')}';
+        variants.add((
+          uniqueKey: urlKey,
+          infohash: urlKey,
+          streamType: StreamType.directUrl,
+          directUrl: playableUrl,
+          hasRealInfoHash: false,
+          seeders: 0,
+        ));
+        withDirectUrl++;
+      } else {
+        skipped++;
         continue;
       }
-      final existing = uniqueTorrents[uniqueKey];
-      if (existing == null ||
-          (streamType == StreamType.torrent &&
-              torrent.seeders > existing.seeders)) {
-        uniqueTorrents[uniqueKey] = torrent;
+
+      for (final variant in variants) {
+        final torrent = Torrent(
+          rowid: 0,
+          infohash: variant.infohash,
+          name: name,
+          sizeBytes: sizeBytes,
+          createdUnix: 0,
+          seeders: variant.seeders,
+          leechers: 0,
+          completed: 0,
+          scrapedDate: 0,
+          source: 'stremio:${stream.source}',
+          streamType: variant.streamType,
+          directUrl: variant.directUrl,
+          hasRealInfoHash: variant.hasRealInfoHash,
+        );
+
+        // Exact addon mode preserves every returned playable entry, including
+        // intentional duplicates. The default path keeps its historic dedupe:
+        // highest-seeder duplicate for torrents, first direct/external URL.
+        if (preserveOrder) {
+          orderedTorrents.add(torrent);
+          continue;
+        }
+        final existing = uniqueTorrents[variant.uniqueKey];
+        if (existing == null ||
+            (variant.streamType == StreamType.torrent &&
+                torrent.seeders > existing.seeders)) {
+          uniqueTorrents[variant.uniqueKey] = torrent;
+        }
       }
     }
 

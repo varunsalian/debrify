@@ -93,10 +93,7 @@ String chunkPieceBody({
 /// A repair request's body: the receiver names the chunk indices that never
 /// arrived. Kept to [kChunkNeedMaxIndices] so the request itself fits one
 /// datagram; a round that cannot name every gap catches the rest next round.
-String chunkNeedBody({
-  required String transferId,
-  required List<int> missing,
-}) {
+String chunkNeedBody({required String transferId, required List<int> missing}) {
   return jsonEncode({
     'transferId': transferId,
     'need': missing.take(kChunkNeedMaxIndices).toList(),
@@ -123,23 +120,47 @@ String chunkNeedBody({
 }
 
 /// Body of a profile-graph outcome report (receiver → sender).
-String profileGraphResultBody({required bool ok, required String message}) {
-  return jsonEncode({'ok': ok, 'message': message});
+String profileGraphResultBody({
+  required String? requestId,
+  required bool ok,
+  required String message,
+}) {
+  return jsonEncode({
+    if (requestId != null) 'requestId': requestId,
+    'ok': ok,
+    'message': message,
+  });
 }
 
 /// Parse of [profileGraphResultBody]; null when malformed.
-({bool ok, String message})? parseProfileGraphResultBody(String data) {
+({String? requestId, bool ok, String message})? parseProfileGraphResultBody(
+  String data,
+) {
   try {
     final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['requestId'];
     final ok = map['ok'];
     final message = map['message'];
-    if (ok is! bool || message is! String || message.length > 500) {
+    if ((requestId != null &&
+            (requestId is! String ||
+                requestId.isEmpty ||
+                requestId.length > 128)) ||
+        ok is! bool ||
+        message is! String ||
+        message.length > 500) {
       return null;
     }
-    return (ok: ok, message: message);
+    return (requestId: requestId as String?, ok: ok, message: message);
   } catch (_) {
     return null;
   }
+}
+
+bool profileGraphResultMatchesRequest({
+  required String requestId,
+  required String? resultRequestId,
+}) {
+  return resultRequestId == requestId;
 }
 
 /// Sent chunks kept for gap repair. Chunks are SEALED ciphertext slices —
@@ -152,7 +173,11 @@ class ChunkResendCache {
   static final Map<String, _CachedTransfer> _transfers = {};
   static final Set<String> _resendInFlight = {};
 
-  static void register(String transferId, String targetIp, List<String> chunks) {
+  static void register(
+    String transferId,
+    String targetIp,
+    List<String> chunks,
+  ) {
     // Bound the cache to the receiver's own concurrent-buffer cap (4): a
     // multi-payload export (config export sends three) must not evict the
     // big first payload while its tail is still being repaired.

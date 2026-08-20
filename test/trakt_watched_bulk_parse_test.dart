@@ -19,4 +19,75 @@ void main() {
 
     expect(watched, {'tt7654321': 100.0});
   });
+
+  test('fully watched series requires every aired regular episode', () {
+    final watched = TraktService.debugParseFullyWatchedShows([
+      {
+        'show': {
+          'aired_episodes': 3,
+          'ids': {'imdb': 'TT1111111'},
+        },
+        'seasons': [
+          {
+            'number': 1,
+            'episodes': [
+              {'number': 1},
+              {'number': 2},
+              {'number': 3},
+            ],
+          },
+        ],
+      },
+      {
+        'show': {
+          'aired_episodes': 3,
+          'ids': {'imdb': 'tt2222222'},
+        },
+        'seasons': [
+          {
+            'number': 1,
+            'episodes': [
+              {'number': 1},
+              {'number': 2},
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(watched, {'tt1111111'});
+  });
+
+  test(
+    'fully watched series does not become the movie-style watched toggle',
+    () {
+      const status = TraktTitleStatus(seriesFullyWatched: true);
+
+      expect(status.titleWatched, isTrue);
+      expect(status.watched, isNull);
+    },
+  );
+
+  test('per-show progress distinguishes complete, incomplete, and unknown', () {
+    expect(
+      TraktService.debugParseShowFullyWatched({'aired': 10, 'completed': 10}),
+      isTrue,
+    );
+    expect(
+      TraktService.debugParseShowFullyWatched({'aired': 10, 'completed': 9}),
+      isFalse,
+    );
+    expect(TraktService.debugParseShowFullyWatched({'aired': 10}), isNull);
+  });
+
+  test('unknown refresh preserves the previous watched answer', () {
+    const previous = TraktTitleStatus(seriesFullyWatched: true);
+    const refresh = TraktTitleStatus(inCollection: true);
+
+    final merged = refresh.preserveWatchedFrom(previous);
+
+    expect(merged.seriesFullyWatched, isTrue);
+    expect(merged.titleWatched, isTrue);
+    expect(merged.inCollection, isTrue);
+  });
 }

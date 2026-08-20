@@ -735,12 +735,33 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final count = _installed.length;
     if (count == 0) return;
     final app = AppThemeScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final int sharedCount;
+    try {
+      sharedCount = await _stremio.sharedAddonCount();
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to check sharing: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final hasSharedAddons = sharedCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _HubDialog(
         title: 'Delete all addons?',
         content: Text(
-          'This removes all $count installed Stremio addon${count == 1 ? '' : 's'} from Debrify.',
+          hasSharedAddons
+              ? '$sharedCount addon${sharedCount == 1 ? ' is' : 's are'} '
+                    'shared with other profiles. Deleting all addons will '
+                    'also remove those addons from every shared profile.'
+              : 'This removes all $count installed Stremio '
+                    'addon${count == 1 ? '' : 's'} from Debrify.',
           style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
@@ -757,9 +778,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
     try {
-      await _stremio.clearAllAddons();
+      await _stremio.clearAllAddons(revokeSharedProfiles: hasSharedAddons);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('Deleted $count addon${count == 1 ? '' : 's'}')),
@@ -808,12 +828,32 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   Future<void> _removeAddon(StremioAddon a) async {
     final app = AppThemeScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final int borrowerCount;
+    try {
+      borrowerCount = await _stremio.addonBorrowerCount(a.manifestUrl);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to check sharing: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final isShared = borrowerCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _HubDialog(
         title: 'Remove addon',
         content: Text(
-          'Remove "${a.name}" from your addons?',
+          isShared
+              ? '"${a.name}" is shared with $borrowerCount other '
+                    'profile${borrowerCount == 1 ? '' : 's'}. Removing it '
+                    'will also remove it from those shared profiles.'
+              : 'Remove "${a.name}" from your addons?',
           style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
@@ -830,9 +870,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
     try {
-      await _stremio.removeAddon(a.manifestUrl);
+      await _stremio.removeAddon(a.manifestUrl, revokeSharedProfiles: isShared);
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('${a.name} removed')));
     } catch (e) {

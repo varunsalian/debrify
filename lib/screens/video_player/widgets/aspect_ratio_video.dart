@@ -8,12 +8,12 @@ class AspectRatioVideo extends StatelessWidget {
   final mkv.SubtitleViewConfiguration? subtitleViewConfiguration;
 
   const AspectRatioVideo({
-    Key? key,
+    super.key,
     required this.videoController,
     required this.customAspectRatio,
     required this.currentFit,
     this.subtitleViewConfiguration,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -184,8 +184,9 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
     var nowIndex = all.indexWhere((p) => p.airsAt(now));
     if (nowIndex < 0) {
       nowIndex = all.indexWhere((p) => p.start.isAfter(now));
-      if (nowIndex < 0)
+      if (nowIndex < 0) {
         return all.length <= 6 ? all : all.sublist(all.length - 6);
+      }
     }
     final start = (nowIndex - 1).clamp(0, all.length);
     return all.sublist(start, (start + 6).clamp(0, all.length));

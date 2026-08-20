@@ -148,9 +148,7 @@ class ProfileRegistry {
   /// cannot add.
   static Future<void> _addPinRecoveryColumns(DatabaseExecutor db) async {
     await db.execute('ALTER TABLE user_profiles ADD COLUMN recovery_hash BLOB');
-    await db.execute(
-      'ALTER TABLE user_profiles ADD COLUMN recovery_salt BLOB',
-    );
+    await db.execute('ALTER TABLE user_profiles ADD COLUMN recovery_salt BLOB');
     await db.execute(
       'ALTER TABLE user_profiles ADD COLUMN recovery_params_json TEXT',
     );
@@ -1295,6 +1293,52 @@ class ProfileRegistry {
     return (await getProfile(profileId))!;
   }
 
+  /// Changes only the unlocked active profile's display identity.
+  ///
+  /// This deliberately does not share [updateProfile]: that method is an
+  /// Admin boundary capable of changing roles, policy and lock behavior. A
+  /// self-service caller cannot name another target, and name/avatar changes
+  /// do not bump the authorization revision because they grant no authority.
+  Future<UserProfile> updateActiveProfileIdentity({
+    required String profileId,
+    required String name,
+    required String? avatarKey,
+    required int actingAuthorizationRevision,
+    required int actingSessionEpoch,
+  }) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || trimmedName.length > 40) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Name must contain 1–40 characters',
+      );
+    }
+    var changed = 0;
+    await _db.transaction((txn) async {
+      await _assertActiveSessionActor(
+        txn,
+        profileId: profileId,
+        authorizationRevision: actingAuthorizationRevision,
+        sessionEpoch: actingSessionEpoch,
+      );
+      changed = await txn.update(
+        'user_profiles',
+        <String, Object?>{
+          'name': trimmedName,
+          'avatar_key': avatarKey,
+          'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+        },
+        where:
+            "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+        whereArgs: <Object>[profileId],
+      );
+    });
+    if (changed != 1) throw StateError('Active profile is unavailable');
+    await checkpointTvOsRecovery();
+    return (await getProfile(profileId))!;
+  }
+
   Future<void> disableProfile(
     String id, {
     String? actingProfileId,
@@ -2195,13 +2239,14 @@ class ProfileRegistry {
   /// Atomically replaces an owner's resources of [types]. This is used by
   /// legacy collection-shaped APIs (WebDAV, IPTV, addons, and indexers) so a
   /// crash can never expose a half-replaced list. Shared resources are never
-  /// silently deleted; callers must use an explicit share-aware management
-  /// flow to remove those.
+  /// silently deleted; [revokeBorrowers] must reflect an explicit,
+  /// share-aware confirmation from the owner.
   Future<void> replaceOwnedResourceCollection({
     required String ownerProfileId,
     required Set<ConnectionResourceType> types,
     required List<PreparedConnectionResource> replacements,
     required int ownerPermissions,
+    bool revokeBorrowers = false,
     String? actingProfileId,
     int? actingAuthorizationRevision,
     ProfileFeature? actingFeature,
@@ -2259,13 +2304,34 @@ class ProfileRegistry {
           throw StateError('Replacement collection contains duplicate IDs');
         }
       }
+      final removedIds = existing
+          .map((row) => row['id']! as String)
+          .where((id) => !replacementIds.contains(id))
+          .toSet();
       if (existing.any(
         (row) =>
             (row['borrower_count'] as int? ?? 0) > 0 &&
-            !replacementIds.contains(row['id']),
+            removedIds.contains(row['id']) &&
+            !revokeBorrowers,
       )) {
         throw StateError(
           'A shared connection must be removed in profile management',
+        );
+      }
+      final revokedBorrowerIds = <String>{};
+      if (revokeBorrowers && removedIds.isNotEmpty) {
+        final removedPlaceholders = List.filled(
+          removedIds.length,
+          '?',
+        ).join(',');
+        final grants = await txn.rawQuery(
+          '''SELECT DISTINCT profile_id FROM profile_resource_grants
+             WHERE resource_id IN ($removedPlaceholders)
+               AND profile_id != ?''',
+          <Object>[...removedIds, ownerProfileId],
+        );
+        revokedBorrowerIds.addAll(
+          grants.map((row) => row['profile_id']! as String),
         );
       }
       for (final row in existing) {
@@ -2364,6 +2430,14 @@ class ProfileRegistry {
                updated_at_ms = ? WHERE id = ? AND disabled_at_ms IS NULL''',
         <Object>[now, ownerProfileId],
       );
+      for (final profileId in revokedBorrowerIds) {
+        await txn.rawUpdate(
+          '''UPDATE user_profiles
+             SET authorization_revision = authorization_revision + 1,
+                 updated_at_ms = ? WHERE id = ?''',
+          <Object>[now, profileId],
+        );
+      }
       await _assertAdminInvariant(txn);
     });
     await checkpointTvOsRecovery();
@@ -2386,6 +2460,19 @@ class ProfileRegistry {
       permissions: rows.single['permissions']! as int,
     );
   }
+
+  Future<int> countResourceBorrowers({
+    required String resourceId,
+    required String ownerProfileId,
+  }) async =>
+      Sqflite.firstIntValue(
+        await _db.rawQuery(
+          '''SELECT COUNT(*) FROM profile_resource_grants
+             WHERE resource_id = ? AND profile_id != ?''',
+          <Object>[resourceId, ownerProfileId],
+        ),
+      ) ??
+      0;
 
   Future<ProfileResourceSettings?> getProfileResourceSettings(
     String profileId,
@@ -3211,6 +3298,97 @@ class ProfileRegistry {
     });
     if (changed != 1) throw StateError('Profile does not exist');
     await checkpointTvOsRecovery();
+  }
+
+  /// Replaces the unlocked active profile's PIN only when the credential the
+  /// caller confirmed is still current. The target is necessarily the actor;
+  /// Admin reset of another profile remains on [setPinRecord].
+  Future<void> setActiveProfilePinRecordIfUnchanged({
+    required String profileId,
+    required ProfilePinRecord expected,
+    required List<int>? hash,
+    required List<int>? salt,
+    required String? paramsJson,
+    required List<int>? recoveryHash,
+    required List<int>? recoverySalt,
+    required String? recoveryParamsJson,
+    required int actingAuthorizationRevision,
+    required int actingSessionEpoch,
+  }) async {
+    if ((hash == null) != (salt == null) ||
+        (hash == null) != (paramsJson == null) ||
+        (recoveryHash == null) != (recoverySalt == null) ||
+        (recoveryHash == null) != (recoveryParamsJson == null) ||
+        (recoveryHash != null && hash == null)) {
+      throw ArgumentError('Incomplete PIN or recovery credential');
+    }
+    try {
+      await authorityWillChangeCallback?.call();
+      var changed = false;
+      await _db.transaction((txn) async {
+        await _assertActiveSessionActor(
+          txn,
+          profileId: profileId,
+          authorizationRevision: actingAuthorizationRevision,
+          sessionEpoch: actingSessionEpoch,
+        );
+        final rows = await txn.query(
+          'user_profiles',
+          columns: const <String>[
+            'pin_hash',
+            'pin_salt',
+            'pin_params_json',
+            'pin_reset_required',
+            'recovery_hash',
+            'recovery_salt',
+            'recovery_params_json',
+          ],
+          where:
+              "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+          whereArgs: <Object>[profileId],
+          limit: 1,
+        );
+        if (rows.isEmpty ||
+            !_pinAndRecoveryRecordMatches(rows.single, expected)) {
+          return;
+        }
+        final count = await txn.update(
+          'user_profiles',
+          <String, Object?>{
+            'pin_hash': hash == null ? null : Uint8List.fromList(hash),
+            'pin_salt': salt == null ? null : Uint8List.fromList(salt),
+            'pin_params_json': paramsJson,
+            'recovery_hash': recoveryHash == null
+                ? null
+                : Uint8List.fromList(recoveryHash),
+            'recovery_salt': recoverySalt == null
+                ? null
+                : Uint8List.fromList(recoverySalt),
+            'recovery_params_json': recoveryParamsJson,
+            'pin_reset_required': 0,
+            'failed_pin_attempts': 0,
+            'locked_until_ms': null,
+            'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+          },
+          where: 'id = ?',
+          whereArgs: <Object>[profileId],
+        );
+        changed = count == 1;
+      });
+      if (!changed) throw StateError('PIN authorization changed');
+      await checkpointTvOsRecovery();
+    } catch (error, stackTrace) {
+      // `authorityWillChangeCallback` denies native readers before the
+      // transaction. Any rejection or publication failure must republish the
+      // currently active authority, not leave a stale session's denial live.
+      try {
+        await authorityChangedCallback?.call();
+      } catch (_) {
+        // Preserve the initiating failure. A later lifecycle publication can
+        // retry, while callers still resolve whether their DB write committed.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   /// Records a failed attempt only if the PIN credential observed by the
@@ -4520,6 +4698,22 @@ class ProfileRegistry {
         (row['pin_reset_required'] == 1) == expected.resetRequired;
   }
 
+  static bool _pinAndRecoveryRecordMatches(
+    Map<String, Object?> row,
+    ProfilePinRecord expected,
+  ) {
+    return _pinRecordMatches(row, expected) &&
+        _bytesEqual(
+          row['recovery_hash'] as Uint8List?,
+          expected.recoveryHash,
+        ) &&
+        _bytesEqual(
+          row['recovery_salt'] as Uint8List?,
+          expected.recoverySalt,
+        ) &&
+        row['recovery_params_json'] == expected.recoveryParamsJson;
+  }
+
   static bool _bytesEqual(List<int>? first, List<int>? second) {
     if (identical(first, second)) return true;
     if (first == null || second == null || first.length != second.length) {
@@ -4868,7 +5062,9 @@ class ProfilePinRecord {
   bool get isCorrupt =>
       (hash != null || salt != null || paramsJson != null) && !hasPin;
   bool get hasRecoveryCode =>
-      recoveryHash != null && recoverySalt != null && recoveryParamsJson != null;
+      recoveryHash != null &&
+      recoverySalt != null &&
+      recoveryParamsJson != null;
 }
 
 extension<T> on List<T> {

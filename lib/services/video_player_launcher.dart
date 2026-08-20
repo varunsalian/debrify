@@ -1212,7 +1212,7 @@ class VideoPlayerLauncher {
                       seriesPlaylist.allEpisodes[currentEpisodeIdx + 1];
                   startIndex = nextEpisode.originalIndex;
                   debugPrint(
-                    'ExternalPlayer: E${lastEpisodeNum} finished, advancing to next at index $startIndex',
+                    'ExternalPlayer: E$lastEpisodeNum finished, advancing to next at index $startIndex',
                   );
                 }
               } else {
@@ -1980,7 +1980,11 @@ class VideoPlayerLauncher {
 
           // Use SeriesPlaylist to detect series and compute season/episode
           final seriesPlaylist = playlistEntries.length > 1
-              ? SeriesPlaylist.fromPlaylistEntries(playlistEntries)
+              ? SeriesPlaylist.fromPlaylistEntries(
+                  playlistEntries,
+                  collectionTitle: args.contentTitle ?? args.title,
+                  forceSeries: args.contentType == 'series',
+                )
               : null;
           final episodes = seriesPlaylist?.allEpisodes;
           // Compare against non-sample count (fromPlaylistEntries excludes samples).
@@ -2014,10 +2018,17 @@ class VideoPlayerLauncher {
               classifiedAsSeries &&
               episodes.length >= 3 &&
               episodes.length * 10 >= nonSampleCount * 7;
-          final isSeries = fullyClassified || mostlyClassified;
+          // Catalog-series source switches already have authoritative content
+          // identity. Match the Dart player: keep them in series mode even
+          // when a valid pack has a few unusually named entries. A singleton
+          // direct stream is also still an episode even though there is no
+          // multi-file playlist from which to infer its identity.
+          final isSeries = args.contentType == 'series'
+              ? playlistEntries.length == 1 || classifiedAsSeries
+              : fullyClassified || mostlyClassified;
 
           // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
-          if (isSeries) {
+          if (isSeries && seriesPlaylist != null) {
             try {
               await seriesPlaylist.fetchEpisodeInfo();
               debugPrint(
@@ -2033,7 +2044,7 @@ class VideoPlayerLauncher {
           // Build originalIndex → episode lookup for correct matching
           // (allEpisodes is sorted by season/episode, not by original entry order)
           final episodeByIndex = <int, SeriesEpisode>{};
-          if (isSeries) {
+          if (isSeries && episodes != null) {
             for (final ep in episodes) {
               episodeByIndex[ep.originalIndex] = ep;
             }
@@ -2056,6 +2067,27 @@ class VideoPlayerLauncher {
               ? sourceTrackerMaps[1]
               : const <String, double>{};
 
+          final stableSeriesTitle =
+              args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
+          var localSeriesProgress = isSeries
+              ? await StorageService.getEpisodeProgress(
+                  seriesTitle: stableSeriesTitle,
+                )
+              : const <String, Map<String, dynamic>>{};
+          // Local series state is title-keyed, with IMDb stored as metadata.
+          // Merge older release-title records through the IMDb lookup, then
+          // let the stable catalog-title record win for duplicate episodes.
+          if (isSeries && args.contentImdbId != null) {
+            final imdbSeriesProgress =
+                await StorageService.getEpisodeProgressByImdbId(
+                  args.contentImdbId!,
+                );
+            localSeriesProgress = {
+              ...imdbSeriesProgress,
+              ...localSeriesProgress,
+            };
+          }
+
           // Convert PlaylistEntry list to Android TV PlaybackItem maps
           final items = <Map<String, dynamic>>[];
           for (int i = 0; i < playlistEntries.length; i++) {
@@ -2074,6 +2106,9 @@ class VideoPlayerLauncher {
                     sourceSimklProgress[episodeKey],
                   ])
                 : null;
+            final localState = episodeKey != null
+                ? localSeriesProgress[episodeKey]
+                : null;
             items.add({
               'id': '${entry.title}_$i',
               // Mirror the resolver's own resumeId keying ('${title}_$i') so
@@ -2091,9 +2126,10 @@ class VideoPlayerLauncher {
               if (epInfo?.plot != null) 'description': epInfo!.plot,
               if (epInfo?.rating != null) 'rating': epInfo!.rating,
               if (entry.sizeBytes != null) 'sizeBytes': entry.sizeBytes,
-              'resumePositionMs': 0,
-              'durationMs': 0,
-              'updatedAt': 0,
+              'resumePositionMs':
+                  (localState?['positionMs'] as num?)?.toInt() ?? 0,
+              'durationMs': (localState?['durationMs'] as num?)?.toInt() ?? 0,
+              'updatedAt': (localState?['updatedAt'] as num?)?.toInt() ?? 0,
               if (entry.provider != null) 'provider': entry.provider,
               if (trackerPercent != null)
                 'traktProgressPercent': trackerPercent,
@@ -2184,16 +2220,19 @@ class VideoPlayerLauncher {
         int? episode,
       })?
       addonSourcesProviderForTv;
-      if (seriesFetcher != null && seriesFetcher.fetchAddonEpisodes != null) {
+      if (seriesFetcher != null &&
+          (seriesFetcher.fetchAddonEpisodes != null ||
+              seriesFetcher.fetchEngine != null)) {
         addonSourcesProviderForTv =
-            (List<String> addonIds, String mode, {
+            (
+              List<String> addonIds,
+              String mode, {
               int? season,
               int? episode,
             }) async {
               final generation = stremioSourcesGeneration;
-              List<Map<String, dynamic>> serialized() => currentStremioSources
-                  .map((t) => t.toJson())
-                  .toList();
+              List<Map<String, dynamic>> serialized() =>
+                  currentStremioSources.map((t) => t.toJson()).toList();
               // Stale = the holder was replaced (channel switch) while this
               // fetch ran; its results belong to the previous content.
               bool stale() => generation != stremioSourcesGeneration;
@@ -2222,15 +2261,25 @@ class VideoPlayerLauncher {
               List<Torrent>? episodes;
               final magnetIds = <String>[];
               for (final addonId in addonIds) {
-                final fetched = await seriesFetcher.fetchAddonEpisodes!(
-                  addonId,
-                  season ?? seriesFetcher.season,
-                  episode ?? seriesFetcher.episode,
-                );
+                final engine = addonId.startsWith('engine::')
+                    ? addonId.substring('engine::'.length)
+                    : null;
+                final fetched = engine == null
+                    ? await seriesFetcher.fetchAddonEpisodes?.call(
+                        addonId,
+                        season ?? seriesFetcher.season,
+                        episode ?? seriesFetcher.episode,
+                      )
+                    : await seriesFetcher.fetchEngine?.call(
+                        engine,
+                        season ?? seriesFetcher.season,
+                        episode ?? seriesFetcher.episode,
+                      );
                 if (stale()) return null;
                 if (fetched != null) {
                   (episodes ??= <Torrent>[]).addAll(fetched);
-                  if (fetched.any((t) => t.streamType == StreamType.torrent)) {
+                  if (engine == null &&
+                      fetched.any((t) => t.streamType == StreamType.torrent)) {
                     magnetIds.add(addonId);
                   }
                 }
@@ -2300,6 +2349,8 @@ class VideoPlayerLauncher {
           // target episode? (1-entry unparseable streams count — they get the
           // target identity stamped on.)
           Future<bool> candidateHasTarget(Torrent t) async {
+            if (!await seriesFetcher.allowsCandidate(t)) return false;
+            if (stale()) return false;
             List<PlaylistEntry>? entries;
             try {
               entries = await resolveSourceToPlaylist(t);
@@ -2312,7 +2363,11 @@ class VideoPlayerLauncher {
               if (info.season == null || info.episode == null) return true;
               return info.season == season && info.episode == episode;
             }
-            final sp = SeriesPlaylist.fromPlaylistEntries(entries);
+            final sp = SeriesPlaylist.fromPlaylistEntries(
+              entries,
+              collectionTitle: args.contentTitle ?? args.title,
+              forceSeries: true,
+            );
             return sp.findOriginalIndexBySeasonEpisode(season, episode) >= 0;
           }
 
@@ -2320,18 +2375,60 @@ class VideoPlayerLauncher {
             final items = await resolvePlaylistForTv(i);
             if (stale() || items == null || items.length < 2) return null;
             // items[0] is the '__meta__' map; stamp the target identity onto
-            // a lone unparseable stream so native lands on the right episode.
+            // a lone stream so native lands on the right episode. The generic
+            // source resolver cannot know the requested identity, so hydrate
+            // its per-episode local/remote resume state here as well.
             if (items.length == 2) {
+              final meta = Map<String, dynamic>.from(items[0]);
+              meta['contentType'] = 'series';
+              items[0] = meta;
               final row = Map<String, dynamic>.from(items[1]);
-              if (row['season'] == null || row['episode'] == null) {
-                row['season'] = season;
-                row['episode'] = episode;
-                items[1] = row;
+              row['season'] = season;
+              row['episode'] = episode;
+
+              final stableSeriesTitle = args.contentTitle ?? args.title;
+              var localProgress = await StorageService.getEpisodeProgress(
+                seriesTitle: stableSeriesTitle,
+              );
+              if (args.contentImdbId != null) {
+                final imdbProgress =
+                    await StorageService.getEpisodeProgressByImdbId(
+                      args.contentImdbId!,
+                    );
+                localProgress = {...imdbProgress, ...localProgress};
+                final trackerMaps = await Future.wait([
+                  StorageService.getEpisodeTraktProgress(
+                    imdbId: args.contentImdbId!,
+                  ),
+                  StorageService.getEpisodeSimklProgress(
+                    imdbId: args.contentImdbId!,
+                  ),
+                ]);
+                final episodeKey = '${season}_$episode';
+                final trackerPercent = furthestEpisodeTrackerPercent([
+                  trackerMaps[0][episodeKey],
+                  trackerMaps[1][episodeKey],
+                ]);
+                if (trackerPercent != null) {
+                  row['traktProgressPercent'] = trackerPercent;
+                }
               }
+              final localState = localProgress['${season}_$episode'];
+              if (localState != null) {
+                row['resumePositionMs'] =
+                    (localState['positionMs'] as num?)?.toInt() ?? 0;
+                row['durationMs'] =
+                    (localState['durationMs'] as num?)?.toInt() ?? 0;
+                row['updatedAt'] =
+                    (localState['updatedAt'] as num?)?.toInt() ?? 0;
+              }
+              items[1] = row;
             }
             return {
               'sourceIndex': i,
               'items': items,
+              'targetSeason': season,
+              'targetEpisode': episode,
               'stremioSources': currentStremioSources
                   .map((t) => t.toJson())
                   .toList(),
@@ -2504,20 +2601,33 @@ class VideoPlayerLauncher {
       // (zero-result addons stay visible with a Fetch row). Best-effort: a
       // listing failure just means no placeholders this session.
       if (addonSourcesProviderForTv != null) {
+        List<SourceAddonRef> addons = const [];
+        List<SourceEngineRef> engines = const [];
         try {
-          final addons = await seriesFetcher!.listAddons?.call() ?? const [];
-          if (addons.isNotEmpty) {
-            payloadMap['sourceAddons'] = [
-              for (final addon in addons)
-                {
-                  'id': addon.id,
-                  'name': addon.name,
-                  'sourceKey': addon.sourceKey,
-                },
-            ];
-          }
+          addons = await seriesFetcher!.listAddons?.call() ?? const [];
         } catch (e) {
           debugPrint('VideoPlayerLauncher: addon listing failed: $e');
+        }
+        try {
+          engines = await seriesFetcher!.listEngines?.call() ?? const [];
+        } catch (e) {
+          debugPrint('VideoPlayerLauncher: engine listing failed: $e');
+        }
+        if (addons.isNotEmpty || engines.isNotEmpty) {
+          payloadMap['sourceAddons'] = [
+            for (final engine in engines)
+              {
+                'id': 'engine::${engine.id}',
+                'name': engine.name,
+                'sourceKey': engine.sourceKey,
+              },
+            for (final addon in addons)
+              {
+                'id': addon.id,
+                'name': addon.name,
+                'sourceKey': addon.sourceKey,
+              },
+          ];
         }
       }
 
@@ -2822,9 +2932,7 @@ class VideoPlayerLauncher {
     final playlistEntries = entries.map((e) => e.entry).toList();
     final singleEntryGuideOnly = playlistEntries.length < 2;
     if (singleEntryGuideOnly && contentImdbId == null) {
-      debugPrint(
-        'TVMazeAsync: SKIPPED - less than 2 entries and no IMDb id',
-      );
+      debugPrint('TVMazeAsync: SKIPPED - less than 2 entries and no IMDb id');
       return;
     }
 
@@ -4187,7 +4295,11 @@ class _AndroidTvPlaybackPayloadBuilder {
             StorageService.defaultLocalCompletionThreshold,
             StorageService.defaultLocalCompletionThreshold,
           ];
-    final perItemStates = await _fetchPerItemPlaybackState(playlistEntries);
+    final perItemStates = await _fetchPerItemPlaybackState(
+      playlistEntries,
+      contentType: contentType,
+      seriesPlaylist: seriesPlaylist,
+    );
     // Cross-device per-episode progress ("season_episode" → 0-100) for playlist
     // bars and in-session episode resume. The native payload retains its legacy
     // `traktProgressPercent` field name, but each value is the furthest of Trakt
@@ -4380,7 +4492,11 @@ class _AndroidTvPlaybackPayloadBuilder {
       subtitle: args.subtitle,
       items: items,
       startIndex: startIndex,
-      seriesTitle: seriesPlaylist?.seriesTitle,
+      // Always carry the stable catalog title for series so local writes use
+      // the same key regardless of which release wins Quick Play or a switch.
+      seriesTitle: contentType == _PlaybackContentType.series
+          ? args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title
+          : seriesPlaylist?.seriesTitle,
       seasons: seasons,
       nextEpisodeMap: navigationMaps.nextMap,
       prevEpisodeMap: navigationMaps.prevMap,
@@ -4590,10 +4706,54 @@ class _AndroidTvPlaybackPayloadBuilder {
   }
 
   Future<List<_PerItemState>> _fetchPerItemPlaybackState(
-    List<PlaylistEntry> entries,
-  ) async {
+    List<PlaylistEntry> entries, {
+    required _PlaybackContentType contentType,
+    required SeriesPlaylist? seriesPlaylist,
+  }) async {
+    final stableSeriesTitle =
+        args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
+    var seriesProgress = contentType == _PlaybackContentType.series
+        ? await StorageService.getEpisodeProgress(
+            seriesTitle: stableSeriesTitle,
+          )
+        : const <String, Map<String, dynamic>>{};
+    if (contentType == _PlaybackContentType.series &&
+        args.contentImdbId != null) {
+      final imdbSeriesProgress =
+          await StorageService.getEpisodeProgressByImdbId(args.contentImdbId!);
+      seriesProgress = {...imdbSeriesProgress, ...seriesProgress};
+    }
     final result = <_PerItemState>[];
-    for (final entry in entries) {
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      SeriesEpisode? parsedEpisode;
+      if (seriesPlaylist != null) {
+        for (final episode in seriesPlaylist.allEpisodes) {
+          if (episode.originalIndex == i) {
+            parsedEpisode = episode;
+            break;
+          }
+        }
+      }
+      final season =
+          parsedEpisode?.seriesInfo.season ??
+          (entries.length == 1 ? args.contentSeason : null);
+      final episode =
+          parsedEpisode?.seriesInfo.episode ??
+          (entries.length == 1 ? args.contentEpisode : null);
+      final seriesState = season != null && episode != null
+          ? seriesProgress['${season}_$episode']
+          : null;
+      if (seriesState != null) {
+        result.add(
+          _PerItemState(
+            positionMs: (seriesState['positionMs'] as num?)?.toInt() ?? 0,
+            durationMs: (seriesState['durationMs'] as num?)?.toInt() ?? 0,
+            updatedAt: (seriesState['updatedAt'] as num?)?.toInt() ?? 0,
+          ),
+        );
+        continue;
+      }
       final resumeId = _resumeIdForEntry(entry);
       result.add(await _readVideoState(resumeId));
     }

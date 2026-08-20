@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -391,14 +392,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
 
   Future<bool> _profileGraphEligible() async {
     try {
-      if (!ProfileRuntime.isInitialized ||
-          !ProfileRuntime.isProfileCommitted) {
+      if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
         return false;
       }
       final registry = ProfileBootstrap.registry;
-      final authorization = await ProfileAuthorizationContext.capture(
-        registry,
-      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
       final actor = await authorization.validate(registry);
       return actor.role == UserProfileRole.admin &&
           actor.allows(ProfileFeature.manageProfiles) &&
@@ -533,9 +531,43 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       _done = false;
     });
     HapticFeedback.mediumImpact();
+    final random = Random.secure();
+    final requestId = base64UrlEncode(
+      List<int>.generate(18, (_) => random.nextInt(256)),
+    ).replaceAll('=', '');
+    // Listen before the first byte is sent. An onboarding receiver can reject
+    // or finish immediately after the final UDP chunk, and this is a broadcast
+    // stream: subscribing after sendConfigPayloadToDevice returns loses that
+    // result and leaves the phone apparently spinning until the timeout.
+    final resultCompleter = Completer<({bool ok, String message})>();
+    final resultSubscription = state.profileGraphResults.stream.listen((
+      result,
+    ) {
+      if (profileGraphResultMatchesRequest(
+            requestId: requestId,
+            resultRequestId: result.requestId,
+          ) &&
+          !resultCompleter.isCompleted) {
+        resultCompleter.complete((ok: result.ok, message: result.message));
+      }
+    });
     var ok = false;
     try {
       Future<bool> sendGraph() async {
+        PortableProfilePackage tagRequest(PortableProfilePackage package) {
+          return PortableProfilePackage(
+            mode: package.mode,
+            createdAt: package.createdAt,
+            profiles: package.profiles,
+            resources: package.resources,
+            sections: package.sections,
+            omissions: <String, dynamic>{
+              ...package.omissions,
+              kProfileGraphRequestIdOmission: requestId,
+            },
+          );
+        }
+
         final registry = ProfileBootstrap.registry;
         final authorization = await ProfileAuthorizationContext.capture(
           registry,
@@ -547,9 +579,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             cipher: DeviceKeyProvider.cipher,
           ),
         );
-        var package = await service.exportAllProfiles(
-          context: authorization,
-          includeSecrets: true,
+        var package = tagRequest(
+          await service.exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+          ),
         );
         var payload = await PortableProfilePackage.encodeAuthenticatedJson(
           package,
@@ -559,10 +593,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
           // Library databases can outgrow the receiver's reassembly buffer;
           // send without them — catalogs rebuild from their restored sources.
-          package = await service.exportAllProfiles(
-            context: authorization,
-            includeSecrets: true,
-            includeDatabaseSnapshots: false,
+          package = tagRequest(
+            await service.exportAllProfiles(
+              context: authorization,
+              includeSecrets: true,
+              includeDatabaseSnapshots: false,
+            ),
           );
           payload = await PortableProfilePackage.encodeAuthenticatedJson(
             package,
@@ -591,8 +627,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       debugPrint('RemoteTransferAll: profile graph send failed');
       ok = false;
     }
-    if (!mounted) return;
+    if (!mounted) {
+      await resultSubscription.cancel();
+      return;
+    }
     if (!ok) {
+      await resultSubscription.cancel();
       setState(() => _transferring = false);
       _toast('Profile transfer failed', error: true);
       return;
@@ -602,7 +642,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     // outcome instead of declaring victory at the first hop.
     _toast('Delivered — confirm the import on the TV');
     try {
-      final result = await state.profileGraphResults.stream.first.timeout(
+      final result = await resultCompleter.future.timeout(
         const Duration(seconds: 180),
       );
       if (!mounted) return;
@@ -618,6 +658,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         'No response from the TV. Open an Admin profile there and resend.',
         error: true,
       );
+    } finally {
+      await resultSubscription.cancel();
     }
   }
 
@@ -892,8 +934,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         else
@@ -903,10 +946,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                           _connecting
                               ? 'Connecting securely…'
                               : _done
-                                  ? 'Done'
-                                  : _includeProfiles
-                                      ? 'Send All Profiles'
-                                      : 'Transfer Everything',
+                              ? 'Done'
+                              : _includeProfiles
+                              ? 'Send All Profiles'
+                              : 'Transfer Everything',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,

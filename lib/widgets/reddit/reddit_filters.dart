@@ -197,7 +197,7 @@ class _SubredditDropdownState extends State<_SubredditDropdown> {
             border: Border.all(
               color: _isFocused
                   ? colorScheme.primary
-                  : colorScheme.outline.withOpacity(0.3),
+                  : colorScheme.outline.withValues(alpha: 0.3),
               width: _isFocused ? 2 : 1,
             ),
           ),
@@ -617,7 +617,7 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -653,7 +653,7 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
                                 boxShadow: _inputIsFocused
                                     ? [
                                         BoxShadow(
-                                          color: colorScheme.primary.withOpacity(0.2),
+                                          color: colorScheme.primary.withValues(alpha: 0.2),
                                           blurRadius: 8,
                                           spreadRadius: 1,
                                         ),
@@ -1031,7 +1031,7 @@ class _TvFocusableIconButtonState extends State<_TvFocusableIconButton> {
             color: _isFocused ? colorScheme.primary : colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _isFocused ? colorScheme.primary : colorScheme.outline.withOpacity(0.3),
+              color: _isFocused ? colorScheme.primary : colorScheme.outline.withValues(alpha: 0.3),
               width: _isFocused ? 2 : 1,
             ),
           ),

@@ -27,6 +27,12 @@ class SourceProviderRef {
 class SourcePriority {
   SourcePriority._();
 
+  /// Addons that use Stremio's stream resource exclusively to return detail
+  /// navigation links. They feed recommendation rails, not playable sources,
+  /// so they do not belong in scraper priority or source-status controls.
+  static bool isRecommendationOnlyAddon(String addonId) =>
+      addonId.trim().toLowerCase() == 'community.watch.next';
+
   /// Normalize a [Torrent.source] value to a priority key. Addon rows carry
   /// 'stremio:<name>'; YAML engines stamp their engine id; indexer-manager
   /// engines stamp their DISPLAY name, which [aliases] maps back to the id.
@@ -120,6 +126,7 @@ class SourcePriority {
     try {
       final addons = await StremioService.instance.getStreamingAddons();
       for (final a in addons) {
+        if (isRecommendationOnlyAddon(a.id)) continue;
         final key = 'stremio:${a.name.trim().toLowerCase()}';
         if (seen.add(key)) {
           refs.add(

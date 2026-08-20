@@ -103,7 +103,7 @@ class _RedditVideoCardState extends State<RedditVideoCard> {
             boxShadow: _isFocused
                 ? [
                     BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.3),
+                      color: colorScheme.primary.withValues(alpha: 0.3),
                       blurRadius: 8,
                       spreadRadius: 1,
                     ),
@@ -156,7 +156,7 @@ class _RedditVideoCardState extends State<RedditVideoCard> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.8),
+                            color: Colors.black.withValues(alpha: 0.8),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -197,7 +197,7 @@ class _RedditVideoCardState extends State<RedditVideoCard> {
                     if (_isFocused)
                       Positioned.fill(
                         child: Container(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           child: const Center(
                             child: Icon(
                               Icons.play_arrow,

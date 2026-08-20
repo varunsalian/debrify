@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/quick_play_rules.dart';
@@ -7,6 +9,7 @@ import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
@@ -32,6 +35,61 @@ Torrent _torrent(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('Adjacent episode direct-link validation', () {
+    test('series fetcher rejects a positively dead direct stream', () async {
+      SharedPreferences.setMockInitialValues({});
+      final realFactory = StreamUrlValidator.clientFactory;
+      addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
+      StreamUrlValidator.clientFactory = () => MockClient(
+        (_) async => http.Response('gone', 404),
+      );
+      final fetcher = TorrentPlaybackService.seriesFetcherFor(
+        meta: const PlaybackMeta(
+          imdbId: 'tt1234567',
+          contentType: 'series',
+          season: 1,
+          episode: 1,
+          title: 'Show',
+        ),
+      );
+
+      expect(fetcher, isNotNull);
+      expect(
+        await fetcher!.allowsCandidate(
+          _torrent('dead', type: StreamType.directUrl),
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+      'series fetcher leaves torrent candidates to normal resolution',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final realFactory = StreamUrlValidator.clientFactory;
+        addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
+        StreamUrlValidator.clientFactory = () => MockClient(
+          (_) async =>
+              throw StateError('torrent candidate must not make HTTP'),
+        );
+        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+          meta: const PlaybackMeta(
+            imdbId: 'tt1234567',
+            contentType: 'series',
+            season: 1,
+            episode: 1,
+            title: 'Show',
+          ),
+        );
+
+        expect(
+          await fetcher!.allowsCandidate(_torrent('pack')),
+          isTrue,
+        );
+      },
+    );
+  });
 
   group('Debrify default compatibility contract', () {
     test('movie defaults preserve the pre-profile behavior', () {
@@ -244,6 +302,43 @@ void main() {
       },
     );
 
+    test('Comet URL and binge-group hash become separate source rows', () {
+      final hash = 'c' * 40;
+      final stream = StremioStream.fromJson({
+        'name': '[TB] Comet 1080p',
+        'description': 'Movie.1080p.WEB-DL 👤 42',
+        'url': 'https://comet.example/stream',
+        'behaviorHints': {
+          'bingeGroup': 'comet|torbox|$hash',
+          'filename': 'Movie.1080p.WEB-DL.mkv',
+          'videoSize': 1234,
+        },
+      }, 'Comet | TB');
+
+      final converted = StremioService.instance.convertStreamsForTesting([
+        stream,
+      ], preserveOrder: true);
+
+      expect(converted, hasLength(2));
+      final direct = converted[0];
+      expect(direct.streamType, StreamType.directUrl);
+      expect(direct.directUrl, 'https://comet.example/stream');
+      expect(direct.infohash, startsWith('url:'));
+      expect(direct.hasRealInfoHash, isFalse);
+
+      final torrent = converted[1];
+      expect(torrent.streamType, StreamType.torrent);
+      expect(torrent.directUrl, isNull);
+      expect(torrent.infohash, hash);
+      expect(torrent.hasRealInfoHash, isTrue);
+
+      final normalSearch = StremioService.instance.convertStreamsForTesting([
+        stream,
+      ]);
+      expect(normalSearch, hasLength(2));
+      expect(normalSearch.map((row) => row.infohash).toSet(), hasLength(2));
+    });
+
     test('exact addon conversion preserves repeated returned entries', () {
       final streams = [
         StremioStream(
@@ -411,6 +506,23 @@ void main() {
         TorrentPlaybackService.directValidationBudgetForRules(tenAttempts),
         5,
       );
+    });
+
+    test('source preference selects the dual-source transport order', () {
+      final torrentFirst = QuickPlayRules.debrifyDefault(isMovie: true);
+      final addonFirst = torrentFirst.copyWith(
+        sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+      );
+
+      expect(
+        TorrentPlaybackService.shouldTryDirectBeforeTorrent(torrentFirst),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldTryDirectBeforeTorrent(addonFirst),
+        isTrue,
+      );
+      expect(TorrentPlaybackService.shouldTryDirectBeforeTorrent(null), isTrue);
     });
 
     test('external links do not count as addon-first autoplay results', () {

@@ -64,6 +64,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -982,6 +983,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // untouched — the invariant that keeps this feature regression-free.
     private var networkPatience = "standard"
     private var networkBuffer = "standard"
+    /** 'auto' | 'hardware' | 'software' — see StorageService.iptvDecoderModes.
+     *  Only ever non-auto when the user picked a decoder in Playback settings
+     *  (a frozen picture with running audio is a box decoder defect). */
+    private var iptvDecoderMode = "auto"
     // Series source tabs (payload-gated): torrent sources split into
     // "Season packs" / "Episodes" columns, each offering "Load more sources"
     // until its dedicated fetch has run (a series play arrives with only one
@@ -1165,10 +1170,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val resizeModes = arrayOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
         AspectRatioFrameLayout.RESIZE_MODE_FILL,
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+        AspectRatioFrameLayout.RESIZE_MODE_FIT
     )
 
-    private val resizeModeLabels = arrayOf("Fit", "Fill", "Zoom")
+    private val resizeModeLabels = arrayOf("Fit", "Fill", "Zoom", "Cinema Zoom")
 
     private val playbackSpeeds = arrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private val playbackSpeedLabels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x")
@@ -1200,10 +1206,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // ~100% and scrobble the item as fully watched. Both reset per item.
     private var maxStableDurationMs: Long = 0L
     private var lastRealPositionMs: Long = 0L
-    // One local-threshold report per playlist item. Flutter owns the durable
+    // One local-threshold report per content identity. Flutter owns the durable
     // completed state; this only prevents sending a write-trigger on every
     // five-second progress pulse after the threshold has been crossed.
-    private val locallyCompletedItemIndices = mutableSetOf<Int>()
+    // A fetched direct episode replaces the one-entry playlist in place, so
+    // its index is always 0. Deduplicate completion by episode identity rather
+    // than index or only the first direct episode could cross the threshold.
+    private val locallyCompletedItemKeys = mutableSetOf<String>()
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
@@ -1471,10 +1480,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null) {
                             val nextTarget = guideAdjacent(model, currentItem, 1)
                             if (nextTarget != null && hasPlaylistResolver) {
-                                requestEpisodeFetch(nextTarget.season, nextTarget.episode)
+                                requestEpisodeFetch(
+                                    nextTarget.season,
+                                    nextTarget.episode,
+                                    autoAdvance = true,
+                                )
                                 return
                             }
                             if (model.imdbId != null) {
+                                if (hasPlaylistResolver) {
+                                    requestAdjacentEpisodeFetch(
+                                        model.imdbId!!,
+                                        currentItem.season,
+                                        currentItem.episode,
+                                        autoAdvance = true,
+                                    )
+                                    return
+                                }
                                 requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
                             }
                         }
@@ -1690,6 +1712,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val guideJson = payloadJson.optJSONObject("stremioTvGuide")
             if (guideJson != null) {
                 initStremioTvGuide(guideJson)
+                updateCatalogEpisodeControls()
             }
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Stremio TV guide init failed", e)
@@ -1804,6 +1827,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (model.contentType.lowercase(Locale.US) == "series") {
                             rebuildPlaylistContent()
                             seriesPlaylistAdapter?.setActiveIndex(currentIndex)
+                            updateCatalogEpisodeControls()
                         }
                     }
                 }
@@ -2086,6 +2110,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return "$scheme://$host:$port"
     }
 
+    /**
+     * Video decoder order for IPTV, honouring the user's Playback setting.
+     *
+     * A frozen picture with running audio on live TV is the box's hardware
+     * decoder mishandling the stream (MediaTek/Amlogic boxes are the usual
+     * reports, and ExoPlayer issue #10369 is the same signature) — it can't
+     * be fixed from the app, only routed around, which is why every IPTV
+     * player exposes this switch. 'software' promotes Android's own software
+     * codecs; the rejected decoders stay in the list as fallbacks because
+     * setEnableDecoderFallback(true) can still reach them. Audio decoding and
+     * every non-IPTV playback keep the platform's own order.
+     */
+    private fun iptvMediaCodecSelector(): MediaCodecSelector {
+        return MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+            val infos = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                mimeType,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder,
+            )
+            if (!isIptvMode || iptvDecoderMode == "auto" || !MimeTypes.isVideo(mimeType)) {
+                infos
+            } else {
+                val preferSoftware = iptvDecoderMode == "software"
+                val preferred = infos.filter { it.softwareOnly == preferSoftware }
+                if (preferred.isEmpty()) {
+                    infos
+                } else {
+                    preferred + infos.filterNot { it.softwareOnly == preferSoftware }
+                }
+            }
+        }
+    }
+
     private fun setupPlayer() {
         trackSelector = DefaultTrackSelector(this)
 
@@ -2097,6 +2154,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val paramsBuilder = trackSelector?.buildUponParameters()
             ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+
+        // Live IPTV: never adapt between video tracks in a way that forces a
+        // codec reconfigure. That switch — not the stream itself — is where
+        // strict decoders wedge into "frozen picture, audio still running"
+        // (ExoPlayer #10369, an ABR switch on an Amlogic STB with no
+        // MediaCodec error at all). Seamless adaptation within one codec
+        // configuration is untouched, so multi-variant channels still adapt.
+        if (isIptvMode) {
+            paramsBuilder?.setAllowVideoNonSeamlessAdaptiveness(false)
+        }
 
         // Apply audio language preference
         if (defaultAudioLang != null) {
@@ -2163,6 +2230,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(iptvMediaCodecSelector())
         val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
             .also { offsetRenderersFactory = it }
 
@@ -2418,7 +2486,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         applySubtitleSettings()
 
         playerView.setControllerAutoShow(false)
-        playerView.resizeMode = resizeModes[resizeModeIndex]
+        applyResizeMode()
         playerView.requestFocus()
 
         if (isIptvMode) {
@@ -3236,14 +3304,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         nextButton?.onFocusChangeListener = extendTimerOnFocus
 
-        // Previous-episode button — IPTV episode lists only (GONE by default in
-        // the layout; shown via updateIptvEpisodeControls when a previous
-        // episode exists).
+        // Previous episode: IPTV walks its episode list; catalog series use the
+        // current playlist first, then fetch across its boundary from the full
+        // guide without leaving the native player.
         prevButton?.setOnClickListener {
             hideControlsMenu()
-            prevIptvEpisode()?.let { switchToIptvChannel(it) }
+            if (isIptvMode) {
+                prevIptvEpisode()?.let { switchToIptvChannel(it) }
+            } else {
+                playPrevious()
+            }
         }
         prevButton?.onFocusChangeListener = extendTimerOnFocus
+        updateCatalogEpisodeControls()
 
         randomButton?.setOnClickListener {
             hideControlsMenu()
@@ -3259,7 +3332,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // [suppressTrakt]: a source switch resumes the captured live position and
     // must not let the per-episode tracker percent override it. The parameter
     // retains its legacy name because the payload field does too.
-    private fun playItem(index: Int, suppressTrakt: Boolean = false) {
+    private fun playItem(
+        index: Int,
+        suppressTrakt: Boolean = false,
+        suppressResume: Boolean = false,
+    ) {
         // A sleep stop wins over anything already queued: the auto-advance
         // arms a 1.5s postDelayed before starting the next item, and a
         // countdown expiring inside that window would otherwise be undone by
@@ -3299,6 +3376,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         cancelPikPakRetry()
 
         currentIndex = index
+        updateCatalogEpisodeControls()
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
@@ -3308,9 +3386,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // switch on the same content (must honour the captured live position).
         val autoAdvance = isAutoAdvancing
         isAutoAdvancing = false
-        pendingSeekMs = item.resumePositionMs
+        pendingSeekMs = if (suppressResume) 0L else item.resumePositionMs
         pendingItemTraktPercent =
-            if (autoAdvance || suppressTrakt) 0.0 else (item.traktProgressPercent ?: 0.0)
+            if (autoAdvance || suppressTrakt || suppressResume) 0.0 else (item.traktProgressPercent ?: 0.0)
 
         // Check if URL needs to be resolved (lazy loading)
         if (item.url.isBlank()) {
@@ -3830,8 +3908,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     return
                 }
                 if (model.imdbId != null) {
-                    requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
-                    finish()
+                    if (hasPlaylistResolver) {
+                        requestAdjacentEpisodeFetch(
+                            model.imdbId!!,
+                            currentItem.season,
+                            currentItem.episode,
+                        )
+                    } else {
+                        requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                        finish()
+                    }
                 } else {
                     Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
                 }
@@ -3839,6 +3925,45 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /** Previous for catalog series, including a single direct-link episode.
+     * Existing playlist navigation wins; at its boundary the full guide names
+     * the adjacent episode and Flutter resolves it in place. */
+    private fun playPrevious() {
+        val model = payload ?: return
+        val prevIndex = getPrevPlayableIndex(currentIndex)
+        if (prevIndex != null) {
+            // Match the Dart player's manual Previous semantics: selecting an
+            // already-present episode starts it fresh. Guide-fetched Previous
+            // remains resumable, as it does in Dart.
+            playItem(prevIndex, suppressResume = true)
+            return
+        }
+        val currentItem = model.items.getOrNull(currentIndex)
+        if (model.contentType == "series" && hasPlaylistResolver) {
+            val previousTarget = guideAdjacent(model, currentItem, -1)
+            if (previousTarget != null) {
+                requestEpisodeFetch(previousTarget.season, previousTarget.episode)
+                return
+            }
+        }
+        Toast.makeText(this, "Beginning of playlist", Toast.LENGTH_SHORT).show()
+    }
+
+    /** The IPTV Previous control is shared by catalog playback. Keep it hidden
+     * for movies/first episodes, and reveal it when either the current source
+     * or the asynchronously delivered full-show guide has a predecessor. */
+    private fun updateCatalogEpisodeControls() {
+        if (isIptvMode) return
+        val model = payload
+        val currentItem = model?.items?.getOrNull(currentIndex)
+        val hasPrevious = model != null && model.contentType == "series" &&
+            !isStremioTvMode &&
+            (getPrevPlayableIndex(currentIndex) != null ||
+                (hasPlaylistResolver &&
+                    guideAdjacent(model, currentItem, -1) != null))
+        iptvPrevButton?.visibility = if (hasPrevious) View.VISIBLE else View.GONE
     }
 
     private fun playRandom() {
@@ -6771,6 +6896,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun initIptvMode(json: JSONObject) {
         isIptvMode = true
         android.util.Log.d("AndroidTvPlayer", "initIptvMode: Starting IPTV mode")
+
+        // IPTV mode returns before parsePayload, so the decoder preference is
+        // read here too — this is the ONLY path where it has any effect.
+        iptvDecoderMode = json.optString("iptvDecoder", "auto")
 
         iptvSourceId = json.optString("sourceId").takeIf { it.isNotEmpty() }
         iptvSourceName = json.optString("sourceName").takeIf { it.isNotEmpty() } ?: "IPTV"
@@ -13159,7 +13288,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val col3 = resizeModeLabels.mapIndexed { i, l ->
             mrow(l, selected = i == resizeModeIndex, onOk = {
                 resizeModeIndex = i.coerceIn(0, resizeModes.lastIndex)
-                playerView.resizeMode = resizeModes[resizeModeIndex]
+                applyResizeMode()
                 updateAspectButtonLabel()
             })
         }
@@ -13963,9 +14092,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Aspect ratio
     private fun cycleAspectRatio() {
         resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
-        playerView.resizeMode = resizeModes[resizeModeIndex]
+        applyResizeMode()
         updateAspectButtonLabel()
         Toast.makeText(this, "Aspect: ${resizeModeLabels[resizeModeIndex]}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun applyResizeMode() {
+        playerView.resizeMode = resizeModes[resizeModeIndex]
+        val content = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
+            ?: playerView.videoSurfaceView
+        val scale = if (resizeModeIndex == 3) 4f / 3f else 1f
+        content?.scaleX = scale
+        content?.scaleY = scale
     }
 
     // Playback speed
@@ -14026,7 +14164,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun loadPlayerDefaults() {
         try {
             // Load aspect index for TV (separate from mobile)
-            // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
+            // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
             resizeModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
                 .getLong(this, "player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)
@@ -14120,12 +14258,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             model.movieCompletionThreshold
         }
+        val completionKey = if (
+            model.contentType == "series" && item.season != null && item.episode != null
+        ) {
+            "series:${item.season}:${item.episode}"
+        } else {
+            "index:$currentIndex"
+        }
         val localCompleted =
             model.localCompletionTracking &&
             duration > 0L &&
             position > 0L &&
             position.toDouble() * 100.0 / duration.toDouble() >= completionThreshold &&
-            locallyCompletedItemIndices.add(currentIndex)
+            locallyCompletedItemKeys.add(completionKey)
 
         // Update the item's progress in the payload for live UI updates
         val updatedItem = item.copy(
@@ -14217,7 +14362,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** In-player quick play of an episode that isn't in the playlist: asks
      * Flutter to find + resolve a source (existing packs → episode fetch →
      * pack fetch) and swaps playlists in place — no activity relaunch. */
-    private fun requestEpisodeFetch(season: Int, episode: Int) {
+    private fun requestEpisodeFetch(
+        season: Int,
+        episode: Int,
+        autoAdvance: Boolean = false,
+    ) {
         if (episodeFetchInFlight) return
         val label = String.format(java.util.Locale.US, "S%02dE%02d", season, episode)
         val channel = MainActivity.getAndroidTvPlayerChannel()
@@ -14249,6 +14398,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             items,
                             targetSeason = season,
                             targetEpisode = episode,
+                            suppressTargetResume = autoAdvance,
                         )
                     }
                 }
@@ -14265,6 +14415,78 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     runOnUiThread {
                         episodeFetchInFlight = false
                         showStatusPillTransient("Couldn't fetch $label")
+                    }
+                }
+            }
+        )
+    }
+
+    /** Guide-not-ready Next for a catalog series. Flutter resolves the next
+     * identity and runs the normal in-player episode source ladder. */
+    private fun requestAdjacentEpisodeFetch(
+        imdbId: String,
+        currentSeason: Int,
+        currentEpisode: Int,
+        autoAdvance: Boolean = false,
+    ) {
+        if (episodeFetchInFlight) return
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            showStatusPillTransient("Couldn't fetch next episode")
+            return
+        }
+        episodeFetchInFlight = true
+        val token = ++stremioResolutionToken
+        showStatusPillTransient("Finding next episode…")
+        channel.invokeMethod(
+            "requestEpisodeFetch",
+            hashMapOf<String, Any>(
+                "imdbId" to imdbId,
+                "currentSeason" to currentSeason,
+                "currentEpisode" to currentEpisode,
+                "direction" to 1,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        val map = result as? Map<*, *>
+                        val items = map?.get("items") as? List<*>
+                        val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
+                        if (map == null || items.isNullOrEmpty() || fetchedSourceIndex == null) {
+                            showStatusPillTransient("No playable next episode found")
+                            return@runOnUiThread
+                        }
+                        val targetSeason = (map["targetSeason"] as? Number)?.toInt()
+                        val targetEpisode = (map["targetEpisode"] as? Number)?.toInt()
+                        if (targetSeason == null || targetEpisode == null) {
+                            showStatusPillTransient("No playable next episode found")
+                            return@runOnUiThread
+                        }
+                        adoptSourceList(map)
+                        switchToSourcePlaylist(
+                            fetchedSourceIndex,
+                            items,
+                            targetSeason = targetSeason,
+                            targetEpisode = targetEpisode,
+                            suppressTargetResume = autoAdvance,
+                        )
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        showStatusPillTransient("No playable next episode found")
+                    }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        showStatusPillTransient("Couldn't fetch next episode")
                     }
                 }
             }
@@ -14773,6 +14995,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         rawItems: List<*>,
         targetSeason: Int? = null,
         targetEpisode: Int? = null,
+        suppressTargetResume: Boolean = false,
     ) {
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
 
@@ -14829,6 +15052,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no items parsed successfully")
             showStatusPillTransient("Source unavailable")
             return
+        }
+
+        // A singleton direct stream has no pack filenames from which Flutter
+        // can infer an episode. Preserve the catalog identity across a manual
+        // source switch as well as an adjacent-episode fetch.
+        if (contentType == "series" && newItems.size == 1 &&
+            (newItems[0].season == null || newItems[0].episode == null) &&
+            resumeSeason != null && resumeEpisode != null) {
+            newItems[0] = newItems[0].copy(
+                season = resumeSeason,
+                episode = resumeEpisode,
+            )
         }
 
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
@@ -14928,7 +15163,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // and must keep its own per-episode tracker resume, matching the Dart
         // player's landedOnSameContent behaviour.
         percentSeekApplied = true
-        playItem(targetIndex, suppressTrakt = matchedSameContent)
+        playItem(
+            targetIndex,
+            suppressTrakt = matchedSameContent,
+            suppressResume = suppressTargetResume,
+        )
 
         // Report the switch outcome once playback settles
         watchSourceSwitchOutcome(sourceIndex)
@@ -15175,6 +15414,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // inherit stale tuning.
             networkPatience = obj.optString("networkPatience", "standard")
             networkBuffer = obj.optString("networkBuffer", "standard")
+            iptvDecoderMode = obj.optString("iptvDecoder", "auto")
 
             // Series source tabs: pack/episode split + per-tab "Load more"
             // availability. Parsed unconditionally (defaults off) so a
@@ -15201,7 +15441,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } ?: emptyList()
             addonFetchState.clear()
             addonPackProbing.clear()
-            locallyCompletedItemIndices.clear()
+            locallyCompletedItemKeys.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
@@ -16332,14 +16572,7 @@ private data class StremioSource(
         }
 
         fun parseQuality(name: String): String {
-            val lower = name.lowercase()
-            return when {
-                lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") -> "4K"
-                lower.contains("1080p") || lower.contains("1080i") -> "1080p"
-                lower.contains("720p") -> "720p"
-                lower.contains("480p") || lower.contains("sd") -> "480p"
-                else -> "HD"
-            }
+            return SourceQualityParser.badge(name) ?: "HD"
         }
     }
 }

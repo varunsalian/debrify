@@ -411,11 +411,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     try {
       final extra = await ImdbEnrichmentService.fetch(imdbId);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _imdbExtra = extra;
           _imdbLoaded = true;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _imdbLoaded = true);
     }
@@ -429,11 +430,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     try {
       final guide = await ImdbParentsGuideService.fetch(imdbId);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _parentsGuide = guide;
           _parentsGuideLoaded = true;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _parentsGuideLoaded = true);
     }
@@ -449,11 +451,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     try {
       final recs = await loader();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _recommendations = recs;
           _recommendationsLoaded = true;
         });
+      }
       final enrich = widget.metaEnricher;
       if (enrich != null) {
         for (final rec in recs.take(8)) {
@@ -644,58 +647,68 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _secMeta(0.20),
     ];
     final g = _secGenres(0.28);
-    if (g != null)
+    if (g != null) {
       children
         ..add(SizedBox(height: t ? 10 : 18))
         ..add(g);
+    }
     final aw = _secAwards(0.32);
-    if (aw != null)
+    if (aw != null) {
       children
         ..add(SizedBox(height: t ? 8 : 12))
         ..add(aw);
+    }
     children
       ..add(SizedBox(height: t ? 16 : 26))
       ..add(_buildActionRow(0.38));
     final d = _secDescription(0.46);
-    if (d != null)
+    if (d != null) {
       children
         ..add(SizedBox(height: t ? 12 : 24))
         ..add(d);
+    }
     final cr = _secCredits(0.50);
-    if (cr != null)
+    if (cr != null) {
       children
         ..add(SizedBox(height: t ? 10 : 18))
         ..add(cr);
+    }
     final ca = _secCast(0.52);
-    if (ca != null)
+    if (ca != null) {
       children
         ..add(SizedBox(height: t ? 14 : 24))
         ..add(ca);
+    }
     final q = _secQuickActions(0.54);
-    if (q != null)
+    if (q != null) {
       children
         ..add(SizedBox(height: t ? 14 : 26))
         ..add(q);
+    }
     final sq = _secSimklQuickActions(0.55);
-    if (sq != null)
+    if (sq != null) {
       children
         ..add(SizedBox(height: t ? 14 : 26))
         ..add(sq);
+    }
     final dt = _secDetails(0.56);
-    if (dt != null)
+    if (dt != null) {
       children
         ..add(SizedBox(height: t ? 12 : 22))
         ..add(dt);
+    }
     final pg = _secParentsGuide(0.58);
-    if (pg != null)
+    if (pg != null) {
       children
         ..add(SizedBox(height: t ? 12 : 22))
         ..add(pg);
+    }
     final r = _secRecommendations(0.66);
-    if (r != null)
+    if (r != null) {
       children
         ..add(SizedBox(height: t ? 16 : 28))
         ..add(r);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -712,15 +725,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _secMeta(0.20),
     ];
     final g = _secGenres(0.28);
-    if (g != null)
+    if (g != null) {
       children
         ..add(const SizedBox(height: 14))
         ..add(g);
+    }
     final aw = _secAwards(0.32);
-    if (aw != null)
+    if (aw != null) {
       children
         ..add(const SizedBox(height: 12))
         ..add(aw);
+    }
     children
       ..add(const SizedBox(height: 24))
       ..add(_buildActionRow(0.38));
@@ -755,15 +770,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
 
     final q = _secQuickActions(0.54);
-    if (q != null)
+    if (q != null) {
       children
         ..add(const SizedBox(height: 24))
         ..add(q);
+    }
     final sq = _secSimklQuickActions(0.55);
-    if (sq != null)
+    if (sq != null) {
       children
         ..add(const SizedBox(height: 24))
         ..add(sq);
+    }
 
     // ── Glass details card: production details + parents guide ──
     const detailStart = 0.56;
@@ -788,10 +805,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
 
     final r = _secRecommendations(0.66);
-    if (r != null)
+    if (r != null) {
       children
         ..add(const SizedBox(height: 28))
         ..add(r);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1401,8 +1419,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         !_recommendationsLoaded &&
         widget.recommendationsLoader != null;
 
-    if (!loading && (recs == null || recs.isEmpty || onTap == null))
+    if (!loading && (recs == null || recs.isEmpty || onTap == null)) {
       return null;
+    }
 
     return _Reveal(
       parent: _revealCtrl,

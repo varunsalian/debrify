@@ -165,7 +165,7 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
                                 BoxShadow(
                                   color: const Color(
                                     0xFF6366F1,
-                                  ).withOpacity(0.3 * _pulseAnimation.value),
+                                  ).withValues(alpha: 0.3 * _pulseAnimation.value),
                                   blurRadius: 40 * _pulseAnimation.value,
                                   spreadRadius: 10 * _pulseAnimation.value,
                                 ),
@@ -252,7 +252,7 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
                           widget.channelName,
                           style: TextStyle(
                             fontSize: 18,
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -270,7 +270,7 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.white.withOpacity(0.4),
+                        Colors.white.withValues(alpha: 0.4),
                       ),
                     ),
                   ),
@@ -287,7 +287,7 @@ class _AutoLaunchOverlayState extends State<AutoLaunchOverlay>
                       style: TextStyle(
                         fontSize: 13,
                         letterSpacing: 0.4,
-                        color: Colors.white.withOpacity(0.45),
+                        color: Colors.white.withValues(alpha: 0.45),
                       ),
                     ),
                   ],

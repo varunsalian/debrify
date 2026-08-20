@@ -6,6 +6,7 @@ import '../../../models/debrify_tv_cache.dart';
 import '../../../theme/app_theme.dart' show DebrifyTvTokens;
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/formatters.dart';
+import '../../../utils/source_quality.dart';
 import 'debrify_tv_view.dart' show kThinPoolThreshold;
 import 'spotlight_rail.dart' show SpotlightKick;
 
@@ -789,11 +790,7 @@ class _SamplePlate extends StatelessWidget {
   }
 
   static String _tierLabel(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('2160p')) return '4K';
-    if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
-    if (lower.contains('720p') || lower.contains('720i')) return '720p';
-    return 'SD';
+    return sourceQualityBadgeForName(name) ?? 'SD';
   }
 }
 

@@ -71,6 +71,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
       ProfileRuntime.scope.addListener(_scopeChanged);
       ProfileLockController.instance.lockedProfileId.addListener(_lockChanged);
       MainPageBridge.showProfilePicker = _showPicker;
+      MainPageBridge.switchProfile = _showPickerFor;
       unawaited(_load(allowSingleProfileAutoEnter: true));
     } else {
       _pins = null;
@@ -93,6 +94,9 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     }
     if (MainPageBridge.showProfilePicker == _showPicker) {
       MainPageBridge.showProfilePicker = null;
+    }
+    if (MainPageBridge.switchProfile == _showPickerFor) {
+      MainPageBridge.switchProfile = null;
     }
     _lifecycle?.dispose();
     super.dispose();
@@ -165,6 +169,18 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   }
 
   void _showPicker() {
+    unawaited(_openPicker());
+  }
+
+  Future<void> _showPickerFor(String profileId) async {
+    await _openPicker();
+    if (!mounted) return;
+    final matches = _profiles?.where((profile) => profile.id == profileId);
+    if (matches == null || matches.isEmpty) return;
+    await _selected(matches.first);
+  }
+
+  Future<void> _openPicker() async {
     if (!mounted || !_committed) return;
     setState(() {
       _pinTarget = null;
@@ -179,7 +195,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     // Auto-entering a sole unpinned profile is a launch convenience. An
     // explicit Switch profile request must remain on the picker so its Admin
     // can reach Manage profiles and create the second profile.
-    unawaited(_load(allowSingleProfileAutoEnter: false));
+    await _load(allowSingleProfileAutoEnter: false);
   }
 
   @override

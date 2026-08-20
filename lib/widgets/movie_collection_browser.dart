@@ -113,9 +113,9 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.4),
+                    color: Colors.black.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
@@ -164,9 +164,9 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: active ? const Color(0xFF6366F1).withOpacity(0.15) : const Color(0xFF1A1A1A),
+                      color: active ? const Color(0xFF6366F1).withValues(alpha: 0.15) : const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: active ? const Color(0xFF6366F1) : Colors.white.withOpacity(0.1), width: 1.5),
+                      border: Border.all(color: active ? const Color(0xFF6366F1) : Colors.white.withValues(alpha: 0.1), width: 1.5),
                     ),
                     padding: const EdgeInsets.all(14),
                     child: Row(
@@ -174,7 +174,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: active ? const Color(0xFF6366F1) : Colors.white.withOpacity(0.08),
+                            color: active ? const Color(0xFF6366F1) : Colors.white.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(active ? Icons.play_arrow_rounded : Icons.movie_rounded, color: Colors.white, size: 20),
@@ -192,21 +192,21 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                                   if (sizeText.isNotEmpty)
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+                                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
                                       child: Text(sizeText, style: const TextStyle(color: Colors.white70, fontSize: 10)),
                                     ),
                                   if (finished) ...[
                                     const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(color: const Color(0xFF059669).withOpacity(0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFF059669).withOpacity(0.6))),
+                                      decoration: BoxDecoration(color: const Color(0xFF059669).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.6))),
                                       child: Row(children: const [Icon(Icons.check_circle, size: 12, color: Color(0xFF10B981)), SizedBox(width: 4), Text('Finished', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.w600))]),
                                     ),
                                   ] else if (resumable) ...[
                                     const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.08), borderRadius: BorderRadius.circular(6)),
+                                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
                                       child: Text('Resume ${(progress * 100).round()}%', style: const TextStyle(color: Colors.white70, fontSize: 10)),
                                     ),
                                   ],
@@ -219,7 +219,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                                   height: 3,
                                   child: Stack(
                                     children: [
-                                      Container(color: Colors.white.withOpacity(0.08)),
+                                      Container(color: Colors.white.withValues(alpha: 0.08)),
                                       FractionallySizedBox(
                                         widthFactor: progress,
                                         child: Container(color: finished ? const Color(0xFF10B981) : const Color(0xFF6366F1)),

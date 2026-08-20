@@ -236,7 +236,7 @@ class IptvZapBanner extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.56),
+                    color: Colors.white.withValues(alpha: 0.56),
                     fontSize: s(11.5),
                     letterSpacing: 0.09 * s(11.5),
                   ),
@@ -267,7 +267,7 @@ class IptvZapBanner extends StatelessWidget {
       nowWeight = FontWeight.bold;
     } else {
       nowText = epgLoading ? 'Loading guide…' : 'No guide data';
-      nowColor = Colors.white.withOpacity(0.42);
+      nowColor = Colors.white.withValues(alpha: 0.42);
       nowWeight = FontWeight.normal;
     }
 
@@ -303,7 +303,7 @@ class IptvZapBanner extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: align,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha: 0.6),
               fontSize: s(11.5),
               fontFamily: 'monospace',
             ),
@@ -317,7 +317,7 @@ class IptvZapBanner extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: align,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.52),
+              color: Colors.white.withValues(alpha: 0.52),
               fontSize: s(12.5),
             ),
           ),
@@ -926,7 +926,7 @@ class IptvZapBanner extends StatelessWidget {
     }
     return Container(
       height: s(4),
-      color: Colors.white.withOpacity(0.13),
+      color: Colors.white.withValues(alpha: 0.13),
       alignment: Alignment.centerLeft,
       child: FractionallySizedBox(
         widthFactor: value,
@@ -977,11 +977,11 @@ class _LogoTile extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white.withOpacity(0.15),
-            Colors.white.withOpacity(0.05),
+            Colors.white.withValues(alpha: 0.15),
+            Colors.white.withValues(alpha: 0.05),
           ],
         ),
-        border: Border.all(color: Colors.white.withOpacity(0.16), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16), width: 1),
       ),
       child: logoUrl == null || logoUrl.isEmpty
           ? _letterTile(letter)

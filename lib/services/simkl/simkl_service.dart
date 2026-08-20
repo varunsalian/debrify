@@ -1059,8 +1059,9 @@ class SimklService {
     try {
       return await future;
     } finally {
-      if (identical(_moviePlaybackInFlight, future))
+      if (identical(_moviePlaybackInFlight, future)) {
         _moviePlaybackInFlight = null;
+      }
     }
   }
 

@@ -11,4 +11,5 @@ enum AspectMode {
   aspect1_1,
   aspect3_2,
   aspect5_4,
+  cinemaZoom,
 }

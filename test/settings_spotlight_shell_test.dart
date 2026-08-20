@@ -1,5 +1,6 @@
 import 'package:debrify/screens/settings/settings_spotlight_shell.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
@@ -251,6 +252,24 @@ void main() {
 
     expect(find.byKey(const Key('settings-compact-root')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('app-shell back restores phone settings before leaving its tab', (
+    tester,
+  ) async {
+    addTearDown(() => MainPageBridge.setActiveTab(null));
+    MainPageBridge.setActiveTab('settings');
+    await _pumpShell(tester, const Size(390, 844));
+
+    await tester.tap(find.byKey(const ValueKey<String>('settings-category-3')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('settings-compact-detail')), findsOneWidget);
+    expect(MainPageBridge.handleBackNavigation(), isTrue);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('settings-compact-root')), findsOneWidget);
+    expect(MainPageBridge.handleBackNavigation(), isFalse);
   });
 
   testWidgets('320dp phone uses one-column cards without overflow', (

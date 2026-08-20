@@ -426,7 +426,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           border: Border.all(
-            color: Theme.of(context).dividerColor.withOpacity(0.3),
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
             width: 1,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -527,7 +527,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               border: Border.all(
                 color: hasFocus
                     ? focusAlt
-                    : Theme.of(context).dividerColor.withOpacity(0.3),
+                    : Theme.of(context).dividerColor.withValues(alpha: 0.3),
                 width: hasFocus ? 3 : 1,
               ),
               borderRadius: app.shape.br(8),
@@ -541,7 +541,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 2,
                         offset: const Offset(0, 1),
                       ),
@@ -563,7 +563,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                       ? Theme.of(context).colorScheme.onSurface
                       : Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.9),
+                        ).colorScheme.onSurface.withValues(alpha: 0.9),
                 ),
               ),
               subtitle: Column(
@@ -579,7 +579,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                         fontSize: 12,
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.7),
+                        ).colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
@@ -595,8 +595,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              categoryColor.withOpacity(hasFocus ? 0.9 : 0.8),
-                              categoryColor.withOpacity(hasFocus ? 1.0 : 0.9),
+                              categoryColor.withValues(alpha: hasFocus ? 0.9 : 0.8),
+                              categoryColor.withValues(alpha: hasFocus ? 1.0 : 0.9),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -604,7 +604,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                           borderRadius: app.shape.br(10),
                           boxShadow: [
                             BoxShadow(
-                              color: categoryColor.withOpacity(0.2),
+                              color: categoryColor.withValues(alpha: 0.2),
                               blurRadius: 2,
                               offset: const Offset(0, 1),
                             ),
@@ -626,7 +626,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                           size: 12,
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
+                          ).colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                         const SizedBox(width: 3),
                         Text(
@@ -635,7 +635,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                             fontSize: 11,
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.5),
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -716,7 +716,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
-                ).colorScheme.surfaceVariant.withOpacity(0.3),
+                ).colorScheme.surfaceVariant.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -736,7 +736,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                           size: isSmallScreen ? 16 : 20,
                           color: Theme.of(
                             context,
-                          ).primaryColor.withOpacity(0.7),
+                          ).primaryColor.withValues(alpha: 0.7),
                         ),
                         isDense: true,
                         filled: true,
@@ -797,7 +797,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                                   ]
                                 : [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.15),
+                                      color: Colors.black.withValues(alpha: 0.15),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     ),
@@ -851,11 +851,11 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                       decoration: BoxDecoration(
                         color: hasFocus
                             ? focusAlt.withAlpha(64)
-                            : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                            : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                         border: Border.all(
                           color: hasFocus
                               ? focusAlt
-                              : Theme.of(context).dividerColor.withOpacity(0.3),
+                              : Theme.of(context).dividerColor.withValues(alpha: 0.3),
                           width: hasFocus ? 3 : 1,
                         ),
                         borderRadius: app.shape.br(8),
@@ -897,8 +897,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                                 color: selectedCount > 0
                                     ? Theme.of(
                                         context,
-                                      ).primaryColor.withOpacity(0.2)
-                                    : Colors.grey.withOpacity(0.2),
+                                      ).primaryColor.withValues(alpha: 0.2)
+                                    : Colors.grey.withValues(alpha: 0.2),
                                 borderRadius: app.shape.br(12),
                               ),
                               child: Text(
@@ -926,7 +926,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               ),
               const SizedBox(height: 6),
               Divider(
-                color: Theme.of(context).dividerColor.withOpacity(0.2),
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
                 thickness: 0.5,
                 height: 1,
               ),
@@ -940,7 +940,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
-                    ).colorScheme.background.withOpacity(0.5),
+                    ).colorScheme.background.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   padding: const EdgeInsets.all(4),

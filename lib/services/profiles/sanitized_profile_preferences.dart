@@ -25,9 +25,9 @@ abstract final class SanitizedProfilePreferences {
       case 'tv_ui_scale_percent':
         return value is int && const <int>{80, 90, 100}.contains(value);
       case 'player_default_aspect_index':
-        return _boundedInt(value, 0, 9);
+        return _boundedInt(value, 0, 10);
       case 'player_default_aspect_index_tv':
-        return _boundedInt(value, 0, 2);
+        return _boundedInt(value, 0, 3);
       case 'player_night_mode_index':
         return _boundedInt(value, 0, 7);
       case 'home_hero_trailer_volume':

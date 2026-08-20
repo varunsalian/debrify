@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../models/profiles/user_profile.dart';
 import '../utils/platform_util.dart';
 import 'main_page_bridge.dart';
 import 'storage_service.dart';
@@ -485,13 +486,19 @@ class TvosTopShelfService {
       (await DevicePreferences.instance()).getBool(_multiProfileOptInKey) ??
       false;
 
+  /// The same authority predicate used by both the settings surface and the
+  /// write boundary. Keeping it here prevents a visible control from drifting
+  /// away from what the service will actually accept.
+  static bool canManageMultiProfilePersonalization(UserProfile? profile) =>
+      profile != null &&
+      profile.role == UserProfileRole.admin &&
+      profile.allows(ProfileFeature.manageProfiles);
+
   Future<void> setMultiProfilePersonalizationEnabled(bool enabled) async {
     final profile = await ProfileBootstrap.registry.getProfile(
       ProfileRuntime.capture().profileId,
     );
-    if (profile == null ||
-        profile.role != UserProfileRole.admin ||
-        !profile.allows(ProfileFeature.manageProfiles)) {
+    if (!canManageMultiProfilePersonalization(profile)) {
       throw StateError('Only an Admin can change Top Shelf privacy');
     }
     if (!await (await DevicePreferences.instance()).setBool(

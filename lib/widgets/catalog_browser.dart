@@ -471,12 +471,13 @@ class CatalogBrowserState extends State<CatalogBrowser> {
             _pendingEpisodeEpisode = null;
             // Schedule after setState completes
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted)
+              if (mounted) {
                 _enterEpisodeMode(
                   pending,
                   initialSeason: pendingSeason,
                   initialEpisode: pendingEpisode,
                 );
+              }
             });
           }
         });
@@ -509,8 +510,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     if (_isLoadingContent ||
         !_hasMoreContent ||
         _selectedAddon == null ||
-        _selectedCatalog == null)
+        _selectedCatalog == null) {
       return;
+    }
     // Set loading flag immediately to prevent race condition from rapid scroll events
     setState(() => _isLoadingContent = true);
     await _fetchContent();
@@ -1578,8 +1580,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                                       () => _boundSources.remove(imdbId),
                                     );
                                   }
-                                  if (dialogContext.mounted)
+                                  if (dialogContext.mounted) {
                                     Navigator.of(dialogContext).pop();
+                                  }
                                 },
                                 icon: const Icon(
                                   Icons.delete_sweep_outlined,
@@ -1615,8 +1618,9 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                                       () => _boundSources.remove(imdbId),
                                     );
                                   }
-                                  if (dialogContext.mounted)
+                                  if (dialogContext.mounted) {
                                     Navigator.of(dialogContext).pop();
+                                  }
                                 },
                                 icon: const Icon(
                                   Icons.delete_outline_rounded,

@@ -117,6 +117,7 @@ class ProfileCollectionResourceFacade {
     required Set<ConnectionResourceType> types,
     required ProfileFeature feature,
     required List<ResourceCollectionItem> items,
+    bool revokeBorrowers = false,
   }) async {
     if (!active) {
       throw StateError('Connection resources are not active');
@@ -131,6 +132,76 @@ class ProfileCollectionResourceFacade {
       types: types,
       feature: feature,
       items: items,
+      revokeBorrowers: revokeBorrowers,
+    );
+  }
+
+  static Future<int> ownedBorrowerCount({
+    required String resourceId,
+    required ProfileFeature feature,
+  }) async {
+    if (!active) return 0;
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final service = ConnectionResourceService(
+      registry: registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    final resource = await service.authorize(
+      context: context,
+      resourceId: resourceId,
+      permission: ResourcePermission.manage,
+      feature: feature,
+    );
+    if (resource.ownerProfileId != context.profileId) {
+      throw const ResourceAuthorizationException(
+        'Only the connection owner can inspect sharing',
+      );
+    }
+    final count = await registry.countResourceBorrowers(
+      resourceId: resourceId,
+      ownerProfileId: context.profileId,
+    );
+    await context.validate(registry);
+    return count;
+  }
+
+  static Future<void> deleteOwned({
+    required String resourceId,
+    required bool revokeBorrowers,
+  }) async {
+    if (!active) throw StateError('Connection resources are not active');
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final service = ConnectionResourceService(
+      registry: registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    if (revokeBorrowers) {
+      await service.deleteOwnedResourceForAll(
+        context: context,
+        resourceId: resourceId,
+      );
+      return;
+    }
+    final resource = await service.authorize(
+      context: context,
+      resourceId: resourceId,
+      permission: ResourcePermission.manage,
+      feature: ProfileFeature.manageConnections,
+    );
+    if (resource.ownerProfileId != context.profileId) {
+      throw const ResourceAuthorizationException(
+        'Only the connection owner can delete it',
+      );
+    }
+    await registry.deleteOwnedResource(
+      resourceId: resourceId,
+      ownerProfileId: context.profileId,
+      revokeBorrowers: false,
+      actingProfileId: context.profileId,
+      actingAuthorizationRevision: context.authorizationRevision,
+      expectedResourceAuthorizationRevision: resource.authorizationRevision,
     );
   }
 
@@ -146,6 +217,7 @@ class ProfileCollectionResourceFacade {
     required ProfileFeature feature,
     required List<ResourceCollectionItem> items,
     bool forSettings = false,
+    bool revokeBorrowers = false,
   }) async {
     if (!active) {
       throw StateError('Connection resources are not active');
@@ -154,7 +226,12 @@ class ProfileCollectionResourceFacade {
     if (expectedScope == null) {
       throw StateError('No visible profile scope');
     }
-    await replace(types: types, feature: feature, items: items);
+    await replace(
+      types: types,
+      feature: feature,
+      items: items,
+      revokeBorrowers: revokeBorrowers,
+    );
     if (ProfileRuntime.scope.value != expectedScope) {
       throw StateError('Profile changed while saving connections');
     }

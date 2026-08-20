@@ -17,13 +17,13 @@ class ChannelGuide extends StatefulWidget {
   final VoidCallback onClose;
 
   const ChannelGuide({
-    Key? key,
+    super.key,
     required this.channels,
     this.currentChannelId,
     this.currentChannelNumber,
     required this.onChannelSelected,
     required this.onClose,
-  }) : super(key: key);
+  });
 
   @override
   State<ChannelGuide> createState() => _ChannelGuideState();
@@ -189,7 +189,7 @@ class _ChannelGuideState extends State<ChannelGuide>
         child: GestureDetector(
           onTap: widget.onClose,
           child: Container(
-            color: Colors.black.withOpacity(0.7),
+            color: Colors.black.withValues(alpha: 0.7),
             child: Center(
               child: GestureDetector(
                 onTap: () {}, // Consume taps on panel
@@ -214,12 +214,12 @@ class _ChannelGuideState extends State<ChannelGuide>
         color: const Color(0xF0141414),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 24,
             spreadRadius: 4,
           ),
@@ -242,7 +242,7 @@ class _ChannelGuideState extends State<ChannelGuide>
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -285,7 +285,7 @@ class _ChannelGuideState extends State<ChannelGuide>
           Text(
             '${widget.channels.length} channels',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
+              color: Colors.white.withValues(alpha: 0.5),
               fontSize: 12,
             ),
           ),
@@ -303,14 +303,14 @@ class _ChannelGuideState extends State<ChannelGuide>
         style: const TextStyle(color: Colors.white, fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Search channels...',
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
           prefixIcon: Icon(
             Icons.search,
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             size: 20,
           ),
           filled: true,
-          fillColor: Colors.white.withOpacity(0.08),
+          fillColor: Colors.white.withValues(alpha: 0.08),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           border: OutlineInputBorder(
@@ -336,14 +336,14 @@ class _ChannelGuideState extends State<ChannelGuide>
           children: [
             Icon(
               Icons.search_off,
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.white.withValues(alpha: 0.3),
               size: 48,
             ),
             const SizedBox(height: 12),
             Text(
               'No channels found',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
                 fontSize: 14,
               ),
             ),
@@ -397,12 +397,12 @@ class _ChannelListItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isFocused
-              ? Colors.white.withOpacity(0.15)
-              : Colors.white.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isFocused
-                ? const Color(0xFF66FF00).withOpacity(0.6)
+                ? const Color(0xFF66FF00).withValues(alpha: 0.6)
                 : Colors.transparent,
             width: 1.5,
           ),
@@ -422,7 +422,7 @@ class _ChannelListItem extends StatelessWidget {
                 style: TextStyle(
                   color: isCurrent
                       ? const Color(0xFF66FF00)
-                      : Colors.white.withOpacity(0.9),
+                      : Colors.white.withValues(alpha: 0.9),
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -443,7 +443,7 @@ class _ChannelListItem extends StatelessWidget {
                     style: TextStyle(
                       color: isCurrent
                           ? const Color(0xFF66FF00)
-                          : Colors.white.withOpacity(0.95),
+                          : Colors.white.withValues(alpha: 0.95),
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0.3,
@@ -454,8 +454,8 @@ class _ChannelListItem extends StatelessWidget {
                     isCurrent ? 'Currently playing' : 'Press OK to tune',
                     style: TextStyle(
                       color: isCurrent
-                          ? const Color(0xFF66FF00).withOpacity(0.7)
-                          : Colors.white.withOpacity(0.4),
+                          ? const Color(0xFF66FF00).withValues(alpha: 0.7)
+                          : Colors.white.withValues(alpha: 0.4),
                       fontSize: 11,
                     ),
                   ),

@@ -63,6 +63,23 @@ class ProfileLockController {
     activate(profile, unlocked: true);
   }
 
+  /// Refreshes non-authority profile metadata without changing lock state.
+  ///
+  /// Async settings saves use this instead of [unlock]: a lock or profile
+  /// switch may have happened while their database/checkpoint work was in
+  /// flight, and completion must never reopen the old session.
+  bool refreshProfileIfCurrent(UserProfile profile) {
+    if (_profile?.id != profile.id) return false;
+    _profile = profile;
+    if (lockedProfileId.value == null) {
+      _arm();
+    } else {
+      _timer?.cancel();
+    }
+    _publishPrivacy();
+    return true;
+  }
+
   void dispose() {
     _timer?.cancel();
     _profile = null;

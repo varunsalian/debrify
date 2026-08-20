@@ -80,6 +80,7 @@ import 'settings/recordings_page.dart';
 import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
 import 'settings/profile_backup_flows.dart';
+import 'settings/profile_appearance_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -96,6 +97,7 @@ import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/profiles_settings_page.dart';
 import 'profiles/profile_setup_flow.dart';
+import 'profiles/profile_wall_screen.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
@@ -832,6 +834,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDiscoverLayout: _openDiscoverLayout,
       tvHomeStyleLabel: tvHomeStyleLabel(_tvHomeStyle),
       onOpenTvHomeStyle: _openTvHomeStyle,
+      profileAppearanceLabel: ProfileGateStyle.labelFor(
+        ProfileGateStyle.cached,
+      ),
+      onOpenProfileAppearance: _openProfileAppearance,
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
       debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
@@ -951,6 +957,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : 'Classic bar',
       desktopSidebarStyleLabel: desktopSidebarStyleLabel(_desktopSidebarStyle),
       onOpenDesktopSidebarStyle: _openDesktopSidebarStyle,
+      profileAppearanceLabel: ProfileGateStyle.labelFor(
+        ProfileGateStyle.cached,
+      ),
+      onOpenProfileAppearance: _openProfileAppearance,
     );
   }
 
@@ -1338,6 +1348,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'view',
           'display',
           'home & display',
+        ],
+      ),
+      nav(
+        SettingsRows.profileAppearance,
+        'Appearance',
+        _openProfileAppearance,
+        subtitle: ProfileGateStyle.labelFor(ProfileGateStyle.cached),
+        keywords: const [
+          'profile',
+          'picker',
+          'who is watching',
+          'who\'s watching',
+          'marquee',
+          'theater',
+          'portrait wall',
+          'top shelf',
+          'apple tv',
         ],
       ),
       // Android TV only — the stage layout is a TV-canvas design; phones and
@@ -2450,6 +2477,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'wrong colors',
             'hardware decoding',
             '10-bit',
+          ],
+        ),
+      if (_isAndroid && PlatformUtil.isAndroidTvCached)
+        leaf(
+          'Playback',
+          'IPTV decoder',
+          'Switch to software decoding when a channel freezes',
+          const [
+            'iptv',
+            'decoder',
+            'software',
+            'hardware',
+            'freeze',
+            'frozen',
+            'audio only',
+            'no picture',
           ],
         ),
       if (_isAndroid && !PlatformUtil.isAndroidTvCached)
@@ -4714,6 +4757,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _openProfileAppearance() async {
+    await pushSettingsPage(context, const ProfileAppearancePage());
+    if (!mounted) return;
+    await ProfileGateStyle.warm();
+    if (mounted) setState(() {});
+  }
+
   /// Same contract as [_openTvHomeStyle], for the IPTV page look picker.
   Future<void> _openIptvStylePage() async {
     await pushSettingsPage(context, const IptvStylePage());
@@ -5239,6 +5289,8 @@ class _SettingsLayout extends StatelessWidget {
   final String phoneNavStyleLabel;
   final String desktopSidebarStyleLabel;
   final Future<void> Function() onOpenDesktopSidebarStyle;
+  final String profileAppearanceLabel;
+  final Future<void> Function() onOpenProfileAppearance;
 
   const _SettingsLayout({
     required this.connections,
@@ -5307,6 +5359,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.phoneNavStyleLabel,
     required this.desktopSidebarStyleLabel,
     required this.onOpenDesktopSidebarStyle,
+    required this.profileAppearanceLabel,
+    required this.onOpenProfileAppearance,
   });
 
   List<ConnectionInfo> get _providerConnections => [
@@ -5497,6 +5551,11 @@ class _SettingsLayout extends StatelessWidget {
                   SettingsRows.parentsGuideStyle,
                   subtitle: parentsGuideStyleLabel,
                   onTap: onOpenParentsGuideStyle,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.profileAppearance,
+                  subtitle: profileAppearanceLabel,
+                  onTap: onOpenProfileAppearance,
                 ),
               ],
             ),
@@ -5828,6 +5887,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.parentsGuideStyle,
                       subtitle: parentsGuideStyleLabel,
                       onTap: onOpenParentsGuideStyle,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.profileAppearance,
+                      subtitle: profileAppearanceLabel,
+                      onTap: onOpenProfileAppearance,
                     ),
                     // Phone/small-window chrome — TVs navigate by sidebar
                     // and never read the style.

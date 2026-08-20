@@ -9,13 +9,13 @@ class NetflixRadioTile extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   const NetflixRadioTile({
-    Key? key,
+    super.key,
     required this.value,
     required this.groupValue,
     required this.title,
     this.subtitle,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,13 +25,13 @@ class NetflixRadioTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isSelected
-            ? const Color(0xFFE50914).withOpacity(0.2)
+            ? const Color(0xFFE50914).withValues(alpha: 0.2)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected
               ? const Color(0xFFE50914)
-              : Colors.white.withOpacity(0.1),
+              : Colors.white.withValues(alpha: 0.1),
           width: 1,
         ),
       ),
@@ -52,7 +52,7 @@ class NetflixRadioTile extends StatelessWidget {
                     border: Border.all(
                       color: isSelected
                           ? const Color(0xFFE50914)
-                          : Colors.white.withOpacity(0.5),
+                          : Colors.white.withValues(alpha: 0.5),
                       width: 2,
                     ),
                   ),
@@ -77,7 +77,7 @@ class NetflixRadioTile extends StatelessWidget {
                         style: TextStyle(
                           color: isSelected
                               ? Colors.white
-                              : Colors.white.withOpacity(0.8),
+                              : Colors.white.withValues(alpha: 0.8),
                           fontWeight: isSelected
                               ? FontWeight.w600
                               : FontWeight.w400,
@@ -89,7 +89,7 @@ class NetflixRadioTile extends StatelessWidget {
                         Text(
                           subtitle!,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 11,
                           ),
                         ),

@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../models/profiles/user_profile.dart';
 import '../utils/platform_util.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
+import 'profiles/profile_avatar_view.dart';
 
 /// Cyan pole of the liquid-glass chromatic accents (edge rim + focus ring).
 const _kRimCyan = Color(0xFF54D6FF);
@@ -37,6 +39,8 @@ class TvSidebarNav extends StatefulWidget {
   /// Fired when the rail opens (true) / closes (false), so the host can dim
   /// the content behind the expanded overlay for depth.
   final ValueChanged<bool>? onExpandedChanged;
+  final UserProfile? profile;
+  final VoidCallback? onProfileTap;
 
   /// Visual style: 'ghost' (no chrome, white coin — the default) | 'classic'
   /// (the original liquid glass) | 'island' (floating glass capsule) |
@@ -58,6 +62,8 @@ class TvSidebarNav extends StatefulWidget {
     this.onFocusContent,
     this.onExpandedChanged,
     this.navStyle = 'ghost',
+    this.profile,
+    this.onProfileTap,
   });
 
   /// The width the collapsed rail occupies. The content is inset by this so
@@ -248,7 +254,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
       node.dispose();
     }
     _focusNodes.clear();
-    for (int i = 0; i < widget.items.length; i++) {
+    final count =
+        widget.items.length +
+        (widget.profile != null && widget.onProfileTap != null ? 1 : 0);
+    for (int i = 0; i < count; i++) {
       final capturedIndex = i;
       // skipTraversal: the rail must NEVER be reachable by Flutter's directional
       // focus search — otherwise a stray DPAD press at a content edge (e.g. DOWN
@@ -279,7 +288,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
         if (ctx == null) return;
         final scrollable = Scrollable.maybeOf(ctx);
         if (scrollable != null && scrollable.position.maxScrollExtent > 0) {
-          Scrollable.ensureVisible(ctx, duration: Duration.zero, alignment: 0.3);
+          Scrollable.ensureVisible(
+            ctx,
+            duration: Duration.zero,
+            alignment: 0.3,
+          );
         }
       });
     } else {
@@ -316,7 +329,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
       // an ancestor walk from one of those asserts.
       if (ctx == null || !ctx.mounted) return;
       final scrollable = Scrollable.maybeOf(ctx);
-      if (scrollable == null || scrollable.position.maxScrollExtent <= 0) return;
+      if (scrollable == null || scrollable.position.maxScrollExtent <= 0)
+        return;
       Scrollable.ensureVisible(
         ctx,
         alignment: 0.5,
@@ -327,6 +341,16 @@ class TvSidebarNavState extends State<TvSidebarNav>
   }
 
   void _selectMenuItem(int index) {
+    if (index == widget.items.length &&
+        widget.profile != null &&
+        widget.onProfileTap != null) {
+      // A pushed route owns its own initial focus. The normal tab path's
+      // delayed focus handoff would otherwise reach through the new Profiles
+      // page and ask the old content tab to take focus back.
+      _collapse();
+      widget.onProfileTap!();
+      return;
+    }
     widget.onTap(index);
     _collapse();
     Future.delayed(const Duration(milliseconds: _pageTransitionDelay), () {
@@ -354,7 +378,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
   @override
   void didUpdateWidget(TvSidebarNav oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.items.length != widget.items.length) {
+    final oldHasProfile =
+        oldWidget.profile != null && oldWidget.onProfileTap != null;
+    final hasProfile = widget.profile != null && widget.onProfileTap != null;
+    if (oldWidget.items.length != widget.items.length ||
+        oldHasProfile != hasProfile) {
       _initFocusNodes();
     }
     if (oldWidget.currentIndex != widget.currentIndex) {
@@ -563,8 +591,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
                       ? ClipRRect(
                           borderRadius: app.shape.br(18),
                           child: BackdropFilter(
-                            filter:
-                                ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                            filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
                             child: panel,
                           ),
                         )
@@ -689,8 +716,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
                               offset: const Offset(10, 0),
                             ),
                             BoxShadow(
-                              color: tinted(app.shell.navAccent, 0.5)
-                                  .withValues(alpha: 0.10 * t),
+                              color: tinted(
+                                app.shell.navAccent,
+                                0.5,
+                              ).withValues(alpha: 0.10 * t),
                               blurRadius: 40,
                               offset: const Offset(2, 0),
                             ),
@@ -723,9 +752,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
                           ),
                         ),
                       ),
-                      Positioned.fill(
-                        child: inner ?? const SizedBox.shrink(),
-                      ),
+                      Positioned.fill(child: inner ?? const SizedBox.shrink()),
                       // Specular streak OVER the content — the gloss. Capped
                       // at 10% white so labels stay legible beneath it.
                       Positioned.fill(
@@ -762,11 +789,13 @@ class TvSidebarNavState extends State<TvSidebarNav>
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  app.shell.navFocus
-                                      .withValues(alpha: 0.70 * t),
+                                  app.shell.navFocus.withValues(
+                                    alpha: 0.70 * t,
+                                  ),
                                   _kRimCyan.withValues(alpha: 0.40 * t),
-                                  app.shell.navFocus
-                                      .withValues(alpha: 0.15 * t),
+                                  app.shell.navFocus.withValues(
+                                    alpha: 0.15 * t,
+                                  ),
                                 ],
                               ),
                             ),
@@ -806,8 +835,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
                     // ever overflows a short screen (keeps ensureVisible working).
                     return SingleChildScrollView(
                       child: ConstrainedBox(
-                        constraints:
-                            BoxConstraints(minHeight: constraints.maxHeight),
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
                         child: Padding(
                           // Island runs tighter: the capsule's own padding +
                           // border eat into the 64px rail, and the row's 44px
@@ -842,6 +872,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
                   },
                 ),
               ),
+              if (widget.profile != null && widget.onProfileTap != null)
+                _buildProfileFooter(app),
             ],
           ),
         ),
@@ -934,8 +966,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
         // sitting ON the page rather than a bar laid over it, which is what
         // lets it stay permanent without owning the corner. Only the icon gets
         // a container, and only enough of one to read as a control.
-        double at(double rest, double near) =>
-            (rest + (near - rest) * lit) * a;
+        double at(double rest, double near) => (rest + (near - rest) * lit) * a;
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -1007,7 +1038,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
     final widgets = <Widget>[];
     for (int index = 0; index < widget.items.length; index++) {
       final item = widget.items[index];
-      final startsSection = item.section != null &&
+      final startsSection =
+          item.section != null &&
           (index == 0 || widget.items[index - 1].section != item.section);
       // The reference drawer has no category headers — one flat list. Pill
       // follows it exactly; every other style keeps its sections.
@@ -1038,6 +1070,41 @@ class TvSidebarNavState extends State<TvSidebarNav>
     return widgets;
   }
 
+  Widget _buildProfileFooter(AppTheme app) {
+    final index = widget.items.length;
+    return Padding(
+      key: const ValueKey('tv-sidebar-profile'),
+      padding: EdgeInsets.fromLTRB(
+        _style == 'island' ? 6 : 10,
+        4,
+        _style == 'island' ? 6 : 10,
+        2,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FadeTransition(
+            opacity: _expand,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Container(height: 1, color: app.fade(app.core.tx, 0.08)),
+            ),
+          ),
+          _TvProfileItemWidget(
+            app: app,
+            profile: widget.profile!,
+            isFocused: index == _focusedIndex && _hasSidebarFocus,
+            expand: _expand,
+            focusNode: _focusNodes[index],
+            onTap: () => _selectMenuItem(index),
+            onKeyEvent: (event) => _handleKeyEvent(index, event),
+            style: _style,
+          ),
+        ],
+      ),
+    );
+  }
+
   /// The reference drawer's header: avatar disc, name, clock — in place of
   /// the branding row, pill style only.
   Widget _buildPillHeader(AppTheme app) {
@@ -1057,10 +1124,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
               clipBehavior: Clip.antiAlias,
               child: Padding(
                 padding: const EdgeInsets.all(5),
-                child: Image.asset(
-                  'assets/app_icon.png',
-                  fit: BoxFit.contain,
-                ),
+                child: Image.asset('assets/app_icon.png', fit: BoxFit.contain),
               ),
             ),
             const SizedBox(width: 9),
@@ -1122,6 +1186,150 @@ class TvSidebarNavState extends State<TvSidebarNav>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TvProfileItemWidget extends StatelessWidget {
+  final AppTheme app;
+  final UserProfile profile;
+  final bool isFocused;
+  final Animation<double> expand;
+  final FocusNode focusNode;
+  final VoidCallback onTap;
+  final KeyEventResult Function(KeyEvent) onKeyEvent;
+  final String style;
+
+  const _TvProfileItemWidget({
+    required this.app,
+    required this.profile,
+    required this.isFocused,
+    required this.expand,
+    required this.focusNode,
+    required this.onTap,
+    required this.onKeyEvent,
+    required this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (_, event) => onKeyEvent(event),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedBuilder(
+          animation: expand,
+          builder: (context, _) {
+            final open = expand.value;
+            final whiteFocus =
+                isFocused && (style == 'badge' || style == 'pill');
+            final collapsedSlot = style == 'island'
+                ? TvSidebarNav.collapsedWidth - 12
+                : TvSidebarNav.collapsedWidth - 20;
+            return Container(
+              height: style == 'badge' ? 52 : 46,
+              decoration: BoxDecoration(
+                color: whiteFocus
+                    ? app.core.tx
+                    : isFocused
+                    ? app.shell.navFocus.withValues(alpha: 0.22)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+                border: isFocused && !whiteFocus
+                    ? Border.all(color: app.fade(app.core.tx, 0.55), width: 1.5)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: collapsedSlot,
+                    child: Center(
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: whiteFocus
+                                ? app.shell.railInk.withValues(alpha: 0.15)
+                                : app.fade(app.core.tx, isFocused ? 0.8 : 0.16),
+                          ),
+                        ),
+                        child: ProfileAvatarView(
+                          profileId: profile.id,
+                          avatarKey: profile.avatarKey,
+                          role: profile.role,
+                          name: profile.name,
+                          focused: isFocused,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (open > 0.01)
+                    Expanded(
+                      child: ClipRect(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: open,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      profile.name,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.clip,
+                                      style: TextStyle(
+                                        color: whiteFocus
+                                            ? app.shell.railInk
+                                            : app.core.tx,
+                                        fontSize: style == 'marquee'
+                                            ? 17
+                                            : 13.5,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    Text(
+                                      profile.isAdmin ? 'Admin' : 'Profile',
+                                      maxLines: 1,
+                                      style: TextStyle(
+                                        color: whiteFocus
+                                            ? app.shell.railInk.withValues(
+                                                alpha: 0.62,
+                                              )
+                                            : app.fade(app.core.tx, 0.48),
+                                        fontSize: 9.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 18,
+                                color: whiteFocus
+                                    ? app.shell.railInk.withValues(alpha: 0.7)
+                                    : app.fade(app.core.tx, 0.48),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -1333,8 +1541,8 @@ class _TvNavItemWidget extends StatelessWidget {
               color: isFocused
                   ? Colors.white
                   : isSelected
-                      ? Colors.white.withValues(alpha: 0.14)
-                      : null,
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : null,
               borderRadius: app.shape.br(23),
             ),
             child: Row(
@@ -1356,8 +1564,9 @@ class _TvNavItemWidget extends StatelessWidget {
                         style: TextStyle(
                           color: ink,
                           fontSize: 14.5,
-                          fontWeight:
-                              isFocused ? FontWeight.w700 : FontWeight.w600,
+                          fontWeight: isFocused
+                              ? FontWeight.w700
+                              : FontWeight.w600,
                           letterSpacing: -0.1,
                         ),
                       ),
@@ -1387,9 +1596,7 @@ class _TvNavItemWidget extends StatelessWidget {
                   : isSelected
                   ? app.fade(app.core.tx, 0.95)
                   : app.fade(app.core.tx, 0.5))
-            : (isSelected
-                  ? app.shell.railInk
-                  : app.fade(app.core.tx, 0.5));
+            : (isSelected ? app.shell.railInk : app.fade(app.core.tx, 0.5));
         return Stack(
           children: [
             // Collapsed coin (dissolves as the capsule opens).
@@ -1484,9 +1691,7 @@ class _TvNavItemWidget extends StatelessWidget {
                   : isFocused
                   ? app.core.tx
                   : app.fade(app.core.tx, 0.5))
-            : (isSelected
-                  ? app.shell.railInk
-                  : app.fade(app.core.tx, 0.48));
+            : (isSelected ? app.shell.railInk : app.fade(app.core.tx, 0.48));
         return Stack(
           children: [
             // Collapsed: white squircle behind the selected icon.
@@ -1516,10 +1721,7 @@ class _TvNavItemWidget extends StatelessWidget {
                   overflow: TextOverflow.clip,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: app.fade(
-                      app.core.tx,
-                      (isSelected ? 0.95 : 0.5) * k,
-                    ),
+                    color: app.fade(app.core.tx, (isSelected ? 0.95 : 0.5) * k),
                     fontSize: 8.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.2,
@@ -1617,214 +1819,208 @@ class _TvNavItemWidget extends StatelessWidget {
     // lands. Only the puck↔pill cross-dissolve animates, riding the shared
     // 200ms expand with alphas baked into the colors.
     return Stack(
-            children: [
-              // COLLAPSED visual: the glass puck behind the icon. Alphas are
-              // premultiplied by (1 - t) so it dissolves as the pane pours in.
-              Positioned(
-                left: 4, // (44-wide icon box − 36 puck) / 2
-                top: 3,
-                child: AnimatedBuilder(
-                  animation: expand,
-                  builder: (context, _) {
-                    final k = 1.0 - expand.value;
-                    if (k < 0.01) {
-                      return const SizedBox(width: 36, height: 36);
-                    }
-                    return Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: isSelected
-                              ? [
-                                  accent.withValues(alpha: 0.34 * k),
-                                  accent.withValues(alpha: 0.18 * k),
-                                ]
-                              : [
-                                  app.fade(app.core.tx, 0.10 * k),
-                                  app.fade(app.core.tx, 0.03 * k),
-                                ],
-                        ),
-                        border: Border.all(
-                          color: isSelected
-                              ? accentSoft.withValues(alpha: 0.55 * k)
-                              : app.fade(app.core.tx, 0.10 * k),
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: accent.withValues(alpha: 0.45 * k),
-                                  blurRadius: 14,
-                                  spreadRadius: -2,
-                                ),
-                              ]
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-              ),
-              // EXPANDED visual: the stadium pill behind the whole row —
-              // liquid purple→cyan ring + glow for focus, faint glass for the
-              // selected tab. Alphas ride t so the collapsed rail stays clean
-              // (the pill would otherwise peek out from behind the puck).
-              Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: expand,
-                  builder: (context, _) {
-                    final t = expand.value;
-                    if (t < 0.01 || !active) return const SizedBox.shrink();
-                    if (isFocused) {
-                      return Container(
-                        decoration: BoxDecoration(
-                          borderRadius: app.shape.br(21),
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              accentSoft.withValues(alpha: t),
-                              _kRimCyan.withValues(alpha: t),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: accent.withValues(alpha: 0.45 * t),
-                              blurRadius: 20,
-                              spreadRadius: -3,
-                            ),
+      children: [
+        // COLLAPSED visual: the glass puck behind the icon. Alphas are
+        // premultiplied by (1 - t) so it dissolves as the pane pours in.
+        Positioned(
+          left: 4, // (44-wide icon box − 36 puck) / 2
+          top: 3,
+          child: AnimatedBuilder(
+            animation: expand,
+            builder: (context, _) {
+              final k = 1.0 - expand.value;
+              if (k < 0.01) {
+                return const SizedBox(width: 36, height: 36);
+              }
+              return Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: isSelected
+                        ? [
+                            accent.withValues(alpha: 0.34 * k),
+                            accent.withValues(alpha: 0.18 * k),
+                          ]
+                        : [
+                            app.fade(app.core.tx, 0.10 * k),
+                            app.fade(app.core.tx, 0.03 * k),
                           ],
-                        ),
-                        padding: const EdgeInsets.all(1.4),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: app.shape.br(20),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                const Color(
-                                  0xFF241B4D,
-                                ).withValues(alpha: 0.94 * t),
-                                const Color(
-                                  0xFF1A1338,
-                                ).withValues(alpha: 0.94 * t),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    return Container(
-                      decoration: BoxDecoration(
-                        borderRadius: app.shape.br(21),
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            app.fade(app.core.tx, 0.08 * t),
-                            app.fade(app.core.tx, 0.02 * t),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Row(
-                children: [
-                  SizedBox(
-                    width: TvSidebarNav.collapsedWidth - 20, // rail - padding(2×10)
-                    child: Center(
-                      child: Icon(item.icon, color: iconColor, size: 20),
-                    ),
                   ),
-                  Expanded(
-                    child: ClipRect(
-                      child: _StaggeredLabel(
-                        expand: expand,
-                        index: index,
-                        curve: labelCurve,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                item.label,
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.clip,
-                                style: TextStyle(
-                                  color: labelColor,
-                                  fontSize: 13.5,
-                                  fontWeight: active
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  letterSpacing: 0.1,
-                                ),
-                              ),
-                            ),
-                            if (item.tag != null) ...[
-                              const SizedBox(width: 7),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: accent.withValues(alpha: 0.18),
-                                  borderRadius: app.shape.br(5),
-                                ),
-                                child: Text(
-                                  item.tag!,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: accentSoft,
-                                    letterSpacing: 0.4,
-                                    height: 1.2,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                  border: Border.all(
+                    color: isSelected
+                        ? accentSoft.withValues(alpha: 0.55 * k)
+                        : app.fade(app.core.tx, 0.10 * k),
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: accent.withValues(alpha: 0.45 * k),
+                            blurRadius: 14,
+                            spreadRadius: -2,
+                          ),
+                        ]
+                      : null,
+                ),
+              );
+            },
+          ),
+        ),
+        // EXPANDED visual: the stadium pill behind the whole row —
+        // liquid purple→cyan ring + glow for focus, faint glass for the
+        // selected tab. Alphas ride t so the collapsed rail stays clean
+        // (the pill would otherwise peek out from behind the puck).
+        Positioned.fill(
+          child: AnimatedBuilder(
+            animation: expand,
+            builder: (context, _) {
+              final t = expand.value;
+              if (t < 0.01 || !active) return const SizedBox.shrink();
+              if (isFocused) {
+                return Container(
+                  decoration: BoxDecoration(
+                    borderRadius: app.shape.br(21),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        accentSoft.withValues(alpha: t),
+                        _kRimCyan.withValues(alpha: t),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.45 * t),
+                        blurRadius: 20,
+                        spreadRadius: -3,
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(1.4),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: app.shape.br(20),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          const Color(0xFF241B4D).withValues(alpha: 0.94 * t),
+                          const Color(0xFF1A1338).withValues(alpha: 0.94 * t),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
-              // Leading tick — active-tab marker, expanded only (collapsed,
-              // the lit puck marks the tab). Focused rows drop it: the
-              // gradient ring is the marker there.
-              if (isSelected && !isFocused)
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: AnimatedBuilder(
-                    animation: expand,
-                    builder: (context, _) {
-                      final t = expand.value;
-                      if (t < 0.01) return const SizedBox.shrink();
-                      return Center(
-                        child: Container(
-                          width: 3.5,
-                          height: 15,
+                );
+              }
+              return Container(
+                decoration: BoxDecoration(
+                  borderRadius: app.shape.br(21),
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      app.fade(app.core.tx, 0.08 * t),
+                      app.fade(app.core.tx, 0.02 * t),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Row(
+          children: [
+            SizedBox(
+              width: TvSidebarNav.collapsedWidth - 20, // rail - padding(2×10)
+              child: Center(child: Icon(item.icon, color: iconColor, size: 20)),
+            ),
+            Expanded(
+              child: ClipRect(
+                child: _StaggeredLabel(
+                  expand: expand,
+                  index: index,
+                  curve: labelCurve,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                          style: TextStyle(
+                            color: labelColor,
+                            fontSize: 13.5,
+                            fontWeight: active
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ),
+                      if (item.tag != null) ...[
+                        const SizedBox(width: 7),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
                           decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.75 * t),
-                            borderRadius: const BorderRadius.horizontal(
-                              right: Radius.circular(4),
+                            color: accent.withValues(alpha: 0.18),
+                            borderRadius: app.shape.br(5),
+                          ),
+                          child: Text(
+                            item.tag!,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: accentSoft,
+                              letterSpacing: 0.4,
+                              height: 1.2,
                             ),
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ],
                   ),
                 ),
-            ],
+              ),
+            ),
+          ],
+        ),
+        // Leading tick — active-tab marker, expanded only (collapsed,
+        // the lit puck marks the tab). Focused rows drop it: the
+        // gradient ring is the marker there.
+        if (isSelected && !isFocused)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: AnimatedBuilder(
+              animation: expand,
+              builder: (context, _) {
+                final t = expand.value;
+                if (t < 0.01) return const SizedBox.shrink();
+                return Center(
+                  child: Container(
+                    width: 3.5,
+                    height: 15,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.75 * t),
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(4),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

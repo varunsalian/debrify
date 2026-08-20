@@ -178,7 +178,7 @@ class ProfileAvatarIngest {
   static Future<void> publish({
     required ProfileRegistry registry,
     required String profileId,
-    required String avatarKey,
+    required String? avatarKey,
     required Future<void> Function() persist,
     required Future<bool> Function() wasPersisted,
     PreparedProfileAvatar? prepared,
@@ -189,7 +189,7 @@ class ProfileAvatarIngest {
     }
     final mutationStarted = managedAvatar != null;
     if (mutationStarted) {
-      await ProfileAvatarMutation.begin(profileId, avatarKey);
+      await ProfileAvatarMutation.begin(profileId, avatarKey!);
     }
 
     try {

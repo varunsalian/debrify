@@ -49,6 +49,7 @@ class ProfileGraphRestoreReport {
   final int grantsImported;
   final int bindingsImported;
   final int pinResetsRequired;
+  final List<String> importedProfileIds;
 
   const ProfileGraphRestoreReport({
     required this.profilesImported,
@@ -56,6 +57,7 @@ class ProfileGraphRestoreReport {
     required this.grantsImported,
     required this.bindingsImported,
     required this.pinResetsRequired,
+    required this.importedProfileIds,
   });
 }
 
@@ -419,6 +421,9 @@ class ProfileRestoreCoordinator {
         grantsImported: grantCount,
         bindingsImported: bindingCount,
         pinResetsRequired: pinResetsRequired,
+        importedProfileIds: List<String>.unmodifiable(
+          parsedProfiles.map((profile) => profile.id),
+        ),
       );
     } catch (_) {
       if (!published && !publicationUncertain) {

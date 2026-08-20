@@ -125,31 +125,31 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
             // are `core.tx`, `home.sheetBg` and `inkOn`, and 0xFF1E293B lives
             // in Cloud / Stremio TV / Playlist. Needs its own token.
             color: isFocused
-                ? const Color(0xFF1E293B).withOpacity(0.8)
+                ? const Color(0xFF1E293B).withValues(alpha: 0.8)
                 : app.home.sheetBg.withAlpha(153),
             border: Border.all(
               color: isFocused
-                  ? accentColor.withOpacity(0.4)
+                  ? accentColor.withValues(alpha: 0.4)
                   : app.core.tx.withAlpha(13),
               width: 1,
             ),
             boxShadow: isFocused
                 ? [
                     BoxShadow(
-                      color: accentColor.withOpacity(0.15),
+                      color: accentColor.withValues(alpha: 0.15),
                       blurRadius: 16,
                       spreadRadius: 0,
                       offset: const Offset(0, 4),
                     ),
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ]
                 : [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -171,7 +171,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                         gradient: LinearGradient(
                           colors: [
                             accentColor,
-                            accentColor.withOpacity(0.6),
+                            accentColor.withValues(alpha: 0.6),
                           ],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
@@ -184,8 +184,8 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                   child: InkWell(
                     onTap: widget.isAndroidTv ? null : onSelect,
                     borderRadius: app.shape.br(12),
-                    splashColor: accentColor.withOpacity(0.1),
-                    highlightColor: accentColor.withOpacity(0.05),
+                    splashColor: accentColor.withValues(alpha: 0.1),
+                    highlightColor: accentColor.withValues(alpha: 0.05),
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(
                         isFocused ? 16 : 14,
@@ -233,7 +233,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                               padding: const EdgeInsets.only(left: 8),
                               child: Icon(
                                 Icons.arrow_forward_ios_rounded,
-                                color: accentColor.withOpacity(0.8),
+                                color: accentColor.withValues(alpha: 0.8),
                                 size: 18,
                               ),
                             ),
@@ -279,7 +279,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 32,
               offset: const Offset(0, 16),
             ),

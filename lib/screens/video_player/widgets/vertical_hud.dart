@@ -3,7 +3,7 @@ import '../models/hud_state.dart';
 
 class VerticalHud extends StatelessWidget {
   final VerticalHudState hud;
-  const VerticalHud({Key? key, required this.hud}) : super(key: key);
+  const VerticalHud({super.key, required this.hud});
   @override
   Widget build(BuildContext context) {
     final icon = hud.kind == VerticalKind.volume
@@ -13,7 +13,7 @@ class VerticalHud extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

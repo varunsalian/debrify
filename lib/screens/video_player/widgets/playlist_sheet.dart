@@ -113,7 +113,7 @@ class PlaylistSheet {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Failed to find episode S${season}E${episode}',
+                                'Failed to find episode S${season}E$episode',
                                 style: const TextStyle(color: Colors.white),
                               ),
                               backgroundColor: VideoPlayerColors.errorRed,

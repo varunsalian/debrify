@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
 import '../../../services/series_source_fetcher.dart';
 import '../../../utils/platform_util.dart';
+import '../../../utils/source_quality.dart';
 import '../../../utils/tv_keys.dart';
 
 /// Full-screen source browser.  It deliberately keeps the source list in its
@@ -60,7 +61,6 @@ class _SourceSheetState extends State<SourceSheet> {
   final ScrollController _addonScrollController = ScrollController();
   final ScrollController _sourceScrollController = ScrollController();
   final Map<int, GlobalKey> _sourceKeys = <int, GlobalKey>{};
-  final GlobalKey _loadMoreKey = GlobalKey();
 
   List<_AddonGroup> _groups = const [];
   int _selectedGroup = 0;
@@ -68,18 +68,19 @@ class _SourceSheetState extends State<SourceSheet> {
   _FocusZone _focusZone = _FocusZone.sources;
   int? _resolvingIndex;
   String? _errorMessage;
-  String? _loadingMode;
 
   /// Every applicable addon for this play — placeholder rail groups are built
   /// from these, so an addon with zero results still shows (with a "Fetch
   /// results" row) instead of being invisible.
   List<SourceAddonRef> _allAddons = const [];
+  List<SourceEngineRef> _allEngines = const [];
 
   /// Group id → ALL addon ids sharing it. Group identity must stay the
   /// name-derived sourceKey (fetched rows carry `stremio:<name>` and nothing
   /// else), so two same-named addons share one group — the fetch then asks
   /// every addon in it rather than silently dropping all but the first.
   final Map<String, List<String>> _addonIdsByGroup = {};
+  final Map<String, String> _engineIdByGroup = {};
 
   /// Per-group fetch state: episode fetch in flight / lazy pack probe in
   /// flight / last fetch failed (the group's Fetch row doubles as retry).
@@ -102,22 +103,39 @@ class _SourceSheetState extends State<SourceSheet> {
   }
 
   Future<void> _loadAddonListing() async {
-    final listing = widget.seriesFetcher?.listAddons;
-    if (listing == null || widget.seriesFetcher?.fetchAddonEpisodes == null) {
+    final addonListing = widget.seriesFetcher?.listAddons;
+    final engineListing = widget.seriesFetcher?.listEngines;
+    if (addonListing == null && engineListing == null) {
       return;
     }
-    try {
-      final addons = await listing();
-      if (!mounted || addons.isEmpty) return;
-      setState(() {
-        _allAddons = addons;
-        final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
-        final focusedOriginal = _focusedEntry?.originalIndex;
-        _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
-      });
-    } catch (_) {
-      // No listing — the sheet simply shows only groups that have results.
+    Future<List<SourceAddonRef>> loadAddons() async {
+      try {
+        return await addonListing?.call() ?? const [];
+      } catch (_) {
+        return const [];
+      }
     }
+
+    Future<List<SourceEngineRef>> loadEngines() async {
+      try {
+        return await engineListing?.call() ?? const [];
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final addonsFuture = loadAddons();
+    final enginesFuture = loadEngines();
+    final addons = await addonsFuture;
+    final engines = await enginesFuture;
+    if (!mounted) return;
+    setState(() {
+      _allAddons = addons;
+      _allEngines = engines;
+      final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
+      final focusedOriginal = _focusedEntry?.originalIndex;
+      _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
+    });
   }
 
   @override
@@ -181,14 +199,22 @@ class _SourceSheetState extends State<SourceSheet> {
     // same bucket the placeholder occupied. Same-named addons share one
     // placeholder (the set guard), never two duplicate groups.
     _addonIdsByGroup.clear();
+    _engineIdByGroup.clear();
     for (final addon in _allAddons) {
       (_addonIdsByGroup[addon.sourceKey] ??= <String>[]).add(addon.id);
     }
+    for (final engine in _allEngines) {
+      _engineIdByGroup[engine.sourceKey] = engine.id;
+    }
     final placeholderKeys = <String>{};
     _groups = <_AddonGroup>[
-      _AddonGroup('all', 'All add-ons', all),
+      _AddonGroup('all', 'All sources', all),
       for (final bucket in buckets.entries)
         _AddonGroup(bucket.key, labels[bucket.key]!, bucket.value),
+      for (final engine in _allEngines)
+        if (!buckets.containsKey(engine.sourceKey) &&
+            placeholderKeys.add(engine.sourceKey))
+          _AddonGroup(engine.sourceKey, engine.name, const <_SourceEntry>[]),
       for (final addon in _allAddons)
         if (!buckets.containsKey(addon.sourceKey) &&
             placeholderKeys.add(addon.sourceKey))
@@ -213,17 +239,6 @@ class _SourceSheetState extends State<SourceSheet> {
       ? _visibleEntries[_focusedSource]
       : null;
 
-  String? get _loadMoreMode {
-    final fetcher = widget.seriesFetcher;
-    if (fetcher == null) return null;
-    if (fetcher.isMovie) {
-      return fetcher.movieFetched ? null : SeriesSourceFetcher.modeMovie;
-    }
-    if (!fetcher.packsFetched) return SeriesSourceFetcher.modePacks;
-    if (!fetcher.episodesFetched) return SeriesSourceFetcher.modeEpisodes;
-    return null;
-  }
-
   String get _seriesStateLabel {
     final fetcher = widget.seriesFetcher;
     if (fetcher == null || fetcher.isMovie) {
@@ -245,12 +260,6 @@ class _SourceSheetState extends State<SourceSheet> {
     return 'Sources returned for this series.';
   }
 
-  String get _loadMoreLabel => switch (_loadMoreMode) {
-    SeriesSourceFetcher.modeEpisodes => 'Load episode sources',
-    SeriesSourceFetcher.modePacks => 'Load season-pack sources',
-    _ => 'Load more sources',
-  };
-
   static bool _isPack(Torrent torrent) =>
       torrent.coverageType == 'seasonPack' ||
       torrent.coverageType == 'multiSeasonPack' ||
@@ -271,9 +280,7 @@ class _SourceSheetState extends State<SourceSheet> {
   void _ensureFocusedVisible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final GlobalKey? key = _focusedSource < 0
-          ? _loadMoreKey
-          : _sourceKeys[_focusedEntry?.originalIndex];
+      final GlobalKey? key = _sourceKeys[_focusedEntry?.originalIndex];
       final context = key?.currentContext;
       if (context != null) {
         Scrollable.ensureVisible(
@@ -351,43 +358,16 @@ class _SourceSheetState extends State<SourceSheet> {
     }
   }
 
-  Future<void> _loadMore() async {
-    final mode = _loadMoreMode;
-    final fetcher = widget.seriesFetcher;
-    if (mode == null || fetcher == null || _loadingMode != null) return;
-    setState(() {
-      _loadingMode = mode;
-      _errorMessage = null;
-    });
-    List<Torrent>? fetched;
-    try {
-      fetched = await fetcher.fetch(
-        mode,
-        season: widget.currentSeason,
-        episode: widget.currentEpisode,
-      );
-    } catch (_) {}
-    if (fetched != null) {
-      widget.onSourcesMerged?.call(
-        SeriesSourceFetcher.mergeSources(widget.sources, fetched),
-      );
-      if (mounted) setState(() => _loadingMode = null);
-      return;
-    }
-    if (!mounted) return;
-    setState(() {
-      _loadingMode = null;
-      _errorMessage = "Couldn't fetch more sources — try again";
-    });
-  }
-
   /// Whether the selected group is an empty addon group whose per-addon
   /// fetch is available — the state that renders the "Fetch results" row.
   bool get _groupFetchAvailable {
-    if (widget.seriesFetcher?.fetchAddonEpisodes == null) return false;
     if (_groups.isEmpty) return false;
     final group = _groups[_selectedGroup];
-    return group.entries.isEmpty && _addonIdsByGroup.containsKey(group.id);
+    return group.entries.isEmpty &&
+        ((_addonIdsByGroup.containsKey(group.id) &&
+                widget.seriesFetcher?.fetchAddonEpisodes != null) ||
+            (_engineIdByGroup.containsKey(group.id) &&
+                widget.seriesFetcher?.fetchEngine != null));
   }
 
   /// Per-addon fetch: episode results first — they render the instant the
@@ -397,9 +377,38 @@ class _SourceSheetState extends State<SourceSheet> {
   /// the Fetch row up as the retry.
   Future<void> _fetchAddonGroup() async {
     final fetcher = widget.seriesFetcher;
-    final search = fetcher?.fetchAddonEpisodes;
-    if (fetcher == null || search == null || _groups.isEmpty) return;
+    if (fetcher == null || _groups.isEmpty) return;
     final group = _groups[_selectedGroup];
+    final engineId = _engineIdByGroup[group.id];
+    if (engineId != null) {
+      if (_fetchingGroups.contains(group.id)) return;
+      setState(() {
+        _fetchingGroups.add(group.id);
+        _failedGroups.remove(group.id);
+      });
+      final fetched = await fetcher.fetchEngine?.call(
+        engineId,
+        widget.currentSeason ?? fetcher.season,
+        widget.currentEpisode ?? fetcher.episode,
+      );
+      if (!mounted) return;
+      setState(() {
+        _fetchingGroups.remove(group.id);
+        if (fetched == null) {
+          _failedGroups.add(group.id);
+        } else {
+          _fetchedGroups.add(group.id);
+        }
+      });
+      if (fetched != null && fetched.isNotEmpty) {
+        widget.onSourcesMerged?.call(
+          SeriesSourceFetcher.mergeSources(widget.sources, fetched),
+        );
+      }
+      return;
+    }
+    final search = fetcher.fetchAddonEpisodes;
+    if (search == null) return;
     final addonIds = _addonIdsByGroup[group.id];
     if (addonIds == null ||
         addonIds.isEmpty ||
@@ -521,8 +530,7 @@ class _SourceSheetState extends State<SourceSheet> {
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       setState(() => _focusZone = _FocusZone.close);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      final minimum = _loadMoreMode == null ? 0 : -1;
-      if (_focusedSource > minimum) {
+      if (_focusedSource > 0) {
         setState(() => _focusedSource--);
         _ensureFocusedVisible();
       }
@@ -532,16 +540,12 @@ class _SourceSheetState extends State<SourceSheet> {
         _ensureFocusedVisible();
       }
     } else if (isActivateKey(event.logicalKey)) {
-      if (_focusedSource < 0) {
-        _loadMore();
-      } else {
-        final entry = _focusedEntry;
-        if (entry != null) {
-          _selectSource(entry);
-        } else if (_groupFetchAvailable) {
-          // Empty addon group: the sole focusable row is "Fetch results".
-          _fetchAddonGroup();
-        }
+      final entry = _focusedEntry;
+      if (entry != null) {
+        _selectSource(entry);
+      } else if (_groupFetchAvailable) {
+        // Empty addon group: the sole focusable row is "Fetch results".
+        _fetchAddonGroup();
       }
     }
   }
@@ -659,7 +663,7 @@ class _SourceSheetState extends State<SourceSheet> {
           children: [
             Expanded(
               child: _sectionLabel(
-                _groups.isEmpty ? 'All add-ons' : _groups[_selectedGroup].label,
+                _groups.isEmpty ? 'All sources' : _groups[_selectedGroup].label,
               ),
             ),
             Text('${_visibleEntries.length} sources', style: _mutedStyle),
@@ -669,16 +673,6 @@ class _SourceSheetState extends State<SourceSheet> {
         ),
         const SizedBox(height: 20),
         Text(_seriesStateLabel, style: _noteStyle),
-        if (_loadMoreMode != null) ...[
-          const SizedBox(height: 12),
-          _LoadMoreRow(
-            key: _loadMoreKey,
-            label: _loadingMode == null ? _loadMoreLabel : 'Loading sources…',
-            focused: _focusZone == _FocusZone.sources && _focusedSource < 0,
-            enabled: _loadingMode == null,
-            onTap: _loadMore,
-          ),
-        ],
         if (_groups.isNotEmpty &&
             _packProbing.contains(_groups[_selectedGroup].id)) ...[
           const SizedBox(height: 8),
@@ -753,7 +747,7 @@ class _SourceSheetState extends State<SourceSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _LoadMoreRow(
+        _ProviderFetchRow(
           label: fetching
               ? 'Fetching episode results…'
               : failed
@@ -766,10 +760,10 @@ class _SourceSheetState extends State<SourceSheet> {
         const SizedBox(height: 10),
         Text(
           failed
-              ? "This add-on couldn't be reached."
+              ? "This provider couldn't be reached."
               : fetched
-              ? 'This add-on returned nothing for this episode.'
-              : "This add-on hasn't been asked yet for this episode.",
+              ? 'This provider returned nothing for this episode.'
+              : "This provider hasn't been asked yet for this episode.",
           style: _mutedStyle,
         ),
       ],
@@ -867,7 +861,7 @@ class _AddonRailRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                label == 'All add-ons'
+                label == 'All sources'
                     ? '✦'
                     : label.characters.first.toUpperCase(),
                 style: TextStyle(
@@ -912,13 +906,12 @@ class _AddonRailRow extends StatelessWidget {
   }
 }
 
-class _LoadMoreRow extends StatelessWidget {
+class _ProviderFetchRow extends StatelessWidget {
   final String label;
   final bool focused;
   final bool enabled;
   final VoidCallback onTap;
-  const _LoadMoreRow({
-    super.key,
+  const _ProviderFetchRow({
     required this.label,
     required this.focused,
     required this.enabled,
@@ -1007,8 +1000,6 @@ class _SourceRow extends StatelessWidget {
             Expanded(
               child: Text(
                 torrent.displayTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: inverse
                       ? Colors.black
@@ -1055,15 +1046,7 @@ class _SourceRow extends StatelessWidget {
   }
 
   static String? _quality(String value) {
-    final lower = value.toLowerCase();
-    if (lower.contains('2160') ||
-        lower.contains('4k') ||
-        lower.contains('uhd')) {
-      return '4K';
-    }
-    if (lower.contains('1080')) return '1080P';
-    if (lower.contains('720')) return '720P';
-    return null;
+    return sourceQualityBadgeForName(value)?.toUpperCase();
   }
 
   static String _formatSize(int bytes) {

@@ -45,6 +45,7 @@ import '../profiles/profile_avatar_policy.dart';
 import '../profiles/portable_profile_package.dart';
 import '../profiles/profile_app_lifecycle_participant.dart';
 import '../profiles/profile_lifecycle.dart';
+import '../profiles/native_profile_projection.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../profiles/device_key_provider.dart';
 import '../../services/backup_restore_service.dart';
@@ -100,6 +101,9 @@ class RemoteCommandRouter {
 
   // Callback to restart app flow (set by main.dart)
   VoidCallback? _onRestartApp;
+
+  @visibleForTesting
+  List<ProfileLifecycleParticipant>? debugOnboardingLifecycleParticipants;
 
   /// Set the navigator key for back navigation
   void setNavigatorKey(GlobalKey<NavigatorState> key) {
@@ -693,7 +697,15 @@ class RemoteCommandRouter {
         return;
       }
       if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
-        await _commitProfileRemotePayload(context, profileBinding);
+        final wasOnboarding = !(await StorageService.isInitialSetupComplete());
+        final applied = await _commitProfileRemotePayload(
+          context,
+          profileBinding,
+        );
+        if (wasOnboarding && applied) {
+          _notifyHandlers(RemoteAction.config, command, data);
+          await _handleConfigComplete(wasOnboardingOverride: true);
+        }
         return;
       }
       _notifyHandlers(RemoteAction.config, command, data);
@@ -792,30 +804,83 @@ class RemoteCommandRouter {
   /// Reports a profile-graph transfer's real outcome back to the sender —
   /// delivery is not application, and without this the phone's "sent" toast
   /// was a lie whenever the TV refused or the user declined.
-  Future<void> _reportProfileGraphResult(
+  Future<bool> _reportProfileGraphResult(
     RemoteCommandContext remoteContext, {
+    required String? requestId,
     required bool ok,
     required String message,
   }) async {
     final sidB64 = remoteContext.sidB64;
-    if (sidB64 == null) return;
+    if (sidB64 == null) return false;
     final state = RemoteControlState();
     final session = state.sessionManager?.sessionBySid(sidB64);
-    if (session == null || !session.authorized) return;
-    await state.sendEncryptedCommand(
+    if (session == null || !session.authorized) return false;
+    return state.sendEncryptedCommand(
       session,
       RemoteCommand(
         action: RemoteAction.config,
         command: ConfigCommand.profileGraphResult,
-        data: profileGraphResultBody(ok: ok, message: message),
+        data: profileGraphResultBody(
+          requestId: requestId,
+          ok: ok,
+          message: message,
+        ),
       ),
     );
+  }
+
+  Future<bool> _runBestEffortProfileGraphResult(
+    Future<bool> Function() send,
+  ) async {
+    try {
+      return await send();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @visibleForTesting
+  Future<bool> debugRunBestEffortProfileGraphResult(
+    Future<bool> Function() send,
+  ) => _runBestEffortProfileGraphResult(send);
+
+  Future<bool> _reportProfileGraphResultBestEffort(
+    RemoteCommandContext remoteContext, {
+    required String? requestId,
+    required bool ok,
+    required String message,
+  }) {
+    return _runBestEffortProfileGraphResult(
+      () => _reportProfileGraphResult(
+        remoteContext,
+        requestId: requestId,
+        ok: ok,
+        message: message,
+      ),
+    );
+  }
+
+  String? _profileGraphRequestId(String data) {
+    try {
+      final decoded = jsonDecode(data);
+      if (decoded is! Map) return null;
+      final omissions = decoded['omissions'];
+      if (omissions is! Map) return null;
+      final requestId = omissions[kProfileGraphRequestIdOmission];
+      if (requestId is! String || requestId.isEmpty || requestId.length > 128) {
+        return null;
+      }
+      return requestId;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _handleProfileGraphConfig(
     String data,
     RemoteCommandContext remoteContext,
   ) async {
+    final requestId = _profileGraphRequestId(data);
     if (!remoteContext.encrypted || !remoteContext.authorized) {
       debugPrint(
         'RemoteCommandRouter: profile graph requires an authorized session',
@@ -828,6 +893,7 @@ class RemoteCommandRouter {
       _showSnackBar('A profile import is already in progress', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'The TV is already importing profiles — wait for it',
       );
@@ -835,7 +901,11 @@ class RemoteCommandRouter {
     }
     _profileGraphInFlight = true;
     try {
-      await _handleProfileGraphConfigInner(data, remoteContext);
+      await _handleProfileGraphConfigInner(
+        data,
+        remoteContext,
+        requestId: requestId,
+      );
     } finally {
       _profileGraphInFlight = false;
     }
@@ -845,8 +915,9 @@ class RemoteCommandRouter {
 
   Future<void> _handleProfileGraphConfigInner(
     String data,
-    RemoteCommandContext remoteContext,
-  ) async {
+    RemoteCommandContext remoteContext, {
+    required String? requestId,
+  }) async {
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
       _showSnackBar(
         'Profiles are not set up on this device yet — finish setup first',
@@ -854,6 +925,7 @@ class RemoteCommandRouter {
       );
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'Finish setting up the TV, then resend',
       );
@@ -874,6 +946,7 @@ class RemoteCommandRouter {
       );
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'The TV rejected the package: ${error.message}',
       );
@@ -888,6 +961,7 @@ class RemoteCommandRouter {
       _showSnackBar('Profile import authorization expired', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'TV profile authorization expired — resend',
       );
@@ -902,16 +976,20 @@ class RemoteCommandRouter {
       );
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'Open an Admin profile on the TV, then resend',
       );
       return;
     }
+    final receivingDuringOnboarding =
+        !(await StorageService.isInitialSetupComplete());
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) {
       _showSnackBar('Profile import needs the app screen open', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'Open the Debrify screen on the TV, then resend',
       );
@@ -919,8 +997,8 @@ class RemoteCommandRouter {
     }
     final sender =
         remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
-    final librariesOmitted = package.omissions['libraryDatabasesOmitted'] ==
-        true;
+    final librariesOmitted =
+        package.omissions['libraryDatabasesOmitted'] == true;
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -934,8 +1012,8 @@ class RemoteCommandRouter {
               'not overwritten. Profiles keep their PINs when the transfer '
               'carries them.'
               '${librariesOmitted ? '\n\nLarge library databases were left '
-                  'out of this transfer; catalogs rebuild from their '
-                  'sources.' : ''}',
+                        'out of this transfer; catalogs rebuild from their '
+                        'sources.' : ''}',
             ),
             actions: <Widget>[
               TextButton(
@@ -955,6 +1033,7 @@ class RemoteCommandRouter {
       _showSnackBar('Profile import declined');
       await _reportProfileGraphResult(
         remoteContext,
+        requestId: requestId,
         ok: false,
         message: 'Declined on the TV',
       );
@@ -974,40 +1053,127 @@ class RemoteCommandRouter {
       );
     }
     try {
-      final report = await ProfileRestoreCoordinator(
-        registry: registry,
-        cipher: DeviceKeyProvider.cipher,
-        lifecycleParticipants: <ProfileLifecycleParticipant>[
-          ProfileAppLifecycleParticipant(),
-        ],
-      ).restoreDeviceGraph(package: package, authorization: authorization);
-      _showSnackBar(
-        'Imported ${report.profilesImported} profiles and '
-        '${report.resourcesImported} connections from $sender.'
-        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}',
-      );
-      await _reportProfileGraphResult(
+      final ProfileGraphRestoreReport report;
+      try {
+        report = await ProfileRestoreCoordinator(
+          registry: registry,
+          cipher: DeviceKeyProvider.cipher,
+          lifecycleParticipants: <ProfileLifecycleParticipant>[
+            ProfileAppLifecycleParticipant(),
+          ],
+        ).restoreDeviceGraph(package: package, authorization: authorization);
+      } catch (_) {
+        debugPrint('RemoteCommandRouter: profile graph restore failed');
+        _showSnackBar(
+          'Profile import failed; existing data is unchanged',
+          isError: true,
+        );
+        await _reportProfileGraphResultBestEffort(
+          remoteContext,
+          requestId: requestId,
+          ok: false,
+          message: 'Import failed on the TV; nothing was changed there',
+        );
+        return;
+      }
+
+      // The restore is durable at this point. A result-send or onboarding
+      // hand-off failure must never fall through to the restore-failed path
+      // and invite the sender to create a duplicate graph. Acknowledge while
+      // the Admin that authorized the inbound transfer is still active; an
+      // imported Admin may legitimately have remote features disabled.
+      final acknowledged = await _reportProfileGraphResultBestEffort(
         remoteContext,
+        requestId: requestId,
         ok: true,
         message:
             'TV imported ${report.profilesImported} profiles and '
             '${report.resourcesImported} connections',
       );
-    } catch (_) {
-      debugPrint('RemoteCommandRouter: profile graph restore failed');
+      if (!acknowledged) {
+        debugPrint(
+          'RemoteCommandRouter: imported profiles but could not report the result',
+        );
+      }
+
+      if (receivingDuringOnboarding &&
+          actor.id == ProfileBootstrap.freshAdminId) {
+        await _activateImportedAdminForOnboarding(report);
+      }
       _showSnackBar(
-        'Profile import failed; existing data is unchanged',
-        isError: true,
+        'Imported ${report.profilesImported} profiles and '
+        '${report.resourcesImported} connections from $sender.'
+        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}',
       );
-      await _reportProfileGraphResult(
-        remoteContext,
-        ok: false,
-        message: 'Import failed on the TV; nothing was changed there',
-      );
+      if (receivingDuringOnboarding) {
+        try {
+          _notifyHandlers(RemoteAction.config, ConfigCommand.complete, null);
+          await _handleConfigComplete(wasOnboardingOverride: true);
+        } catch (_) {
+          // The graph is already published and the sender has its success
+          // result. Never turn a post-import navigation failure into a second,
+          // contradictory "nothing changed" result.
+          debugPrint(
+            'RemoteCommandRouter: imported profiles but could not leave onboarding',
+          );
+        }
+      }
     } finally {
       done.value = true;
     }
   }
+
+  /// Move authority to an imported usable Admin after an onboarding restore.
+  /// The existing setup profile is deliberately retained: users may have
+  /// configured services before navigating back to import, so setup-incomplete
+  /// is not proof that the profile (or its private files) is disposable.
+  Future<void> _activateImportedAdminForOnboarding(
+    ProfileGraphRestoreReport report,
+  ) async {
+    final registry = ProfileBootstrap.registry;
+    UserProfile? importedAdmin;
+    for (final profileId in report.importedProfileIds) {
+      final profile = await registry.getProfile(profileId);
+      if (profile == null ||
+          !profile.isEnabled ||
+          !profile.isAdmin ||
+          profile.pinResetRequired) {
+        continue;
+      }
+      importedAdmin = profile;
+      break;
+    }
+    if (importedAdmin == null) return;
+
+    final lifecycle = ProfileLifecycleCoordinator(
+      registry: registry,
+      participants:
+          debugOnboardingLifecycleParticipants ??
+          <ProfileLifecycleParticipant>[ProfileAppLifecycleParticipant()],
+    );
+    try {
+      await lifecycle.switchTo(
+        importedAdmin.id,
+        // The transfer was approved locally by the current Admin. The root
+        // ProfileGate reloads and asks normally before Home.
+        unlock: (_) async => true,
+      );
+    } catch (_) {
+      // Publication already succeeded. Keep the bootstrap Admin active so the
+      // restored profiles stay manageable instead of claiming the import did
+      // not happen and encouraging a duplicate graph.
+      debugPrint(
+        'RemoteCommandRouter: onboarding profile hand-off was deferred',
+      );
+    } finally {
+      lifecycle.dispose();
+    }
+  }
+
+  @visibleForTesting
+  Future<void> debugActivateImportedAdminForOnboarding(
+    ProfileGraphRestoreReport report,
+  ) => _activateImportedAdminForOnboarding(report);
 
   /// A picked image pushed from the paired phone, applied to the ACTIVE
   /// profile. `updateProfile` requires a managing actor, so this works only
@@ -1283,7 +1449,7 @@ class RemoteCommandRouter {
     RemoteCommandContext context,
   ) => _dispatchCommandAndWait(action, command, data, context);
 
-  Future<void> _commitProfileRemotePayload(
+  Future<bool> _commitProfileRemotePayload(
     RemoteCommandContext remoteContext,
     _ProfileCommandBinding? binding,
   ) async {
@@ -1295,7 +1461,7 @@ class RemoteCommandRouter {
         _profileRemotePeer != _profilePeerKey(remoteContext) ||
         ProfileRuntime.capture() != binding.scope) {
       _showSnackBar('No profile configuration received', isError: true);
-      return;
+      return false;
     }
     if (!await _validateRemoteBinding(
       remoteContext,
@@ -1304,15 +1470,15 @@ class RemoteCommandRouter {
     )) {
       clearProfileTransferBuffer();
       _showSnackBar('Remote transfer authorization expired', isError: true);
-      return;
+      return false;
     }
     final context = _navigatorKey?.currentContext;
     if (context == null) {
       _showSnackBar('Local profile confirmation required', isError: true);
-      return;
+      return false;
     }
     final profile = await ProfileBootstrap.registry.activeProfile();
-    if (profile == null) return;
+    if (profile == null) return false;
     final summary = BackupRestoreService.summarize(payload);
     final itemCount =
         <bool>[
@@ -1331,7 +1497,7 @@ class RemoteCommandRouter {
         summary.iptvPlaylistCount +
         summary.iptvFavoriteCount +
         summary.iptvListCount;
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -1360,7 +1526,7 @@ class RemoteCommandRouter {
     if (!confirmed) {
       clearProfileTransferBuffer();
       _showSnackBar('Profile import cancelled');
-      return;
+      return false;
     }
     try {
       if (!await _validateRemoteBinding(
@@ -1388,7 +1554,7 @@ class RemoteCommandRouter {
           'A transfer is already being applied — try again in a moment',
           isError: true,
         );
-        return;
+        return false;
       }
       _applyingRemotePayload = true;
       try {
@@ -1411,6 +1577,7 @@ class RemoteCommandRouter {
       } finally {
         _applyingRemotePayload = false;
       }
+      return true;
     } catch (_) {
       // Reachable only from the pre-write validations above; the apply loop
       // itself never throws. Keep the wording survivable either way.
@@ -1418,6 +1585,7 @@ class RemoteCommandRouter {
         'Profile import stopped — nothing further was applied',
         isError: true,
       );
+      return false;
     }
   }
 
@@ -2040,8 +2208,10 @@ class RemoteCommandRouter {
   /// If onboarding is already done — e.g. a phone or already-configured TV
   /// is in receive mode mid-session — we just acknowledge with a snackbar
   /// and let the user keep using the app uninterrupted.
-  Future<void> _handleConfigComplete() async {
-    final wasOnboarding = !(await StorageService.isInitialSetupComplete());
+  Future<void> _handleConfigComplete({bool? wasOnboardingOverride}) async {
+    final wasOnboarding =
+        wasOnboardingOverride ??
+        !(await StorageService.isInitialSetupComplete());
 
     if (!wasOnboarding) {
       debugPrint('RemoteCommandRouter: Config complete (already onboarded)');
@@ -2056,6 +2226,12 @@ class RemoteCommandRouter {
     );
 
     await StorageService.setInitialSetupComplete(true);
+    // Registry writes invalidate the native privacy projection before changing
+    // authority. This is an in-process route restart, not a cold bootstrap, so
+    // publish the now-final active scope explicitly before native readers run.
+    if (ProfileRuntime.isProfileCommitted) {
+      await NativeProfileProjection.publish(ProfileRuntime.capture());
+    }
     _flushBatch(prefix: 'Setup received — restarting');
 
     // Give snackbar time to show, then restart app
