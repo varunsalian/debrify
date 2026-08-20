@@ -1366,7 +1366,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 for (final key in sortedKeys)
                   if (retryByKey[key] case final status?)
                     pill(
-                      key: 'source-pill-${status.addonId}',
+                      key: 'source-pill-$key',
                       on: false,
                       onTap: () => unawaited(_retryAddon(status)),
                       child: Row(
