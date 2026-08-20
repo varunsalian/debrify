@@ -26,7 +26,7 @@ class TraktTitleStatus {
   /// both "Mark Watched" and "Mark Unwatched" bulk actions.
   final bool? seriesFullyWatched;
 
-  bool get titleWatched => watched == true || seriesFullyWatched == true;
+  bool? get titleWatched => watched ?? seriesFullyWatched;
 
   /// The user's 1–10 Trakt rating, or null if unrated.
   final int? rating;
@@ -38,6 +38,20 @@ class TraktTitleStatus {
     this.seriesFullyWatched,
     this.rating,
   });
+
+  /// Keep an authoritative watched answer when a later best-effort refresh
+  /// can only say "unknown". The independent library fields still come from
+  /// the fresh response.
+  TraktTitleStatus preserveWatchedFrom(TraktTitleStatus? previous) {
+    if (previous == null) return this;
+    return TraktTitleStatus(
+      inWatchlist: inWatchlist,
+      inCollection: inCollection,
+      watched: watched ?? previous.watched,
+      seriesFullyWatched: seriesFullyWatched ?? previous.seriesFullyWatched,
+      rating: rating,
+    );
+  }
 }
 
 class _TraktDeviceAuthorization {
@@ -167,14 +181,19 @@ class TraktService {
       // null (not cached, treated as "unknown watched") instead of poisoning
       // the cache with an empty set. Series need progress detail so fully
       // watched can be distinguished from merely started.
-      final watchedF = _cachedLib<Set<String>>(
-        'watched:$contentType',
-        () async {
-          if (type == 'series') return fetchFullyWatchedShowsOrNull();
+      final Future<bool?> watchedF;
+      if (type == 'series') {
+        final normalizedId = imdbId.trim().toLowerCase();
+        watchedF = _cachedLib<bool>(
+          'watched:show:$normalizedId',
+          () => fetchShowFullyWatchedOrNull(normalizedId),
+        );
+      } else {
+        watchedF = _cachedLib<Set<String>>('watched:movies', () async {
           final l = await fetchListOrNull('watched', 'movies');
           return l == null ? null : _extractListImdbIds(l);
-        },
-      );
+        }).then((ids) => ids?.contains(imdbId.toLowerCase()));
+      }
 
       final watchlist = await watchlistF;
       final collection = await collectionF;
@@ -185,8 +204,7 @@ class TraktService {
         return null;
       }
       // Null (watched fetch failed) → watched unknown, not "unwatched".
-      final watchedTitles = await watchedF;
-      final titleWatched = watchedTitles?.contains(imdbId.toLowerCase());
+      final titleWatched = await watchedF;
 
       return TraktTitleStatus(
         inWatchlist: watchlist.contains(imdbId),
@@ -1430,6 +1448,34 @@ class TraktService {
     );
     if (list == null) return null;
     return debugParseFullyWatchedShows(list);
+  }
+
+  /// Failure-aware completion check for one series detail page. This avoids
+  /// downloading the user's entire watched-show history merely to label one
+  /// title's Trakt pill.
+  Future<bool?> fetchShowFullyWatchedOrNull(String showId) async {
+    final response = await _authenticatedGet(
+      '/shows/$showId/progress/watched?hidden=false&specials=false&count_specials=false',
+    );
+    if (response == null || response.statusCode != 200) return null;
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return debugParseShowFullyWatched(data);
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetch show watched progress parse error '
+        '(${error.runtimeType})',
+      );
+      return null;
+    }
+  }
+
+  @visibleForTesting
+  static bool? debugParseShowFullyWatched(Map<String, dynamic> data) {
+    final aired = (data['aired'] as num?)?.toInt();
+    final completed = (data['completed'] as num?)?.toInt();
+    if (aired == null || completed == null) return null;
+    return aired > 0 && completed >= aired;
   }
 
   @visibleForTesting

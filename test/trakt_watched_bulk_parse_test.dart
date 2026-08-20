@@ -67,4 +67,27 @@ void main() {
       expect(status.watched, isNull);
     },
   );
+
+  test('per-show progress distinguishes complete, incomplete, and unknown', () {
+    expect(
+      TraktService.debugParseShowFullyWatched({'aired': 10, 'completed': 10}),
+      isTrue,
+    );
+    expect(
+      TraktService.debugParseShowFullyWatched({'aired': 10, 'completed': 9}),
+      isFalse,
+    );
+    expect(TraktService.debugParseShowFullyWatched({'aired': 10}), isNull);
+  });
+
+  test('unknown refresh preserves the previous watched answer', () {
+    const previous = TraktTitleStatus(seriesFullyWatched: true);
+    const refresh = TraktTitleStatus(inCollection: true);
+
+    final merged = refresh.preserveWatchedFrom(previous);
+
+    expect(merged.seriesFullyWatched, isTrue);
+    expect(merged.titleWatched, isTrue);
+    expect(merged.inCollection, isTrue);
+  });
 }

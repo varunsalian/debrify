@@ -582,7 +582,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final loader = widget.traktStatusLoader;
     if (loader == null) return;
     try {
-      final status = await loader();
+      final status = (await loader())?.preserveWatchedFrom(_traktStatus);
       if (!mounted || status == null) return;
       setState(() => _traktStatus = status);
     } catch (_) {
@@ -1932,7 +1932,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return s != null &&
         (s.inWatchlist ||
             s.inCollection ||
-            s.titleWatched ||
+            s.titleWatched == true ||
             s.rating != null);
   }
 
@@ -1958,9 +1958,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final parts = <String>[
       if (s.inWatchlist) 'Watchlist',
       if (s.inCollection) 'Collected',
-      if (s.titleWatched) 'Watched',
+      if (s.titleWatched == true) 'Watched',
     ];
-    if (parts.isEmpty) return s.rating != null ? 'Rated' : 'Not tracked';
+    if (parts.isEmpty) {
+      if (s.rating != null) return 'Rated';
+      return s.titleWatched == null ? 'Status unavailable' : 'Not tracked';
+    }
     return parts.take(2).join(' · ');
   }
 
