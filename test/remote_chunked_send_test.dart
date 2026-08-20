@@ -122,24 +122,61 @@ void main() {
   });
 
   group('profile graph result', () {
+    test('acknowledgement failure stays a delivery failure', () async {
+      final router = RemoteCommandRouter();
+      expect(
+        await router.debugRunBestEffortProfileGraphResult(
+          () async => throw StateError('socket authorization changed'),
+        ),
+        isFalse,
+      );
+      expect(
+        await router.debugRunBestEffortProfileGraphResult(() async => true),
+        isTrue,
+      );
+    });
+
     test('outcome body round-trips and rejects malformed input', () {
       final body = profileGraphResultBody(
+        requestId: 'request-123',
         ok: false,
         message: 'Open an Admin profile on the TV, then resend',
       );
       final parsed = parseProfileGraphResultBody(body);
       expect(parsed, isNotNull);
-      expect(parsed!.ok, isFalse);
+      expect(parsed!.requestId, 'request-123');
+      expect(parsed.ok, isFalse);
       expect(parsed.message, contains('Admin profile'));
+      expect(
+        profileGraphResultMatchesRequest(
+          requestId: 'request-123',
+          resultRequestId: parsed.requestId,
+        ),
+        isTrue,
+      );
+      expect(
+        profileGraphResultMatchesRequest(
+          requestId: 'new-attempt',
+          resultRequestId: parsed.requestId,
+        ),
+        isFalse,
+        reason: 'a late result from the previous attempt must be ignored',
+      );
+      expect(
+        profileGraphResultMatchesRequest(
+          requestId: 'request-123',
+          resultRequestId: null,
+        ),
+        isFalse,
+        reason: 'an uncorrelated legacy result must not complete this send',
+      );
 
       expect(parseProfileGraphResultBody('not json'), isNull);
       expect(parseProfileGraphResultBody('{"ok":"yes","message":1}'), isNull);
       // A hostile peer must not be able to pump an unbounded string into a
       // sender-side toast.
       expect(
-        parseProfileGraphResultBody(
-          '{"ok":true,"message":"${'x' * 600}"}',
-        ),
+        parseProfileGraphResultBody('{"ok":true,"message":"${'x' * 600}"}'),
         isNull,
       );
     });

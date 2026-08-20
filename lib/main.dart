@@ -906,10 +906,16 @@ class _DebrifyAppState extends State<DebrifyApp> {
 
     // Set up restart callback for remote config (when TV receives setup from phone)
     RemoteCommandRouter().setRestartCallback(() {
-      _navigatorKey.currentState?.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AppInitializer()),
-        (_) => false,
-      );
+      // Keep the existing root ProfileGate alive. Mounting a replacement
+      // before the old route's exit animation disposes can let the old gate
+      // revoke the new gate's global lock timer and remote lease.
+      _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      unawaited(() async {
+        final profiles = await ProfileBootstrap.registry.listProfiles();
+        if (profiles.length < 2) return;
+        await WidgetsBinding.instance.endOfFrame;
+        MainPageBridge.showProfilePicker?.call();
+      }());
     });
 
     return MaterialApp(

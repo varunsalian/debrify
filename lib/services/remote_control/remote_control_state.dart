@@ -46,8 +46,11 @@ class RemoteControlState extends ChangeNotifier {
   /// Outcome reports for profile-graph transfers this device SENT (see
   /// [ConfigCommand.profileGraphResult]). Broadcast so a late listener
   /// simply misses old events instead of buffering them forever.
-  final StreamController<({bool ok, String message})> profileGraphResults =
-      StreamController<({bool ok, String message})>.broadcast();
+  final StreamController<({String? requestId, bool ok, String message})>
+  profileGraphResults =
+      StreamController<
+        ({String? requestId, bool ok, String message})
+      >.broadcast();
 
   // Services
   UdpDiscoveryService? _discoveryService;

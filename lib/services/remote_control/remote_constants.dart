@@ -224,6 +224,10 @@ const Duration kChunkResendCacheTtl = Duration(seconds: 90);
 /// library database snapshots (catalogs rebuild from their sources).
 const int kMaxProfileGraphWireBytes = 10 * 1024 * 1024;
 
+/// Authenticated package metadata used to correlate a profile-graph result
+/// with the exact send attempt that caused it.
+const String kProfileGraphRequestIdOmission = 'remoteTransferRequestId';
+
 const int kChunkMaxBytes =
     1400; // Safe single-fragment UDP payload (MTU 1500 - IP/UDP headers)
 const int kChunkJsonOverhead = 120; // JSON envelope overhead per chunk packet

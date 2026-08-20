@@ -149,6 +149,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   bool _hadImportConnection = false;
   int _receivedItemCount = 0;
   String? _lastReceivedLabel;
+  String? _chunkInFlightLabel;
   String _advertisedName = 'This device';
   String? _receiverError;
 
@@ -611,6 +612,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _hadImportConnection = false;
     _receivedItemCount = 0;
     _lastReceivedLabel = null;
+    _chunkInFlightLabel = null;
     _receiverError = null;
     _transition(OnboardStep.importing);
     _attachImportListeners();
@@ -690,7 +692,17 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     }
     if (label == null) return;
     setState(() {
-      _receivedItemCount++;
+      if (command == ConfigCommand.debrifyChannelStart) {
+        _chunkInFlightLabel = label;
+        _receivedItemCount++;
+      } else if (_chunkInFlightLabel == label) {
+        // The start packet already counted this logical payload. Reassembly
+        // replays its real command through the same observer; do not display
+        // one all-profile transfer (or IPTV payload) as two received items.
+        _chunkInFlightLabel = null;
+      } else {
+        _receivedItemCount++;
+      }
       _lastReceivedLabel = label;
     });
   }
@@ -712,6 +724,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       ConfigCommand.iptvLists => 'IPTV lists',
       ConfigCommand.debrifyChannel => 'TV channel',
       ConfigCommand.debrifyChannelStart => _chunkLabel(data),
+      ConfigCommand.profileGraph => 'All profiles',
       _ => null,
     };
   }
