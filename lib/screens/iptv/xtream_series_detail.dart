@@ -283,9 +283,7 @@ Future<void> openXtreamSeries(
         addon: addon,
         isTelevision: isTelevision,
         showQuickPlay: true,
-        onResume: () {
-          resumeAndPlay();
-        },
+        onResume: resumeAndPlay,
         resumeInfoLoader: () async {
           final state = await resumeState();
           return (
@@ -295,9 +293,7 @@ Future<void> openXtreamSeries(
           );
         },
         seasonsLoader: seasonsLoader,
-        onPlayEpisode: (episode) {
-          playEpisode(episode);
-        },
+        onPlayEpisode: playEpisode,
         watchProgressLoader: progress,
       ),
     ),
