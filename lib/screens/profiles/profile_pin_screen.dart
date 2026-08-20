@@ -219,6 +219,7 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final phone = constraints.maxWidth < 600;
+              final short = constraints.maxHeight < 620;
               return Stack(
                 children: [
                   Positioned.fill(
@@ -238,7 +239,7 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
                         ? _buildPhone()
                         : _tv
                         ? _buildTelevision()
-                        : _buildDesktop(),
+                        : _buildDesktop(compactHeight: short),
                   ),
                 ],
               );
@@ -407,8 +408,10 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     ),
   );
 
-  Widget _buildDesktop() => Padding(
-    padding: const EdgeInsets.fromLTRB(64, 64, 64, 42),
+  Widget _buildDesktop({required bool compactHeight}) => Padding(
+    padding: compactHeight
+        ? const EdgeInsets.fromLTRB(52, 16, 34, 16)
+        : const EdgeInsets.fromLTRB(64, 64, 64, 42),
     child: Row(
       children: [
         Expanded(
@@ -417,7 +420,10 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 470),
-              child: _identity(titleSize: 58),
+              child: _identity(
+                titleSize: compactHeight ? 42 : 58,
+                compact: compactHeight,
+              ),
             ),
           ),
         ),
@@ -425,18 +431,18 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
           flex: 9,
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 390),
+              constraints: BoxConstraints(maxWidth: compactHeight ? 280 : 390),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _indicators(compact: false),
-                  const SizedBox(height: 24),
+                  SizedBox(height: compactHeight ? 12 : 24),
                   GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     crossAxisCount: 3,
-                    childAspectRatio: 1.55,
+                    childAspectRatio: compactHeight ? 2.2 : 1.55,
                     children: _keys(horizontal: false),
                   ),
                   _statusAndRecovery(),

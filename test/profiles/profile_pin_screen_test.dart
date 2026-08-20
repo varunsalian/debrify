@@ -87,6 +87,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('landscape phone uses a compact split without overflow', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      size: const Size(667, 375),
+      onSubmit: (_) async =>
+          const ProfilePinVerification(ProfilePinResult.verified),
+    );
+
+    expect(find.byKey(const Key('profile-pin-title')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-pin-submit')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('TV DPAD moves across the keypad and activates focused keys', (
     tester,
   ) async {
