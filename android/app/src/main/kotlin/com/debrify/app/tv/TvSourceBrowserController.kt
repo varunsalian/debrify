@@ -333,14 +333,15 @@ class TvSourceBrowserController(
     private fun sourceRow(entry: TvSourceBrowserEntry, active: Boolean, current: Boolean, click: () -> Unit): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = android.view.Gravity.CENTER_VERTICAL
+        minimumHeight = dp(58)
         setPadding(dp(18), dp(11), dp(18), dp(11))
         background = bg(active, false)
         setOnClickListener { click() }
-        addView(TextView(activity).apply { text = entry.title; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt()); textSize = 14f; setTypeface(typeface, 1) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        addView(TextView(activity).apply { text = entry.title; setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt()); textSize = 14f; setTypeface(typeface, 1) }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         val tags = listOfNotNull(entry.quality.takeIf { it.isNotBlank() }, entry.size, if (!entry.direct && entry.seeders > 0) "${entry.seeders} seeders" else null, if (entry.direct) "DIRECT" else null)
         tags.forEach { tag -> addView(tagView(tag, active)) }
         if (current) addView(TextView(activity).apply { text = "▮▮▮"; setTextColor(if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()); textSize = 11f; setPadding(dp(14), 0, 0, 0) })
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(5) }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(5) }
     }
 
     private fun fetchRow(label: String, active: Boolean, enabled: Boolean, click: () -> Unit): View = TextView(activity).apply {

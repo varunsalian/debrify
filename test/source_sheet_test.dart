@@ -58,6 +58,28 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
+  testWidgets('shows the complete source name across multiple lines', (
+    tester,
+  ) async {
+    const title =
+        'The complete source title remains visible even when it needs several lines';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [_source(name: title, source: 'stremio:torrentio')],
+          currentSourceIndex: 0,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (_, _) {},
+          onClose: () {},
+        ),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.text(title));
+    expect(text.maxLines, isNull);
+    expect(text.overflow, isNull);
+  });
+
   testWidgets('groups by add-on while retaining original selection indexes', (
     tester,
   ) async {

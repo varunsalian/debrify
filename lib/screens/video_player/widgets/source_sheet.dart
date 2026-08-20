@@ -1007,8 +1007,6 @@ class _SourceRow extends StatelessWidget {
             Expanded(
               child: Text(
                 torrent.displayTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: inverse
                       ? Colors.black
