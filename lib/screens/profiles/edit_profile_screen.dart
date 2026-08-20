@@ -22,9 +22,12 @@ import '../../services/profiles/profile_registry.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/profiles/profile_creation_service.dart';
+import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_art.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 import '../../widgets/tv_text_field.dart';
+
+enum _TvProfileSection { profile, lock, access, data }
 
 /// The profile create/edit form, in six labelled sections: Avatar, Identity,
 /// Role, Lock, Access, Data. The sectioning is presentation only — what a save
@@ -70,6 +73,219 @@ class EditProfileScreen extends StatefulWidget {
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
+}
+
+class _EnsureVisibleOnFocus extends StatelessWidget {
+  const _EnsureVisibleOnFocus({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onFocusChange: (focused) {
+      if (!focused) return;
+      Scrollable.ensureVisible(
+        context,
+        alignment: .35,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      );
+    },
+    child: child,
+  );
+}
+
+class _TvActionSurface extends StatefulWidget {
+  const _TvActionSurface({
+    required this.child,
+    required this.onPressed,
+    this.selected = false,
+    this.borderRadius = const BorderRadius.all(Radius.circular(14)),
+  });
+
+  final Widget child;
+  final VoidCallback? onPressed;
+  final bool selected;
+  final BorderRadius borderRadius;
+
+  @override
+  State<_TvActionSurface> createState() => _TvActionSurfaceState();
+}
+
+class _TvActionSurfaceState extends State<_TvActionSurface> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final active = _focused || widget.selected;
+    return AnimatedScale(
+      scale: _focused ? 1.025 : 1,
+      duration: const Duration(milliseconds: 120),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: active
+              ? colors.primary.withValues(alpha: widget.selected ? .15 : .1)
+              : colors.surfaceContainerHighest.withValues(alpha: .55),
+          borderRadius: widget.borderRadius,
+          border: Border.all(
+            color: active ? colors.primary : Colors.transparent,
+            width: _focused ? 3 : 2,
+          ),
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: colors.primary.withValues(alpha: .28),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onFocusChange: (focused) {
+            if (_focused != focused) setState(() => _focused = focused);
+            if (focused) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: .35,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          },
+          onTap: widget.onPressed,
+          borderRadius: widget.borderRadius,
+          child: IconTheme.merge(
+            data: IconThemeData(color: active ? colors.primary : null),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(color: active ? colors.primary : null),
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TvAutoLockField extends StatefulWidget {
+  const _TvAutoLockField({required this.value, required this.onChanged});
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_TvAutoLockField> createState() => _TvAutoLockFieldState();
+}
+
+class _TvAutoLockFieldState extends State<_TvAutoLockField> {
+  static const _values = <int>[0, 5, 15, 30, 60];
+  bool _focused = false;
+
+  String get _label => switch (widget.value) {
+    0 => 'Never',
+    5 => 'After 5 minutes',
+    15 => 'After 15 minutes',
+    30 => 'After 30 minutes',
+    60 => 'After 1 hour',
+    _ => 'Never',
+  };
+
+  void _move(int delta) {
+    final current = _values.indexOf(widget.value);
+    final next = (current + delta).clamp(0, _values.length - 1);
+    if (next != current) widget.onChanged(_values[next]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _move(-1);
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _move(1);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _focused ? colors.primary : Colors.transparent,
+            width: 3,
+          ),
+          boxShadow: _focused
+              ? [
+                  BoxShadow(
+                    color: colors.primary.withValues(alpha: .25),
+                    blurRadius: 16,
+                  ),
+                ]
+              : null,
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onFocusChange: (focused) {
+            setState(() => _focused = focused);
+            if (focused) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: .65,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          },
+          onTap: () => _move(1),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Auto-lock',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: _focused ? colors.primary : null,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.chevron_left_rounded, size: 30),
+                    Expanded(
+                      child: Text(
+                        _label,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, size: 30),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Immutable save input. The form is also focus/pointer locked while saving,
@@ -118,6 +334,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late bool _lockOnResume;
   late int _inactivityMinutes;
   late String _avatarKey;
+  _TvProfileSection _tvSection = _TvProfileSection.profile;
 
   /// A picked-but-not-saved image. Held in memory and ingested at save time,
   /// once the target profile's id exists (a created profile has none until
@@ -815,6 +1032,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (PlatformUtil.isTelevision) return _buildTvEditor(context);
+
     final editableFeatures = ProfileFeature.values.where(
       (feature) =>
           feature != ProfileFeature.manageProfiles ||
@@ -999,6 +1218,576 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildTvEditor(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 72,
+          title: Text(
+            widget.profile == null ? 'Create profile' : 'Edit profile',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 36),
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Text('Save'),
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Focus(
+            descendantsAreFocusable: !_saving,
+            descendantsAreTraversable: !_saving,
+            child: AbsorbPointer(
+              absorbing: _saving,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(36, 16, 36, 28),
+                child: Column(
+                  children: [
+                    if (_saving) const LinearProgressIndicator(),
+                    _buildTvSectionRail(colors),
+                    const SizedBox(height: 18),
+                    Expanded(
+                      child: switch (_tvSection) {
+                        _TvProfileSection.profile => _buildTvProfileSection(),
+                        _TvProfileSection.lock => _buildTvLockSection(),
+                        _TvProfileSection.access => _buildTvAccessSection(),
+                        _TvProfileSection.data => _buildTvDataSection(),
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTvSectionRail(ColorScheme colors) {
+    const tabs = <(_TvProfileSection, IconData, String)>[
+      (_TvProfileSection.profile, Icons.person_rounded, 'PROFILE'),
+      (_TvProfileSection.lock, Icons.lock_rounded, 'LOCK'),
+      (_TvProfileSection.access, Icons.group_rounded, 'ACCESS'),
+      (_TvProfileSection.data, Icons.shield_rounded, 'DATA'),
+    ];
+    return Container(
+      height: 72,
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: .45)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          for (final tab in tabs)
+            Expanded(
+              child: _TvActionSurface(
+                selected: _tvSection == tab.$1,
+                borderRadius: BorderRadius.zero,
+                onPressed: () => setState(() => _tvSection = tab.$1),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(tab.$2, size: 24),
+                    const SizedBox(width: 12),
+                    Text(
+                      tab.$3,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTvProfileSection() {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(width: 300, child: _buildTvProfilePreview(colors)),
+        const SizedBox(width: 18),
+        Expanded(
+          child: _tvPanel(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Choose an avatar',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      if (ProfileAvatarPolicy.userImagesSupported)
+                        _EnsureVisibleOnFocus(
+                          child: OutlinedButton.icon(
+                            onPressed: _saving ? null : _pickAvatarImage,
+                            icon: const Icon(Icons.image_outlined),
+                            label: const Text('Choose image or GIF'),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (_pendingAvatarBytes != null &&
+                      ProfileAvatarPolicy.userImagesSupported)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _saving
+                            ? null
+                            : () => setState(() => _pendingAvatarBytes = null),
+                        icon: const Icon(Icons.undo_rounded),
+                        label: const Text('Discard picked image'),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 14,
+                    children: [
+                      for (final art in ProfileArtRegistry.all)
+                        _tvAvatarTile(
+                          keyName: 'art:${art.id}',
+                          label: art.label,
+                        ),
+                      for (final iconKey in ProfileAvatar.legacyIconIds)
+                        _tvAvatarTile(keyName: iconKey, label: iconKey),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Text('Name', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  TvTextField(
+                    controller: _name,
+                    autofocus: true,
+                    onChanged: (_) => setState(() {}),
+                    inputFormatters: <TextInputFormatter>[
+                      LengthLimitingTextInputFormatter(40),
+                    ],
+                    decoration: const InputDecoration(hintText: 'Profile name'),
+                  ),
+                  const SizedBox(height: 20),
+                  Text('Role', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  _buildTvRoleCards(),
+                  if (widget.profile == null) ...[
+                    const SizedBox(height: 14),
+                    _EnsureVisibleOnFocus(
+                      child: SwitchListTile(
+                        value: _copyDefaults,
+                        title: const Text(
+                          'Copy appearance and playback defaults',
+                        ),
+                        onChanged: (value) =>
+                            setState(() => _copyDefaults = value),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTvProfilePreview(ColorScheme colors) => _tvPanel(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 420;
+        final avatarSize = compact ? 118.0 : 164.0;
+        return Padding(
+          padding: EdgeInsets.all(compact ? 16 : 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(compact ? 22 : 28),
+                child: SizedBox(
+                  width: avatarSize,
+                  height: avatarSize,
+                  child: _pendingAvatarBytes != null
+                      ? Image.memory(_pendingAvatarBytes!, fit: BoxFit.cover)
+                      : ProfileAvatarView(
+                          profileId: widget.profile?.id ?? 'staging-preview',
+                          avatarKey: _avatarKey,
+                          role: _role,
+                          name: _name.text.isEmpty ? '?' : _name.text,
+                          focused: true,
+                        ),
+                ),
+              ),
+              SizedBox(height: compact ? 12 : 24),
+              Text(
+                _name.text.trim().isEmpty ? 'New profile' : _name.text.trim(),
+                key: const Key('tv-profile-name-preview'),
+                textAlign: TextAlign.center,
+                maxLines: compact ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: compact ? 8 : 12),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: colors.primary),
+                  color: colors.primary.withValues(alpha: .1),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: compact ? 6 : 8,
+                  ),
+                  child: Text(
+                    _role == UserProfileRole.child
+                        ? 'Kid'
+                        : _role.name[0].toUpperCase() + _role.name.substring(1),
+                    style: TextStyle(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+
+  Widget _tvAvatarTile({required String keyName, required String label}) {
+    final selected = _pendingAvatarBytes == null && _avatarKey == keyName;
+    return SizedBox(
+      width: 78,
+      height: 78,
+      child: Tooltip(
+        message: label,
+        child: _TvActionSurface(
+          selected: selected,
+          onPressed: () => setState(() {
+            _avatarKey = keyName;
+            _pendingAvatarBytes = null;
+          }),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ProfileAvatarView(
+              profileId: widget.profile?.id ?? 'staging-preview',
+              avatarKey: keyName,
+              role: _role,
+              name: label,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTvRoleCards() {
+    const descriptions = <UserProfileRole, (String, String, IconData)>{
+      UserProfileRole.admin: (
+        'Admin',
+        'Full control',
+        Icons.admin_panel_settings,
+      ),
+      UserProfileRole.member: ('Member', 'No profile management', Icons.group),
+      UserProfileRole.child: ('Kid', 'Limited content', Icons.child_care),
+    };
+    return SizedBox(
+      height: 104,
+      child: Row(
+        children: [
+          for (final role in UserProfileRole.values) ...[
+            Expanded(
+              child: _TvActionSurface(
+                selected: _role == role,
+                onPressed: () => _setRole(role),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(descriptions[role]!.$3, size: 30),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              descriptions[role]!.$1,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              descriptions[role]!.$2,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (role != UserProfileRole.child) const SizedBox(width: 12),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTvLockSection() => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 900),
+      child: _tvPanel(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Profile lock',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Choose when this profile asks for its PIN.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 24),
+              TvTextField(
+                controller: _pin,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                inputFormatters: <TextInputFormatter>[
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: InputDecoration(
+                  labelText: widget.profile?.hasPin == true
+                      ? 'New PIN (leave blank to keep current)'
+                      : 'PIN (optional)',
+                ),
+              ),
+              if (widget.profile?.hasPin == true ||
+                  widget.profile?.pinResetRequired == true)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _saving ? null : _removePinAsAdmin,
+                    icon: const Icon(Icons.lock_open_rounded),
+                    label: const Text('Admin reset: remove PIN'),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              _EnsureVisibleOnFocus(
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 8,
+                  ),
+                  value: _lockOnResume,
+                  title: const Text('Lock when the app resumes'),
+                  subtitle: const Text('Require the PIN after leaving Debrify'),
+                  onChanged: (value) => setState(() => _lockOnResume = value),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  tileColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _TvAutoLockField(
+                value: _inactivityMinutes,
+                onChanged: (value) =>
+                    setState(() => _inactivityMinutes = value),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildTvAccessSection() => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1100),
+      child: _tvPanel(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Profile access',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Choose which engines and connections this profile can use.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 14),
+              if (_setupLoadError != null)
+                _EnsureVisibleOnFocus(
+                  child: ListTile(
+                    leading: const Icon(Icons.error_outline_rounded),
+                    title: Text(_setupLoadError!),
+                    trailing: TextButton(
+                      onPressed: _loadSetupOptions,
+                      child: const Text('Retry'),
+                    ),
+                  ),
+                )
+              else if (_engines == null)
+                const LinearProgressIndicator()
+              else ...[
+                _buildEngineGroup(),
+                ..._buildConnectionGroups(),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildTvDataSection() => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 900),
+      child: _tvPanel(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Profile data',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.profile == null
+                    ? 'Data tools become available after the profile is created.'
+                    : 'Inspect this profile’s registry and session state.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 24),
+              if (widget.profile != null)
+                SizedBox(
+                  height: 92,
+                  child: _TvActionSurface(
+                    onPressed: _showDiagnostics,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 32),
+                          const SizedBox(width: 18),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Diagnostics',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                const Text(
+                                  'Registry, generation and lease state',
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, size: 32),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _tvPanel({required Widget child}) => Material(
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: BorderSide(
+        color: Theme.of(
+          context,
+        ).colorScheme.outlineVariant.withValues(alpha: .4),
+      ),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: child,
+  );
+
+  Future<void> _removePinAsAdmin() async {
+    try {
+      final operationActor = _authorization;
+      await _validateManagingAdmin(operationActor);
+      await widget.pins.removePinAsAdmin(
+        actor: operationActor,
+        targetProfileId: widget.profile!.id,
+      );
+      _authorization = await _refreshSameManagingAdmin(
+        operationActor.profileId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PIN protection removed')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PIN protection was not changed')),
+      );
+    }
   }
 
   Widget _buildAvatarSection() {
@@ -1422,5 +2211,4 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     return '${spaced[0].toUpperCase()}${spaced.substring(1)}';
   }
-
 }
