@@ -2195,13 +2195,14 @@ class ProfileRegistry {
   /// Atomically replaces an owner's resources of [types]. This is used by
   /// legacy collection-shaped APIs (WebDAV, IPTV, addons, and indexers) so a
   /// crash can never expose a half-replaced list. Shared resources are never
-  /// silently deleted; callers must use an explicit share-aware management
-  /// flow to remove those.
+  /// silently deleted; [revokeBorrowers] must reflect an explicit,
+  /// share-aware confirmation from the owner.
   Future<void> replaceOwnedResourceCollection({
     required String ownerProfileId,
     required Set<ConnectionResourceType> types,
     required List<PreparedConnectionResource> replacements,
     required int ownerPermissions,
+    bool revokeBorrowers = false,
     String? actingProfileId,
     int? actingAuthorizationRevision,
     ProfileFeature? actingFeature,
@@ -2259,13 +2260,34 @@ class ProfileRegistry {
           throw StateError('Replacement collection contains duplicate IDs');
         }
       }
+      final removedIds = existing
+          .map((row) => row['id']! as String)
+          .where((id) => !replacementIds.contains(id))
+          .toSet();
       if (existing.any(
         (row) =>
             (row['borrower_count'] as int? ?? 0) > 0 &&
-            !replacementIds.contains(row['id']),
+            removedIds.contains(row['id']) &&
+            !revokeBorrowers,
       )) {
         throw StateError(
           'A shared connection must be removed in profile management',
+        );
+      }
+      final revokedBorrowerIds = <String>{};
+      if (revokeBorrowers && removedIds.isNotEmpty) {
+        final removedPlaceholders = List.filled(
+          removedIds.length,
+          '?',
+        ).join(',');
+        final grants = await txn.rawQuery(
+          '''SELECT DISTINCT profile_id FROM profile_resource_grants
+             WHERE resource_id IN ($removedPlaceholders)
+               AND profile_id != ?''',
+          <Object>[...removedIds, ownerProfileId],
+        );
+        revokedBorrowerIds.addAll(
+          grants.map((row) => row['profile_id']! as String),
         );
       }
       for (final row in existing) {
@@ -2364,6 +2386,14 @@ class ProfileRegistry {
                updated_at_ms = ? WHERE id = ? AND disabled_at_ms IS NULL''',
         <Object>[now, ownerProfileId],
       );
+      for (final profileId in revokedBorrowerIds) {
+        await txn.rawUpdate(
+          '''UPDATE user_profiles
+             SET authorization_revision = authorization_revision + 1,
+                 updated_at_ms = ? WHERE id = ?''',
+          <Object>[now, profileId],
+        );
+      }
       await _assertAdminInvariant(txn);
     });
     await checkpointTvOsRecovery();
@@ -2386,6 +2416,19 @@ class ProfileRegistry {
       permissions: rows.single['permissions']! as int,
     );
   }
+
+  Future<int> countResourceBorrowers({
+    required String resourceId,
+    required String ownerProfileId,
+  }) async =>
+      Sqflite.firstIntValue(
+        await _db.rawQuery(
+          '''SELECT COUNT(*) FROM profile_resource_grants
+             WHERE resource_id = ? AND profile_id != ?''',
+          <Object>[resourceId, ownerProfileId],
+        ),
+      ) ??
+      0;
 
   Future<ProfileResourceSettings?> getProfileResourceSettings(
     String profileId,

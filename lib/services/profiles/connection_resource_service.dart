@@ -104,6 +104,7 @@ class ConnectionResourceService {
     required Set<ConnectionResourceType> types,
     required ProfileFeature feature,
     required List<ResourceCollectionItem> items,
+    bool revokeBorrowers = false,
   }) async {
     final owner = await context.validate(registry);
     if (!owner.allows(ProfileFeature.manageConnections) ||
@@ -194,6 +195,7 @@ class ConnectionResourceService {
         0,
         (mask, permission) => mask | permission.bit,
       ),
+      revokeBorrowers: revokeBorrowers,
       actingProfileId: context.profileId,
       actingAuthorizationRevision: context.authorizationRevision,
       actingFeature: feature,

@@ -462,6 +462,7 @@ class StremioService {
   Future<List<StremioAddon>> _saveAddons(
     List<StremioAddon> addons, {
     ProfileAsyncAuthorization? initiatingAuthorization,
+    bool revokeSharedProfiles = false,
   }) async {
     Future<List<StremioAddon>> persist() async {
       if (ProfileCollectionResourceFacade.active) {
@@ -487,6 +488,7 @@ class StremioService {
           // profile-local and a disabled resource is still part of the saved
           // collection (and may be returned to the management caller).
           forSettings: true,
+          revokeBorrowers: revokeSharedProfiles,
         );
         return rows.map(StremioAddon.fromJson).toList(growable: false);
       } else {
@@ -694,8 +696,42 @@ class StremioService {
     );
   }
 
-  /// Remove an addon by its manifest URL
-  Future<void> removeAddon(String manifestUrl) async {
+  Future<int> addonBorrowerCount(String manifestUrl) async {
+    final addons = await getAddonsForManagement();
+    final target = addons
+        .where((a) => a.manifestUrl == manifestUrl)
+        .firstOrNull;
+    final resourceId = target?.connectionResourceId;
+    if (resourceId == null) return 0;
+    return ProfileCollectionResourceFacade.ownedBorrowerCount(
+      resourceId: resourceId,
+      feature: ProfileFeature.addonsAndEngines,
+    );
+  }
+
+  Future<int> sharedAddonCount() async {
+    if (!ProfileCollectionResourceFacade.active) return 0;
+    final addons = await getAddonsForManagement();
+    var count = 0;
+    for (final addon in addons) {
+      final resourceId = addon.connectionResourceId;
+      if (!addon.canManage || resourceId == null) continue;
+      final borrowers =
+          await ProfileCollectionResourceFacade.ownedBorrowerCount(
+            resourceId: resourceId,
+            feature: ProfileFeature.addonsAndEngines,
+          );
+      if (borrowers > 0) count++;
+    }
+    return count;
+  }
+
+  /// Remove an addon by its manifest URL. Shared profile access is revoked
+  /// only after the caller has explicitly confirmed that destructive impact.
+  Future<void> removeAddon(
+    String manifestUrl, {
+    bool revokeSharedProfiles = false,
+  }) async {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
@@ -712,6 +748,20 @@ class StremioService {
       throw const ResourceAuthorizationException(
         'A shared addon can only be managed by its owner',
       );
+    }
+    final resourceId = target?.connectionResourceId;
+    if (resourceId != null && ProfileCollectionResourceFacade.active) {
+      await ProfileCollectionResourceFacade.deleteOwned(
+        resourceId: resourceId,
+        revokeBorrowers: revokeSharedProfiles,
+      );
+      if (authorization != null && !authorization.isCurrentlyActive) {
+        throw StateError('Profile session changed before addon publication');
+      }
+      invalidateCache();
+      _notifyAddonsChanged();
+      debugPrint('StremioService: Removed addon');
+      return;
     }
     addons.removeWhere((a) => a.manifestUrl == manifestUrl);
     await _saveAddons(addons, initiatingAuthorization: authorization);
@@ -880,11 +930,15 @@ class StremioService {
   }
 
   /// Clear all addons
-  Future<void> clearAllAddons() async {
+  Future<void> clearAllAddons({bool revokeSharedProfiles = false}) async {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    await _saveAddons([], initiatingAuthorization: authorization);
+    await _saveAddons(
+      [],
+      initiatingAuthorization: authorization,
+      revokeSharedProfiles: revokeSharedProfiles,
+    );
     debugPrint('StremioService: Cleared all addons');
   }
 

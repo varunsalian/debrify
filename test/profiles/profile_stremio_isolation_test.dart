@@ -355,4 +355,99 @@ void main() {
     await service.removeAddon(disabled.manifestUrl);
     expect(await service.getAddons(forSettings: true), isEmpty);
   });
+
+  test('owner can confirm removal from every shared profile', () async {
+    const manifestUrl = 'https://addon.invalid/shared/manifest.json';
+    service.debugManifestFetcher = (url) async => StremioAddon(
+      id: 'shared-removal-addon',
+      name: 'Shared removal addon',
+      manifestUrl: url,
+      baseUrl: 'https://addon.invalid/shared',
+      types: const <String>['movie'],
+      resources: const <String>['stream'],
+    );
+    final added = await service.addAddon(manifestUrl);
+    final resourceId = added.connectionResourceId!;
+    final resourceService = ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    );
+    await resourceService.grant(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: secondId,
+      resourceId: resourceId,
+      permissions: const <ResourcePermission>{ResourcePermission.use},
+    );
+
+    expect(await service.addonBorrowerCount(manifestUrl), 1);
+    await expectLater(
+      () => service.removeAddon(manifestUrl),
+      throwsA(isA<StateError>()),
+    );
+    expect(await registry.getResource(resourceId), isNotNull);
+    expect(await registry.getGrant(secondId, resourceId), isNotNull);
+
+    await service.removeAddon(manifestUrl, revokeSharedProfiles: true);
+
+    expect(await registry.getResource(resourceId), isNull);
+    expect(await registry.getGrant(secondId, resourceId), isNull);
+    expect(await service.getAddons(forSettings: true), isEmpty);
+  });
+
+  test('delete all atomically revokes shared addon access', () async {
+    service.debugManifestFetcher = (url) async {
+      final shared = url.contains('/shared/');
+      return StremioAddon(
+        id: shared ? 'bulk-shared-addon' : 'bulk-owned-addon',
+        name: shared ? 'Bulk shared addon' : 'Bulk owned addon',
+        manifestUrl: url,
+        baseUrl: shared
+            ? 'https://addon.invalid/shared'
+            : 'https://addon.invalid/owned',
+        types: const <String>['movie'],
+        resources: const <String>['stream'],
+      );
+    };
+    final shared = await service.addAddon(
+      'https://addon.invalid/shared/manifest.json',
+    );
+    final owned = await service.addAddon(
+      'https://addon.invalid/owned/manifest.json',
+    );
+    final resourceService = ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    );
+    await resourceService.grant(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: secondId,
+      resourceId: shared.connectionResourceId!,
+      permissions: const <ResourcePermission>{ResourcePermission.use},
+    );
+    final borrowerRevision = (await registry.getProfile(
+      secondId,
+    ))!.authorizationRevision;
+
+    expect(await service.sharedAddonCount(), 1);
+    await expectLater(
+      () => service.clearAllAddons(),
+      throwsA(isA<StateError>()),
+    );
+    expect(await registry.getResource(shared.connectionResourceId!), isNotNull);
+    expect(await registry.getResource(owned.connectionResourceId!), isNotNull);
+
+    await service.clearAllAddons(revokeSharedProfiles: true);
+
+    expect(await registry.getResource(shared.connectionResourceId!), isNull);
+    expect(await registry.getResource(owned.connectionResourceId!), isNull);
+    expect(
+      await registry.getGrant(secondId, shared.connectionResourceId!),
+      isNull,
+    );
+    expect(
+      (await registry.getProfile(secondId))!.authorizationRevision,
+      borrowerRevision + 1,
+    );
+    expect(await service.getAddons(forSettings: true), isEmpty);
+  });
 }
