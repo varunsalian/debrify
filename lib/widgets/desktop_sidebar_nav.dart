@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_motion.dart';
 import '../theme/app_theme_scope.dart';
+import '../models/profiles/user_profile.dart';
+import 'profiles/profile_avatar_view.dart';
 import 'window_drag_area.dart';
 
 /// One entry in the desktop sidebar. [section] groups consecutive entries; a
@@ -32,6 +34,11 @@ class DesktopSidebarNav extends StatelessWidget {
   /// Use the wider rail intended for touch tablets.
   final bool expanded;
 
+  /// Active identity, deliberately rendered outside the scrolling nav list so
+  /// it remains the final, stable item at the foot of the rail.
+  final UserProfile? profile;
+  final VoidCallback? onProfileTap;
+
   static const double width = 90.0;
   static const double expandedWidth = 128.0;
 
@@ -41,6 +48,8 @@ class DesktopSidebarNav extends StatelessWidget {
     required this.entries,
     required this.onTap,
     this.expanded = false,
+    this.profile,
+    this.onProfileTap,
   });
 
   @override
@@ -68,9 +77,7 @@ class DesktopSidebarNav extends StatelessWidget {
       width: expanded ? expandedWidth : width,
       decoration: BoxDecoration(color: app.shell.railBg),
       foregroundDecoration: BoxDecoration(
-        border: Border(
-          right: BorderSide(color: app.fade(app.core.tx, 0.05)),
-        ),
+        border: Border(right: BorderSide(color: app.fade(app.core.tx, 0.05))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -82,8 +89,11 @@ class DesktopSidebarNav extends StatelessWidget {
               child: Center(
                 child: ClipRRect(
                   borderRadius: app.shape.br(9),
-                  child: Image.asset('assets/app_icon.png',
-                      width: 32, height: 32),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    width: 32,
+                    height: 32,
+                  ),
                 ),
               ),
             ),
@@ -94,7 +104,94 @@ class DesktopSidebarNav extends StatelessWidget {
               children: children,
             ),
           ),
+          if (profile != null && onProfileTap != null)
+            _RailProfile(
+              profile: profile!,
+              expanded: expanded,
+              onTap: onProfileTap!,
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _RailProfile extends StatefulWidget {
+  final UserProfile profile;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _RailProfile({
+    required this.profile,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  State<_RailProfile> createState() => _RailProfileState();
+}
+
+class _RailProfileState extends State<_RailProfile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Padding(
+      key: const ValueKey('desktop-sidebar-profile'),
+      padding: const EdgeInsets.fromLTRB(10, 5, 10, 14),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: AnimatedContainer(
+            duration: AppMotion.of(
+              context,
+            ).scaled(const Duration(milliseconds: 130)),
+            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? app.fade(app.core.tx, 0.06)
+                  : Colors.transparent,
+              borderRadius: app.shape.br(16),
+              border: Border.all(color: app.fade(app.core.tx, 0.08)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: ClipOval(
+                    child: ProfileAvatarView(
+                      profileId: widget.profile.id,
+                      avatarKey: widget.profile.avatarKey,
+                      role: widget.profile.role,
+                      name: widget.profile.name,
+                      animateWhenIdle: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  widget.profile.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _hovered
+                        ? Theme.of(context).colorScheme.onSurface
+                        : app.fade(app.core.tx, 0.68),
+                    fontSize: widget.expanded ? 11.5 : 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -108,10 +205,7 @@ class _GroupDivider extends StatelessWidget {
     final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-      child: Container(
-        height: 1,
-        color: app.fade(app.core.tx, 0.06),
-      ),
+      child: Container(height: 1, color: app.fade(app.core.tx, 0.06)),
     );
   }
 }

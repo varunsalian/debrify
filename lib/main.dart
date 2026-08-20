@@ -26,6 +26,8 @@ import 'screens/premiumize/premiumize_files_screen.dart';
 import 'screens/alldebrid/alldebrid_files_screen.dart';
 import 'screens/webdav/webdav_files_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/settings/profiles_settings_page.dart';
+import 'screens/settings/widgets/settings_widgets.dart' show pushSettingsPage;
 import 'screens/profiles/profile_gate.dart';
 import 'screens/profiles/linux_vault_screen.dart';
 import 'screens/profiles/profile_recovery_screen.dart';
@@ -1714,6 +1716,19 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (!ProfileRuntime.isProfileCommitted) return true;
     final profile = _profilePolicy;
     return profile != null && profile.allows(feature);
+  }
+
+  Future<void> _openProfilesFromNavigation() async {
+    if (!ProfileRuntime.isProfileCommitted || _profilePolicy == null) return;
+    await pushSettingsPage(context, const ProfilesSettingsPage());
+    if (!mounted || !ProfileRuntime.isProfileCommitted) return;
+    await _loadProfilePolicy();
+    if (!mounted) return;
+    if (_isAndroidTv) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) MainPageBridge.requestTvContentFocus();
+      });
+    }
   }
 
   List<int> _applyProfilePolicy(List<int> indices) {
@@ -3560,6 +3575,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                   _onItemTapped(actualIndex);
                                   // Focus is handled by sidebar via MainPageBridge
                                 },
+                                profile: _profilePolicy,
+                                onProfileTap: _profilePolicy == null
+                                    ? null
+                                    : () => unawaited(
+                                        _openProfilesFromNavigation(),
+                                      ),
                                 onFocusContent: () {
                                   // Fallback for screens without registered handler
                                   FocusScope.of(context).nextFocus();
@@ -3732,6 +3753,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               ),
                             );
                           },
+                          profile: _profilePolicy,
+                          onProfileTap: _profilePolicy == null
+                              ? null
+                              : () => unawaited(_openProfilesFromNavigation()),
                         )
                       : null,
                   body: Stack(
@@ -3799,6 +3824,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               final actualIndex = nonTvIndices[relativeIndex];
                               _onItemTapped(actualIndex);
                             },
+                            profile: _profilePolicy,
+                            onProfileTap: _profilePolicy == null
+                                ? null
+                                : () =>
+                                      unawaited(_openProfilesFromNavigation()),
                           ),
                         ),
                       // Full-screen layer, but hit-testable only at the
@@ -3822,6 +3852,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               final actualIndex = nonTvIndices[relativeIndex];
                               _onItemTapped(actualIndex);
                             },
+                            profile: _profilePolicy,
+                            onProfileTap: _profilePolicy == null
+                                ? null
+                                : () =>
+                                      unawaited(_openProfilesFromNavigation()),
                           ),
                         ),
                       if (!isDesktopWide &&
@@ -3848,6 +3883,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               ),
                             );
                           },
+                          profile: _profilePolicy,
+                          onProfileTap: _profilePolicy == null
+                              ? null
+                              : () => unawaited(_openProfilesFromNavigation()),
                         ),
                     ],
                   ),

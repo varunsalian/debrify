@@ -8,6 +8,8 @@ import '../theme/app_surface.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/widgets/glass_surface.dart';
+import '../models/profiles/user_profile.dart';
+import 'profiles/profile_avatar_view.dart';
 
 /// A premium glassmorphic floating action button menu for mobile navigation
 /// Features frosted glass effect, smooth animations, and elegant reveals
@@ -16,6 +18,8 @@ class MobileFloatingNav extends StatefulWidget {
   final List<MobileNavItem> items;
   final ValueChanged<int> onTap;
   final VoidCallback? onRemoteControlTap;
+  final UserProfile? profile;
+  final VoidCallback? onProfileTap;
 
   const MobileFloatingNav({
     super.key,
@@ -23,6 +27,8 @@ class MobileFloatingNav extends StatefulWidget {
     required this.items,
     required this.onTap,
     this.onRemoteControlTap,
+    this.profile,
+    this.onProfileTap,
   });
 
   @override
@@ -202,8 +208,12 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withValues(alpha: 0.2 * _backdropAnimation.value),
-                            Colors.black.withValues(alpha: 0.5 * _backdropAnimation.value),
+                            Colors.black.withValues(
+                              alpha: 0.2 * _backdropAnimation.value,
+                            ),
+                            Colors.black.withValues(
+                              alpha: 0.5 * _backdropAnimation.value,
+                            ),
                           ],
                         ),
                       ),
@@ -219,7 +229,10 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
           bottom: 80 + bottomPadding,
           right: 16,
           child: AnimatedBuilder(
-            animation: Listenable.merge([_menuSlideAnimation, _menuFadeAnimation]),
+            animation: Listenable.merge([
+              _menuSlideAnimation,
+              _menuFadeAnimation,
+            ]),
             builder: (context, child) {
               return Transform.translate(
                 offset: Offset(0, 20 * (1 - _menuSlideAnimation.value)),
@@ -282,6 +295,14 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                             widget.onRemoteControlTap!();
                           }
                         : null,
+                    profile: widget.profile,
+                    onProfileTap:
+                        widget.profile != null && widget.onProfileTap != null
+                        ? () {
+                            _toggle();
+                            widget.onProfileTap!();
+                          }
+                        : null,
                   ),
                 ),
               ),
@@ -337,7 +358,10 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                               : app.fade(app.core.tx, 0.1),
                           borderRadius: app.shape.br(22),
                           border: Border.all(
-                            color: app.fade(app.core.tx, _isExpanded ? 0.25 : 0.15),
+                            color: app.fade(
+                              app.core.tx,
+                              _isExpanded ? 0.25 : 0.15,
+                            ),
                             width: 1,
                           ),
                         ),
@@ -383,6 +407,8 @@ class _ScrollableMenuContent extends StatefulWidget {
   final List<Color> Function(int) getGradientForIndex;
   final void Function(int) onSelectItem;
   final VoidCallback? onRemoteControlTap;
+  final UserProfile? profile;
+  final VoidCallback? onProfileTap;
 
   const _ScrollableMenuContent({
     required this.items,
@@ -390,6 +416,8 @@ class _ScrollableMenuContent extends StatefulWidget {
     required this.getGradientForIndex,
     required this.onSelectItem,
     this.onRemoteControlTap,
+    this.profile,
+    this.onProfileTap,
   });
 
   @override
@@ -453,10 +481,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                       (i == 0 ||
                           widget.items[i - 1].section !=
                               widget.items[i].section))
-                    _SectionLabel(
-                      widget.items[i].section!,
-                      first: i == 0,
-                    ),
+                    _SectionLabel(widget.items[i].section!, first: i == 0),
                   _GlassMenuItem(
                     item: widget.items[i],
                     isSelected: i == widget.currentIndex,
@@ -477,15 +502,33 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                 // Remote Control action item (accent line style)
                 if (widget.onRemoteControlTap != null) ...[
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     child: Divider(
                       height: 1,
                       thickness: 0.5,
                       color: app.fade(app.core.tx, 0.1),
                     ),
                   ),
-                  _RemoteControlMenuItem(
-                    onTap: widget.onRemoteControlTap!,
+                  _RemoteControlMenuItem(onTap: widget.onRemoteControlTap!),
+                ],
+                if (widget.profile != null && widget.onProfileTap != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    child: Divider(
+                      height: 1,
+                      thickness: 0.5,
+                      color: app.fade(app.core.tx, 0.1),
+                    ),
+                  ),
+                  _MobileProfileMenuItem(
+                    profile: widget.profile!,
+                    onTap: widget.onProfileTap!,
                   ),
                 ],
               ],
@@ -563,6 +606,77 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
   }
 }
 
+class _MobileProfileMenuItem extends StatelessWidget {
+  final UserProfile profile;
+  final VoidCallback onTap;
+
+  const _MobileProfileMenuItem({required this.profile, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Material(
+      key: const ValueKey('mobile-floating-profile'),
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: app.shape.br(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: ClipOval(
+                  child: ProfileAvatarView(
+                    profileId: profile.id,
+                    avatarKey: profile.avatarKey,
+                    role: profile.role,
+                    name: profile.name,
+                    animateWhenIdle: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      profile.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: app.fade(app.core.tx, 0.9),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      profile.isAdmin ? 'Admin' : 'Profile',
+                      style: TextStyle(
+                        color: app.fade(app.core.tx, 0.48),
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: app.fade(app.core.tx, 0.45),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Group header inside the expanded menu. Matches the desktop / TV rail
 /// label styling so all three nav surfaces read the same.
 class _SectionLabel extends StatelessWidget {
@@ -630,8 +744,12 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    widget.gradient[0].withValues(alpha: widget.isSelected ? 0.25 : 0.15),
-                    widget.gradient[1].withValues(alpha: widget.isSelected ? 0.15 : 0.08),
+                    widget.gradient[0].withValues(
+                      alpha: widget.isSelected ? 0.25 : 0.15,
+                    ),
+                    widget.gradient[1].withValues(
+                      alpha: widget.isSelected ? 0.15 : 0.08,
+                    ),
                   ],
                 )
               : null,
@@ -695,7 +813,9 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                             ? app.core.tx
                             : app.fade(app.core.tx, 0.85),
                         fontSize: 14,
-                        fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: widget.isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         letterSpacing: 0.2,
                       ),
                     ),
@@ -703,11 +823,17 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                   if (widget.item.tag != null) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.15),
                         borderRadius: app.shape.br(4),
-                        border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.4),
+                          width: 0.5,
+                        ),
                       ),
                       child: Text(
                         widget.item.tag!,
@@ -767,11 +893,7 @@ class _SimpleAnimatedIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isExpanded) {
-      return Icon(
-        Icons.close_rounded,
-        color: app.core.tx,
-        size: 18,
-      );
+      return Icon(Icons.close_rounded, color: app.core.tx, size: 18);
     }
 
     // 2x2 grid of dots with subtle animation
@@ -853,7 +975,9 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
         transformAlignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: _isPressed ? _accentColor.withValues(alpha: 0.08) : Colors.transparent,
+          color: _isPressed
+              ? _accentColor.withValues(alpha: 0.08)
+              : Colors.transparent,
           borderRadius: app.shape.br(8),
           border: Border(
             left: BorderSide(

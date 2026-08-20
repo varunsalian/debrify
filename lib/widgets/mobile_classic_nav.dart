@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme_scope.dart';
+import '../models/profiles/user_profile.dart';
+import 'profiles/profile_avatar_view.dart';
 
 /// The "classic" phone navigation — Concept 2 ("Your Five") from
 /// design/mockups/phone_nav_mockup/: a persistent Material-style bottom bar of
@@ -42,6 +44,8 @@ class MobileClassicNav extends StatelessWidget {
   final ValueChanged<int> onTap;
   final ValueChanged<List<int>> onBarEdited;
   final VoidCallback? onRemoteControlTap;
+  final UserProfile? profile;
+  final VoidCallback? onProfileTap;
 
   const MobileClassicNav({
     super.key,
@@ -53,6 +57,8 @@ class MobileClassicNav extends StatelessWidget {
     required this.onTap,
     required this.onBarEdited,
     this.onRemoteControlTap,
+    this.profile,
+    this.onProfileTap,
   });
 
   List<int> get _barSlots => [
@@ -76,9 +82,7 @@ class MobileClassicNav extends StatelessWidget {
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
       decoration: BoxDecoration(
         color: app.shell.barBg,
-        border: Border(
-          top: BorderSide(color: app.fade(app.core.tx, 0.08)),
-        ),
+        border: Border(top: BorderSide(color: app.fade(app.core.tx, 0.08))),
       ),
       child: SizedBox(
         height: barHeight,
@@ -94,7 +98,8 @@ class MobileClassicNav extends StatelessWidget {
                   onTap(index);
                 },
               ),
-            if (sheet.isNotEmpty)
+            if (sheet.isNotEmpty ||
+                (profile != null && onProfileTap != null))
               _NavSlot(
                 icon: activeInSheet
                     ? icons[currentIndex]
@@ -202,6 +207,40 @@ class MobileClassicNav extends StatelessWidget {
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     onRemoteControlTap!();
+                  },
+                ),
+              ],
+              if (profile != null && onProfileTap != null) ...[
+                const SizedBox(height: 8),
+                Divider(color: app.fade(app.core.tx, 0.08)),
+                ListTile(
+                  key: const ValueKey('mobile-classic-profile'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                  leading: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: ClipOval(
+                      child: ProfileAvatarView(
+                        profileId: profile!.id,
+                        avatarKey: profile!.avatarKey,
+                        role: profile!.role,
+                        name: profile!.name,
+                        animateWhenIdle: true,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    profile!.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(profile!.isAdmin ? 'Admin' : 'Profile'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  shape: RoundedRectangleBorder(borderRadius: app.shape.br(14)),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    onProfileTap!();
                   },
                 ),
               ],
@@ -357,9 +396,7 @@ class MobileClassicNav extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       borderRadius: app.shape.br(14),
-                      border: Border.all(
-                        color: app.fade(app.core.tx, 0.12),
-                      ),
+                      border: Border.all(color: app.fade(app.core.tx, 0.12)),
                     ),
                     child: Wrap(
                       spacing: 8,
@@ -516,9 +553,7 @@ class _SheetCell extends StatelessWidget {
             Icon(
               icon,
               size: 20,
-              color: active
-                  ? app.shell.navLabel
-                  : app.fade(app.core.tx, 0.75),
+              color: active ? app.shell.navLabel : app.fade(app.core.tx, 0.75),
             ),
             const SizedBox(height: 5),
             Text(
@@ -528,9 +563,7 @@ class _SheetCell extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: active
-                    ? app.shell.navLabel
-                    : app.fade(app.core.tx, 0.6),
+                color: active ? app.shell.navLabel : app.fade(app.core.tx, 0.6),
               ),
             ),
           ],
@@ -568,10 +601,7 @@ class _RemoteRow extends StatelessWidget {
             const SizedBox(width: 10),
             const Text(
               'Remote control',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
             ),
             const Spacer(),
             Icon(
@@ -637,11 +667,7 @@ class _EditChip extends StatelessWidget {
     if (fixed || onTap == null) return chip;
     return Opacity(
       opacity: dimmedWhenFull ? 0.45 : 1,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: app.shape.br(10),
-        child: chip,
-      ),
+      child: InkWell(onTap: onTap, borderRadius: app.shape.br(10), child: chip),
     );
   }
 }
