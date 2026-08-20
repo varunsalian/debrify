@@ -1400,6 +1400,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return 'torbox';
       case 6:
         return 'pikpak';
+      case 8:
+        return 'settings';
       case 10:
         return 'webdav';
       case 11:
