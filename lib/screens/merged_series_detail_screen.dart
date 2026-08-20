@@ -443,14 +443,24 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   Future<void> _guardPlay(Future<void> Function() launch) async {
-    if (_playLaunching) return;
-    _playLaunching = true;
+    if (_playLaunching || !mounted) return;
+    // Rebuild immediately so HeroTrailerBackdrop disables and tears down its
+    // engine at the button press. The resolving loader is a RawDialogRoute,
+    // which the app's PageRoute observer deliberately does not see; waiting
+    // for the eventual player-handoff signal lets the delayed trailer start
+    // (or keep playing) behind source resolution.
+    setState(() => _playLaunching = true);
     try {
       await launch();
     } finally {
-      // No setState: this is an execution latch, not rendered state, and the
-      // screen may have been disposed while an external player was active.
-      _playLaunching = false;
+      if (mounted) {
+        // A cancelled/failed resolve may resume autoplay after its normal
+        // delay. A successful launch remains off because the backdrop's
+        // content-player signal has independently latched _canPlay false.
+        setState(() => _playLaunching = false);
+      } else {
+        _playLaunching = false;
+      }
     }
   }
 
@@ -1037,7 +1047,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 startDelay: widget.isTelevision
                     ? const Duration(milliseconds: 3200)
                     : const Duration(milliseconds: 1400),
-                enabled: _trailerAutoplayEnabled,
+                // Suspend at the Play press, before source/resume resolution.
+                // The pipeline loader is a PopupRoute rather than a PageRoute,
+                // so RouteAware.didPushNext cannot provide this lifecycle beat.
+                enabled: _trailerAutoplayEnabled && !_playLaunching,
                 ambientVolume: _trailerAmbientVolume,
                 foreground: _trailerForeground,
                 onRequestClose: _exitTrailerForeground,
