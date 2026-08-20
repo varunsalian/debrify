@@ -14,10 +14,10 @@ import 'profiles/profile_async_authorization.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 
-/// One addon's outcome for a single stream search — drives the source list's
-/// per-addon status strip, which shows EVERY applicable addon including the
-/// ones that failed or returned nothing (the count maps alone lose zero-count
-/// addons once counts are rebuilt from the final rows).
+/// One addon's outcome for a single stream search — lets the source provider
+/// row retain retry controls for addons that failed or returned nothing (the
+/// count maps alone lose zero-count addons once counts are rebuilt from the
+/// final rows).
 ///
 /// [sourceKey] matches `Torrent.source` (`stremio:<name>` lowercased);
 /// [count] is the addon's RAW stream count before cross-addon dedupe, so
@@ -1188,7 +1188,7 @@ class StremioService {
     return result;
   }
 
-  /// Re-runs the stream fetch for ONE addon — the status strip's Retry.
+  /// Re-runs the stream fetch for ONE addon — the provider pill's Retry.
   /// Returns the converted rows (empty when the addon genuinely has nothing).
   /// The series smart fallback is deliberately not replayed: a single-addon
   /// retry probes the one streamId the current scope implies, which covers

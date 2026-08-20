@@ -70,4 +70,15 @@ void main() {
     );
     expect(out, ['engineB', 'stremio:Comet', 'engineA']);
   });
+
+  test('Watch Next is recommendation-only, not a source provider', () {
+    expect(
+      SourcePriority.isRecommendationOnlyAddon('community.watch.next'),
+      isTrue,
+    );
+    expect(
+      SourcePriority.isRecommendationOnlyAddon('com.stremio.torrentio'),
+      isFalse,
+    );
+  });
 }
