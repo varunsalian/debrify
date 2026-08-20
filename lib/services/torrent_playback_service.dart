@@ -2550,6 +2550,9 @@ class TorrentPlaybackService {
       isCancelled: () => cancel.cancelled,
       ladder: ladder,
       rules: rules,
+      seriesFetcher: isMovie
+          ? movieFetcherFor(meta: meta)
+          : seriesFetcherFor(meta: meta, episodesFetched: true),
     );
     return true;
   }
