@@ -1023,11 +1023,23 @@ class TorrentPlaybackService {
       _snack(context, 'No IMDb match to find sources for "$label".');
       return;
     }
-    final resolving = showResolvingOverlay(context, meta: meta, title: label);
-    final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
-    if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
+    var cancelled = false;
+    final resolving = showResolvingOverlay(
+      context,
+      meta: meta,
+      title: label,
+      onCancel: () => cancelled = true,
+    );
+    late final QuickPlayRules rules;
+    try {
+      rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+      if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
+    } catch (_) {
+      resolving.dismiss();
+      rethrow;
+    }
     var activeRules = rules;
-    if (!context.mounted) {
+    if (!context.mounted || cancelled) {
       resolving.dismiss();
       return;
     }
@@ -1068,8 +1080,17 @@ class TorrentPlaybackService {
     // Bound-source reuse: if the user pinned a source for this title, play it
     // directly and skip the torrent search entirely. A series binding is only
     // usable when a concrete season+episode is requested (to land in the pack).
-    final bound = await SeriesSourceService.getSources(imdbId);
-    if (!context.mounted) return;
+    late final List<SeriesSource> bound;
+    try {
+      bound = await SeriesSourceService.getSources(imdbId);
+    } catch (_) {
+      resolving.dismiss();
+      rethrow;
+    }
+    if (!context.mounted || cancelled) {
+      resolving.dismiss();
+      return;
+    }
     // A series binding needs a concrete season+episode to land inside the pack.
     // Gate on the same fields _launch forwards to the player (meta.*), so the
     // requested episode is guaranteed to reach findOriginalIndexBySeasonEpisode.
@@ -5714,11 +5735,13 @@ class TorrentPlaybackService {
     BuildContext context, {
     required PlaybackMeta? meta,
     required String title,
+    VoidCallback? onCancel,
   }) => _showPipeline(
     context,
     provider: 'preparing',
     meta: meta,
     title: title,
+    onCancel: onCancel,
   );
 
   // ── Minimal UI feedback ────────────────────────────────────────────────────

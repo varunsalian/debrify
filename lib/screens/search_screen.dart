@@ -12051,6 +12051,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
   }) async {
+    var cancelled = false;
     final resolving = preferTraktResume
         ? TorrentPlaybackService.showResolvingOverlay(
             context,
@@ -12063,10 +12064,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               addonId: addon.id,
             ),
             title: item.name,
+            onCancel: () => cancelled = true,
           )
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
       resolving?.dismiss();
+      if (cancelled) return;
       await _playSelection(selection);
     }
 
@@ -12097,7 +12100,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (cw != null) {
         final sel = await TraktContinueWatchingService.instance
             .selectionForItem(cw);
-        if (!mounted) return;
+        if (!mounted || cancelled) return;
         if (sel != null) {
           await launch(sel);
           return;
@@ -12115,7 +12118,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 traktContentType: TraktContinueWatchingService.showsContentType,
                 itemId: id,
               );
-          if (!mounted) return;
+          if (!mounted || cancelled) return;
           if (sel != null) {
             await launch(sel);
             return;
@@ -12131,7 +12134,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // keeps its local split untouched.
     if (_isSimklAuthenticated && preferTraktResume && item.type == 'series') {
       final simkl = await _simklResumeFor(item);
-      if (!mounted) return;
+      if (!mounted || cancelled) return;
       if (simkl != null) {
         await launch(
           AdvancedSearchSelection(
@@ -12180,7 +12183,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 ).timeout(const Duration(seconds: 4), onTimeout: () => null)
               : Future<double?>.value(null),
         ]);
-        if (!mounted) return;
+        if (!mounted || cancelled) return;
         traktPct = lookups[0];
         simklPct = lookups[1];
       }
@@ -12196,7 +12199,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Same id resolution the detail screen's status loader uses (_imdbOf),
         // so the "Rewatch" label and this flip never disagree on the title.
         final imdb = _imdbOf(item);
-        if (imdb != null && await StorageService.getSimklSyncCatalogItems()) {
+        final syncCatalog = await StorageService.getSimklSyncCatalogItems();
+        if (!mounted || cancelled) return;
+        if (imdb != null && syncCatalog) {
           // Time-boxed like the tracker-percent lookups above: a degraded Simkl
           // API must never stall the Play press. On timeout we just skip the
           // flip — worst case the rewatch doesn't surface in Continue Watching,
@@ -12204,12 +12209,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           final status = await SimklService.instance
               .fetchTitleStatus(imdb)
               .timeout(const Duration(seconds: 4), onTimeout: () => null);
-          if (!mounted) return;
+          if (!mounted || cancelled) return;
           if (status?.currentStatus == 'completed') {
             await SimklService.instance
                 .markUnwatched(imdb, 'movie')
                 .timeout(const Duration(seconds: 4), onTimeout: () => false);
-            if (!mounted) return;
+            if (!mounted || cancelled) return;
           }
         }
       }
@@ -12231,7 +12236,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // fall back to the manual episode picker — except from the merged page
     // (episodes are inline there), where we play via the raw id's addon stream.
     if (ttId.isEmpty && !skipEpisodeFallback) {
-      _openEpisodes(item, addon, isTraktSource: isTraktSource);
+      if (!cancelled) {
+        _openEpisodes(item, addon, isTraktSource: isTraktSource);
+      }
       return;
     }
     // Play id: the `tt…` id when present (torrent-resolvable); otherwise the raw
@@ -12263,7 +12270,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final next = await _simklNextToWatchFor(
         item,
       ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-      if (!mounted) return;
+      if (!mounted || cancelled) return;
       if (next != null) {
         season = next.season;
         episode = next.episode;
@@ -12280,13 +12287,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         season,
         episode,
       );
-      if (!mounted) return;
+      if (!mounted || cancelled) return;
       if (next != null) {
         season = next.season;
         episode = next.episode;
       }
     }
-    if (!mounted) return;
+    if (!mounted || cancelled) return;
 
     await launch(
       AdvancedSearchSelection(
