@@ -183,7 +183,7 @@ class TvSourceBrowserController(
             labels.putIfAbsent(id, sourceLabel(raw))
         }
         groups = buildList {
-            add(Group("all", "All add-ons", all))
+            add(Group("all", "All sources", all))
             lists.forEach { (id, entries) -> add(Group(id, labels[id] ?: "Other sources", entries)) }
             // Applicable addons with nothing yet — same group id their fetched
             // rows will use, so the placeholder becomes the real group.
@@ -231,7 +231,7 @@ class TvSourceBrowserController(
     private fun renderResults() {
         val entries = visible()
         val groupId = groups.getOrNull(selectedGroup)?.id
-        header.text = (groups.getOrNull(selectedGroup)?.label ?: "All add-ons").uppercase()
+        header.text = (groups.getOrNull(selectedGroup)?.label ?: "All sources").uppercase()
         count.text = "${entries.size} source${if (entries.size == 1) "" else "s"}"
         val probing = groupId != null && callbacks.isGroupProbing(groupId)
         context.text = transientError

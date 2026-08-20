@@ -16,6 +16,7 @@ import '../models/quick_play_rules.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/torrent.dart';
+import '../models/indexer_manager_config.dart';
 import '../screens/video_player/models/playlist_entry.dart';
 import '../models/torrent_filter_state.dart';
 import '../theme/app_theme_scope.dart';
@@ -2029,10 +2030,22 @@ class TorrentPlaybackService {
         }
       },
       listAddons: () async => [
-        for (final addon in await StremioService.instance
-            .applicableStreamingAddons(type: 'series', contentId: imdbId))
-          SourceAddonRef(addon.id, addon.name),
+        for (final addon
+            in await StremioService.instance.applicableStreamingAddons(
+              type: 'series',
+              contentId: imdbId,
+            ))
+          if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
+            SourceAddonRef(addon.id, addon.name),
       ],
+      listEngines: _sourceEngineListing,
+      fetchEngine: (engineId, s, e) => _fetchOneEngine(
+        engineId,
+        imdbId: imdbId,
+        isMovie: false,
+        season: s,
+        episode: e,
+      ),
       fetchAddonEpisodes: (addonId, s, e) async {
         try {
           return await StremioService.instance.retryAddonStreams(
@@ -2118,10 +2131,17 @@ class TorrentPlaybackService {
         }
       },
       listAddons: () async => [
-        for (final addon in await StremioService.instance
-            .applicableStreamingAddons(type: 'movie', contentId: imdbId))
-          SourceAddonRef(addon.id, addon.name),
+        for (final addon
+            in await StremioService.instance.applicableStreamingAddons(
+              type: 'movie',
+              contentId: imdbId,
+            ))
+          if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
+            SourceAddonRef(addon.id, addon.name),
       ],
+      listEngines: _sourceEngineListing,
+      fetchEngine: (engineId, _, __) =>
+          _fetchOneEngine(engineId, imdbId: imdbId, isMovie: true),
       fetchAddonEpisodes: (addonId, _, __) async {
         try {
           return await StremioService.instance.retryAddonStreams(
@@ -2134,6 +2154,47 @@ class TorrentPlaybackService {
         }
       },
     );
+  }
+
+  static Future<List<SourceEngineRef>> _sourceEngineListing() async {
+    final engines = await TorrentService.getImdbSearchEngines();
+    final refs = <SourceEngineRef>[];
+    for (final engine in engines) {
+      if (!await TorrentService.isEngineEnabled(engine.name)) continue;
+      final source = IndexerManagerConfig.isIndexerManagerEngine(engine.name)
+          ? engine.displayName
+          : engine.name;
+      refs.add(
+        SourceEngineRef(engine.name, engine.displayName, source.toLowerCase()),
+      );
+    }
+    return refs;
+  }
+
+  static Future<List<Torrent>?> _fetchOneEngine(
+    String engineId, {
+    required String imdbId,
+    required bool isMovie,
+    int? season,
+    int? episode,
+  }) async {
+    try {
+      final engines = await TorrentService.getImdbSearchEngines();
+      final states = <String, bool>{for (final e in engines) e.name: false};
+      states[engineId] = true;
+      final result = await TorrentService.searchByImdb(
+        imdbId,
+        engineStates: states,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+      );
+      final errors = result['engineErrors'] as Map<String, String>? ?? const {};
+      if (errors.containsKey(engineId)) return null;
+      return result['torrents'] as List<Torrent>? ?? const <Torrent>[];
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Curate torrent candidates before probing, mirroring the old Home engine:

@@ -74,12 +74,14 @@ class _SourceSheetState extends State<SourceSheet> {
   /// from these, so an addon with zero results still shows (with a "Fetch
   /// results" row) instead of being invisible.
   List<SourceAddonRef> _allAddons = const [];
+  List<SourceEngineRef> _allEngines = const [];
 
   /// Group id → ALL addon ids sharing it. Group identity must stay the
   /// name-derived sourceKey (fetched rows carry `stremio:<name>` and nothing
   /// else), so two same-named addons share one group — the fetch then asks
   /// every addon in it rather than silently dropping all but the first.
   final Map<String, List<String>> _addonIdsByGroup = {};
+  final Map<String, String> _engineIdByGroup = {};
 
   /// Per-group fetch state: episode fetch in flight / lazy pack probe in
   /// flight / last fetch failed (the group's Fetch row doubles as retry).
@@ -102,18 +104,26 @@ class _SourceSheetState extends State<SourceSheet> {
   }
 
   Future<void> _loadAddonListing() async {
-    final listing = widget.seriesFetcher?.listAddons;
-    if (listing == null || widget.seriesFetcher?.fetchAddonEpisodes == null) {
+    final addonListing = widget.seriesFetcher?.listAddons;
+    final engineListing = widget.seriesFetcher?.listEngines;
+    if (addonListing == null && engineListing == null) {
       return;
     }
     try {
-      final addons = await listing();
-      if (!mounted || addons.isEmpty) return;
+      final listings = await Future.wait([
+        addonListing?.call() ?? Future.value(const <SourceAddonRef>[]),
+        engineListing?.call() ?? Future.value(const <SourceEngineRef>[]),
+      ]);
+      if (!mounted) return;
       setState(() {
-        _allAddons = addons;
+        _allAddons = listings[0] as List<SourceAddonRef>;
+        _allEngines = listings[1] as List<SourceEngineRef>;
         final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
         final focusedOriginal = _focusedEntry?.originalIndex;
-        _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
+        _rebuildGroups(
+          selectedId: selectedId,
+          focusedOriginal: focusedOriginal,
+        );
       });
     } catch (_) {
       // No listing — the sheet simply shows only groups that have results.
@@ -181,14 +191,22 @@ class _SourceSheetState extends State<SourceSheet> {
     // same bucket the placeholder occupied. Same-named addons share one
     // placeholder (the set guard), never two duplicate groups.
     _addonIdsByGroup.clear();
+    _engineIdByGroup.clear();
     for (final addon in _allAddons) {
       (_addonIdsByGroup[addon.sourceKey] ??= <String>[]).add(addon.id);
     }
+    for (final engine in _allEngines) {
+      _engineIdByGroup[engine.sourceKey] = engine.id;
+    }
     final placeholderKeys = <String>{};
     _groups = <_AddonGroup>[
-      _AddonGroup('all', 'All add-ons', all),
+      _AddonGroup('all', 'All sources', all),
       for (final bucket in buckets.entries)
         _AddonGroup(bucket.key, labels[bucket.key]!, bucket.value),
+      for (final engine in _allEngines)
+        if (!buckets.containsKey(engine.sourceKey) &&
+            placeholderKeys.add(engine.sourceKey))
+          _AddonGroup(engine.sourceKey, engine.name, const <_SourceEntry>[]),
       for (final addon in _allAddons)
         if (!buckets.containsKey(addon.sourceKey) &&
             placeholderKeys.add(addon.sourceKey))
@@ -384,10 +402,13 @@ class _SourceSheetState extends State<SourceSheet> {
   /// Whether the selected group is an empty addon group whose per-addon
   /// fetch is available — the state that renders the "Fetch results" row.
   bool get _groupFetchAvailable {
-    if (widget.seriesFetcher?.fetchAddonEpisodes == null) return false;
     if (_groups.isEmpty) return false;
     final group = _groups[_selectedGroup];
-    return group.entries.isEmpty && _addonIdsByGroup.containsKey(group.id);
+    return group.entries.isEmpty &&
+        ((_addonIdsByGroup.containsKey(group.id) &&
+                widget.seriesFetcher?.fetchAddonEpisodes != null) ||
+            (_engineIdByGroup.containsKey(group.id) &&
+                widget.seriesFetcher?.fetchEngine != null));
   }
 
   /// Per-addon fetch: episode results first — they render the instant the
@@ -397,9 +418,38 @@ class _SourceSheetState extends State<SourceSheet> {
   /// the Fetch row up as the retry.
   Future<void> _fetchAddonGroup() async {
     final fetcher = widget.seriesFetcher;
-    final search = fetcher?.fetchAddonEpisodes;
-    if (fetcher == null || search == null || _groups.isEmpty) return;
+    if (fetcher == null || _groups.isEmpty) return;
     final group = _groups[_selectedGroup];
+    final engineId = _engineIdByGroup[group.id];
+    if (engineId != null) {
+      if (_fetchingGroups.contains(group.id)) return;
+      setState(() {
+        _fetchingGroups.add(group.id);
+        _failedGroups.remove(group.id);
+      });
+      final fetched = await fetcher.fetchEngine?.call(
+        engineId,
+        widget.currentSeason ?? fetcher.season,
+        widget.currentEpisode ?? fetcher.episode,
+      );
+      if (!mounted) return;
+      setState(() {
+        _fetchingGroups.remove(group.id);
+        if (fetched == null) {
+          _failedGroups.add(group.id);
+        } else {
+          _fetchedGroups.add(group.id);
+        }
+      });
+      if (fetched != null && fetched.isNotEmpty) {
+        widget.onSourcesMerged?.call(
+          SeriesSourceFetcher.mergeSources(widget.sources, fetched),
+        );
+      }
+      return;
+    }
+    final search = fetcher.fetchAddonEpisodes;
+    if (search == null) return;
     final addonIds = _addonIdsByGroup[group.id];
     if (addonIds == null ||
         addonIds.isEmpty ||
@@ -659,7 +709,7 @@ class _SourceSheetState extends State<SourceSheet> {
           children: [
             Expanded(
               child: _sectionLabel(
-                _groups.isEmpty ? 'All add-ons' : _groups[_selectedGroup].label,
+                _groups.isEmpty ? 'All sources' : _groups[_selectedGroup].label,
               ),
             ),
             Text('${_visibleEntries.length} sources', style: _mutedStyle),
@@ -867,7 +917,7 @@ class _AddonRailRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                label == 'All add-ons'
+                label == 'All sources'
                     ? '✦'
                     : label.characters.first.toUpperCase(),
                 style: TextStyle(

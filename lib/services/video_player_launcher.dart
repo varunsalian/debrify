@@ -2184,16 +2184,19 @@ class VideoPlayerLauncher {
         int? episode,
       })?
       addonSourcesProviderForTv;
-      if (seriesFetcher != null && seriesFetcher.fetchAddonEpisodes != null) {
+      if (seriesFetcher != null &&
+          (seriesFetcher.fetchAddonEpisodes != null ||
+              seriesFetcher.fetchEngine != null)) {
         addonSourcesProviderForTv =
-            (List<String> addonIds, String mode, {
+            (
+              List<String> addonIds,
+              String mode, {
               int? season,
               int? episode,
             }) async {
               final generation = stremioSourcesGeneration;
-              List<Map<String, dynamic>> serialized() => currentStremioSources
-                  .map((t) => t.toJson())
-                  .toList();
+              List<Map<String, dynamic>> serialized() =>
+                  currentStremioSources.map((t) => t.toJson()).toList();
               // Stale = the holder was replaced (channel switch) while this
               // fetch ran; its results belong to the previous content.
               bool stale() => generation != stremioSourcesGeneration;
@@ -2222,15 +2225,25 @@ class VideoPlayerLauncher {
               List<Torrent>? episodes;
               final magnetIds = <String>[];
               for (final addonId in addonIds) {
-                final fetched = await seriesFetcher.fetchAddonEpisodes!(
-                  addonId,
-                  season ?? seriesFetcher.season,
-                  episode ?? seriesFetcher.episode,
-                );
+                final engine = addonId.startsWith('engine::')
+                    ? addonId.substring('engine::'.length)
+                    : null;
+                final fetched = engine == null
+                    ? await seriesFetcher.fetchAddonEpisodes?.call(
+                        addonId,
+                        season ?? seriesFetcher.season,
+                        episode ?? seriesFetcher.episode,
+                      )
+                    : await seriesFetcher.fetchEngine?.call(
+                        engine,
+                        season ?? seriesFetcher.season,
+                        episode ?? seriesFetcher.episode,
+                      );
                 if (stale()) return null;
                 if (fetched != null) {
                   (episodes ??= <Torrent>[]).addAll(fetched);
-                  if (fetched.any((t) => t.streamType == StreamType.torrent)) {
+                  if (engine == null &&
+                      fetched.any((t) => t.streamType == StreamType.torrent)) {
                     magnetIds.add(addonId);
                   }
                 }
@@ -2506,8 +2519,15 @@ class VideoPlayerLauncher {
       if (addonSourcesProviderForTv != null) {
         try {
           final addons = await seriesFetcher!.listAddons?.call() ?? const [];
-          if (addons.isNotEmpty) {
+          final engines = await seriesFetcher.listEngines?.call() ?? const [];
+          if (addons.isNotEmpty || engines.isNotEmpty) {
             payloadMap['sourceAddons'] = [
+              for (final engine in engines)
+                {
+                  'id': 'engine::${engine.id}',
+                  'name': engine.name,
+                  'sourceKey': engine.sourceKey,
+                },
               for (final addon in addons)
                 {
                   'id': addon.id,
@@ -2822,9 +2842,7 @@ class VideoPlayerLauncher {
     final playlistEntries = entries.map((e) => e.entry).toList();
     final singleEntryGuideOnly = playlistEntries.length < 2;
     if (singleEntryGuideOnly && contentImdbId == null) {
-      debugPrint(
-        'TVMazeAsync: SKIPPED - less than 2 entries and no IMDb id',
-      );
+      debugPrint('TVMazeAsync: SKIPPED - less than 2 entries and no IMDb id');
       return;
     }
 

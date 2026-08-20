@@ -4,10 +4,8 @@ import '../models/torrent.dart';
 /// "individual episodes"), targeting a concrete [season]/[episode]. Returns
 /// the curated, ordered results, or null when the search itself failed
 /// (transient network etc.).
-typedef SeriesSourceSearch = Future<List<Torrent>?> Function(
-  int season,
-  int episode,
-);
+typedef SeriesSourceSearch =
+    Future<List<Torrent>?> Function(int season, int episode);
 
 /// One search for a movie's full source list (no episode targeting).
 typedef MovieSourceSearch = Future<List<Torrent>?> Function();
@@ -15,6 +13,15 @@ typedef MovieSourceSearch = Future<List<Torrent>?> Function();
 /// The applicable Stremio addons for this play — every one the sheets should
 /// show as a group, zero-result ones included.
 typedef AddonListing = Future<List<SourceAddonRef>> Function();
+
+/// Enabled torrent engines applicable to this play, including engines whose
+/// last search returned no rows.
+typedef EngineListing = Future<List<SourceEngineRef>> Function();
+
+/// A targeted fetch for one torrent engine. Null means the engine failed;
+/// empty means it completed successfully with no results.
+typedef EngineSourceSearch =
+    Future<List<Torrent>?> Function(String engineId, int season, int episode);
 
 /// One addon's episode-scoped fetch (movies ignore season/episode). Null =
 /// the fetch itself failed; empty = the addon genuinely has nothing.
@@ -36,6 +43,13 @@ class SourceAddonRef {
   /// sheets' group id, so a placeholder group and the addon's fetched rows
   /// land in the same bucket.
   String get sourceKey => 'stremio:$name'.toLowerCase();
+}
+
+class SourceEngineRef {
+  final String id;
+  final String name;
+  final String sourceKey;
+  const SourceEngineRef(this.id, this.name, this.sourceKey);
 }
 
 /// On-demand fetcher for the in-player "Load more sources" action.
@@ -60,27 +74,31 @@ class SeriesSourceFetcher {
     this.packsFetched = false,
     this.episodesFetched = false,
     this.listAddons,
+    this.listEngines,
     this.fetchAddonEpisodes,
     this.fetchAddonPacks,
-  })  : _searchPacks = searchPacks,
-        _searchEpisodes = searchEpisodes,
-        _searchMovie = null,
-        movieFetched = true;
+    this.fetchEngine,
+  }) : _searchPacks = searchPacks,
+       _searchEpisodes = searchEpisodes,
+       _searchMovie = null,
+       movieFetched = true;
 
   /// Movie flavor: one flat list, one "Load more" (the normal movie search).
   SeriesSourceFetcher.movie({
     required MovieSourceSearch searchMovie,
     this.movieFetched = false,
     this.listAddons,
+    this.listEngines,
     this.fetchAddonEpisodes,
-  })  : _searchMovie = searchMovie,
-        _searchPacks = null,
-        _searchEpisodes = null,
-        fetchAddonPacks = null,
-        season = 0,
-        episode = 0,
-        packsFetched = true,
-        episodesFetched = true;
+    this.fetchEngine,
+  }) : _searchMovie = searchMovie,
+       _searchPacks = null,
+       _searchEpisodes = null,
+       fetchAddonPacks = null,
+       season = 0,
+       episode = 0,
+       packsFetched = true,
+       episodesFetched = true;
 
   /// Per-addon fetch, for the sheets' all-addons rail: every applicable
   /// addon shows as a group even with zero results, and an empty/failed
@@ -88,8 +106,10 @@ class SeriesSourceFetcher {
   /// instantly), then the lazy pack probe when magnets appeared. All three
   /// are optional; older launch sites simply don't get the affordance.
   final AddonListing? listAddons;
+  final EngineListing? listEngines;
   final AddonEpisodeSearch? fetchAddonEpisodes;
   final AddonPackSearch? fetchAddonPacks;
+  final EngineSourceSearch? fetchEngine;
 
   static const String modePacks = 'packs';
   static const String modeEpisodes = 'episodes';

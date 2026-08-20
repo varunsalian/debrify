@@ -108,7 +108,7 @@ void main() {
       ),
     );
 
-    expect(find.text('All add-ons'), findsOneWidget);
+    expect(find.text('All sources'), findsOneWidget);
     expect(find.text('Torrentio'), findsOneWidget);
     expect(find.text('Comet'), findsOneWidget);
     expect(find.text('DIRECT'), findsOneWidget);
@@ -119,6 +119,70 @@ void main() {
     await tester.pump();
 
     expect(selectedIndex, 2);
+  });
+
+  testWidgets('lists an empty engine and fetches only that provider', (
+    tester,
+  ) async {
+    var fetchedEngine = '';
+    final fetcher = SeriesSourceFetcher.movie(
+      searchMovie: () async => const [],
+      listEngines: () async => const [
+        SourceEngineRef('engine_a', 'Engine A', 'engine_a'),
+      ],
+      fetchEngine: (engineId, _, __) async {
+        fetchedEngine = engineId;
+        return [_source(name: 'Engine result', source: 'engine_a')];
+      },
+    );
+
+    await tester.pumpWidget(_Host(initial: const [], fetcher: fetcher));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Engine A'), findsOneWidget);
+    await tester.tap(find.text('Engine A'));
+    await tester.pump();
+    expect(find.text('Fetch results'), findsOneWidget);
+    await tester.tap(find.text('Fetch results'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(fetchedEngine, 'engine_a');
+    expect(find.text('Engine result'), findsOneWidget);
+  });
+
+  testWidgets('keeps a failed engine fetch available for retry', (
+    tester,
+  ) async {
+    var attempts = 0;
+    final fetcher = SeriesSourceFetcher.movie(
+      searchMovie: () async => const [],
+      listEngines: () async => const [
+        SourceEngineRef('engine_a', 'Engine A', 'engine_a'),
+      ],
+      fetchEngine: (engineId, _, __) async {
+        attempts++;
+        if (attempts == 1) return null;
+        return [_source(name: 'Retried result', source: engineId)];
+      },
+    );
+
+    await tester.pumpWidget(_Host(initial: const [], fetcher: fetcher));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Engine A'));
+    await tester.pump();
+    await tester.tap(find.text('Fetch results'));
+    await tester.pump();
+
+    expect(find.text('Fetch failed — try again'), findsOneWidget);
+    await tester.tap(find.text('Fetch failed — try again'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(attempts, 2);
+    expect(find.text('Retried result'), findsOneWidget);
   });
 
   testWidgets('uses a compact source browser without overflowing in portrait', (
@@ -149,7 +213,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('All add-ons'), findsOneWidget);
+    expect(find.text('All sources'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -409,11 +473,9 @@ void main() {
       expect(find.text('Comet A S01E02'), findsOneWidget);
       await tester.pump();
       await tester.pump();
-      expect(
-        probedIds,
-        ['comet-a'],
-        reason: 'only the magnet-bearing id earns the pack probe',
-      );
+      expect(probedIds, [
+        'comet-a',
+      ], reason: 'only the magnet-bearing id earns the pack probe');
     },
   );
 
