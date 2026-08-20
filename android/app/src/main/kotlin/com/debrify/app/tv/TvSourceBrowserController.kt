@@ -65,7 +65,7 @@ class TvSourceBrowserController(
 
     private var groups: List<Group> = emptyList()
     private var selectedGroup = 0
-    private var selectedResult = 0 // -1 is the load-more action.
+    private var selectedResult = 0
     private var zone = Zone.RESULTS
     private var transientError: String? = null
     var isVisible = false
@@ -74,9 +74,7 @@ class TvSourceBrowserController(
     init {
         root.isFocusable = true
         root.isFocusableInTouchMode = true
-        loadMore.setOnClickListener {
-            callbacks.loadMoreMode()?.let { callbacks.requestLoadMore(it) }
-        }
+        loadMore.visibility = View.GONE
     }
 
     fun show() {
@@ -149,18 +147,13 @@ class TvSourceBrowserController(
             render()
         } else {
             val oldSelection = selectedResult
-            val minimum = if (callbacks.loadMoreMode() == null) 0 else -1
-            selectedResult = (selectedResult + delta).coerceIn(minimum, (visible().size - 1).coerceAtLeast(minimum))
+            selectedResult = (selectedResult + delta).coerceIn(0, (visible().size - 1).coerceAtLeast(0))
             if (selectedResult != oldSelection) refreshResultSelection(oldSelection)
         }
     }
 
     private fun activate() {
         if (zone == Zone.RAIL) { zone = Zone.RESULTS; render(); return }
-        if (selectedResult < 0) {
-            callbacks.loadMoreMode()?.let { callbacks.requestLoadMore(it) }
-            return
-        }
         val entry = visible().getOrNull(selectedResult)
         if (entry != null) {
             callbacks.onSourceSelected(entry.index)
@@ -194,8 +187,7 @@ class TvSourceBrowserController(
         selectedGroup = groups.indexOfFirst { it.id == selectedId }.let { if (it < 0) 0 else it }
         val target = focusedIndex ?: if (landOnCurrent) callbacks.currentIndex() else null
         selectedResult = target?.let { wanted -> visible().indexOfFirst { it.index == wanted } } ?: selectedResult
-        val minimum = if (callbacks.loadMoreMode() == null) 0 else -1
-        if (selectedResult < minimum && visible().isNotEmpty()) selectedResult = minimum
+        if (selectedResult < 0 && visible().isNotEmpty()) selectedResult = 0
     }
 
     private fun visible(): List<TvSourceBrowserEntry> = groups.getOrNull(selectedGroup)?.entries ?: emptyList()
@@ -237,13 +229,7 @@ class TvSourceBrowserController(
         context.text = transientError
             ?: if (probing) "Looking for season packs from this add-on…" else contextLabel(entries)
         context.setTextColor(if (transientError == null) 0x8CFFFFFF.toInt() else 0xFFFF7A85.toInt())
-        val mode = callbacks.loadMoreMode()
-        loadMore.visibility = if (mode == null) View.GONE else View.VISIBLE
-        if (mode != null) {
-            loadMore.text = if (callbacks.isLoading(mode)) "Loading sources…" else loadLabel(mode)
-            loadMore.background = bg(zone == Zone.RESULTS && selectedResult < 0, false)
-            loadMore.setTextColor(if (zone == Zone.RESULTS && selectedResult < 0) Color.BLACK else 0xD9FFFFFF.toInt())
-        }
+        loadMore.visibility = View.GONE
         results.removeAllViews()
         // Empty addon group: one "Fetch results" row (also the retry after a
         // failure or an empty fetch).
@@ -268,18 +254,12 @@ class TvSourceBrowserController(
             })
         }
         resultsScroll.post {
-            val focusTop = if (selectedResult < 0) loadMore.top else results.getChildAt(selectedResult)?.top ?: 0
+            val focusTop = results.getChildAt(selectedResult)?.top ?: 0
             resultsScroll.smoothScrollTo(0, (focusTop - resultsScroll.height / 3).coerceAtLeast(0))
         }
     }
 
     private fun refreshResultSelection(oldSelection: Int) {
-        val mode = callbacks.loadMoreMode()
-        if (mode != null) {
-            val loadMoreActive = selectedResult < 0
-            loadMore.background = bg(loadMoreActive, false)
-            loadMore.setTextColor(if (loadMoreActive) Color.BLACK else 0xD9FFFFFF.toInt())
-        }
         val entries = visible()
         listOf(oldSelection, selectedResult).distinct().forEach { index ->
             val entry = entries.getOrNull(index) ?: return@forEach
@@ -295,7 +275,7 @@ class TvSourceBrowserController(
             results.addView(replacement, index)
         }
         resultsScroll.post {
-            val focusTop = if (selectedResult < 0) loadMore.top else results.getChildAt(selectedResult)?.top ?: 0
+            val focusTop = results.getChildAt(selectedResult)?.top ?: 0
             resultsScroll.smoothScrollTo(0, (focusTop - resultsScroll.height / 3).coerceAtLeast(0))
         }
     }
@@ -310,12 +290,6 @@ class TvSourceBrowserController(
             episodes -> "Episode results loaded. Season packs are fetched separately."
             else -> "Sources returned for this title."
         }
-    }
-
-    private fun loadLabel(mode: String) = when (mode) {
-        "episodes" -> "Load episode sources  ›"
-        "packs" -> "Load season-pack sources  ›"
-        else -> "Load more sources  ›"
     }
 
     private fun row(title: String, value: String, active: Boolean, selected: Boolean, click: () -> Unit): View = LinearLayout(activity).apply {

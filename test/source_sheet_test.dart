@@ -283,9 +283,7 @@ void main() {
     expect(selectedIndex, 1);
   });
 
-  testWidgets('activates load more from the row above the first source', (
-    tester,
-  ) async {
+  testWidgets('does not expose the global load-more action', (tester) async {
     var searches = 0;
     final fetcher = SeriesSourceFetcher(
       season: 1,
@@ -310,11 +308,10 @@ void main() {
     );
     await tester.pump();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
-
-    expect(searches, 1);
+    expect(find.textContaining('Load more'), findsNothing);
+    expect(find.textContaining('Load season-pack'), findsNothing);
+    expect(find.textContaining('Load episode'), findsNothing);
+    expect(searches, 0);
   });
 
   testWidgets('closes from the visible DPAD close control', (tester) async {

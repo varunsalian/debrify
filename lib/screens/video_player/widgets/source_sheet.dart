@@ -60,7 +60,6 @@ class _SourceSheetState extends State<SourceSheet> {
   final ScrollController _addonScrollController = ScrollController();
   final ScrollController _sourceScrollController = ScrollController();
   final Map<int, GlobalKey> _sourceKeys = <int, GlobalKey>{};
-  final GlobalKey _loadMoreKey = GlobalKey();
 
   List<_AddonGroup> _groups = const [];
   int _selectedGroup = 0;
@@ -68,7 +67,6 @@ class _SourceSheetState extends State<SourceSheet> {
   _FocusZone _focusZone = _FocusZone.sources;
   int? _resolvingIndex;
   String? _errorMessage;
-  String? _loadingMode;
 
   /// Every applicable addon for this play — placeholder rail groups are built
   /// from these, so an addon with zero results still shows (with a "Fetch
@@ -240,17 +238,6 @@ class _SourceSheetState extends State<SourceSheet> {
       ? _visibleEntries[_focusedSource]
       : null;
 
-  String? get _loadMoreMode {
-    final fetcher = widget.seriesFetcher;
-    if (fetcher == null) return null;
-    if (fetcher.isMovie) {
-      return fetcher.movieFetched ? null : SeriesSourceFetcher.modeMovie;
-    }
-    if (!fetcher.packsFetched) return SeriesSourceFetcher.modePacks;
-    if (!fetcher.episodesFetched) return SeriesSourceFetcher.modeEpisodes;
-    return null;
-  }
-
   String get _seriesStateLabel {
     final fetcher = widget.seriesFetcher;
     if (fetcher == null || fetcher.isMovie) {
@@ -272,12 +259,6 @@ class _SourceSheetState extends State<SourceSheet> {
     return 'Sources returned for this series.';
   }
 
-  String get _loadMoreLabel => switch (_loadMoreMode) {
-    SeriesSourceFetcher.modeEpisodes => 'Load episode sources',
-    SeriesSourceFetcher.modePacks => 'Load season-pack sources',
-    _ => 'Load more sources',
-  };
-
   static bool _isPack(Torrent torrent) =>
       torrent.coverageType == 'seasonPack' ||
       torrent.coverageType == 'multiSeasonPack' ||
@@ -298,9 +279,7 @@ class _SourceSheetState extends State<SourceSheet> {
   void _ensureFocusedVisible() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final GlobalKey? key = _focusedSource < 0
-          ? _loadMoreKey
-          : _sourceKeys[_focusedEntry?.originalIndex];
+      final GlobalKey? key = _sourceKeys[_focusedEntry?.originalIndex];
       final context = key?.currentContext;
       if (context != null) {
         Scrollable.ensureVisible(
@@ -376,36 +355,6 @@ class _SourceSheetState extends State<SourceSheet> {
     if (mounted && _resolvingIndex == null) {
       setState(() => _errorMessage = null);
     }
-  }
-
-  Future<void> _loadMore() async {
-    final mode = _loadMoreMode;
-    final fetcher = widget.seriesFetcher;
-    if (mode == null || fetcher == null || _loadingMode != null) return;
-    setState(() {
-      _loadingMode = mode;
-      _errorMessage = null;
-    });
-    List<Torrent>? fetched;
-    try {
-      fetched = await fetcher.fetch(
-        mode,
-        season: widget.currentSeason,
-        episode: widget.currentEpisode,
-      );
-    } catch (_) {}
-    if (fetched != null) {
-      widget.onSourcesMerged?.call(
-        SeriesSourceFetcher.mergeSources(widget.sources, fetched),
-      );
-      if (mounted) setState(() => _loadingMode = null);
-      return;
-    }
-    if (!mounted) return;
-    setState(() {
-      _loadingMode = null;
-      _errorMessage = "Couldn't fetch more sources — try again";
-    });
   }
 
   /// Whether the selected group is an empty addon group whose per-addon
@@ -580,8 +529,7 @@ class _SourceSheetState extends State<SourceSheet> {
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       setState(() => _focusZone = _FocusZone.close);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      final minimum = _loadMoreMode == null ? 0 : -1;
-      if (_focusedSource > minimum) {
+      if (_focusedSource > 0) {
         setState(() => _focusedSource--);
         _ensureFocusedVisible();
       }
@@ -591,16 +539,12 @@ class _SourceSheetState extends State<SourceSheet> {
         _ensureFocusedVisible();
       }
     } else if (isActivateKey(event.logicalKey)) {
-      if (_focusedSource < 0) {
-        _loadMore();
-      } else {
-        final entry = _focusedEntry;
-        if (entry != null) {
-          _selectSource(entry);
-        } else if (_groupFetchAvailable) {
-          // Empty addon group: the sole focusable row is "Fetch results".
-          _fetchAddonGroup();
-        }
+      final entry = _focusedEntry;
+      if (entry != null) {
+        _selectSource(entry);
+      } else if (_groupFetchAvailable) {
+        // Empty addon group: the sole focusable row is "Fetch results".
+        _fetchAddonGroup();
       }
     }
   }
@@ -728,16 +672,6 @@ class _SourceSheetState extends State<SourceSheet> {
         ),
         const SizedBox(height: 20),
         Text(_seriesStateLabel, style: _noteStyle),
-        if (_loadMoreMode != null) ...[
-          const SizedBox(height: 12),
-          _LoadMoreRow(
-            key: _loadMoreKey,
-            label: _loadingMode == null ? _loadMoreLabel : 'Loading sources…',
-            focused: _focusZone == _FocusZone.sources && _focusedSource < 0,
-            enabled: _loadingMode == null,
-            onTap: _loadMore,
-          ),
-        ],
         if (_groups.isNotEmpty &&
             _packProbing.contains(_groups[_selectedGroup].id)) ...[
           const SizedBox(height: 8),
@@ -812,7 +746,7 @@ class _SourceSheetState extends State<SourceSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _LoadMoreRow(
+        _ProviderFetchRow(
           label: fetching
               ? 'Fetching episode results…'
               : failed
@@ -971,13 +905,12 @@ class _AddonRailRow extends StatelessWidget {
   }
 }
 
-class _LoadMoreRow extends StatelessWidget {
+class _ProviderFetchRow extends StatelessWidget {
   final String label;
   final bool focused;
   final bool enabled;
   final VoidCallback onTap;
-  const _LoadMoreRow({
-    super.key,
+  const _ProviderFetchRow({
     required this.label,
     required this.focused,
     required this.enabled,
