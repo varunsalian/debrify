@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
 import '../../../services/series_source_fetcher.dart';
 import '../../../utils/platform_util.dart';
+import '../../../utils/source_quality.dart';
 import '../../../utils/tv_keys.dart';
 
 /// Full-screen source browser.  It deliberately keeps the source list in its
@@ -1045,15 +1046,7 @@ class _SourceRow extends StatelessWidget {
   }
 
   static String? _quality(String value) {
-    final lower = value.toLowerCase();
-    if (lower.contains('2160') ||
-        lower.contains('4k') ||
-        lower.contains('uhd')) {
-      return '4K';
-    }
-    if (lower.contains('1080')) return '1080P';
-    if (lower.contains('720')) return '720P';
-    return null;
+    return sourceQualityBadgeForName(value)?.toUpperCase();
   }
 
   static String _formatSize(int bytes) {

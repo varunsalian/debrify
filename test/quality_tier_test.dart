@@ -28,6 +28,20 @@ void main() {
           QualityTier.fullHd);
     });
 
+    test('release-group DS4K does not override an explicit 1080p encode', () {
+      expect(
+        named('Obsession.2026.1080p.10bit.DS4K.BluRay.x265').qualityTier,
+        QualityTier.fullHd,
+      );
+    });
+
+    test('release-group DS4K alone is not classified as 4K', () {
+      expect(
+        named('Obsession.2026.DS4K.BluRay.x265').qualityTier,
+        QualityTier.sd,
+      );
+    });
+
     test('explicit 2160p is 4K', () {
       expect(named('Movie.2160p.UHD.BluRay.x265').qualityTier,
           QualityTier.ultraHd);

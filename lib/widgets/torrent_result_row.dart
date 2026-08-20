@@ -8,6 +8,7 @@ import '../theme/app_theme_scope.dart';
 
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../utils/source_quality.dart';
 import '../utils/tv_keys.dart';
 
 /// Compact torrent result row with quality color accent
@@ -618,39 +619,21 @@ extension TorrentQualityExtension on Torrent {
 /// name). One implementation so the badge, the browse filter, and the play
 /// ladder can never disagree.
 QualityTier qualityTierForName(String name) {
-  final nameLower = name.toLowerCase();
-
-    // Explicit pixel resolutions WIN. "uhd"/"4k" often name the SOURCE, not the
-    // encode — e.g. "UHD BluRay 1080p" is a 1080p file — so those keywords only
-    // classify when no pixel resolution token is present (kept in sync with
-    // FormatTagDetector so the redesign badges, this row, and the quality
-    // filter all agree).
-    if (nameLower.contains('2160p')) return QualityTier.ultraHd;
-    if (nameLower.contains('1080p') || nameLower.contains('1080i')) {
-      return QualityTier.fullHd;
-    }
-    if (nameLower.contains('720p') || nameLower.contains('720i')) {
-      return QualityTier.hd;
-    }
-    if (nameLower.contains('480p') ||
-        nameLower.contains('576p') ||
-        nameLower.contains('360p')) {
-      return QualityTier.sd;
-    }
-
-    // Keyword fallbacks — only reached when the name carries no pixel token.
-    if (nameLower.contains('4k') ||
-        nameLower.contains('uhd') ||
-        nameLower.contains('4096')) {
+  switch (sourceQualityForName(name)) {
+    case SourceQuality.ultraHd:
       return QualityTier.ultraHd;
-    }
-    if (nameLower.contains('fullhd') || nameLower.contains('full hd')) {
+    case SourceQuality.fullHd:
       return QualityTier.fullHd;
-    }
-    if (nameLower.contains('hd ') || nameLower.contains('hdrip')) {
+    case SourceQuality.hd:
       return QualityTier.hd;
-    }
-
-  // SD/unknown - default to SD
-  return QualityTier.sd;
+    case SourceQuality.sd:
+      return QualityTier.sd;
+    case null:
+      final lower = name.toLowerCase();
+      if (lower.contains('4096')) return QualityTier.ultraHd;
+      if (lower.contains('hd ') || lower.contains('hdrip')) {
+        return QualityTier.hd;
+      }
+      return QualityTier.sd;
+  }
 }

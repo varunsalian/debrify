@@ -8,6 +8,8 @@
 /// forgiving — a name that encodes nothing simply yields an empty list.
 library;
 
+import 'source_quality.dart';
+
 /// One recognizable release attribute. Grouped by kind; [FormatTagDetector]
 /// emits at most a few per row, in a fixed display order (source → resolution →
 /// HDR → IMAX → codec → audio) so rows line up visually.
@@ -120,19 +122,23 @@ class FormatTagDetector {
       tags.add(FormatTag.cam);
     }
 
-    // Resolution — explicit pixel tokens WIN. "UHD"/"4K" keywords frequently
-    // name the SOURCE, not the encode ("UHD BluRay 1080p" is a 1080p file), so
-    // they only decide the tag when no pixel resolution is present.
-    if (_has(text, r'2160p')) {
-      tags.add(FormatTag.uhd4k);
-    } else if (_has(text, r'1080p|1080i|FHD')) {
-      tags.add(FormatTag.fullHd);
-    } else if (_has(text, r'720p|720i')) {
-      tags.add(FormatTag.hd720);
-    } else if (_has(text, r'480p|360p|576p')) {
-      tags.add(FormatTag.sd);
-    } else if (_has(text, r'4K|UHD')) {
-      tags.add(FormatTag.uhd4k);
+    // Resolution comes from the shared classifier used by every quality
+    // badge/filter. It rejects embedded release-group text such as `DS4K`.
+    switch (sourceQualityForName(text)) {
+      case SourceQuality.ultraHd:
+        tags.add(FormatTag.uhd4k);
+        break;
+      case SourceQuality.fullHd:
+        tags.add(FormatTag.fullHd);
+        break;
+      case SourceQuality.hd:
+        tags.add(FormatTag.hd720);
+        break;
+      case SourceQuality.sd:
+        tags.add(FormatTag.sd);
+        break;
+      case null:
+        break;
     }
 
     // HDR — Dolby Vision is additive; then one brightness tag, most specific.

@@ -16396,14 +16396,7 @@ private data class StremioSource(
         }
 
         fun parseQuality(name: String): String {
-            val lower = name.lowercase()
-            return when {
-                lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") -> "4K"
-                lower.contains("1080p") || lower.contains("1080i") -> "1080p"
-                lower.contains("720p") -> "720p"
-                lower.contains("480p") || lower.contains("sd") -> "480p"
-                else -> "HD"
-            }
+            return SourceQualityParser.badge(name) ?: "HD"
         }
     }
 }

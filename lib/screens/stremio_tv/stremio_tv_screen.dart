@@ -30,6 +30,7 @@ import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
 import '../../utils/stremio_tv_debrid_fallback.dart';
 import '../../utils/series_parser.dart';
+import '../../utils/source_quality.dart';
 import '../../utils/torrent_coverage_detector.dart';
 import '../../services/torrent_service.dart';
 import '../catalog_item_detail_screen.dart';
@@ -599,18 +600,19 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   /// Extract normalized quality from a stream/torrent name.
   /// Returns '2160p', '1080p', '720p', '480p', or null.
-  static final RegExp _qualityPattern = RegExp(
-    r'\b(2160p|1080p|720p|480p|4K|UHD|FHD)\b',
-    caseSensitive: false,
-  );
-
   static String? _extractQuality(String name) {
-    final match = _qualityPattern.firstMatch(name);
-    if (match == null) return null;
-    final q = match.group(1)!.toLowerCase();
-    if (q == '4k' || q == 'uhd') return '2160p';
-    if (q == 'fhd') return '1080p';
-    return q;
+    switch (sourceQualityForName(name)) {
+      case SourceQuality.ultraHd:
+        return '2160p';
+      case SourceQuality.fullHd:
+        return '1080p';
+      case SourceQuality.hd:
+        return '720p';
+      case SourceQuality.sd:
+        return '480p';
+      case null:
+        return null;
+    }
   }
 
   /// Sort streams so those matching [_preferredQuality] come first.
@@ -3419,16 +3421,7 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
   }
 
   String _parseQuality(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('2160p') ||
-        lower.contains('4k') ||
-        lower.contains('uhd')) {
-      return '4K';
-    }
-    if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
-    if (lower.contains('720p')) return '720p';
-    if (lower.contains('480p') || lower.contains('sd')) return '480p';
-    return 'HD';
+    return sourceQualityBadgeForName(name) ?? 'HD';
   }
 
   Color _qualityColor(String quality) {

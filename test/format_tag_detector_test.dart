@@ -70,6 +70,18 @@ void main() {
       expect(tags, isNot(contains(FormatTag.uhd4k)));
     });
 
+    test('embedded DS4K release-group text is not a 4K badge', () {
+      final tags = FormatTagDetector.detect(
+        'Obsession.2026.1080p.10bit.DS4K.BluRay.x265',
+      );
+      expect(tags, contains(FormatTag.fullHd));
+      expect(tags, isNot(contains(FormatTag.uhd4k)));
+      expect(
+        FormatTagDetector.detect('Obsession.2026.DS4K.BluRay.x265'),
+        isNot(contains(FormatTag.uhd4k)),
+      );
+    });
+
     test('explicit 2160p is still 4K; bare 4K/UHD keyword falls back to 4K', () {
       expect(
         FormatTagDetector.detect('Movie.2160p.UHD.BluRay.x265'),
