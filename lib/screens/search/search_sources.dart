@@ -45,7 +45,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   TorrentFilterState _filters = const TorrentFilterState.empty();
   String _sortBy = 'relevance'; // relevance | name | size | seeders | date
   bool _sortAsc = false;
-  String? _sourceFilter; // null = all sources; else a Torrent.source value
+  String? _sourceFilter; // null = all sources; else a normalized provider key
 
   /// D-pad anchor for the redesigned toolbar: the filter funnel. Pressing UP
   /// from the first row focuses this on TV so the remote can reach the toolbar
@@ -586,7 +586,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // an early batch that merely hasn't delivered that source yet must not
     // silently clear the user's filter mid-stream.
     if (_sourceFilter != null &&
-        !fullSet.any((t) => t.source == _sourceFilter)) {
+        !fullSet.any(
+          (t) =>
+              SourcePriority.keyForSource(
+                t.source,
+                aliases: _sourceAliases,
+              ) ==
+              _sourceFilter,
+        )) {
       _sourceFilter = null;
       if (_pendingTorrents == null) {
         _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
@@ -1188,7 +1195,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   List<Torrent> _applyToolbar(List<Torrent> src) {
     var list = src;
     if (_sourceFilter != null) {
-      list = list.where((t) => t.source == _sourceFilter).toList();
+      list = list
+          .where(
+            (t) =>
+                SourcePriority.keyForSource(
+                  t.source,
+                  aliases: _sourceAliases,
+                ) ==
+                _sourceFilter,
+          )
+          .toList();
     }
     // Size buckets are meaningless for series: addon packs report a single
     // episode's size, so a size filter would match against a misleading
@@ -1352,9 +1368,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     pill(
                       key: 'source-pill-${status.addonId}',
                       on: false,
-                      onTap: _retryingAddons.contains(status.addonId)
-                          ? null
-                          : () => unawaited(_retryAddon(status)),
+                      onTap: () => unawaited(_retryAddon(status)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -1395,15 +1409,15 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   else if (sourceByKey[key] case final source?)
                     pill(
                       key: 'source-pill-$key',
-                      on: _sourceFilter == source,
+                      on: _sourceFilter == key,
                       onTap: () {
-                        _sourceFilter = source;
+                        _sourceFilter = key;
                         _rebuildVisible();
                       },
                       child: Text(
                         _prettySource(source),
                         style: TextStyle(
-                          color: _sourceFilter == source
+                          color: _sourceFilter == key
                               ? app.inkOn(accent)
                               : dim,
                           fontSize: 12.5,
