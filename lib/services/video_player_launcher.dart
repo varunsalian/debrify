@@ -2517,27 +2517,33 @@ class VideoPlayerLauncher {
       // (zero-result addons stay visible with a Fetch row). Best-effort: a
       // listing failure just means no placeholders this session.
       if (addonSourcesProviderForTv != null) {
+        List<SourceAddonRef> addons = const [];
+        List<SourceEngineRef> engines = const [];
         try {
-          final addons = await seriesFetcher!.listAddons?.call() ?? const [];
-          final engines = await seriesFetcher.listEngines?.call() ?? const [];
-          if (addons.isNotEmpty || engines.isNotEmpty) {
-            payloadMap['sourceAddons'] = [
-              for (final engine in engines)
-                {
-                  'id': 'engine::${engine.id}',
-                  'name': engine.name,
-                  'sourceKey': engine.sourceKey,
-                },
-              for (final addon in addons)
-                {
-                  'id': addon.id,
-                  'name': addon.name,
-                  'sourceKey': addon.sourceKey,
-                },
-            ];
-          }
+          addons = await seriesFetcher!.listAddons?.call() ?? const [];
         } catch (e) {
           debugPrint('VideoPlayerLauncher: addon listing failed: $e');
+        }
+        try {
+          engines = await seriesFetcher!.listEngines?.call() ?? const [];
+        } catch (e) {
+          debugPrint('VideoPlayerLauncher: engine listing failed: $e');
+        }
+        if (addons.isNotEmpty || engines.isNotEmpty) {
+          payloadMap['sourceAddons'] = [
+            for (final engine in engines)
+              {
+                'id': 'engine::${engine.id}',
+                'name': engine.name,
+                'sourceKey': engine.sourceKey,
+              },
+            for (final addon in addons)
+              {
+                'id': addon.id,
+                'name': addon.name,
+                'sourceKey': addon.sourceKey,
+              },
+          ];
         }
       }
 

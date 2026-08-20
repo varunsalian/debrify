@@ -109,25 +109,34 @@ class _SourceSheetState extends State<SourceSheet> {
     if (addonListing == null && engineListing == null) {
       return;
     }
-    try {
-      final listings = await Future.wait([
-        addonListing?.call() ?? Future.value(const <SourceAddonRef>[]),
-        engineListing?.call() ?? Future.value(const <SourceEngineRef>[]),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _allAddons = listings[0] as List<SourceAddonRef>;
-        _allEngines = listings[1] as List<SourceEngineRef>;
-        final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
-        final focusedOriginal = _focusedEntry?.originalIndex;
-        _rebuildGroups(
-          selectedId: selectedId,
-          focusedOriginal: focusedOriginal,
-        );
-      });
-    } catch (_) {
-      // No listing — the sheet simply shows only groups that have results.
+    Future<List<SourceAddonRef>> loadAddons() async {
+      try {
+        return await addonListing?.call() ?? const [];
+      } catch (_) {
+        return const [];
+      }
     }
+
+    Future<List<SourceEngineRef>> loadEngines() async {
+      try {
+        return await engineListing?.call() ?? const [];
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final addonsFuture = loadAddons();
+    final enginesFuture = loadEngines();
+    final addons = await addonsFuture;
+    final engines = await enginesFuture;
+    if (!mounted) return;
+    setState(() {
+      _allAddons = addons;
+      _allEngines = engines;
+      final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
+      final focusedOriginal = _focusedEntry?.originalIndex;
+      _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
+    });
   }
 
   @override
@@ -816,10 +825,10 @@ class _SourceSheetState extends State<SourceSheet> {
         const SizedBox(height: 10),
         Text(
           failed
-              ? "This add-on couldn't be reached."
+              ? "This provider couldn't be reached."
               : fetched
-              ? 'This add-on returned nothing for this episode.'
-              : "This add-on hasn't been asked yet for this episode.",
+              ? 'This provider returned nothing for this episode.'
+              : "This provider hasn't been asked yet for this episode.",
           style: _mutedStyle,
         ),
       ],

@@ -185,6 +185,44 @@ void main() {
     expect(find.text('Retried result'), findsOneWidget);
   });
 
+  testWidgets('keeps engine placeholders when addon listing fails', (
+    tester,
+  ) async {
+    final fetcher = SeriesSourceFetcher.movie(
+      searchMovie: () async => const [],
+      listAddons: () async => throw Exception('addon listing failed'),
+      listEngines: () async => const [
+        SourceEngineRef('engine_a', 'Engine A', 'engine_a'),
+      ],
+      fetchAddonEpisodes: (_, __, ___) async => const [],
+      fetchEngine: (_, __, ___) async => const [],
+    );
+
+    await tester.pumpWidget(_Host(initial: const [], fetcher: fetcher));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Engine A'), findsOneWidget);
+  });
+
+  testWidgets('keeps addon placeholders when engine listing fails', (
+    tester,
+  ) async {
+    final fetcher = SeriesSourceFetcher.movie(
+      searchMovie: () async => const [],
+      listAddons: () async => const [SourceAddonRef('comet', 'Comet')],
+      listEngines: () async => throw Exception('engine listing failed'),
+      fetchAddonEpisodes: (_, __, ___) async => const [],
+      fetchEngine: (_, __, ___) async => const [],
+    );
+
+    await tester.pumpWidget(_Host(initial: const [], fetcher: fetcher));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Comet'), findsOneWidget);
+  });
+
   testWidgets('uses a compact source browser without overflowing in portrait', (
     tester,
   ) async {
