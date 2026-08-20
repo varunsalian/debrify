@@ -389,7 +389,7 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
                       fontWeight: FontWeight.w500,
                       height: 1.3,
                     ),
-                    maxLines: 2,
+                    maxLines: 6,
                     overflow: TextOverflow.ellipsis,
                   ),
 

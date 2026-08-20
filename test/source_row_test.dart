@@ -49,6 +49,25 @@ void main() {
     expect(find.text('Season Pack'), findsOneWidget);
   });
 
+  testWidgets('source title honors a six-line limit', (tester) async {
+    final node = FocusNode();
+    addTearDown(node.dispose);
+    await pump(
+      tester,
+      SourceRow(
+        title: 'A very long source title',
+        titleMaxLines: 6,
+        subtitle: 'metadata',
+        focusNode: node,
+        onTap: () {},
+      ),
+    );
+
+    final title = tester.widget<Text>(find.text('A very long source title'));
+    expect(title.maxLines, 6);
+    expect(title.overflow, TextOverflow.ellipsis);
+  });
+
   testWidgets('tap fires onTap (touch)', (tester) async {
     final node = FocusNode();
     addTearDown(node.dispose);

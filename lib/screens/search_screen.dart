@@ -13635,7 +13635,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
                               ),
                               title: t.displayTitle,
-                              titleMaxLines: 2,
+                              titleMaxLines: 6,
                               subtitle: _kwRowSubtitle(t),
                               focusNode: _kwNodes[i],
                               isTelevision: widget.isTelevision,

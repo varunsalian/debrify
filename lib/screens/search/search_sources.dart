@@ -1845,6 +1845,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         : FormatTagDetector.detect(t.name);
     return SourceRow(
       title: t.displayTitle,
+      titleMaxLines: 6,
       subtitle: _rowSubtitle(t),
       focusNode: _nodes[i],
       isTelevision: widget.isTelevision,
