@@ -470,4 +470,3 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
     ],
   ];
 }
-

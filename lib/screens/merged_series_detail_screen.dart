@@ -1932,7 +1932,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return s != null &&
         (s.inWatchlist ||
             s.inCollection ||
-            s.watched == true ||
+            s.titleWatched ||
             s.rating != null);
   }
 
@@ -1958,7 +1958,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final parts = <String>[
       if (s.inWatchlist) 'Watchlist',
       if (s.inCollection) 'Collected',
-      if (s.watched == true) 'Watched',
+      if (s.titleWatched) 'Watched',
     ];
     if (parts.isEmpty) return s.rating != null ? 'Rated' : 'Not tracked';
     return parts.take(2).join(' · ');

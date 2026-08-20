@@ -17,11 +17,16 @@ class TraktTitleStatus {
   final bool inWatchlist;
   final bool inCollection;
 
-  /// Title-level watched. Non-null only for **movies** (a movie is a clean
-  /// binary). Null for series — whole-series completion is fuzzy and the
-  /// episode list owns per-episode watched state — so the menu keeps offering
-  /// both "Mark Watched" and "Mark Unwatched" for shows.
+  /// Title-level watched. Non-null only for movies; series retain both bulk
+  /// history actions in their menu regardless of completion.
   final bool? watched;
+
+  /// True when every currently aired regular episode is in Trakt history.
+  /// Kept separate from [watched] so partially watched series can still offer
+  /// both "Mark Watched" and "Mark Unwatched" bulk actions.
+  final bool? seriesFullyWatched;
+
+  bool get titleWatched => watched == true || seriesFullyWatched == true;
 
   /// The user's 1–10 Trakt rating, or null if unrated.
   final int? rating;
@@ -30,6 +35,7 @@ class TraktTitleStatus {
     this.inWatchlist = false,
     this.inCollection = false,
     this.watched,
+    this.seriesFullyWatched,
     this.rating,
   });
 }
@@ -157,17 +163,18 @@ class TraktService {
           return l == null ? null : _extractRatings(l);
         },
       );
-      // Watched (movies only) via the failure-aware list endpoint, so a
-      // transient failure returns null (not cached, treated as "unknown
-      // watched") instead of poisoning the cache with an empty set that would
-      // hide the Watched badge for 45s. Unknown watched → offer both toggles,
-      // which is safe (mark/unmark are idempotent), so it never blocks a status.
-      final watchedF = type == 'series'
-          ? null
-          : _cachedLib<Set<String>>('watched:movies', () async {
-              final l = await fetchListOrNull('watched', 'movies');
-              return l == null ? null : _extractListImdbIds(l);
-            });
+      // Watched via failure-aware endpoints, so a transient failure returns
+      // null (not cached, treated as "unknown watched") instead of poisoning
+      // the cache with an empty set. Series need progress detail so fully
+      // watched can be distinguished from merely started.
+      final watchedF = _cachedLib<Set<String>>(
+        'watched:$contentType',
+        () async {
+          if (type == 'series') return fetchFullyWatchedShowsOrNull();
+          final l = await fetchListOrNull('watched', 'movies');
+          return l == null ? null : _extractListImdbIds(l);
+        },
+      );
 
       final watchlist = await watchlistF;
       final collection = await collectionF;
@@ -178,12 +185,14 @@ class TraktService {
         return null;
       }
       // Null (watched fetch failed) → watched unknown, not "unwatched".
-      final watchedMovies = watchedF == null ? null : await watchedF;
+      final watchedTitles = await watchedF;
+      final titleWatched = watchedTitles?.contains(imdbId.toLowerCase());
 
       return TraktTitleStatus(
         inWatchlist: watchlist.contains(imdbId),
         inCollection: collection.contains(imdbId),
-        watched: watchedMovies?.contains(imdbId),
+        watched: type == 'series' ? null : titleWatched,
+        seriesFullyWatched: type == 'series' ? titleWatched : null,
         rating: ratings[imdbId],
       );
     } catch (error) {
@@ -624,6 +633,10 @@ class TraktService {
     final response = await _authenticatedPost(path, body);
     if (response == null) return false;
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (path == '/scrobble/stop' && progress > 80) {
+        _invalidateLibraryCache();
+        StorageService.movieFinishedRevision.value++;
+      }
       debugPrint('Trakt: Scrobble completed');
       return true;
     }
@@ -738,6 +751,9 @@ class TraktService {
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
       debugPrint('Trakt: Episode sync failed (${response.statusCode})');
+    } else if (path == '/sync/history' || path == '/sync/history/remove') {
+      _invalidateLibraryCache();
+      StorageService.movieFinishedRevision.value++;
     }
     return ok;
   }
@@ -1413,6 +1429,11 @@ class TraktService {
       limit: 100,
     );
     if (list == null) return null;
+    return debugParseFullyWatchedShows(list);
+  }
+
+  @visibleForTesting
+  static Set<String> debugParseFullyWatchedShows(List<dynamic> list) {
     final result = <String>{};
     for (final item in list) {
       if (item is! Map<String, dynamic>) continue;

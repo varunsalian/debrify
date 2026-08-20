@@ -19,4 +19,52 @@ void main() {
 
     expect(watched, {'tt7654321': 100.0});
   });
+
+  test('fully watched series requires every aired regular episode', () {
+    final watched = TraktService.debugParseFullyWatchedShows([
+      {
+        'show': {
+          'aired_episodes': 3,
+          'ids': {'imdb': 'TT1111111'},
+        },
+        'seasons': [
+          {
+            'number': 1,
+            'episodes': [
+              {'number': 1},
+              {'number': 2},
+              {'number': 3},
+            ],
+          },
+        ],
+      },
+      {
+        'show': {
+          'aired_episodes': 3,
+          'ids': {'imdb': 'tt2222222'},
+        },
+        'seasons': [
+          {
+            'number': 1,
+            'episodes': [
+              {'number': 1},
+              {'number': 2},
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(watched, {'tt1111111'});
+  });
+
+  test(
+    'fully watched series does not become the movie-style watched toggle',
+    () {
+      const status = TraktTitleStatus(seriesFullyWatched: true);
+
+      expect(status.titleWatched, isTrue);
+      expect(status.watched, isNull);
+    },
+  );
 }
