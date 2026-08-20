@@ -121,13 +121,19 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
-    for (var i = 0; i < 10; i++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
 
     expect(submitted, '1234');
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('profile-pin-submit'))).dy,
+      greaterThan(
+        tester
+            .getBottomRight(find.byKey(const ValueKey('profile-pin-key-1')))
+            .dy,
+      ),
+    );
     expect(tester.takeException(), isNull);
   });
 

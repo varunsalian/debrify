@@ -327,7 +327,17 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     ),
   );
 
-  List<Widget> _keys({required bool horizontal}) => [
+  Widget _submitKey({required bool horizontal}) => _PinKey(
+    key: const ValueKey('profile-pin-submit'),
+    icon: Icons.check_rounded,
+    semanticLabel: 'Unlock profile',
+    enabled: !_busy,
+    busy: _busy,
+    onPressed: _submit,
+    horizontal: horizontal,
+  );
+
+  List<Widget> _keys({required bool horizontal, bool includeSubmit = true}) => [
     for (var digit = 1; digit <= 9; digit++)
       _PinKey(
         key: ValueKey('profile-pin-key-$digit'),
@@ -349,15 +359,7 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
       onPressed: () => _add(0),
       horizontal: horizontal,
     ),
-    _PinKey(
-      key: const ValueKey('profile-pin-submit'),
-      icon: Icons.check_rounded,
-      semanticLabel: 'Unlock profile',
-      enabled: !_busy,
-      busy: _busy,
-      onPressed: _submit,
-      horizontal: horizontal,
-    ),
+    if (includeSubmit) _submitKey(horizontal: horizontal),
   ];
 
   Widget _statusAndRecovery({bool center = false}) => Column(
@@ -473,9 +475,15 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
         const SizedBox(height: 18),
         Row(
           children: [
-            for (final key in _keys(horizontal: true)) Expanded(child: key),
+            for (final key in _keys(horizontal: true, includeSubmit: false))
+              Expanded(child: key),
           ],
         ),
+        const SizedBox(height: 6),
+        // One full-width target beneath the keypad means Down reaches Submit
+        // from every number/backspace position. This is substantially easier
+        // than traversing to the far-right end of a twelve-button TV row.
+        SizedBox(width: double.infinity, child: _submitKey(horizontal: true)),
         _statusAndRecovery(),
       ],
     ),
