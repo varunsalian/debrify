@@ -139,10 +139,11 @@ dependencies:
   provider: ^6.1.2
   youtube_explode_dart: ^3.1.0
 
-# media_kit is vendored under packages/media_kit_patched with ONE change: an
-# already-resolved guard in NativeLibrary.ensureInitialized. Without it, Apple
-# TV video can never start (see the comment at the patch site). Everything
-# else is stock media_kit 1.2.0 — diff it before upgrading.
+# media_kit is vendored under packages/media_kit_patched for Apple TV support:
+# an already-resolved NativeLibrary initialization guard, safe NativeCallable
+# ownership during disposal, and off-main-isolate libmpv destruction. Without
+# these, tvOS playback either cannot start or can deadlock/abort during player
+# teardown. Diff the package before upgrading from the 1.2.0 base.
 # path_provider_tvos is vendored under packages/path_provider_tvos_patched with
 # ONE change: getApplicationSupportDirectory returns a Caches subdirectory
 # instead of nil. Upstream is technically right (Application Support cannot be
@@ -203,6 +204,7 @@ flutter:
     - assets/app_icon.png
     - assets/app_icon_foreground.png
     - assets/images/profile_gate_lighthouse.png
+    - assets/images/profile_avatars/
     - assets/splash_logo.png
     - assets/config/app_remote_config.json
     - assets/config/engines/

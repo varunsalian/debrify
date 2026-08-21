@@ -2,13 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// A built-in avatar, **drawn rather than shipped**.
+/// A built-in avatar, either drawn in code or shipped as a bounded asset.
 ///
-/// The art in the design mock is gradients and keyframes, not photographs, so
-/// the whole default set costs a few KB of code instead of asset bytes. That
-/// matters three ways: nothing is added to an APK that is already too big,
-/// there is no network and no cache, and — because assets and code cannot be
-/// purged — these are the avatars that survive tvOS reclaiming its Caches.
+/// The original abstract set is gradients and keyframes, so it costs only a
+/// few KB of code. Character art can opt into a small bundled GIF instead.
+/// Both forms have no network or cache dependency and survive tvOS reclaiming
+/// its Caches.
 ///
 /// Each entry declares its own wash colour, so the gate never decodes anything
 /// to paint its backdrop.
@@ -25,7 +24,10 @@ class ProfileArt {
 
   /// Paints into a [size] box. `t` runs 0→1 and wraps; it is only advanced
   /// while the avatar is focused.
-  final void Function(Canvas canvas, Size size, double t) paint;
+  final void Function(Canvas canvas, Size size, double t)? paint;
+
+  /// Bundled raster animation. Mutually exclusive with [paint].
+  final String? assetPath;
 
   const ProfileArt({
     required this.id,
@@ -33,7 +35,17 @@ class ProfileArt {
     required this.color,
     required this.animated,
     required this.paint,
-  });
+  }) : assetPath = null;
+
+  const ProfileArt.asset({
+    required this.id,
+    required this.label,
+    required this.color,
+    required this.assetPath,
+    this.animated = true,
+  }) : paint = null;
+
+  bool get isAsset => assetPath != null;
 }
 
 class ProfileArtRegistry {
@@ -47,6 +59,36 @@ class ProfileArtRegistry {
   }
 
   static const List<ProfileArt> all = <ProfileArt>[
+    ProfileArt.asset(
+      id: 'snack_popcorn',
+      label: 'Popcorn Panic',
+      color: Color(0xFFD5292F),
+      assetPath: 'assets/images/profile_avatars/snack_popcorn.gif',
+    ),
+    ProfileArt.asset(
+      id: 'snack_soda',
+      label: 'Soda Star',
+      color: Color(0xFF149B9E),
+      assetPath: 'assets/images/profile_avatars/snack_soda.gif',
+    ),
+    ProfileArt.asset(
+      id: 'snack_nacho',
+      label: 'Nacho Mood',
+      color: Color(0xFFD99012),
+      assetPath: 'assets/images/profile_avatars/snack_nacho.gif',
+    ),
+    ProfileArt.asset(
+      id: 'snack_gummy',
+      label: 'Gummy Gamer',
+      color: Color(0xFF8625B5),
+      assetPath: 'assets/images/profile_avatars/snack_gummy.gif',
+    ),
+    ProfileArt.asset(
+      id: 'snack_sundae',
+      label: 'Sleepy Sundae',
+      color: Color(0xFF5DAE9F),
+      assetPath: 'assets/images/profile_avatars/snack_sundae.gif',
+    ),
     ProfileArt(
       id: 'aurora',
       label: 'Aurora',

@@ -32,11 +32,25 @@ import 'package:media_kit/src/player/native/core/native_library.dart';
 import 'package:media_kit/src/player/native/utils/android_asset_loader.dart';
 import 'package:media_kit/src/player/native/utils/android_helper.dart';
 import 'package:media_kit/src/player/native/utils/isolates.dart';
+import 'package:media_kit/src/player/native/utils/native_player_disposal.dart';
 import 'package:media_kit/src/player/native/utils/native_reference_holder.dart';
 import 'package:media_kit/src/player/native/utils/temp_file.dart';
 import 'package:media_kit/src/player/platform_player.dart';
 
 import 'package:media_kit/generated/libmpv/bindings.dart' as generated;
+
+/// Runs the blocking libmpv join outside Flutter's main isolate.
+///
+/// On Apple, video-output teardown may synchronously dispatch work back to the
+/// platform main queue. Calling `mpv_terminate_destroy` from Flutter's main
+/// isolate therefore deadlocks both sides until the scene-update watchdog
+/// kills the app. Only send primitive values across the isolate boundary and
+/// resolve the library/function table inside the worker.
+void _terminateNativePlayer(List<Object> message) {
+  final library = generated.MPV(DynamicLibrary.open(message[0] as String));
+  final handle = Pointer<generated.mpv_handle>.fromAddress(message[1] as int);
+  library.mpv_terminate_destroy(handle);
+}
 
 /// Initializes the native backend for package:media_kit.
 void nativeEnsureInitialized({String? libmpv}) {
@@ -100,11 +114,34 @@ class NativePlayer extends PlatformPlayer {
 
       await super.dispose();
 
-      Initializer(mpv).dispose(ctx);
+      final closeWakeupCallback = Initializer(mpv).dispose(ctx) ?? () {};
 
-      Future.delayed(const Duration(seconds: 5), () {
-        mpv.mpv_terminate_destroy(ctx);
-      });
+      if (Platform.isIOS) {
+        // tvOS reports itself as iOS through dart:io. Await the worker so
+        // Player.dispose (and Debrify's VideoOutputLease) completes only after
+        // the native output has actually gone away. The main isolate remains
+        // free to service VideoOutput's shutdown callbacks meanwhile.
+        await completeNativePlayerDisposal(
+          terminate: () => compute(
+            _terminateNativePlayer,
+            <Object>[NativeLibrary.path, ctx.address],
+            debugLabel: 'media_kit: mpv_terminate_destroy',
+          ),
+          closeWakeupCallback: closeWakeupCallback,
+        );
+      } else {
+        // Preserve media_kit's established grace period off Apple. Keep the
+        // callback alive through native termination instead of closing both on
+        // independent timers, where timer ordering recreates the callback race.
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 5)).then(
+            (_) => completeNativePlayerDisposal(
+              terminate: () async => mpv.mpv_terminate_destroy(ctx),
+              closeWakeupCallback: closeWakeupCallback,
+            ),
+          ),
+        );
+      }
     }
 
     if (synchronized) {
