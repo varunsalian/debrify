@@ -4,9 +4,30 @@ import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/tvos_top_shelf_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('Top Shelf personalization authority', () {
+    test('multi-profile personalization defaults to enabled', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      expect(
+        await TvosTopShelfService.instance.multiProfilePersonalizationEnabled(),
+        isTrue,
+      );
+    });
+
+    test('honors an explicit disabled preference', () async {
+      SharedPreferences.setMockInitialValues({
+        'tvos_multi_profile_top_shelf_enabled': false,
+      });
+
+      expect(
+        await TvosTopShelfService.instance.multiProfilePersonalizationEnabled(),
+        isFalse,
+      );
+    });
+
     test('allows only an Admin with profile-management permission', () {
       expect(
         TvosTopShelfService.canManageMultiProfilePersonalization(
