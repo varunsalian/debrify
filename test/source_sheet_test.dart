@@ -61,6 +61,10 @@ void main() {
   testWidgets('shows the complete source name across multiple lines', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     const title =
         'The complete source title remains visible even when it needs several lines';
     await tester.pumpWidget(
@@ -78,6 +82,9 @@ void main() {
     final text = tester.widget<Text>(find.text(title));
     expect(text.maxLines, isNull);
     expect(text.overflow, isNull);
+    // The fixed desktop rail leaves a narrow results pane at this size. The
+    // title still gets the row width instead of being squeezed by its badges.
+    expect(tester.getSize(find.text(title)).width, greaterThan(250));
   });
 
   testWidgets('groups by add-on while retaining original selection indexes', (

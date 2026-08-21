@@ -976,6 +976,42 @@ class _SourceRow extends StatelessWidget {
         '${torrent.seeders} seeders',
     ];
     final quality = _quality(torrent.displayTitle);
+    final title = Text(
+      torrent.displayTitle,
+      style: TextStyle(
+        color: inverse ? Colors.black : Colors.white.withValues(alpha: .86),
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final badges = <Widget>[
+      if (quality != null)
+        _Pill(label: quality, inverse: inverse, emphasis: true),
+      for (final tag in tags) _Pill(label: tag, inverse: inverse),
+    ];
+    final activity = resolving
+        ? SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.8,
+              color: inverse ? Colors.black : Colors.white70,
+            ),
+          )
+        : current
+        ? Text(
+            '▮▮▮',
+            semanticsLabel: 'Playing',
+            style: TextStyle(
+              color: inverse
+                  ? const Color(0xFFAB2733)
+                  : const Color(0xFFE23D4C),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+            ),
+          )
+        : null;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -995,51 +1031,52 @@ class _SourceRow extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                torrent.displayTitle,
-                style: TextStyle(
-                  color: inverse
-                      ? Colors.black
-                      : Colors.white.withValues(alpha: .86),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            if (quality != null)
-              _Pill(label: quality, inverse: inverse, emphasis: true),
-            for (final tag in tags) ...[
-              const SizedBox(width: 6),
-              _Pill(label: tag, inverse: inverse),
-            ],
-            const SizedBox(width: 14),
-            if (resolving)
-              SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.8,
-                  color: inverse ? Colors.black : Colors.white70,
-                ),
-              )
-            else if (current)
-              Text(
-                '▮▮▮',
-                semanticsLabel: 'Playing',
-                style: TextStyle(
-                  color: inverse
-                      ? const Color(0xFFAB2733)
-                      : const Color(0xFFE23D4C),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Inline badges can otherwise squeeze an untruncated title into a
+            // column only a few characters wide on a narrow results pane.
+            if (constraints.maxWidth < 520) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: double.infinity, child: title),
+                  if (badges.isNotEmpty || activity != null) ...[
+                    const SizedBox(height: 9),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (badges.isNotEmpty)
+                          Expanded(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: badges,
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        if (activity != null) ...[
+                          const SizedBox(width: 14),
+                          activity,
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: title),
+                if (badges.isNotEmpty) ...[
+                  const SizedBox(width: 14),
+                  Wrap(spacing: 6, children: badges),
+                ],
+                if (activity != null) ...[const SizedBox(width: 14), activity],
+              ],
+            );
+          },
         ),
       ),
     );
