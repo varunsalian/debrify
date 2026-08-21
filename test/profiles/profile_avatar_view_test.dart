@@ -170,6 +170,34 @@ void main() {
     });
   });
 
+  group('bundled GIF avatars', () {
+    testWidgets('unfocused bundled art holds its first frame', (tester) async {
+      await tester.pumpWidget(harness(avatarKey: 'art:snack_popcorn'));
+
+      expect(find.byType(Image), findsNothing);
+      expect(find.byKey(ProfileAvatarView.stillFrameKey), findsOneWidget);
+    });
+
+    testWidgets('focused bundled art animates', (tester) async {
+      await tester.pumpWidget(
+        harness(avatarKey: 'art:snack_popcorn', focused: true),
+      );
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byKey(ProfileAvatarView.stillFrameKey), findsNothing);
+    });
+
+    test('declares a stable wash colour and bundled asset', () {
+      final art = ProfileArtRegistry.byId('snack_popcorn');
+      expect(art?.isAsset, isTrue);
+      expect(art?.assetPath, endsWith('snack_popcorn.gif'));
+      expect(
+        ProfileAvatarView.washColor('art:snack_popcorn', UserProfileRole.admin),
+        art?.color,
+      );
+    });
+  });
+
   group('the missing-file floor', () {
     testWidgets('a key with no file renders the initial, never an error', (
       tester,

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -187,6 +188,7 @@ class _ProfileAvatarViewState extends State<ProfileAvatarView>
     final shouldRun =
         (widget.focused || widget.animateWhenIdle) &&
         widget.allowAnimation &&
+        !(art?.isAsset ?? false) &&
         (art?.animated ?? false);
     if (shouldRun) {
       if (!_controller.isAnimating) _controller.repeat();
@@ -216,17 +218,39 @@ class _ProfileAvatarViewState extends State<ProfileAvatarView>
 
   Widget _buildArt(ProfileArt art) => AnimatedBuilder(
     animation: _controller,
-    builder: (context, _) => CustomPaint(
-      // Keyed so a test can find *this* painter: a MaterialApp is full of
-      // framework CustomPaints, and `find.byType(CustomPaint).first` picks one
-      // of those instead.
-      key: ProfileAvatarView.artPaintKey,
-      painter: _ArtPainter(art: art, t: _controller.value),
-      isComplex: true,
-      willChange: _controller.isAnimating,
-      size: Size.infinite,
-    ),
+    builder: (context, _) {
+      final assetPath = art.assetPath;
+      if (assetPath != null) return _buildAssetArt(art, assetPath);
+      return CustomPaint(
+        // Keyed so a test can find *this* painter: a MaterialApp is full of
+        // framework CustomPaints, and `find.byType(CustomPaint).first` picks one
+        // of those instead.
+        key: ProfileAvatarView.artPaintKey,
+        painter: _ArtPainter(art: art, t: _controller.value),
+        isComplex: true,
+        willChange: _controller.isAnimating,
+        size: Size.infinite,
+      );
+    },
   );
+
+  Widget _buildAssetArt(ProfileArt art, String assetPath) {
+    if ((widget.focused || widget.animateWhenIdle) &&
+        widget.allowAnimation &&
+        art.animated) {
+      return Image.asset(
+        assetPath,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => _buildFallback(),
+      );
+    }
+    return _StillFrame.asset(
+      key: ProfileAvatarView.stillFrameKey,
+      assetPath: assetPath,
+      placeholderColor: art.color,
+    );
+  }
 
   Widget _buildImage(ProfileAvatar avatar, File file) {
     if (!avatar.isAnimatedImage) {
@@ -245,7 +269,7 @@ class _ProfileAvatarViewState extends State<ProfileAvatarView>
         errorBuilder: (_, __, ___) => _buildFallback(),
       );
     }
-    return _StillFrame(
+    return _StillFrame.file(
       key: ProfileAvatarView.stillFrameKey,
       file: file,
       placeholderColor: ProfileAvatarView.washColor(
@@ -316,7 +340,7 @@ class _ArtPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     canvas.clipRect(Offset.zero & size);
-    art.paint(canvas, size, t);
+    art.paint!(canvas, size, t);
   }
 
   @override
@@ -328,14 +352,30 @@ class _ArtPainter extends CustomPainter {
 /// This is what keeps a wall of GIFs affordable: only the focused tile holds a
 /// live decoder, and every other tile is a single static bitmap.
 class _StillFrame extends StatefulWidget {
-  final File file;
+  final File? file;
+  final String? assetPath;
   final Color placeholderColor;
 
-  const _StillFrame({
+  const _StillFrame.file({
     super.key,
-    required this.file,
+    required File this.file,
     required this.placeholderColor,
-  });
+  }) : assetPath = null;
+
+  const _StillFrame.asset({
+    super.key,
+    required String this.assetPath,
+    required this.placeholderColor,
+  }) : file = null;
+
+  String get cacheKey => file?.path ?? 'asset:$assetPath';
+
+  Future<Uint8List> readBytes() async {
+    final sourceFile = file;
+    if (sourceFile != null) return sourceFile.readAsBytes();
+    final data = await rootBundle.load(assetPath!);
+    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  }
 
   @override
   State<_StillFrame> createState() => _StillFrameState();
@@ -358,7 +398,7 @@ class _StillFrameState extends State<_StillFrame> {
   @override
   void didUpdateWidget(_StillFrame old) {
     super.didUpdateWidget(old);
-    if (old.file.path != widget.file.path) {
+    if (old.cacheKey != widget.cacheKey) {
       _releaseEntry();
       _load();
     }
@@ -373,7 +413,7 @@ class _StillFrameState extends State<_StillFrame> {
 
   Future<void> _load() async {
     final serial = ++_loadSerial;
-    final path = widget.file.path;
+    final path = widget.cacheKey;
     // A hit becomes most-recently used, rather than leaving the map FIFO.
     final cached = _cache.remove(path);
     if (cached != null) {
@@ -387,7 +427,7 @@ class _StillFrameState extends State<_StillFrame> {
     ui.Codec? codec;
     ui.Image? decoded;
     try {
-      final bytes = await widget.file.readAsBytes();
+      final bytes = await widget.readBytes();
       buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       descriptor = await ui.ImageDescriptor.encoded(buffer);
       codec = await descriptor.instantiateCodec(
@@ -396,7 +436,7 @@ class _StillFrameState extends State<_StillFrame> {
       );
       final frame = await codec.getNextFrame();
       decoded = frame.image;
-      if (!mounted || serial != _loadSerial || widget.file.path != path) {
+      if (!mounted || serial != _loadSerial || widget.cacheKey != path) {
         decoded.dispose();
         decoded = null;
         return;

@@ -33,8 +33,9 @@ class TvosTopShelfService {
   static const int _previewHeight = 1080;
   static const int _previewDurationSeconds = 120;
   static const String _previewCacheVersion = 'v1';
-  static const String _multiProfileOptInKey =
+  static const String _multiProfileEnabledKey =
       'tvos_multi_profile_top_shelf_enabled';
+  static const bool _multiProfileEnabledByDefault = true;
 
   String? _lastSourceContent;
   String? _lastPublishedContent;
@@ -136,8 +137,10 @@ class TvosTopShelfService {
     }
     final profiles = await ProfileBootstrap.registry.listProfiles();
     if (profiles.length > 1 &&
-        !((await DevicePreferences.instance()).getBool(_multiProfileOptInKey) ??
-            false)) {
+        !((await DevicePreferences.instance()).getBool(
+              _multiProfileEnabledKey,
+            ) ??
+            _multiProfileEnabledByDefault)) {
       return null;
     }
     final revision = DateTime.now().microsecondsSinceEpoch;
@@ -483,8 +486,8 @@ class TvosTopShelfService {
   }
 
   Future<bool> multiProfilePersonalizationEnabled() async =>
-      (await DevicePreferences.instance()).getBool(_multiProfileOptInKey) ??
-      false;
+      (await DevicePreferences.instance()).getBool(_multiProfileEnabledKey) ??
+      _multiProfileEnabledByDefault;
 
   /// The same authority predicate used by both the settings surface and the
   /// write boundary. Keeping it here prevents a visible control from drifting
@@ -502,7 +505,7 @@ class TvosTopShelfService {
       throw StateError('Only an Admin can change Top Shelf privacy');
     }
     if (!await (await DevicePreferences.instance()).setBool(
-      _multiProfileOptInKey,
+      _multiProfileEnabledKey,
       enabled,
     )) {
       throw StateError('Could not save Top Shelf privacy preference');

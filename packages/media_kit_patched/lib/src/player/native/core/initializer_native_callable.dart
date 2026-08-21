@@ -58,25 +58,17 @@ class InitializerNativeCallable {
 
   /// Disposes [Pointer<mpv_handle>].
   ///
-  /// PATCHED (Debrify): upstream closes the [NativeCallable] here and nothing
-  /// tells mpv to stop using it. The caller (`real.dart`) then defers
-  /// `mpv_terminate_destroy` by five seconds — so for those five seconds a live
-  /// mpv handle still holds a pointer to a callback that no longer exists. Any
-  /// event in that window aborts the process with
-  /// "Callback invoked after it has been deleted" (SIGABRT). It reproduces on
-  /// Apple TV whenever one player is torn down while another starts, which the
-  /// ambient trailer does constantly.
-  ///
-  /// So: detach from mpv first, and close the callable later. `.listener`
-  /// delivers through the isolate's message queue, so an invocation posted
-  /// before the detach may still be in flight — closing on a later turn lets it
-  /// drain. The delay matches the caller's terminate delay.
-  void dispose(Pointer<generated.mpv_handle> ctx) {
+  /// PATCHED (Debrify): detach the [NativeCallable], but hand ownership back to
+  /// the caller instead of closing it here. Clearing mpv's callback prevents
+  /// new invocations, but an invocation already posted to Dart may still be in
+  /// flight. The caller closes this only after `mpv_terminate_destroy` returns.
+  NativeCallable<WakeUpCallback>? dispose(
+    Pointer<generated.mpv_handle> ctx,
+  ) {
     mpv.mpv_set_wakeup_callback(ctx, nullptr, nullptr);
     _locks.remove(ctx.address);
     _eventCallbacks.remove(ctx.address);
-    final callable = _wakeUpNativeCallables.remove(ctx.address);
-    Future.delayed(const Duration(seconds: 5), () => callable?.close());
+    return _wakeUpNativeCallables.remove(ctx.address);
   }
 
   void _callback(Pointer<generated.mpv_handle> ctx) {

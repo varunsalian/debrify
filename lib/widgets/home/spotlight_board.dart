@@ -519,22 +519,25 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// which side the identity sits on.
   final Map<String, double> _leftThird = {};
 
-  /// The hero's cadence: art, then a trailer. **Never an advance.**
+  /// The hero's cadence: resolve its trailer as soon as it is eligible.
+  /// **Never an advance.**
   ///
-  ///     art (4s) ──▶ trailer (loops until a deliberate move)
-  ///      ▲                       │
-  ///      └── swipe / LEFT/RIGHT ─┘
+  ///     art ──▶ resolve immediately ──▶ trailer (loops until a move)
+  ///      ▲                                      │
+  ///      └──────── swipe / LEFT/RIGHT ──────────┘
   ///
   /// The reel used to page itself (art → trailer → advance → next art, and a
-  /// plain 4s advance with trailers off). Killed by user call, on every
+  /// plain timed advance with trailers off). Killed by user call, on every
   /// device: a carousel that moves under you takes the choice away — the
   /// reel now moves ONLY on a swipe, a dot tap, or a DPAD page. The one
-  /// timer's one remaining job is the trailer dwell.
+  /// timer is now only a cancellable next-event-loop handoff: trailer lookup
+  /// already takes noticeable time, so an artificial art dwell only makes the
+  /// hero feel unresponsive.
   ///
   /// ONE timer with ONE owner. The shared `_scheduleHeroTrailer` is excluded
   /// for this style precisely so the two cannot interleave and start a trailer
   /// under the wrong title.
-  static const Duration _artDwell = Duration(seconds: 4);
+  static const Duration _hiddenRetry = Duration(seconds: 1);
 
   Timer? _cadence;
 
@@ -599,15 +602,17 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // loading more shelves or resolving hero art must not re-arm the hero
     // underneath it.
     if (_desktopPreviewOwners.isNotEmpty) return;
-    // The cadence's only job is the trailer dwell now — with no trailer to
-    // arm there is nothing to time. The reel itself moves only on input.
+    // With no trailer to arm there is nothing to schedule. The reel itself
+    // still moves only on input.
     if (!widget.trailersEnabled || widget.onDwell == null) return;
     // TV: frozen while focus is off the hero. `_row == -1` alone is NOT that
     // test: it stays -1 when focus goes to the sidebar, another tab, or a
     // pushed detail route — the node's own `hasFocus` is the real question.
     // Touch has no focus to gate on; visibility is checked at FIRE time.
     if (widget.dpad && (_row >= 0 || !widget.heroNode.hasFocus)) return;
-    _cadence = Timer(_artDwell, _onArtDone);
+    // Keep the handoff cancellable so a focus/route change in this event loop
+    // can still stop the resolve, but add no user-visible dwell.
+    _cadence = Timer(Duration.zero, _onArtDone);
   }
 
   /// Dot tap / swipe target: show slide [i] and restart the clock.
@@ -631,24 +636,22 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // cadence via [_onBoardScrolled].
     if (_scrolledAway) return;
     // Touch: a covered or backgrounded board must not spin up an engine for
-    // a hero nobody can see. Re-arm and wait rather than dying — the route
-    // pop that reveals the board again gives no callback here.
+    // a hero nobody can see. Poll gently until visible; this retry delay is
+    // not part of the visible start cadence.
     if (!widget.dpad) {
       final route = ModalRoute.of(context);
       final lifecycle = WidgetsBinding.instance.lifecycleState;
       final visible = (route == null || route.isCurrent) &&
           (lifecycle == null || lifecycle == AppLifecycleState.resumed);
       if (!visible) {
-        _cadence = Timer(_artDwell, _onArtDone);
+        _cadence = Timer(_hiddenRetry, _onArtDone);
         return;
       }
     }
     final item = _heroItem;
     if (item == null) {
-      // An empty reel consumed the one-shot — re-arm, or a hero arriving
-      // later (CW mounts before the first catalog section) finds a dead
-      // clock and never dwells.
-      _cadence = Timer(_artDwell, _onArtDone);
+      // didUpdateWidget re-arms when the first hero arrives; polling an empty
+      // reel here would create a zero-delay loop.
       return;
     }
     if (widget.trailersEnabled && widget.onDwell != null) {

@@ -387,10 +387,11 @@ class _RowPlate extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────── Marquee ──────────
 
-/// Marquee: the Spotlight rail-and-stage grammar. The focused person IS the
-/// screen — display-type name, role/PIN chips, a white Continue pill and
-/// their avatar huge on the right — while the household is a quiet rail of
-/// circles. Focus lives on the rail only.
+/// Marquee: the cinematic, lighthouse-lit front door. A crop-safe background
+/// carries the room while the household remains unmistakably in the foreground:
+/// a focusable avatar rail on TV and desktop, a card grid on tablet, and big
+/// tap targets on phones. The asset deliberately leaves its left half quiet,
+/// so the same artwork remains readable at every aspect ratio.
 class ProfileMarqueeGateScreen extends StatefulWidget {
   final List<UserProfile> profiles;
   final ValueChanged<UserProfile> onSelected;
@@ -440,398 +441,444 @@ class _ProfileMarqueeGateScreenState extends State<ProfileMarqueeGateScreen> {
     final wash = _wash;
     return Scaffold(
       backgroundColor: _kGround,
-      body: AnimatedContainer(
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: const Alignment(.85, 0),
-            radius: 1.3,
-            colors: [wash.withValues(alpha: .34), _kGround],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/profile_gate_lighthouse.png',
+            fit: BoxFit.cover,
+            alignment: Alignment.centerRight,
           ),
-        ),
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // A portrait tablet can be wider than a phone but still has no
-              // room for the side-by-side stage.  Treating it as a desktop
-              // layout makes the artwork overlap the copy and leaves the
-              // focused rail pressed against the bottom edge.
-              final wide =
-                  constraints.maxWidth >= 700 &&
-                  constraints.maxWidth >= constraints.maxHeight;
-              return wide ? _wide(constraints) : _narrow(constraints);
-            },
+          // Preserve the lighthouse's warmth while guaranteeing text and
+          // focus-ring contrast over every crop of the image.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0x330D1420), Color(0xAA0D1420), _kGround],
+                stops: [0, .58, 1],
+              ),
+            ),
           ),
-        ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(-.8, .2),
+                radius: 1.15,
+                colors: [wash.withValues(alpha: .20), Colors.transparent],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide =
+                    constraints.maxWidth >= 720 &&
+                    constraints.maxWidth >= constraints.maxHeight;
+                if (wide) return _wide(constraints);
+                if (constraints.maxWidth >= 600) return _tablet(constraints);
+                return _phone();
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _wide(BoxConstraints constraints) {
-    final artSize = (constraints.maxHeight * 0.72).clamp(220.0, 560.0);
-    return Stack(
-      children: [
-        Positioned(
-          right: -artSize * 0.16,
-          top: 0,
-          bottom: 0,
-          child: Center(child: _stageArt(artSize)),
-        ),
-        Positioned(
-          left: constraints.maxWidth * 0.065,
-          top: 0,
-          bottom: constraints.maxHeight * 0.2,
-          right: constraints.maxWidth * 0.42,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _stageInfo(nameSize: 58, alignStart: true),
-          ),
-        ),
-        Positioned(
-          left: constraints.maxWidth * 0.065,
-          bottom: 30,
-          right: 24,
-          child: Row(
-            children: [
-              // A big household must scroll along the rail, not overflow
-              // off the right edge of a 960-logical TV. Expanded+Align, not
-              // Flexible+Spacer: a Spacer would claim half the free width,
-              // capping the rail's viewport and pushing the legend off the
-              // right edge.
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: _rail(dot: 56),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              const _KeyLegend(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _narrow(BoxConstraints constraints) {
-    const focusPaintInset = 12.0;
-    const topInset = 34.0;
-    const bottomInset = 42.0;
-    final minContentHeight = constraints.maxHeight > topInset + bottomInset
-        ? constraints.maxHeight - topInset - bottomInset
-        : 0.0;
-    return SingleChildScrollView(
-      // AnimatedScale paints beyond the rail dot's layout bounds.  Do not
-      // crop its focus ring/shadow while this vertical surface scrolls.
-      clipBehavior: Clip.none,
-      padding: const EdgeInsets.fromLTRB(26, topInset, 26, bottomInset),
-      child: Center(
-        child: ConstrainedBox(
-          // A wide portrait tablet should retain the composed phone layout,
-          // rather than stretching its stage copy across the whole display.
-          constraints: BoxConstraints(
-            maxWidth: 460,
-            minHeight: minContentHeight,
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _stageArt((constraints.maxWidth * 0.42).clamp(120.0, 200.0)),
-                const SizedBox(height: 20),
-                ..._stageInfo(nameSize: 34, alignStart: false),
-                const SizedBox(height: 30),
-                // Leave paint room around a scaled dot (and its lock badge),
-                // so the initial focused profile is wholly visible.
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: focusPaintInset,
-                  ),
-                  child: _rail(dot: 62, wrap: true),
-                ),
-              ],
-            ),
-          ),
-        ),
+    final tile = (constraints.maxHeight * .20).clamp(82.0, 130.0);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        (constraints.maxWidth * .065).clamp(32.0, 110.0),
+        26,
+        32,
+        18,
       ),
-    );
-  }
-
-  Widget _stageArt(double size) {
-    final p = _focusedProfile;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      child: Container(
-        key: ValueKey<String>(p?.id ?? 'manage'),
-        width: size,
-        height: size,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: _wash.withValues(alpha: .4),
-              blurRadius: 60,
-              spreadRadius: 4,
-            ),
-          ],
-        ),
-        child: p == null
-            ? Container(
-                color: _kNeutralWash,
-                child: Icon(
-                  Icons.manage_accounts_rounded,
-                  size: size * 0.4,
-                  color: Colors.white.withValues(alpha: .7),
-                ),
-              )
-            // The stage copy is the focus indicator — it animates; the rail
-            // dots stay still (one moving avatar, the house contract).
-            : ProfileAvatarView(
-                profileId: p.id,
-                avatarKey: p.avatarKey,
-                role: p.role,
-                name: p.name,
-                focused: true,
-                animateWhenIdle: !PlatformUtil.isTelevision,
-              ),
-      ),
-    );
-  }
-
-  List<Widget> _stageInfo({
-    required double nameSize,
-    required bool alignStart,
-  }) {
-    final p = _focusedProfile;
-    final cross = alignStart
-        ? CrossAxisAlignment.start
-        : CrossAxisAlignment.center;
-    Widget chip(String text) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white.withValues(alpha: .3)),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          letterSpacing: 1.6,
-          color: Colors.white.withValues(alpha: .6),
-        ),
-      ),
-    );
-    return [
-      Text(
-        p == null ? 'HOUSEHOLD' : 'PROFILE',
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 3,
-          color: Color(0xFFE23D4C),
-        ),
-      ),
-      const SizedBox(height: 10),
-      Column(
-        crossAxisAlignment: cross,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              p?.name ?? 'Manage profiles',
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: nameSize,
-                height: 1,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.5,
-                color: Colors.white,
-              ),
-            ),
+          const _CinematicHeader(aligned: true),
+          const Spacer(flex: 3),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            child: _rail(size: tile),
           ),
-          const SizedBox(height: 14),
-          if (p != null)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                chip(_roleLabel(p.role)),
-                if (p.hasPin) ...[const SizedBox(width: 8), chip('PIN')],
-              ],
-            )
-          else
-            Text(
-              'Create, edit, back up, send to TV',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: .55),
-              ),
-            ),
-          const SizedBox(height: 24),
-          // A visual echo of OK for touch; not a focus stop, so DPAD keeps
-          // exactly one grammar (the rail).
-          GestureDetector(
-            onTap: () {
-              final profile = _focusedProfile;
-              if (profile != null) {
-                widget.onSelected(profile);
-              } else {
-                widget.onManage?.call();
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .94),
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x66000000), blurRadius: 26),
-                ],
-              ),
-              child: Text(
-                p == null ? 'Open' : 'Continue as ${p.name}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0B0F17),
-                ),
-              ),
-            ),
-          ),
+          const SizedBox(height: 22),
+          if (widget.onManage != null) _manageLink(aligned: true),
+          const Spacer(flex: 2),
+          const Align(alignment: Alignment.center, child: _KeyLegend()),
         ],
       ),
-    ];
+    );
   }
 
-  Widget _rail({required double dot, bool wrap = false}) {
-    final dots = <Widget>[
-      for (var i = 0; i < widget.profiles.length; i++) _dot(i, dot),
-      if (widget.onManage != null) _manageDot(dot),
-    ];
-    if (wrap) {
-      return Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 16,
-        runSpacing: 16,
-        children: dots,
-      );
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _tablet(BoxConstraints constraints) {
+    final cardWidth = (constraints.maxWidth - 68) / 2;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 32, 28, 40),
       children: [
-        for (final d in dots)
-          Padding(padding: const EdgeInsets.only(right: 14), child: d),
+        const _CinematicHeader(aligned: false),
+        const SizedBox(height: 30),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (var i = 0; i < widget.profiles.length; i++)
+              SizedBox(width: cardWidth, child: _card(i, compact: false)),
+          ],
+        ),
+        if (widget.onManage != null) ...[
+          const SizedBox(height: 16),
+          _manageCard(),
+        ],
       ],
     );
   }
 
-  Widget _dot(int index, double size) {
+  Widget _phone() => ListView(
+    padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+    children: [
+      const _CinematicHeader(aligned: false),
+      const SizedBox(height: 28),
+      for (var i = 0; i < widget.profiles.length; i++) ...[
+        _card(i, compact: true),
+        const SizedBox(height: 12),
+      ],
+      if (widget.onManage != null) _manageCard(),
+    ],
+  );
+
+  Widget _rail({required double size}) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (var i = 0; i < widget.profiles.length; i++)
+        Padding(
+          padding: const EdgeInsets.only(right: 24),
+          child: _railProfile(i, size),
+        ),
+    ],
+  );
+
+  Widget _railProfile(int index, double size) {
     final p = widget.profiles[index];
     return _GateFocusable(
       autofocus: index == 0,
       onFocus: () => setState(() => _focusedIndex = index),
       onPressed: () => widget.onSelected(p),
-      builder: (context, hasFocus) => _MarqueeDot(
+      builder: (context, hasFocus) => _CinematicRailProfile(
         size: size,
-        lifted: hasFocus,
+        focused: hasFocus,
+        caption: p.name,
         locked: p.hasPin,
         child: ProfileAvatarView(
           profileId: p.id,
           avatarKey: p.avatarKey,
           role: p.role,
           name: p.name,
-          // The stage copy animates; the dot never does.
-          allowAnimation: false,
+          focused: hasFocus,
+          animateWhenIdle: !PlatformUtil.isTelevision,
         ),
       ),
     );
   }
 
-  Widget _manageDot(double size) {
+  Widget _card(int index, {required bool compact}) {
+    final p = widget.profiles[index];
     return _GateFocusable(
-      autofocus: false,
-      onFocus: () => setState(() => _focusedIndex = widget.profiles.length),
-      onPressed: widget.onManage!,
-      builder: (context, hasFocus) => _MarqueeDot(
-        size: size,
-        lifted: hasFocus,
-        locked: false,
-        outlined: true,
-        child: Center(
-          child: Icon(
-            Icons.manage_accounts_rounded,
-            size: size * 0.42,
-            color: Colors.white.withValues(alpha: .6),
+      autofocus: index == 0,
+      onFocus: () => setState(() => _focusedIndex = index),
+      onPressed: () => widget.onSelected(p),
+      builder: (context, hasFocus) => _CinematicProfileCard(
+        profile: p,
+        focused: hasFocus,
+        compact: compact,
+      ),
+    );
+  }
+
+  Widget _manageCard() => _GateFocusable(
+    autofocus: false,
+    onFocus: () => setState(() => _focusedIndex = widget.profiles.length),
+    onPressed: widget.onManage!,
+    builder: (context, hasFocus) =>
+        _CinematicManageCard(focused: hasFocus, compact: true),
+  );
+
+  Widget _manageLink({required bool aligned}) => _GateFocusable(
+    autofocus: false,
+    onFocus: () => setState(() => _focusedIndex = widget.profiles.length),
+    onPressed: widget.onManage!,
+    builder: (context, hasFocus) => AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasFocus
+              ? const Color(0xFFFF7A6A)
+              : Colors.white.withValues(alpha: .14),
+        ),
+        color: Colors.black.withValues(alpha: hasFocus ? .24 : .12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.manage_accounts_outlined,
+            size: 18,
+            color: Colors.white.withValues(alpha: .76),
           ),
+          const SizedBox(width: 8),
+          Text(
+            'Manage profiles',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .82),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _CinematicHeader extends StatelessWidget {
+  final bool aligned;
+
+  const _CinematicHeader({required this.aligned});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: aligned
+        ? CrossAxisAlignment.start
+        : CrossAxisAlignment.center,
+    children: [
+      Text(
+        'DEBRIFY',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 5,
+          color: const Color(0xFFFF9A81).withValues(alpha: .94),
+        ),
+      ),
+      const SizedBox(height: 18),
+      const Text(
+        "Who's watching?",
+        style: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -.8,
+          color: Colors.white,
+        ),
+      ),
+    ],
+  );
+}
+
+class _CinematicRailProfile extends StatelessWidget {
+  final double size;
+  final bool focused;
+  final String caption;
+  final bool locked;
+  final Widget child;
+
+  const _CinematicRailProfile({
+    required this.size,
+    required this.focused,
+    required this.caption,
+    required this.locked,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: focused ? 1.08 : 1.0,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: focused ? 1 : .62,
+        duration: const Duration(milliseconds: 200),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: size,
+                  height: size,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      width: 3,
+                      color: focused
+                          ? const Color(0xFFFF7A6A)
+                          : Colors.white.withValues(alpha: .10),
+                    ),
+                    boxShadow: focused
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x66FF7A6A),
+                              blurRadius: 28,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                        : const [],
+                  ),
+                  child: child,
+                ),
+                if (locked)
+                  Positioned(
+                    bottom: -3,
+                    right: -3,
+                    child: _LockBadge(size: size * .16),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              caption,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: focused ? 1 : .65),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _MarqueeDot extends StatelessWidget {
-  final double size;
-  final bool lifted;
-  final bool locked;
-  final bool outlined;
-  final Widget child;
+class _CinematicProfileCard extends StatelessWidget {
+  final UserProfile profile;
+  final bool focused;
+  final bool compact;
 
-  const _MarqueeDot({
-    required this.size,
-    required this.lifted,
-    required this.locked,
-    required this.child,
-    this.outlined = false,
+  const _CinematicProfileCard({
+    required this.profile,
+    required this.focused,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
+    final height = compact ? 78.0 : 142.0;
+    final avatar = compact ? 52.0 : 74.0;
+    final wash = ProfileAvatarView.washColor(profile.avatarKey, profile.role);
     return AnimatedScale(
-      scale: lifted ? 1.12 : 1.0,
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
-      child: AnimatedOpacity(
-        opacity: lifted ? 1 : .55,
-        duration: const Duration(milliseconds: 200),
-        child: Stack(
-          clipBehavior: Clip.none,
+      scale: focused ? 1.015 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: height,
+        padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            width: focused ? 2 : 1,
+            color: focused
+                ? const Color(0xFFFF7A6A)
+                : Colors.white.withValues(alpha: .12),
+          ),
+          gradient: LinearGradient(
+            colors: [wash.withValues(alpha: .52), const Color(0xDD111A2A)],
+          ),
+          boxShadow: focused
+              ? const [BoxShadow(color: Color(0x55000000), blurRadius: 22)]
+              : const [],
+        ),
+        child: Row(
           children: [
             Container(
-              width: size,
-              height: size,
+              width: avatar,
+              height: avatar,
               clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  width: 2.5,
-                  color: lifted
-                      ? Colors.white
-                      : outlined
-                      ? Colors.white.withValues(alpha: .25)
-                      : Colors.transparent,
+              decoration: const BoxDecoration(shape: BoxShape.circle),
+              child: ProfileAvatarView(
+                profileId: profile.id,
+                avatarKey: profile.avatarKey,
+                role: profile.role,
+                name: profile.name,
+                focused: focused,
+                animateWhenIdle: !PlatformUtil.isTelevision,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                profile.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: compact ? 17 : 21,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              child: child,
             ),
-            if (locked)
-              Positioned(
-                bottom: -2,
-                right: -2,
-                child: _LockBadge(size: size * 0.16),
+            if (profile.hasPin)
+              Icon(
+                Icons.lock_outline_rounded,
+                color: Colors.white.withValues(alpha: .74),
               ),
           ],
         ),
       ),
     );
   }
+}
+
+class _CinematicManageCard extends StatelessWidget {
+  final bool focused;
+  final bool compact;
+
+  const _CinematicManageCard({required this.focused, required this.compact});
+
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+    duration: const Duration(milliseconds: 180),
+    height: compact ? 62 : 100,
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        width: focused ? 2 : 1,
+        color: focused
+            ? const Color(0xFFFF7A6A)
+            : Colors.white.withValues(alpha: .16),
+      ),
+      color: Colors.black.withValues(alpha: .28),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.manage_accounts_outlined,
+          color: Colors.white.withValues(alpha: .78),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          'Manage profiles',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: .88),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────── Theater ──────────

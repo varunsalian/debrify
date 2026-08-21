@@ -173,6 +173,7 @@ class TraktContinueWatchingService {
       inferredType: 'movie',
     );
     final progressById = <String, double>{};
+    final runtimeById = <String, int>{};
     final playbackIdsById = <String, List<int>>{};
     final pausedAtById = <String, int>{};
 
@@ -185,6 +186,8 @@ class TraktContinueWatchingService {
       final imdbId = ids?['imdb'] as String?;
       if (imdbId == null) continue;
       if (progress != null) progressById[imdbId] = progress.toDouble();
+      final runtime = movie?['runtime'] as int?;
+      if (runtime != null && runtime > 0) runtimeById[imdbId] = runtime;
       if (playbackId != null) {
         playbackIdsById.putIfAbsent(imdbId, () => []).add(playbackId);
       }
@@ -198,6 +201,7 @@ class TraktContinueWatchingService {
             meta: meta,
             traktContentType: moviesContentType,
             progress: progressById[meta.id],
+            runtime: runtimeById[meta.id],
             playbackIds: playbackIdsById[meta.id] ?? const [],
             pausedAtMs: pausedAtById[meta.id],
           ),

@@ -24,6 +24,7 @@ import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
+import '../services/episode_artwork_service.dart';
 import '../services/home_list_rows.dart';
 import '../services/home_row_order.dart';
 import '../services/iptv_cw_router.dart';
@@ -54,6 +55,7 @@ import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/concurrency.dart';
+import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
@@ -730,6 +732,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<StremioMeta> _cwAll = [];
   final Map<String, double> _cwProgress = {}; // imdbId → 0..1 watched fraction
   final Map<String, String> _cwEpisode = {}; // imdbId → 'S2 · E5' (series only)
+  final Map<String, int> _cwRemainingMinutes = {};
+  final Map<String, String> _cwEpisodeArtwork = {};
   final Set<String> _cwIds = {}; // imdbIds currently in Continue Watching
   final Map<String, String?> _cwAddonId = {}; // imdbId → source addon id
   final List<FocusNode> _cwMovieNodes = [];
@@ -778,6 +782,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<StremioMeta> _traktAll = [];
   final Map<String, double> _traktProgress = {}; // imdbId → 0..1
   final Map<String, String> _traktEpisode = {}; // imdbId → 'S2 · E5' (series)
+  final Map<String, int> _traktRemainingMinutes = {};
+  final Map<String, String> _traktEpisodeArtwork = {};
   final Map<String, TraktContinueWatchingItem> _traktByImdb = {};
   final List<FocusNode> _traktMovieNodes = [];
   final List<FocusNode> _traktSeriesNodes = [];
@@ -791,6 +797,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<StremioMeta> _simklAll = []; // paused_at order, for the See-All grid
   final Map<String, double> _simklProgress = {}; // imdbId → 0..1
   final Map<String, String> _simklEpisode = {}; // imdbId → 'S2 · E5' (series)
+  final Map<String, String> _simklEpisodeArtwork = {};
   final Map<String, SimklContinueWatchingItem> _simklByImdb = {};
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
@@ -909,6 +916,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _cwMovieNodes,
         progressOf: (m) => _cwProgress[m.imdbId],
         episodeOf: (_) => null,
+        remainingMinutesOf: (m) => _cwRemainingMinutes[m.imdbId],
+        episodeArtworkOf: (_) => null,
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
         onRemove: _removeLocalCwItem,
@@ -926,6 +935,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _cwSeriesNodes,
         progressOf: (m) => _cwProgress[m.imdbId],
         episodeOf: (m) => _cwEpisode[m.imdbId],
+        remainingMinutesOf: (m) => _cwRemainingMinutes[m.imdbId],
+        episodeArtworkOf: (m) => _cwEpisodeArtwork[m.imdbId],
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
         onRemove: _removeLocalCwItem,
@@ -941,6 +952,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _traktMovieNodes,
         progressOf: (m) => _traktProgress[m.imdbId],
         episodeOf: (_) => null,
+        remainingMinutesOf: (m) => _traktRemainingMinutes[m.imdbId],
+        episodeArtworkOf: (_) => null,
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
         onRemove: _removeTraktCwItem,
@@ -956,6 +969,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _traktSeriesNodes,
         progressOf: (m) => _traktProgress[m.imdbId],
         episodeOf: (m) => _traktEpisode[m.imdbId],
+        remainingMinutesOf: (m) => _traktRemainingMinutes[m.imdbId],
+        episodeArtworkOf: (m) => _traktEpisodeArtwork[m.imdbId],
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
         onRemove: _removeTraktCwItem,
@@ -977,6 +992,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _simklMovieNodes,
         progressOf: (m) => _simklProgress[m.imdbId],
         episodeOf: (_) => null,
+        remainingMinutesOf: (_) => null,
+        episodeArtworkOf: (_) => null,
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
         onRemove: _removeSimklCwItem,
@@ -992,6 +1009,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _simklSeriesNodes,
         progressOf: (m) => _simklProgress[m.imdbId],
         episodeOf: (m) => _simklEpisode[m.imdbId],
+        remainingMinutesOf: (_) => null,
+        episodeArtworkOf: (m) => _simklEpisodeArtwork[m.imdbId],
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
         onRemove: _removeSimklCwItem,
@@ -1011,6 +1030,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _iptvCwMovieNodes,
         progressOf: (m) => _iptvCwProgress[m.id],
         episodeOf: (_) => null,
+        remainingMinutesOf: (m) => _iptvRemainingMinutes(m.id),
+        episodeArtworkOf: (_) => null,
         onOpen: _openIptvCwItem,
         onQuickPlay: _openIptvCwItem,
         onRemove: _removeIptvCwItem,
@@ -1025,6 +1046,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes: _iptvCwSeriesNodes,
         progressOf: (m) => _iptvCwProgress[m.id],
         episodeOf: (m) => _iptvCwEpisode[m.id],
+        remainingMinutesOf: (m) => _iptvRemainingMinutes(m.id),
+        episodeArtworkOf: (m) => _iptvCwByKey[m.id]?.posterUrl,
         onOpen: _openIptvCwItem,
         onQuickPlay: _openIptvCwItem,
         onRemove: _removeIptvCwItem,
@@ -2503,6 +2526,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _cwIds.clear();
         _cwProgress.clear();
         _cwEpisode.clear();
+        _cwRemainingMinutes.clear();
+        _cwEpisodeArtwork.clear();
         _cwAddonId.clear();
       });
       return;
@@ -2512,6 +2537,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final items = <StremioMeta>[];
     final progress = <String, double>{};
     final episode = <String, String>{};
+    final remainingMinutes = <String, int>{};
+    final episodeRefs = <String, ({int season, int episode})>{};
     final ids = <String>{};
     final addonIds = <String, String?>{};
     for (final m in raw) {
@@ -2550,6 +2577,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             lastEp['episode'] as int?,
           );
           if (se != null) episode[imdbId] = se;
+          final season = lastEp['season'] as int?;
+          final episodeNumber = lastEp['episode'] as int?;
+          if (season != null &&
+              episodeNumber != null &&
+              season > 0 &&
+              episodeNumber > 0) {
+            episodeRefs[imdbId] = (season: season, episode: episodeNumber);
+          }
+          final left = continueWatchingMinutesLeft(
+            positionMs: posMs,
+            durationMs: durMs,
+          );
+          if (left != null) remainingMinutes[imdbId] = left;
         }
       } else {
         final state = await StorageService.getVideoPlaybackStateByImdbId(
@@ -2559,6 +2599,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           final posMs = state['positionMs'] as int? ?? 0;
           final durMs = state['durationMs'] as int? ?? 1;
           if (durMs > 0) pct = (posMs / durMs * 100).clamp(0.0, 100.0);
+          final left = continueWatchingMinutesLeft(
+            positionMs: posMs,
+            durationMs: durMs,
+          );
+          if (left != null) remainingMinutes[imdbId] = left;
         }
       }
       if (pct != null) progress[imdbId] = pct / 100.0;
@@ -2591,10 +2636,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _cwEpisode
         ..clear()
         ..addAll(episode);
+      _cwRemainingMinutes
+        ..clear()
+        ..addAll(remainingMinutes);
+      _cwEpisodeArtwork.clear();
       _cwAddonId
         ..clear()
         ..addAll(addonIds);
     });
+    unawaited(
+      _enrichCwEpisodeArtwork(
+        refs: episodeRefs,
+        target: _cwEpisodeArtwork,
+        isCurrent: () => token == _cwLoadToken,
+      ),
+    );
     _maybeAutoFocusBoard();
   }
 
@@ -2652,6 +2708,41 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(byKey);
     });
     _maybeAutoFocusBoard();
+  }
+
+  int? _iptvRemainingMinutes(String routeKey) {
+    final raw = _iptvCwByKey[routeKey]?.raw;
+    if (raw == null) return null;
+    return continueWatchingMinutesLeft(
+      positionMs: (raw['positionMs'] as num?)?.toInt() ?? 0,
+      durationMs: (raw['durationMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Resolve episode stills away from the build path, at TV-safe concurrency.
+  /// A provider refresh owns the result through [isCurrent], so an older batch
+  /// can never paint the episode that preceded a newly-resumed one.
+  Future<void> _enrichCwEpisodeArtwork({
+    required Map<String, ({int season, int episode})> refs,
+    required Map<String, String> target,
+    required bool Function() isCurrent,
+  }) async {
+    if (refs.isEmpty) return;
+    final resolved = await mapWithConcurrency(refs.entries, (entry) async {
+      final art = await EpisodeArtworkService.instance.resolve(
+        imdbId: entry.key,
+        season: entry.value.season,
+        episode: entry.value.episode,
+      );
+      return (id: entry.key, art: art);
+    }, concurrency: 3);
+    if (!mounted || !isCurrent()) return;
+    final artwork = <String, String>{
+      for (final item in resolved)
+        if (item.art != null && item.art!.isNotEmpty) item.id: item.art!,
+    };
+    if (artwork.isEmpty) return;
+    setState(() => target.addAll(artwork));
   }
 
   /// Open an IPTV Continue Watching card: a series routes to the merged Xtream
@@ -3866,6 +3957,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _traktAll = [];
           _traktProgress.clear();
           _traktEpisode.clear();
+          _traktRemainingMinutes.clear();
+          _traktEpisodeArtwork.clear();
           _traktByImdb.clear();
         });
         return;
@@ -3888,6 +3981,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final showMetas = <StremioMeta>[];
     final progress = <String, double>{};
     final episode = <String, String>{};
+    final remainingMinutes = <String, int>{};
+    final episodeRefs = <String, ({int season, int episode})>{};
     final byImdb = <String, TraktContinueWatchingItem>{};
     void ingest(List<TraktContinueWatchingItem> items, List<StremioMeta> into) {
       for (final it in items) {
@@ -3899,6 +3994,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
         final se = _seLabel(it.season, it.episode);
         if (se != null) episode[id] = se;
+        if (it.season != null &&
+            it.episode != null &&
+            it.season! > 0 &&
+            it.episode! > 0) {
+          episodeRefs[id] = (season: it.season!, episode: it.episode!);
+        }
+        final left = continueWatchingMinutesLeftFromProgress(
+          progress: it.progress,
+          runtimeMinutes: it.runtime,
+        );
+        if (left != null) remainingMinutes[id] = left;
       }
     }
 
@@ -3943,10 +4049,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _traktEpisode
         ..clear()
         ..addAll(episode);
+      _traktRemainingMinutes
+        ..clear()
+        ..addAll(remainingMinutes);
+      _traktEpisodeArtwork.clear();
       _traktByImdb
         ..clear()
         ..addAll(byImdb);
     });
+    unawaited(
+      _enrichCwEpisodeArtwork(
+        refs: episodeRefs,
+        target: _traktEpisodeArtwork,
+        isCurrent: () => token == _traktCwToken,
+      ),
+    );
     _maybeAutoFocusBoard();
     if (!hadTraktRows) _maybeAnnounceTraktRows();
     if (refreshBound) unawaited(_refreshBoundSources());
@@ -4359,6 +4476,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final showMetas = <StremioMeta>[];
     final progress = <String, double>{};
     final episode = <String, String>{};
+    final episodeRefs = <String, ({int season, int episode})>{};
     final byImdb = <String, SimklContinueWatchingItem>{};
     void ingest(List<SimklContinueWatchingItem> items, List<StremioMeta> into) {
       for (final it in items) {
@@ -4371,6 +4489,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
         final se = _seLabel(it.season, it.episode);
         if (se != null) episode[id] = se;
+        if (it.season != null &&
+            it.episode != null &&
+            it.season! > 0 &&
+            it.episode! > 0) {
+          episodeRefs[id] = (season: it.season!, episode: it.episode!);
+        }
       }
     }
 
@@ -4412,10 +4536,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _simklEpisode
         ..clear()
         ..addAll(episode);
+      _simklEpisodeArtwork.clear();
       _simklByImdb
         ..clear()
         ..addAll(byImdb);
     });
+    unawaited(
+      _enrichCwEpisodeArtwork(
+        refs: episodeRefs,
+        target: _simklEpisodeArtwork,
+        isCurrent: () => token == _simklCwToken,
+      ),
+    );
     _maybeAutoFocusBoard();
     if (!hadSimklRows) _maybeAnnounceSimklRows();
     if (refreshBound) unawaited(_refreshBoundSources());
@@ -5869,33 +6001,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Already nullable on the row itself — a tracker row with no grid
         // behind it hands over null and simply draws no chevron.
         onSeeAll: row.onSeeAll,
-        // Caption-free like the catalog rows in PORTRAIT. The mock kept CW
-        // captions for the INFORMATIVE case ("48 min left") — but the card
-        // model only has the title, and a title caption under one row on a
-        // board where no other row has any read as the odd one out, not as
-        // information (user call, 2026-08-16). The progress bar stays CW's
-        // signal. LANDSCAPE flips the premise: a backdrop rarely carries its
-        // title the way poster art does, so the caption becomes the label.
+        // Caption-free like catalog rows in PORTRAIT off TV. LANDSCAPE flips
+        // the premise: a textless still needs the title, and CW's second line
+        // adds its useful episode / remaining-time context.
         captions: _homeLandscapeCards,
         items: [
-          for (final m in row.items)
-            SpotlightCard(
-              image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
-              fallbackImage: _homeLandscapeCards ? m.poster : null,
-              title: m.name,
-              rating: m.imdbRating,
-              shape: _homeLandscapeCards
-                  ? SpotlightCardShape.wide
-                  : SpotlightCardShape.poster,
-              watchedImdbId: m.type == 'movie' || m.type == 'series'
-                  ? (m.effectiveImdbId ?? m.id)
-                  : null,
-              watchedContentType: m.type,
-              // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
-              progress: (row.progressOf(m) ?? 0) * 100,
-              onOpen: () => row.onOpen(m),
-              onOptions: () => row.onQuickPlay(m),
-            ),
+          for (final m in row.items) _spotlightContinueWatchingCard(row, m),
         ],
       );
     }
@@ -5934,6 +6045,38 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             onOpen: () => _openItem(m, _sections[i].addon),
           ),
       ],
+    );
+  }
+
+  SpotlightCard _spotlightContinueWatchingCard(_CwRow row, StremioMeta item) {
+    final wideArt = _wideArtUrl(item);
+    final episodeArt = item.type == 'series'
+        ? row.episodeArtworkOf(item)
+        : null;
+    return SpotlightCard(
+      image: _homeLandscapeCards ? (episodeArt ?? wideArt) : item.poster,
+      // An episode still is best-effort. If it fails at image-decode time (not
+      // only during lookup), fall back to the same show art CW used before.
+      fallbackImage: _homeLandscapeCards
+          ? (episodeArt != null ? wideArt : item.poster)
+          : null,
+      title: item.name,
+      subtitle: continueWatchingCardSubtitle(
+        episodeLabel: row.episodeOf(item),
+        minutesLeft: row.remainingMinutesOf(item),
+      ),
+      rating: item.imdbRating,
+      shape: _homeLandscapeCards
+          ? SpotlightCardShape.wide
+          : SpotlightCardShape.poster,
+      watchedImdbId: item.type == 'movie' || item.type == 'series'
+          ? (item.effectiveImdbId ?? item.id)
+          : null,
+      watchedContentType: item.type,
+      // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
+      progress: (row.progressOf(item) ?? 0) * 100,
+      onOpen: () => row.onOpen(item),
+      onOptions: () => row.onQuickPlay(item),
     );
   }
 
@@ -7978,6 +8121,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _deferStageRight(railKey, col);
       }
     }
+
     final onUp = col - perRow >= 0
         ? () {
             if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
@@ -8000,6 +8144,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       prefetch();
       _stageSwitchRail(1);
     }
+
     // A catalog keeps paging for as long as it has more, so the last grid
     // line is a moving target and DOWN alone can never reliably reach the
     // next rail. HOLDING the key changes rail from anywhere in the grid.
@@ -9376,7 +9521,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
-    _heroTrailerTimer = Timer(const Duration(milliseconds: 2400), () async {
+    // Spotlight has already decided that this hero owns the stage. Begin the
+    // useful network/decoder work immediately there; other layouts keep the
+    // shared 2.4s focus-rest debounce so flying across their rows stays cheap.
+    final resolveDelay = fromSpotlight
+        ? Duration.zero
+        : const Duration(milliseconds: 2400);
+    _heroTrailerTimer = Timer(resolveDelay, () async {
       if (!mounted || req != _heroTrailerReq) return;
       // The layout may have changed during the dwell — a stage with nowhere
       // to put moving picture must not spin up an engine.
@@ -12074,240 +12225,241 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
 
     try {
-    // Set the active addon before any early return so a movie play carries the
-    // right addon id into meta.addonId (addon-stream resume/next), instead of a
-    // stale one left over from a previously-browsed series.
-    _activeAddonId = addon.id;
+      // Set the active addon before any early return so a movie play carries the
+      // right addon id into meta.addonId (addon-stream resume/next), instead of a
+      // stale one left over from a previously-browsed series.
+      _activeAddonId = addon.id;
 
-    // Trakt-wins resume — resolve the SAME position the detail button advertised
-    // (_resolveResumeInfo → _traktResumeFor) so label and Play never disagree.
-    // Fires for Trakt-sourced titles and for the merged Resume's authenticated
-    // series (preferTraktResume). Cached CW item → selectionForItem (carries a
-    // movie's Trakt % and a series' next-episode). Otherwise a live playback
-    // lookup, series-only HERE; movies without a cached CW item are handled by
-    // the movie branch below (which pulls their tracker % directly), so they
-    // still resume cross-device — the player now honours a movie's percent (it
-    // reconciles trakt%/simkl%/local), which it didn't when this block was
-    // written.
-    // `_isTraktAuthenticated || isTraktSource`: a Trakt-sourced item always
-    // resolves via Trakt (matching the pre-change `if (isTraktSource)` — which
-    // never checked the auth flag), so a still-settling `_isTraktAuthenticated`
-    // can't regress its cached resume; the general series path self-guards
-    // (resolveSelection returns null when not authed).
-    if ((_isTraktAuthenticated || isTraktSource) &&
-        (isTraktSource || (preferTraktResume && item.type == 'series'))) {
-      final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
-      if (cw != null) {
-        final sel = await TraktContinueWatchingService.instance
-            .selectionForItem(cw);
-        if (!mounted || cancelled) return;
-        if (sel != null) {
-          await launch(sel);
-          return;
-        }
-      } else if (item.type == 'series') {
-        // Same resolution the label used (_traktResumeFor general path) so Play
-        // lands on exactly the advertised episode. resolveSelection returns a
-        // ready-to-play selection (Trakt paused/next episode, with progress).
-        // Guard the empty id (resolveSelection would otherwise treat it as "the
-        // first CW item" and play an unrelated title).
-        final id = item.effectiveImdbId ?? item.id;
-        if (id.isNotEmpty) {
+      // Trakt-wins resume — resolve the SAME position the detail button advertised
+      // (_resolveResumeInfo → _traktResumeFor) so label and Play never disagree.
+      // Fires for Trakt-sourced titles and for the merged Resume's authenticated
+      // series (preferTraktResume). Cached CW item → selectionForItem (carries a
+      // movie's Trakt % and a series' next-episode). Otherwise a live playback
+      // lookup, series-only HERE; movies without a cached CW item are handled by
+      // the movie branch below (which pulls their tracker % directly), so they
+      // still resume cross-device — the player now honours a movie's percent (it
+      // reconciles trakt%/simkl%/local), which it didn't when this block was
+      // written.
+      // `_isTraktAuthenticated || isTraktSource`: a Trakt-sourced item always
+      // resolves via Trakt (matching the pre-change `if (isTraktSource)` — which
+      // never checked the auth flag), so a still-settling `_isTraktAuthenticated`
+      // can't regress its cached resume; the general series path self-guards
+      // (resolveSelection returns null when not authed).
+      if ((_isTraktAuthenticated || isTraktSource) &&
+          (isTraktSource || (preferTraktResume && item.type == 'series'))) {
+        final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+        if (cw != null) {
           final sel = await TraktContinueWatchingService.instance
-              .resolveSelection(
-                traktContentType: TraktContinueWatchingService.showsContentType,
-                itemId: id,
-              );
+              .selectionForItem(cw);
           if (!mounted || cancelled) return;
           if (sel != null) {
             await launch(sel);
             return;
           }
+        } else if (item.type == 'series') {
+          // Same resolution the label used (_traktResumeFor general path) so Play
+          // lands on exactly the advertised episode. resolveSelection returns a
+          // ready-to-play selection (Trakt paused/next episode, with progress).
+          // Guard the empty id (resolveSelection would otherwise treat it as "the
+          // first CW item" and play an unrelated title).
+          final id = item.effectiveImdbId ?? item.id;
+          if (id.isNotEmpty) {
+            final sel = await TraktContinueWatchingService.instance
+                .resolveSelection(
+                  traktContentType:
+                      TraktContinueWatchingService.showsContentType,
+                  itemId: id,
+                );
+            if (!mounted || cancelled) return;
+            if (sel != null) {
+              await launch(sel);
+              return;
+            }
+          }
         }
       }
-    }
 
-    // Simkl fallback — only reached when the Trakt resolution above produced
-    // nothing, matching the label's priority order (_resolveResumeInfo:
-    // Trakt → Simkl → local). Same preferTraktResume scope as the Trakt step:
-    // the detail Resume flow honours tracker positions; Home/row quick-play
-    // keeps its local split untouched.
-    if (_isSimklAuthenticated && preferTraktResume && item.type == 'series') {
-      final simkl = await _simklResumeFor(item);
-      if (!mounted || cancelled) return;
-      if (simkl != null) {
+      // Simkl fallback — only reached when the Trakt resolution above produced
+      // nothing, matching the label's priority order (_resolveResumeInfo:
+      // Trakt → Simkl → local). Same preferTraktResume scope as the Trakt step:
+      // the detail Resume flow honours tracker positions; Home/row quick-play
+      // keeps its local split untouched.
+      if (_isSimklAuthenticated && preferTraktResume && item.type == 'series') {
+        final simkl = await _simklResumeFor(item);
+        if (!mounted || cancelled) return;
+        if (simkl != null) {
+          await launch(
+            AdvancedSearchSelection(
+              imdbId: item.effectiveImdbId ?? item.id,
+              isSeries: true,
+              title: item.name,
+              year: item.year,
+              season: simkl.season,
+              episode: simkl.episode,
+              contentType: item.type,
+              posterUrl: item.poster,
+              traktSource: isTraktSource,
+              simklProgressPercent: simkl.progress,
+              simklSource: true,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (item.type != 'series') {
+        // Cross-device movie resume: on the detail-page Play/Resume flow
+        // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
+        // tracker position and carry it on the selection. The player's resume
+        // reconciliation then seeks the furthest of trakt%/simkl%/local — so a
+        // movie paused on another device resumes here even when opened from a
+        // plain catalog result (previously movies started at 00:00). Row
+        // quick-play (no preferTraktResume) keeps its local-only resume.
+        double? traktPct;
+        double? simklPct;
+        if (preferTraktResume || isTraktSource) {
+          // Concurrent and individually time-boxed: the Play press must never
+          // stall behind a degraded tracker API (sequential awaits here could
+          // previously block playback for the full HTTP timeouts). On timeout we
+          // launch with local-only resume — the reconciliation in the player
+          // degrades gracefully to the local position.
+          final lookups = await Future.wait<double?>([
+            (_isTraktAuthenticated || isTraktSource)
+                ? _traktMoviePercent(
+                    item,
+                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
+                : Future<double?>.value(null),
+            _isSimklAuthenticated
+                ? _simklMoviePercent(
+                    item,
+                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
+                : Future<double?>.value(null),
+          ]);
+          if (!mounted || cancelled) return;
+          traktPct = lookups[0];
+          simklPct = lookups[1];
+        }
+        // Rewatch (Simkl): a movie already marked `completed` on Simkl has no
+        // resume session, and Simkl won't create one on replay — so it can never
+        // re-enter Continue Watching. On the detail Play/Resume flow (the
+        // "Rewatch" button surface, preferTraktResume), un-mark it watched first
+        // so the upcoming catalog scrobble creates a fresh resume session; the
+        // ≥80% stop re-marks it completed when the rewatch finishes. Gated on the
+        // sync setting + auth so we never un-complete a movie that won't actually
+        // be re-tracked. Row quick-play (no preferTraktResume) is left untouched.
+        if (preferTraktResume && _isSimklAuthenticated) {
+          // Same id resolution the detail screen's status loader uses (_imdbOf),
+          // so the "Rewatch" label and this flip never disagree on the title.
+          final imdb = _imdbOf(item);
+          final syncCatalog = await StorageService.getSimklSyncCatalogItems();
+          if (!mounted || cancelled) return;
+          if (imdb != null && syncCatalog) {
+            // Time-boxed like the tracker-percent lookups above: a degraded Simkl
+            // API must never stall the Play press. On timeout we just skip the
+            // flip — worst case the rewatch doesn't surface in Continue Watching,
+            // exactly today's behaviour.
+            final status = await SimklService.instance
+                .fetchTitleStatus(imdb)
+                .timeout(const Duration(seconds: 4), onTimeout: () => null);
+            if (!mounted || cancelled) return;
+            if (status?.currentStatus == 'completed') {
+              await SimklService.instance
+                  .markUnwatched(imdb, 'movie')
+                  .timeout(const Duration(seconds: 4), onTimeout: () => false);
+              if (!mounted || cancelled) return;
+            }
+          }
+        }
+        // Keep the detail page underneath — the cinematic loading overlay covers
+        // it, and after playback Back returns to the detail (like Home).
         await launch(
-          AdvancedSearchSelection(
-            imdbId: item.effectiveImdbId ?? item.id,
-            isSeries: true,
-            title: item.name,
-            year: item.year,
-            season: simkl.season,
-            episode: simkl.episode,
-            contentType: item.type,
-            posterUrl: item.poster,
-            traktSource: isTraktSource,
-            simklProgressPercent: simkl.progress,
-            simklSource: true,
+          _movieSelection(
+            item,
+            isTraktSource: isTraktSource,
+            traktProgressPercent: traktPct,
+            simklProgressPercent: simklPct,
           ),
         );
         return;
       }
-    }
 
-    if (item.type != 'series') {
-      // Cross-device movie resume: on the detail-page Play/Resume flow
-      // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
-      // tracker position and carry it on the selection. The player's resume
-      // reconciliation then seeks the furthest of trakt%/simkl%/local — so a
-      // movie paused on another device resumes here even when opened from a
-      // plain catalog result (previously movies started at 00:00). Row
-      // quick-play (no preferTraktResume) keeps its local-only resume.
-      double? traktPct;
-      double? simklPct;
-      if (preferTraktResume || isTraktSource) {
-        // Concurrent and individually time-boxed: the Play press must never
-        // stall behind a degraded tracker API (sequential awaits here could
-        // previously block playback for the full HTTP timeouts). On timeout we
-        // launch with local-only resume — the reconciliation in the player
-        // degrades gracefully to the local position.
-        final lookups = await Future.wait<double?>([
-          (_isTraktAuthenticated || isTraktSource)
-              ? _traktMoviePercent(
-                  item,
-                ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-              : Future<double?>.value(null),
-          _isSimklAuthenticated
-              ? _simklMoviePercent(
-                  item,
-                ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-              : Future<double?>.value(null),
-        ]);
-        if (!mounted || cancelled) return;
-        traktPct = lookups[0];
-        simklPct = lookups[1];
+      final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
+      // Without an IMDb id we can't search torrents for a specific episode, so
+      // fall back to the manual episode picker — except from the merged page
+      // (episodes are inline there), where we play via the raw id's addon stream.
+      if (ttId.isEmpty && !skipEpisodeFallback) {
+        if (!cancelled) {
+          _openEpisodes(item, addon, isTraktSource: isTraktSource);
+        }
+        return;
       }
-      // Rewatch (Simkl): a movie already marked `completed` on Simkl has no
-      // resume session, and Simkl won't create one on replay — so it can never
-      // re-enter Continue Watching. On the detail Play/Resume flow (the
-      // "Rewatch" button surface, preferTraktResume), un-mark it watched first
-      // so the upcoming catalog scrobble creates a fresh resume session; the
-      // ≥80% stop re-marks it completed when the rewatch finishes. Gated on the
-      // sync setting + auth so we never un-complete a movie that won't actually
-      // be re-tracked. Row quick-play (no preferTraktResume) is left untouched.
-      if (preferTraktResume && _isSimklAuthenticated) {
-        // Same id resolution the detail screen's status loader uses (_imdbOf),
-        // so the "Rewatch" label and this flip never disagree on the title.
-        final imdb = _imdbOf(item);
-        final syncCatalog = await StorageService.getSimklSyncCatalogItems();
+      // Play id: the `tt…` id when present (torrent-resolvable); otherwise the raw
+      // catalog id, which playFromSelection routes to the addon /stream endpoint.
+      final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
+
+      // Resolve where to resume, mirroring EpisodesScreen's landing logic:
+      // last-played episode for this show (by imdbId, then by title), else S01E01.
+      int? season;
+      int? episode;
+      final byId = await StorageService.getLastPlayedEpisodeByImdbId(playId);
+      season = byId?['season'] as int?;
+      episode = byId?['episode'] as int?;
+      final lastFinished = byId?['finished'] == true;
+      if (season == null || episode == null) {
+        final byTitle = await StorageService.getLastPlayedEpisode(
+          seriesTitle: item.name,
+        );
+        season ??= byTitle?['season'] as int?;
+        episode ??= byTitle?['episode'] as int?;
+      }
+      // No local history — last resort: Simkl's next-to-watch, mirroring the
+      // label (_resolveResumeInfo) so the two agree. Only on the detail Resume
+      // flow, and TIME-BOXED (4s) like the movie branch so a slow Simkl API never
+      // freezes the Play press — on timeout it falls through to S01E01.
+      if ((season == null || episode == null) &&
+          _isSimklAuthenticated &&
+          preferTraktResume) {
+        final next = await _simklNextToWatchFor(
+          item,
+        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
         if (!mounted || cancelled) return;
-        if (imdb != null && syncCatalog) {
-          // Time-boxed like the tracker-percent lookups above: a degraded Simkl
-          // API must never stall the Play press. On timeout we just skip the
-          // flip — worst case the rewatch doesn't surface in Continue Watching,
-          // exactly today's behaviour.
-          final status = await SimklService.instance
-              .fetchTitleStatus(imdb)
-              .timeout(const Duration(seconds: 4), onTimeout: () => null);
-          if (!mounted || cancelled) return;
-          if (status?.currentStatus == 'completed') {
-            await SimklService.instance
-                .markUnwatched(imdb, 'movie')
-                .timeout(const Duration(seconds: 4), onTimeout: () => false);
-            if (!mounted || cancelled) return;
-          }
+        if (next != null) {
+          season = next.season;
+          episode = next.episode;
         }
       }
-      // Keep the detail page underneath — the cinematic loading overlay covers
-      // it, and after playback Back returns to the detail (like Home).
+      season ??= 1;
+      episode ??= 1;
+      // If the last-played episode is finished, resume the NEXT one instead of
+      // re-opening it — parity with the deprecated home's continue-watching
+      // quick-play (only the local, non-Trakt path; Trakt resolves its own next).
+      if (lastFinished) {
+        final next = await NextEpisodeService.findNextEpisode(
+          playId,
+          season,
+          episode,
+        );
+        if (!mounted || cancelled) return;
+        if (next != null) {
+          season = next.season;
+          episode = next.episode;
+        }
+      }
+      if (!mounted || cancelled) return;
+
       await launch(
-        _movieSelection(
-          item,
-          isTraktSource: isTraktSource,
-          traktProgressPercent: traktPct,
-          simklProgressPercent: simklPct,
+        AdvancedSearchSelection(
+          imdbId: playId,
+          isSeries: true,
+          title: item.name,
+          year: item.year,
+          season: season,
+          episode: episode,
+          contentType: item.type,
+          posterUrl: item.poster,
+          traktSource: isTraktSource,
         ),
       );
-      return;
-    }
-
-    final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
-    // Without an IMDb id we can't search torrents for a specific episode, so
-    // fall back to the manual episode picker — except from the merged page
-    // (episodes are inline there), where we play via the raw id's addon stream.
-    if (ttId.isEmpty && !skipEpisodeFallback) {
-      if (!cancelled) {
-        _openEpisodes(item, addon, isTraktSource: isTraktSource);
-      }
-      return;
-    }
-    // Play id: the `tt…` id when present (torrent-resolvable); otherwise the raw
-    // catalog id, which playFromSelection routes to the addon /stream endpoint.
-    final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
-
-    // Resolve where to resume, mirroring EpisodesScreen's landing logic:
-    // last-played episode for this show (by imdbId, then by title), else S01E01.
-    int? season;
-    int? episode;
-    final byId = await StorageService.getLastPlayedEpisodeByImdbId(playId);
-    season = byId?['season'] as int?;
-    episode = byId?['episode'] as int?;
-    final lastFinished = byId?['finished'] == true;
-    if (season == null || episode == null) {
-      final byTitle = await StorageService.getLastPlayedEpisode(
-        seriesTitle: item.name,
-      );
-      season ??= byTitle?['season'] as int?;
-      episode ??= byTitle?['episode'] as int?;
-    }
-    // No local history — last resort: Simkl's next-to-watch, mirroring the
-    // label (_resolveResumeInfo) so the two agree. Only on the detail Resume
-    // flow, and TIME-BOXED (4s) like the movie branch so a slow Simkl API never
-    // freezes the Play press — on timeout it falls through to S01E01.
-    if ((season == null || episode == null) &&
-        _isSimklAuthenticated &&
-        preferTraktResume) {
-      final next = await _simklNextToWatchFor(
-        item,
-      ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-      if (!mounted || cancelled) return;
-      if (next != null) {
-        season = next.season;
-        episode = next.episode;
-      }
-    }
-    season ??= 1;
-    episode ??= 1;
-    // If the last-played episode is finished, resume the NEXT one instead of
-    // re-opening it — parity with the deprecated home's continue-watching
-    // quick-play (only the local, non-Trakt path; Trakt resolves its own next).
-    if (lastFinished) {
-      final next = await NextEpisodeService.findNextEpisode(
-        playId,
-        season,
-        episode,
-      );
-      if (!mounted || cancelled) return;
-      if (next != null) {
-        season = next.season;
-        episode = next.episode;
-      }
-    }
-    if (!mounted || cancelled) return;
-
-    await launch(
-      AdvancedSearchSelection(
-        imdbId: playId,
-        isSeries: true,
-        title: item.name,
-        year: item.year,
-        season: season,
-        episode: episode,
-        contentType: item.type,
-        posterUrl: item.poster,
-        traktSource: isTraktSource,
-      ),
-    );
     } finally {
       resolving?.dismiss();
     }

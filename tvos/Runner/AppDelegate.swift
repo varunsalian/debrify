@@ -98,6 +98,37 @@ private final class TvOsProfileRecoveryChannel {
     private let shardBytes = 8 * 1024
     private let maxEnvelopeBytes = 768 * 1024
 
+    // ── Mirror (2026-08-20 incident) ────────────────────────────────────────
+    // tvOS purged all ten 8KB shards of a committed generation while keeping
+    // the 1KB manifest — no app code path can produce that state (the sweep
+    // only ever deletes accounts absent from the manifest it just verified),
+    // so the Keychain alone is not durable enough to be the sole authority
+    // here. NSUserDefaults is the one store tvOS documents as persistent
+    // (500KB budget), so every publication also lands there as an encrypted,
+    // zlib-compressed mirror, and a failed Keychain read heals from it
+    // silently instead of sending the user to the recovery screen. The AES
+    // key is derived (see mirrorSymmetricKey), never stored — a stored key
+    // would be subject to the very loss the mirror guards against. If BOTH
+    // stores are lost, behavior is unchanged from before: recovery screen.
+    private var mirrorDefaultsKey: String { "\(service).mirror.v1" }
+    /// Durable high-water mark of the generation counter, maintained on every
+    /// successful Keychain publication — including ones whose mirror write is
+    /// skipped or fails. It anchors two guarantees the Keychain alone cannot:
+    /// [publish] never mints a generation below it (numbering stays monotonic
+    /// across a full-service wipe, where the manifest-derived counter would
+    /// restart at 1), and [usableMirror] can refuse a stale mirror even when
+    /// the manifest that would prove staleness was purged with everything
+    /// else. Cleared only by [clear].
+    private var generationFloorKey: String { "\(service).generation-floor.v1" }
+    /// Budget guard: the raw envelope is capped at 768KB, but the DEFAULTS
+    /// budget is ~500KB for the WHOLE app — a mirror is skipped (with a log),
+    /// never truncated, when its sealed form would crowd that. The stored
+    /// footprint is ≈ 4/3 × sealed (the payload is base64 inside the JSON
+    /// document), so 192KB sealed ≈ 256KB stored, leaving the other half of
+    /// the budget to the app's own preferences. A real envelope observed in
+    /// production sealed to ~35KB.
+    private let mirrorMaxSealedBytes = 192 * 1024
+
     func install(on messenger: FlutterBinaryMessenger) -> FlutterMethodChannel {
         let channel = FlutterMethodChannel(name: "debrify/tvos_profile_recovery", binaryMessenger: messenger)
         channel.setMethodCallHandler { [weak self] call, result in
@@ -138,7 +169,9 @@ private final class TvOsProfileRecoveryChannel {
     private func publish(_ data: Data) throws {
         let marker = try installMarker(create: true)!
         let oldManifest = try keychainRead(manifestAccount).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        let generation = ((oldManifest?["generation"] as? Int) ?? 0) + 1
+        let generation = max(
+            (oldManifest?["generation"] as? Int) ?? 0,
+            UserDefaults.standard.integer(forKey: generationFloorKey)) + 1
         // A generation counter alone is not a safe shard namespace: a crash
         // before manifest publication leaves immutable N+1 shards behind and a
         // retry would select N+1 again. The transaction UUID makes every retry
@@ -174,6 +207,14 @@ private final class TvOsProfileRecoveryChannel {
         guard try keychainRead(manifestAccount) == manifestData else {
             throw NSError(domain: "ProfileRecovery", code: 4, userInfo: [NSLocalizedDescriptionKey: "Recovery manifest verification failed"])
         }
+        // The floor advances the instant the publication is durable — before
+        // the sweep and the mirror write, both of which may fail. Anything
+        // later and a failure in between leaves a committed generation the
+        // floor does not know about, which is precisely the gap that lets a
+        // retained older mirror pass the freshness check after a purge.
+        if generation > UserDefaults.standard.integer(forKey: generationFloorKey) {
+            UserDefaults.standard.set(generation, forKey: generationFloorKey)
+        }
         // A terminated pre-manifest transaction is invisible but its immutable
         // shards can remain. Once a new manifest is verified, sweep every
         // unreferenced recovery shard (including those abandoned transactions)
@@ -182,9 +223,110 @@ private final class TvOsProfileRecoveryChannel {
             where account.hasPrefix("generation.") && !accounts.contains(account) {
             try? keychainDelete(account)
         }
+        writeMirror(data, generation: generation, marker: marker)
     }
 
     private func read() throws -> String? {
+        do {
+            if let primary = try readPrimary() {
+                let current = manifestGeneration() ?? 0
+                let floor = UserDefaults.standard.integer(forKey: generationFloorKey)
+                // A readable envelope is not automatically the NEWEST one: if
+                // the Keychain itself rolled back beneath the committed floor
+                // (the incident that motivated all of this was a partial
+                // Keychain loss), importing it would silently undo committed
+                // profile state. Prefer a mirror at or above the floor; with
+                // neither copy current, fail to the recovery screen rather
+                // than time-travel.
+                if current < floor {
+                    if let marker = try? installMarker(create: false),
+                       let mirrored = usableMirror(marker: marker) {
+                        NSLog("[ProfileRecovery] Keychain envelope generation %ld predates committed %ld; restoring newer mirror",
+                              current, floor)
+                        heal(mirrored)
+                        return mirrored
+                    }
+                    throw NSError(domain: "ProfileRecovery", code: 9, userInfo: [NSLocalizedDescriptionKey: "Recovery envelope predates committed state"])
+                }
+                // An upgraded install has no mirror until its next Keychain
+                // publication, and a corrupt mirror or one left behind by a
+                // failed write is worse than none — it would never repair
+                // itself while the primary stays healthy. Reseed whenever the
+                // mirror is not both readable and current; while the primary
+                // is readable it is the authority, so overwriting is safe.
+                if let marker = try? installMarker(create: false) {
+                    let existing = readMirror(marker: marker)
+                    if existing == nil || existing!.generation < current {
+                        writeMirror(Data(primary.utf8), generation: current, marker: marker)
+                    }
+                }
+                return primary
+            }
+            // Manifest absent. A fresh install and a post-`clear` state have
+            // no marker and no mirror and correctly fall through to nil; a
+            // purge that took the whole service can still heal from the
+            // mirror.
+            guard let marker = try installMarker(create: false),
+                  let mirrored = usableMirror(marker: marker) else { return nil }
+            NSLog("[ProfileRecovery] Keychain envelope missing; restoring from mirror")
+            heal(mirrored)
+            return mirrored
+        } catch {
+            guard let marker = try? installMarker(create: false),
+                  let mirrored = usableMirror(marker: marker) else { throw error }
+            NSLog("[ProfileRecovery] Keychain envelope unreadable (%@); restoring from mirror",
+                  error.localizedDescription)
+            heal(mirrored)
+            return mirrored
+        }
+    }
+
+    /// The mirror's envelope, unless something newer proves it stale.
+    ///
+    /// A mirror write can be skipped (size cap) or fail while the Keychain
+    /// publication succeeded, leaving the mirror generations behind. Healing
+    /// from it would silently roll the registry back — resurrecting deleted
+    /// profiles or an old PIN. The floor is the newest generation known to
+    /// have committed: a surviving manifest's counter, or the durable
+    /// high-water mark when the manifest was purged too. An older mirror is
+    /// refused and the caller falls through to the recovery screen rather
+    /// than time-travel.
+    private func usableMirror(marker: String) -> String? {
+        guard let mirrored = readMirror(marker: marker) else { return nil }
+        let floor = max(
+            manifestGeneration() ?? 0,
+            UserDefaults.standard.integer(forKey: generationFloorKey))
+        if mirrored.generation < floor {
+            NSLog("[ProfileRecovery] Mirror refused: generation %ld predates committed %ld",
+                  mirrored.generation, floor)
+            return nil
+        }
+        return mirrored.text
+    }
+
+    private func manifestGeneration() -> Int? {
+        guard let manifestData = try? keychainRead(manifestAccount),
+              let manifest = (try? JSONSerialization.jsonObject(with: manifestData)) as? [String: Any] else {
+            return nil
+        }
+        return manifest["generation"] as? Int
+    }
+
+    /// Republishes a mirror-recovered envelope back into the Keychain so the
+    /// primary is whole again. Failure is logged, not thrown — the caller
+    /// already holds a good envelope, and the next successful publication
+    /// repairs the Keychain anyway.
+    private func heal(_ text: String) {
+        do {
+            try publish(Data(text.utf8))
+            NSLog("[ProfileRecovery] Keychain re-published from mirror")
+        } catch {
+            NSLog("[ProfileRecovery] Self-heal republication failed: %@",
+                  error.localizedDescription)
+        }
+    }
+
+    private func readPrimary() throws -> String? {
         guard let manifestData = try keychainRead(manifestAccount) else { return nil }
         guard let marker = try installMarker(create: false) else {
             throw NSError(domain: "ProfileRecovery", code: 5, userInfo: [NSLocalizedDescriptionKey: "Recovery state exists without this installation marker"])
@@ -220,6 +362,13 @@ private final class TvOsProfileRecoveryChannel {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
         }
+        // The mirror dies with the service — a cleared device must not
+        // resurrect profiles through the fallback path. (Its key is derived,
+        // not stored, so there is nothing key-shaped to delete.) The
+        // generation floor resets too: after a deliberate reset, restarting
+        // the counter at 1 is correct, unlike after a purge.
+        UserDefaults.standard.removeObject(forKey: mirrorDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: generationFloorKey)
         UserDefaults.standard.removeObject(forKey: installMarkerKey)
     }
 
@@ -299,6 +448,99 @@ private final class TvOsProfileRecoveryChannel {
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
+    }
+
+    /// Derived, never stored. An earlier design kept a random key as its own
+    /// Keychain item — but the mirror exists precisely to survive Keychain
+    /// loss, and a purge that took the whole service would have taken the key
+    /// with it, leaving a perfectly good mirror permanently undecryptable.
+    /// `identifierForVendor` has exactly the right lifetime: stable across
+    /// updates and Keychain purges, gone on uninstall (when the defaults die
+    /// too). The mirror still never leaves the device readable — the
+    /// identifier is not stored alongside the ciphertext.
+    private func mirrorSymmetricKey() throws -> SymmetricKey {
+        guard let vendor = UIDevice.current.identifierForVendor?.uuidString else {
+            throw NSError(domain: "ProfileRecovery", code: 22, userInfo: [NSLocalizedDescriptionKey: "Device identifier unavailable for mirror key"])
+        }
+        return HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: Data(vendor.utf8)),
+            salt: Data(service.utf8),
+            info: Data("debrify.profile-recovery.mirror-key.v3".utf8),
+            outputByteCount: 32)
+    }
+
+    /// The generation is part of the AAD, not just the plaintext document —
+    /// so a rolled-back or hand-edited generation field fails authentication
+    /// instead of steering the freshness check in [read].
+    private func mirrorAAD(marker: String, generation: Int) -> Data {
+        Data("\(service)|\(marker)|mirror-v3|gen.\(generation)".utf8)
+    }
+
+    /// Non-fatal by design: the Keychain publication this shadows has already
+    /// verified, and a missing mirror only means the NEXT purge is unhealed —
+    /// the same exposure as before the mirror existed, never worse.
+    private func writeMirror(_ data: Data, generation: Int, marker: String) {
+        do {
+            let compressed = try (data as NSData).compressed(using: .zlib) as Data
+            let sealed = try AES.GCM.seal(
+                compressed,
+                using: try mirrorSymmetricKey(),
+                authenticating: mirrorAAD(marker: marker, generation: generation))
+            guard let combined = sealed.combined else {
+                throw NSError(domain: "ProfileRecovery", code: 20)
+            }
+            guard combined.count <= mirrorMaxSealedBytes else {
+                NSLog("[ProfileRecovery] Mirror skipped: %ld sealed bytes exceeds the defaults budget",
+                      combined.count)
+                return
+            }
+            let document: [String: Any] = [
+                "version": 3,
+                "generation": generation,
+                "length": data.count,
+                "payload": combined.base64EncodedString(),
+            ]
+            let json = try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+            guard let text = String(data: json, encoding: .utf8) else {
+                throw NSError(domain: "ProfileRecovery", code: 21)
+            }
+            // Stored as the JSON string itself — an extra base64 pass over the
+            // whole document would inflate the defaults footprint by another
+            // third for nothing (the sealed payload inside is already base64).
+            UserDefaults.standard.set(text, forKey: mirrorDefaultsKey)
+        } catch {
+            NSLog("[ProfileRecovery] Mirror write failed (non-fatal): %@",
+                  error.localizedDescription)
+        }
+    }
+
+    /// nil on any imperfection — a mirror that fails authentication, inflation,
+    /// or the length check is treated as absent, never partially trusted.
+    private func readMirror(marker: String) -> (text: String, generation: Int)? {
+        guard let stored = UserDefaults.standard.string(forKey: mirrorDefaultsKey),
+              let json = stored.data(using: .utf8),
+              let document = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any],
+              document["version"] as? Int == 3,
+              let generation = document["generation"] as? Int,
+              let length = document["length"] as? Int,
+              length <= maxEnvelopeBytes,
+              let payload = document["payload"] as? String,
+              let combined = Data(base64Encoded: payload) else { return nil }
+        do {
+            let box = try AES.GCM.SealedBox(combined: combined)
+            let compressed = try AES.GCM.open(
+                box,
+                using: try mirrorSymmetricKey(),
+                authenticating: mirrorAAD(marker: marker, generation: generation))
+            let data = try (compressed as NSData).decompressed(using: .zlib) as Data
+            guard data.count == length, let text = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+            return (text, generation)
+        } catch {
+            NSLog("[ProfileRecovery] Mirror unreadable: %@", error.localizedDescription)
+            return nil
+        }
     }
 }
 

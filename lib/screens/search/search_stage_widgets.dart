@@ -16,6 +16,13 @@ class _CwRow {
 
   /// Subtle 'S2 · E5' label for series cards (null for movies / when unknown).
   final String? Function(StremioMeta) episodeOf;
+
+  /// Whole minutes remaining when this provider has a trustworthy duration.
+  final int? Function(StremioMeta) remainingMinutesOf;
+
+  /// Episode still for landscape series cards, resolved asynchronously and
+  /// null until available. The card keeps its show-art fallback throughout.
+  final String? Function(StremioMeta) episodeArtworkOf;
   final void Function(StremioMeta) onOpen;
   final void Function(StremioMeta) onQuickPlay;
 
@@ -35,6 +42,8 @@ class _CwRow {
     required this.nodes,
     required this.progressOf,
     required this.episodeOf,
+    required this.remainingMinutesOf,
+    required this.episodeArtworkOf,
     required this.onOpen,
     required this.onQuickPlay,
     required this.onRemove,

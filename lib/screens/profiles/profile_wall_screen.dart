@@ -30,8 +30,8 @@ class ProfileGateStyle {
   static const List<({String id, String label, String blurb})> options = [
     (
       id: marquee,
-      label: 'Marquee',
-      blurb: 'A big stage for whoever is focused',
+      label: 'Lighthouse',
+      blurb: 'A cinematic welcome for the whole household',
     ),
     (
       id: theater,

@@ -46,11 +46,13 @@ class Initializer {
   }
 
   /// Disposes [Pointer<mpv_handle>].
-  void dispose(Pointer<generated.mpv_handle> ctx) {
+  void Function()? dispose(Pointer<generated.mpv_handle> ctx) {
     if (!isExecmemRestricted) {
-      InitializerNativeCallable(mpv).dispose(ctx);
+      final callable = InitializerNativeCallable(mpv).dispose(ctx);
+      return callable?.close;
     } else {
       InitializerIsolate().dispose(mpv, ctx);
+      return null;
     }
   }
 }

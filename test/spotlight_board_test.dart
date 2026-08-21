@@ -26,13 +26,13 @@ import 'package:debrify/widgets/home/spotlight_board.dart';
 /// through** rather than be swallowed, because falling through is the only way
 /// the sidebar ever opens.
 StremioMeta _meta(String id, String name) => StremioMeta(
-      id: id,
-      imdbId: id,
-      type: 'series',
-      name: name,
-      description: 'About $name.',
-      genres: const ['Drama'],
-    );
+  id: id,
+  imdbId: id,
+  type: 'series',
+  name: name,
+  description: 'About $name.',
+  genres: const ['Drama'],
+);
 
 final _addon = StremioAddon(
   id: 'a',
@@ -43,19 +43,22 @@ final _addon = StremioAddon(
   resources: const ['catalog'],
 );
 
-SpotlightShelf _section(String title, List<StremioMeta> items,
-        {List<FocusNode>? nodes}) =>
-    SpotlightShelf(
-      title: title,
-      nodes: nodes ?? _rowNodes(items.length),
-      items: [
-        for (final m in items)
-          SpotlightCard(image: m.poster, title: m.name, onOpen: () {}),
-      ],
-    );
+SpotlightShelf _section(
+  String title,
+  List<StremioMeta> items, {
+  List<FocusNode>? nodes,
+}) => SpotlightShelf(
+  title: title,
+  nodes: nodes ?? _rowNodes(items.length),
+  items: [
+    for (final m in items)
+      SpotlightCard(image: m.poster, title: m.name, onOpen: () {}),
+  ],
+);
 
-List<FocusNode> _rowNodes(int n) =>
-    [for (var i = 0; i < n; i++) FocusNode(debugLabel: 'cell$i')];
+List<FocusNode> _rowNodes(int n) => [
+  for (var i = 0; i < n; i++) FocusNode(debugLabel: 'cell$i'),
+];
 
 void _noop() {}
 
@@ -85,32 +88,39 @@ void main() {
     bool dpad = true,
     void Function(StremioMeta item)? onDwell,
     VoidCallback? onTrailerStop,
-  }) =>
-      MaterialApp(
-        home: AppThemeScope(
-          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
-          child: Scaffold(
-            body: SpotlightBoard(
-              hero: heroItems,
-              sections: sections,
-              heroNode: hero,
-              heroAddon: _addon,
-              onHeroOpen: (_, __) {},
-              onDwell: onDwell,
-              onTrailerStop: onTrailerStop,
-              dpad: dpad,
-            ),
-          ),
+  }) => MaterialApp(
+    home: AppThemeScope(
+      theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+      child: Scaffold(
+        body: SpotlightBoard(
+          hero: heroItems,
+          sections: sections,
+          heroNode: hero,
+          heroAddon: _addon,
+          onHeroOpen: (_, __) {},
+          onDwell: onDwell,
+          onTrailerStop: onTrailerStop,
+          dpad: dpad,
         ),
-      );
+      ),
+    ),
+  );
 
-  testWidgets('the hero parks by ITEM ID across a reel re-order',
-      (tester) async {
+  testWidgets('the hero parks by ITEM ID across a reel re-order', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     final c = _meta('tt3', 'Charlie');
 
-    await tester.pumpWidget(host([a, b, c], [_section('Top', [a, b, c])]));
+    await tester.pumpWidget(
+      host(
+        [a, b, c],
+        [
+          _section('Top', [a, b, c]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Page to Bravo.
@@ -122,70 +132,99 @@ void main() {
 
     // The reel re-orders — exactly what happens when tracker rows arrive and
     // shift the sections. An index would now point at Charlie.
-    await tester.pumpWidget(host([c, a, b], [_section('Top', [c, a, b])]));
+    await tester.pumpWidget(
+      host(
+        [c, a, b],
+        [
+          _section('Top', [c, a, b]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Bravo'), findsWidgets,
-        reason: 'the parked title must survive the re-order');
+    expect(
+      find.text('Bravo'),
+      findsWidgets,
+      reason: 'the parked title must survive the re-order',
+    );
   });
 
-  testWidgets('a dropped hero item falls back to the head, not a stale index',
-      (tester) async {
+  testWidgets('a dropped hero item falls back to the head, not a stale index', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
-    await tester.pumpWidget(host([a, b], [_section('Top', [a, b])]));
+    await tester.pumpWidget(
+      host(
+        [a, b],
+        [
+          _section('Top', [a, b]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
     hero.requestFocus();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
 
     // Bravo disappears from the catalog entirely.
-    await tester.pumpWidget(host([a], [_section('Top', [a])]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('Top', [a]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Alpha'), findsWidgets);
   });
 
-  testWidgets('LEFT at column 0 falls through — the sidebar is the only way out',
-      (tester) async {
-    final a = _meta('tt1', 'Alpha');
-    var sawLeft = false;
+  testWidgets(
+    'LEFT at column 0 falls through — the sidebar is the only way out',
+    (tester) async {
+      final a = _meta('tt1', 'Alpha');
+      var sawLeft = false;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppThemeScope(
-          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
-          child: Focus(
-            // Stands in for the shell's directional handler, which is what
-            // actually opens the sidebar. If the board swallowed LEFT this
-            // would never fire and the sidebar would be unreachable.
-            onKeyEvent: (_, e) {
-              if (e is KeyDownEvent &&
-                  e.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                sawLeft = true;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: Scaffold(
-              body: SpotlightBoard(
-                hero: [a],
-                sections: [_section('Top', [a], nodes: rows[0])],
-                heroNode: hero,
-                heroAddon: _addon,
-                onHeroOpen: (_, __) {},
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppThemeScope(
+            theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+            child: Focus(
+              // Stands in for the shell's directional handler, which is what
+              // actually opens the sidebar. If the board swallowed LEFT this
+              // would never fire and the sidebar would be unreachable.
+              onKeyEvent: (_, e) {
+                if (e is KeyDownEvent &&
+                    e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                  sawLeft = true;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Scaffold(
+                body: SpotlightBoard(
+                  hero: [a],
+                  sections: [
+                    _section('Top', [a], nodes: rows[0]),
+                  ],
+                  heroNode: hero,
+                  heroAddon: _addon,
+                  onHeroOpen: (_, __) {},
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    rows[0][0].requestFocus();
-    await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
+      rows[0][0].requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
 
-    expect(sawLeft, isTrue);
-  });
+      expect(sawLeft, isTrue);
+    },
+  );
 
   testWidgets('cells hide from geometric search — the LEFT fallback can '
       'never land on another row instead of the sidebar', (tester) async {
@@ -195,43 +234,65 @@ void main() {
     // means LEFT-at-the-edge sometimes browsed instead of opening the rail.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
-    await tester
-        .pumpWidget(host([a, b], [_section('Top', [a, b], nodes: rows[0])]));
+    await tester.pumpWidget(
+      host(
+        [a, b],
+        [
+          _section('Top', [a, b], nodes: rows[0]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     rows[0][1].requestFocus();
     await tester.pumpAndSettle();
 
-    expect(rows[0][1].skipTraversal, isTrue,
-        reason: 'cells must be reachable only by the board\'s explicit walk');
-    expect(rows[0][1].focusInDirection(TraversalDirection.left), isFalse,
-        reason: 'a geometric LEFT search must find nothing inside the board');
+    expect(
+      rows[0][1].skipTraversal,
+      isTrue,
+      reason: 'cells must be reachable only by the board\'s explicit walk',
+    );
+    expect(
+      rows[0][1].focusInDirection(TraversalDirection.left),
+      isFalse,
+      reason: 'a geometric LEFT search must find nothing inside the board',
+    );
     expect(rows[0][0].hasFocus, isFalse);
   });
 
-  testWidgets('a title card wears its rating on the caption meta line',
-      (tester) async {
-    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [
-      SpotlightShelf(
-        title: 'Top',
-        nodes: rows[0],
-        items: [
-          SpotlightCard(title: 'Rated', rating: 8.06, onOpen: _noop),
-          // Zero means "no rating carried" (common on catalog list items) —
-          // an empty star would read as a zero score.
-          SpotlightCard(title: 'Unrated', rating: 0, onOpen: _noop),
+  testWidgets('a title card wears its rating on the caption meta line', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        [_meta('tt1', 'Alpha')],
+        [
+          SpotlightShelf(
+            title: 'Top',
+            nodes: rows[0],
+            items: [
+              SpotlightCard(title: 'Rated', rating: 8.06, onOpen: _noop),
+              // Zero means "no rating carried" (common on catalog list items) —
+              // an empty star would read as a zero score.
+              SpotlightCard(title: 'Unrated', rating: 0, onOpen: _noop),
+            ],
+          ),
         ],
       ),
-    ]));
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('★ 8.1'), findsOneWidget,
-        reason: 'one decimal, star-prefixed, on the caption meta line');
+    expect(
+      find.text('★ 8.1'),
+      findsOneWidget,
+      reason: 'one decimal, star-prefixed, on the caption meta line',
+    );
     expect(find.textContaining('★ 0'), findsNothing);
   });
 
-  testWidgets('the board is LAZY — off-screen shelves do not build at mount',
-      (tester) async {
+  testWidgets('the board is LAZY — off-screen shelves do not build at mount', (
+    tester,
+  ) async {
     // A Column of shelves inside the vertical list once defeated its
     // laziness: every shelf built, decoded and uploaded textures on mount,
     // the measured first-seconds burst on a Mali box.
@@ -250,14 +311,21 @@ void main() {
     await tester.pumpWidget(host([_meta('tt1', 'Alpha')], sections));
     await tester.pumpAndSettle();
 
-    expect(find.text('R0-C0'), findsOneWidget,
-        reason: 'the first shelf is on screen and must build');
-    expect(find.text('R11-C0'), findsNothing,
-        reason: 'a shelf far below the fold must not build at mount');
+    expect(
+      find.text('R0-C0'),
+      findsOneWidget,
+      reason: 'the first shelf is on screen and must build',
+    );
+    expect(
+      find.text('R11-C0'),
+      findsNothing,
+      reason: 'a shelf far below the fold must not build at mount',
+    );
   });
 
-  testWidgets('a front-inserted shelf REUSES the shelves below it',
-      (tester) async {
+  testWidgets('a front-inserted shelf REUSES the shelves below it', (
+    tester,
+  ) async {
     // Tracker rows stream in above the catalog rows. Identity keys mean the
     // insert must not remount existing shelves (remount = scroll reset +
     // full texture re-upload of every visible card).
@@ -283,17 +351,20 @@ void main() {
       nodes: const [],
       items: [SpotlightCard(title: 'Bravo', onOpen: _noop)],
     );
-    await tester
-        .pumpWidget(host([_meta('tt1', 'Alpha')], [inserted, below]));
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [inserted, below]));
     await tester.pumpAndSettle();
     final after = tester.element(find.text('CardOnShelf'));
 
-    expect(identical(before, after), isTrue,
-        reason: 'the shelf below the insert must keep its element subtree');
+    expect(
+      identical(before, after),
+      isTrue,
+      reason: 'the shelf below the insert must keep its element subtree',
+    );
   });
 
-  testWidgets('DOWN reaches a row whose remembered cell is not built',
-      (tester) async {
+  testWidgets('DOWN reaches a row whose remembered cell is not built', (
+    tester,
+  ) async {
     // The intermittent dead-DOWN: the target row sits parked at a far
     // horizontal offset, so the cell the board remembers for it is outside
     // the row's build window — a detached FocusNode, and requestFocus on it
@@ -305,26 +376,29 @@ void main() {
         n.dispose();
       }
     });
-    Widget board() => host([_meta('tt1', 'Alpha')], [
-          SpotlightShelf(
-            title: 'A',
-            id: 'a',
-            nodes: nodesA,
-            items: [
-              for (var c = 0; c < 2; c++)
-                SpotlightCard(title: 'A-C$c', onOpen: _noop),
-            ],
-          ),
-          SpotlightShelf(
-            title: 'B',
-            id: 'b',
-            nodes: nodesB,
-            items: [
-              for (var c = 0; c < 20; c++)
-                SpotlightCard(title: 'B-C$c', onOpen: _noop),
-            ],
-          ),
-        ]);
+    Widget board() => host(
+      [_meta('tt1', 'Alpha')],
+      [
+        SpotlightShelf(
+          title: 'A',
+          id: 'a',
+          nodes: nodesA,
+          items: [
+            for (var c = 0; c < 2; c++)
+              SpotlightCard(title: 'A-C$c', onOpen: _noop),
+          ],
+        ),
+        SpotlightShelf(
+          title: 'B',
+          id: 'b',
+          nodes: nodesB,
+          items: [
+            for (var c = 0; c < 20; c++)
+              SpotlightCard(title: 'B-C$c', onOpen: _noop),
+          ],
+        ),
+      ],
+    );
     await tester.pumpWidget(board());
     await tester.pumpAndSettle();
 
@@ -335,14 +409,20 @@ void main() {
     // a touch drag, exactly what a restored scroll offset also produces.
     await tester.drag(find.text('B-C1'), const Offset(-1400, 0));
     await tester.pumpAndSettle();
-    expect(nodesB[0].context?.mounted ?? false, isFalse,
-        reason: 'setup: the remembered column-0 cell must be UNBUILT');
+    expect(
+      nodesB[0].context?.mounted ?? false,
+      isFalse,
+      reason: 'setup: the remembered column-0 cell must be UNBUILT',
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
 
-    expect(nodesB.any((n) => n.hasFocus), isTrue,
-        reason: 'DOWN must land somewhere in row B, never die silently');
+    expect(
+      nodesB.any((n) => n.hasFocus),
+      isTrue,
+      reason: 'DOWN must land somewhere in row B, never die silently',
+    );
   });
 
   testWidgets('the reel NEVER advances on its own — only a deliberate move '
@@ -353,7 +433,14 @@ void main() {
     // timer's one remaining job is the trailer dwell.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
-    await tester.pumpWidget(host([a, b], [_section('Top', [a, b])]));
+    await tester.pumpWidget(
+      host(
+        [a, b],
+        [
+          _section('Top', [a, b]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('About Alpha.'), findsOneWidget);
 
@@ -367,8 +454,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 12));
     await tester.pumpAndSettle();
-    expect(find.text('About Alpha.'), findsOneWidget,
-        reason: 'the reel must hold still until a deliberate move');
+    expect(
+      find.text('About Alpha.'),
+      findsOneWidget,
+      reason: 'the reel must hold still until a deliberate move',
+    );
     expect(find.text('About Bravo.'), findsNothing);
 
     // A deliberate move still pages it.
@@ -377,10 +467,10 @@ void main() {
     expect(find.text('About Bravo.'), findsOneWidget);
   });
 
-  testWidgets('the TV dwell asks for a trailer without paging, and re-arms '
-      'after a deliberate move', (tester) async {
-    // The cadence's one remaining job on TV: focus rests on the hero, the
-    // art dwell elapses, the host is told — and the reel does NOT move.
+  testWidgets('the TV hero asks for a trailer immediately without paging, and '
+      're-arms after a deliberate move', (tester) async {
+    // Once the TV hero owns focus, tell the host immediately — trailer lookup
+    // is already the useful wait — and do not move the reel.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     final dwelled = <String>[];
@@ -391,7 +481,9 @@ void main() {
           child: Scaffold(
             body: SpotlightBoard(
               hero: [a, b],
-              sections: [_section('Top', [a, b])],
+              sections: [
+                _section('Top', [a, b]),
+              ],
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: (_, __) {},
@@ -409,24 +501,24 @@ void main() {
     expect(dwelled, isEmpty);
 
     hero.requestFocus();
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pump();
-    expect(dwelled, ['tt1'], reason: 'focused: one dwell after the art rest');
-    expect(find.text('About Alpha.'), findsOneWidget,
-        reason: 'and the reel has not paged');
+    await tester.pumpAndSettle();
+    expect(dwelled, ['tt1'], reason: 'focused: resolve starts immediately');
+    expect(
+      find.text('About Alpha.'),
+      findsOneWidget,
+      reason: 'and the reel has not paged',
+    );
 
     // RIGHT pages, tears the roll down, and re-arms for the new slide.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.text('About Bravo.'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pump();
     expect(dwelled, ['tt1', 'tt2']);
   });
 
-  testWidgets('a shrinking board does not strand the cursor past the end',
-      (tester) async {
+  testWidgets('a shrinking board does not strand the cursor past the end', (
+    tester,
+  ) async {
     // A board reload can shrink or reorder the shelves under a parked cursor.
     // `_row` is positional, so an unclamped one indexes past the end of
     // rowNodes on the next arrow key and throws.
@@ -435,10 +527,15 @@ void main() {
       [FocusNode(debugLabel: 'r0c0')],
       [FocusNode(debugLabel: 'r1c0')],
     ];
-    await tester.pumpWidget(host([a], [
-      _section('One', [a], nodes: rows[0]),
-      _section('Two', [a], nodes: rows[1]),
-    ]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('One', [a], nodes: rows[0]),
+          _section('Two', [a], nodes: rows[1]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     hero.requestFocus();
@@ -451,7 +548,14 @@ void main() {
     rows = [
       [FocusNode(debugLabel: 'r0c0')],
     ];
-    await tester.pumpWidget(host([a], [_section('One', [a], nodes: rows[0])]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('One', [a], nodes: rows[0]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -460,8 +564,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('DOWN at the last shelf waits for a lazy batch and enters it',
-      (tester) async {
+  testWidgets('DOWN at the last shelf waits for a lazy batch and enters it', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     final gate = Completer<void>();
@@ -525,41 +630,54 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
 
-    expect(rows[2][0].hasFocus, isTrue,
-        reason: 'the original DOWN must finish when the new shelf mounts');
+    expect(
+      rows[2][0].hasFocus,
+      isTrue,
+      reason: 'the original DOWN must finish when the new shelf mounts',
+    );
     expect(
       find.byKey(const ValueKey('spotlight-loading-more-shelves')),
       findsNothing,
     );
   });
 
-  testWidgets('a Continue Watching shelf draws progress; a catalog one does not',
-      (tester) async {
-    // The whole point of the shelf descriptor: the board renders progress
-    // without knowing what Continue Watching IS. A shelf that returns null for
-    // every item simply draws no bars.
-    final a = _meta('tt1', 'Alpha');
-    await tester.pumpWidget(host([a], [
-      SpotlightShelf(
-        title: 'Continue Watching',
-        nodes: _rowNodes(1),
-        items: [
-          SpotlightCard(
-            image: a.poster,
-            title: a.name,
-            progress: 40,
-            onOpen: () {},
-          ),
-        ],
-      ),
-      _section('Popular', [a]),
-    ]));
-    await tester.pumpAndSettle();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-  });
+  testWidgets(
+    'a Continue Watching shelf draws progress; a catalog one does not',
+    (tester) async {
+      // The whole point of the shelf descriptor: the board renders progress
+      // without knowing what Continue Watching IS. A shelf that returns null for
+      // every item simply draws no bars.
+      final a = _meta('tt1', 'Alpha');
+      await tester.pumpWidget(
+        host(
+          [a],
+          [
+            SpotlightShelf(
+              title: 'Continue Watching',
+              nodes: _rowNodes(1),
+              items: [
+                SpotlightCard(
+                  image: a.poster,
+                  title: a.name,
+                  subtitle: 'S2 · E5 · 24 min left',
+                  progress: 40,
+                  onOpen: () {},
+                ),
+              ],
+            ),
+            _section('Popular', [a]),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('S2 · E5 · 24 min left'), findsOneWidget);
+    },
+  );
 
-  testWidgets('a rolling trailer stops the reel — it must not cut away',
-      (tester) async {
+  testWidgets('a rolling trailer stops the reel — it must not cut away', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     var dwelt = 0;
@@ -570,7 +688,9 @@ void main() {
           child: Scaffold(
             body: SpotlightBoard(
               hero: [a, b],
-              sections: [_section('Top', [a, b])],
+              sections: [
+                _section('Top', [a, b]),
+              ],
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: (_, __) {},
@@ -585,20 +705,23 @@ void main() {
     hero.requestFocus();
     await tester.pumpAndSettle();
 
-    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    expect(dwelt, 1, reason: 'the dwell must start a trailer');
+    expect(dwelt, 1, reason: 'the eligible hero must start a trailer resolve');
 
     // Long past any cap: cutting away from something the user is watching to
     // show the next poster is the opposite of what the dwell is for.
     await tester.pump(const Duration(seconds: 40));
     await tester.pumpAndSettle();
-    expect(find.text('Alpha'), findsWidgets,
-        reason: 'a rolling trailer must hold the reel');
+    expect(
+      find.text('Alpha'),
+      findsWidgets,
+      reason: 'a rolling trailer must hold the reel',
+    );
   });
 
-  testWidgets('LEFT from mid-row is consumed, not leaked to the shell',
-      (tester) async {
+  testWidgets('LEFT from mid-row is consumed, not leaked to the shell', (
+    tester,
+  ) async {
     // The bug: `_col` drifting from real focus made LEFT fall through while
     // the cursor sat mid-row. The shell then ran a geometric search and jumped
     // to another row, which is what made the sidebar hard to reach.
@@ -650,8 +773,9 @@ void main() {
     expect(leaked, 1);
   });
 
-  testWidgets('the trailer layer follows the HOST, not the board\'s own flag',
-      (tester) async {
+  testWidgets('the trailer layer follows the HOST, not the board\'s own flag', (
+    tester,
+  ) async {
     // The crash this pins: gating the trailer widget on the board's `_rolling`
     // kept a media_kit engine mounted after the host had torn the trailer down
     // for playback. Two VideoOutputs is SIGABRT on tvOS.
@@ -668,7 +792,9 @@ void main() {
           child: Scaffold(
             body: SpotlightBoard(
               hero: [a],
-              sections: [_section('Top', [a])],
+              sections: [
+                _section('Top', [a]),
+              ],
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: (_, __) {},
@@ -690,7 +816,9 @@ void main() {
           child: Scaffold(
             body: SpotlightBoard(
               hero: [a],
-              sections: [_section('Top', [a])],
+              sections: [
+                _section('Top', [a]),
+              ],
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: (_, __) {},
@@ -703,25 +831,32 @@ void main() {
     expect(find.byKey(marker), findsNothing);
   });
 
-  testWidgets('a channel tile CONTAINS its logo; a poster fills', (tester) async {
+  testWidgets('a channel tile CONTAINS its logo; a poster fills', (
+    tester,
+  ) async {
     // The reason the card model generalised at all: a channel logo is a wide,
     // often transparent mark. A 2:3 crop cuts the wordmark in half, so channel
     // cards are square and contain their art on a plate.
     final a = _meta('tt1', 'Alpha');
-    await tester.pumpWidget(host([a], [
-      SpotlightShelf(
-        title: 'IPTV Favourites',
-        nodes: _rowNodes(1),
-        items: const [
-          SpotlightCard(
-            title: 'A Channel',
-            subtitle: 'LIVE',
-            shape: SpotlightCardShape.channel,
-            onOpen: _noop,
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'IPTV Favourites',
+            nodes: _rowNodes(1),
+            items: const [
+              SpotlightCard(
+                title: 'A Channel',
+                subtitle: 'LIVE',
+                shape: SpotlightCardShape.channel,
+                onOpen: _noop,
+              ),
+            ],
           ),
         ],
       ),
-    ]));
+    );
     await tester.pumpAndSettle();
     expect(find.text('A Channel'), findsOneWidget);
     expect(find.text('LIVE'), findsOneWidget);
@@ -742,10 +877,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        home: SpotlightIptvCardPreview(
-          channel: channel,
-          ambientVolume: volume,
-        ),
+        home: SpotlightIptvCardPreview(channel: channel, ambientVolume: volume),
       ),
     );
 
@@ -868,8 +1000,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pump();
     expect(dwelled, ['tt1']);
 
     final cardMouseRegion = tester.widget<MouseRegion>(
@@ -882,15 +1012,20 @@ void main() {
     expect(trailerStops, 1);
 
     cardMouseRegion.onExit!(const PointerExitEvent());
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(dwelled, ['tt1', 'tt1']);
   });
 
   testWidgets('a single-item reel shows no dots', (tester) async {
     final a = _meta('tt1', 'Alpha');
-    await tester.pumpWidget(host([a], [_section('Top', [a])]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('Top', [a]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
     // One page is not a carousel; dots there are chrome that says nothing.
     // By key, not byType(AnimatedContainer): under a non-parallax theme every
@@ -898,8 +1033,9 @@ void main() {
     expect(find.byKey(const ValueKey('spotlight-hero-dots')), findsNothing);
   });
 
-  testWidgets('off-parallax themes still get a cursor on the shelf',
-      (tester) async {
+  testWidgets('off-parallax themes still get a cursor on the shelf', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
 
     // Signal expresses focus as a ring. The parallax lift is a THEME
@@ -908,7 +1044,14 @@ void main() {
     // indistinguishable from a resting one (the Classic-look +
     // Spotlight-layout combination shipped exactly that).
     final nodes = _rowNodes(1);
-    await tester.pumpWidget(host([a], [_section('Top', [a], nodes: nodes)]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('Top', [a], nodes: nodes),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(FocusExpressionBox), findsWidgets);
 
@@ -916,17 +1059,18 @@ void main() {
     nodes[0].requestFocus();
     await tester.pumpAndSettle();
     final lit = tester
-        .widgetList<AnimatedContainer>(find.descendant(
-          of: find.byType(FocusExpressionBox),
-          matching: find.byType(AnimatedContainer),
-        ))
+        .widgetList<AnimatedContainer>(
+          find.descendant(
+            of: find.byType(FocusExpressionBox),
+            matching: find.byType(AnimatedContainer),
+          ),
+        )
         .any((c) {
-      final d = c.foregroundDecoration;
-      final border = d is BoxDecoration ? d.border : null;
-      return border is Border && border.top.color.a > 0;
-    });
-    expect(lit, isTrue,
-        reason: 'the focused card must paint the theme cursor');
+          final d = c.foregroundDecoration;
+          final border = d is BoxDecoration ? d.border : null;
+          return border is Border && border.top.color.a > 0;
+        });
+    expect(lit, isTrue, reason: 'the focused card must paint the theme cursor');
 
     // Under the Spotlight look the lift IS the cursor and the delegate must
     // stay out of the tree: its parallax arm clips the glare at the theme's
@@ -938,7 +1082,9 @@ void main() {
           child: Scaffold(
             body: SpotlightBoard(
               hero: [a],
-              sections: [_section('Top', [a])],
+              sections: [
+                _section('Top', [a]),
+              ],
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: (_, __) {},
@@ -951,8 +1097,9 @@ void main() {
     expect(find.byType(FocusExpressionBox), findsNothing);
   });
 
-  testWidgets('the card draws at the poster ratio, not the row viewport\'s',
-      (tester) async {
+  testWidgets('the card draws at the poster ratio, not the row viewport\'s', (
+    tester,
+  ) async {
     // The bug this pins: the row reserved the lift by making its own viewport
     // `posterH * 1.10 + 24` tall. A horizontal ListView constrains children to
     // the viewport height TIGHTLY, so every card was stretched to that while
@@ -961,7 +1108,14 @@ void main() {
     // are too big" and twice mis-diagnosed as the 260×390 ratio being wrong.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
-    await tester.pumpWidget(host([a], [_section('Top', [a, b])]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('Top', [a, b]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     final board = tester.getSize(find.byType(SpotlightBoard)).width;
@@ -974,30 +1128,42 @@ void main() {
         .firstWhere((p) => p.fixedScaleForeground != null);
     final box = tester.getSize(find.byWidget(cardHost));
 
-    expect(box.height, closeTo(posterH, 0.5),
-        reason: 'the card must be its own height, not the viewport\'s');
-    expect(box.width / box.height, closeTo(2 / 3, 0.005),
-        reason: 'a poster is 2:3 — anything else means it was stretched');
+    expect(
+      box.height,
+      closeTo(posterH, 0.5),
+      reason: 'the card must be its own height, not the viewport\'s',
+    );
+    expect(
+      box.width / box.height,
+      closeTo(2 / 3, 0.005),
+      reason: 'a poster is 2:3 — anything else means it was stretched',
+    );
   });
 
-  testWidgets('a wide shelf uses the readable landscape rail width',
-      (tester) async {
+  testWidgets('a wide shelf uses the readable landscape rail width', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
-    await tester.pumpWidget(host([a], [
-      SpotlightShelf(
-        title: 'Top',
-        nodes: rows[0],
-        items: [
-          for (final item in [a, b])
-            SpotlightCard(
-              title: item.name,
-              shape: SpotlightCardShape.wide,
-              onOpen: _noop,
-            ),
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'Top',
+            nodes: rows[0],
+            items: [
+              for (final item in [a, b])
+                SpotlightCard(
+                  title: item.name,
+                  shape: SpotlightCardShape.wide,
+                  onOpen: _noop,
+                ),
+            ],
+          ),
         ],
       ),
-    ]));
+    );
     await tester.pumpAndSettle();
 
     final board = tester.getSize(find.byType(SpotlightBoard)).width;
@@ -1012,46 +1178,64 @@ void main() {
   });
 
   testWidgets(
-      'a wideChannel shelf takes the FULL landscape card size — one rail, '
-      'logo contained, preview rect 16:9', (tester) async {
-    await tester.pumpWidget(host(
-      [_meta('tt1', 'Alpha')],
-      [
-        SpotlightShelf(
-          title: 'IPTV Favourites',
-          nodes: rows[0],
-          items: [
-            for (final name in ['One', 'Two'])
-              SpotlightCard(
-                title: name,
-                subtitle: 'LIVE',
-                shape: SpotlightCardShape.wideChannel,
-                onOpen: _noop,
-              ),
+    'a wideChannel shelf takes the FULL landscape card size — one rail, '
+    'logo contained, preview rect 16:9',
+    (tester) async {
+      await tester.pumpWidget(
+        host(
+          [_meta('tt1', 'Alpha')],
+          [
+            SpotlightShelf(
+              title: 'IPTV Favourites',
+              nodes: rows[0],
+              items: [
+                for (final name in ['One', 'Two'])
+                  SpotlightCard(
+                    title: name,
+                    subtitle: 'LIVE',
+                    shape: SpotlightCardShape.wideChannel,
+                    onOpen: _noop,
+                  ),
+              ],
+            ),
           ],
         ),
-      ],
-    ));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final board = tester.getSize(find.byType(SpotlightBoard)).width;
-    final expectedW = board * (470 / 1920);
-    final cardHost = tester
-        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
-        .firstWhere((p) => p.fixedScaleForeground != null);
-    final box = tester.getSize(find.byWidget(cardHost));
+      final board = tester.getSize(find.byType(SpotlightBoard)).width;
+      final expectedW = board * (470 / 1920);
+      final cardHost = tester
+          .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+          .firstWhere((p) => p.fixedScaleForeground != null);
+      final box = tester.getSize(find.byWidget(cardHost));
 
-    expect(box.width, closeTo(expectedW, 0.5),
-        reason: 'a channel tile must match the landscape title card');
-    expect(box.width / box.height, closeTo(16 / 9, 0.005));
-    expect(SpotlightCardShape.wideChannel.fit, BoxFit.contain,
-        reason: 'the mark is contained — a cropped logo is a cut wordmark');
-  });
+      expect(
+        box.width,
+        closeTo(expectedW, 0.5),
+        reason: 'a channel tile must match the landscape title card',
+      );
+      expect(box.width / box.height, closeTo(16 / 9, 0.005));
+      expect(
+        SpotlightCardShape.wideChannel.fit,
+        BoxFit.contain,
+        reason: 'the mark is contained — a cropped logo is a cut wordmark',
+      );
+    },
+  );
 
-  testWidgets('TV card titles use the crisp fixed-scale label treatment',
-      (tester) async {
+  testWidgets('TV card titles use the crisp fixed-scale label treatment', (
+    tester,
+  ) async {
     final a = _meta('tt1', 'Alpha');
-    await tester.pumpWidget(host([a], [_section('Top', [a])]));
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          _section('Top', [a]),
+        ],
+      ),
+    );
     await tester.pumpAndSettle();
 
     final captionHost = tester
@@ -1065,8 +1249,9 @@ void main() {
     expect(cardTitle.style!.color!.a, closeTo(0.96, 0.001));
   });
 
-  testWidgets('LEFT on the FIRST hero slide falls through to the sidebar',
-      (tester) async {
+  testWidgets('LEFT on the FIRST hero slide falls through to the sidebar', (
+    tester,
+  ) async {
     // The reel used to wrap modulo its length, so LEFT at slide 0 jumped to
     // the last slide. Since LEFT is the only gesture that opens the sidebar,
     // that made the hero a loop with no way out.
@@ -1090,7 +1275,9 @@ void main() {
             child: Scaffold(
               body: SpotlightBoard(
                 hero: [a, b],
-                sections: [_section('Top', [a, b])],
+                sections: [
+                  _section('Top', [a, b]),
+                ],
                 heroNode: hero,
                 heroAddon: _addon,
                 onHeroOpen: (_, __) {},
@@ -1107,8 +1294,11 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     expect(sawLeft, isTrue, reason: 'the shell must get the key');
-    expect(find.text('Alpha'), findsWidgets,
-        reason: 'and the reel must not have paged anywhere');
+    expect(
+      find.text('Alpha'),
+      findsWidgets,
+      reason: 'and the reel must not have paged anywhere',
+    );
 
     // RIGHT then LEFT still walks the reel — only the first slide falls out.
     sawLeft = false;
@@ -1120,8 +1310,9 @@ void main() {
     expect(find.text('Alpha'), findsWidgets);
   });
 
-  testWidgets('the hero is a FRACTION of the board, not a pixel count',
-      (tester) async {
+  testWidgets('the hero is a FRACTION of the board, not a pixel count', (
+    tester,
+  ) async {
     // `_heroHeight` was 540 logical pixels flat. Logical size differs per
     // device, so that one constant made the hero ~89% of the screen on an
     // Android TV box and ~40% on an Apple TV — and on the latter the trailer
@@ -1137,7 +1328,14 @@ void main() {
     Future<double> heroShare(Size size) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
-      await tester.pumpWidget(host([a], [_section('Shelf', [a])]));
+      await tester.pumpWidget(
+        host(
+          [a],
+          [
+            _section('Shelf', [a]),
+          ],
+        ),
+      );
       await tester.pumpAndSettle();
       final board = tester.getSize(find.byType(SpotlightBoard)).height;
       final titleTop = tester.getTopLeft(find.text('Shelf')).dy;
@@ -1146,50 +1344,67 @@ void main() {
 
     final short = await heroShare(const Size(1280, 720));
     final tall = await heroShare(const Size(1280, 1440));
-    expect(tall, closeTo(short, 0.03),
-        reason: 'the hero must occupy the same share of every panel');
+    expect(
+      tall,
+      closeTo(short, 0.03),
+      reason: 'the hero must occupy the same share of every panel',
+    );
     // And the artwork must reach the bottom of the screen, with the shelf over
     // it — the first shelf title sits inside the hero's lower portion, not
     // below its end. A share of 1.0 would mean the cards start off-screen; the
     // overlap is what brings them up onto the art.
     expect(short, greaterThan(0.6));
-    expect(short, lessThan(0.92),
-        reason: 'the first shelf must ride ON the artwork, not sit under it');
+    expect(
+      short,
+      lessThan(0.92),
+      reason: 'the first shelf must ride ON the artwork, not sit under it',
+    );
   });
 
-  testWidgets('a card is never the same colour as the page it sits on',
-      (tester) async {
+  testWidgets('a card is never the same colour as the page it sits on', (
+    tester,
+  ) async {
     // The channel plate used to DARKEN off the ground, to give light-on-
     // transparent logos a dark backing. On a black ground that is degenerate —
     // `lerp(black, black)` is black — and an entire row of channels went
     // invisible while still being painted. Any ground the theme can produce
     // must leave a card distinguishable from the page.
     final a = _meta('tt1', 'Alpha');
-    await tester.pumpWidget(host([a], [
-      SpotlightShelf(
-        title: 'Channels',
-        nodes: _rowNodes(1),
-        items: [
-          SpotlightCard(
-            title: 'CH 1',
-            onOpen: () {},
-            shape: SpotlightCardShape.channel,
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'Channels',
+            nodes: _rowNodes(1),
+            items: [
+              SpotlightCard(
+                title: 'CH 1',
+                onOpen: () {},
+                shape: SpotlightCardShape.channel,
+              ),
+            ],
           ),
         ],
       ),
-    ]));
+    );
     await tester.pumpAndSettle();
 
     final ground = SpotlightBoard.groundOf(
       AppTheme.fromDetail(DetailThemes.byId('signal')),
     );
     final plate = tester
-        .widgetList<ColoredBox>(find.descendant(
-          of: find.byType(ClipRRect),
-          matching: find.byType(ColoredBox),
-        ))
+        .widgetList<ColoredBox>(
+          find.descendant(
+            of: find.byType(ClipRRect),
+            matching: find.byType(ColoredBox),
+          ),
+        )
         .first;
-    expect(plate.color, isNot(ground),
-        reason: 'a card the colour of the page is an invisible card');
+    expect(
+      plate.color,
+      isNot(ground),
+      reason: 'a card the colour of the page is an invisible card',
+    );
   });
 }

@@ -1041,12 +1041,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 audioUrl: _trailerAutoplayEnabled && !_bodyDeep
                     ? _trailerStreams?.audioUrl
                     : null,
-                // The still is meant to be SEEN first — that is the shape of
-                // the reference, poster then motion. Off-TV keeps the shorter
-                // default it has always had.
-                startDelay: widget.isTelevision
-                    ? const Duration(milliseconds: 3200)
-                    : const Duration(milliseconds: 1400),
+                // Resolution and decoder startup already provide a natural
+                // poster dwell. Do not stack an artificial wait on top of that.
+                startDelay: Duration.zero,
                 // Suspend at the Play press, before source/resume resolution.
                 // The pipeline loader is a PopupRoute rather than a PageRoute,
                 // so RouteAware.didPushNext cannot provide this lifecycle beat.

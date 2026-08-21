@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -122,6 +122,11 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// exactly as it does in the real players. Null for trailer clips.
   final Map<String, String>? httpHeaders;
 
+  /// Test seam for exercising the surface-mount lifecycle without creating a
+  /// real platform decoder. Production callers always use the platform engine.
+  @visibleForTesting
+  final Future<TrailerEngine> Function()? engineFactory;
+
   const HeroTrailerBackdrop({
     super.key,
     required this.imageUrl,
@@ -141,6 +146,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.heroTag,
     this.live = false,
     this.httpHeaders,
+    this.engineFactory,
   });
 
   /// See [ambientVolume]. 70% — audible but under the UI, matching the Home
@@ -259,11 +265,6 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// buffer window the parent falls back to launching the standalone player.
   bool get canPromote => _engine != null && _videoVisible;
 
-  /// TV underlay preference (Settings → Home Page → Native Trailer Surface).
-  /// Loaded async in initState; engines are only created after [startDelay],
-  /// long after this resolves. Off-TV it is never read.
-  bool _underlayPref = false;
-
   /// TV (Android) gets the native ExoPlayer engine — libmpv stutters decoding
   /// the trailer on weak TV SoCs. By default (pref on) it renders in underlay
   /// mode: a native SurfaceView *behind* a translucent Flutter surface, its
@@ -272,31 +273,33 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// what stuttered. Underlay needs the blur-free config (a Flutter gaussian
   /// can't touch pixels that aren't in the Flutter surface); every TV call
   /// site passes sigma 0. Everything else keeps the proven media_kit path.
-  /// Asynchronous because the media_kit engine must wait for the single video
-  /// output slot before it can be built (see [VideoOutputLease]). The Exo path
-  /// takes no lease — different decoder, different failure mode — and so
-  /// completes without ever yielding.
-  Future<TrailerEngine> _createEngine() {
+  /// Asynchronous because media_kit must wait for the single video-output slot
+  /// (see [VideoOutputLease]), while Android TV must first read the native
+  /// activity's fixed underlay-mode snapshot. Exo itself takes no output lease.
+  Future<TrailerEngine> _createEngine() async {
+    final factory = widget.engineFactory;
+    if (factory != null) return await factory();
     final useExo =
         !kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached;
-    return useExo
-        ? Future.value(ExoTrailerEngine(
-            maxHeight: _tvTrailerMaxHeight,
-            underlay: _underlayPref && widget.videoBlurSigma <= 0,
-          ))
-        : MediaKitTrailerEngine.create();
+    if (useExo) {
+      // This is the EFFECTIVE native launch decision, not the live user pref.
+      // MainActivity fixes Flutter's transparency mode before the first Dart
+      // frame, so engine creation must await the matching snapshot. The old
+      // artificial trailer delay happened to hide this read; zero-delay starts
+      // make the ordering explicit instead of racing a false default.
+      final underlayAtLaunch =
+          await StorageService.getTvTrailerUnderlayEnabledAtLaunch();
+      return ExoTrailerEngine(
+        maxHeight: _tvTrailerMaxHeight,
+        underlay: underlayAtLaunch && widget.videoBlurSigma <= 0,
+      );
+    }
+    return await MediaKitTrailerEngine.create();
   }
 
   @override
   void initState() {
     super.initState();
-    if (!kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached) {
-      // AtLaunch (not the live pref): must match the surface mode the activity
-      // was created with — see StorageService.getTvTrailerUnderlayEnabledAtLaunch.
-      StorageService.getTvTrailerUnderlayEnabledAtLaunch().then((v) {
-        if (mounted) _underlayPref = v;
-      });
-    }
     WidgetsBinding.instance.addObserver(this);
     MainPageBridge.addExternalPlayerLaunchListener(_onExternalPlayerLaunched);
     MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunching);
@@ -420,7 +423,12 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       unawaited(engine.dispose());
       return;
     }
-    _engine = engine;
+    // Mount the render slot immediately, before open()/first-frame. Underlay
+    // engines use that slot to report their full bounds to the native
+    // SurfaceView. Waiting for the first-frame callback to rebuild creates a
+    // deadlock on TVs that refuse to render the native surface at its initial
+    // 1x1 size; a later DPAD rebuild happened to break that cycle.
+    setState(() => _engine = engine);
 
     // Stall watchdog: no rendered frame within the window = a dead-but-silent
     // stream. Only genuine stalls fire — the timer is cancelled by the first

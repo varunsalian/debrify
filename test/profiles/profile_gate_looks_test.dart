@@ -83,7 +83,7 @@ void main() {
     });
 
     test('unknown stored ids fall back to the default label', () {
-      expect(ProfileGateStyle.labelFor('style-from-the-future'), 'Marquee');
+      expect(ProfileGateStyle.labelFor('style-from-the-future'), 'Lighthouse');
     });
   });
 
@@ -263,9 +263,7 @@ void main() {
   });
 
   group('Marquee', () {
-    testWidgets('rail focus recasts the stage; Continue opens it', (
-      tester,
-    ) async {
+    testWidgets('rail focus changes selection and OK opens it', (tester) async {
       UserProfile? selected;
       await pump(
         tester,
@@ -276,22 +274,18 @@ void main() {
         ),
       );
 
-      expect(find.text('Continue as Meera'), findsOneWidget);
+      expect(find.text('Meera'), findsOneWidget);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('Continue as Kiran'), findsOneWidget);
+      expect(find.text('Kiran'), findsOneWidget);
 
-      // The pill is a touch echo of OK — tapping it opens the FOCUSED
-      // profile.
-      await tester.tap(find.text('Continue as Kiran'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       expect(selected?.id, 'p2');
     });
 
-    testWidgets('manage focus turns the stage into the household panel', (
-      tester,
-    ) async {
+    testWidgets('the Manage profiles action remains available', (tester) async {
       var managed = false;
       await pump(
         tester,
@@ -302,14 +296,11 @@ void main() {
         ),
       );
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('Manage profiles'), findsOneWidget);
-      expect(find.text('Open'), findsOneWidget);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      // The same two-tap grammar as profile cards: focus, then activate.
+      await tester.tap(find.text('Manage profiles'));
+      await tester.pump();
+      await tester.tap(find.text('Manage profiles'));
       await tester.pump();
       expect(managed, isTrue);
     });
@@ -324,7 +315,7 @@ void main() {
         ),
         size: const Size(360, 740),
       );
-      expect(find.text('Continue as Meera'), findsOneWidget);
+      expect(find.text('Meera'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -343,12 +334,8 @@ void main() {
         size: const Size(744, 1024),
       );
 
-      final scroller = tester.widget<SingleChildScrollView>(
-        find.byType(SingleChildScrollView),
-      );
-      expect(scroller.scrollDirection, Axis.vertical);
-      expect(scroller.clipBehavior, Clip.none);
-      expect(find.text('Continue as Meera'), findsOneWidget);
+      expect(find.byType(ListView), findsOneWidget);
+      expect(find.text('Meera'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

@@ -1,0 +1,771 @@
+<title>Debrify — Round 5: Quiet Water</title>
+<style>
+  :root {
+    --ink: #E7ECF5;
+    --dim: #8A93A6;
+    --line: rgba(255,255,255,.08);
+    --bg: #07080C;
+    --card: #0B0D13;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 24px 8px;
+  }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 28px;
+    font-weight: 300;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+  }
+  header p { margin: 0; max-width: 62ch; color: var(--dim); }
+  .grid {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+    display: grid;
+    gap: 40px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .shape { display: flex; gap: 8px; margin-top: 18px; }
+  .shape button {
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--dim);
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .shape button:focus-visible { outline: 2px solid #6E86B8; outline-offset: 2px; }
+  .shape button.on { color: var(--ink); border-color: rgba(255,255,255,.34); }
+  .stage { position: relative; aspect-ratio: 16 / 9; background: #000; }
+  /* Phone shape: the splash is portrait on a handset, so review it portrait. */
+  body.phone .stage {
+    aspect-ratio: 9 / 19.5;
+    max-width: 380px;
+    margin: 28px auto;
+    border-radius: 26px;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .replay {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    padding: 7px 14px;
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 999px;
+    background: rgba(0,0,0,.42);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .25s;
+  }
+  .stage:hover .replay { opacity: 1; }
+  .meta { padding: 18px 22px 22px; }
+  .meta h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: .04em;
+  }
+  .meta .sub { margin: 0 0 10px; color: var(--dim); }
+  .meta .beats {
+    margin: 0;
+    color: #6E7689;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tag {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    vertical-align: 2px;
+  }
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+    color: var(--dim);
+    font-size: 13px;
+  }
+  footer code { color: var(--ink); }
+  body.solo header, body.solo footer, body.solo .meta { display: none; }
+  body.solo .grid { max-width: none; padding: 0; }
+  body.solo .card { border: 0; border-radius: 0; }
+  body.solo .stage { aspect-ratio: auto; height: 100vh; }
+</style>
+
+<header>
+  <h1>Round 5 — Quiet Water</h1>
+  <p>
+    Three takes on the same brief: you walk in, switch the TV on, and the
+    room gets calmer. No impacts, no flashes, no shake. One light source,
+    slow water, type that arrives without announcing itself. Every reveal
+    settles to a completely motionless frame — the splash is held while Home
+    prepaints behind it, so the last frame has to be still.
+  </p>
+  <div class="shape" role="group" aria-label="Screen shape">
+    <button type="button" data-shape="tv" class="on">TV 16:9</button>
+    <button type="button" data-shape="phone">Phone 9:19.5</button>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<footer>
+  <p>
+    Review hooks: <code>#still</code> draws every card at its final frame,
+    <code>#id=moonglade</code> (or <code>stillwater</code>,
+    <code>lowtide</code>) opens one full-screen. Click a stage to replay.
+  </p>
+</footer>
+
+<script>
+// ---------------------------------------------------------------- helpers
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+// Normalized progress through a beat, 0 before it, 1 after.
+const seg = (p, a, b) => clamp((p - a) / (b - a), 0, 1);
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeInOut = t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+// Drift that decelerates to a dead stop at p=1 — the settled-frame contract.
+const drift = (p, amount, k = 2.4) => amount * (1 - Math.pow(1 - p, k));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const WORD = 'DEBRIFY';
+
+// The house mark: a play triangle with rounded corners (identPlayPath).
+function markPath(ctx, cx, cy, s) {
+  const pts = [
+    [cx - .30 * s, cy - .40 * s],
+    [cx - .30 * s, cy + .40 * s],
+    [cx + .43 * s, cy],
+  ];
+  const r = .14 * s;
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = pts[i], b = pts[(i + 1) % 3], c = pts[(i + 2) % 3];
+    const v1 = [a[0] - b[0], a[1] - b[1]], v2 = [c[0] - b[0], c[1] - b[1]];
+    const l1 = Math.hypot(v1[0], v1[1]) || 1, l2 = Math.hypot(v2[0], v2[1]) || 1;
+    const t1 = [b[0] + v1[0] * r / l1, b[1] + v1[1] * r / l1];
+    const t2 = [b[0] + v2[0] * r / l2, b[1] + v2[1] * r / l2];
+    if (i === 0) ctx.moveTo(t1[0], t1[1]); else ctx.lineTo(t1[0], t1[1]);
+    ctx.quadraticCurveTo(b[0], b[1], t2[0], t2[1]);
+  }
+  ctx.closePath();
+}
+
+// Tracked caps, drawn per letter so each can carry its own alpha. [maxW]
+// shrinks the whole lockup rather than letting it run off a narrow screen —
+// a phone splash is ~390pt wide and tracked caps overflow fast.
+function word(ctx, text, cx, y, size, track, weight, alphaAt, color, maxW) {
+  const face = s => `${weight} ${s}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
+  ctx.font = face(size);
+  ctx.textBaseline = 'alphabetic';
+  let w = [...text].map(ch => ctx.measureText(ch).width);
+  let total = w.reduce((a, b) => a + b, 0) + track * (text.length - 1);
+  if (maxW && total > maxW) {
+    const k = maxW / total;
+    ctx.font = face(size * k);
+    track *= k;
+    w = [...text].map(ch => ctx.measureText(ch).width);
+    total = w.reduce((a, b) => a + b, 0) + track * (text.length - 1);
+  }
+  let x = cx - total / 2;
+  for (let i = 0; i < text.length; i++) {
+    const a = alphaAt(i);
+    if (a > .004) {
+      ctx.globalAlpha = a;
+      ctx.fillStyle = color;
+      ctx.fillText(text[i], x, y);
+    }
+    x += w[i] + track;
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Per-letter fade that walks left to right over [a,b], each letter taking
+// `hold` of the window. Slow and even — no snap, no stagger bounce.
+function letterFade(p, a, b, n, hold = .55) {
+  return i => {
+    const step = (b - a) * (1 - hold) / Math.max(1, n - 1);
+    return easeOut(seg(p, a + step * i, a + step * i + (b - a) * hold));
+  };
+}
+
+function halo(ctx, x, y, r, stops) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  for (const [o, c] of stops) g.addColorStop(o, c);
+  return g;
+}
+
+// A true crescent: ONE closed path made of the lit limb of the outer disc
+// and the terminator arc of the shadow disc, joined at the two intersection
+// points. Not disc-minus-disc — even-odd would also fill the shadow disc's
+// overhang (a ring), and overpainting in the sky colour prints a dark disc
+// over anything drawn behind it.
+function crescentPath(ctx, x0, y0, r0, x1, y1, r1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const d = Math.hypot(dx, dy);
+  if (d === 0 || d >= r0 + r1 || d <= Math.abs(r0 - r1)) {
+    ctx.beginPath();
+    ctx.arc(x0, y0, r0, 0, Math.PI * 2);
+    return;
+  }
+  const ux = dx / d, uy = dy / d;      // toward the shadow disc
+  const vx = -uy, vy = ux;             // the chord direction
+  const a = (d * d + r0 * r0 - r1 * r1) / (2 * d);
+  const h = Math.sqrt(Math.max(0, r0 * r0 - a * a));
+  const px = x0 + a * ux, py = y0 + a * uy;
+  const i1x = px + h * vx, i1y = py + h * vy;
+  const i2x = px - h * vx, i2y = py - h * vy;
+  ctx.beginPath();
+  // Lit limb: the sweep from I1 to I2 that runs AWAY from the shadow disc.
+  ctx.arc(x0, y0, r0, Math.atan2(i1y - y0, i1x - x0),
+          Math.atan2(i2y - y0, i2x - x0), false);
+  // Terminator: back along the shadow disc, through the side facing the moon.
+  ctx.arc(x1, y1, r1, Math.atan2(i2y - y1, i2x - x1),
+          Math.atan2(i1y - y1, i1x - x1), true);
+  ctx.closePath();
+}
+
+// A gradient baked ONCE into the unit rect (-.5,-.5)..(.5,.5) and stretched
+// with translate+scale — one shader serves every frame at every size. This
+// is the Anamorphic idiom from launch_ident.dart; it is what makes soft-ended
+// shapes affordable on TV.
+function unitGrad(cache, key, ctx, horizontal, stops) {
+  if (cache[key]) return cache[key];
+  const g = horizontal
+    ? ctx.createLinearGradient(-.5, 0, .5, 0)
+    : ctx.createRadialGradient(0, 0, 0, 0, 0, .5);
+  for (const [o, c] of stops) g.addColorStop(o, c);
+  return (cache[key] = g);
+}
+
+// Fill the unit gradient stretched into (cx,cy,w,h).
+function stretch(ctx, grad, cx, cy, w, h, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  ctx.scale(w, h);
+  ctx.fillStyle = grad;
+  ctx.fillRect(-.5, -.5, 1, 1);
+  ctx.restore();
+}
+
+// ------------------------------------------------------------- IDENT ONE
+// Moonglade — a low full moon and the broken column of light it throws
+// across the water toward you.
+const moonglade = {
+  id: 'moonglade',
+  label: 'Moonglade',
+  subtitle: 'A low moon lays a broken column of light across the water',
+  duration: 4000,
+  beats: '0–.55 moon rises · .12–.62 the glade reaches the shore · .40–.72 horizon settles · .52–.86 name · .70–.92 mark',
+  base: '#04060C',
+  backdrop(ctx, W, H) {
+    const hz = H * .60;
+    const sky = ctx.createLinearGradient(0, 0, 0, hz);
+    sky.addColorStop(0, '#04060C');
+    sky.addColorStop(.62, '#080D18');
+    sky.addColorStop(1, '#101A2B');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, hz);
+    const sea = ctx.createLinearGradient(0, hz, 0, H);
+    sea.addColorStop(0, '#08101C');
+    sea.addColorStop(1, '#020509');
+    ctx.fillStyle = sea;
+    ctx.fillRect(0, hz, W, H - hz);
+    // One flat haze band hugging the horizon. Static: lives in the backdrop.
+    const haze = ctx.createLinearGradient(0, hz - H * .10, 0, hz);
+    haze.addColorStop(0, 'rgba(150,180,220,0)');
+    haze.addColorStop(1, 'rgba(150,180,220,.07)');
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, hz - H * .10, W, H * .10);
+  },
+  paint(ctx, W, H, p, g) {
+    const hz = H * .60;
+    const cx = W * .5;
+    const R = H * .075;
+
+    // Moon rises out of the water and stops well short of the top.
+    const rise = easeOut(seg(p, 0, .55));
+    const my = lerp(hz + R * .55, hz - H * .30, rise);
+    const lit = seg(p, .02, .38);
+
+    ctx.globalAlpha = lit * .55;
+    ctx.fillStyle = halo(ctx, cx, my, R * 5.2, [
+      [0, 'rgba(196,214,246,.30)'],
+      [.42, 'rgba(150,178,224,.09)'],
+      [1, 'rgba(120,150,200,0)'],
+    ]);
+    ctx.fillRect(cx - R * 5.2, my - R * 5.2, R * 10.4, R * 10.4);
+    ctx.globalAlpha = 1;
+
+    // The disc, with the terminator kept faint so it reads as a real moon.
+    ctx.globalAlpha = lit;
+    ctx.fillStyle = halo(ctx, cx - R * .28, my - R * .30, R * 1.35, [
+      [0, '#F2F6FF'],
+      [.55, '#DCE6F8'],
+      [1, '#AFC0DC'],
+    ]);
+    ctx.beginPath();
+    ctx.arc(cx, my, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // The glade: soft-ended slivers of reflected light from the horizon down
+    // to the near edge, widening as they approach. Every sliver is the same
+    // baked gradient stretched — feathered ends, one shader. Phase
+    // decelerates to a stop, so the last frame is motionless.
+    const gl = unitGrad(g, 'glade', ctx, true, [
+      [0, 'rgba(200,220,248,0)'],
+      [.22, 'rgba(200,220,248,.55)'],
+      [.5, 'rgba(226,238,255,1)'],
+      [.78, 'rgba(200,220,248,.55)'],
+      [1, 'rgba(200,220,248,0)'],
+    ]);
+    const ph = drift(p, 6.2, 2.6);
+    const reach = easeInOut(seg(p, .12, .62));
+    const N = 44;
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      if (t > reach) break;
+      // Uneven row spacing — evenly spaced rows read as slats, not water.
+      const y = hz + (H - hz) * Math.pow(t, 1.42) +
+                Math.sin(i * 2.7) * H * .006 * (.3 + t);
+      // Cone: narrow at the horizon, wide at the near edge.
+      const s1 = Math.sin(i * 1.31 + ph);
+      const s2 = Math.sin(i * .47 + ph * .63);
+      const wide = R * (.55 + 3.6 * Math.pow(t, 1.05)) * (.82 + .18 * s2);
+      const dx = s1 * R * .30 * (.15 + t);
+      const th = Math.max(1, H * (.0035 + .010 * t));
+      // Brightest right under the moon, dissolving toward the near edge.
+      const a = Math.pow(1 - t, 1.35) * (.30 + .32 * (.5 + .5 * s1)) *
+                clamp((reach - t) * 7, 0, 1) * lit;
+      stretch(ctx, gl, cx + dx, y, wide * 2, th, a);
+    }
+    ctx.globalAlpha = 1;
+
+    // Horizon hairline, brightest under the moon.
+    const hl = easeOut(seg(p, .40, .72));
+    const hg = ctx.createLinearGradient(cx - W * .42, 0, cx + W * .42, 0);
+    hg.addColorStop(0, 'rgba(190,210,240,0)');
+    hg.addColorStop(.5, 'rgba(200,220,250,.55)');
+    hg.addColorStop(1, 'rgba(190,210,240,0)');
+    ctx.globalAlpha = hl;
+    ctx.fillStyle = hg;
+    ctx.fillRect(cx - W * .42, hz - 1, W * .84, 1.3);
+    ctx.globalAlpha = 1;
+
+    // Lockup sits in the sky, under the moon — never over the moving water.
+    const size = H * .052;
+    word(ctx, WORD, cx, hz - H * .075, size, size * .52, 200,
+         letterFade(p, .52, .86, WORD.length, .6), '#E6EDFA');
+
+    const mk = easeOut(seg(p, .70, .92));
+    ctx.globalAlpha = mk * .92;
+    ctx.fillStyle = '#C6D6F0';
+    markPath(ctx, cx, hz - H * .155, H * .030);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+};
+
+// ------------------------------------------------------------- IDENT TWO
+// Still Water — mirror-calm lake, one drop, one ring. The quietest of the
+// three and the cheapest to draw.
+const stillwater = {
+  id: 'stillwater',
+  label: 'Still Water',
+  subtitle: 'Mirror-calm water, one drop, one ring that fades to nothing',
+  duration: 3800,
+  beats: '0–.40 world dissolves up · .30–.42 drop falls · .38–.90 ring opens and dies · .48–.82 name · .62–.86 mark',
+  base: '#03050A',
+  backdrop(ctx, W, H) {
+    const hz = H * .52;
+    const sky = ctx.createLinearGradient(0, 0, 0, hz);
+    sky.addColorStop(0, '#03050A');
+    sky.addColorStop(1, '#0A1120');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, hz);
+    const sea = ctx.createLinearGradient(0, hz, 0, H);
+    sea.addColorStop(0, '#0A1120');
+    sea.addColorStop(.5, '#050A13');
+    sea.addColorStop(1, '#02040A');
+    ctx.fillStyle = sea;
+    ctx.fillRect(0, hz, W, H - hz);
+  },
+  paint(ctx, W, H, p, g) {
+    const hz = H * .52;
+    const cx = W * .5;
+    const R = H * .045;
+    const my = H * .20;
+    const up = easeInOut(seg(p, 0, .40));
+
+    // Small crisp moon, high and off-centre.
+    const mx = W * .34;
+    ctx.globalAlpha = up * .40;
+    ctx.fillStyle = halo(ctx, mx, my, R * 6, [
+      [0, 'rgba(180,200,236,.26)'],
+      [1, 'rgba(140,170,220,0)'],
+    ]);
+    ctx.fillRect(mx - R * 6, my - R * 6, R * 12, R * 12);
+    ctx.globalAlpha = up;
+    ctx.fillStyle = '#EDF2FC';
+    ctx.beginPath();
+    ctx.arc(mx, my, R, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Its reflection: not a copy of the disc but the column of light it lays
+    // down — seven feathered slivers, brightest at the top, dissolving as
+    // they come toward you. Same baked gradient stretched seven ways.
+    const sl = unitGrad(g, 'sliver', ctx, true, [
+      [0, 'rgba(198,216,244,0)'],
+      [.5, 'rgba(226,238,255,1)'],
+      [1, 'rgba(198,216,244,0)'],
+    ]);
+    const top = hz + H * .012;
+    for (let i = 0; i < 7; i++) {
+      const t = i / 6;
+      const y = top + (H - top) * Math.pow(t, 1.35) * .62;
+      const w = R * (1.5 + 2.1 * t) * (i % 2 ? .82 : 1);
+      const th = Math.max(1, H * (.004 + .006 * t));
+      stretch(ctx, sl, mx + Math.sin(i * 1.9) * R * .35, y, w * 2, th,
+              up * (.30 - .034 * i));
+    }
+    ctx.globalAlpha = 1;
+
+    // Horizon hairline — the only hard edge in the frame.
+    const hg = ctx.createLinearGradient(0, 0, W, 0);
+    hg.addColorStop(0, 'rgba(170,196,232,0)');
+    hg.addColorStop(.34, 'rgba(198,218,248,.42)');
+    hg.addColorStop(1, 'rgba(170,196,232,0)');
+    ctx.globalAlpha = up;
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, hz - 1, W, 1.2);
+    ctx.globalAlpha = 1;
+
+    // A point of light falls and touches the water inside the light column.
+    const fall = seg(p, .30, .42);
+    if (fall > 0 && fall < 1) {
+      ctx.globalAlpha = up * (1 - fall * .3);
+      ctx.fillStyle = '#DCE7FA';
+      const dy = lerp(hz - H * .26, hz + H * .10, easeOut(fall));
+      ctx.beginPath();
+      ctx.ellipse(mx, dy, H * .004, H * .010, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Two rings open outward in perspective and die out completely — the
+    // frame has to be motionless at p=1, so alpha is gone by .90.
+    for (let k = 0; k < 2; k++) {
+      const e = easeOut(seg(p, .38 + k * .10, .90 + k * .04));
+      if (e <= 0 || e >= 1) continue;
+      const rx = W * .05 + W * .30 * e;
+      ctx.globalAlpha = Math.pow(1 - e, 1.7) * .45 * up;
+      ctx.strokeStyle = '#B9CCE8';
+      ctx.lineWidth = Math.max(1, H * .0026);
+      ctx.beginPath();
+      ctx.ellipse(mx, hz + H * .10, rx, rx * .22, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Lockup in the sky, right of the moon's column.
+    const size = H * .048;
+    word(ctx, WORD, cx, hz - H * .095, size, size * .58, 200,
+         letterFade(p, .48, .82, WORD.length, .62), '#E4EBF8');
+
+    const mk = easeOut(seg(p, .62, .86));
+    ctx.globalAlpha = mk * .9;
+    ctx.fillStyle = '#BCCFEC';
+    markPath(ctx, cx, hz - H * .175, H * .028);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+};
+
+// ----------------------------------------------------------- IDENT THREE
+// Low Tide — warm, hazy, almost sepia. A crescent behind mist, wet sand
+// holding a smear of its light.
+const lowtide = {
+  id: 'lowtide',
+  label: 'Low Tide',
+  subtitle: 'A crescent behind slow mist, its light smeared on wet sand',
+  duration: 4200,
+  beats: '0–.45 crescent clears the mist · .10–.70 mist drifts and stops · .18→ tide breathes twice and settles · .35–.75 the moon column lies on the water · .50–.88 name · .68–.92 mark',
+  base: '#070610',
+  // Portrait is not landscape cropped: on a phone the horizon sits higher,
+  // the sand gets more room, and the moon is sized off the WIDTH so it can't
+  // grow past the frame. Shared by backdrop and painter so they agree.
+  lay(W, H) {
+    const tall = H > W;
+    const hz = H * (tall ? .56 : .62);
+    const R = Math.min(H * .085, W * .105);
+    // Where the tide comes to rest. The water wants most of the lower field —
+    // a thin strip under the horizon reads as a bar, not as a sea — and the
+    // lockup sits on the wet sand this line leaves behind. The lockup is
+    // anchored to the RESTING line, never to the breathing edge, or it would
+    // bob with the swell.
+    const rest = hz + (H - hz) * (tall ? .50 : .55);
+    return { tall, hz, R, rest,
+             mx: Math.min(W * (tall ? .63 : .62), W - R * 2.0),
+             my: hz - (tall ? H * .21 : H * .26) };
+  },
+  backdrop(ctx, W, H) {
+    const hz = this.lay(W, H).hz;
+    const sky = ctx.createLinearGradient(0, 0, 0, hz);
+    sky.addColorStop(0, '#060610');
+    sky.addColorStop(.55, '#12101E');
+    sky.addColorStop(1, '#241C27');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, hz);
+    const sand = ctx.createLinearGradient(0, hz, 0, H);
+    sand.addColorStop(0, '#1B1620');
+    sand.addColorStop(.45, '#100D16');
+    sand.addColorStop(1, '#08060C');
+    ctx.fillStyle = sand;
+    ctx.fillRect(0, hz, W, H - hz);
+  },
+  paint(ctx, W, H, p, g) {
+    const { tall, hz, R, rest, mx, my } = this.lay(W, H);
+    const lit = easeOut(seg(p, 0, .45));
+
+    // Crescent as ONE even-odd path — outer disc minus an offset disc. No
+    // overpaint (which would print a dark circle over anything behind it),
+    // no layer, no mask.
+    ctx.globalAlpha = lit * .5;
+    ctx.fillStyle = halo(ctx, mx, my, R * 4.4, [
+      [0, 'rgba(240,214,178,.24)'],
+      [1, 'rgba(220,190,150,0)'],
+    ]);
+    ctx.fillRect(mx - R * 4.4, my - R * 4.4, R * 8.8, R * 8.8);
+    ctx.globalAlpha = lit;
+    ctx.fillStyle = '#F3E4CC';
+    // Shadow disc slightly larger and pushed off-centre — a waning crescent
+    // lit from the lower right, the same key as the smear on the sand.
+    crescentPath(ctx, mx, my, R, mx - R * .62, my - R * .16, R * 1.06);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Mist: five soft banks crossing the crescent, feathered on all four
+    // sides (one baked radial stretched wide), each slower than the last,
+    // all coasting to a stop.
+    const bank = unitGrad(g, 'bank', ctx, false, [
+      [0, 'rgba(228,208,184,1)'],
+      [.55, 'rgba(224,202,178,.45)'],
+      [1, 'rgba(220,196,170,0)'],
+    ]);
+    const mist = easeOut(seg(p, .10, .70));
+    for (let i = 0; i < 5; i++) {
+      const y = my - R * 1.5 + R * .82 * i;
+      const h = R * (.9 + .3 * i);
+      const x = W * (.16 + .21 * ((i * 3) % 5)) +
+                drift(p, W * (.09 + .04 * i), 2.2 + i * .3);
+      stretch(ctx, bank, x, y, W * (.85 + .12 * i), h,
+              mist * (.085 + .035 * (i % 2)));
+    }
+    ctx.globalAlpha = 1;
+
+    // Horizon, where the sea meets the sky.
+    const wl = easeOut(seg(p, .30, .68));
+    ctx.globalAlpha = wl * .5;
+    const wg = ctx.createLinearGradient(0, 0, W, 0);
+    wg.addColorStop(0, 'rgba(226,206,182,0)');
+    wg.addColorStop(.55, 'rgba(240,222,196,.5)');
+    wg.addColorStop(1, 'rgba(226,206,182,0)');
+    ctx.fillStyle = wg;
+    ctx.fillRect(0, hz - 1, W, 1.4);
+    ctx.globalAlpha = 1;
+
+    // ---- the tide -------------------------------------------------------
+    // The water comes up the sand in two long breaths and settles. The
+    // amplitude is a DAMPED cosine multiplied by a hard taper, so at p=1 both
+    // the edge and its rate of change are exactly zero — a swell that is
+    // still mid-breath when the splash freezes reads as a dropped frame.
+    const deep = rest - hz;              // water depth on screen at rest
+    const t = seg(p, .18, 1);
+    const swell = Math.cos(t * Math.PI * 3.1) * Math.exp(-2.6 * t) *
+                  Math.pow(1 - t, 2);
+    const edge = hz + easeOut(seg(p, .18, .62)) * deep + swell * deep * .16;
+
+    // Water sheet: a touch lighter than the sand it covers, darkest right at
+    // the leading edge where it thins out.
+    const sheet = ctx.createLinearGradient(0, hz, 0, edge);
+    sheet.addColorStop(0, 'rgba(150,140,168,.20)');
+    sheet.addColorStop(.55, 'rgba(120,112,140,.12)');
+    sheet.addColorStop(1, 'rgba(90,84,110,.05)');
+    ctx.globalAlpha = wl;
+    ctx.fillStyle = sheet;
+    ctx.fillRect(0, hz, W, edge - hz);
+    ctx.globalAlpha = 1;
+
+    // The moon's column, laid on the water rather than the sand — the water
+    // is the reflective surface now, so this is where the light belongs.
+    const sm = easeInOut(seg(p, .35, .75));
+    const sliver = unitGrad(g, 'tide', ctx, true, [
+      [0, 'rgba(240,222,196,0)'],
+      [.5, 'rgba(248,234,212,1)'],
+      [1, 'rgba(240,222,196,0)'],
+    ]);
+    // Phase advances and coasts to a stop; the rows themselves never move
+    // vertically, so nothing shears when the swell breathes.
+    const ph = drift(p, 5.4, 2.4);
+    if (sm > 0) {
+      for (let i = 0; i < 9; i++) {
+        const f = (i + .5) / 9;
+        const y = hz + (edge - hz) * f;
+        const s = Math.sin(i * 1.37 + ph);
+        const w = R * (1.1 + 2.4 * f) * (.8 + .2 * Math.sin(i * .8 + ph * .6));
+        stretch(ctx, sliver, mx + s * R * .45 * (.4 + f), y, w * 2,
+                Math.max(1, H * (.0035 + .004 * f)),
+                sm * (.20 + .16 * (.5 + .5 * s)) * (1 - f * .35));
+      }
+    }
+
+    // Foam: three feathered lines stacked at the leading edge, offset a
+    // little from each other so the edge reads soft and uneven, not ruled.
+    if (wl > 0) {
+      for (let i = 0; i < 3; i++) {
+        const y = edge - i * H * .004 + Math.sin(i * 2.3) * H * .002;
+        stretch(ctx, sliver, W * (.46 + .06 * Math.sin(i * 1.7 + ph * .5)), y,
+                W * (.86 - .12 * i), Math.max(1, H * (.004 - .001 * i)),
+                wl * (.26 - .07 * i));
+      }
+      // Wet sand just below the foam, still bright from the last wave.
+      const wetH = (H - rest) * .45;
+      const wet = ctx.createLinearGradient(0, edge, 0, edge + wetH);
+      wet.addColorStop(0, 'rgba(232,214,190,.16)');
+      wet.addColorStop(1, 'rgba(232,214,190,0)');
+      ctx.globalAlpha = wl;
+      ctx.fillStyle = wet;
+      ctx.fillRect(0, edge, W, wetH);
+      ctx.globalAlpha = 1;
+    }
+
+    // Lockup low and small on the sand, warm bone. On a phone it rides
+    // higher up the sand (a lockup pinned near the bottom edge reads as a
+    // system watermark) and is sized off the width.
+    const size = Math.min(H * .046, W * .072);
+    const strip = H - rest;              // wet sand the tide leaves behind
+    word(ctx, WORD, W * .5, rest + strip * (tall ? .52 : .58),
+         size, size * .62, 200,
+         letterFade(p, .50, .88, WORD.length, .64), '#EDDFC9', W * .78);
+
+    const mk = easeOut(seg(p, .68, .92));
+    ctx.globalAlpha = mk * .85;
+    ctx.fillStyle = '#E0CDAF';
+    markPath(ctx, W * .5, rest + strip * (tall ? .24 : .26),
+             Math.min(H * .026, W * .042));
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+};
+
+// -------------------------------------------------------------- harness
+const IDENTS = [moonglade, stillwater, lowtide];
+const params = new URLSearchParams(location.hash.slice(1));
+const still = params.has('still');
+// #still&p=0.45 freezes mid-reveal — how you check a beat without filming it.
+const stillAt = params.has('p') ? clamp(parseFloat(params.get('p')), 0, 1) : 1;
+const solo = params.get('id');
+if (solo) document.body.classList.add('solo');
+if (params.get('shape') === 'phone') document.body.classList.add('phone');
+
+document.querySelector('.shape').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.body.classList.toggle('phone', btn.dataset.shape === 'phone');
+  for (const b of document.querySelectorAll('.shape button')) {
+    b.classList.toggle('on', b === btn);
+  }
+});
+
+const grid = document.getElementById('grid');
+for (const ident of (solo ? IDENTS.filter(i => i.id === solo) : IDENTS)) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="stage"><canvas></canvas><button class="replay">Replay</button></div>
+    <div class="meta">
+      <h2>${ident.label}<span class="tag">${(ident.duration / 1000).toFixed(1)}s</span></h2>
+      <p class="sub">${ident.subtitle}</p>
+      <p class="beats">${ident.beats}</p>
+    </div>`;
+  grid.appendChild(card);
+  mount(card.querySelector('canvas'), ident, card.querySelector('.stage'));
+}
+
+function mount(canvas, ident, stage) {
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, start = null;
+  const HOLD = 1500; // dwell on the settled frame before looping
+  // Gradients baked once per canvas, in unit space, and stretched per draw —
+  // nothing native is created per frame. See unitGrad/stretch.
+  const cache = {};
+
+  function size() {
+    const r = canvas.getBoundingClientRect();
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    W = Math.round(r.width);
+    H = Math.round(r.height);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function draw(p) {
+    ctx.clearRect(0, 0, W, H);
+    ident.backdrop(ctx, W, H);   // static: rasters once in the real thing
+    ident.paint(ctx, W, H, p, cache);   // only what moves
+  }
+
+  function frame(t) {
+    if (start === null) start = t;
+    const e = t - start;
+    const p = clamp(e / ident.duration, 0, 1);
+    draw(p);
+    if (e > ident.duration + HOLD) start = t;
+    requestAnimationFrame(frame);
+  }
+
+  const ro = new ResizeObserver(() => { size(); if (still) draw(stillAt); });
+  ro.observe(canvas);
+  size();
+  if (still) { draw(stillAt); return; }
+  stage.addEventListener('click', e => {
+    if (e.target.tagName === 'BUTTON' || true) start = null;
+  });
+  requestAnimationFrame(frame);
+}
+</script>
