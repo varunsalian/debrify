@@ -103,7 +103,7 @@ void main() {
   }
 
   group('the metric tier follows width — but only off DPAD', () {
-    testWidgets('390 wide + touch = compact: posters at 24.3%',
+    testWidgets('390 wide + touch = compact: posters at 25.7%',
         (tester) async {
       surface(tester, const Size(390, 844));
       final a = _meta('tt1', 'Alpha');
@@ -111,10 +111,10 @@ void main() {
           .pumpWidget(host([a], [_section('Top', [a])], dpad: false));
       await tester.pumpAndSettle();
 
-      final poster = 390 * 0.243;
+      final poster = 390 * 0.257;
       final box = cardBox(tester, 'Alpha');
       expect(box.width, closeTo(poster, 0.5),
-          reason: 'compact posters are 24.3% of the width — the measured '
+          reason: 'compact posters are 25.7% of the width — the measured '
               'Apple phone fraction');
       expect(box.width / box.height, closeTo(2 / 3, 0.005));
     });
@@ -290,10 +290,11 @@ void main() {
       expect(find.text('About Bravo.'), findsNothing);
     });
 
-    testWidgets('the touch dwell asks for a trailer without paging the reel',
+    testWidgets(
+        'the touch hero asks for a trailer immediately without paging the reel',
         (tester) async {
-      // The cadence's one remaining job: after the art dwell, tell the host
-      // the hero has rested — and change nothing else.
+      // Start useful trailer work as soon as the visible hero is eligible,
+      // and change nothing else.
       surface(tester, const Size(390, 844));
       final a = _meta('tt1', 'Alpha');
       final b = _meta('tt2', 'Bravo');
@@ -317,11 +318,9 @@ void main() {
           ),
         ),
       );
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(dwelled, ['tt1'],
-          reason: 'the dwell fires for the resting slide');
+          reason: 'the resolve starts for the visible slide immediately');
       expect(find.text('Alpha'), findsWidgets,
           reason: 'and the reel has not moved');
 
@@ -329,8 +328,6 @@ void main() {
       await tester.fling(
           find.byType(SpotlightBoard), const Offset(-260, 0), 900);
       await tester.pumpAndSettle();
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pump();
       expect(dwelled, ['tt1', 'tt2']);
     });
 

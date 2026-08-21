@@ -62,6 +62,7 @@ void main() {
     HeroTrailerBackdrop trailer() =>
         tester.widget<HeroTrailerBackdrop>(find.byType(HeroTrailerBackdrop));
     expect(trailer().enabled, isTrue);
+    expect(trailer().startDelay, Duration.zero);
 
     await tester.tap(find.text('Play'));
     await tester.pump();
