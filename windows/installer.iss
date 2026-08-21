@@ -17,8 +17,8 @@ OutputDir=..\\build\\windows\\installer
 OutputBaseFilename=debrify-{#AppVersion}-setup
 Compression=lzma
 SolidCompression=yes
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=runner\\resources\\app_icon.ico
 WizardStyle=modern
 
