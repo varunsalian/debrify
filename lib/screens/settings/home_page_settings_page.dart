@@ -29,6 +29,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _selectedSourceType = 'catalog';
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
+  bool _holdToQuickPlay = false;
   bool _trailerAutoplayEnabled = false;
   bool _heroTrailerEnabled = true;
   bool _ambientTrailerAudioEnabled = true;
@@ -144,6 +145,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
       final continueWatchingEnabled =
           await StorageService.getHomeContinueWatchingEnabled();
+      final holdToQuickPlay =
+          await StorageService.getHomeCwHoldToQuickPlay();
       final trailerAutoplayEnabled =
           await StorageService.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
@@ -189,6 +192,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _selectedSourceType = normalizedSourceType;
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
+        _holdToQuickPlay = holdToQuickPlay;
         _trailerAutoplayEnabled = trailerAutoplayEnabled;
         _heroTrailerEnabled = heroTrailerEnabled;
         _ambientTrailerAudioEnabled = ambientTrailerAudioEnabled;
@@ -495,6 +499,30 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           if (!mounted) return;
                           setState(() => _continueWatchingEnabled = value);
                           MainPageBridge.notifyHomeSettingsChanged();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    SettingsToggleTile(
+                      icon: Icons.touch_app_rounded,
+                      title: 'Hold to Quick Play',
+                      subtitle:
+                          'Play immediately when holding a Continue Watching '
+                          'card instead of showing the action menu',
+                      subtitleMaxLines: 2,
+                      value: _holdToQuickPlay,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setHomeCwHoldToQuickPlay(value);
+                          if (!mounted) return;
+                          setState(() => _holdToQuickPlay = value);
                         } catch (e) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(

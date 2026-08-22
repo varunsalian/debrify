@@ -268,6 +268,8 @@ class StorageService {
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
   static const String _homeContinueWatchingEnabledKey =
       'home_continue_watching_enabled';
+  static const String _homeCwHoldToQuickPlayKey =
+      'home_cw_hold_to_quick_play';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
@@ -5341,6 +5343,20 @@ class StorageService {
     await prefs.setBool(_homeContinueWatchingEnabledKey, value);
   }
 
+  /// Whether holding a Continue Watching card should immediately Quick Play
+  /// instead of opening the Play / Remove action menu. Off by default so the
+  /// removal action remains discoverable until the user opts into the faster
+  /// gesture.
+  static Future<bool> getHomeCwHoldToQuickPlay() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeCwHoldToQuickPlayKey) ?? false;
+  }
+
+  static Future<void> setHomeCwHoldToQuickPlay(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeCwHoldToQuickPlayKey, value);
+  }
+
   static Future<String> getHomeFavoritesTapAction() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'choose';
@@ -5374,6 +5390,7 @@ class StorageService {
     await prefs.remove(_homeDefaultCatalogIdKey);
     await prefs.remove(_homeHideProviderCardsKey);
     await prefs.remove(_homeContinueWatchingEnabledKey);
+    await prefs.remove(_homeCwHoldToQuickPlayKey);
     await prefs.remove(_homeFavoritesOpenFolderKey);
     await prefs.remove(_homeCardOrientationKey);
   }

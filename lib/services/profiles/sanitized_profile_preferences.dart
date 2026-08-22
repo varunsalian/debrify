@@ -16,6 +16,7 @@ abstract final class SanitizedProfilePreferences {
       case 'subtitle_auto_sync_enabled':
       case 'recording_engine_enabled':
       case 'home_hero_trailer_enabled':
+      case 'home_cw_hold_to_quick_play':
       case 'detail_trailer_autoplay_enabled':
       case 'home_hero_trailer_audio_enabled':
       case 'detail_trailer_audio_enabled':
