@@ -15,6 +15,7 @@ import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:debrify/services/remote_control/remote_control_state.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/services/remote_control/udp_command_service.dart';
+import 'package:debrify/services/remote_control/udp_discovery_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -178,6 +179,169 @@ void main() {
       expect(
         parseProfileGraphResultBody('{"ok":true,"message":"${'x' * 600}"}'),
         isNull,
+      );
+    });
+  });
+
+  group('addon transfer result', () {
+    test('outcome body is correlated and bounded', () {
+      final parsed = parseAddonTransferResultBody(
+        addonTransferResultBody(requestId: 'addon-request-1', ok: true),
+      );
+      expect(parsed, isNotNull);
+      expect(parsed!.requestId, 'addon-request-1');
+      expect(parsed.ok, isTrue);
+      expect(parseAddonTransferResultBody('not json'), isNull);
+      expect(
+        parseAddonTransferResultBody('{"requestId":"${'x' * 129}","ok":true}'),
+        isNull,
+      );
+      expect(
+        parseAddonTransferResultBody(
+          '{"requestId":"addon-request-1","ok":"yes"}',
+        ),
+        isNull,
+      );
+    });
+
+    test('discovery capability starts at protocol v3', () {
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 2,
+        ).supportsAddonTransferResult,
+        isFalse,
+      );
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 3,
+        ).supportsAddonTransferResult,
+        isTrue,
+      );
+    });
+  });
+
+  group('generic remote transfer result', () {
+    test('request, item, result, and channel envelopes round-trip', () {
+      const requestId = 'remote-request-1';
+      final request = parseRemoteTransferRequestBody(
+        remoteTransferRequestBody(
+          requestId,
+          expectedCommands: const [
+            ConfigCommand.realDebrid,
+            RemoteAction.addon,
+            RemoteAction.addon,
+          ],
+        ),
+      );
+      expect(request, isNotNull);
+      expect(request!.requestId, requestId);
+      expect(request.expected, {
+        ConfigCommand.realDebrid: 1,
+        RemoteAction.addon: 2,
+      });
+
+      final item = parseRemoteTransferItemBody(
+        remoteTransferItemBody(requestId: requestId, payload: 'secret'),
+      );
+      expect(item, isNotNull);
+      expect(item!.requestId, requestId);
+      expect(item.payload, 'secret');
+      expect(parseRemoteTransferItemBody('secret'), isNull);
+      expect(
+        parseRemoteTransferItemBody(
+          remoteTransferItemBody(requestId: 'x' * 129, payload: 'secret'),
+        ),
+        isNull,
+      );
+
+      final result = parseRemoteTransferResultBody(
+        remoteTransferResultBody(
+          requestId: requestId,
+          ok: true,
+          message: 'Applied on TV',
+        ),
+      );
+      expect(result, isNotNull);
+      expect(result!.requestId, requestId);
+      expect(result.ok, isTrue);
+      expect(result.message, 'Applied on TV');
+
+      const uri = 'debrify://channel-payload';
+      final channel = parseRemoteChannelTransferBody(
+        remoteChannelTransferBody(requestId: requestId, uri: uri),
+      );
+      expect(channel, isNotNull);
+      expect(channel!.requestId, requestId);
+      expect(channel.uri, uri);
+
+      final chunkStart = chunkStartBody(
+        transferId: 'transfer-1',
+        command: ConfigCommand.debrifyChannel,
+        label: 'Channel',
+        totalChunks: 2,
+        resultRequestId: requestId,
+      );
+      expect(parseChunkResultRequestId(chunkStart), requestId);
+    });
+
+    test('malformed and oversized outcome envelopes are rejected', () {
+      expect(parseRemoteTransferRequestBody(null), isNull);
+      expect(parseRemoteTransferRequestBody('not json'), isNull);
+      expect(
+        parseRemoteTransferRequestBody(
+          '{"version":1,"requestId":"${'x' * 129}"}',
+        ),
+        isNull,
+      );
+      expect(
+        parseRemoteTransferRequestBody(
+          '{"version":1,"requestId":"ok","expected":{"addon":0}}',
+        ),
+        isNull,
+      );
+      expect(
+        parseRemoteTransferRequestBody(
+          '{"version":1,"requestId":"ok","expected":{"addon":201}}',
+        ),
+        isNull,
+      );
+      expect(parseRemoteTransferResultBody('not json'), isNull);
+      expect(
+        parseRemoteTransferResultBody(
+          '{"requestId":"ok","ok":true,"message":"${'x' * 501}"}',
+        ),
+        isNull,
+      );
+      expect(parseRemoteChannelTransferBody('{"version":1}'), isNull);
+      expect(parseChunkResultRequestId('{"resultRequestId":""}'), isNull);
+      expect(
+        parseRemoteChannelTransferBody(
+          remoteChannelTransferBody(requestId: 'ok', uri: 'https://wrong'),
+        ),
+        isNull,
+      );
+    });
+
+    test('discovery capability starts at protocol v4', () {
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 3,
+        ).supportsRemoteTransferResult,
+        isFalse,
+      );
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 4,
+        ).supportsRemoteTransferResult,
+        isTrue,
       );
     });
   });
@@ -456,7 +620,19 @@ void productionRouteIntegrationTest() {
         state
           ..debugInstallSessionManager(manager)
           ..debugInstallOutboundSession(sender, ip: 'receiver')
-          ..debugInstallOutboundSession(receiver, ip: 'sender');
+          ..debugInstallOutboundSession(receiver, ip: 'sender')
+          ..debugRememberPeer(receiver.peerFingerprint);
+
+        final rememberedChunkContext = state.debugAuthenticatedChunkContext(
+          RemoteCommand(
+            action: RemoteAction.config,
+            command: ConfigCommand.debrifyChannelStart,
+            data: '{}',
+          ),
+          'sender',
+        );
+        expect(rememberedChunkContext, isNotNull);
+        expect(rememberedChunkContext!.remembered, isTrue);
 
         final wire = <Map<String, dynamic>>[];
         state.debugPlainSender = (command, _, _) async {

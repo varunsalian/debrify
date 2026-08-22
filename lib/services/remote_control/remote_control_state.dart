@@ -52,6 +52,15 @@ class RemoteControlState extends ChangeNotifier {
         ({String? requestId, bool ok, String message})
       >.broadcast();
 
+  final StreamController<({String requestId, bool ok})> addonTransferResults =
+      StreamController<({String requestId, bool ok})>.broadcast();
+
+  final StreamController<({String requestId, bool ok, String message})>
+  remoteTransferResults =
+      StreamController<
+        ({String requestId, bool ok, String message})
+      >.broadcast();
+
   // Services
   UdpDiscoveryService? _discoveryService;
   UdpCommandService? _commandService;
@@ -797,6 +806,7 @@ class RemoteControlState extends ChangeNotifier {
       _roleBeforeLeases = null;
       _receiverNameBeforeLeases = null;
       _nextLeaseId = 0;
+      _rememberedFingerprints.clear();
       onCommandReceived = null;
     });
     debugReceiverStarter = null;
@@ -821,6 +831,17 @@ class RemoteControlState extends ChangeNotifier {
   void debugInstallSessionManager(RemoteSessionManager manager) {
     _sessionManager = manager;
   }
+
+  @visibleForTesting
+  void debugRememberPeer(String peerFingerprint) {
+    _rememberedFingerprints.add(peerFingerprint);
+  }
+
+  @visibleForTesting
+  RemoteCommandContext? debugAuthenticatedChunkContext(
+    RemoteCommand command,
+    String sourceIp,
+  ) => _authenticatedChunkContext(command, sourceIp);
 
   @visibleForTesting
   String get debugRole => _role.name;
@@ -884,6 +905,7 @@ class RemoteControlState extends ChangeNotifier {
     return RemoteCommandContext(
       encrypted: true,
       authorized: true,
+      remembered: _rememberedFingerprints.contains(session.peerFingerprint),
       sidB64: session.sidB64,
       peerFingerprint: session.peerFingerprint,
       peerName: session.peerName,
@@ -963,6 +985,22 @@ class RemoteControlState extends ChangeNotifier {
       if (data != null && context.encrypted && context.authorized) {
         final result = parseProfileGraphResultBody(data);
         if (result != null) profileGraphResults.add(result);
+      }
+      return;
+    }
+    if (action == RemoteAction.config &&
+        command == ConfigCommand.addonTransferResult) {
+      if (data != null && context.encrypted && context.authorized) {
+        final result = parseAddonTransferResultBody(data);
+        if (result != null) addonTransferResults.add(result);
+      }
+      return;
+    }
+    if (action == RemoteAction.config &&
+        command == ConfigCommand.remoteTransferResult) {
+      if (data != null && context.encrypted && context.authorized) {
+        final result = parseRemoteTransferResultBody(data);
+        if (result != null) remoteTransferResults.add(result);
       }
       return;
     }
@@ -1173,6 +1211,7 @@ class RemoteControlState extends ChangeNotifier {
       RemoteCommandContext(
         encrypted: true,
         authorized: session.authorized,
+        remembered: _rememberedFingerprints.contains(session.peerFingerprint),
         sidB64: session.sidB64,
         peerFingerprint: session.peerFingerprint,
         peerName: session.peerName,

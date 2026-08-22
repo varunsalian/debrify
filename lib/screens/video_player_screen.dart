@@ -53,6 +53,8 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 // Video Player Components
 import 'video_player/models/playlist_entry.dart';
+import 'video_player/services/external_subtitle_payload.dart';
+import 'video_player/services/subtitle_track_utils.dart';
 import 'video_player/models/gesture_state.dart';
 import 'video_player/models/hud_state.dart';
 import 'video_player/painters/double_tap_ripple_painter.dart';
@@ -115,6 +117,30 @@ class _SeasonEpisodeSelection {
   final int episode;
 
   const _SeasonEpisodeSelection({required this.season, required this.episode});
+}
+
+class _SubtitleApplyAttempt {
+  final int generation;
+  final mk.SubtitleTrack requested;
+  final mk.SubtitleTrack previous;
+  final String source;
+  final String? previousStremioId;
+  final String? previousExternalPath;
+  bool failed = false;
+  bool handled = false;
+  bool successReturned = false;
+  bool persisted = false;
+  String? persistedAudioId;
+  Completer<void>? persistenceDone;
+
+  _SubtitleApplyAttempt({
+    required this.generation,
+    required this.requested,
+    required this.previous,
+    required this.source,
+    required this.previousStremioId,
+    required this.previousExternalPath,
+  });
 }
 
 /// One page of a live IPTV category, as the browse provider returns it.
@@ -383,12 +409,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
-  // Direct Surface is the efficient Android default, but a vendor codec or
-  // surface implementation may reject it. The startup guard is deliberately
+  // Explicit Android renderers can be rejected by a vendor codec, GPU, or
+  // surface implementation. The startup guard is deliberately
   // limited to the first successfully decoded item in this screen: once the
   // output has attached, later network/media failures must not be blamed on the
   // renderer. A confirmed renderer failure recreates the whole player once.
-  bool _directSurfaceValidatedForSession = false;
+  bool _rendererValidatedForSession = false;
   bool _rendererFallbackInProgress = false;
   int _rendererStartupGuardToken = 0;
   int _rendererStartupValidationGeneration = -1;
@@ -522,10 +548,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The generation in force when the current scrub began.
   int _tvScrubStartedAtGeneration = 0;
 
-  // NOTE: do NOT drive mpv's `sub-visibility` here. media_kit renders
-  // subtitles as a Flutter widget and keeps mpv's own renderer switched off;
-  // turning it back on draws every subtitle twice. Lifting subtitles clear of
-  // the bar belongs in the subtitle view's padding instead.
+  // Text subtitles stay in MediaKit's Flutter renderer. Bitmap subtitles are
+  // the narrow exception: their decoded image cues cannot enter a text widget,
+  // so the selection path temporarily enables mpv's native compositor.
   bool _isSeekingWithSlider = false;
   Duration? _lastSliderSeekPos;
 
@@ -884,6 +909,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// player config requests error-level logs), which is exactly the band
   /// stream-record failures log in.
   StreamSubscription<mk.PlayerLog>? _recordLogSub;
+  StreamSubscription<mk.PlayerLog>? _subtitleDiagnosticLogSub;
+  int _subtitleDiagnosticGeneration = 0;
+  _SubtitleApplyAttempt? _activeSubtitleApplyAttempt;
+  final ValueNotifier<String?> _subtitleSelectionCorrection = ValueNotifier(
+    null,
+  );
 
   /// Repaints the Record button when a desktop capture starts or ends behind
   /// this screen's back — a scheduled one firing on the channel being watched,
@@ -2353,6 +2384,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('VideoPlayer: audio config $property=$value failed: $e');
       }
     }
+    // Preferred audio language, handed to mpv itself as `alang`. The Dart
+    // matcher (_applyDefaultAudioLanguage) only runs after the track list
+    // reaches Dart and only matches on metadata; mpv applies the preference
+    // at stream selection, and its matcher also weighs the default/forced
+    // dispositions. Users with no preference set send nothing.
+    try {
+      final lang = await StorageService.getDefaultAudioLanguage();
+      if (lang != null && lang.isNotEmpty) {
+        final alang = LanguageMapper.alangForCode(lang);
+        if (alang.isNotEmpty) await platform.setProperty('alang', alang);
+      }
+    } catch (e) {
+      debugPrint('VideoPlayer: alang config failed: $e');
+    }
   }
 
   /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
@@ -2744,6 +2789,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool isCurrent() =>
         mounted && instanceGeneration == _playerInstanceGeneration;
 
+    _subtitleDiagnosticLogSub = player.stream.log.listen((log) {
+      if (!isCurrent()) return;
+      final searchable = '${log.prefix} ${log.text}'.toLowerCase();
+      if (!searchable.contains('sub') &&
+          !searchable.contains('libass') &&
+          !searchable.contains('track')) {
+        return;
+      }
+      debugPrint('[SubtitleDiag] mpv[${log.level}] ${log.prefix}: ${log.text}');
+      final level = log.level.toLowerCase();
+      final subtitleFailure =
+          (level == 'error' || level == 'fatal') &&
+          (log.prefix.toLowerCase().startsWith('sub') ||
+              searchable.contains('subtitle decoder') ||
+              searchable.contains('subtitle converter'));
+      final attempt = _activeSubtitleApplyAttempt;
+      if (subtitleFailure && attempt != null) {
+        unawaited(_handleSubtitleApplyFailure(attempt, log.text));
+      }
+    });
     // Subscribe before open() so fast local media and immediate renderer
     // failures are visible to both diagnostics and the startup guard.
     _paramsSub = player.stream.videoParams.listen((params) {
@@ -2762,7 +2827,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       unawaited(
-        _fallbackDirectSurfaceToAutomatic(
+        _fallbackExplicitRendererToAutomatic(
           instanceGeneration: instanceGeneration,
           mediaGeneration: _decoderProbeGeneration,
           reason: 'renderer_error',
@@ -2897,6 +2962,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _bufferingSub,
       _iptvErrorSub,
       _rendererStartupErrorSub,
+      _subtitleDiagnosticLogSub,
     ];
     _posSub = null;
     _durSub = null;
@@ -2906,6 +2972,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _bufferingSub = null;
     _iptvErrorSub = null;
     _rendererStartupErrorSub = null;
+    _subtitleDiagnosticLogSub = null;
     for (final subscription in subscriptions) {
       if (subscription == null) continue;
       try {
@@ -2934,7 +3001,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _decoderProbeParams = params;
     _scheduleDecoderProbe();
-    _scheduleDirectSurfaceStartupValidation();
+    _scheduleRendererStartupValidation();
     final remedy = _tvosDecodeRemedy;
     if (remedy != null) {
       // Only ever STARTS the ladder (from idle, on a triggering format) —
@@ -2952,8 +3019,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // ANDROID ONLY, deliberately.
     //
-    // These observers exist to feed the Android direct-surface renderer
-    // fallback (`_scheduleDirectSurfaceStartupValidation`), which is itself
+    // These observers exist to feed the Android explicit-renderer fallback
+    // (`_scheduleRendererStartupValidation`), which is itself
     // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
     //
     // They are also `mpv_observe_property` calls issued unawaited, at the same
@@ -2986,12 +3053,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  void _scheduleDirectSurfaceStartupValidation() {
+  void _scheduleRendererStartupValidation() {
     if (!AndroidRendererStartupFallback.shouldArm(
           isAndroid: Platform.isAndroid,
           isAndroidTv: PlatformUtil.isAndroidTvCached,
           mode: _androidVideoRendererMode,
-          alreadyValidated: _directSurfaceValidatedForSession,
+          alreadyValidated: _rendererValidatedForSession,
           fallbackInProgress: _rendererFallbackInProgress,
         ) ||
         _iptvErrorsMuted ||
@@ -3004,7 +3071,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final mediaGeneration = _decoderProbeGeneration;
     final player = _player;
     unawaited(
-      _validateDirectSurfaceStartup(
+      _validateRendererStartup(
         guardToken: guardToken,
         instanceGeneration: instanceGeneration,
         mediaGeneration: mediaGeneration,
@@ -3013,7 +3080,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Future<void> _validateDirectSurfaceStartup({
+  Future<void> _validateRendererStartup({
     required int guardToken,
     required int instanceGeneration,
     required int mediaGeneration,
@@ -3035,9 +3102,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       try {
         final output = await platform.getProperty('current-vo');
-        if (AndroidRendererStartupFallback.isExpectedOutput(output) &&
+        if (AndroidRendererStartupFallback.isExpectedOutput(
+              mode: _androidVideoRendererMode,
+              value: output,
+            ) &&
             output == previousOutput) {
-          _directSurfaceValidatedForSession = true;
+          _rendererValidatedForSession = true;
           _rendererStartupGuardToken++;
           return;
         }
@@ -3048,14 +3118,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
 
-    await _fallbackDirectSurfaceToAutomatic(
+    await _fallbackExplicitRendererToAutomatic(
       instanceGeneration: instanceGeneration,
       mediaGeneration: mediaGeneration,
-      reason: 'surface_output_not_ready',
+      reason: 'requested_output_not_ready',
     );
   }
 
-  Future<void> _fallbackDirectSurfaceToAutomatic({
+  Future<void> _fallbackExplicitRendererToAutomatic({
     required int instanceGeneration,
     required int mediaGeneration,
     required String reason,
@@ -3064,7 +3134,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           isAndroid: Platform.isAndroid,
           isAndroidTv: PlatformUtil.isAndroidTvCached,
           mode: _androidVideoRendererMode,
-          alreadyValidated: _directSurfaceValidatedForSession,
+          alreadyValidated: _rendererValidatedForSession,
           fallbackInProgress: _rendererFallbackInProgress,
         ) ||
         !mounted ||
@@ -3093,10 +3163,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final externalAudio = widget.audioUrl;
     final hasExternalAudio = externalAudio != null && externalAudio.isNotEmpty;
 
+    final failedRenderer = _androidVideoRendererMode.storageKey;
     _releasePlayerDiagnostic(
       'generation=$mediaGeneration phase=fallback '
       'status=renderer_startup_failed platform=android backend=libmpv '
-      'requested_renderer=direct_surface fallback=automatic reason=$reason',
+      'requested_renderer=$failedRenderer fallback=automatic reason=$reason',
     );
 
     // Invalidate every old callback before the first await. Only one native
@@ -3125,7 +3196,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!mounted) return;
 
       // Remember the compatibility result. The setting now visibly reads
-      // Automatic, and choosing Direct Surface again is the explicit retry.
+      // Automatic, and choosing an explicit renderer again retries it.
       _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
       try {
         await StorageService.setAndroidVideoRendererMode(
@@ -3544,6 +3615,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // call owns the player now.
       if (_screenDisposed || generation != _decoderProbeGeneration) return;
     }
+    // `sub-visibility` is player-global. Reset it before a reused player opens
+    // new media so a previous bitmap track cannot make auto-selected text draw
+    // both natively and in Flutter. Restored bitmap selections re-enable it.
+    if (platform is mk.NativePlayer) {
+      try {
+        await platform.setProperty('sub-visibility', 'no');
+      } catch (error) {
+        debugPrint('Player: subtitle visibility reset failed: $error');
+      }
+    }
     return _player.open(media, play: play);
   }
 
@@ -3628,6 +3709,169 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await Future.delayed(const Duration(milliseconds: 100));
     }
     // Timeout reached - video may not have embedded subtitles
+  }
+
+  static String _diagnosticSubtitleId(mk.SubtitleTrack track) =>
+      track.uri || track.data ? '<external>' : track.id;
+
+  Future<void> _setNativeSubtitleVisibilityForTrack(
+    mk.SubtitleTrack track,
+  ) async {
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final nativeRendering = requiresNativeSubtitleRendering(track);
+    await platform.setProperty(
+      'sub-visibility',
+      nativeRendering ? 'yes' : 'no',
+    );
+  }
+
+  /// Records both media_kit's optimistic Dart state and libmpv's authoritative
+  /// properties. This distinction matters for subtitle selection: media_kit
+  /// updates `state.track.subtitle` after the property-set request completes,
+  /// while mpv may still retain a different `sid` or fail to decode the track.
+  Future<bool> _setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+  }) async {
+    if (Platform.isAndroid &&
+        !PlatformUtil.isAndroidTvCached &&
+        requiresNativeSubtitleRendering(track) &&
+        _androidVideoRendererMode !=
+            AndroidVideoRendererMode.directMediaCodec) {
+      _showSubtitleFailureMessage(
+        'Bitmap subtitles require MediaCodec + GPU. Change Video renderer in Settings and restart playback.',
+      );
+      debugPrint(
+        '[SubtitleDiag] apply rejected source=$source '
+        'reason=android_renderer_incompatible',
+      );
+      return false;
+    }
+    final diagnosticGeneration = ++_subtitleDiagnosticGeneration;
+    final attempt = _SubtitleApplyAttempt(
+      generation: diagnosticGeneration,
+      requested: track,
+      previous: _player.state.track.subtitle,
+      source: source,
+      previousStremioId: _selectedStremioSubtitleId,
+      previousExternalPath: _activeExternalSubtitlePath,
+    );
+    _activeSubtitleApplyAttempt = attempt;
+    // Null arms the next correction even when two failures restore the same
+    // selection consecutively.
+    _subtitleSelectionCorrection.value = null;
+
+    try {
+      await _setNativeSubtitleVisibilityForTrack(track);
+      await _player.setSubtitleTrack(track);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[SubtitleDiag] set FAILED source=$source '
+        'requestedId=${_diagnosticSubtitleId(track)} '
+        'error=$error\n$stackTrace',
+      );
+      await _handleSubtitleApplyFailure(attempt, error.toString());
+      return false;
+    }
+    // mpv posts decoder failures through its log stream immediately after the
+    // property reply. Give that event one run-loop turn before reporting
+    // success to optimistic menu UI; late failures are still handled by the
+    // active attempt above and roll the selection back centrally.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (attempt.failed) return false;
+
+    attempt.successReturned = true;
+    return true;
+  }
+
+  Future<void> _handleSubtitleApplyFailure(
+    _SubtitleApplyAttempt attempt,
+    String reason,
+  ) async {
+    if (attempt.handled ||
+        _activeSubtitleApplyAttempt != attempt ||
+        attempt.generation != _subtitleDiagnosticGeneration) {
+      return;
+    }
+    attempt.failed = true;
+    attempt.handled = true;
+    _activeSubtitleApplyAttempt = null;
+
+    final previous = attempt.previous;
+    final sameTrack = previous.id == attempt.requested.id;
+    final fallback = previous.id == 'auto' || sameTrack
+        ? mk.SubtitleTrack.no()
+        : previous;
+    var restoredOriginalSelection = fallback.id == previous.id;
+    try {
+      await _setNativeSubtitleVisibilityForTrack(fallback);
+      await _player.setSubtitleTrack(fallback);
+    } catch (error) {
+      restoredOriginalSelection = false;
+      debugPrint(
+        '[SubtitleDiag] rollback FAILED source=${attempt.source} error=$error',
+      );
+      try {
+        final noTrack = mk.SubtitleTrack.no();
+        await _setNativeSubtitleVisibilityForTrack(noTrack);
+        await _player.setSubtitleTrack(noTrack);
+      } catch (_) {
+        // The original actionable error is surfaced below. A second snackbar
+        // for rollback failure would obscure it without giving the user a
+        // useful recovery action.
+      }
+    }
+
+    _selectedStremioSubtitleId = restoredOriginalSelection
+        ? attempt.previousStremioId
+        : null;
+    _activeExternalSubtitlePath = restoredOriginalSelection
+        ? attempt.previousExternalPath
+        : null;
+    final String restoredSelection;
+    if (restoredOriginalSelection && attempt.previousStremioId != null) {
+      restoredSelection = 'stremio:${attempt.previousStremioId}';
+    } else {
+      restoredSelection = restoredOriginalSelection ? fallback.id : 'no';
+    }
+
+    // A decoder error can arrive after the property reply and after a picker
+    // has persisted its optimistic selection. Undo that commit as part of the
+    // same rollback, while leaving automatic (never-persisted) attempts alone.
+    if (attempt.successReturned && attempt.persisted) {
+      await attempt.persistenceDone?.future;
+      await _persistTrackChoice(
+        attempt.persistedAudioId ?? _player.state.track.audio.id,
+        restoredSelection,
+      );
+    }
+    if (!mounted) return;
+    setState(() {});
+    _playerMenuKey.currentState?.reconcileSubtitleSelection(restoredSelection);
+    _subtitleSelectionCorrection.value = restoredSelection;
+
+    final codec = attempt.requested.codec;
+    final message = codec == null || codec.isEmpty
+        ? 'Couldn’t apply subtitles. Try another embedded or online track.'
+        : 'Couldn’t decode $codec subtitles. Try another embedded or online track.';
+    _showSubtitleFailureMessage(message);
+    debugPrint(
+      '[SubtitleDiag] user notified source=${attempt.source} reason=$reason',
+    );
+  }
+
+  void _showSubtitleFailureMessage(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   // Wait for duration to be available before attempting position restoration
@@ -4449,7 +4693,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
           _currentStreamUrl = url;
           // Disable auto-enabled embedded subtitles to prevent duplicates
-          await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+          await _setSubtitleTrackWithDiagnostics(
+            mk.SubtitleTrack.no(),
+            source: 'debrify-tv-open-disable-auto',
+          );
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
             await _waitForVideoReady();
@@ -6205,6 +6452,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _tapMpvLogsForRecording() {
     _recordLogSub?.cancel();
     _recordLogSub = _player.stream.log.listen((log) {
+      final level = log.level.toLowerCase();
+      if (level != 'error' && level != 'fatal') return;
       debugPrint('VideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}');
     });
   }
@@ -7163,7 +7412,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _pikPakRetryId++;
       await _openMedia(mk.Media(url), play: true);
       _currentStreamUrl = url;
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'stremio-tv-switch-disable-auto',
+      );
       if (startAtPercent != null && startAtPercent > 0) {
         // Apply start position once duration is known
         _player.stream.duration.firstWhere((d) => d > Duration.zero).then((d) {
@@ -7372,7 +7624,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       _currentStreamUrl = nextUrl;
       // Disable auto-enabled embedded subtitles to prevent duplicates
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'channel-switch-disable-auto',
+      );
     } catch (e) {
       debugPrint('Player: Failed to open channel stream: $e');
       setState(() {
@@ -7498,7 +7753,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       _currentStreamUrl = nextUrl;
       // Disable auto-enabled embedded subtitles to prevent duplicates
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'next-channel-disable-auto',
+      );
     } catch (e) {
       debugPrint('Player: Failed to open next channel stream: $e');
       setState(() {
@@ -8931,6 +9189,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _verticalHud.dispose();
     _speedHoldHud.dispose();
     _recordLogSub?.cancel();
+    _subtitleDiagnosticLogSub?.cancel();
+    _subtitleSelectionCorrection.dispose();
+    _subtitleDiagnosticGeneration++;
+    _activeSubtitleApplyAttempt = null;
     _decoderProbeGeneration++;
     _decoderProbeToken++;
     _rendererStartupGuardToken++;
@@ -10600,9 +10862,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Build subtitle view configuration from settings
   // NOTE: the television bar deliberately does NOT move subtitles.
   //
-  // Two attempts made things worse: driving mpv's `sub-visibility` drew every
-  // line twice (media_kit renders subtitles itself and keeps mpv's own
-  // renderer off), and padding them upward fought the user's own subtitle
+  // Native visibility remains off for text tracks because enabling it draws
+  // every line twice (MediaKit also renders those cues in Flutter). Bitmap
+  // selections toggle it separately because they have no text cues. Padding
+  // subtitles upward fought the user's own subtitle
   // elevation setting and threw them into the middle of the screen. The bar is
   // transient and the elevation setting already exists for exactly this
   // preference, so subtitles stay where the user put them.
@@ -11047,7 +11310,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (full.isEmpty) return null;
     final eps = <(int, int)>[
       for (final m in full)
-        if (m['season'] is int && m['number'] is int && (m['season'] as int) > 0)
+        if (m['season'] is int &&
+            m['number'] is int &&
+            (m['season'] as int) > 0)
           ((m['season'] as int), (m['number'] as int)),
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final idx = eps.indexWhere((p) => p.$1 == season && p.$2 == episode);
@@ -13026,11 +13291,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _cachedSubtitleKey = cacheKey;
       },
       selectedStremioSubtitleId: _selectedStremioSubtitleId,
+      subtitleSelectionCorrection: _subtitleSelectionCorrection,
       onStremioSubtitleSelected: (id) {
         _selectedStremioSubtitleId = id;
         _userManuallySelectedSubtitle = true;
       },
-      onDownloadStremioSubtitleToFile: _downloadStremioSubtitleToTempFile,
+      onApplyEmbeddedSubtitle: (track) => _setSubtitleTrackWithDiagnostics(
+        track,
+        source: 'tracks-sheet-embedded',
+      ),
+      onApplyStremioSubtitle: _applyStremioSubtitleFromTracksSheet,
       onIdentifyTitle: _identifyTitleAndFetchSubtitles,
       subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
     );
@@ -13150,20 +13420,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _menuApplyTrackChange(audioId, currentSubId);
   }
 
-  Future<void> _menuSubtitlesOff(String audioId) async {
+  Future<bool> _menuSubtitlesOff(String audioId) async {
+    final applied = await _setSubtitleTrackWithDiagnostics(
+      mk.SubtitleTrack.no(),
+      source: 'player-menu-off',
+    );
+    if (!applied) return false;
     _selectedStremioSubtitleId = null;
-    await _player.setSubtitleTrack(mk.SubtitleTrack.no());
     await _menuApplyTrackChange(audioId, 'no');
+    return true;
   }
 
-  Future<void> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
+  Future<bool> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
     final track = _player.state.tracks.subtitle
         .where((s) => s.id == subId)
         .firstOrNull;
-    if (track == null) return;
+    if (track == null) {
+      _showSubtitleFailureMessage(
+        'That subtitle track is no longer available. Try another track.',
+      );
+      return false;
+    }
+    final applied = await _setSubtitleTrackWithDiagnostics(
+      track,
+      source: 'player-menu-embedded',
+    );
+    if (!applied) return false;
     _selectedStremioSubtitleId = null;
-    await _player.setSubtitleTrack(track);
     await _menuApplyTrackChange(audioId, subId);
+    return true;
   }
 
   /// Returns false when the download/apply failed — the panel keeps the
@@ -13178,7 +13463,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final token = _addonSubtitleFetchToken;
     try {
       final filePath = await _downloadStremioSubtitleToTempFile(sub);
-      if (filePath == null || token != _addonSubtitleFetchToken || !mounted) {
+      if (filePath == null) {
+        _showSubtitleFailureMessage(
+          'Couldn’t load subtitles. Check your connection or try another track.',
+        );
+        return false;
+      }
+      if (token != _addonSubtitleFetchToken || !mounted) {
         return false;
       }
       final track = mk.SubtitleTrack.uri(
@@ -13186,17 +13477,51 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: sub.displayName,
         language: sub.lang,
       );
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-      // Each await is a window for the content to switch under us; persisting
-      // the stale id would also suppress the new item's subtitle auto-select.
-      if (token != _addonSubtitleFetchToken || !mounted) return false;
-      await _player.setSubtitleTrack(track);
+      final applied = await _applyExternalSubtitleTrack(track);
+      if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _selectedStremioSubtitleId = sub.id;
+      _activeExternalSubtitlePath = filePath;
       await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
       return true;
     } catch (e) {
       debugPrint('PlayerMenu: subtitle apply failed - $e');
+      _showSubtitleFailureMessage(
+        'Couldn’t apply subtitles. Try another embedded or online track.',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _applyStremioSubtitleFromTracksSheet(StremioSubtitle sub) async {
+    final token = _addonSubtitleFetchToken;
+    try {
+      final filePath = await _downloadStremioSubtitleToTempFile(sub);
+      if (filePath == null) {
+        _showSubtitleFailureMessage(
+          'Couldn’t load subtitles. Check your connection or try another track.',
+        );
+        return false;
+      }
+      if (token != _addonSubtitleFetchToken || !mounted) {
+        return false;
+      }
+      final applied = await _applyExternalSubtitleTrack(
+        mk.SubtitleTrack.uri(
+          filePath,
+          title: sub.displayName,
+          language: sub.lang,
+        ),
+      );
+      if (!applied) return false;
+      if (token != _addonSubtitleFetchToken || !mounted) return false;
+      _activeExternalSubtitlePath = filePath;
+      return true;
+    } catch (e) {
+      debugPrint('TracksSheet: subtitle apply failed - $e');
+      _showSubtitleFailureMessage(
+        'Couldn’t apply subtitles. Try another embedded or online track.',
+      );
       return false;
     }
   }
@@ -13205,11 +13530,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final audios = _player.state.tracks.audio
         .where((a) => a.id.toLowerCase() != 'no')
         .toList(growable: false);
-    final embedded = _player.state.tracks.subtitle
-        .where(
-          (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
-        )
-        .toList(growable: false);
+    final embedded = embeddedSubtitleTracks(_player.state.tracks.subtitle);
     final selectedSub = _selectedStremioSubtitleId != null
         ? 'stremio:$_selectedStremioSubtitleId'
         : _player.state.track.subtitle.id;
@@ -13221,10 +13542,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       key: _playerMenuKey,
       initialSection: _playerMenuInitialSection,
       onClose: _hidePlayerMenu,
-      audioTracks: [
-        for (final (i, a) in audios.indexed)
-          PlayerMenuTrackOption(a.id, LanguageMapper.labelForTrack(a, i)),
-      ],
+      // mpv's `auto` pseudo-entry heads the list, labeled for what it is —
+      // and kept, because persisting 'auto' is the only way to un-pin a
+      // stored explicit track for this title (restore treats a stored 'auto'
+      // as "use the default selection"). Real tracks are numbered without it
+      // so the file's first stream still reads "Track 1".
+      audioTracks: LanguageMapper.audioTrackOptions(
+        audios,
+        (id, label) => PlayerMenuTrackOption(id, label),
+      ),
       selectedAudioId: _player.state.track.audio.id,
       onAudioSelected: _menuSelectAudio,
       audioPassthrough: !kIsWeb && Platform.isAndroid
@@ -13297,6 +13623,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _userManuallySelectedSubtitle = false;
     _trackPreferencesReadyForAddonSubtitles = false;
     _addonSubtitleFetchToken++;
+    _subtitleDiagnosticGeneration++;
+    _activeSubtitleApplyAttempt = null;
     _cleanupTempSubtitleFilesSync();
     _activeExternalSubtitlePath = null;
     _showSyncOverlay = false;
@@ -13366,16 +13694,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final audioTrackId = trackPreferences['audioTrackId'] as String?;
         final subtitleTrackId = trackPreferences['subtitleTrackId'] as String?;
 
-        // Apply audio track preference
+        // Apply audio track preference — only if the stored id exists in
+        // THIS file (mirrors the subtitle branch). Prefs are keyed by title
+        // and store bare mpv ordinals, so a different release of the same
+        // title can carry the ordinal elsewhere; the old fallback landed on
+        // tracks.audio.first, which is the 'auto' pseudo-track.
         if (audioTrackId != null &&
             audioTrackId.isNotEmpty &&
             audioTrackId != 'auto') {
-          final tracks = _player.state.tracks;
-          final audioTrack = tracks.audio.firstWhere(
-            (track) => track.id == audioTrackId,
-            orElse: () => tracks.audio.first,
-          );
-          await _player.setAudioTrack(audioTrack);
+          final audioTrack = _player.state.tracks.audio
+              .where((track) => track.id == audioTrackId)
+              .firstOrNull;
+          if (audioTrack != null) {
+            await _player.setAudioTrack(audioTrack);
+          } else {
+            await _applyDefaultAudioLanguage();
+          }
         } else {
           // No stored audio preference - apply default audio language setting
           await _applyDefaultAudioLanguage();
@@ -13397,11 +13731,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final tracks = _player.state.tracks;
           // Check if the stored track actually exists in this video
           final trackExists = tracks.subtitle.any(
-            (t) => t.id == subtitleTrackId,
+            (t) =>
+                t.id == subtitleTrackId && !isAppManagedAddonSubtitleTrack(t),
           );
           if (trackExists) {
             final subtitleTrack = tracks.subtitle.firstWhere(
-              (track) => track.id == subtitleTrackId,
+              (track) =>
+                  track.id == subtitleTrackId &&
+                  !isAppManagedAddonSubtitleTrack(track),
             );
             // A stored pick that CONFLICTS with the current global default
             // language is stale — it predates the user changing the setting
@@ -13435,8 +13772,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 'SubAuto: applying STORED subtitle track id=$subtitleTrackId '
                 '(lang=${subtitleTrack.language}/${subtitleTrack.title}) — blocks addon auto-select',
               );
-              await _player.setSubtitleTrack(subtitleTrack);
-              subtitleApplied = true;
+              subtitleApplied = await _setSubtitleTrackWithDiagnostics(
+                subtitleTrack,
+                source: 'restore-stored-embedded',
+              );
             }
           } else {
             // Stored track doesn't exist in this video - fall through to default
@@ -13501,6 +13840,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final tracks = _player.state.tracks;
       if (tracks.audio.isEmpty) return;
 
+      // If mpv's own selection (via the `alang` set at configure time)
+      // already matches the preference, keep it: mpv's matcher weighs the
+      // default/forced dispositions, so on a file with a normal and a
+      // commentary track in the same language it lands on the right one —
+      // the first-match loop below would overwrite that with whichever
+      // matching track enumerates first.
+      final platform = _player.platform;
+      if (platform is mk.NativePlayer) {
+        try {
+          final currentLang = await platform.getProperty(
+            'current-tracks/audio/lang',
+          );
+          if (LanguageMapper.matchesLanguage(defaultLang, currentLang)) {
+            return;
+          }
+        } catch (_) {
+          // Property unanswered — fall through to the metadata matcher.
+        }
+      }
+
       // Find an audio track matching the preferred language using robust matching
       mk.AudioTrack? matchingTrack;
       for (final track in tracks.audio) {
@@ -13538,14 +13897,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (defaultLang == 'off') {
         // Explicitly disable subtitles
-        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-        return true; // User explicitly disabled, don't try addon
+        final applied = await _setSubtitleTrackWithDiagnostics(
+          mk.SubtitleTrack.no(),
+          source: 'default-language-off',
+        );
+        return applied; // User explicitly disabled, don't try addon
       }
 
       // Find a subtitle track matching the preferred language using robust matching
       // This handles ISO 639-1, ISO 639-2, regional variants, and language names
       mk.SubtitleTrack? matchingTrack;
       for (final track in tracks.subtitle) {
+        if (isAppManagedAddonSubtitleTrack(track)) continue;
         if (LanguageMapper.matchesLanguage(defaultLang, track.language)) {
           matchingTrack = track;
           break;
@@ -13561,8 +13924,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint(
           'SubAuto: matched EMBEDDED track id=${matchingTrack.id} lang=${matchingTrack.language} title=${matchingTrack.title} — applying',
         );
-        await _player.setSubtitleTrack(matchingTrack);
-        return true;
+        return _setSubtitleTrackWithDiagnostics(
+          matchingTrack,
+          source: 'default-language-embedded',
+        );
       }
       debugPrint(
         'SubAuto: no $defaultLang embedded track → returning false (addon auto-select may run)',
@@ -13586,65 +13951,110 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     try {
       final uri = Uri.parse(sub.url);
-      final urlPath = uri.path.toLowerCase();
-      String ext = 'srt';
-      if (urlPath.endsWith('.vtt')) {
-        ext = 'vtt';
-      } else if (urlPath.endsWith('.ass') || urlPath.endsWith('.ssa')) {
-        ext = 'ass';
-      } else if (urlPath.endsWith('.ttml') || urlPath.endsWith('.xml')) {
-        ext = 'ttml';
-      } else if (urlPath.endsWith('.sub')) {
-        ext = 'sub';
-      } else {
-        // No file extension in the path (e.g. YouTube's timedtext endpoint) —
-        // fall back to the format carried in the `fmt`/`format` query param so
-        // the temp file gets the right extension for libmpv's demuxer.
-        final fmt =
-            (uri.queryParameters['fmt'] ?? uri.queryParameters['format'] ?? '')
-                .toLowerCase();
-        if (fmt == 'vtt') {
-          ext = 'vtt';
-        } else if (fmt == 'ttml') {
-          ext = 'ttml';
-        }
-        // Note: YouTube's srv1/srv2/srv3 are XML timedtext, NOT TTML, and
-        // libmpv can't parse them — we deliberately request fmt=vtt for
-        // YouTube captions, so those never reach here. Leaving ext='srt' for
-        // any unknown fmt is a safe default (WEBVTT/SRT auto-detect by libmpv).
-      }
-
       final dir = await getTemporaryDirectory();
-      final stem = sub.id.hashCode.toUnsigned(32).toRadixString(16);
-      final file = File('${dir.path}/stremio_sub_$stem.$ext');
+      final stem = externalSubtitleCacheStem(sub.url);
+      for (final ext in const [
+        'srt',
+        'vtt',
+        'ass',
+        'ssa',
+        'ttml',
+        'xml',
+        'sub',
+      ]) {
+        final cached = File('${dir.path}/stremio_sub_$stem.$ext');
+        if (cached.existsSync()) {
+          final cachedLength = cached.lengthSync();
+          if (cachedLength > 0 && cachedLength <= maxDecodedSubtitleBytes) {
+            _tempSubtitleFiles.add(cached.path);
+            return cached.path;
+          }
+          cached.deleteSync();
+        }
+      }
 
-      // Re-tapping the same subtitle (or finding a leftover from a previous
-      // session) — reuse the existing file instead of re-downloading.
-      if (file.existsSync()) {
+      final client = http.Client();
+      late http.StreamedResponse response;
+      try {
+        response = await client
+            .send(http.Request('GET', uri))
+            .timeout(const Duration(seconds: 15));
+        final declaredLength = response.contentLength;
+        if (declaredLength != null &&
+            declaredLength > maxSubtitleResponseBytes) {
+          debugPrint(
+            'VideoPlayer: Subtitle download rejected: '
+            '$declaredLength bytes exceeds limit',
+          );
+          return null;
+        }
+        if (response.statusCode != 200) {
+          debugPrint(
+            'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}',
+          );
+          return null;
+        }
+
+        final responseBytes = await readBoundedSubtitleResponse(
+          response.stream,
+        ).timeout(const Duration(seconds: 15));
+        final payload = prepareExternalSubtitlePayload(responseBytes, uri);
+        final file = File('${dir.path}/stremio_sub_$stem.${payload.extension}');
+        final partial = File('${file.path}.part');
+        await partial.writeAsBytes(payload.bytes, flush: true);
+        if (file.existsSync()) file.deleteSync();
+        await partial.rename(file.path);
         _tempSubtitleFiles.add(file.path);
-        _activeExternalSubtitlePath = file.path;
-        return file.path;
-      }
-
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) {
         debugPrint(
-          'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}',
+          'VideoPlayer: Subtitle written to temp file: ${file.path} '
+          '(${payload.bytes.length} bytes)',
         );
-        return null;
+        return file.path;
+      } finally {
+        client.close();
       }
-
-      await file.writeAsBytes(response.bodyBytes);
-      _tempSubtitleFiles.add(file.path);
-      _activeExternalSubtitlePath = file.path;
-      debugPrint(
-        'VideoPlayer: Subtitle written to temp file: ${file.path} (${response.bodyBytes.length} bytes)',
-      );
-      return file.path;
     } catch (e) {
       debugPrint('VideoPlayer: Subtitle download/write failed: $e');
       return null;
     }
+  }
+
+  /// Load a replacement first, then unload older addon tracks. A malformed
+  /// replacement therefore leaves the currently working subtitle untouched.
+  Future<bool> _applyExternalSubtitleTrack(mk.SubtitleTrack track) async {
+    // Track IDs are small mpv ordinals and may be reused by the next media.
+    // Keep the content generation with this operation so a delayed apply can
+    // never remove a same-numbered subtitle from newly opened content.
+    final contentToken = _addonSubtitleFetchToken;
+    final oldExternalIds = _player.state.tracks.subtitle
+        .where(isAppManagedAddonSubtitleTrack)
+        .map((subtitle) => subtitle.id)
+        .toList(growable: false);
+
+    final applied = await _setSubtitleTrackWithDiagnostics(
+      track,
+      source: 'addon-external',
+    );
+    if (!applied) return false;
+
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      for (final id in oldExternalIds) {
+        if (!mounted || contentToken != _addonSubtitleFetchToken) {
+          debugPrint(
+            'VideoPlayer: Content changed during addon subtitle cleanup; '
+            'stopping before track $id',
+          );
+          return false;
+        }
+        try {
+          await platform.command(['sub-remove', id]);
+        } catch (e) {
+          debugPrint('VideoPlayer: Failed to unload external subtitle $id: $e');
+        }
+      }
+    }
+    return true;
   }
 
   /// Delete any temp subtitle files we've written. Called from dispose.
@@ -13838,6 +14248,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint(
           'SubAuto: FAILED to download addon subtitle ${matchingSub.url}',
         );
+        _showSubtitleFailureMessage(
+          'Couldn’t load the preferred subtitles. Choose another subtitle track.',
+        );
         return;
       }
 
@@ -13846,8 +14259,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: matchingSub.displayName,
         language: matchingSub.lang,
       );
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-      await _player.setSubtitleTrack(track);
+      final applied = await _applyExternalSubtitleTrack(track);
+      if (!applied) return;
       _selectedStremioSubtitleId = matchingSub.id;
       _activeExternalSubtitlePath = filePath;
 
@@ -13875,6 +14288,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _persistTrackChoice(String audio, String subtitle) async {
+    final attempt = _activeSubtitleApplyAttempt;
+    Completer<void>? persistenceDone;
+    if (attempt != null &&
+        attempt.successReturned &&
+        _subtitlePreferenceMatchesAttempt(subtitle, attempt)) {
+      attempt.persisted = true;
+      attempt.persistedAudioId = audio;
+      persistenceDone = Completer<void>();
+      attempt.persistenceDone = persistenceDone;
+    }
     try {
       final seriesPlaylist = _seriesPlaylist;
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
@@ -13895,7 +14318,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           subtitleTrackId: subtitle,
         );
       }
-    } catch (e) {}
+    } catch (e) {
+      // Track persistence is best-effort; playback selection still succeeds.
+    } finally {
+      if (persistenceDone != null && !persistenceDone.isCompleted) {
+        persistenceDone.complete();
+      }
+    }
+  }
+
+  static bool _subtitlePreferenceMatchesAttempt(
+    String subtitle,
+    _SubtitleApplyAttempt attempt,
+  ) {
+    if (attempt.requested.id == 'no') return subtitle == 'no';
+    if (attempt.requested.uri || attempt.requested.data) {
+      return subtitle.startsWith('stremio:');
+    }
+    return subtitle == attempt.requested.id;
   }
 
   /// Generate a stable hash from filename for non-series playlist state tracking

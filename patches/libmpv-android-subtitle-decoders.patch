@@ -1,0 +1,23 @@
+diff --git a/buildscripts/flavors/default.sh b/buildscripts/flavors/default.sh
+index 7e49a6e..df6b33d 100644
+--- a/buildscripts/flavors/default.sh
++++ b/buildscripts/flavors/default.sh
+@@ -133,9 +133,18 @@ else
+ 	--enable-decoder=ssa \
+ 	--enable-decoder=ass \
+ 	--enable-decoder=dvbsub \
+ 	--enable-decoder=dvdsub \
++	--enable-decoder=pgssub \
++	--enable-decoder=xsub \
++	--enable-decoder=ccaption \
++	--enable-decoder=jacosub \
++	--enable-decoder=microdvd \
++	--enable-decoder=mpl2 \
++	--enable-decoder=pjs \
++	--enable-decoder=realtext \
++	--enable-decoder=sami \
+ 	--enable-decoder=srt \
+ 	--enable-decoder=stl \
+ 	--enable-decoder=subrip \
+ 	--enable-decoder=subviewer \
+ 	--enable-decoder=subviewer1 \

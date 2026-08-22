@@ -106,6 +106,27 @@ void main() {
     );
   });
 
+  test('Home card hold action transfers as a reviewed preference', () {
+    expect(
+      ProfileCreationService.copyablePreferenceKeys,
+      contains('home_cw_hold_to_quick_play'),
+    );
+    expect(
+      SanitizedProfilePreferences.allowsEntry(
+        'home_cw_hold_to_quick_play',
+        true,
+      ),
+      isTrue,
+    );
+    expect(
+      SanitizedProfilePreferences.allowsEntry(
+        'home_cw_hold_to_quick_play',
+        'yes',
+      ),
+      isFalse,
+    );
+  });
+
   test('device preference allowlist rejects arbitrary state', () async {
     final prefs = await DevicePreferences.instance();
     expect(() => prefs.setString('profile_theme', 'dark'), throwsArgumentError);

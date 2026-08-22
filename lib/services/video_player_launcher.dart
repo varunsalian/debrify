@@ -192,7 +192,8 @@ class VideoPlayerLaunchArgs {
   final String? audioUrl;
 
   /// Optional muxed stream (already has audio) used as a never-silent fallback
-  /// on Android TV, where [videoUrl] may be a video-only HD track.
+  /// by players that can only accept one URL, where [videoUrl] may be a
+  /// video-only HD track.
   final String? fallbackUrl;
   final String title;
   final String? subtitle;
@@ -420,6 +421,22 @@ class VideoPlayerLaunchArgs {
 }
 
 class VideoPlayerLauncher {
+  /// Select the single URL handed to an external player.
+  ///
+  /// External-player intents, URL schemes, and generic commands cannot
+  /// reliably attach [VideoPlayerLaunchArgs.audioUrl] on every platform. When
+  /// the primary stream needs that separate audio track, prefer the muxed
+  /// fallback so external playback is never silent.
+  @visibleForTesting
+  static String externalPlaybackUrlFor(VideoPlayerLaunchArgs args) {
+    final hasSeparateAudio = args.audioUrl?.isNotEmpty ?? false;
+    final muxedFallback = args.fallbackUrl;
+    if (hasSeparateAudio && muxedFallback != null && muxedFallback.isNotEmpty) {
+      return muxedFallback;
+    }
+    return args.videoUrl;
+  }
+
   /// Generate a resume key for a playlist entry.
   /// Used to pre-populate playback state (e.g., from Trakt progress).
   static String resumeIdForEntry(
@@ -1165,7 +1182,7 @@ class VideoPlayerLauncher {
       return false;
     }
     // Determine the correct URL to play (considering resume state for series)
-    String url = args.videoUrl;
+    String url = externalPlaybackUrlFor(args);
     String title = args.title;
 
     final playlist = args.playlist;

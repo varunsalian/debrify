@@ -427,8 +427,11 @@ class _M {
   double get caption => compact ? 12.0 : w * (21 / 1920);
 
   /// The caption strip below the art — compact only; wide overlays it on the
-  /// card. One 12pt line plus its 6px gap.
-  double get captionBlock => compact ? 24.0 : 0;
+  /// card. It reserves two lines because the second carries useful playback
+  /// context (season/episode) and ratings. The compact renderer used to
+  /// reserve and paint only the title, silently dropping that metadata even
+  /// though the same card showed it in the wide layout.
+  double get captionBlock => compact ? 40.0 : 0;
 }
 
 class SpotlightBoardState extends State<SpotlightBoard> {
@@ -1976,8 +1979,15 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         ? m.wideCardW / SpotlightCardShape.wide.aspect
         : m.posterH;
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
-    // overlay captions everywhere — a non-TV presentation choice only.
-    final captions = widget.dpad || section.captions;
+    // overlay captions everywhere. Compact must also keep a caption whenever
+    // a card carries metadata: otherwise portrait mode discards ratings and
+    // Continue Watching's season/episode label while landscape shows both.
+    final hasCardMetadata = section.items.any(
+      (item) =>
+          (item.subtitle ?? '').isNotEmpty || (item.rating ?? 0) > 0,
+    );
+    final captions =
+        widget.dpad || section.captions || (m.compact && hasCardMetadata);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -2590,8 +2600,9 @@ class _CardState extends State<_Card> {
             child: art,
           );
 
-    // Compact: art + a one-line caption below, one Column — the caption is
-    // part of the card so the tap target covers both.
+    // Compact: art + its caption below, one Column — the caption is part of
+    // the card so the tap target covers both. Keep the same metadata line as
+    // the wide overlay; changing orientation must not change information.
     final card = widget.captionBelow
         ? SizedBox(
             width: w,
@@ -2602,15 +2613,34 @@ class _CardState extends State<_Card> {
                   height: widget.captionBlock,
                   child: Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      c.title,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: widget.caption,
-                        color: app.core.tx.withValues(alpha: 0.55),
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          c.title,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: widget.caption,
+                            height: 1.15,
+                            color: app.core.tx.withValues(alpha: 0.72),
+                          ),
+                        ),
+                        if (hasSubtitle)
+                          Text(
+                            metaLine,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: widget.caption * 0.85,
+                              height: 1.2,
+                              fontWeight: FontWeight.w500,
+                              color: app.core.tx.withValues(alpha: 0.52),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),

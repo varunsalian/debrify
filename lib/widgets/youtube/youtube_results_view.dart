@@ -290,7 +290,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
       VideoPlayerLaunchArgs(
         videoUrl: playUrl,
         audioUrl: streams?.audioUrl,
-        fallbackUrl: streams?.downloadUrl,
+        fallbackUrl: streams?.muxedPlaybackFallback,
         title: streams?.title ?? video.title,
         subtitle: video.author,
         viewMode: PlaylistViewMode.sorted,

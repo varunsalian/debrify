@@ -194,6 +194,40 @@ void main() {
               'below the card on compact');
     });
 
+    testWidgets(
+        'portrait keeps rating and season/episode metadata below the art',
+        (tester) async {
+      surface(tester, const Size(390, 844));
+      final a = _meta('tt1', 'Alpha');
+      await tester.pumpWidget(
+        host(
+          [a],
+          [
+            SpotlightShelf(
+              title: 'Continue Watching',
+              nodes: const [],
+              // Home may request caption-free poster rows, but useful card
+              // metadata must still survive the compact breakpoint.
+              captions: false,
+              items: [
+                SpotlightCard(
+                  title: 'Alpha',
+                  subtitle: 'S2 · E5 · 24 min left',
+                  rating: 8.06,
+                  onOpen: () {},
+                ),
+              ],
+            ),
+          ],
+          dpad: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('S2 · E5 · 24 min left · ★ 8.1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('the hero is ~64% of the board with a centered Open pill',
         (tester) async {
       surface(tester, const Size(390, 844));

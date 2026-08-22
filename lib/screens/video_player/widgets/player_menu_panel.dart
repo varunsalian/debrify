@@ -68,10 +68,16 @@ class PlayerMenuPanel extends StatefulWidget {
   // ── Subtitles ──
   final List<PlayerMenuTrackOption> embeddedSubtitles;
 
-  /// 'no' | embedded track id | 'stremio:<id>' | 'auto'.
+  /// `no` | embedded track id | `stremio:<id>` | `auto`.
   final String selectedSubtitleId;
-  final Future<void> Function(String currentAudioId) onSubtitlesOff;
-  final Future<void> Function(String subId, String currentAudioId)
+
+  /// Returns false when disabling subtitles failed, allowing the optimistic
+  /// checkmark to be rolled back just like an embedded-track selection.
+  final Future<bool> Function(String currentAudioId) onSubtitlesOff;
+
+  /// Returns false when the native backend rejected or could not decode the
+  /// track, allowing the optimistic checkmark to be rolled back.
+  final Future<bool> Function(String subId, String currentAudioId)
   onEmbeddedSubtitleSelected;
 
   /// Returns false when the download/apply failed (selection is kept).
@@ -267,6 +273,16 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
   /// The addon subtitle currently downloading, so the row can show it.
   String? _applyingSubId;
 
+  /// Reconciles an optimistic picker choice when the native decoder reports a
+  /// failure after the original property-set future already completed.
+  void reconcileSubtitleSelection(String selectionId) {
+    if (!mounted) return;
+    setState(() {
+      _selectedSub = selectionId;
+      _applyingSubId = null;
+    });
+  }
+
   SubtitleSettingsData? _style;
 
   @override
@@ -305,8 +321,8 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
       duration: const Duration(milliseconds: 320),
       vsync: this,
     );
-    _slideAnim =
-        Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(
+    _slideAnim = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero)
+        .animate(
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
         );
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
@@ -391,7 +407,11 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
   List<_SectionDef> get _sections => _sectionsFor(widget);
 
   static List<_SectionDef> _sectionsFor(PlayerMenuPanel w) => [
-    const _SectionDef(PlayerMenuSection.audio, Icons.graphic_eq_rounded, 'Audio'),
+    const _SectionDef(
+      PlayerMenuSection.audio,
+      Icons.graphic_eq_rounded,
+      'Audio',
+    ),
     const _SectionDef(
       PlayerMenuSection.subtitles,
       Icons.subtitles_rounded,
@@ -472,8 +492,9 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
     }
   }
 
-  static String _speedLabel(double v) =>
-      v == 1.0 ? 'Normal' : '${v.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '')}×';
+  static String _speedLabel(double v) => v == 1.0
+      ? 'Normal'
+      : '${v.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '')}×';
 
   static String _aspectLabel(AspectMode m) => switch (m) {
     AspectMode.contain => 'Contain',
@@ -636,17 +657,37 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
   }
 
   Future<void> _selectSubtitlesOff() async {
+    if (_applyingSubId != null) return;
     final realChange = _isRealSubtitleChange('no');
-    setState(() => _selectedSub = 'no');
-    await widget.onSubtitlesOff(_selectedAudio);
-    if (realChange) widget.onSubtitleTrackChanged?.call();
+    final previous = _selectedSub;
+    setState(() {
+      _selectedSub = 'no';
+      _applyingSubId = 'no';
+    });
+    final ok = await widget.onSubtitlesOff(_selectedAudio);
+    if (ok && realChange) widget.onSubtitleTrackChanged?.call();
+    if (!mounted) return;
+    setState(() {
+      _applyingSubId = null;
+      if (!ok) _selectedSub = previous;
+    });
   }
 
   Future<void> _selectEmbeddedSub(String id) async {
+    if (_applyingSubId != null) return;
     final realChange = _isRealSubtitleChange(id);
-    setState(() => _selectedSub = id);
-    await widget.onEmbeddedSubtitleSelected(id, _selectedAudio);
-    if (realChange) widget.onSubtitleTrackChanged?.call();
+    final previous = _selectedSub;
+    setState(() {
+      _selectedSub = id;
+      _applyingSubId = id;
+    });
+    final ok = await widget.onEmbeddedSubtitleSelected(id, _selectedAudio);
+    if (ok && realChange) widget.onSubtitleTrackChanged?.call();
+    if (!mounted) return;
+    setState(() {
+      _applyingSubId = null;
+      if (!ok) _selectedSub = previous;
+    });
   }
 
   Future<void> _selectAddonSub(StremioSubtitle sub) async {
@@ -726,7 +767,8 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
       rows.add(
         _MenuRow(
           label: 'Passthrough (AC3 · EAC3 · DTS)',
-          sublabel: 'Bitstream to your receiver. If you hear silence, '
+          sublabel:
+              'Bitstream to your receiver. If you hear silence, '
               'turn this off.',
           selected: _passthrough == true,
           onTap: () async {
@@ -738,7 +780,9 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
       );
     }
     if (widget.audioTracks.isEmpty) {
-      rows.add(const _MenuRow(label: 'No audio tracks in this file', note: true));
+      rows.add(
+        const _MenuRow(label: 'No audio tracks in this file', note: true),
+      );
     } else {
       for (final t in widget.audioTracks) {
         rows.add(
@@ -775,6 +819,7 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
       _MenuRow(
         label: 'Off',
         selected: _selectedSub == 'no',
+        loading: _applyingSubId == 'no',
         onTap: _selectSubtitlesOff,
       ),
     );
@@ -790,6 +835,7 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
           _MenuRow(
             label: t.label,
             selected: t.id == _selectedSub,
+            loading: _applyingSubId == t.id,
             onTap: () => _selectEmbeddedSub(t.id),
           ),
         );
@@ -798,13 +844,17 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
 
     final slots = _addonSlots;
     if (slots == null && _slotsFetchStarted) {
-      rows.add(const _MenuRow(label: 'Searching add-ons…', loading: true, note: true));
+      rows.add(
+        const _MenuRow(label: 'Searching add-ons…', loading: true, note: true),
+      );
     }
     for (final slot in slots ?? const <AddonSubtitleSlot>[]) {
       rows.add(_MenuRow(label: slot.addonName, header: true));
       switch (slot.status) {
         case AddonSubtitleStatus.loading:
-          rows.add(const _MenuRow(label: 'Fetching…', loading: true, note: true));
+          rows.add(
+            const _MenuRow(label: 'Fetching…', loading: true, note: true),
+          );
         case AddonSubtitleStatus.failed:
           rows.add(
             _MenuRow(
@@ -817,7 +867,10 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
         case AddonSubtitleStatus.ok:
           if (slot.subtitles.isEmpty) {
             rows.add(
-              const _MenuRow(label: 'No subtitles from this add-on', note: true),
+              const _MenuRow(
+                label: 'No subtitles from this add-on',
+                note: true,
+              ),
             );
           } else {
             for (final sub in slot.subtitles) {
@@ -1239,7 +1292,10 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SizedBox(width: compact ? 168 : 208, child: _buildRail()),
-                      Container(width: 0.75, color: _ink.withValues(alpha: 0.09)),
+                      Container(
+                        width: 0.75,
+                        color: _ink.withValues(alpha: 0.09),
+                      ),
                       Expanded(child: _buildValues()),
                     ],
                   ),
@@ -1299,7 +1355,8 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
             itemCount: sections.length,
             itemBuilder: (context, i) {
               final s = sections[i];
-              final focused = _dpadActive && _zone == _Zone.rail && i == _railIndex;
+              final focused =
+                  _dpadActive && _zone == _Zone.rail && i == _railIndex;
               final selected = _zone == _Zone.pane && i == _railIndex;
               return _RailRow(
                 icon: s.icon,
@@ -1362,12 +1419,13 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
                     itemBuilder: (context, i) {
                       final row = rows[i];
                       final key = row.focusable
-                          ? _paneRowKeys.putIfAbsent(
-                              (section.id, i),
-                              () => GlobalKey(),
-                            )
+                          ? _paneRowKeys.putIfAbsent((
+                              section.id,
+                              i,
+                            ), () => GlobalKey())
                           : null;
-                      final focused = _dpadActive &&
+                      final focused =
+                          _dpadActive &&
                           _zone == _Zone.pane &&
                           i == _valueIndex &&
                           row.focusable;
@@ -1465,7 +1523,11 @@ class _RailRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: fg.withValues(alpha: focused ? 1 : 0.75)),
+              Icon(
+                icon,
+                size: 16,
+                color: fg.withValues(alpha: focused ? 1 : 0.75),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

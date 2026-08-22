@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../models/stremio_addon.dart';
 import '../models/profiles/user_profile.dart';
 import '../utils/platform_util.dart';
+import '../utils/tvos_device.dart';
 import 'main_page_bridge.dart';
 import 'storage_service.dart';
 import 'stremio_service.dart';
@@ -52,8 +53,10 @@ class TvosTopShelfService {
       final raw = call.arguments;
       if (raw is Map) {
         final action = Map<String, dynamic>.from(raw);
-        _openTopShelfItem(action);
+        // Acknowledge BEFORE opening: if the open dies, the next launch must
+        // start clean instead of replaying the same crash.
         await _channel.invokeMethod<void>('clearPendingAction', action);
+        _openTopShelfItem(action);
       }
     });
 
@@ -94,6 +97,13 @@ class TvosTopShelfService {
       // ready; tvOS keeps showing this image-only version in the meantime.
       await _publishSnapshot(content);
       _lastSourceContent = contentJson;
+
+      // The 2-3 GB Apple TV generations keep the image-only Top Shelf: the
+      // 1080p AVAssetExportSession runs concurrently with the Home board's
+      // cold-start decode, and on the launch after a crash that combination
+      // repeats deterministically — the "crashes immediately every time now"
+      // half of the first-gen 4K report.
+      if (TvosDevice.isLowMemoryCached) return;
 
       // Serialize preview work across rapid Home reloads. A stale generation
       // exits before its next expensive operation, while an export already in

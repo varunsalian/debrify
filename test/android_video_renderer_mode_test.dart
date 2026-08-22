@@ -32,11 +32,11 @@ void main() {
   });
 
   test(
-    'storage defaults to direct surface and round-trips a selected mode',
+    'storage defaults to GPU MediaCodec and round-trips a selected mode',
     () async {
       expect(
         await StorageService.getAndroidVideoRendererMode(),
-        AndroidVideoRendererMode.directSurface,
+        AndroidVideoRendererMode.directMediaCodec,
       );
 
       await StorageService.setAndroidVideoRendererMode(
@@ -48,6 +48,25 @@ void main() {
       );
     },
   );
+
+  test('migrates the former direct-surface default only once', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'android_video_renderer_mode': 'direct_surface',
+    });
+
+    expect(
+      await StorageService.getAndroidVideoRendererMode(),
+      AndroidVideoRendererMode.directMediaCodec,
+    );
+
+    await StorageService.setAndroidVideoRendererMode(
+      AndroidVideoRendererMode.directSurface,
+    );
+    expect(
+      await StorageService.getAndroidVideoRendererMode(),
+      AndroidVideoRendererMode.directSurface,
+    );
+  });
 
   test('unknown stored values fall back to automatic', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{

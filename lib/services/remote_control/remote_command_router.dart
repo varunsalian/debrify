@@ -27,6 +27,7 @@ import '../../services/engine/local_engine_storage.dart';
 import '../../services/community/magnet_yaml_service.dart';
 import '../../services/debrify_tv_zip_importer.dart';
 import '../../services/iptv_transfer_payload.dart';
+import '../../services/debrify_tv_database.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/debrify_tv_cache_service.dart';
 import '../../models/debrify_tv_cache.dart';
@@ -82,6 +83,7 @@ class RemoteCommandRouter {
 
   // Registered command handlers
   final List<RemoteCommandCallback> _handlers = [];
+  final Set<Future<void>> _pendingRemoteTransferDispatches = {};
 
   // Chunk reassembly buffer for large channel transfers
   final Map<String, _ChunkBuffer> _chunkBuffers = {};
@@ -92,6 +94,32 @@ class RemoteCommandRouter {
   Timer? _profileRemoteExpiry;
   static const int _maxProfileRemotePayloadBytes = 16 * 1024 * 1024;
   static const Duration _profileRemotePayloadLifetime = Duration(minutes: 10);
+
+  // Completed v4 requests are retained briefly so a sender can safely retry
+  // a lost UDP completion packet without applying the same payload twice.
+  final Map<String, ({bool ok, String message, DateTime completedAt})>
+  _remoteTransferOutcomes = {};
+  final Set<String> _remoteTransfersInFlight = {};
+  String? _activeRemoteTransferRequestId;
+  String? _activeRemoteTransferPeer;
+  final Map<String, int> _activeRemoteTransferReceived = {};
+  static const Set<String> _remoteBatchCommands = <String>{
+    RemoteAction.addon,
+    ConfigCommand.realDebrid,
+    ConfigCommand.torbox,
+    ConfigCommand.premiumize,
+    ConfigCommand.allDebrid,
+    ConfigCommand.pikpak,
+    ConfigCommand.trakt,
+    ConfigCommand.simkl,
+    ConfigCommand.searchEngines,
+    ConfigCommand.webDav,
+    ConfigCommand.indexerManagers,
+    ConfigCommand.iptvPlaylists,
+    ConfigCommand.iptvFavorites,
+    ConfigCommand.iptvLists,
+  };
+  static const Duration _remoteTransferOutcomeLifetime = Duration(minutes: 5);
 
   // Navigator key for back navigation
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -306,7 +334,24 @@ class RemoteCommandRouter {
     String? data, {
     RemoteCommandContext context = RemoteCommandContext.plaintext,
   }) {
-    unawaited(_dispatchCommandAndWait(action, command, data, context));
+    final work = _dispatchCommandAndWait(action, command, data, context);
+    final transferWork =
+        (action == RemoteAction.config || action == RemoteAction.addon) &&
+        command != ConfigCommand.complete &&
+        command != ConfigCommand.remoteTransferResult &&
+        command != ConfigCommand.addonTransferResult &&
+        command != ConfigCommand.profileGraphResult &&
+        command != ConfigCommand.debrifyChannelNeed;
+    if (!transferWork) {
+      unawaited(work);
+      return;
+    }
+    late Future<void> tracked;
+    tracked = work.whenComplete(
+      () => _pendingRemoteTransferDispatches.remove(tracked),
+    );
+    _pendingRemoteTransferDispatches.add(tracked);
+    unawaited(tracked);
   }
 
   Future<void> _dispatchCommandAndWait(
@@ -354,28 +399,108 @@ class RemoteCommandRouter {
         ? ProfileFeature.remoteTransfer
         : ProfileFeature.remoteControl;
     final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
-    if (!ProfileRuntime.isProfileCommitted ||
-        ProfileRuntime.capture() != scope ||
-        profile == null ||
-        !profile.allows(feature) ||
-        !ProfileRemoteLease.instance.bindAuthenticatedPeer(
-          peerFingerprint: peerFingerprint,
-          sessionId: sessionId,
-          scope: scope,
-          currentProfile: profile,
-        ) ||
-        !ProfileRemoteLease.instance.allows(
-          feature,
-          scope,
-          currentProfile: profile,
-          peerFingerprint: peerFingerprint,
-          sessionId: sessionId,
-          rateLimit:
-              command != ConfigCommand.debrifyChannelStart &&
-              command != ConfigCommand.debrifyChannelChunk,
-        )) {
+    final runtimeCommitted = ProfileRuntime.isProfileCommitted;
+    final scopeCurrent = ProfileRuntime.capture() == scope;
+    final profilePresent = profile != null;
+    final featureAllowed = profile?.allows(feature) ?? false;
+    var peerBound =
+        runtimeCommitted && scopeCurrent && profilePresent && featureAllowed
+        ? ProfileRemoteLease.instance.bindAuthenticatedPeer(
+            peerFingerprint: peerFingerprint,
+            sessionId: sessionId,
+            scope: scope,
+            currentProfile: profile,
+          )
+        : false;
+    if (!peerBound &&
+        context.remembered &&
+        runtimeCommitted &&
+        scopeCurrent &&
+        profilePresent &&
+        featureAllowed) {
+      peerBound = ProfileRemoteLease.instance.renewRememberedPeerAfterRevision(
+        profile: profile,
+        scope: scope,
+        peerFingerprint: peerFingerprint,
+        sessionId: sessionId,
+      );
+    }
+    if (!peerBound &&
+        context.remembered &&
+        runtimeCommitted &&
+        scopeCurrent &&
+        profilePresent &&
+        featureAllowed) {
+      peerBound = ProfileRemoteLease.instance
+          .bindRememberedPeerAfterUnboundRevision(
+            profile: profile,
+            scope: scope,
+            peerFingerprint: peerFingerprint,
+            sessionId: sessionId,
+          );
+    }
+    final leaseAllowed = peerBound
+        ? ProfileRemoteLease.instance.allows(
+            feature,
+            scope,
+            currentProfile: profile!,
+            peerFingerprint: peerFingerprint,
+            sessionId: sessionId,
+            rateLimit:
+                command != ConfigCommand.remoteTransferStart &&
+                command != ConfigCommand.debrifyChannelStart &&
+                command != ConfigCommand.debrifyChannelChunk,
+          )
+        : false;
+    if (!runtimeCommitted ||
+        !scopeCurrent ||
+        !profilePresent ||
+        !featureAllowed ||
+        !peerBound ||
+        !leaseAllowed) {
       debugPrint('RemoteCommandRouter: local profile authorization required');
-      unawaited(context.reject?.call('profile_authorization_required'));
+      final completeRequestId = command == ConfigCommand.complete
+          ? parseRemoteTransferRequestBody(data)?.requestId ??
+                _addonTransferRequestId(data)
+          : null;
+      final channelRequestId = command == ConfigCommand.debrifyChannel
+          ? parseRemoteChannelTransferBody(data ?? '')?.requestId
+          : command == ConfigCommand.debrifyChannelStart
+          ? parseChunkResultRequestId(data)
+          : null;
+      final startRequestId = command == ConfigCommand.remoteTransferStart
+          ? parseRemoteTransferRequestBody(data)?.requestId
+          : null;
+      if (action == RemoteAction.config && completeRequestId != null) {
+        unawaited(
+          _reportCompleteTransferResultBestEffort(
+            context,
+            data,
+            ok: false,
+            message: 'TV profile authorization is required',
+          ),
+        );
+      } else if (action == RemoteAction.config && channelRequestId != null) {
+        unawaited(
+          _reportRemoteTransferResultBestEffort(
+            context,
+            requestId: channelRequestId,
+            ok: false,
+            message: 'TV profile authorization is required',
+          ),
+        );
+      } else if (action == RemoteAction.config && startRequestId != null) {
+        unawaited(
+          _reportRemoteTransferResultBestEffort(
+            context,
+            requestId: startRequestId,
+            ok: false,
+            message: 'TV profile authorization is required',
+          ),
+        );
+      } else {
+        unawaited(context.reject?.call('profile_authorization_required'));
+      }
       return;
     }
     await _dispatchAuthorized(
@@ -451,6 +576,12 @@ class RemoteCommandRouter {
     _ProfileCommandBinding? profileBinding,
   }) async {
     if (command == AddonCommand.install && data != null) {
+      final manifestUrl = _remoteTransferItemPayload(
+        RemoteAction.addon,
+        data,
+        context,
+      );
+      if (manifestUrl == null) return;
       // Same trust rule as config: an unauthorized encrypted send was already
       // bounced at the session layer; plaintext (v1 phone) needs the user to
       // approve it on this screen first.
@@ -458,36 +589,42 @@ class RemoteCommandRouter {
         if (_legacyApprovedFor(context.sourceIp)) {
           _markAuthorizedConfigActivity();
         } else {
-          _enqueueLegacy(_LegacyItem.addon(command, data), context.sourceIp);
+          _enqueueLegacy(
+            _LegacyItem.addon(command, manifestUrl),
+            context.sourceIp,
+          );
           return;
         }
       }
       _markAuthorizedConfigActivity();
+      _recordRemoteTransferCommand(RemoteAction.addon, context);
       if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
         final payload = _profilePayload(context, profileBinding);
         if (payload == null) return;
         final addons =
             (payload['addonManifestUrls'] as List<String>?) ?? <String>[];
-        if (!addons.contains(data)) addons.add(data);
+        if (!addons.contains(manifestUrl)) addons.add(manifestUrl);
         payload['addonManifestUrls'] = addons;
         if (!_profilePayloadWithinLimit(payload)) return;
         _showSnackBar('Addon staged for profile import');
         return;
       }
-      _notifyHandlers(RemoteAction.addon, command, data);
+      _notifyHandlers(RemoteAction.addon, command, manifestUrl);
       // Addons ride the SAME phone import as the config packets (one command
       // per addon), so they join the same collecting window — otherwise a
       // ten-addon setup still parades ten snackbars past.
       _beginOrExtendBatch();
       debugPrint('RemoteCommandRouter: installing addon');
-      try {
-        final addon = await StremioService.instance.addAddon(data);
-        debugPrint('RemoteCommandRouter: addon installed');
-        _showSnackBar('Addon installed: ${addon.name}');
-      } catch (_) {
-        debugPrint('RemoteCommandRouter: addon install failed');
-        _showSnackBar('Failed to install addon', isError: true);
-      }
+      await _trackConfigWork(() async {
+        try {
+          final addon = await StremioService.instance.addAddon(manifestUrl);
+          debugPrint('RemoteCommandRouter: addon installed');
+          _showSnackBar('Addon installed: ${addon.name}');
+        } catch (_) {
+          debugPrint('RemoteCommandRouter: addon install failed');
+          _showSnackBar('Failed to install addon', isError: true);
+        }
+      }());
     }
   }
 
@@ -670,50 +807,163 @@ class RemoteCommandRouter {
       debugPrint('RemoteCommandRouter: Handling config command: $command');
     }
 
+    if (command == ConfigCommand.remoteTransferStart) {
+      if (data == null || !_openRemoteTransfer(data, context)) {
+        final requestId = parseRemoteTransferRequestBody(data)?.requestId;
+        await _reportRemoteTransferResultBestEffort(
+          context,
+          requestId: requestId,
+          ok: false,
+          message: 'The TV could not start the configuration transfer',
+        );
+      }
+      return;
+    }
+
     // Handle complete signal (doesn't need data)
     if (command == ConfigCommand.complete) {
-      // `complete` can mark onboarding done and RESTART THE APP — honoring an
-      // unsolicited one is a LAN denial-of-service. It only counts after
-      // authorized config work landed recently over an approved transport.
-      final approvedTransport =
-          context.authorized || _legacyApprovedFor(context.sourceIp);
-      final lastWork = _lastAuthorizedConfigAt;
-      final recentWork =
-          lastWork != null &&
-          DateTime.now().difference(lastWork) < _authorizedActivityWindow;
-      if (!approvedTransport || !recentWork) {
-        // A v1 phone fires its whole burst — complete included — before the
-        // user can possibly answer the consent dialog. Park the signal with
-        // the burst; Allow replays it after the items, Deny drops it. Only a
-        // complete from the SAME source as the pending burst qualifies —
-        // anything else is unsolicited.
-        if ((_legacyBuffer.isNotEmpty || _legacyDialogShowing) &&
-            context.sourceIp != null &&
-            context.sourceIp == _legacyPeerIp) {
-          _enqueueLegacy(const _LegacyItem.complete(), context.sourceIp);
+      final transferRequest = parseRemoteTransferRequestBody(data);
+      final cachedOutcome = transferRequest == null
+          ? null
+          : _remoteTransferOutcomes[transferRequest.requestId];
+      if (cachedOutcome != null &&
+          DateTime.now().difference(cachedOutcome.completedAt) <=
+              _remoteTransferOutcomeLifetime) {
+        await _reportRemoteTransferResultBestEffort(
+          context,
+          requestId: transferRequest!.requestId,
+          ok: cachedOutcome.ok,
+          message: cachedOutcome.message,
+        );
+        return;
+      }
+      final transferRequestId = transferRequest?.requestId;
+      if (transferRequestId != null &&
+          !_remoteTransfersInFlight.add(transferRequestId)) {
+        return;
+      }
+      try {
+        // `complete` can mark onboarding done and RESTART THE APP — honoring an
+        // unsolicited one is a LAN denial-of-service. It only counts after
+        // authorized config work landed recently over an approved transport.
+        final approvedTransport =
+            context.authorized || _legacyApprovedFor(context.sourceIp);
+        final lastWork = _lastAuthorizedConfigAt;
+        final recentWork =
+            lastWork != null &&
+            DateTime.now().difference(lastWork) < _authorizedActivityWindow;
+        if (!approvedTransport || !recentWork) {
+          // A v1 phone fires its whole burst — complete included — before the
+          // user can possibly answer the consent dialog. Park the signal with
+          // the burst; Allow replays it after the items, Deny drops it. Only a
+          // complete from the SAME source as the pending burst qualifies —
+          // anything else is unsolicited.
+          if ((_legacyBuffer.isNotEmpty || _legacyDialogShowing) &&
+              context.sourceIp != null &&
+              context.sourceIp == _legacyPeerIp) {
+            _enqueueLegacy(const _LegacyItem.complete(), context.sourceIp);
+            return;
+          }
+          debugPrint(
+            'RemoteCommandRouter: Ignoring unsolicited complete signal',
+          );
+          await _reportCompleteTransferResultBestEffort(
+            context,
+            data,
+            ok: false,
+            message: 'The TV rejected the transfer completion',
+          );
           return;
         }
-        debugPrint('RemoteCommandRouter: Ignoring unsolicited complete signal');
-        return;
-      }
-      if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
-        final wasOnboarding = !(await StorageService.isInitialSetupComplete());
-        final applied = await _commitProfileRemotePayload(
-          context,
-          profileBinding,
-        );
-        if (wasOnboarding && applied) {
-          _notifyHandlers(RemoteAction.config, command, data);
-          await _handleConfigComplete(wasOnboardingOverride: true);
+        // Readiness is receiver-owned. Commands that arrived before this
+        // packet may still be awaiting profile authorization, and chunk gaps
+        // are not requested until the receiver's repair stall elapses. Drain
+        // both phases before deciding whether the manifest is incomplete.
+        await _awaitInFlightConfigWork();
+        if (transferRequest != null &&
+            !_activeRemoteTransferContainsExpected(
+              transferRequest.requestId,
+              transferRequest.expected,
+              context,
+            )) {
+          // A delayed completion from an interrupted request must not erase
+          // the newer transaction that currently owns the staging buffer.
+          if (_activeRemoteTransferMatches(
+            transferRequest.requestId,
+            context,
+          )) {
+            clearProfileTransferBuffer();
+          }
+          await _reportRemoteTransferResultBestEffort(
+            context,
+            requestId: transferRequest.requestId,
+            ok: false,
+            message: 'Some configuration packets did not reach the TV',
+          );
+          _showSnackBar(
+            'Configuration transfer was incomplete — send it again',
+            isError: true,
+          );
+          return;
         }
-        return;
+        if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
+          if (transferRequest != null &&
+              !_profilePayloadContainsExpected(transferRequest.expected)) {
+            clearProfileTransferBuffer();
+            await _reportRemoteTransferResultBestEffort(
+              context,
+              requestId: transferRequest.requestId,
+              ok: false,
+              message: 'Some configuration packets did not reach the TV',
+            );
+            _showSnackBar(
+              'Configuration transfer was incomplete — send it again',
+              isError: true,
+            );
+            return;
+          }
+          final wasOnboarding =
+              !(await StorageService.isInitialSetupComplete());
+          final applied = await _commitProfileRemotePayload(
+            context,
+            profileBinding,
+          );
+          await _reportCompleteTransferResultBestEffort(
+            context,
+            data,
+            ok: applied,
+            message: applied
+                ? 'Configuration applied on TV'
+                : 'The TV did not apply the configuration',
+          );
+          if (wasOnboarding && applied) {
+            _notifyHandlers(RemoteAction.config, command, data);
+            await _handleConfigComplete(wasOnboardingOverride: true);
+          }
+          return;
+        }
+        _notifyHandlers(RemoteAction.config, command, data);
+        // Imports run as their packets arrive, and this signal restarts the app
+        // moments later. A large IPTV list is hundreds of SQLite writes, so
+        // restarting without waiting would leave it half-imported.
+        final applied = _batchFailed.isEmpty && _batchOk.isNotEmpty;
+        await _reportCompleteTransferResultBestEffort(
+          context,
+          data,
+          ok: applied,
+          message: applied
+              ? 'Configuration applied on TV'
+              : 'Some configuration items failed on TV',
+        );
+        await _handleConfigComplete();
+      } finally {
+        if (transferRequestId != null) {
+          _remoteTransfersInFlight.remove(transferRequestId);
+          if (_activeRemoteTransferRequestId == transferRequestId) {
+            _clearActiveRemoteTransfer();
+          }
+        }
       }
-      _notifyHandlers(RemoteAction.config, command, data);
-      // Imports run as their packets arrive, and this signal restarts the app
-      // moments later. A large IPTV list is hundreds of SQLite writes, so
-      // restarting without waiting would leave it half-imported.
-      await _awaitInFlightConfigWork();
-      await _handleConfigComplete();
       return;
     }
 
@@ -744,6 +994,9 @@ class RemoteCommandRouter {
       return;
     }
 
+    final commandData = _remoteTransferItemPayload(command, data, context);
+    if (commandData == null) return;
+
     // Chunk-transport packets only file bytes into a buffer — the payload
     // they carry hits these gates again when it replays after reassembly.
     final isTransport =
@@ -753,12 +1006,17 @@ class RemoteCommandRouter {
       if (_legacyApprovedFor(context.sourceIp)) {
         _markAuthorizedConfigActivity();
       } else {
-        _enqueueLegacy(_LegacyItem.config(command, data), context.sourceIp);
+        _enqueueLegacy(
+          _LegacyItem.config(command, commandData),
+          context.sourceIp,
+        );
         return;
       }
     } else if (!isTransport) {
       _markAuthorizedConfigActivity();
     }
+
+    _recordRemoteTransferCommand(command, context);
 
     if (ProfileRuntime.isInitialized &&
         ProfileRuntime.isProfileCommitted &&
@@ -777,7 +1035,12 @@ class RemoteCommandRouter {
         // A profile graph is its own atomic import path (restoreDeviceGraph)
         // with its own confirmation — never a staged category.
         command != ConfigCommand.profileGraph) {
-      if (!_bufferProfileConfig(command, data, context, profileBinding)) {
+      if (!_bufferProfileConfig(
+        command,
+        commandData,
+        context,
+        profileBinding,
+      )) {
         return;
       }
       _showSnackBar('Configuration staged for profile import');
@@ -785,13 +1048,18 @@ class RemoteCommandRouter {
     }
 
     // Past the gates — NOW the observers may hear about it.
-    _notifyHandlers(RemoteAction.config, command, data);
+    _notifyHandlers(RemoteAction.config, command, commandData);
 
     // Opened BEFORE the work starts, so the snackbar that work raises when it
     // finishes is banked rather than shown.
     _beginOrExtendBatch();
     await _trackConfigWork(
-      _dispatchConfigCommand(command, data, context: context),
+      _dispatchConfigCommand(
+        command,
+        commandData,
+        context: context,
+        profileBinding: profileBinding,
+      ),
     );
   }
 
@@ -815,18 +1083,32 @@ class RemoteCommandRouter {
     final state = RemoteControlState();
     final session = state.sessionManager?.sessionBySid(sidB64);
     if (session == null || !session.authorized) return false;
-    return state.sendEncryptedCommand(
-      session,
-      RemoteCommand(
-        action: RemoteAction.config,
-        command: ConfigCommand.profileGraphResult,
-        data: profileGraphResultBody(
-          requestId: requestId,
-          ok: ok,
-          message: message,
-        ),
-      ),
-    );
+    var sent = false;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+      try {
+        sent =
+            await state.sendEncryptedCommand(
+              session,
+              RemoteCommand(
+                action: RemoteAction.config,
+                command: ConfigCommand.profileGraphResult,
+                data: profileGraphResultBody(
+                  requestId: requestId,
+                  ok: ok,
+                  message: message,
+                ),
+              ),
+            ) ||
+            sent;
+      } catch (_) {
+        // A later attempt can still reach the sender if the profile/session
+        // authorization race that rejected this one settles safely.
+      }
+    }
+    return sent;
   }
 
   Future<bool> _runBestEffortProfileGraphResult(
@@ -857,6 +1139,130 @@ class RemoteCommandRouter {
         ok: ok,
         message: message,
       ),
+    );
+  }
+
+  String? _addonTransferRequestId(String? data) {
+    if (data == null || data.isEmpty || data.length > 128) return null;
+    return data;
+  }
+
+  Future<bool> _reportAddonTransferResultBestEffort(
+    RemoteCommandContext remoteContext, {
+    required String? requestId,
+    required bool ok,
+  }) async {
+    if (requestId == null) return false;
+    try {
+      final sidB64 = remoteContext.sidB64;
+      if (sidB64 == null) return false;
+      final state = RemoteControlState();
+      final session = state.sessionManager?.sessionBySid(sidB64);
+      if (session == null || !session.authorized) return false;
+      var sent = false;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
+        try {
+          sent =
+              await state.sendEncryptedCommand(
+                session,
+                RemoteCommand(
+                  action: RemoteAction.config,
+                  command: ConfigCommand.addonTransferResult,
+                  data: addonTransferResultBody(requestId: requestId, ok: ok),
+                ),
+              ) ||
+              sent;
+        } catch (_) {
+          // Best effort; retain an earlier success and keep retrying.
+        }
+      }
+      return sent;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _reportRemoteTransferResultBestEffort(
+    RemoteCommandContext remoteContext, {
+    required String? requestId,
+    required bool ok,
+    required String message,
+  }) async {
+    if (requestId == null) return false;
+    final now = DateTime.now();
+    _remoteTransferOutcomes.removeWhere(
+      (_, outcome) =>
+          now.difference(outcome.completedAt) > _remoteTransferOutcomeLifetime,
+    );
+    while (_remoteTransferOutcomes.length >= 256) {
+      _remoteTransferOutcomes.remove(_remoteTransferOutcomes.keys.first);
+    }
+    _remoteTransferOutcomes[requestId] = (
+      ok: ok,
+      message: message,
+      completedAt: now,
+    );
+    try {
+      final sidB64 = remoteContext.sidB64;
+      if (sidB64 == null) return false;
+      final state = RemoteControlState();
+      final session = state.sessionManager?.sessionBySid(sidB64);
+      if (session == null || !session.authorized) return false;
+      var sent = false;
+      // The result is also UDP. Repeat it with fresh encrypted counters so a
+      // single lost datagram cannot turn an applied transfer into a timeout
+      // on the phone; request correlation makes duplicates harmless.
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
+        try {
+          sent =
+              await state.sendEncryptedCommand(
+                session,
+                RemoteCommand(
+                  action: RemoteAction.config,
+                  command: ConfigCommand.remoteTransferResult,
+                  data: remoteTransferResultBody(
+                    requestId: requestId,
+                    ok: ok,
+                    message: message,
+                  ),
+                ),
+              ) ||
+              sent;
+        } catch (_) {
+          // Best effort; retain an earlier success and keep retrying.
+        }
+      }
+      return sent;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _reportCompleteTransferResultBestEffort(
+    RemoteCommandContext remoteContext,
+    String? data, {
+    required bool ok,
+    required String message,
+  }) {
+    final remoteRequest = parseRemoteTransferRequestBody(data);
+    if (remoteRequest != null) {
+      return _reportRemoteTransferResultBestEffort(
+        remoteContext,
+        requestId: remoteRequest.requestId,
+        ok: ok,
+        message: message,
+      );
+    }
+    return _reportAddonTransferResultBestEffort(
+      remoteContext,
+      requestId: _addonTransferRequestId(data),
+      ok: ok,
     );
   }
 
@@ -1286,7 +1692,18 @@ class RemoteCommandRouter {
     final code = requestId == null
         ? 'avatar_$result'
         : 'profile_avatar:$requestId:$result';
-    await reply(code);
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+      try {
+        await reply(code);
+      } catch (_) {
+        // Applying the avatar is already durable. A failed best-effort reply
+        // must not fall into the outer apply-failed handler and contradict a
+        // success packet that may already have reached the phone.
+      }
+    }
   }
 
   @visibleForTesting
@@ -1393,6 +1810,133 @@ class RemoteCommandRouter {
     return false;
   }
 
+  bool _profilePayloadContainsExpected(Map<String, int> expected) {
+    if (expected.isEmpty) return true;
+    final payload = _profileRemotePayload;
+    if (payload == null) return false;
+    const payloadKeys = <String, String>{
+      ConfigCommand.realDebrid: 'realDebridApiKey',
+      ConfigCommand.torbox: 'torboxApiKey',
+      ConfigCommand.premiumize: 'premiumizeApiKey',
+      ConfigCommand.allDebrid: 'allDebridApiKey',
+      ConfigCommand.pikpak: 'pikpak',
+      ConfigCommand.trakt: 'trakt',
+      ConfigCommand.simkl: 'simkl',
+      ConfigCommand.searchEngines: 'searchEngineIds',
+      ConfigCommand.webDav: 'webDavServers',
+      ConfigCommand.indexerManagers: 'indexerManagers',
+      ConfigCommand.iptvPlaylists: 'iptvPlaylists',
+      ConfigCommand.iptvFavorites: 'iptvFavorites',
+      ConfigCommand.iptvLists: 'iptvLists',
+    };
+    for (final entry in expected.entries) {
+      if (entry.key == RemoteAction.addon) {
+        final addons = payload['addonManifestUrls'];
+        if (addons is! List || addons.length < entry.value) return false;
+        continue;
+      }
+      final payloadKey = payloadKeys[entry.key];
+      if (payloadKey == null || !payload.containsKey(payloadKey)) return false;
+    }
+    return true;
+  }
+
+  bool _openRemoteTransfer(String data, RemoteCommandContext context) {
+    final request = parseRemoteTransferRequestBody(data);
+    final peer = _profilePeerKey(context);
+    if (request == null || peer == null) return false;
+    if (_activeRemoteTransferRequestId == request.requestId &&
+        _activeRemoteTransferPeer == peer) {
+      _markAuthorizedConfigActivity();
+      return true;
+    }
+    if (_remoteTransfersInFlight.isNotEmpty || _applyingRemotePayload) {
+      return false;
+    }
+
+    // A different request is a new transaction even when it comes from the
+    // same remembered peer/session. Discard anything its predecessor staged
+    // so missing packets cannot be satisfied by ten-minute-old values.
+    clearProfileTransferBuffer();
+    _batchIdleTimer?.cancel();
+    _batchIdleTimer = null;
+    _batching = false;
+    _batchOk.clear();
+    _batchFailed.clear();
+    _activeRemoteTransferRequestId = request.requestId;
+    _activeRemoteTransferPeer = peer;
+    _activeRemoteTransferReceived.clear();
+    _markAuthorizedConfigActivity();
+    return true;
+  }
+
+  void _recordRemoteTransferCommand(
+    String command,
+    RemoteCommandContext context,
+  ) {
+    if (!_remoteBatchCommands.contains(command) ||
+        _activeRemoteTransferPeer != _profilePeerKey(context)) {
+      return;
+    }
+    _activeRemoteTransferReceived.update(
+      command,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+  }
+
+  String? _remoteTransferItemPayload(
+    String command,
+    String data,
+    RemoteCommandContext context,
+  ) {
+    if (!_remoteBatchCommands.contains(command)) return data;
+    final item = parseRemoteTransferItemBody(data);
+    final activeRequestId = _activeRemoteTransferRequestId;
+    final activePeer = _activeRemoteTransferPeer;
+
+    // Raw item bodies remain valid for older, non-transactional senders. A
+    // wrapped item is meaningful only while its matching transaction is open.
+    if (activeRequestId == null || activePeer == null) {
+      return item == null ? data : null;
+    }
+    if (item == null ||
+        item.requestId != activeRequestId ||
+        activePeer != _profilePeerKey(context)) {
+      return null;
+    }
+    return item.payload;
+  }
+
+  bool _activeRemoteTransferContainsExpected(
+    String requestId,
+    Map<String, int> expected,
+    RemoteCommandContext context,
+  ) {
+    if (!_activeRemoteTransferMatches(requestId, context) || expected.isEmpty) {
+      return false;
+    }
+    for (final entry in expected.entries) {
+      if ((_activeRemoteTransferReceived[entry.key] ?? 0) < entry.value) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _activeRemoteTransferMatches(
+    String requestId,
+    RemoteCommandContext context,
+  ) =>
+      _activeRemoteTransferRequestId == requestId &&
+      _activeRemoteTransferPeer == _profilePeerKey(context);
+
+  void _clearActiveRemoteTransfer() {
+    _activeRemoteTransferRequestId = null;
+    _activeRemoteTransferPeer = null;
+    _activeRemoteTransferReceived.clear();
+  }
+
   static String? _profilePeerKey(RemoteCommandContext context) {
     if (context.encrypted) {
       final fingerprint = context.peerFingerprint;
@@ -1412,6 +1956,7 @@ class RemoteCommandRouter {
     _profileRemotePayload = null;
     _profileRemoteBinding = null;
     _profileRemotePeer = null;
+    _clearActiveRemoteTransfer();
   }
 
   void clearProfileSessionState() {
@@ -1439,6 +1984,10 @@ class RemoteCommandRouter {
   Object? debugProfileTransferValue(String key) => _profileRemotePayload?[key];
 
   @visibleForTesting
+  bool debugProfilePayloadContainsExpected(Map<String, int> expected) =>
+      _profilePayloadContainsExpected(expected);
+
+  @visibleForTesting
   ProfileScope? get debugProfileTransferScope => _profileRemoteBinding?.scope;
 
   @visibleForTesting
@@ -1454,12 +2003,16 @@ class RemoteCommandRouter {
     _ProfileCommandBinding? binding,
   ) async {
     final payload = _profileRemotePayload;
+    final bindingMatches = binding != null && _profileRemoteBinding == binding;
+    final peerMatches = _profileRemotePeer == _profilePeerKey(remoteContext);
+    final scopeMatches =
+        binding != null && ProfileRuntime.capture() == binding.scope;
     if (payload == null ||
         payload.length <= 2 ||
         binding == null ||
-        _profileRemoteBinding != binding ||
-        _profileRemotePeer != _profilePeerKey(remoteContext) ||
-        ProfileRuntime.capture() != binding.scope) {
+        !bindingMatches ||
+        !peerMatches ||
+        !scopeMatches) {
       _showSnackBar('No profile configuration received', isError: true);
       return false;
     }
@@ -1573,14 +2126,32 @@ class RemoteCommandRouter {
         // per-item application instead of all-or-nothing, which remote
         // transfers tolerate by construction: they are idempotent, and a
         // resend converges.
-        await _applyProfileRemotePayload(payload, binding);
+        final allApplied = await _applyProfileRemotePayload(payload, binding);
+        final updatedProfile = await ProfileBootstrap.registry.getProfile(
+          binding.scope.profileId,
+        );
+        final peerFingerprint = remoteContext.peerFingerprint;
+        final sessionId = remoteContext.sidB64;
+        final currentScope = ProfileRuntime.capture();
+        if (updatedProfile == null ||
+            peerFingerprint == null ||
+            sessionId == null ||
+            currentScope != binding.scope ||
+            !ProfileRemoteLease.instance.reauthorizeApprovedPeer(
+              profile: updatedProfile,
+              scope: currentScope,
+              peerFingerprint: peerFingerprint,
+              sessionId: sessionId,
+            )) {
+          throw StateError('Approved remote peer could not be reauthorized');
+        }
+        return allApplied;
       } finally {
         _applyingRemotePayload = false;
       }
-      return true;
     } catch (_) {
-      // Reachable only from the pre-write validations above; the apply loop
-      // itself never throws. Keep the wording survivable either way.
+      // The apply loop banks item failures, but post-write lease refresh can
+      // still fail if the destination changes at the end of the import.
       _showSnackBar(
         'Profile import stopped — nothing further was applied',
         isError: true,
@@ -1598,7 +2169,7 @@ class RemoteCommandRouter {
   /// NAMED failure snackbar into the batch, and the single flush at the end
   /// is the honest summary — "2 failed (Real-Debrid, PikPak)" beats any
   /// counter this function could keep.
-  Future<void> _applyProfileRemotePayload(
+  Future<bool> _applyProfileRemotePayload(
     Map<String, dynamic> payload,
     _ProfileCommandBinding binding,
   ) async {
@@ -1615,6 +2186,7 @@ class RemoteCommandRouter {
     _batchIdleTimer?.cancel();
     _batchIdleTimer = null;
     var destinationLost = false;
+    var hadFailure = false;
     Future<void> apply(String label, Future<void> Function() body) async {
       if (destinationLost) return;
       // The confirm dialog authorized THIS profile. Handlers capture the
@@ -1635,6 +2207,7 @@ class RemoteCommandRouter {
       try {
         await body();
       } catch (_) {
+        hadFailure = true;
         // Handlers bank their own named failures; this catch only covers
         // throws that escape them (and the addon path below).
         debugPrint('RemoteCommandRouter: applying $label failed');
@@ -1700,6 +2273,7 @@ class RemoteCommandRouter {
     } finally {
       _flushBatch(prefix: 'Transfer applied');
     }
+    return !destinationLost && !hadFailure;
   }
 
   Future<bool> _validateRemoteBinding(
@@ -1903,6 +2477,22 @@ class RemoteCommandRouter {
   }
 
   Future<void> _awaitInFlightConfigWork() async {
+    Future<void> drainPendingDispatches() async {
+      while (_pendingRemoteTransferDispatches.isNotEmpty) {
+        try {
+          await Future.wait(_pendingRemoteTransferDispatches.toList());
+        } catch (_) {
+          // Individual handlers report their own failure.
+        }
+      }
+    }
+
+    // Registration happens synchronously in [dispatchCommand], before any
+    // profile lookup or handler await. Drain it first so a chunk start that
+    // has already arrived gets a chance to create its buffer before the
+    // buffer-repair phase below checks for one.
+    await drainPendingDispatches();
+
     // A chunked transfer that hasn't finished arriving is NOT in-flight work
     // yet — each chunk's handler completes the moment it files the piece, and
     // the real import only starts on the last one. Restarting now would throw
@@ -1922,6 +2512,11 @@ class RemoteCommandRouter {
       );
     }
 
+    // Repair replies arrive as new dispatches. The final chunk removes its
+    // buffer before it decrypts/replays the payload, so drain again to wait
+    // for that replay and its actual import to finish.
+    await drainPendingDispatches();
+
     // Drain rather than waiting on one snapshot: the final packet's import can
     // still be running, and it can start further work as it finishes.
     while (_inFlightConfigWork.isNotEmpty) {
@@ -1938,6 +2533,7 @@ class RemoteCommandRouter {
     String command,
     String data, {
     RemoteCommandContext context = RemoteCommandContext.plaintext,
+    _ProfileCommandBinding? profileBinding,
   }) async {
     switch (command) {
       case ConfigCommand.realDebrid:
@@ -1980,7 +2576,7 @@ class RemoteCommandRouter {
         await _handleIptvListsConfig(data);
         break;
       case ConfigCommand.debrifyChannel:
-        await _handleDebrifyChannelConfig(data);
+        await _handleDebrifyChannelConfig(data, context, profileBinding);
         break;
       case ConfigCommand.profileAvatar:
         await _handleProfileAvatarConfig(data, context);
@@ -2588,7 +3184,28 @@ class RemoteCommandRouter {
   }
 
   /// Handle Debrify TV channel import from remote
-  Future<void> _handleDebrifyChannelConfig(String debrifyUri) async {
+  Future<void> _handleDebrifyChannelConfig(
+    String data,
+    RemoteCommandContext context,
+    _ProfileCommandBinding? profileBinding,
+  ) async {
+    final request = parseRemoteChannelTransferBody(data);
+    final requestId = request?.requestId;
+    final debrifyUri = request?.uri ?? data;
+    final cachedOutcome = requestId == null
+        ? null
+        : _remoteTransferOutcomes[requestId];
+    if (cachedOutcome != null &&
+        DateTime.now().difference(cachedOutcome.completedAt) <=
+            _remoteTransferOutcomeLifetime) {
+      await _reportRemoteTransferResultBestEffort(
+        context,
+        requestId: requestId,
+        ok: cachedOutcome.ok,
+        message: cachedOutcome.message,
+      );
+      return;
+    }
     try {
       debugPrint('RemoteCommandRouter: Importing Debrify TV channel...');
 
@@ -2601,48 +3218,73 @@ class RemoteCommandRouter {
         content: decoded.yamlContent,
       );
 
-      // 3. Reuse existing channelId if a channel with the same name exists
-      final existingChannels = await DebrifyTvRepository.instance
-          .fetchAllChannels();
-      final existingMatch = existingChannels
-          .where(
-            (c) => c.name.toLowerCase() == parsed.channelName.toLowerCase(),
-          )
-          .firstOrNull;
-      final channelId =
-          existingMatch?.channelId ??
-          DateTime.now().microsecondsSinceEpoch.toString();
-      final now = DateTime.now();
+      if (profileBinding != null &&
+          !await _validateRemoteBinding(
+            context,
+            profileBinding,
+            ProfileFeature.remoteTransfer,
+          )) {
+        throw StateError('Remote transfer authorization expired');
+      }
 
-      final record = DebrifyTvChannelRecord(
-        channelId: channelId,
-        name: parsed.channelName,
-        keywords: parsed.displayKeywords,
-        avoidNsfw: parsed.avoidNsfw,
-        channelNumber: 0,
-        createdAt: now,
-        updatedAt: now,
-      );
+      // 3. Keep lookup, channel write, and cache write on the one profile DB
+      // admitted here. A profile switch waits for this scope to drain instead
+      // of redirecting a later await into the newly active profile.
+      await DebrifyTvDatabase.instance.runScoped((_) async {
+        final existingChannels = await DebrifyTvRepository.instance
+            .fetchAllChannels();
+        final existingMatch = existingChannels
+            .where(
+              (c) => c.name.toLowerCase() == parsed.channelName.toLowerCase(),
+            )
+            .firstOrNull;
+        final channelId =
+            existingMatch?.channelId ??
+            DateTime.now().microsecondsSinceEpoch.toString();
+        final now = DateTime.now();
 
-      final entry = DebrifyTvChannelCacheEntry(
-        version: 1,
-        channelId: channelId,
-        normalizedKeywords: parsed.normalizedKeywords,
-        fetchedAt: now.millisecondsSinceEpoch,
-        status: DebrifyTvCacheStatus.ready,
-        errorMessage: null,
-        torrents: parsed.torrents,
-        keywordStats: parsed.keywordStats,
-      );
+        final record = DebrifyTvChannelRecord(
+          channelId: channelId,
+          name: parsed.channelName,
+          keywords: parsed.displayKeywords,
+          avoidNsfw: parsed.avoidNsfw,
+          channelNumber: 0,
+          createdAt: now,
+          updatedAt: now,
+        );
 
-      await DebrifyTvRepository.instance.upsertChannel(record);
-      await DebrifyTvCacheService.saveEntry(entry);
+        final entry = DebrifyTvChannelCacheEntry(
+          version: 1,
+          channelId: channelId,
+          normalizedKeywords: parsed.normalizedKeywords,
+          fetchedAt: now.millisecondsSinceEpoch,
+          status: DebrifyTvCacheStatus.ready,
+          errorMessage: null,
+          torrents: parsed.torrents,
+          keywordStats: parsed.keywordStats,
+        );
+
+        await DebrifyTvRepository.instance.upsertChannel(record);
+        await DebrifyTvCacheService.saveEntry(entry);
+      });
 
       debugPrint('RemoteCommandRouter: channel imported');
       _showSnackBar('Channel imported: ${parsed.channelName}');
+      await _reportRemoteTransferResultBestEffort(
+        context,
+        requestId: requestId,
+        ok: true,
+        message: 'Channel imported on TV',
+      );
     } catch (_) {
       debugPrint('RemoteCommandRouter: channel import failed');
       _showSnackBar('Failed to import channel', isError: true);
+      await _reportRemoteTransferResultBestEffort(
+        context,
+        requestId: requestId,
+        ok: false,
+        message: 'The TV could not import the channel',
+      );
     }
   }
 
@@ -2660,6 +3302,7 @@ class RemoteCommandRouter {
       final kind = (data['kind'] as String?) ?? ConfigCommand.debrifyChannel;
       final encrypted = data['enc'] == 1;
       final sid = data['sid'] as String?;
+      final resultRequestId = data['resultRequestId'] as String?;
       final peer = _profilePeerKey(context);
 
       if (transferId.isEmpty ||
@@ -2670,6 +3313,8 @@ class RemoteCommandRouter {
               _maxProfileRemotePayloadBytes ~/ kChunkRawBytesPerChunk + 1 ||
           peer == null ||
           encrypted != context.encrypted ||
+          (resultRequestId != null &&
+              (resultRequestId.isEmpty || resultRequestId.length > 128)) ||
           (encrypted && (!context.authorized || sid != context.sidB64))) {
         throw const FormatException('Invalid chunk transfer envelope');
       }
@@ -2722,6 +3367,8 @@ class RemoteCommandRouter {
         // match the complete packet arriving from the real address.
         sourceIp: context.sourceIp,
         peerKey: peer,
+        remembered: context.remembered,
+        resultRequestId: resultRequestId,
       );
       _chunkBuffers[transferId] = buffer;
       _armChunkTimeout(transferId, buffer);
@@ -2769,6 +3416,12 @@ class RemoteCommandRouter {
         debugPrint('RemoteCommandRouter: chunk transfer stalled beyond repair');
         _chunkBuffers.remove(transferId);
         _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
+        unawaited(
+          _reportChunkFailure(
+            buffer,
+            'Transfer timed out before the TV could import it',
+          ),
+        );
         return;
       }
       buffer.repairRounds++;
@@ -2802,6 +3455,7 @@ class RemoteCommandRouter {
     String jsonData,
     RemoteCommandContext context,
   ) async {
+    _ChunkBuffer? failedBuffer;
     try {
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
       final transferId = data['transferId'] as String;
@@ -2813,6 +3467,7 @@ class RemoteCommandRouter {
         debugPrint('RemoteCommandRouter: chunk has no active buffer');
         return;
       }
+      failedBuffer = buffer;
 
       if (_profilePeerKey(context) != buffer.peerKey ||
           context.encrypted != buffer.encrypted ||
@@ -2876,6 +3531,17 @@ class RemoteCommandRouter {
       }
     } catch (_) {
       debugPrint('RemoteCommandRouter: chunk handling failed');
+      final buffer = failedBuffer;
+      if (buffer != null) {
+        buffer.timeout?.cancel();
+        _chunkBuffers.removeWhere(
+          (_, candidate) => identical(candidate, buffer),
+        );
+        await _reportChunkFailure(
+          buffer,
+          'The TV could not reassemble the transfer',
+        );
+      }
     }
   }
 
@@ -2891,6 +3557,7 @@ class RemoteCommandRouter {
     final n = buffer.blobN;
     if (manager == null || sidB64 == null || n == null) {
       debugPrint('RemoteCommandRouter: Encrypted blob missing session fields');
+      await _reportChunkFailure(buffer, 'Transfer session data was incomplete');
       return;
     }
     final session = manager.sessionBySid(sidB64);
@@ -2900,10 +3567,12 @@ class RemoteCommandRouter {
         'Transfer failed: session expired — send again',
         isError: true,
       );
+      await _reportChunkFailure(buffer, 'Transfer session expired on TV');
       return;
     }
     if (!session.authorized) {
       debugPrint('RemoteCommandRouter: Dropping blob on unauthorized session');
+      await _reportChunkFailure(buffer, 'Transfer session was not authorized');
       return;
     }
     final plaintext = await RemoteSessionCrypto.openBlob(
@@ -2919,6 +3588,10 @@ class RemoteCommandRouter {
         'Transfer failed: could not decrypt ${buffer.label}',
         isError: true,
       );
+      await _reportChunkFailure(
+        buffer,
+        'The TV could not decrypt the transfer',
+      );
       return;
     }
     if (!session.acceptBlob(n)) {
@@ -2932,6 +3605,7 @@ class RemoteCommandRouter {
       RemoteCommandContext(
         encrypted: true,
         authorized: true,
+        remembered: buffer.remembered,
         sidB64: session.sidB64,
         peerFingerprint: session.peerFingerprint,
         peerName: session.peerName,
@@ -2947,6 +3621,31 @@ class RemoteCommandRouter {
           );
         },
       ),
+    );
+  }
+
+  Future<bool> _reportChunkFailure(_ChunkBuffer buffer, String message) {
+    final requestId = buffer.resultRequestId;
+    final sid = buffer.sidB64;
+    if (requestId == null || sid == null) return Future<bool>.value(false);
+    final state = RemoteControlState();
+    final session = state.sessionManager?.sessionBySid(sid);
+    if (session == null || !session.authorized) {
+      return Future<bool>.value(false);
+    }
+    return _reportRemoteTransferResultBestEffort(
+      RemoteCommandContext(
+        encrypted: true,
+        authorized: true,
+        remembered: buffer.remembered,
+        sidB64: session.sidB64,
+        peerFingerprint: session.peerFingerprint,
+        peerName: session.peerName,
+        sourceIp: buffer.sourceIp,
+      ),
+      requestId: requestId,
+      ok: false,
+      message: message,
     );
   }
 
@@ -3285,6 +3984,8 @@ class _ChunkBuffer {
   /// reassembled payload replays under the sender's consent identity.
   final String? sourceIp;
   final String peerKey;
+  final bool remembered;
+  final String? resultRequestId;
 
   /// Restarted on every chunk that arrives: the deadline is for a *stalled*
   /// transfer, not a slow one. A large payload is paced at 50ms per chunk, so
@@ -3308,6 +4009,8 @@ class _ChunkBuffer {
     this.blobN,
     this.sourceIp,
     required this.peerKey,
+    this.remembered = false,
+    this.resultRequestId,
   });
 }
 

@@ -95,6 +95,7 @@ import 'widgets/remote/remote_pairing_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
+import 'utils/tvos_device.dart';
 import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
@@ -141,6 +142,13 @@ Future<void> _capImageCache() async {
   // overlaps; the cache evicts older artwork rather than expanding resident
   // memory on a constrained TV box.
   cache.maximumSizeBytes = 56 << 20; // 56 MB
+  if (TvosDevice.isLowMemoryCached) {
+    // The 2-3 GB Apple TV generations get roughly half the jetsam budget of
+    // a modern unit; these devices also decode at the performance artwork
+    // size, so the smaller cache still holds a full screen of cards.
+    cache.maximumSize = 100;
+    cache.maximumSizeBytes = 36 << 20; // 36 MB
+  }
 }
 
 // The TV-aware page transition moved to `theme/app_theme_adapter.dart`
@@ -616,6 +624,13 @@ Future<void> _continueApplicationStartup() async {
   // Compass for one frame.
   try {
     await StorageService.getParentsGuideStyle();
+  } catch (_) {}
+  // Apple TV hardware generation, warmed FIRST because everything below keys
+  // off it: the artwork decode bounds, the image-cache cap, the Home board's
+  // ambient trailer, and the Top Shelf preview exporter all downshift on the
+  // 2-3 GB units (Apple TV HD, and both the 2017 and 2021 4K models).
+  try {
+    await TvosDevice.warm();
   } catch (_) {}
   // Resolve TV hero decode bounds before first paint. Otherwise a stored Full
   // HD choice would first decode the default smaller image, then immediately

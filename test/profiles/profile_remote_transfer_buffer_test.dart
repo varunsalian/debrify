@@ -6,6 +6,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_remote_lease.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/remote_control/remote_chunked_send.dart';
 import 'package:debrify/services/remote_control/remote_command_router.dart';
 import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
@@ -153,5 +154,180 @@ void main() {
 
     expect(router.debugProfileTransferKeys, contains('realDebridApiKey'));
     expect(router.debugProfileTransferKeys, isNot(contains('torboxApiKey')));
+  });
+
+  test(
+    'completion manifest detects a missing config or addon packet',
+    () async {
+      await router.debugDispatchAndWait(
+        RemoteAction.config,
+        ConfigCommand.realDebrid,
+        'first-secret',
+        peer,
+      );
+
+      expect(
+        router.debugProfilePayloadContainsExpected(const {
+          ConfigCommand.realDebrid: 1,
+        }),
+        isTrue,
+      );
+      expect(
+        router.debugProfilePayloadContainsExpected(const {
+          ConfigCommand.realDebrid: 1,
+          ConfigCommand.torbox: 1,
+        }),
+        isFalse,
+      );
+      expect(
+        router.debugProfilePayloadContainsExpected(const {
+          RemoteAction.addon: 1,
+        }),
+        isFalse,
+      );
+    },
+  );
+
+  test('a v4 start discards stale staging from an interrupted batch', () async {
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.realDebrid,
+      'stale-secret',
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      remoteTransferRequestBody('fresh-request'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.torbox,
+      remoteTransferItemBody(
+        requestId: 'fresh-request',
+        payload: 'fresh-secret',
+      ),
+      peer,
+    );
+
+    expect(router.debugProfileTransferKeys, contains('torboxApiKey'));
+    expect(
+      router.debugProfileTransferKeys,
+      isNot(contains('realDebridApiKey')),
+    );
+    expect(
+      router.debugProfilePayloadContainsExpected(const {
+        ConfigCommand.torbox: 1,
+      }),
+      isTrue,
+    );
+  });
+
+  test('a duplicate v4 start is idempotent after items arrive', () async {
+    final start = remoteTransferRequestBody('same-request');
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      start,
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.realDebrid,
+      remoteTransferItemBody(requestId: 'same-request', payload: 'kept-secret'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      start,
+      peer,
+    );
+
+    expect(router.debugProfileTransferValue('realDebridApiKey'), 'kept-secret');
+  });
+
+  test('a delayed item cannot enter a newer v4 transfer', () async {
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      remoteTransferRequestBody('request-a'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      remoteTransferRequestBody('request-b'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.realDebrid,
+      remoteTransferItemBody(requestId: 'request-a', payload: 'stale-secret'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.torbox,
+      remoteTransferItemBody(requestId: 'request-b', payload: 'fresh-secret'),
+      peer,
+    );
+
+    expect(
+      router.debugProfileTransferKeys,
+      isNot(contains('realDebridApiKey')),
+    );
+    expect(router.debugProfileTransferValue('torboxApiKey'), 'fresh-secret');
+    expect(
+      router.debugProfilePayloadContainsExpected(const {
+        ConfigCommand.realDebrid: 1,
+      }),
+      isFalse,
+    );
+    expect(
+      router.debugProfilePayloadContainsExpected(const {
+        ConfigCommand.torbox: 1,
+      }),
+      isTrue,
+    );
+  });
+
+  test('a delayed completion cannot clear a newer v4 transfer', () async {
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      remoteTransferRequestBody('request-a'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.remoteTransferStart,
+      remoteTransferRequestBody('request-b'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.torbox,
+      remoteTransferItemBody(requestId: 'request-b', payload: 'fresh-secret'),
+      peer,
+    );
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.complete,
+      remoteTransferRequestBody(
+        'request-a',
+        expectedCommands: const [ConfigCommand.realDebrid],
+      ),
+      peer,
+    );
+
+    expect(router.debugProfileTransferValue('torboxApiKey'), 'fresh-secret');
+    expect(
+      router.debugProfilePayloadContainsExpected(const {
+        ConfigCommand.torbox: 1,
+      }),
+      isTrue,
+    );
   });
 }

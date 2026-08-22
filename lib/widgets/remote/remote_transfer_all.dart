@@ -444,6 +444,17 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
 
     int success = 0;
     int failure = 0;
+    final deliveredCommands = <String>[];
+    final supportsApplicationResult = target.supportsRemoteTransferResult;
+    final requestId = createRemoteTransferRequestId();
+
+    if (supportsApplicationResult &&
+        !await beginRemoteTransfer(state, target.ip, requestId: requestId)) {
+      if (!mounted) return;
+      setState(() => _transferring = false);
+      _toast('The TV refused to start the transfer', error: true);
+      return;
+    }
 
     for (final item in _items) {
       if (!mounted) return;
@@ -471,10 +482,20 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                 await state.sendAddonCommandToDevice(
                   AddonCommand.install,
                   target.ip,
-                  manifestUrl: authorizedAddon.manifestUrl,
+                  manifestUrl: supportsApplicationResult
+                      ? remoteTransferItemBody(
+                          requestId: requestId,
+                          payload: authorizedAddon.manifestUrl,
+                        )
+                      : authorizedAddon.manifestUrl,
                 );
           }
-          return _sendConfigItem(state, target.ip, item.key);
+          return _sendConfigItem(
+            state,
+            target.ip,
+            item.key,
+            transferRequestId: supportsApplicationResult ? requestId : null,
+          );
         }
 
         ok = authorization == null
@@ -491,6 +512,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       });
       if (ok) {
         success++;
+        deliveredCommands.add(
+          item.key.startsWith('addon:') ? RemoteAction.addon : item.key,
+        );
       } else {
         failure++;
       }
@@ -498,23 +522,74 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       await Future.delayed(const Duration(milliseconds: 250));
     }
 
+    ({bool ok, String message})? applicationResult;
     if (success > 0) {
       await Future.delayed(const Duration(milliseconds: 400));
-      await state.sendConfigCommandToDevice(ConfigCommand.complete, target.ip);
+      final resultCompleter = Completer<({bool ok, String message})>();
+      StreamSubscription<({String requestId, bool ok, String message})>?
+      resultSubscription;
+      if (supportsApplicationResult) {
+        resultSubscription = state.remoteTransferResults.stream.listen((
+          result,
+        ) {
+          if (result.requestId == requestId && !resultCompleter.isCompleted) {
+            resultCompleter.complete((ok: result.ok, message: result.message));
+          }
+        });
+      }
+      try {
+        final completed = supportsApplicationResult
+            ? await sendRemoteTransferCompletion(
+                state,
+                target.ip,
+                requestId: requestId,
+                expectedCommands: deliveredCommands,
+              )
+            : await state.sendConfigCommandToDevice(
+                ConfigCommand.complete,
+                target.ip,
+              );
+        if (!completed) {
+          applicationResult = (
+            ok: false,
+            message: 'The TV refused the transfer completion',
+          );
+        } else if (supportsApplicationResult) {
+          applicationResult = await resultCompleter.future.timeout(
+            const Duration(minutes: 3),
+            onTimeout: () =>
+                (ok: false, message: 'No application result received from TV'),
+          );
+        }
+      } finally {
+        await resultSubscription?.cancel();
+      }
     }
 
     if (!mounted) return;
     setState(() {
       _transferring = false;
-      _done = true;
+      _done = applicationResult?.ok ?? true;
     });
 
-    if (failure == 0) {
-      _toast('Transferred $success item${success == 1 ? '' : 's'}');
+    final finalApplicationResult = applicationResult;
+    if (finalApplicationResult != null && !finalApplicationResult.ok) {
+      _toast(finalApplicationResult.message, error: true);
+    } else if (failure == 0) {
+      _toast(
+        target.supportsRemoteTransferResult
+            ? 'Applied $success item${success == 1 ? '' : 's'} on TV'
+            : 'Delivered $success item${success == 1 ? '' : 's'} — confirm on TV',
+        warning: !target.supportsRemoteTransferResult,
+      );
     } else if (success == 0) {
       _toast('Transfer failed', error: true);
     } else {
-      _toast('Transferred $success, $failure failed', warning: true);
+      _toast(
+        '${target.supportsRemoteTransferResult ? 'Applied' : 'Delivered'} '
+        '$success, $failure failed',
+        warning: true,
+      );
     }
   }
 
@@ -666,8 +741,13 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   Future<bool> _sendConfigItem(
     RemoteControlState state,
     String targetIp,
-    String key,
-  ) async {
+    String key, {
+    String? transferRequestId,
+  }) async {
+    String transferData(String value) => transferRequestId == null
+        ? value
+        : remoteTransferItemBody(requestId: transferRequestId, payload: value);
+
     Future<bool> sendScalar(
       String command,
       Future<String?> Function() read,
@@ -678,7 +758,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           await state.sendConfigCommandToDevice(
             command,
             targetIp,
-            configData: value,
+            configData: transferData(value),
           );
     }
 
@@ -711,10 +791,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         return state.sendConfigCommandToDevice(
           ConfigCommand.pikpak,
           targetIp,
-          configData: jsonEncode({
-            'email': email,
-            'password': _pikpakPasswordController.text,
-          }),
+          configData: transferData(
+            jsonEncode({
+              'email': email,
+              'password': _pikpakPasswordController.text,
+            }),
+          ),
         );
       case ConfigCommand.trakt:
         final access = await StorageService.getTraktAccessToken(
@@ -734,12 +816,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         return state.sendConfigCommandToDevice(
           ConfigCommand.trakt,
           targetIp,
-          configData: jsonEncode({
-            'access_token': access,
-            'refresh_token': refresh,
-            if (expiry != null) 'expiry_ms': expiry,
-            if (username != null) 'username': username,
-          }),
+          configData: transferData(
+            jsonEncode({
+              'access_token': access,
+              'refresh_token': refresh,
+              if (expiry != null) 'expiry_ms': expiry,
+              if (username != null) 'username': username,
+            }),
+          ),
         );
       case ConfigCommand.simkl:
         final access = await StorageService.getSimklAccessToken(
@@ -750,10 +834,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         return state.sendConfigCommandToDevice(
           ConfigCommand.simkl,
           targetIp,
-          configData: jsonEncode({
-            'access_token': access,
-            if (username != null) 'username': username,
-          }),
+          configData: transferData(
+            jsonEncode({
+              'access_token': access,
+              if (username != null) 'username': username,
+            }),
+          ),
         );
       case ConfigCommand.searchEngines:
         await LocalEngineStorage.instance.initialize();
@@ -763,7 +849,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         return state.sendConfigCommandToDevice(
           ConfigCommand.searchEngines,
           targetIp,
-          configData: jsonEncode(engineIds),
+          configData: transferData(jsonEncode(engineIds)),
         );
       case ConfigCommand.webDav:
         final servers = await StorageService.getWebDavServers(
@@ -774,9 +860,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         return state.sendConfigCommandToDevice(
           ConfigCommand.webDav,
           targetIp,
-          configData: jsonEncode([
-            for (final server in servers) server.toTransferJson(),
-          ]),
+          configData: transferData(
+            jsonEncode([for (final server in servers) server.toTransferJson()]),
+          ),
         );
       case ConfigCommand.indexerManagers:
         final managers = await StorageService.getIndexerManagerConfigs(
@@ -787,9 +873,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         return state.sendConfigCommandToDevice(
           ConfigCommand.indexerManagers,
           targetIp,
-          configData: jsonEncode([
-            for (final manager in managers) manager.toTransferJson(),
-          ]),
+          configData: transferData(
+            jsonEncode([
+              for (final manager in managers) manager.toTransferJson(),
+            ]),
+          ),
         );
       // The IPTV payloads routinely outgrow a single datagram — a few hundred
       // starred channels is tens of kilobytes — so they take the chunked path.
@@ -804,6 +892,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           targetIp,
           jsonEncode(payload),
           label: 'IPTV providers',
+          transferRequestId: transferRequestId,
         );
       case ConfigCommand.iptvFavorites:
         final payload = await IptvTransferPayload.buildFavorites(
@@ -816,6 +905,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           targetIp,
           jsonEncode(payload),
           label: 'IPTV favorites',
+          transferRequestId: transferRequestId,
         );
       case ConfigCommand.iptvLists:
         final payload = await IptvTransferPayload.buildCustomLists(
@@ -828,6 +918,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           targetIp,
           jsonEncode(payload),
           label: 'IPTV lists',
+          transferRequestId: transferRequestId,
         );
       default:
         return false;

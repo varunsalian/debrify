@@ -2268,6 +2268,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Home Screen',
+        'Hold to Quick Play',
+        'Play immediately when holding a Continue Watching card',
+        const [
+          'hold',
+          'long press',
+          'quick play',
+          'continue watching',
+          'card action',
+        ],
+      ),
+      leaf(
+        'Home Screen',
         'Hide Provider Cards',
         'Hide debrid status cards on Home',
         const ['hide', 'provider cards', 'debrid', 'status'],

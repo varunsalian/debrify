@@ -697,6 +697,13 @@ class AppDelegate: FlutterAppDelegate {
         deviceChannel.setMethodCallHandler { call, result in
             if call.method == "id" {
                 result(UIDevice.current.identifierForVendor?.uuidString)
+            } else if call.method == "physicalMemory" {
+                // Installed RAM in bytes. Dart gates the heavy Home paths off
+                // this: the 2-3 GB units (Apple TV HD, both 3 GB 4K
+                // generations) get low-res artwork and no ambient trailer.
+                // Measured, not inferred from the model string — the model
+                // table already burned us once (AppleTV11,1 is 3 GB, not 4).
+                result(Int64(ProcessInfo.processInfo.physicalMemory))
             } else {
                 result(FlutterMethodNotImplemented)
             }

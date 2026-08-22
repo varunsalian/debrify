@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +10,8 @@ import '../../services/debrify_tv_repository.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import '../../services/profiles/profile_async_authorization.dart';
+import '../../models/profiles/profile_policy.dart';
 import 'remote_pairing_dialog.dart';
 
 /// Widget for exporting Debrify TV channels to a TV via remote control
@@ -99,9 +103,10 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
 
     final targetIp = connectedDevice.ip;
     final state = RemoteControlState();
+    final supportsApplicationResult =
+        connectedDevice.supportsRemoteTransferResult;
     int successCount = 0;
     int failCount = 0;
-    final List<String> sentNames = [];
 
     try {
       final selectedChannels = _channels
@@ -109,29 +114,47 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           .toList();
 
       for (var i = 0; i < selectedChannels.length; i++) {
-        final channel = selectedChannels[i];
+        final selectedChannel = selectedChannels[i];
 
         try {
-          // Generate YAML from channel data + cached torrents
-          final yamlContent = await ChannelYamlBuilder.build(channel);
-
-          // Encode as debrify:// URI
-          final debrifyUri = MagnetYamlService.encode(
-            yamlContent: yamlContent,
-            channelName: channel.name,
+          final authorization = await ProfileAsyncAuthorization.capture(
+            ProfileFeature.remoteTransfer,
           );
+          Future<bool> sendCurrentChannel() async {
+            // The list on screen is only a selection hint. Re-read from the
+            // authorized profile immediately before building cached torrent
+            // data so a profile switch cannot send the previous profile's
+            // channel under the new profile's transport capability.
+            final currentChannels = await DebrifyTvRepository.instance
+                .fetchAllChannels();
+            DebrifyTvChannelRecord? currentChannel;
+            for (final candidate in currentChannels) {
+              if (candidate.channelId == selectedChannel.channelId) {
+                currentChannel = candidate;
+                break;
+              }
+            }
+            if (currentChannel == null) return false;
+            final yamlContent = await ChannelYamlBuilder.build(currentChannel);
+            final debrifyUri = MagnetYamlService.encode(
+              yamlContent: yamlContent,
+              channelName: currentChannel.name,
+            );
+            return _sendChannelToTv(
+              state,
+              targetIp,
+              debrifyUri,
+              currentChannel.name,
+              waitForApplication: supportsApplicationResult,
+            );
+          }
 
-          // Send to TV — use chunked transfer if payload is large
-          final success = await _sendChannelToTv(
-            state,
-            targetIp,
-            debrifyUri,
-            channel.name,
-          );
+          final success = authorization == null
+              ? await sendCurrentChannel()
+              : await authorization.runIfCurrentAsOutbound(sendCurrentChannel);
 
           if (success) {
             successCount++;
-            sentNames.add(channel.name);
           } else {
             failCount++;
           }
@@ -151,9 +174,13 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Sent $successCount channel${successCount != 1 ? 's' : ''} to TV',
+                supportsApplicationResult
+                    ? 'Imported $successCount channel${successCount != 1 ? 's' : ''} on TV'
+                    : 'Delivered $successCount channel${successCount != 1 ? 's' : ''} — confirm on TV',
               ),
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: supportsApplicationResult
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFFF59E0B),
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 3),
             ),
@@ -170,7 +197,9 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Sent $successCount channel${successCount != 1 ? 's' : ''}, $failCount failed',
+                '${supportsApplicationResult ? 'Imported' : 'Delivered'} '
+                '$successCount channel${successCount != 1 ? 's' : ''}, '
+                '$failCount failed',
               ),
               backgroundColor: const Color(0xFFF59E0B),
               behavior: SnackBarBehavior.floating,
@@ -203,15 +232,39 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     RemoteControlState state,
     String targetIp,
     String debrifyUri,
-    String channelName,
-  ) {
-    return sendConfigPayloadToDevice(
-      state,
-      ConfigCommand.debrifyChannel,
-      targetIp,
-      debrifyUri,
-      label: channelName,
-    );
+    String channelName, {
+    required bool waitForApplication,
+  }) async {
+    final requestId = createRemoteTransferRequestId();
+    final resultCompleter = Completer<bool>();
+    StreamSubscription<({String requestId, bool ok, String message})>?
+    resultSubscription;
+    if (waitForApplication) {
+      resultSubscription = state.remoteTransferResults.stream.listen((result) {
+        if (result.requestId == requestId && !resultCompleter.isCompleted) {
+          resultCompleter.complete(result.ok);
+        }
+      });
+    }
+    try {
+      final delivered = await sendConfigPayloadToDevice(
+        state,
+        ConfigCommand.debrifyChannel,
+        targetIp,
+        waitForApplication
+            ? remoteChannelTransferBody(requestId: requestId, uri: debrifyUri)
+            : debrifyUri,
+        label: channelName,
+        resultRequestId: waitForApplication ? requestId : null,
+      );
+      if (!delivered || !waitForApplication) return delivered;
+      return resultCompleter.future.timeout(
+        const Duration(minutes: 2),
+        onTimeout: () => false,
+      );
+    } finally {
+      await resultSubscription?.cancel();
+    }
   }
 
   @override

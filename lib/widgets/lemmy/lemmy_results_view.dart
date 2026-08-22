@@ -326,7 +326,7 @@ class LemmyResultsViewState extends State<LemmyResultsView> {
       final streams = await _resolveYouTube(post);
       playUrl = streams?.playUrl;
       audioUrl = streams?.audioUrl;
-      fallbackUrl = streams?.downloadUrl;
+      fallbackUrl = streams?.muxedPlaybackFallback;
       if (!mounted) return;
     }
 

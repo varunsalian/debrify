@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -62,6 +64,21 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
     setState(() => _sendingAddons.add(addon.manifestUrl));
     HapticFeedback.mediumImpact();
 
+    final supportsApplicationResult = target.supportsAddonTransferResult;
+    final random = Random.secure();
+    final requestId = base64UrlEncode(
+      List<int>.generate(18, (_) => random.nextInt(256)),
+    ).replaceAll('=', '');
+    final applicationResult = Completer<bool>();
+    StreamSubscription<({String requestId, bool ok})>? resultSubscription;
+    if (supportsApplicationResult) {
+      resultSubscription = state.addonTransferResults.stream.listen((result) {
+        if (result.requestId == requestId && !applicationResult.isCompleted) {
+          applicationResult.complete(result.ok);
+        }
+      });
+    }
+
     try {
       final authorization = await ProfileAsyncAuthorization.capture(
         ProfileFeature.remoteTransfer,
@@ -105,15 +122,32 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
       final committed = await state.sendConfigCommandToDevice(
         ConfigCommand.complete,
         target.ip,
+        configData: supportsApplicationResult ? requestId : null,
       );
       if (!committed) throw StateError('Remote addon commit was refused');
+
+      if (supportsApplicationResult) {
+        final applied = await applicationResult.future.timeout(
+          const Duration(minutes: 2),
+          onTimeout: () => false,
+        );
+        if (!applied) {
+          throw StateError('TV did not apply the addon');
+        }
+      }
 
       // Show success feedback
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Sent "${addon.name}" to TV'),
-            backgroundColor: const Color(0xFF10B981),
+            content: Text(
+              supportsApplicationResult
+                  ? 'Installed "${addon.name}" on TV'
+                  : 'Sent "${addon.name}" — confirm the import on TV',
+            ),
+            backgroundColor: supportsApplicationResult
+                ? const Color(0xFF10B981)
+                : const Color(0xFFF59E0B),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -136,6 +170,7 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
         );
       }
     } finally {
+      await resultSubscription?.cancel();
       if (mounted) {
         setState(() => _sendingAddons.remove(addon.manifestUrl));
       }

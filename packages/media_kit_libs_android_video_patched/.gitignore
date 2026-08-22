@@ -1,0 +1,3 @@
+android/libs/*.jar
+android/libs/.debrify-subtitle-build
+android/.cache/

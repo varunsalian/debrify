@@ -1,0 +1,107 @@
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+
+group 'com.alexmercerind.media_kit_libs_android_video'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.3.0'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    if (project.android.hasProperty('namespace')) {
+        namespace 'com.alexmercerind.media_kit_libs_android_video'
+    }
+    compileSdkVersion 31
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    defaultConfig {
+        minSdkVersion 16
+    }
+}
+
+def nativeLibDir = file('libs')
+def patchedMarker = new File(nativeLibDir, '.debrify-subtitle-build')
+def upstreamVersion = 'v1.1.5'
+def upstreamFiles = [
+    ['default-arm64-v8a.jar',   '5f521b08692d7fef73c5df9bcc00ca4d'],
+    ['default-armeabi-v7a.jar', '08d500ca1116c13e9c1296cc6f2207b0'],
+    ['default-x86_64.jar',      '0880d5fbc3ff0053409704617f54cb55'],
+    ['default-x86.jar',         'f6f51aa42b30d747099506cdc3277352'],
+]
+
+def md5 = { File input ->
+    MessageDigest.getInstance('MD5')
+        .digest(Files.readAllBytes(input.toPath()))
+        .encodeHex()
+        .toString()
+}
+
+def downloadAtomically = { String source, File destination ->
+    def temporary = new File(destination.parentFile, "${destination.name}.tmp")
+    temporary.delete()
+    project.exec {
+        commandLine(
+            'curl', '-fL', '--retry', '3', '--retry-all-errors',
+            '--connect-timeout', '30', '--max-time', '300',
+            '-o', temporary.absolutePath, source
+        )
+    }
+    Files.move(
+        temporary.toPath(),
+        destination.toPath(),
+        StandardCopyOption.REPLACE_EXISTING
+    )
+}
+
+tasks.register('ensureMediaKitNativeLibraries') {
+    doLast {
+        nativeLibDir.mkdirs()
+        upstreamFiles.each { entry ->
+            def destination = new File(nativeLibDir, entry[0])
+            // CI installs patched jars before Gradle starts. Local development
+            // falls back to MediaKit's exact hosted bundle so builds remain
+            // possible; runtime failure handling rejects unsupported PGS.
+            if (!patchedMarker.exists() && destination.exists() && md5(destination) != entry[1]) {
+                destination.delete()
+            }
+            if (!destination.exists()) {
+                downloadAtomically(
+                    "https://github.com/media-kit/libmpv-android-video-build/releases/download/${upstreamVersion}/${entry[0]}",
+                    destination
+                )
+            }
+        }
+        if (!patchedMarker.exists()) {
+            upstreamFiles.each { entry ->
+                if (md5(new File(nativeLibDir, entry[0])) != entry[1]) {
+                    throw new GradleException("MediaKit Android library checksum failed: ${entry[0]}")
+                }
+            }
+        }
+    }
+}
+
+preBuild.dependsOn(tasks.named('ensureMediaKitNativeLibraries'))
+
+dependencies {
+    implementation fileTree(dir: nativeLibDir, include: ['*.jar'])
+}

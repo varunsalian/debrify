@@ -12,6 +12,7 @@ import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/artwork_accent.dart';
 import '../utils/platform_util.dart';
+import '../utils/tvos_device.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
@@ -1199,9 +1200,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Trailers only on the TV Home board's full spotlight — never the Search
   /// tab's compact strip (too small, and results should dominate) or off-TV
-  /// (the hero itself isn't rendered there).
+  /// (the hero itself isn't rendered there). Low-memory Apple TV generations
+  /// are excluded outright: an mpv trailer engine alongside the board's
+  /// artwork is exactly the load that jetsam-kills a 3 GB first-gen 4K, and
+  /// the probe is warmed pre-runApp so this getter stays constant for the
+  /// State's lifetime (the init/dispose registrations must agree).
   bool get _heroTrailerActive =>
-      widget.isTelevision && !widget.searchMode && !widget.discoverMode;
+      widget.isTelevision &&
+      !widget.searchMode &&
+      !widget.discoverMode &&
+      !TvosDevice.isLowMemoryCached;
 
   /// The hero trailer off-TV: the Spotlight home board's reel, rendered on
   /// phones/tablets/desktop. Deliberately SEPARATE from [_heroTrailerActive]
@@ -4297,6 +4305,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Long-press (hold-OK on TV) on a Continue Watching card: Play, or take the
   /// title off the row. Each row supplies its own removal (see [_CwRow.onRemove])
   /// because the four sources write to four different places.
+  /// When Home's Hold to Quick Play preference is on, the same gesture skips
+  /// this menu and invokes the row's Quick Play action directly.
   ///
   /// [cwIndex]/[col] are the card's board coordinates, used to put TV focus back
   /// on a live card once the row rebuilds without the removed one.
@@ -4309,6 +4319,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_cwMenuOpen) return;
     _cwMenuOpen = true;
     final isSeries = item.type == 'series';
+    final playActionAvailable = row.kind == _CwKind.iptv || !_pikpakOnly;
+    // IPTV series use their primary action to open the series page; that is
+    // still useful in the menu, but it is not the immediate playback this
+    // preference promises.
+    final quickPlayAvailable =
+        playActionAvailable && !(row.kind == _CwKind.iptv && isSeries);
+    try {
+      final holdToQuickPlay =
+          await StorageService.getHomeCwHoldToQuickPlay();
+      if (!mounted) return;
+      if (holdToQuickPlay && quickPlayAvailable) {
+        row.onQuickPlay(item);
+        return;
+      }
+    } catch (_) {
+      // A preference read must never take the existing action menu away.
+    } finally {
+      // The dialog path takes ownership of this guard below. Direct Quick Play
+      // and failed preference reads release it here.
+      _cwMenuOpen = false;
+    }
+    if (!mounted) return;
+    _cwMenuOpen = true;
     // An IPTV series card routes to its Xtream series page rather than playing
     // outright (see [_openIptvCwItem]) — so name the action for what it does.
     final playLabel = (row.kind == _CwKind.iptv && isSeries)
@@ -4361,7 +4394,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         subtitle: [row.title, if (episode != null) episode].join('  ·  '),
         // Mirrors the card's own long-press-to-play gate: PikPak-only setups
         // have no quick play, so the menu offers the removal alone.
-        showPlay: row.kind == _CwKind.iptv || !_pikpakOnly,
+        showPlay: playActionAvailable,
         playLabel: playLabel,
         playDescription: playDescription,
         removeDescription: removeDescription,

@@ -22,6 +22,9 @@ void main() {
     ValueChanged<SleepTimerSelection>? onSleep,
     VoidCallback? onClose,
     GlobalKey<PlayerMenuPanelState>? key,
+    String selectedSubtitleId = 'no',
+    Future<bool> Function(String)? onSubtitlesOff,
+    Future<bool> Function(String, String)? onEmbeddedSubtitleSelected,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -36,9 +39,10 @@ void main() {
           selectedAudioId: '1',
           onAudioSelected: (_, __) async {},
           embeddedSubtitles: const [PlayerMenuTrackOption('3', 'English')],
-          selectedSubtitleId: 'no',
-          onSubtitlesOff: (_) async {},
-          onEmbeddedSubtitleSelected: (_, __) async {},
+          selectedSubtitleId: selectedSubtitleId,
+          onSubtitlesOff: onSubtitlesOff ?? (_) async => true,
+          onEmbeddedSubtitleSelected:
+              onEmbeddedSubtitleSelected ?? ((_, __) async => true),
           onAddonSubtitleSelected: (_, __) async => true,
           showSpeed: showSpeed,
           speed: speed,
@@ -57,8 +61,9 @@ void main() {
     );
   }
 
-  testWidgets('rail shows sections, hiding shuffle without a playlist',
-      (tester) async {
+  testWidgets('rail shows sections, hiding shuffle without a playlist', (
+    tester,
+  ) async {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
@@ -73,14 +78,12 @@ void main() {
     expect(find.text('Shuffle'), findsOneWidget);
   });
 
-  testWidgets('speed section hides for live and OK picks a speed',
-      (tester) async {
+  testWidgets('speed section hides for live and OK picks a speed', (
+    tester,
+  ) async {
     final picked = <double>[];
     await tester.pumpWidget(
-      host(
-        initial: PlayerMenuSection.speed,
-        onSpeed: picked.add,
-      ),
+      host(initial: PlayerMenuSection.speed, onSpeed: picked.add),
     );
     await tester.pumpAndSettle();
 
@@ -100,8 +103,9 @@ void main() {
     expect(find.text('Speed'), findsNothing);
   });
 
-  testWidgets('BACK walks pane -> rail -> close, and host back mirrors it',
-      (tester) async {
+  testWidgets('BACK walks pane -> rail -> close, and host back mirrors it', (
+    tester,
+  ) async {
     var closed = false;
     final key = GlobalKey<PlayerMenuPanelState>();
     await tester.pumpWidget(
@@ -128,8 +132,9 @@ void main() {
     expect(closed, isTrue);
   });
 
-  testWidgets('sleep pane hides End of episode for live content',
-      (tester) async {
+  testWidgets('sleep pane hides End of episode for live content', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       host(initial: PlayerMenuSection.sleep, allowEndOfItem: false),
     );
@@ -151,8 +156,9 @@ void main() {
     expect(picked.single.minutes, 30);
   });
 
-  testWidgets('subtitles pane lists Off + embedded and marks the selection',
-      (tester) async {
+  testWidgets('subtitles pane lists Off + embedded and marks the selection', (
+    tester,
+  ) async {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
@@ -163,4 +169,92 @@ void main() {
     expect(find.text('EMBEDDED'), findsOneWidget);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
   });
+
+  testWidgets('failed subtitles-off apply rolls optimistic selection back', (
+    tester,
+  ) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      host(
+        onSubtitlesOff: (_) async {
+          attempts++;
+          return false;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('English').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Off').last);
+    await tester.pumpAndSettle();
+
+    expect(attempts, 1);
+    final englishRow = find.ancestor(
+      of: find.text('English').last,
+      matching: find.byType(GestureDetector),
+    );
+    expect(
+      find.descendant(
+        of: englishRow,
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('late native subtitle failure reconciles the visible selection', (
+    tester,
+  ) async {
+    final key = GlobalKey<PlayerMenuPanelState>();
+    await tester.pumpWidget(host(key: key, selectedSubtitleId: '3'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+
+    key.currentState!.reconcileSubtitleSelection('no');
+    await tester.pump();
+
+    final offRow = find.ancestor(
+      of: find.text('Off').last,
+      matching: find.byType(GestureDetector),
+    );
+    expect(
+      find.descendant(of: offRow, matching: find.byIcon(Icons.check_rounded)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'failed embedded subtitle apply rolls optimistic selection back',
+    (tester) async {
+      var attempts = 0;
+      await tester.pumpWidget(
+        host(
+          onEmbeddedSubtitleSelected: (_, __) async {
+            attempts++;
+            return false;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('English').last);
+      await tester.pumpAndSettle();
+
+      expect(attempts, 1);
+      final offRow = find.ancestor(
+        of: find.text('Off').last,
+        matching: find.byType(GestureDetector),
+      );
+      expect(
+        find.descendant(of: offRow, matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget,
+      );
+    },
+  );
 }

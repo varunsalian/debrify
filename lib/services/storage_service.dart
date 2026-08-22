@@ -268,6 +268,8 @@ class StorageService {
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
   static const String _homeContinueWatchingEnabledKey =
       'home_continue_watching_enabled';
+  static const String _homeCwHoldToQuickPlayKey =
+      'home_cw_hold_to_quick_play';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
@@ -362,6 +364,8 @@ class StorageService {
   static const int _currentPlaybackCompletionMigrationGeneration = 1;
   static const String _androidVideoRendererModeKey =
       'android_video_renderer_mode';
+  static const String _androidVideoRendererGpuMigrationKey =
+      'android_video_renderer_gpu_migration_v1';
   static const String _tvosForceSoftwareDecodeKey =
       'tvos_force_software_decode';
   static const String _audioPassthroughKey = 'player_audio_passthrough';
@@ -5341,6 +5345,20 @@ class StorageService {
     await prefs.setBool(_homeContinueWatchingEnabledKey, value);
   }
 
+  /// Whether holding a Continue Watching card should immediately Quick Play
+  /// instead of opening the Play / Remove action menu. Off by default so the
+  /// removal action remains discoverable until the user opts into the faster
+  /// gesture.
+  static Future<bool> getHomeCwHoldToQuickPlay() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeCwHoldToQuickPlayKey) ?? false;
+  }
+
+  static Future<void> setHomeCwHoldToQuickPlay(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeCwHoldToQuickPlayKey, value);
+  }
+
   static Future<String> getHomeFavoritesTapAction() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'choose';
@@ -5374,6 +5392,7 @@ class StorageService {
     await prefs.remove(_homeDefaultCatalogIdKey);
     await prefs.remove(_homeHideProviderCardsKey);
     await prefs.remove(_homeContinueWatchingEnabledKey);
+    await prefs.remove(_homeCwHoldToQuickPlayKey);
     await prefs.remove(_homeFavoritesOpenFolderKey);
     await prefs.remove(_homeCardOrientationKey);
   }
@@ -7671,6 +7690,22 @@ class StorageService {
   /// Android TV ignores this and keeps its native Media3 SurfaceView backend.
   static Future<AndroidVideoRendererMode> getAndroidVideoRendererMode() async {
     final prefs = await ProfilePreferences.instance();
+    final migrated =
+        prefs.getBool(_androidVideoRendererGpuMigrationKey) ?? false;
+    final stored = prefs.getString(_androidVideoRendererModeKey);
+    if (!migrated) {
+      // Direct Surface used to be the default, but mediacodec_embed cannot
+      // composite bitmap subtitles. Migrate existing installs once; users may
+      // still explicitly choose the performance renderer afterwards.
+      if (stored == null ||
+          stored == AndroidVideoRendererMode.directSurface.storageKey) {
+        await prefs.setString(
+          _androidVideoRendererModeKey,
+          AndroidVideoRendererMode.directMediaCodec.storageKey,
+        );
+      }
+      await prefs.setBool(_androidVideoRendererGpuMigrationKey, true);
+    }
     return AndroidVideoRendererMode.fromStorage(
       prefs.getString(_androidVideoRendererModeKey),
     );
@@ -7681,6 +7716,7 @@ class StorageService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_androidVideoRendererModeKey, mode.storageKey);
+    await prefs.setBool(_androidVideoRendererGpuMigrationKey, true);
   }
 
   /// Whether the Debrify Player should request community timestamps and show

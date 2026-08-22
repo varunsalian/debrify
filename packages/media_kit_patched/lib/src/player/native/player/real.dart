@@ -1125,6 +1125,7 @@ class NativePlayer extends PlatformPlayer {
             track.title ?? 'external',
             track.language ?? 'auto',
           ],
+          throwOnError: true,
         );
         state = state.copyWith(
           track: state.track.copyWith(
@@ -1723,6 +1724,8 @@ class NativePlayer extends PlatformPlayer {
               String? language;
               bool? image;
               bool? albumart;
+              bool external = false;
+              String? externalFilename;
               String? codec;
               String? decoder;
               int? w;
@@ -1775,6 +1778,9 @@ class NativePlayer extends PlatformPlayer {
                     case 'albumart':
                       albumart = map.values[j].u.flag > 0;
                       break;
+                    case 'external':
+                      external = map.values[j].u.flag > 0;
+                      break;
                   }
                 }
                 if (map.values[j].format ==
@@ -1807,6 +1813,9 @@ class NativePlayer extends PlatformPlayer {
                       break;
                     case 'decoder-desc':
                       decoder = value;
+                      break;
+                    case 'external-filename':
+                      externalFilename = value;
                       break;
                     case 'demux-channels':
                       channels = value;
@@ -1881,6 +1890,8 @@ class NativePlayer extends PlatformPlayer {
                       rotate: rotate,
                       par: par,
                       audiochannels: audiochannels,
+                      external: external,
+                      externalFilename: externalFilename,
                     ),
                   );
                   break;
@@ -2601,30 +2612,43 @@ class NativePlayer extends PlatformPlayer {
     calloc.free(string);
   }
 
-  Future<void> _command(List<String> args) async {
+  Future<void> _command(
+    List<String> args, {
+    bool throwOnError = false,
+  }) async {
     final pointers = args.map<Pointer<Utf8>>((e) => e.toNativeUtf8()).toList();
     final arr = calloc<Pointer<Utf8>>(128);
     for (int i = 0; i < args.length; i++) {
       (arr + i).value = pointers[i];
     }
 
-    if (configuration.async) {
-      final requestNumber = _asyncRequestNumber++;
-      final completer = _commandRequests[requestNumber] = Completer<int>();
-      final immediate = mpv.mpv_command_async(ctx, requestNumber, arr.cast());
-      final text = '_command(${args.join(', ')})';
-      if (immediate < 0) {
-        // Sending failed.
-        _logError(immediate, text);
-        return;
+    final text = '_command(${args.join(', ')})';
+    try {
+      final int result;
+      if (configuration.async) {
+        final requestNumber = _asyncRequestNumber++;
+        final completer = _commandRequests[requestNumber] = Completer<int>();
+        final immediate = mpv.mpv_command_async(ctx, requestNumber, arr.cast());
+        if (immediate < 0) {
+          _commandRequests.remove(requestNumber);
+          result = immediate;
+        } else {
+          result = await completer.future;
+        }
+      } else {
+        result = mpv.mpv_command(ctx, arr.cast());
       }
-      _logError(await completer.future, text);
-    } else {
-      mpv.mpv_command(ctx, arr.cast());
-    }
 
-    calloc.free(arr);
-    pointers.forEach(calloc.free);
+      _logError(result, text);
+      if (throwOnError && result < 0) {
+        final message =
+            mpv.mpv_error_string(result).cast<Utf8>().toDartString();
+        throw StateError('$message: $text');
+      }
+    } finally {
+      calloc.free(arr);
+      pointers.forEach(calloc.free);
+    }
   }
 
   /// Generated libmpv C API bindings.
