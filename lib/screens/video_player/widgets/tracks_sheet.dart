@@ -115,6 +115,7 @@ class TracksSheet {
     bool isIdentifyingTitle = false;
     int subtitleFetchGeneration = 0;
     int selectedTabIndex = 0;
+    final subtitleApplyGate = SubtitleApplyGate();
     // Addons the user retried: a late snapshot from the initial full fetch
     // must not clobber their (newer) retry outcome.
     final retriedAddonIds = <String>{};
@@ -228,8 +229,7 @@ class TracksSheet {
                 return;
               }
               final idx = slots.indexWhere((s) => s.addonId == addonId);
-                if (idx < 0 ||
-                    slots[idx].status == AddonSubtitleStatus.loading) {
+              if (idx < 0 || slots[idx].status == AddonSubtitleStatus.loading) {
                 return;
               }
               final generation = subtitleFetchGeneration;
@@ -390,9 +390,7 @@ class TracksSheet {
                             onAudioPassthroughChanged == null
                             ? null
                             : (enabled) async {
-                                  setModalState(
-                                    () => passthroughState = enabled,
-                                  );
+                                setModalState(() => passthroughState = enabled);
                                 await onAudioPassthroughChanged(enabled);
                               },
                         embeddedSubs: embeddedSubs,
@@ -409,7 +407,8 @@ class TracksSheet {
                           }
                         },
                         onStremioSubtitleSelected: onStremioSubtitleSelected,
-                          onApplyEmbeddedSubtitle: onApplyEmbeddedSubtitle,
+                        subtitleApplyGate: subtitleApplyGate,
+                        onApplyEmbeddedSubtitle: onApplyEmbeddedSubtitle,
                         onApplyStremioSubtitle: onApplyStremioSubtitle,
                         onSubtitleTrackChanged: onSubtitleTrackChanged,
                         isIdentifyingTitle: isIdentifyingTitle,
@@ -441,8 +440,7 @@ class TracksSheet {
                                       }
                                       if (result.imdbId != null) {
                                         activeImdbId = result.imdbId;
-                                          activeContentType =
-                                              result.contentType;
+                                        activeContentType = result.contentType;
                                         activeSeason = result.season;
                                         activeEpisode = result.episode;
                                       }
@@ -459,8 +457,7 @@ class TracksSheet {
                                             if (slot.subtitles.any(
                                               (s) => s.id == selectedId,
                                             )) {
-                                                selectedProviderId =
-                                                    slot.addonId;
+                                              selectedProviderId = slot.addonId;
                                               break;
                                             }
                                           }
@@ -613,6 +610,7 @@ class TracksSheet {
     required void Function(String) onRetryAddon,
     required void Function(String) onSubChanged,
     required void Function(String? id)? onStremioSubtitleSelected,
+    required SubtitleApplyGate subtitleApplyGate,
     required Future<bool> Function(mk.SubtitleTrack track)?
     onApplyEmbeddedSubtitle,
     required Future<bool> Function(StremioSubtitle subtitle)?
@@ -654,6 +652,7 @@ class TracksSheet {
           onTrackChanged: onTrackChanged,
           onSubChanged: onSubChanged,
           onStremioSubtitleSelected: onStremioSubtitleSelected,
+          subtitleApplyGate: subtitleApplyGate,
           onApplyEmbeddedSubtitle: onApplyEmbeddedSubtitle,
           onApplyStremioSubtitle: onApplyStremioSubtitle,
           onSubtitleTrackChanged: onSubtitleTrackChanged,
@@ -852,6 +851,7 @@ class _SubtitlesTab extends StatelessWidget {
   final Future<void> Function(String, String) onTrackChanged;
   final void Function(String) onSubChanged;
   final void Function(String? id)? onStremioSubtitleSelected;
+  final SubtitleApplyGate subtitleApplyGate;
   final Future<bool> Function(mk.SubtitleTrack track)? onApplyEmbeddedSubtitle;
   final Future<bool> Function(StremioSubtitle subtitle)? onApplyStremioSubtitle;
   final VoidCallback? onSubtitleTrackChanged;
@@ -874,6 +874,7 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onTrackChanged,
     required this.onSubChanged,
     required this.onStremioSubtitleSelected,
+    required this.subtitleApplyGate,
     required this.onApplyEmbeddedSubtitle,
     required this.onApplyStremioSubtitle,
     this.onSubtitleTrackChanged,
@@ -1026,13 +1027,16 @@ class _SubtitlesTab extends StatelessWidget {
             onTap: () async {
               final realChange = _isRealSubtitleChange('no');
               final track = mk.SubtitleTrack.no();
-              final applied = onApplyEmbeddedSubtitle == null
-                  ? await _applyDirectly(track)
-                  : await onApplyEmbeddedSubtitle!(track);
-              if (!applied) return;
-              onSubChanged('no');
-              await onTrackChanged(selectedAudio, 'no');
-              if (realChange) onSubtitleTrackChanged?.call();
+              await subtitleApplyGate.run(() async {
+                final applied = onApplyEmbeddedSubtitle == null
+                    ? await _applyDirectly(track)
+                    : await onApplyEmbeddedSubtitle!(track);
+                if (!applied) return false;
+                onSubChanged('no');
+                await onTrackChanged(selectedAudio, 'no');
+                if (realChange) onSubtitleTrackChanged?.call();
+                return true;
+              });
             },
           ),
           const SizedBox(height: 8),
@@ -1061,13 +1065,16 @@ class _SubtitlesTab extends StatelessWidget {
                   isSelected: sub.id == selectedSub,
                   onTap: () async {
                     final realChange = _isRealSubtitleChange(sub.id);
-                    final applied = onApplyEmbeddedSubtitle == null
-                        ? await _applyDirectly(sub)
-                        : await onApplyEmbeddedSubtitle!(sub);
-                    if (!applied) return;
-                    onSubChanged(sub.id);
-                    await onTrackChanged(selectedAudio, sub.id);
-                    if (realChange) onSubtitleTrackChanged?.call();
+                    await subtitleApplyGate.run(() async {
+                      final applied = onApplyEmbeddedSubtitle == null
+                          ? await _applyDirectly(sub)
+                          : await onApplyEmbeddedSubtitle!(sub);
+                      if (!applied) return false;
+                      onSubChanged(sub.id);
+                      await onTrackChanged(selectedAudio, sub.id);
+                      if (realChange) onSubtitleTrackChanged?.call();
+                      return true;
+                    });
                   },
                 ),
               );
@@ -1178,15 +1185,20 @@ class _SubtitlesTab extends StatelessWidget {
                 onTap: () async {
                   final realChange = _isRealSubtitleChange(subId);
                   try {
-                    final applied = await onApplyStremioSubtitle?.call(sub);
-                    // Keep both the player and local row selection on the
-                    // previous subtitle when download/parsing/loading fails.
-                    if (applied != true) return;
+                    final apply = onApplyStremioSubtitle;
+                    if (apply == null) return;
+                    await subtitleApplyGate.run(() async {
+                      final applied = await apply(sub);
+                      // Keep both the player and local row selection on the
+                      // previous subtitle when download/parsing/loading fails.
+                      if (!applied) return false;
 
-                    onSubChanged(subId);
-                    onStremioSubtitleSelected?.call(sub.id);
-                    await onTrackChanged(selectedAudio, subId);
-                    if (realChange) onSubtitleTrackChanged?.call();
+                      onSubChanged(subId);
+                      onStremioSubtitleSelected?.call(sub.id);
+                      await onTrackChanged(selectedAudio, subId);
+                      if (realChange) onSubtitleTrackChanged?.call();
+                      return true;
+                    });
                   } catch (e) {
                     debugPrint('TracksSheet: Subtitle error - $e');
                   }

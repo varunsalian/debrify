@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -249,6 +250,30 @@ void main() {
       }
     });
   });
+
+  test(
+    'subtitle apply gate ignores overlap and reopens after completion',
+    () async {
+      final gate = SubtitleApplyGate();
+      final firstCompleter = Completer<bool>();
+      var calls = 0;
+
+      final first = gate.run(() {
+        calls++;
+        return firstCompleter.future;
+      });
+      final overlapping = await gate.run(() async {
+        calls++;
+        return true;
+      });
+
+      expect(overlapping, isFalse);
+      expect(calls, 1);
+      firstCompleter.complete(true);
+      expect(await first, isTrue);
+      expect(await gate.run(() async => true), isTrue);
+    },
+  );
 }
 
 void _overwriteZipUncompressedSizes(Uint8List bytes, int size) {

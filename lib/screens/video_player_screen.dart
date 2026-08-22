@@ -409,12 +409,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
-  // Direct Surface is the efficient Android default, but a vendor codec or
-  // surface implementation may reject it. The startup guard is deliberately
+  // Explicit Android renderers can be rejected by a vendor codec, GPU, or
+  // surface implementation. The startup guard is deliberately
   // limited to the first successfully decoded item in this screen: once the
   // output has attached, later network/media failures must not be blamed on the
   // renderer. A confirmed renderer failure recreates the whole player once.
-  bool _directSurfaceValidatedForSession = false;
+  bool _rendererValidatedForSession = false;
   bool _rendererFallbackInProgress = false;
   int _rendererStartupGuardToken = 0;
   int _rendererStartupValidationGeneration = -1;
@@ -910,8 +910,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// stream-record failures log in.
   StreamSubscription<mk.PlayerLog>? _recordLogSub;
   StreamSubscription<mk.PlayerLog>? _subtitleDiagnosticLogSub;
-  StreamSubscription? _subtitleDiagnosticCueSub;
-  StreamSubscription? _subtitleDiagnosticTracksSub;
   int _subtitleDiagnosticGeneration = 0;
   _SubtitleApplyAttempt? _activeSubtitleApplyAttempt;
   final ValueNotifier<String?> _subtitleSelectionCorrection = ValueNotifier(
@@ -2280,10 +2278,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _isReady = false;
     final player = mk.Player(
       configuration: mk.PlayerConfiguration(
-        // Subtitle diagnostics below filter this stream before printing it.
-        // `info` is needed because libass/track-selection messages are often
-        // below mpv's error level, even when no subtitle is rendered.
-        logLevel: mk.MPVLogLevel.info,
+        logLevel: mk.MPVLogLevel.error,
         ready: () => _onPlayerInstanceReady(instanceGeneration),
       ),
     );
@@ -2814,22 +2809,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         unawaited(_handleSubtitleApplyFailure(attempt, log.text));
       }
     });
-    _subtitleDiagnosticCueSub = player.stream.subtitle.listen((lines) {
-      if (!isCurrent()) return;
-      if (!lines.any((line) => line.trim().isNotEmpty)) return;
-      debugPrint(
-        '[SubtitleDiag] cue emitted selectedStateId='
-        '${_diagnosticSubtitleId(player.state.track.subtitle)}',
-      );
-    });
-    _subtitleDiagnosticTracksSub = player.stream.tracks.listen((tracks) {
-      if (!isCurrent()) return;
-      debugPrint(
-        '[SubtitleDiag] track-list changed subtitles='
-        '${_describeSubtitleTracks(tracks.subtitle)}',
-      );
-    });
-
     // Subscribe before open() so fast local media and immediate renderer
     // failures are visible to both diagnostics and the startup guard.
     _paramsSub = player.stream.videoParams.listen((params) {
@@ -2848,7 +2827,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       unawaited(
-        _fallbackDirectSurfaceToAutomatic(
+        _fallbackExplicitRendererToAutomatic(
           instanceGeneration: instanceGeneration,
           mediaGeneration: _decoderProbeGeneration,
           reason: 'renderer_error',
@@ -2984,8 +2963,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _iptvErrorSub,
       _rendererStartupErrorSub,
       _subtitleDiagnosticLogSub,
-      _subtitleDiagnosticCueSub,
-      _subtitleDiagnosticTracksSub,
     ];
     _posSub = null;
     _durSub = null;
@@ -2996,8 +2973,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvErrorSub = null;
     _rendererStartupErrorSub = null;
     _subtitleDiagnosticLogSub = null;
-    _subtitleDiagnosticCueSub = null;
-    _subtitleDiagnosticTracksSub = null;
     for (final subscription in subscriptions) {
       if (subscription == null) continue;
       try {
@@ -3026,7 +3001,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _decoderProbeParams = params;
     _scheduleDecoderProbe();
-    _scheduleDirectSurfaceStartupValidation();
+    _scheduleRendererStartupValidation();
     final remedy = _tvosDecodeRemedy;
     if (remedy != null) {
       // Only ever STARTS the ladder (from idle, on a triggering format) —
@@ -3044,8 +3019,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // ANDROID ONLY, deliberately.
     //
-    // These observers exist to feed the Android direct-surface renderer
-    // fallback (`_scheduleDirectSurfaceStartupValidation`), which is itself
+    // These observers exist to feed the Android explicit-renderer fallback
+    // (`_scheduleRendererStartupValidation`), which is itself
     // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
     //
     // They are also `mpv_observe_property` calls issued unawaited, at the same
@@ -3078,12 +3053,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  void _scheduleDirectSurfaceStartupValidation() {
+  void _scheduleRendererStartupValidation() {
     if (!AndroidRendererStartupFallback.shouldArm(
           isAndroid: Platform.isAndroid,
           isAndroidTv: PlatformUtil.isAndroidTvCached,
           mode: _androidVideoRendererMode,
-          alreadyValidated: _directSurfaceValidatedForSession,
+          alreadyValidated: _rendererValidatedForSession,
           fallbackInProgress: _rendererFallbackInProgress,
         ) ||
         _iptvErrorsMuted ||
@@ -3096,7 +3071,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final mediaGeneration = _decoderProbeGeneration;
     final player = _player;
     unawaited(
-      _validateDirectSurfaceStartup(
+      _validateRendererStartup(
         guardToken: guardToken,
         instanceGeneration: instanceGeneration,
         mediaGeneration: mediaGeneration,
@@ -3105,7 +3080,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Future<void> _validateDirectSurfaceStartup({
+  Future<void> _validateRendererStartup({
     required int guardToken,
     required int instanceGeneration,
     required int mediaGeneration,
@@ -3127,9 +3102,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       try {
         final output = await platform.getProperty('current-vo');
-        if (AndroidRendererStartupFallback.isExpectedOutput(output) &&
+        if (AndroidRendererStartupFallback.isExpectedOutput(
+              mode: _androidVideoRendererMode,
+              value: output,
+            ) &&
             output == previousOutput) {
-          _directSurfaceValidatedForSession = true;
+          _rendererValidatedForSession = true;
           _rendererStartupGuardToken++;
           return;
         }
@@ -3140,14 +3118,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
 
-    await _fallbackDirectSurfaceToAutomatic(
+    await _fallbackExplicitRendererToAutomatic(
       instanceGeneration: instanceGeneration,
       mediaGeneration: mediaGeneration,
-      reason: 'surface_output_not_ready',
+      reason: 'requested_output_not_ready',
     );
   }
 
-  Future<void> _fallbackDirectSurfaceToAutomatic({
+  Future<void> _fallbackExplicitRendererToAutomatic({
     required int instanceGeneration,
     required int mediaGeneration,
     required String reason,
@@ -3156,7 +3134,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           isAndroid: Platform.isAndroid,
           isAndroidTv: PlatformUtil.isAndroidTvCached,
           mode: _androidVideoRendererMode,
-          alreadyValidated: _directSurfaceValidatedForSession,
+          alreadyValidated: _rendererValidatedForSession,
           fallbackInProgress: _rendererFallbackInProgress,
         ) ||
         !mounted ||
@@ -3185,10 +3163,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final externalAudio = widget.audioUrl;
     final hasExternalAudio = externalAudio != null && externalAudio.isNotEmpty;
 
+    final failedRenderer = _androidVideoRendererMode.storageKey;
     _releasePlayerDiagnostic(
       'generation=$mediaGeneration phase=fallback '
       'status=renderer_startup_failed platform=android backend=libmpv '
-      'requested_renderer=direct_surface fallback=automatic reason=$reason',
+      'requested_renderer=$failedRenderer fallback=automatic reason=$reason',
     );
 
     // Invalidate every old callback before the first await. Only one native
@@ -3217,7 +3196,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!mounted) return;
 
       // Remember the compatibility result. The setting now visibly reads
-      // Automatic, and choosing Direct Surface again is the explicit retry.
+      // Automatic, and choosing an explicit renderer again retries it.
       _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
       try {
         await StorageService.setAndroidVideoRendererMode(
@@ -3732,15 +3711,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Timeout reached - video may not have embedded subtitles
   }
 
-  static String _describeSubtitleTracks(Iterable<mk.SubtitleTrack> tracks) {
-    return tracks
-        .map((track) {
-          return '{id=${track.id},lang=${track.language},title=${track.title},'
-              'codec=${track.codec},image=${track.image},external=${track.external}}';
-        })
-        .join(', ');
-  }
-
   static String _diagnosticSubtitleId(mk.SubtitleTrack track) =>
       track.uri || track.data ? '<external>' : track.id;
 
@@ -3749,9 +3719,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     final platform = _player.platform;
     if (platform is! mk.NativePlayer) return;
+    final nativeRendering = requiresNativeSubtitleRendering(track);
     await platform.setProperty(
       'sub-visibility',
-      requiresNativeSubtitleRendering(track) ? 'yes' : 'no',
+      nativeRendering ? 'yes' : 'no',
     );
   }
 
@@ -3763,8 +3734,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     mk.SubtitleTrack track, {
     required String source,
   }) async {
+    if (Platform.isAndroid &&
+        !PlatformUtil.isAndroidTvCached &&
+        requiresNativeSubtitleRendering(track) &&
+        _androidVideoRendererMode !=
+            AndroidVideoRendererMode.directMediaCodec) {
+      _showSubtitleFailureMessage(
+        'Bitmap subtitles require MediaCodec + GPU. Change Video renderer in Settings and restart playback.',
+      );
+      debugPrint(
+        '[SubtitleDiag] apply rejected source=$source '
+        'reason=android_renderer_incompatible',
+      );
+      return false;
+    }
     final diagnosticGeneration = ++_subtitleDiagnosticGeneration;
-    final playerGeneration = _playerInstanceGeneration;
     final attempt = _SubtitleApplyAttempt(
       generation: diagnosticGeneration,
       requested: track,
@@ -3778,11 +3762,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // selection consecutively.
     _subtitleSelectionCorrection.value = null;
 
-    await _logSubtitleDiagnosticSnapshot(
-      phase: 'before-set',
-      source: source,
-      requested: track,
-    );
     try {
       await _setNativeSubtitleVisibilityForTrack(track);
       await _player.setSubtitleTrack(track);
@@ -3795,12 +3774,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _handleSubtitleApplyFailure(attempt, error.toString());
       return false;
     }
-    await _logSubtitleDiagnosticSnapshot(
-      phase: 'after-await',
-      source: source,
-      requested: track,
-    );
-
     // mpv posts decoder failures through its log stream immediately after the
     // property reply. Give that event one run-loop turn before reporting
     // success to optimistic menu UI; late failures are still handled by the
@@ -3808,25 +3781,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (attempt.failed) return false;
 
-    for (final delay in const [
-      Duration(milliseconds: 500),
-      Duration(seconds: 2),
-    ]) {
-      unawaited(
-        Future<void>.delayed(delay, () async {
-          if (!mounted ||
-              diagnosticGeneration != _subtitleDiagnosticGeneration ||
-              playerGeneration != _playerInstanceGeneration) {
-            return;
-          }
-          await _logSubtitleDiagnosticSnapshot(
-            phase: 'after-${delay.inMilliseconds}ms',
-            source: source,
-            requested: track,
-          );
-        }),
-      );
-    }
     attempt.successReturned = true;
     return true;
   }
@@ -3917,68 +3871,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ),
-    );
-  }
-
-  Future<void> _logSubtitleDiagnosticSnapshot({
-    required String phase,
-    required String source,
-    required mk.SubtitleTrack requested,
-  }) async {
-    final stateTrack = _player.state.track.subtitle;
-    final tracks = _player.state.tracks.subtitle;
-    final platform = _player.platform;
-    if (platform is! mk.NativePlayer) {
-      debugPrint(
-        '[SubtitleDiag] $phase source=$source '
-        'requestedId=${_diagnosticSubtitleId(requested)} '
-        'native=false stateId=${_diagnosticSubtitleId(stateTrack)} tracks='
-        '${_describeSubtitleTracks(tracks)}',
-      );
-      return;
-    }
-
-    const propertyNames = <String>[
-      'sid',
-      'sub-visibility',
-      'current-tracks/sub/id',
-      'current-tracks/sub/lang',
-      'current-tracks/sub/title',
-      'current-tracks/sub/codec',
-      'current-tracks/sub/external',
-      'sub-text',
-      'sub-start',
-      'sub-end',
-    ];
-    final values = await Future.wait(
-      propertyNames.map((name) async {
-        try {
-          return MapEntry(name, await platform.getProperty(name));
-        } catch (error) {
-          return MapEntry(name, '<error:$error>');
-        }
-      }),
-    );
-    final properties = Map<String, String>.fromEntries(values);
-    final rawText = properties['sub-text'] ?? '';
-    final singleLineText = rawText.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final textPreview = singleLineText.length <= 120
-        ? singleLineText
-        : '${singleLineText.substring(0, 120)}…';
-    properties['sub-text'] = textPreview.isEmpty ? '<empty>' : textPreview;
-    final sid = properties['sid'];
-    final requestedAccepted = requested.uri || requested.data
-        ? '<external-track-id-assigned-by-mpv>'
-        : '${sid == requested.id}';
-
-    debugPrint(
-      '[SubtitleDiag] $phase source=$source '
-      'requested={id=${_diagnosticSubtitleId(requested)},lang=${requested.language},'
-      'title=${requested.title},codec=${requested.codec},image=${requested.image},'
-      'external=${requested.external},uri=${requested.uri},data=${requested.data}} '
-      'state={id=${_diagnosticSubtitleId(stateTrack)},lang=${stateTrack.language},'
-      'title=${stateTrack.title}} sidMatchesRequest=$requestedAccepted '
-      'mpv=$properties tracks=${_describeSubtitleTracks(tracks)}',
     );
   }
 
@@ -9298,8 +9190,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _speedHoldHud.dispose();
     _recordLogSub?.cancel();
     _subtitleDiagnosticLogSub?.cancel();
-    _subtitleDiagnosticCueSub?.cancel();
-    _subtitleDiagnosticTracksSub?.cancel();
     _subtitleSelectionCorrection.dispose();
     _subtitleDiagnosticGeneration++;
     _activeSubtitleApplyAttempt = null;

@@ -53,3 +53,20 @@ bool requiresNativeSubtitleRendering(mk.SubtitleTrack track) {
     _ => false,
   };
 }
+
+/// Serializes subtitle changes so native visibility and track selection remain
+/// one atomic user operation. A second tap while an apply is in flight is
+/// ignored instead of racing the first operation.
+class SubtitleApplyGate {
+  bool _busy = false;
+
+  Future<bool> run(Future<bool> Function() apply) async {
+    if (_busy) return false;
+    _busy = true;
+    try {
+      return await apply();
+    } finally {
+      _busy = false;
+    }
+  }
+}

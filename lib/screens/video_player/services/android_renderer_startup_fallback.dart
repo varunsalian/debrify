@@ -7,6 +7,7 @@ import '../../../models/android_video_renderer_mode.dart';
 /// while MediaCodec/surface failures do.
 abstract final class AndroidRendererStartupFallback {
   static const String directSurfaceOutput = 'mediacodec_embed';
+  static const String directMediaCodecOutput = 'gpu';
 
   static bool shouldArm({
     required bool isAndroid,
@@ -17,13 +18,21 @@ abstract final class AndroidRendererStartupFallback {
   }) {
     return isAndroid &&
         !isAndroidTv &&
-        mode == AndroidVideoRendererMode.directSurface &&
+        mode != AndroidVideoRendererMode.automatic &&
         !alreadyValidated &&
         !fallbackInProgress;
   }
 
-  static bool isExpectedOutput(String value) {
-    return value.trim().toLowerCase() == directSurfaceOutput;
+  static bool isExpectedOutput({
+    required AndroidVideoRendererMode mode,
+    required String value,
+  }) {
+    final expected = switch (mode) {
+      AndroidVideoRendererMode.directMediaCodec => directMediaCodecOutput,
+      AndroidVideoRendererMode.directSurface => directSurfaceOutput,
+      AndroidVideoRendererMode.automatic => null,
+    };
+    return expected != null && value.trim().toLowerCase() == expected;
   }
 
   /// Only errors that identify the video decoder/output path may trigger the
@@ -32,6 +41,8 @@ abstract final class AndroidRendererStartupFallback {
   static bool isRendererFailure(String error) {
     final value = error.toLowerCase();
     return value.contains('mediacodec') ||
+        value.contains('gpu context') ||
+        value.contains('render context') ||
         value.contains('video output') ||
         value.contains('video-output') ||
         value.contains('could not open codec') ||

@@ -364,6 +364,8 @@ class StorageService {
   static const int _currentPlaybackCompletionMigrationGeneration = 1;
   static const String _androidVideoRendererModeKey =
       'android_video_renderer_mode';
+  static const String _androidVideoRendererGpuMigrationKey =
+      'android_video_renderer_gpu_migration_v1';
   static const String _tvosForceSoftwareDecodeKey =
       'tvos_force_software_decode';
   static const String _audioPassthroughKey = 'player_audio_passthrough';
@@ -7688,6 +7690,22 @@ class StorageService {
   /// Android TV ignores this and keeps its native Media3 SurfaceView backend.
   static Future<AndroidVideoRendererMode> getAndroidVideoRendererMode() async {
     final prefs = await ProfilePreferences.instance();
+    final migrated =
+        prefs.getBool(_androidVideoRendererGpuMigrationKey) ?? false;
+    final stored = prefs.getString(_androidVideoRendererModeKey);
+    if (!migrated) {
+      // Direct Surface used to be the default, but mediacodec_embed cannot
+      // composite bitmap subtitles. Migrate existing installs once; users may
+      // still explicitly choose the performance renderer afterwards.
+      if (stored == null ||
+          stored == AndroidVideoRendererMode.directSurface.storageKey) {
+        await prefs.setString(
+          _androidVideoRendererModeKey,
+          AndroidVideoRendererMode.directMediaCodec.storageKey,
+        );
+      }
+      await prefs.setBool(_androidVideoRendererGpuMigrationKey, true);
+    }
     return AndroidVideoRendererMode.fromStorage(
       prefs.getString(_androidVideoRendererModeKey),
     );
@@ -7698,6 +7716,7 @@ class StorageService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_androidVideoRendererModeKey, mode.storageKey);
+    await prefs.setBool(_androidVideoRendererGpuMigrationKey, true);
   }
 
   /// Whether the Debrify Player should request community timestamps and show

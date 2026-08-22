@@ -3,7 +3,7 @@ import 'package:debrify/screens/video_player/services/android_renderer_startup_f
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('arms only for unvalidated Android phone direct surface', () {
+  test('arms only for an unvalidated explicit Android phone renderer', () {
     bool shouldArm({
       bool android = true,
       bool tv = false,
@@ -21,6 +21,7 @@ void main() {
     }
 
     expect(shouldArm(), isTrue);
+    expect(shouldArm(mode: AndroidVideoRendererMode.directMediaCodec), isTrue);
     expect(shouldArm(android: false), isFalse);
     expect(shouldArm(tv: true), isFalse);
     expect(shouldArm(mode: AndroidVideoRendererMode.automatic), isFalse);
@@ -28,17 +29,42 @@ void main() {
     expect(shouldArm(inProgress: true), isFalse);
   });
 
-  test('requires the exact direct surface output', () {
+  test('requires the exact output requested by each renderer mode', () {
     expect(
-      AndroidRendererStartupFallback.isExpectedOutput('mediacodec_embed'),
+      AndroidRendererStartupFallback.isExpectedOutput(
+        mode: AndroidVideoRendererMode.directSurface,
+        value: 'mediacodec_embed',
+      ),
       isTrue,
     );
     expect(
-      AndroidRendererStartupFallback.isExpectedOutput(' MEDIACODEC_EMBED '),
+      AndroidRendererStartupFallback.isExpectedOutput(
+        mode: AndroidVideoRendererMode.directSurface,
+        value: ' MEDIACODEC_EMBED ',
+      ),
       isTrue,
     );
-    expect(AndroidRendererStartupFallback.isExpectedOutput('gpu'), isFalse);
-    expect(AndroidRendererStartupFallback.isExpectedOutput('null'), isFalse);
+    expect(
+      AndroidRendererStartupFallback.isExpectedOutput(
+        mode: AndroidVideoRendererMode.directMediaCodec,
+        value: 'gpu',
+      ),
+      isTrue,
+    );
+    expect(
+      AndroidRendererStartupFallback.isExpectedOutput(
+        mode: AndroidVideoRendererMode.directMediaCodec,
+        value: 'mediacodec_embed',
+      ),
+      isFalse,
+    );
+    expect(
+      AndroidRendererStartupFallback.isExpectedOutput(
+        mode: AndroidVideoRendererMode.automatic,
+        value: 'gpu',
+      ),
+      isFalse,
+    );
   });
 
   test('renderer errors trigger but network errors do not', () {
@@ -48,6 +74,8 @@ void main() {
       'Failed to configure codec',
       'Video output initialization failed',
       'Video Surface could not be attached',
+      'GPU context creation failed',
+      'Could not create render context',
     ]) {
       expect(
         AndroidRendererStartupFallback.isRendererFailure(error),

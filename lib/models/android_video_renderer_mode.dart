@@ -11,14 +11,15 @@ enum AndroidVideoRendererMode {
   ),
   directMediaCodec(
     storageKey: 'direct_mediacodec',
-    label: 'Direct MediaCodec (Experimental)',
-    description: 'Avoids the decoded-frame copy when the device supports it.',
+    label: 'MediaCodec + GPU (Recommended)',
+    description:
+        'Hardware decoding with subtitle, scaling, and video-effect support.',
   ),
   directSurface(
     storageKey: 'direct_surface',
-    label: 'Direct Surface (Recommended)',
+    label: 'Direct Surface (Performance)',
     description:
-        'Lowest-overhead Android surface path; some video features may not work.',
+        'Lowest overhead, but bitmap subtitles and some video features are unavailable.',
   );
 
   const AndroidVideoRendererMode({
@@ -43,7 +44,7 @@ enum AndroidVideoRendererMode {
   };
 
   static AndroidVideoRendererMode fromStorage(String? value) {
-    if (value == null) return directSurface;
+    if (value == null) return directMediaCodec;
     return values.firstWhere(
       (mode) => mode.storageKey == value,
       orElse: () => automatic,
