@@ -52,6 +52,9 @@ class RemoteControlState extends ChangeNotifier {
         ({String? requestId, bool ok, String message})
       >.broadcast();
 
+  final StreamController<({String requestId, bool ok})> addonTransferResults =
+      StreamController<({String requestId, bool ok})>.broadcast();
+
   // Services
   UdpDiscoveryService? _discoveryService;
   UdpCommandService? _commandService;
@@ -966,6 +969,14 @@ class RemoteControlState extends ChangeNotifier {
       }
       return;
     }
+    if (action == RemoteAction.config &&
+        command == ConfigCommand.addonTransferResult) {
+      if (data != null && context.encrypted && context.authorized) {
+        final result = parseAddonTransferResultBody(data);
+        if (result != null) addonTransferResults.add(result);
+      }
+      return;
+    }
     final contextual = onCommandReceivedWithContext;
     if (contextual != null) {
       contextual(action, command, data, context);
@@ -1173,6 +1184,7 @@ class RemoteControlState extends ChangeNotifier {
       RemoteCommandContext(
         encrypted: true,
         authorized: session.authorized,
+        remembered: _rememberedFingerprints.contains(session.peerFingerprint),
         sidB64: session.sidB64,
         peerFingerprint: session.peerFingerprint,
         peerName: session.peerName,

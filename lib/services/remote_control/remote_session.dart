@@ -362,6 +362,10 @@ class RemoteSession {
 class RemoteCommandContext {
   final bool encrypted;
   final bool authorized;
+
+  /// True only when the receiver's persisted pairing store contains this
+  /// cryptographically authenticated peer fingerprint.
+  final bool remembered;
   final String? sidB64;
   final String? peerFingerprint;
   final String? peerName;
@@ -379,6 +383,7 @@ class RemoteCommandContext {
   const RemoteCommandContext({
     required this.encrypted,
     required this.authorized,
+    this.remembered = false,
     this.sidB64,
     this.peerFingerprint,
     this.peerName,

@@ -29,6 +29,8 @@ class DiscoveredDevice {
   }) : discoveredAt = discoveredAt ?? DateTime.now();
 
   bool get supportsEncryption => protoVersion >= 2;
+  bool get supportsAddonTransferResult =>
+      protoVersion >= kAddonResultProtocolVersion;
 
   Map<String, dynamic> toJson() => {
     'deviceName': deviceName,

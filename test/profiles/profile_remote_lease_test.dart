@@ -144,6 +144,123 @@ void main() {
     );
   });
 
+  test('live remembered peer can renew after an ordinary revision', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+    ProfileRemoteLease.instance.bindAuthenticatedPeer(
+      peerFingerprint: peer,
+      sessionId: session,
+      scope: scope,
+      currentProfile: original,
+    );
+
+    final updated = profile(revision: 2);
+    expect(
+      ProfileRemoteLease.instance.renewRememberedPeerAfterRevision(
+        profile: updated,
+        scope: scope,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isTrue,
+    );
+    expect(
+      ProfileRemoteLease.instance.allows(
+        ProfileFeature.remoteTransfer,
+        scope,
+        currentProfile: updated,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isTrue,
+    );
+  });
+
+  test('expired remembered peer cannot renew after a revision', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.debugSetClock(() => now);
+    ProfileRemoteLease.instance.authorize(original, scope);
+    ProfileRemoteLease.instance.bindAuthenticatedPeer(
+      peerFingerprint: peer,
+      sessionId: session,
+      scope: scope,
+      currentProfile: original,
+    );
+    ProfileRemoteLease.instance.debugSetClock(
+      () => now.add(const Duration(minutes: 16)),
+    );
+
+    expect(
+      ProfileRemoteLease.instance.renewRememberedPeerAfterRevision(
+        profile: profile(revision: 2),
+        scope: scope,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isFalse,
+    );
+  });
+
+  test('approved mutation rebinds only the importing peer to new revision', () {
+    final original = profile();
+    final updated = profile(revision: 2);
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+    expect(
+      ProfileRemoteLease.instance.bindAuthenticatedPeer(
+        peerFingerprint: peer,
+        sessionId: session,
+        scope: scope,
+        currentProfile: original,
+      ),
+      isTrue,
+    );
+    expect(
+      ProfileRemoteLease.instance.reauthorizeApprovedPeer(
+        profile: updated,
+        scope: scope,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isTrue,
+    );
+    expect(
+      ProfileRemoteLease.instance.allows(
+        ProfileFeature.remoteTransfer,
+        scope,
+        currentProfile: updated,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isTrue,
+    );
+    expect(
+      ProfileRemoteLease.instance.allows(
+        ProfileFeature.remoteTransfer,
+        scope,
+        currentProfile: updated,
+        peerFingerprint: 'different-peer',
+        sessionId: 'different-session',
+      ),
+      isFalse,
+      reason: 'revision refresh must not revive unrelated peers',
+    );
+  });
+
   test('explicit lock revokes every peer session', () {
     final original = profile();
     final scope = ProfileScope(

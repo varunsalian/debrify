@@ -163,6 +163,27 @@ bool profileGraphResultMatchesRequest({
   return resultRequestId == requestId;
 }
 
+/// Correlated application outcome for one single-addon transfer.
+String addonTransferResultBody({required String requestId, required bool ok}) =>
+    jsonEncode({'requestId': requestId, 'ok': ok});
+
+({String requestId, bool ok})? parseAddonTransferResultBody(String data) {
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['requestId'];
+    final ok = map['ok'];
+    if (requestId is! String ||
+        requestId.isEmpty ||
+        requestId.length > 128 ||
+        ok is! bool) {
+      return null;
+    }
+    return (requestId: requestId, ok: ok);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Sent chunks kept for gap repair. Chunks are SEALED ciphertext slices —
 /// caching them holds no plaintext — and resends go to the transfer's
 /// original target only, never to whoever asked (a forged need can at worst

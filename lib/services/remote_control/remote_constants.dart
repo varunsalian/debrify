@@ -32,8 +32,11 @@ class RemoteMessageType {
 }
 
 /// Protocol version advertised in discovery. v1 = plaintext only (implied by
-/// the field's absence), v2 = X25519/AES-GCM sessions + pairing codes.
-const int kProtoVersion = 2;
+/// the field's absence), v2 = X25519/AES-GCM sessions + pairing codes, v3 =
+/// correlated receiver outcomes for single-addon transfers.
+const int kProtoVersion = 3;
+
+const int kAddonResultProtocolVersion = 3;
 
 /// First Debrify release whose RECEIVER speaks [kProtoVersion] 2, quoted to
 /// the user when a send is refused. v2 landed after 0.8.1-alpha.1 shipped, so
@@ -185,6 +188,10 @@ class ConfigCommand {
   // refuse, the import can fail). Consumed in RemoteControlState._dispatch
   // on any role; never routed to the command router.
   static const String profileGraphResult = 'profile_graph_result';
+  // Receiver → sender: correlated result for a single-addon transfer. The
+  // sender must not treat local UDP acceptance as proof that the TV applied
+  // the add-on.
+  static const String addonTransferResult = 'addon_transfer_result';
   static const String complete =
       'complete'; // Signals all configs sent, TV should restart
 }

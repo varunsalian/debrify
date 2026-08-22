@@ -15,6 +15,7 @@ import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:debrify/services/remote_control/remote_control_state.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/services/remote_control/udp_command_service.dart';
+import 'package:debrify/services/remote_control/udp_discovery_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -178,6 +179,47 @@ void main() {
       expect(
         parseProfileGraphResultBody('{"ok":true,"message":"${'x' * 600}"}'),
         isNull,
+      );
+    });
+  });
+
+  group('addon transfer result', () {
+    test('outcome body is correlated and bounded', () {
+      final parsed = parseAddonTransferResultBody(
+        addonTransferResultBody(requestId: 'addon-request-1', ok: true),
+      );
+      expect(parsed, isNotNull);
+      expect(parsed!.requestId, 'addon-request-1');
+      expect(parsed.ok, isTrue);
+      expect(parseAddonTransferResultBody('not json'), isNull);
+      expect(
+        parseAddonTransferResultBody('{"requestId":"${'x' * 129}","ok":true}'),
+        isNull,
+      );
+      expect(
+        parseAddonTransferResultBody(
+          '{"requestId":"addon-request-1","ok":"yes"}',
+        ),
+        isNull,
+      );
+    });
+
+    test('discovery capability starts at protocol v3', () {
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 2,
+        ).supportsAddonTransferResult,
+        isFalse,
+      );
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 3,
+        ).supportsAddonTransferResult,
+        isTrue,
       );
     });
   });

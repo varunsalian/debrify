@@ -354,28 +354,65 @@ class RemoteCommandRouter {
         ? ProfileFeature.remoteTransfer
         : ProfileFeature.remoteControl;
     final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
-    if (!ProfileRuntime.isProfileCommitted ||
-        ProfileRuntime.capture() != scope ||
-        profile == null ||
-        !profile.allows(feature) ||
-        !ProfileRemoteLease.instance.bindAuthenticatedPeer(
-          peerFingerprint: peerFingerprint,
-          sessionId: sessionId,
-          scope: scope,
-          currentProfile: profile,
-        ) ||
-        !ProfileRemoteLease.instance.allows(
-          feature,
-          scope,
-          currentProfile: profile,
-          peerFingerprint: peerFingerprint,
-          sessionId: sessionId,
-          rateLimit:
-              command != ConfigCommand.debrifyChannelStart &&
-              command != ConfigCommand.debrifyChannelChunk,
-        )) {
+    final runtimeCommitted = ProfileRuntime.isProfileCommitted;
+    final scopeCurrent = ProfileRuntime.capture() == scope;
+    final profilePresent = profile != null;
+    final featureAllowed = profile?.allows(feature) ?? false;
+    var peerBound =
+        runtimeCommitted && scopeCurrent && profilePresent && featureAllowed
+        ? ProfileRemoteLease.instance.bindAuthenticatedPeer(
+            peerFingerprint: peerFingerprint,
+            sessionId: sessionId,
+            scope: scope,
+            currentProfile: profile,
+          )
+        : false;
+    if (!peerBound &&
+        context.remembered &&
+        runtimeCommitted &&
+        scopeCurrent &&
+        profilePresent &&
+        featureAllowed) {
+      peerBound = ProfileRemoteLease.instance.renewRememberedPeerAfterRevision(
+        profile: profile,
+        scope: scope,
+        peerFingerprint: peerFingerprint,
+        sessionId: sessionId,
+      );
+    }
+    final leaseAllowed = peerBound
+        ? ProfileRemoteLease.instance.allows(
+            feature,
+            scope,
+            currentProfile: profile!,
+            peerFingerprint: peerFingerprint,
+            sessionId: sessionId,
+            rateLimit:
+                command != ConfigCommand.debrifyChannelStart &&
+                command != ConfigCommand.debrifyChannelChunk,
+          )
+        : false;
+    if (!runtimeCommitted ||
+        !scopeCurrent ||
+        !profilePresent ||
+        !featureAllowed ||
+        !peerBound ||
+        !leaseAllowed) {
       debugPrint('RemoteCommandRouter: local profile authorization required');
-      unawaited(context.reject?.call('profile_authorization_required'));
+      final requestId = _addonTransferRequestId(data);
+      if (action == RemoteAction.config &&
+          command == ConfigCommand.complete &&
+          requestId != null) {
+        unawaited(
+          _reportAddonTransferResultBestEffort(
+            context,
+            requestId: requestId,
+            ok: false,
+          ),
+        );
+      } else {
+        unawaited(context.reject?.call('profile_authorization_required'));
+      }
       return;
     }
     await _dispatchAuthorized(
@@ -694,6 +731,11 @@ class RemoteCommandRouter {
           return;
         }
         debugPrint('RemoteCommandRouter: Ignoring unsolicited complete signal');
+        await _reportAddonTransferResultBestEffort(
+          context,
+          requestId: _addonTransferRequestId(data),
+          ok: false,
+        );
         return;
       }
       if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
@@ -701,6 +743,11 @@ class RemoteCommandRouter {
         final applied = await _commitProfileRemotePayload(
           context,
           profileBinding,
+        );
+        await _reportAddonTransferResultBestEffort(
+          context,
+          requestId: _addonTransferRequestId(data),
+          ok: applied,
         );
         if (wasOnboarding && applied) {
           _notifyHandlers(RemoteAction.config, command, data);
@@ -858,6 +905,37 @@ class RemoteCommandRouter {
         message: message,
       ),
     );
+  }
+
+  String? _addonTransferRequestId(String? data) {
+    if (data == null || data.isEmpty || data.length > 128) return null;
+    return data;
+  }
+
+  Future<bool> _reportAddonTransferResultBestEffort(
+    RemoteCommandContext remoteContext, {
+    required String? requestId,
+    required bool ok,
+  }) async {
+    if (requestId == null) return false;
+    try {
+      final sidB64 = remoteContext.sidB64;
+      if (sidB64 == null) return false;
+      final state = RemoteControlState();
+      final session = state.sessionManager?.sessionBySid(sidB64);
+      if (session == null || !session.authorized) return false;
+      final sent = await state.sendEncryptedCommand(
+        session,
+        RemoteCommand(
+          action: RemoteAction.config,
+          command: ConfigCommand.addonTransferResult,
+          data: addonTransferResultBody(requestId: requestId, ok: ok),
+        ),
+      );
+      return sent;
+    } catch (_) {
+      return false;
+    }
   }
 
   String? _profileGraphRequestId(String data) {
@@ -1454,12 +1532,16 @@ class RemoteCommandRouter {
     _ProfileCommandBinding? binding,
   ) async {
     final payload = _profileRemotePayload;
+    final bindingMatches = binding != null && _profileRemoteBinding == binding;
+    final peerMatches = _profileRemotePeer == _profilePeerKey(remoteContext);
+    final scopeMatches =
+        binding != null && ProfileRuntime.capture() == binding.scope;
     if (payload == null ||
         payload.length <= 2 ||
         binding == null ||
-        _profileRemoteBinding != binding ||
-        _profileRemotePeer != _profilePeerKey(remoteContext) ||
-        ProfileRuntime.capture() != binding.scope) {
+        !bindingMatches ||
+        !peerMatches ||
+        !scopeMatches) {
       _showSnackBar('No profile configuration received', isError: true);
       return false;
     }
@@ -1573,14 +1655,32 @@ class RemoteCommandRouter {
         // per-item application instead of all-or-nothing, which remote
         // transfers tolerate by construction: they are idempotent, and a
         // resend converges.
-        await _applyProfileRemotePayload(payload, binding);
+        final allApplied = await _applyProfileRemotePayload(payload, binding);
+        final updatedProfile = await ProfileBootstrap.registry.getProfile(
+          binding.scope.profileId,
+        );
+        final peerFingerprint = remoteContext.peerFingerprint;
+        final sessionId = remoteContext.sidB64;
+        final currentScope = ProfileRuntime.capture();
+        if (updatedProfile == null ||
+            peerFingerprint == null ||
+            sessionId == null ||
+            currentScope != binding.scope ||
+            !ProfileRemoteLease.instance.reauthorizeApprovedPeer(
+              profile: updatedProfile,
+              scope: currentScope,
+              peerFingerprint: peerFingerprint,
+              sessionId: sessionId,
+            )) {
+          throw StateError('Approved remote peer could not be reauthorized');
+        }
+        return allApplied;
       } finally {
         _applyingRemotePayload = false;
       }
-      return true;
     } catch (_) {
-      // Reachable only from the pre-write validations above; the apply loop
-      // itself never throws. Keep the wording survivable either way.
+      // The apply loop banks item failures, but post-write lease refresh can
+      // still fail if the destination changes at the end of the import.
       _showSnackBar(
         'Profile import stopped — nothing further was applied',
         isError: true,
@@ -1598,7 +1698,7 @@ class RemoteCommandRouter {
   /// NAMED failure snackbar into the batch, and the single flush at the end
   /// is the honest summary — "2 failed (Real-Debrid, PikPak)" beats any
   /// counter this function could keep.
-  Future<void> _applyProfileRemotePayload(
+  Future<bool> _applyProfileRemotePayload(
     Map<String, dynamic> payload,
     _ProfileCommandBinding binding,
   ) async {
@@ -1615,6 +1715,7 @@ class RemoteCommandRouter {
     _batchIdleTimer?.cancel();
     _batchIdleTimer = null;
     var destinationLost = false;
+    var hadFailure = false;
     Future<void> apply(String label, Future<void> Function() body) async {
       if (destinationLost) return;
       // The confirm dialog authorized THIS profile. Handlers capture the
@@ -1635,6 +1736,7 @@ class RemoteCommandRouter {
       try {
         await body();
       } catch (_) {
+        hadFailure = true;
         // Handlers bank their own named failures; this catch only covers
         // throws that escape them (and the addon path below).
         debugPrint('RemoteCommandRouter: applying $label failed');
@@ -1700,6 +1802,7 @@ class RemoteCommandRouter {
     } finally {
       _flushBatch(prefix: 'Transfer applied');
     }
+    return !destinationLost && !hadFailure;
   }
 
   Future<bool> _validateRemoteBinding(
