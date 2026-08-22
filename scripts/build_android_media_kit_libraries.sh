@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build MediaKit's exact Android v1.1.5 native bundle with Debrify's subtitle
+# Build MediaKit's exact Android v1.1.11 native bundle with Debrify's subtitle
 # decoder patch. This intentionally keeps mpv, FFmpeg, helper code and all
 # non-subtitle options aligned with the bundle currently shipped by Debrify.
 
@@ -28,7 +28,7 @@ if [[ -z "${ANDROID_HOME:-}" || ! -d "$ANDROID_HOME" ]]; then
 fi
 
 readonly UPSTREAM_REPO="https://github.com/media-kit/libmpv-android-video-build.git"
-readonly UPSTREAM_COMMIT="637737313266a71c57c67744434ee3c491e75657"
+readonly UPSTREAM_COMMIT="1ecf5100ec0f75e1d0630f48851b85769c92eed2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATCH="$ROOT/patches/libmpv-android-subtitle-decoders.patch"
@@ -41,12 +41,12 @@ git -C "$WORK/source" apply --check "$PATCH"
 git -C "$WORK/source" apply "$PATCH"
 
 # Avoid the upstream script's package-manager branch. GitHub's Android runner
-# already has Java/Flutter; the pinned build downloads its own matching Android
-# command-line tools & NDK. Reusing the runner's newer sdkmanager would require
-# Java 17, while the helper Gradle project in this recipe still requires 11.
-# v1.1.5's cleanup predicates expect these directories to exist before their
-# first invocation (the release workflow normally primes the workspace).
+# already has Java 17, Flutter and the SDK; the recipe installs only its pinned
+# NDK/build-tools into that SDK. v1.1.11's cleanup predicates expect these
+# directories to exist before their first invocation.
 mkdir -p "$WORK/source/buildscripts/deps" "$WORK/source/buildscripts/prefix"
+mkdir -p "$WORK/source/buildscripts/sdk"
+ln -s "$ANDROID_HOME" "$WORK/source/buildscripts/sdk/android-sdk-linux"
 (
   cd "$WORK/source/buildscripts"
   TRAVIS=1 ./bundle_default.sh
@@ -54,7 +54,8 @@ mkdir -p "$WORK/source/buildscripts/deps" "$WORK/source/buildscripts/prefix"
 
 STAGE="$WORK/jars"
 mkdir -p "$STAGE"
-find "$WORK/source/output" -maxdepth 1 -type f -name 'default-*.jar' \
+find "$WORK/source/buildscripts/artifacts/default" -maxdepth 1 -type f \
+  -name 'default-*.jar' \
   -exec cp {} "$STAGE"/ \;
 
 if [[ "$(find "$STAGE" -maxdepth 1 -type f -name 'default-*.jar' | wc -l | tr -d ' ')" != 4 ]]; then

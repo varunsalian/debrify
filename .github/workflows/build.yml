@@ -68,14 +68,14 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y autoconf automake libtool ninja-build nasm pkg-config python3-pip python3-setuptools unzip wget zip
-        python3 -m pip install --user meson==1.2.3
+        python3 -m pip install --user meson==1.7.0
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-    - name: Select Java 11 for pinned MediaKit native build
+    - name: Select Java 17 for pinned MediaKit native build
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '11'
+        java-version: '17'
 
     - name: Build PGS-capable MediaKit Android libraries
       run: scripts/build_android_media_kit_libraries.sh packages/media_kit_libs_android_video_patched/android/libs
