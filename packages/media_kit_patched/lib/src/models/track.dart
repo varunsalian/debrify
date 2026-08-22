@@ -219,6 +219,15 @@ class SubtitleTrack extends _Track {
   /// Whether the audio track is loaded from data.
   final bool data;
 
+  /// Whether this track comes from a file outside the playing media.
+  ///
+  /// Native backends populate this from libmpv's `track-list/N/external`
+  /// property. URI/data tracks are external by definition.
+  final bool external;
+
+  /// Source filename reported by the native backend for an external track.
+  final String? externalFilename;
+
   /// {@macro subtitle_track}
   const SubtitleTrack(
     super.id,
@@ -240,6 +249,8 @@ class SubtitleTrack extends _Track {
     super.audiochannels,
     this.uri = false,
     this.data = false,
+    this.external = false,
+    this.externalFilename,
   });
 
   /// No subtitle track. Disables subtitle output.
@@ -258,7 +269,8 @@ class SubtitleTrack extends _Track {
     String? title,
     String? language,
   }) =>
-      SubtitleTrack(uri, title, language, uri: true);
+      SubtitleTrack(uri, title, language,
+          uri: true, external: true, externalFilename: uri);
 
   /// [SubtitleTrack] loaded with data.
   ///
@@ -270,7 +282,7 @@ class SubtitleTrack extends _Track {
     String? title,
     String? language,
   }) =>
-      SubtitleTrack(data, title, language, data: true);
+      SubtitleTrack(data, title, language, data: true, external: true);
 
   @override
   bool operator ==(Object other) {
@@ -278,13 +290,23 @@ class SubtitleTrack extends _Track {
       return true;
     }
     if (other is SubtitleTrack) {
-      return id == other.id && uri == other.uri && data == other.data;
+      return id == other.id &&
+          uri == other.uri &&
+          data == other.data &&
+          external == other.external &&
+          externalFilename == other.externalFilename;
     }
     return false;
   }
 
   @override
-  int get hashCode => 0x3 ^ id.hashCode ^ uri.hashCode ^ data.hashCode;
+  int get hashCode =>
+      0x3 ^
+      id.hashCode ^
+      uri.hashCode ^
+      data.hashCode ^
+      external.hashCode ^
+      externalFilename.hashCode;
 }
 
 // For composition in [PlayerState] & [PlayerStreams] classes.

@@ -8,6 +8,7 @@ import '../../../services/subtitle_font_service.dart';
 import '../constants/color_constants.dart';
 import '../utils/language_mapping.dart';
 import '../services/subtitle_settings_service.dart';
+import '../services/subtitle_track_utils.dart';
 
 class TracksSheetSubtitleSearchResult {
   final List<StremioSubtitle> subtitles;
@@ -58,8 +59,7 @@ class TracksSheet {
     void Function(List<AddonSubtitleSlot> slots)? onAddonSlotsFetched,
     String? selectedStremioSubtitleId,
     void Function(String? id)? onStremioSubtitleSelected,
-    Future<String?> Function(StremioSubtitle subtitle)?
-    onDownloadStremioSubtitleToFile,
+    Future<bool> Function(StremioSubtitle subtitle)? onApplyStremioSubtitle,
     Future<TracksSheetSubtitleSearchResult?> Function()? onIdentifyTitle,
     String? subtitleIdentityLabel,
     // Fired only when the user applies an ACTUAL subtitle change (not an audio
@@ -77,11 +77,7 @@ class TracksSheet {
     final audios = tracks.audio
         .where((a) => a.id.toLowerCase() != 'no')
         .toList(growable: false);
-    final embeddedSubs = tracks.subtitle
-        .where(
-          (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
-        )
-        .toList(growable: false);
+    final embeddedSubs = embeddedSubtitleTracks(tracks.subtitle);
     String selectedAudio = player.state.track.audio.id;
     String selectedSub = selectedStremioSubtitleId != null
         ? 'stremio:$selectedStremioSubtitleId'
@@ -150,49 +146,51 @@ class TracksSheet {
             // Kick off the per-addon fetch on first build (cache miss).
             final fetchImdbId = activeImdbId;
             final fetchType = activeContentType;
-            if (!slotsFetchStarted && fetchImdbId != null && fetchType != null) {
+            if (!slotsFetchStarted &&
+                fetchImdbId != null &&
+                fetchType != null) {
               slotsFetchStarted = true;
               final generation = ++subtitleFetchGeneration;
               StremioSubtitleService.instance
                   .fetchSubtitleSlots(
-                type: fetchType,
-                imdbId: fetchImdbId,
-                season: activeSeason,
-                episode: activeEpisode,
-                onUpdate: (slots) {
-                  if (generation != subtitleFetchGeneration) return;
-                  // The service snapshot doesn't know about retries — keep
-                  // the locally newer outcome for any retried addon.
-                  var next = slots;
-                  final local = addonSlots;
-                  if (local != null && retriedAddonIds.isNotEmpty) {
-                    next = [
-                      for (final s in slots)
-                        if (retriedAddonIds.contains(s.addonId))
-                          local.firstWhere(
-                            (l) => l.addonId == s.addonId,
-                            orElse: () => s,
-                          )
-                        else
-                          s,
-                    ];
-                  }
-                  // Cache runs even if the sheet was closed mid-fetch.
-                  cacheSlots(next);
-                  if (!context.mounted) return;
-                  setModalState(() => addonSlots = next);
-                },
-              )
+                    type: fetchType,
+                    imdbId: fetchImdbId,
+                    season: activeSeason,
+                    episode: activeEpisode,
+                    onUpdate: (slots) {
+                      if (generation != subtitleFetchGeneration) return;
+                      // The service snapshot doesn't know about retries — keep
+                      // the locally newer outcome for any retried addon.
+                      var next = slots;
+                      final local = addonSlots;
+                      if (local != null && retriedAddonIds.isNotEmpty) {
+                        next = [
+                          for (final s in slots)
+                            if (retriedAddonIds.contains(s.addonId))
+                              local.firstWhere(
+                                (l) => l.addonId == s.addonId,
+                                orElse: () => s,
+                              )
+                            else
+                              s,
+                        ];
+                      }
+                      // Cache runs even if the sheet was closed mid-fetch.
+                      cacheSlots(next);
+                      if (!context.mounted) return;
+                      setModalState(() => addonSlots = next);
+                    },
+                  )
                   .catchError((Object e) {
-                // Addon-level errors are caught per-slot inside the service;
-                // this only fires when listing the addons itself blew up.
-                debugPrint('TracksSheet: Slot fetch failed: $e');
-                if (generation == subtitleFetchGeneration &&
-                    context.mounted) {
-                  setModalState(() => addonSlots ??= const []);
-                }
-                return const <AddonSubtitleSlot>[];
-              });
+                    // Addon-level errors are caught per-slot inside the service;
+                    // this only fires when listing the addons itself blew up.
+                    debugPrint('TracksSheet: Slot fetch failed: $e');
+                    if (generation == subtitleFetchGeneration &&
+                        context.mounted) {
+                      setModalState(() => addonSlots ??= const []);
+                    }
+                    return const <AddonSubtitleSlot>[];
+                  });
             }
 
             void retryAddon(String addonId) {
@@ -210,28 +208,29 @@ class TracksSheet {
               retriedAddonIds.add(addonId);
               setModalState(() {
                 addonSlots = List.of(slots)
-                  ..[idx] = slots[idx]
-                      .copyWith(status: AddonSubtitleStatus.loading);
+                  ..[idx] = slots[idx].copyWith(
+                    status: AddonSubtitleStatus.loading,
+                  );
               });
               StremioSubtitleService.instance
                   .fetchSingleAddonSlot(
-                addonId: addonId,
-                type: type,
-                imdbId: imdbId,
-                season: activeSeason,
-                episode: activeEpisode,
-              )
+                    addonId: addonId,
+                    type: type,
+                    imdbId: imdbId,
+                    season: activeSeason,
+                    episode: activeEpisode,
+                  )
                   .then((settled) {
-                if (generation != subtitleFetchGeneration) return;
-                final cur = addonSlots;
-                if (cur == null) return;
-                final i = cur.indexWhere((s) => s.addonId == addonId);
-                if (i < 0) return;
-                final updated = List.of(cur)..[i] = settled;
-                cacheSlots(updated);
-                if (!context.mounted) return;
-                setModalState(() => addonSlots = updated);
-              });
+                    if (generation != subtitleFetchGeneration) return;
+                    final cur = addonSlots;
+                    if (cur == null) return;
+                    final i = cur.indexWhere((s) => s.addonId == addonId);
+                    if (i < 0) return;
+                    final updated = List.of(cur)..[i] = settled;
+                    cacheSlots(updated);
+                    if (!context.mounted) return;
+                    setModalState(() => addonSlots = updated);
+                  });
             }
 
             final screenWidth = MediaQuery.of(context).size.width;
@@ -320,8 +319,11 @@ class TracksSheet {
                           _buildTab(
                             icon: Icons.subtitles_rounded,
                             label: 'Subtitles',
-                            badge: _subtitleBadge(embeddedSubs, addonSlots,
-                                slotsFetchStarted),
+                            badge: _subtitleBadge(
+                              embeddedSubs,
+                              addonSlots,
+                              slotsFetchStarted,
+                            ),
                             isSelected: selectedTabIndex == 1,
                             onTap: () =>
                                 setModalState(() => selectedTabIndex = 1),
@@ -360,9 +362,7 @@ class TracksSheet {
                             onAudioPassthroughChanged == null
                             ? null
                             : (enabled) async {
-                                setModalState(
-                                  () => passthroughState = enabled,
-                                );
+                                setModalState(() => passthroughState = enabled);
                                 await onAudioPassthroughChanged(enabled);
                               },
                         embeddedSubs: embeddedSubs,
@@ -379,8 +379,7 @@ class TracksSheet {
                           }
                         },
                         onStremioSubtitleSelected: onStremioSubtitleSelected,
-                        onDownloadStremioSubtitleToFile:
-                            onDownloadStremioSubtitleToFile,
+                        onApplyStremioSubtitle: onApplyStremioSubtitle,
                         onSubtitleTrackChanged: onSubtitleTrackChanged,
                         isIdentifyingTitle: isIdentifyingTitle,
                         subtitleIdentityLabel: activeSubtitleIdentityLabel,
@@ -411,8 +410,7 @@ class TracksSheet {
                                       }
                                       if (result.imdbId != null) {
                                         activeImdbId = result.imdbId;
-                                        activeContentType =
-                                            result.contentType;
+                                        activeContentType = result.contentType;
                                         activeSeason = result.season;
                                         activeEpisode = result.episode;
                                       }
@@ -427,9 +425,9 @@ class TracksSheet {
                                         if (slots != null) {
                                           for (final slot in slots) {
                                             if (slot.subtitles.any(
-                                                (s) => s.id == selectedId)) {
-                                              selectedProviderId =
-                                                  slot.addonId;
+                                              (s) => s.id == selectedId,
+                                            )) {
+                                              selectedProviderId = slot.addonId;
                                               break;
                                             }
                                           }
@@ -480,7 +478,9 @@ class TracksSheet {
     bool fetchStarted,
   ) {
     if (slots == null) {
-      return fetchStarted ? '…' : (embedded.isNotEmpty ? '${embedded.length}' : null);
+      return fetchStarted
+          ? '…'
+          : (embedded.isNotEmpty ? '${embedded.length}' : null);
     }
     if (slots.any((s) => s.status == AddonSubtitleStatus.loading)) return '…';
     final count = embedded.length + AddonSubtitleSlot.flatten(slots).length;
@@ -577,8 +577,8 @@ class TracksSheet {
     required void Function(String) onRetryAddon,
     required void Function(String) onSubChanged,
     required void Function(String? id)? onStremioSubtitleSelected,
-    required Future<String?> Function(StremioSubtitle subtitle)?
-    onDownloadStremioSubtitleToFile,
+    required Future<bool> Function(StremioSubtitle subtitle)?
+    onApplyStremioSubtitle,
     VoidCallback? onSubtitleTrackChanged,
     required bool isIdentifyingTitle,
     required String? subtitleIdentityLabel,
@@ -616,7 +616,7 @@ class TracksSheet {
           onTrackChanged: onTrackChanged,
           onSubChanged: onSubChanged,
           onStremioSubtitleSelected: onStremioSubtitleSelected,
-          onDownloadStremioSubtitleToFile: onDownloadStremioSubtitleToFile,
+          onApplyStremioSubtitle: onApplyStremioSubtitle,
           onSubtitleTrackChanged: onSubtitleTrackChanged,
           isIdentifyingTitle: isIdentifyingTitle,
           subtitleIdentityLabel: subtitleIdentityLabel,
@@ -778,10 +778,7 @@ class _PassthroughToggle extends StatelessWidget {
               ],
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: (v) => onChanged(v),
-          ),
+          Switch(value: value, onChanged: (v) => onChanged(v)),
         ],
       ),
     );
@@ -812,8 +809,7 @@ class _SubtitlesTab extends StatelessWidget {
   final Future<void> Function(String, String) onTrackChanged;
   final void Function(String) onSubChanged;
   final void Function(String? id)? onStremioSubtitleSelected;
-  final Future<String?> Function(StremioSubtitle subtitle)?
-  onDownloadStremioSubtitleToFile;
+  final Future<bool> Function(StremioSubtitle subtitle)? onApplyStremioSubtitle;
   final VoidCallback? onSubtitleTrackChanged;
   final bool isIdentifyingTitle;
   final String? subtitleIdentityLabel;
@@ -834,7 +830,7 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onTrackChanged,
     required this.onSubChanged,
     required this.onStremioSubtitleSelected,
-    required this.onDownloadStremioSubtitleToFile,
+    required this.onApplyStremioSubtitle,
     this.onSubtitleTrackChanged,
     required this.isIdentifyingTitle,
     required this.subtitleIdentityLabel,
@@ -850,10 +846,10 @@ class _SubtitlesTab extends StatelessWidget {
       tappedId != selectedSub && selectedSub != 'auto';
 
   List<_ProviderEntry> get _providers => [
-        const _ProviderEntry('emb', 'Embedded', null),
-        for (final slot in addonSlots ?? const <AddonSubtitleSlot>[])
-          _ProviderEntry(slot.addonId, slot.addonName, slot),
-      ];
+    const _ProviderEntry('emb', 'Embedded', null),
+    for (final slot in addonSlots ?? const <AddonSubtitleSlot>[])
+      _ProviderEntry(slot.addonId, slot.addonName, slot),
+  ];
 
   /// Whether the currently applied subtitle lives in this provider's group.
   bool _providerHasSelection(_ProviderEntry p) {
@@ -916,7 +912,10 @@ class _SubtitlesTab extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Container(width: 1, color: Colors.white.withValues(alpha: 0.06)),
+                  Container(
+                    width: 1,
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
                   const SizedBox(width: 16),
                   Expanded(child: _buildProviderContent(selected)),
                 ],
@@ -1087,8 +1086,9 @@ class _SubtitlesTab extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
                 ),
                 child: Column(
                   children: [
@@ -1125,21 +1125,13 @@ class _SubtitlesTab extends StatelessWidget {
                 isSelected: subId == selectedSub,
                 onTap: () async {
                   final realChange = _isRealSubtitleChange(subId);
-                  onSubChanged(subId);
                   try {
-                    final filePath = await onDownloadStremioSubtitleToFile
-                        ?.call(sub);
-                    // Download failed: leave the current subtitle (and its
-                    // offset) untouched — do NOT fire onSubtitleTrackChanged.
-                    if (filePath == null) return;
+                    final applied = await onApplyStremioSubtitle?.call(sub);
+                    // Keep both the player and local row selection on the
+                    // previous subtitle when download/parsing/loading fails.
+                    if (applied != true) return;
 
-                    final track = mk.SubtitleTrack.uri(
-                      filePath,
-                      title: sub.displayName,
-                      language: sub.lang,
-                    );
-                    await player.setSubtitleTrack(mk.SubtitleTrack.no());
-                    await player.setSubtitleTrack(track);
+                    onSubChanged(subId);
                     onStremioSubtitleSelected?.call(sub.id);
                     await onTrackChanged(selectedAudio, subId);
                     if (realChange) onSubtitleTrackChanged?.call();
@@ -1579,11 +1571,11 @@ class _ProviderChip extends StatelessWidget {
   });
 
   const _ProviderChip.pending()
-      : entry = null,
-        embeddedCount = 0,
-        isSelected = false,
-        hasActiveSub = false,
-        onTap = null;
+    : entry = null,
+      embeddedCount = 0,
+      isSelected = false,
+      hasActiveSub = false,
+      onTap = null;
 
   @override
   Widget build(BuildContext context) {
@@ -1865,8 +1857,7 @@ class _RetryCard extends StatelessWidget {
           TvTappable(
             onTap: onRetry,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFFE50914), Color(0xFFFF4D57)],
@@ -1990,8 +1981,7 @@ class _TrackTile extends StatelessWidget {
             if (trailing != null) ...[
               const SizedBox(width: 10),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? VideoPlayerColors.netflixRed.withValues(alpha: 0.4)

@@ -53,6 +53,8 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 // Video Player Components
 import 'video_player/models/playlist_entry.dart';
+import 'video_player/services/external_subtitle_payload.dart';
+import 'video_player/services/subtitle_track_utils.dart';
 import 'video_player/models/gesture_state.dart';
 import 'video_player/models/hud_state.dart';
 import 'video_player/painters/double_tap_ripple_painter.dart';
@@ -11047,7 +11049,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (full.isEmpty) return null;
     final eps = <(int, int)>[
       for (final m in full)
-        if (m['season'] is int && m['number'] is int && (m['season'] as int) > 0)
+        if (m['season'] is int &&
+            m['number'] is int &&
+            (m['season'] as int) > 0)
           ((m['season'] as int), (m['number'] as int)),
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
     final idx = eps.indexWhere((p) => p.$1 == season && p.$2 == episode);
@@ -13030,7 +13034,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _selectedStremioSubtitleId = id;
         _userManuallySelectedSubtitle = true;
       },
-      onDownloadStremioSubtitleToFile: _downloadStremioSubtitleToTempFile,
+      onApplyStremioSubtitle: _applyStremioSubtitleFromTracksSheet,
       onIdentifyTitle: _identifyTitleAndFetchSubtitles,
       subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
     );
@@ -13186,13 +13190,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: sub.displayName,
         language: sub.lang,
       );
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-      // Each await is a window for the content to switch under us; persisting
-      // the stale id would also suppress the new item's subtitle auto-select.
-      if (token != _addonSubtitleFetchToken || !mounted) return false;
-      await _player.setSubtitleTrack(track);
+      await _applyExternalSubtitleTrack(track);
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _selectedStremioSubtitleId = sub.id;
+      _activeExternalSubtitlePath = filePath;
       await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
       return true;
     } catch (e) {
@@ -13201,15 +13202,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  Future<bool> _applyStremioSubtitleFromTracksSheet(StremioSubtitle sub) async {
+    final token = _addonSubtitleFetchToken;
+    try {
+      final filePath = await _downloadStremioSubtitleToTempFile(sub);
+      if (filePath == null || token != _addonSubtitleFetchToken || !mounted) {
+        return false;
+      }
+      await _applyExternalSubtitleTrack(
+        mk.SubtitleTrack.uri(
+          filePath,
+          title: sub.displayName,
+          language: sub.lang,
+        ),
+      );
+      if (token != _addonSubtitleFetchToken || !mounted) return false;
+      _activeExternalSubtitlePath = filePath;
+      return true;
+    } catch (e) {
+      debugPrint('TracksSheet: subtitle apply failed - $e');
+      return false;
+    }
+  }
+
   Widget _buildPlayerMenuPanel() {
     final audios = _player.state.tracks.audio
         .where((a) => a.id.toLowerCase() != 'no')
         .toList(growable: false);
-    final embedded = _player.state.tracks.subtitle
-        .where(
-          (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
-        )
-        .toList(growable: false);
+    final embedded = embeddedSubtitleTracks(_player.state.tracks.subtitle);
     final selectedSub = _selectedStremioSubtitleId != null
         ? 'stremio:$_selectedStremioSubtitleId'
         : _player.state.track.subtitle.id;
@@ -13397,11 +13417,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final tracks = _player.state.tracks;
           // Check if the stored track actually exists in this video
           final trackExists = tracks.subtitle.any(
-            (t) => t.id == subtitleTrackId,
+            (t) =>
+                t.id == subtitleTrackId &&
+                !isAppManagedAddonSubtitleTrack(t),
           );
           if (trackExists) {
             final subtitleTrack = tracks.subtitle.firstWhere(
-              (track) => track.id == subtitleTrackId,
+              (track) =>
+                  track.id == subtitleTrackId &&
+                  !isAppManagedAddonSubtitleTrack(track),
             );
             // A stored pick that CONFLICTS with the current global default
             // language is stale — it predates the user changing the setting
@@ -13546,6 +13570,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // This handles ISO 639-1, ISO 639-2, regional variants, and language names
       mk.SubtitleTrack? matchingTrack;
       for (final track in tracks.subtitle) {
+        if (isAppManagedAddonSubtitleTrack(track)) continue;
         if (LanguageMapper.matchesLanguage(defaultLang, track.language)) {
           matchingTrack = track;
           break;
@@ -13586,64 +13611,104 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     try {
       final uri = Uri.parse(sub.url);
-      final urlPath = uri.path.toLowerCase();
-      String ext = 'srt';
-      if (urlPath.endsWith('.vtt')) {
-        ext = 'vtt';
-      } else if (urlPath.endsWith('.ass') || urlPath.endsWith('.ssa')) {
-        ext = 'ass';
-      } else if (urlPath.endsWith('.ttml') || urlPath.endsWith('.xml')) {
-        ext = 'ttml';
-      } else if (urlPath.endsWith('.sub')) {
-        ext = 'sub';
-      } else {
-        // No file extension in the path (e.g. YouTube's timedtext endpoint) —
-        // fall back to the format carried in the `fmt`/`format` query param so
-        // the temp file gets the right extension for libmpv's demuxer.
-        final fmt =
-            (uri.queryParameters['fmt'] ?? uri.queryParameters['format'] ?? '')
-                .toLowerCase();
-        if (fmt == 'vtt') {
-          ext = 'vtt';
-        } else if (fmt == 'ttml') {
-          ext = 'ttml';
-        }
-        // Note: YouTube's srv1/srv2/srv3 are XML timedtext, NOT TTML, and
-        // libmpv can't parse them — we deliberately request fmt=vtt for
-        // YouTube captions, so those never reach here. Leaving ext='srt' for
-        // any unknown fmt is a safe default (WEBVTT/SRT auto-detect by libmpv).
-      }
-
       final dir = await getTemporaryDirectory();
-      final stem = sub.id.hashCode.toUnsigned(32).toRadixString(16);
-      final file = File('${dir.path}/stremio_sub_$stem.$ext');
+      final stem = externalSubtitleCacheStem(sub.url);
+      for (final ext in const [
+        'srt',
+        'vtt',
+        'ass',
+        'ssa',
+        'ttml',
+        'xml',
+        'sub',
+      ]) {
+        final cached = File('${dir.path}/stremio_sub_$stem.$ext');
+        if (cached.existsSync()) {
+          final cachedLength = cached.lengthSync();
+          if (cachedLength > 0 && cachedLength <= maxDecodedSubtitleBytes) {
+            _tempSubtitleFiles.add(cached.path);
+            return cached.path;
+          }
+          cached.deleteSync();
+        }
+      }
 
-      // Re-tapping the same subtitle (or finding a leftover from a previous
-      // session) — reuse the existing file instead of re-downloading.
-      if (file.existsSync()) {
+      final client = http.Client();
+      late http.StreamedResponse response;
+      try {
+        response = await client
+            .send(http.Request('GET', uri))
+            .timeout(const Duration(seconds: 15));
+        final declaredLength = response.contentLength;
+        if (declaredLength != null &&
+            declaredLength > maxSubtitleResponseBytes) {
+          debugPrint(
+            'VideoPlayer: Subtitle download rejected: '
+            '$declaredLength bytes exceeds limit',
+          );
+          return null;
+        }
+        if (response.statusCode != 200) {
+          debugPrint(
+            'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}',
+          );
+          return null;
+        }
+
+        final responseBytes = await readBoundedSubtitleResponse(
+          response.stream,
+        ).timeout(const Duration(seconds: 15));
+        final payload = prepareExternalSubtitlePayload(responseBytes, uri);
+        final file = File('${dir.path}/stremio_sub_$stem.${payload.extension}');
+        final partial = File('${file.path}.part');
+        await partial.writeAsBytes(payload.bytes, flush: true);
+        if (file.existsSync()) file.deleteSync();
+        await partial.rename(file.path);
         _tempSubtitleFiles.add(file.path);
-        _activeExternalSubtitlePath = file.path;
-        return file.path;
-      }
-
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) {
         debugPrint(
-          'VideoPlayer: Subtitle download failed: HTTP ${response.statusCode}',
+          'VideoPlayer: Subtitle written to temp file: ${file.path} '
+          '(${payload.bytes.length} bytes)',
         );
-        return null;
+        return file.path;
+      } finally {
+        client.close();
       }
-
-      await file.writeAsBytes(response.bodyBytes);
-      _tempSubtitleFiles.add(file.path);
-      _activeExternalSubtitlePath = file.path;
-      debugPrint(
-        'VideoPlayer: Subtitle written to temp file: ${file.path} (${response.bodyBytes.length} bytes)',
-      );
-      return file.path;
     } catch (e) {
       debugPrint('VideoPlayer: Subtitle download/write failed: $e');
       return null;
+    }
+  }
+
+  /// Load a replacement first, then unload older addon tracks. A malformed
+  /// replacement therefore leaves the currently working subtitle untouched.
+  Future<void> _applyExternalSubtitleTrack(mk.SubtitleTrack track) async {
+    // Track IDs are small mpv ordinals and may be reused by the next media.
+    // Keep the content generation with this operation so a delayed apply can
+    // never remove a same-numbered subtitle from newly opened content.
+    final contentToken = _addonSubtitleFetchToken;
+    final oldExternalIds = _player.state.tracks.subtitle
+        .where(isAppManagedAddonSubtitleTrack)
+        .map((subtitle) => subtitle.id)
+        .toList(growable: false);
+
+    await _player.setSubtitleTrack(track);
+
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      for (final id in oldExternalIds) {
+        if (!mounted || contentToken != _addonSubtitleFetchToken) {
+          debugPrint(
+            'VideoPlayer: Content changed during addon subtitle cleanup; '
+            'stopping before track $id',
+          );
+          return;
+        }
+        try {
+          await platform.command(['sub-remove', id]);
+        } catch (e) {
+          debugPrint('VideoPlayer: Failed to unload external subtitle $id: $e');
+        }
+      }
     }
   }
 
@@ -13846,8 +13911,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: matchingSub.displayName,
         language: matchingSub.lang,
       );
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-      await _player.setSubtitleTrack(track);
+      await _applyExternalSubtitleTrack(track);
       _selectedStremioSubtitleId = matchingSub.id;
       _activeExternalSubtitlePath = filePath;
 
