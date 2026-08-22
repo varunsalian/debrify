@@ -219,6 +219,44 @@ class LanguageMapper {
     return false;
   }
 
+  /// mpv `--alang` value for a preferred language: the canonical ISO code
+  /// followed by its tag-shaped variants ("en,eng,en-us,…"). Only variants
+  /// that look like language TAGS are included — display names ("english")
+  /// never appear in container metadata, and mpv compares against tags.
+  /// Feeding mpv directly means the preference works before Dart ever sees
+  /// the track list, and mpv's matcher also honours default/forced flags.
+  static String alangForCode(String code) {
+    final normalized = code.toLowerCase().trim();
+    if (normalized.isEmpty) return '';
+    final canonical = _getReverseLookup[normalized] ?? normalized;
+    final variants = _languageVariants[canonical];
+    if (variants == null) return canonical;
+    final tagShaped = RegExp(r'^[a-z]{2,3}(-[a-z0-9]{2,4})?$');
+    return <String>[
+      canonical,
+      for (final v in variants)
+        if (v != canonical && tagShaped.hasMatch(v)) v,
+    ].join(',');
+  }
+
+  /// Audio rows for a track picker. mpv's `auto` pseudo-entry is kept and
+  /// labeled "Automatic" — selecting it is the only way to un-pin a stored
+  /// explicit track (a persisted 'auto' means "use the default selection") —
+  /// while real tracks are numbered without it, so a metadata-less first
+  /// stream reads "Track 1" instead of "Track 2".
+  static List<T> audioTrackOptions<T>(
+    List<dynamic> tracks,
+    T Function(String id, String label) build,
+  ) {
+    var realIndex = 0;
+    return [
+      for (final t in tracks)
+        (t.id as String) == 'auto'
+            ? build('auto', 'Automatic')
+            : build(t.id as String, labelForTrack(t, realIndex++)),
+    ];
+  }
+
   /// Legacy method for track label display.
   static String labelForTrack(dynamic t, int index) {
     // 1. First, check the language property (this is the correct metadata field)

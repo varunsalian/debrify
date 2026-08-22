@@ -2355,6 +2355,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('VideoPlayer: audio config $property=$value failed: $e');
       }
     }
+    // Preferred audio language, handed to mpv itself as `alang`. The Dart
+    // matcher (_applyDefaultAudioLanguage) only runs after the track list
+    // reaches Dart and only matches on metadata; mpv applies the preference
+    // at stream selection, and its matcher also weighs the default/forced
+    // dispositions. Users with no preference set send nothing.
+    try {
+      final lang = await StorageService.getDefaultAudioLanguage();
+      if (lang != null && lang.isNotEmpty) {
+        final alang = LanguageMapper.alangForCode(lang);
+        if (alang.isNotEmpty) await platform.setProperty('alang', alang);
+      }
+    } catch (e) {
+      debugPrint('VideoPlayer: alang config failed: $e');
+    }
   }
 
   /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
@@ -13241,10 +13255,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       key: _playerMenuKey,
       initialSection: _playerMenuInitialSection,
       onClose: _hidePlayerMenu,
-      audioTracks: [
-        for (final (i, a) in audios.indexed)
-          PlayerMenuTrackOption(a.id, LanguageMapper.labelForTrack(a, i)),
-      ],
+      // mpv's `auto` pseudo-entry heads the list, labeled for what it is —
+      // and kept, because persisting 'auto' is the only way to un-pin a
+      // stored explicit track for this title (restore treats a stored 'auto'
+      // as "use the default selection"). Real tracks are numbered without it
+      // so the file's first stream still reads "Track 1".
+      audioTracks: LanguageMapper.audioTrackOptions(
+        audios,
+        (id, label) => PlayerMenuTrackOption(id, label),
+      ),
       selectedAudioId: _player.state.track.audio.id,
       onAudioSelected: _menuSelectAudio,
       audioPassthrough: !kIsWeb && Platform.isAndroid
@@ -13386,16 +13405,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final audioTrackId = trackPreferences['audioTrackId'] as String?;
         final subtitleTrackId = trackPreferences['subtitleTrackId'] as String?;
 
-        // Apply audio track preference
+        // Apply audio track preference — only if the stored id exists in
+        // THIS file (mirrors the subtitle branch). Prefs are keyed by title
+        // and store bare mpv ordinals, so a different release of the same
+        // title can carry the ordinal elsewhere; the old fallback landed on
+        // tracks.audio.first, which is the 'auto' pseudo-track.
         if (audioTrackId != null &&
             audioTrackId.isNotEmpty &&
             audioTrackId != 'auto') {
-          final tracks = _player.state.tracks;
-          final audioTrack = tracks.audio.firstWhere(
-            (track) => track.id == audioTrackId,
-            orElse: () => tracks.audio.first,
-          );
-          await _player.setAudioTrack(audioTrack);
+          final audioTrack = _player.state.tracks.audio
+              .where((track) => track.id == audioTrackId)
+              .firstOrNull;
+          if (audioTrack != null) {
+            await _player.setAudioTrack(audioTrack);
+          } else {
+            await _applyDefaultAudioLanguage();
+          }
         } else {
           // No stored audio preference - apply default audio language setting
           await _applyDefaultAudioLanguage();
@@ -13524,6 +13549,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       final tracks = _player.state.tracks;
       if (tracks.audio.isEmpty) return;
+
+      // If mpv's own selection (via the `alang` set at configure time)
+      // already matches the preference, keep it: mpv's matcher weighs the
+      // default/forced dispositions, so on a file with a normal and a
+      // commentary track in the same language it lands on the right one —
+      // the first-match loop below would overwrite that with whichever
+      // matching track enumerates first.
+      final platform = _player.platform;
+      if (platform is mk.NativePlayer) {
+        try {
+          final currentLang = await platform.getProperty(
+            'current-tracks/audio/lang',
+          );
+          if (LanguageMapper.matchesLanguage(defaultLang, currentLang)) {
+            return;
+          }
+        } catch (_) {
+          // Property unanswered — fall through to the metadata matcher.
+        }
+      }
 
       // Find an audio track matching the preferred language using robust matching
       mk.AudioTrack? matchingTrack;

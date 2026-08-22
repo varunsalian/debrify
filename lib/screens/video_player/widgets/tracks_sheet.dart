@@ -711,6 +711,10 @@ class _AudioTab extends StatelessWidget {
     // The toggle rides the same scroll as the tracks (itemCount + 1) so a
     // long track list doesn't pin it and shrink the list's viewport.
     final extra = toggle != null ? 1 : 0;
+    final labels = LanguageMapper.audioTrackOptions<String>(
+      audios,
+      (_, label) => label,
+    );
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       itemCount: audios.length + extra,
@@ -719,7 +723,7 @@ class _AudioTab extends StatelessWidget {
         if (toggle != null && index == 0) return toggle;
         final audio = audios[index - extra];
         final isSelected = audio.id == selectedAudio;
-        final label = LanguageMapper.labelForTrack(audio, index - extra);
+        final label = labels[index - extra];
 
         return _TrackTile(
           title: label,
