@@ -380,6 +380,20 @@ class RemoteCommandRouter {
         sessionId: sessionId,
       );
     }
+    if (!peerBound &&
+        context.remembered &&
+        runtimeCommitted &&
+        scopeCurrent &&
+        profilePresent &&
+        featureAllowed) {
+      peerBound = ProfileRemoteLease.instance
+          .bindRememberedPeerAfterUnboundRevision(
+            profile: profile,
+            scope: scope,
+            peerFingerprint: peerFingerprint,
+            sessionId: sessionId,
+          );
+    }
     final leaseAllowed = peerBound
         ? ProfileRemoteLease.instance.allows(
             feature,

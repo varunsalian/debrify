@@ -800,6 +800,7 @@ class RemoteControlState extends ChangeNotifier {
       _roleBeforeLeases = null;
       _receiverNameBeforeLeases = null;
       _nextLeaseId = 0;
+      _rememberedFingerprints.clear();
       onCommandReceived = null;
     });
     debugReceiverStarter = null;
@@ -824,6 +825,17 @@ class RemoteControlState extends ChangeNotifier {
   void debugInstallSessionManager(RemoteSessionManager manager) {
     _sessionManager = manager;
   }
+
+  @visibleForTesting
+  void debugRememberPeer(String peerFingerprint) {
+    _rememberedFingerprints.add(peerFingerprint);
+  }
+
+  @visibleForTesting
+  RemoteCommandContext? debugAuthenticatedChunkContext(
+    RemoteCommand command,
+    String sourceIp,
+  ) => _authenticatedChunkContext(command, sourceIp);
 
   @visibleForTesting
   String get debugRole => _role.name;
@@ -887,6 +899,7 @@ class RemoteControlState extends ChangeNotifier {
     return RemoteCommandContext(
       encrypted: true,
       authorized: true,
+      remembered: _rememberedFingerprints.contains(session.peerFingerprint),
       sidB64: session.sidB64,
       peerFingerprint: session.peerFingerprint,
       peerName: session.peerName,

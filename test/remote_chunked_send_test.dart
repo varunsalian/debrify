@@ -498,7 +498,19 @@ void productionRouteIntegrationTest() {
         state
           ..debugInstallSessionManager(manager)
           ..debugInstallOutboundSession(sender, ip: 'receiver')
-          ..debugInstallOutboundSession(receiver, ip: 'sender');
+          ..debugInstallOutboundSession(receiver, ip: 'sender')
+          ..debugRememberPeer(receiver.peerFingerprint);
+
+        final rememberedChunkContext = state.debugAuthenticatedChunkContext(
+          RemoteCommand(
+            action: RemoteAction.config,
+            command: ConfigCommand.debrifyChannelStart,
+            data: '{}',
+          ),
+          'sender',
+        );
+        expect(rememberedChunkContext, isNotNull);
+        expect(rememberedChunkContext!.remembered, isTrue);
 
         final wire = <Map<String, dynamic>>[];
         state.debugPlainSender = (command, _, _) async {

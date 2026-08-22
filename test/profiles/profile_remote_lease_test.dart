@@ -181,6 +181,156 @@ void main() {
     );
   });
 
+  test('live remembered peer can renew after revision and reconnect', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+    expect(
+      ProfileRemoteLease.instance.bindAuthenticatedPeer(
+        peerFingerprint: peer,
+        sessionId: session,
+        scope: scope,
+        currentProfile: original,
+      ),
+      isTrue,
+    );
+
+    final updated = profile(revision: 2);
+    expect(
+      ProfileRemoteLease.instance.renewRememberedPeerAfterRevision(
+        profile: updated,
+        scope: scope,
+        peerFingerprint: peer,
+        sessionId: 'replacement-session',
+      ),
+      isTrue,
+    );
+    expect(
+      ProfileRemoteLease.instance.allows(
+        ProfileFeature.remoteTransfer,
+        scope,
+        currentProfile: updated,
+        peerFingerprint: peer,
+        sessionId: 'replacement-session',
+      ),
+      isTrue,
+    );
+  });
+
+  test('revision reconnect cannot adopt another peer lease', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+    expect(
+      ProfileRemoteLease.instance.bindAuthenticatedPeer(
+        peerFingerprint: peer,
+        sessionId: session,
+        scope: scope,
+        currentProfile: original,
+      ),
+      isTrue,
+    );
+
+    expect(
+      ProfileRemoteLease.instance.renewRememberedPeerAfterRevision(
+        profile: profile(revision: 2),
+        scope: scope,
+        peerFingerprint: 'different-peer',
+        sessionId: 'replacement-session',
+      ),
+      isFalse,
+    );
+  });
+
+  test('remembered peer can bind after a pre-admission revision', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+
+    final updated = profile(revision: 2);
+    expect(
+      ProfileRemoteLease.instance.bindRememberedPeerAfterUnboundRevision(
+        profile: updated,
+        scope: scope,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isTrue,
+    );
+    expect(
+      ProfileRemoteLease.instance.allows(
+        ProfileFeature.remoteTransfer,
+        scope,
+        currentProfile: updated,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isTrue,
+    );
+  });
+
+  test('pre-admission revision bind requires the same unlocked scope', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+    ProfileRemoteLease.instance.revoke();
+
+    expect(
+      ProfileRemoteLease.instance.bindRememberedPeerAfterUnboundRevision(
+        profile: profile(revision: 2),
+        scope: scope,
+        peerFingerprint: peer,
+        sessionId: session,
+      ),
+      isFalse,
+    );
+  });
+
+  test('pre-admission path cannot replace an issued peer lease', () {
+    final original = profile();
+    final scope = ProfileScope(
+      profileId: original.id,
+      dataGeneration: 1,
+      sessionEpoch: 5,
+    );
+    ProfileRemoteLease.instance.authorize(original, scope);
+    expect(
+      ProfileRemoteLease.instance.bindAuthenticatedPeer(
+        peerFingerprint: peer,
+        sessionId: session,
+        scope: scope,
+        currentProfile: original,
+      ),
+      isTrue,
+    );
+
+    expect(
+      ProfileRemoteLease.instance.bindRememberedPeerAfterUnboundRevision(
+        profile: profile(revision: 2),
+        scope: scope,
+        peerFingerprint: 'different-peer',
+        sessionId: 'different-session',
+      ),
+      isFalse,
+    );
+  });
+
   test('expired remembered peer cannot renew after a revision', () {
     final original = profile();
     final scope = ProfileScope(

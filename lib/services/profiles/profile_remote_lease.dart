@@ -68,7 +68,12 @@ class ProfileRemoteLease {
   }) {
     final now = _clock().toUtc();
     final key = _peerKey(peerFingerprint, sessionId);
-    final livePeer = _peerSessions[key]?.isAfter(now) ?? false;
+    final priorKeys = _peerSessions.keys
+        .where((bound) => bound.startsWith('$peerFingerprint\u0000'))
+        .toList(growable: false);
+    final livePeer =
+        (_peerSessions[key]?.isAfter(now) ?? false) ||
+        priorKeys.any((bound) => _peerSessions[bound]!.isAfter(now));
     final sameUnlockedScope =
         _profileId == scope.profileId &&
         _generation == scope.dataGeneration &&
@@ -79,6 +84,40 @@ class ProfileRemoteLease {
         _authorizationRevision != null &&
         _authorizationRevision != profile.authorizationRevision;
     if (!livePeer || !sameUnlockedScope || !revisionChanged) {
+      return false;
+    }
+    authorize(profile, scope);
+    return bindAuthenticatedPeer(
+      peerFingerprint: peerFingerprint,
+      sessionId: sessionId,
+      scope: scope,
+      currentProfile: profile,
+    );
+  }
+
+  /// Refreshes an unlocked profile whose authority revision changed before
+  /// any remote peer had been admitted. This can happen while startup work
+  /// reconciles profile-owned resources after the local unlock.
+  ///
+  /// Once any peer lease has been issued, including an expired one, revision
+  /// renewal must use [renewRememberedPeerAfterRevision] instead. That keeps a
+  /// lock, revocation, or expired lease from becoming a fresh authorization.
+  bool bindRememberedPeerAfterUnboundRevision({
+    required UserProfile profile,
+    required ProfileScope scope,
+    required String peerFingerprint,
+    required String sessionId,
+  }) {
+    final sameUnlockedScope =
+        _profileId == scope.profileId &&
+        _generation == scope.dataGeneration &&
+        _sessionEpoch == scope.sessionEpoch &&
+        profile.id == _profileId &&
+        profile.isEnabled;
+    final revisionChanged =
+        _authorizationRevision != null &&
+        _authorizationRevision != profile.authorizationRevision;
+    if (!sameUnlockedScope || !revisionChanged || _peerSessions.isNotEmpty) {
       return false;
     }
     authorize(profile, scope);
