@@ -1,0 +1,21 @@
+diff --git a/nix/packages/mk-pkg-ffmpeg/meson.build b/nix/packages/mk-pkg-ffmpeg/meson.build
+index 94f1f22..b5c171a 100644
+--- a/nix/packages/mk-pkg-ffmpeg/meson.build
++++ b/nix/packages/mk-pkg-ffmpeg/meson.build
+@@ -200,7 +200,16 @@ video_default_options = video_base_options + [
+     '--enable-decoder=ssa',
+     '--enable-decoder=ass',
+     '--enable-decoder=dvbsub',
+     '--enable-decoder=dvdsub',
++    '--enable-decoder=pgssub',
++    '--enable-decoder=xsub',
++    '--enable-decoder=ccaption',
++    '--enable-decoder=jacosub',
++    '--enable-decoder=microdvd',
++    '--enable-decoder=mpl2',
++    '--enable-decoder=pjs',
++    '--enable-decoder=realtext',
++    '--enable-decoder=sami',
+     '--enable-decoder=srt',
+     '--enable-decoder=stl',
+     '--enable-decoder=subrip',

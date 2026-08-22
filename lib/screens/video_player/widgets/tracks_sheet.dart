@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'tv_tappable.dart';
@@ -58,7 +59,9 @@ class TracksSheet {
     List<AddonSubtitleSlot>? cachedAddonSlots,
     void Function(List<AddonSubtitleSlot> slots)? onAddonSlotsFetched,
     String? selectedStremioSubtitleId,
+    ValueListenable<String?>? subtitleSelectionCorrection,
     void Function(String? id)? onStremioSubtitleSelected,
+    Future<bool> Function(mk.SubtitleTrack track)? onApplyEmbeddedSubtitle,
     Future<bool> Function(StremioSubtitle subtitle)? onApplyStremioSubtitle,
     Future<TracksSheetSubtitleSearchResult?> Function()? onIdentifyTitle,
     String? subtitleIdentityLabel,
@@ -136,6 +139,29 @@ class TracksSheet {
       }
     }
 
+    StateSetter? activeModalSetState;
+    var sheetOpen = true;
+    void reconcileSubtitleSelection() {
+      final selection = subtitleSelectionCorrection?.value;
+      final setModalState = activeModalSetState;
+      if (!sheetOpen || selection == null || setModalState == null) return;
+      setModalState(() {
+        selectedSub = selection;
+        selectedProviderId = 'emb';
+        final slots = addonSlots;
+        if (selection.startsWith('stremio:') && slots != null) {
+          final id = selection.substring('stremio:'.length);
+          for (final slot in slots) {
+            if (slot.subtitles.any((subtitle) => subtitle.id == id)) {
+              selectedProviderId = slot.addonId;
+              break;
+            }
+          }
+        }
+      });
+    }
+
+    subtitleSelectionCorrection?.addListener(reconcileSubtitleSelection);
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -143,6 +169,7 @@ class TracksSheet {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            activeModalSetState = setModalState;
             // Kick off the per-addon fetch on first build (cache miss).
             final fetchImdbId = activeImdbId;
             final fetchType = activeContentType;
@@ -201,7 +228,8 @@ class TracksSheet {
                 return;
               }
               final idx = slots.indexWhere((s) => s.addonId == addonId);
-              if (idx < 0 || slots[idx].status == AddonSubtitleStatus.loading) {
+                if (idx < 0 ||
+                    slots[idx].status == AddonSubtitleStatus.loading) {
                 return;
               }
               final generation = subtitleFetchGeneration;
@@ -362,7 +390,9 @@ class TracksSheet {
                             onAudioPassthroughChanged == null
                             ? null
                             : (enabled) async {
-                                setModalState(() => passthroughState = enabled);
+                                  setModalState(
+                                    () => passthroughState = enabled,
+                                  );
                                 await onAudioPassthroughChanged(enabled);
                               },
                         embeddedSubs: embeddedSubs,
@@ -379,6 +409,7 @@ class TracksSheet {
                           }
                         },
                         onStremioSubtitleSelected: onStremioSubtitleSelected,
+                          onApplyEmbeddedSubtitle: onApplyEmbeddedSubtitle,
                         onApplyStremioSubtitle: onApplyStremioSubtitle,
                         onSubtitleTrackChanged: onSubtitleTrackChanged,
                         isIdentifyingTitle: isIdentifyingTitle,
@@ -410,7 +441,8 @@ class TracksSheet {
                                       }
                                       if (result.imdbId != null) {
                                         activeImdbId = result.imdbId;
-                                        activeContentType = result.contentType;
+                                          activeContentType =
+                                              result.contentType;
                                         activeSeason = result.season;
                                         activeEpisode = result.episode;
                                       }
@@ -427,7 +459,8 @@ class TracksSheet {
                                             if (slot.subtitles.any(
                                               (s) => s.id == selectedId,
                                             )) {
-                                              selectedProviderId = slot.addonId;
+                                                selectedProviderId =
+                                                    slot.addonId;
                                               break;
                                             }
                                           }
@@ -469,7 +502,10 @@ class TracksSheet {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      sheetOpen = false;
+      subtitleSelectionCorrection?.removeListener(reconcileSubtitleSelection);
+    });
   }
 
   static String? _subtitleBadge(
@@ -577,6 +613,8 @@ class TracksSheet {
     required void Function(String) onRetryAddon,
     required void Function(String) onSubChanged,
     required void Function(String? id)? onStremioSubtitleSelected,
+    required Future<bool> Function(mk.SubtitleTrack track)?
+    onApplyEmbeddedSubtitle,
     required Future<bool> Function(StremioSubtitle subtitle)?
     onApplyStremioSubtitle,
     VoidCallback? onSubtitleTrackChanged,
@@ -616,6 +654,7 @@ class TracksSheet {
           onTrackChanged: onTrackChanged,
           onSubChanged: onSubChanged,
           onStremioSubtitleSelected: onStremioSubtitleSelected,
+          onApplyEmbeddedSubtitle: onApplyEmbeddedSubtitle,
           onApplyStremioSubtitle: onApplyStremioSubtitle,
           onSubtitleTrackChanged: onSubtitleTrackChanged,
           isIdentifyingTitle: isIdentifyingTitle,
@@ -813,6 +852,7 @@ class _SubtitlesTab extends StatelessWidget {
   final Future<void> Function(String, String) onTrackChanged;
   final void Function(String) onSubChanged;
   final void Function(String? id)? onStremioSubtitleSelected;
+  final Future<bool> Function(mk.SubtitleTrack track)? onApplyEmbeddedSubtitle;
   final Future<bool> Function(StremioSubtitle subtitle)? onApplyStremioSubtitle;
   final VoidCallback? onSubtitleTrackChanged;
   final bool isIdentifyingTitle;
@@ -834,6 +874,7 @@ class _SubtitlesTab extends StatelessWidget {
     required this.onTrackChanged,
     required this.onSubChanged,
     required this.onStremioSubtitleSelected,
+    required this.onApplyEmbeddedSubtitle,
     required this.onApplyStremioSubtitle,
     this.onSubtitleTrackChanged,
     required this.isIdentifyingTitle,
@@ -984,8 +1025,12 @@ class _SubtitlesTab extends StatelessWidget {
             isSelected: selectedSub == 'no',
             onTap: () async {
               final realChange = _isRealSubtitleChange('no');
+              final track = mk.SubtitleTrack.no();
+              final applied = onApplyEmbeddedSubtitle == null
+                  ? await _applyDirectly(track)
+                  : await onApplyEmbeddedSubtitle!(track);
+              if (!applied) return;
               onSubChanged('no');
-              await player.setSubtitleTrack(mk.SubtitleTrack.no());
               await onTrackChanged(selectedAudio, 'no');
               if (realChange) onSubtitleTrackChanged?.call();
             },
@@ -1016,8 +1061,11 @@ class _SubtitlesTab extends StatelessWidget {
                   isSelected: sub.id == selectedSub,
                   onTap: () async {
                     final realChange = _isRealSubtitleChange(sub.id);
+                    final applied = onApplyEmbeddedSubtitle == null
+                        ? await _applyDirectly(sub)
+                        : await onApplyEmbeddedSubtitle!(sub);
+                    if (!applied) return;
                     onSubChanged(sub.id);
-                    await player.setSubtitleTrack(sub);
                     await onTrackChanged(selectedAudio, sub.id);
                     if (realChange) onSubtitleTrackChanged?.call();
                   },
@@ -1147,6 +1195,16 @@ class _SubtitlesTab extends StatelessWidget {
             );
           },
         );
+    }
+  }
+
+  Future<bool> _applyDirectly(mk.SubtitleTrack track) async {
+    try {
+      await player.setSubtitleTrack(track);
+      return true;
+    } catch (error) {
+      debugPrint('TracksSheet: Embedded subtitle error - $error');
+      return false;
     }
   }
 }

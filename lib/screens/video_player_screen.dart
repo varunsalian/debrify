@@ -119,6 +119,30 @@ class _SeasonEpisodeSelection {
   const _SeasonEpisodeSelection({required this.season, required this.episode});
 }
 
+class _SubtitleApplyAttempt {
+  final int generation;
+  final mk.SubtitleTrack requested;
+  final mk.SubtitleTrack previous;
+  final String source;
+  final String? previousStremioId;
+  final String? previousExternalPath;
+  bool failed = false;
+  bool handled = false;
+  bool successReturned = false;
+  bool persisted = false;
+  String? persistedAudioId;
+  Completer<void>? persistenceDone;
+
+  _SubtitleApplyAttempt({
+    required this.generation,
+    required this.requested,
+    required this.previous,
+    required this.source,
+    required this.previousStremioId,
+    required this.previousExternalPath,
+  });
+}
+
 /// One page of a live IPTV category, as the browse provider returns it.
 ///
 /// [offset] is the page's absolute position inside [category] and [total] is
@@ -886,6 +910,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// player config requests error-level logs), which is exactly the band
   /// stream-record failures log in.
   StreamSubscription<mk.PlayerLog>? _recordLogSub;
+  StreamSubscription<mk.PlayerLog>? _subtitleDiagnosticLogSub;
+  StreamSubscription? _subtitleDiagnosticCueSub;
+  StreamSubscription? _subtitleDiagnosticTracksSub;
+  int _subtitleDiagnosticGeneration = 0;
+  _SubtitleApplyAttempt? _activeSubtitleApplyAttempt;
+  final ValueNotifier<String?> _subtitleSelectionCorrection = ValueNotifier(
+    null,
+  );
 
   /// Repaints the Record button when a desktop capture starts or ends behind
   /// this screen's back — a scheduled one firing on the channel being watched,
@@ -2249,7 +2281,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _isReady = false;
     final player = mk.Player(
       configuration: mk.PlayerConfiguration(
-        logLevel: mk.MPVLogLevel.error,
+        // Subtitle diagnostics below filter this stream before printing it.
+        // `info` is needed because libass/track-selection messages are often
+        // below mpv's error level, even when no subtitle is rendered.
+        logLevel: mk.MPVLogLevel.info,
         ready: () => _onPlayerInstanceReady(instanceGeneration),
       ),
     );
@@ -2760,6 +2795,42 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool isCurrent() =>
         mounted && instanceGeneration == _playerInstanceGeneration;
 
+    _subtitleDiagnosticLogSub = player.stream.log.listen((log) {
+      if (!isCurrent()) return;
+      final searchable = '${log.prefix} ${log.text}'.toLowerCase();
+      if (!searchable.contains('sub') &&
+          !searchable.contains('libass') &&
+          !searchable.contains('track')) {
+        return;
+      }
+      debugPrint('[SubtitleDiag] mpv[${log.level}] ${log.prefix}: ${log.text}');
+      final level = log.level.toLowerCase();
+      final subtitleFailure =
+          (level == 'error' || level == 'fatal') &&
+          (log.prefix.toLowerCase().startsWith('sub') ||
+              searchable.contains('subtitle decoder') ||
+              searchable.contains('subtitle converter'));
+      final attempt = _activeSubtitleApplyAttempt;
+      if (subtitleFailure && attempt != null) {
+        unawaited(_handleSubtitleApplyFailure(attempt, log.text));
+      }
+    });
+    _subtitleDiagnosticCueSub = player.stream.subtitle.listen((lines) {
+      if (!isCurrent()) return;
+      if (!lines.any((line) => line.trim().isNotEmpty)) return;
+      debugPrint(
+        '[SubtitleDiag] cue emitted selectedStateId='
+        '${_diagnosticSubtitleId(player.state.track.subtitle)}',
+      );
+    });
+    _subtitleDiagnosticTracksSub = player.stream.tracks.listen((tracks) {
+      if (!isCurrent()) return;
+      debugPrint(
+        '[SubtitleDiag] track-list changed subtitles='
+        '${_describeSubtitleTracks(tracks.subtitle)}',
+      );
+    });
+
     // Subscribe before open() so fast local media and immediate renderer
     // failures are visible to both diagnostics and the startup guard.
     _paramsSub = player.stream.videoParams.listen((params) {
@@ -2913,6 +2984,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _bufferingSub,
       _iptvErrorSub,
       _rendererStartupErrorSub,
+      _subtitleDiagnosticLogSub,
+      _subtitleDiagnosticCueSub,
+      _subtitleDiagnosticTracksSub,
     ];
     _posSub = null;
     _durSub = null;
@@ -2922,6 +2996,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _bufferingSub = null;
     _iptvErrorSub = null;
     _rendererStartupErrorSub = null;
+    _subtitleDiagnosticLogSub = null;
+    _subtitleDiagnosticCueSub = null;
+    _subtitleDiagnosticTracksSub = null;
     for (final subscription in subscriptions) {
       if (subscription == null) continue;
       try {
@@ -3644,6 +3721,241 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await Future.delayed(const Duration(milliseconds: 100));
     }
     // Timeout reached - video may not have embedded subtitles
+  }
+
+  static String _describeSubtitleTracks(Iterable<mk.SubtitleTrack> tracks) {
+    return tracks
+        .map((track) {
+          return '{id=${track.id},lang=${track.language},title=${track.title},'
+              'codec=${track.codec},image=${track.image},external=${track.external}}';
+        })
+        .join(', ');
+  }
+
+  static String _diagnosticSubtitleId(mk.SubtitleTrack track) =>
+      track.uri || track.data ? '<external>' : track.id;
+
+  /// Records both media_kit's optimistic Dart state and libmpv's authoritative
+  /// properties. This distinction matters for subtitle selection: media_kit
+  /// updates `state.track.subtitle` after the property-set request completes,
+  /// while mpv may still retain a different `sid` or fail to decode the track.
+  Future<bool> _setSubtitleTrackWithDiagnostics(
+    mk.SubtitleTrack track, {
+    required String source,
+  }) async {
+    final diagnosticGeneration = ++_subtitleDiagnosticGeneration;
+    final playerGeneration = _playerInstanceGeneration;
+    final attempt = _SubtitleApplyAttempt(
+      generation: diagnosticGeneration,
+      requested: track,
+      previous: _player.state.track.subtitle,
+      source: source,
+      previousStremioId: _selectedStremioSubtitleId,
+      previousExternalPath: _activeExternalSubtitlePath,
+    );
+    _activeSubtitleApplyAttempt = attempt;
+    // Null arms the next correction even when two failures restore the same
+    // selection consecutively.
+    _subtitleSelectionCorrection.value = null;
+
+    await _logSubtitleDiagnosticSnapshot(
+      phase: 'before-set',
+      source: source,
+      requested: track,
+    );
+    try {
+      await _player.setSubtitleTrack(track);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[SubtitleDiag] set FAILED source=$source '
+        'requestedId=${_diagnosticSubtitleId(track)} '
+        'error=$error\n$stackTrace',
+      );
+      await _handleSubtitleApplyFailure(attempt, error.toString());
+      return false;
+    }
+    await _logSubtitleDiagnosticSnapshot(
+      phase: 'after-await',
+      source: source,
+      requested: track,
+    );
+
+    // mpv posts decoder failures through its log stream immediately after the
+    // property reply. Give that event one run-loop turn before reporting
+    // success to optimistic menu UI; late failures are still handled by the
+    // active attempt above and roll the selection back centrally.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (attempt.failed) return false;
+
+    for (final delay in const [
+      Duration(milliseconds: 500),
+      Duration(seconds: 2),
+    ]) {
+      unawaited(
+        Future<void>.delayed(delay, () async {
+          if (!mounted ||
+              diagnosticGeneration != _subtitleDiagnosticGeneration ||
+              playerGeneration != _playerInstanceGeneration) {
+            return;
+          }
+          await _logSubtitleDiagnosticSnapshot(
+            phase: 'after-${delay.inMilliseconds}ms',
+            source: source,
+            requested: track,
+          );
+        }),
+      );
+    }
+    attempt.successReturned = true;
+    return true;
+  }
+
+  Future<void> _handleSubtitleApplyFailure(
+    _SubtitleApplyAttempt attempt,
+    String reason,
+  ) async {
+    if (attempt.handled ||
+        _activeSubtitleApplyAttempt != attempt ||
+        attempt.generation != _subtitleDiagnosticGeneration) {
+      return;
+    }
+    attempt.failed = true;
+    attempt.handled = true;
+    _activeSubtitleApplyAttempt = null;
+
+    final previous = attempt.previous;
+    final sameTrack = previous.id == attempt.requested.id;
+    final fallback = previous.id == 'auto' || sameTrack
+        ? mk.SubtitleTrack.no()
+        : previous;
+    var restoredOriginalSelection = fallback.id == previous.id;
+    try {
+      await _player.setSubtitleTrack(fallback);
+    } catch (error) {
+      restoredOriginalSelection = false;
+      debugPrint(
+        '[SubtitleDiag] rollback FAILED source=${attempt.source} error=$error',
+      );
+      try {
+        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      } catch (_) {
+        // The original actionable error is surfaced below. A second snackbar
+        // for rollback failure would obscure it without giving the user a
+        // useful recovery action.
+      }
+    }
+
+    _selectedStremioSubtitleId = restoredOriginalSelection
+        ? attempt.previousStremioId
+        : null;
+    _activeExternalSubtitlePath = restoredOriginalSelection
+        ? attempt.previousExternalPath
+        : null;
+    final String restoredSelection;
+    if (restoredOriginalSelection && attempt.previousStremioId != null) {
+      restoredSelection = 'stremio:${attempt.previousStremioId}';
+    } else {
+      restoredSelection = restoredOriginalSelection ? fallback.id : 'no';
+    }
+
+    // A decoder error can arrive after the property reply and after a picker
+    // has persisted its optimistic selection. Undo that commit as part of the
+    // same rollback, while leaving automatic (never-persisted) attempts alone.
+    if (attempt.successReturned && attempt.persisted) {
+      await attempt.persistenceDone?.future;
+      await _persistTrackChoice(
+        attempt.persistedAudioId ?? _player.state.track.audio.id,
+        restoredSelection,
+      );
+    }
+    if (!mounted) return;
+    setState(() {});
+    _playerMenuKey.currentState?.reconcileSubtitleSelection(restoredSelection);
+    _subtitleSelectionCorrection.value = restoredSelection;
+
+    final codec = attempt.requested.codec;
+    final message = codec == null || codec.isEmpty
+        ? 'Couldn’t apply subtitles. Try another embedded or online track.'
+        : 'Couldn’t decode $codec subtitles. Try another embedded or online track.';
+    _showSubtitleFailureMessage(message);
+    debugPrint(
+      '[SubtitleDiag] user notified source=${attempt.source} reason=$reason',
+    );
+  }
+
+  void _showSubtitleFailureMessage(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _logSubtitleDiagnosticSnapshot({
+    required String phase,
+    required String source,
+    required mk.SubtitleTrack requested,
+  }) async {
+    final stateTrack = _player.state.track.subtitle;
+    final tracks = _player.state.tracks.subtitle;
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) {
+      debugPrint(
+        '[SubtitleDiag] $phase source=$source '
+        'requestedId=${_diagnosticSubtitleId(requested)} '
+        'native=false stateId=${_diagnosticSubtitleId(stateTrack)} tracks='
+        '${_describeSubtitleTracks(tracks)}',
+      );
+      return;
+    }
+
+    const propertyNames = <String>[
+      'sid',
+      'sub-visibility',
+      'current-tracks/sub/id',
+      'current-tracks/sub/lang',
+      'current-tracks/sub/title',
+      'current-tracks/sub/codec',
+      'current-tracks/sub/external',
+      'sub-text',
+      'sub-start',
+      'sub-end',
+    ];
+    final values = await Future.wait(
+      propertyNames.map((name) async {
+        try {
+          return MapEntry(name, await platform.getProperty(name));
+        } catch (error) {
+          return MapEntry(name, '<error:$error>');
+        }
+      }),
+    );
+    final properties = Map<String, String>.fromEntries(values);
+    final rawText = properties['sub-text'] ?? '';
+    final singleLineText = rawText.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final textPreview = singleLineText.length <= 120
+        ? singleLineText
+        : '${singleLineText.substring(0, 120)}…';
+    properties['sub-text'] = textPreview.isEmpty ? '<empty>' : textPreview;
+    final sid = properties['sid'];
+    final requestedAccepted = requested.uri || requested.data
+        ? '<external-track-id-assigned-by-mpv>'
+        : '${sid == requested.id}';
+
+    debugPrint(
+      '[SubtitleDiag] $phase source=$source '
+      'requested={id=${_diagnosticSubtitleId(requested)},lang=${requested.language},'
+      'title=${requested.title},codec=${requested.codec},image=${requested.image},'
+      'external=${requested.external},uri=${requested.uri},data=${requested.data}} '
+      'state={id=${_diagnosticSubtitleId(stateTrack)},lang=${stateTrack.language},'
+      'title=${stateTrack.title}} sidMatchesRequest=$requestedAccepted '
+      'mpv=$properties tracks=${_describeSubtitleTracks(tracks)}',
+    );
   }
 
   // Wait for duration to be available before attempting position restoration
@@ -4465,7 +4777,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           }
           _currentStreamUrl = url;
           // Disable auto-enabled embedded subtitles to prevent duplicates
-          await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+          await _setSubtitleTrackWithDiagnostics(
+            mk.SubtitleTrack.no(),
+            source: 'debrify-tv-open-disable-auto',
+          );
           // If advanced option is enabled, jump to a random timestamp for Debrify TV items
           if (widget.startFromRandom) {
             await _waitForVideoReady();
@@ -6221,6 +6536,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _tapMpvLogsForRecording() {
     _recordLogSub?.cancel();
     _recordLogSub = _player.stream.log.listen((log) {
+      final level = log.level.toLowerCase();
+      if (level != 'error' && level != 'fatal') return;
       debugPrint('VideoPlayer: mpv[${log.level}] ${log.prefix}: ${log.text}');
     });
   }
@@ -7179,7 +7496,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _pikPakRetryId++;
       await _openMedia(mk.Media(url), play: true);
       _currentStreamUrl = url;
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'stremio-tv-switch-disable-auto',
+      );
       if (startAtPercent != null && startAtPercent > 0) {
         // Apply start position once duration is known
         _player.stream.duration.firstWhere((d) => d > Duration.zero).then((d) {
@@ -7388,7 +7708,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       _currentStreamUrl = nextUrl;
       // Disable auto-enabled embedded subtitles to prevent duplicates
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'channel-switch-disable-auto',
+      );
     } catch (e) {
       debugPrint('Player: Failed to open channel stream: $e');
       setState(() {
@@ -7514,7 +7837,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       _currentStreamUrl = nextUrl;
       // Disable auto-enabled embedded subtitles to prevent duplicates
-      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'next-channel-disable-auto',
+      );
     } catch (e) {
       debugPrint('Player: Failed to open next channel stream: $e');
       setState(() {
@@ -8947,6 +9273,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _verticalHud.dispose();
     _speedHoldHud.dispose();
     _recordLogSub?.cancel();
+    _subtitleDiagnosticLogSub?.cancel();
+    _subtitleDiagnosticCueSub?.cancel();
+    _subtitleDiagnosticTracksSub?.cancel();
+    _subtitleSelectionCorrection.dispose();
+    _subtitleDiagnosticGeneration++;
+    _activeSubtitleApplyAttempt = null;
     _decoderProbeGeneration++;
     _decoderProbeToken++;
     _rendererStartupGuardToken++;
@@ -13044,10 +13376,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _cachedSubtitleKey = cacheKey;
       },
       selectedStremioSubtitleId: _selectedStremioSubtitleId,
+      subtitleSelectionCorrection: _subtitleSelectionCorrection,
       onStremioSubtitleSelected: (id) {
         _selectedStremioSubtitleId = id;
         _userManuallySelectedSubtitle = true;
       },
+      onApplyEmbeddedSubtitle: (track) => _setSubtitleTrackWithDiagnostics(
+        track,
+        source: 'tracks-sheet-embedded',
+      ),
       onApplyStremioSubtitle: _applyStremioSubtitleFromTracksSheet,
       onIdentifyTitle: _identifyTitleAndFetchSubtitles,
       subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
@@ -13168,20 +13505,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _menuApplyTrackChange(audioId, currentSubId);
   }
 
-  Future<void> _menuSubtitlesOff(String audioId) async {
+  Future<bool> _menuSubtitlesOff(String audioId) async {
+    final applied = await _setSubtitleTrackWithDiagnostics(
+      mk.SubtitleTrack.no(),
+      source: 'player-menu-off',
+    );
+    if (!applied) return false;
     _selectedStremioSubtitleId = null;
-    await _player.setSubtitleTrack(mk.SubtitleTrack.no());
     await _menuApplyTrackChange(audioId, 'no');
+    return true;
   }
 
-  Future<void> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
+  Future<bool> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
     final track = _player.state.tracks.subtitle
         .where((s) => s.id == subId)
         .firstOrNull;
-    if (track == null) return;
+    if (track == null) {
+      _showSubtitleFailureMessage(
+        'That subtitle track is no longer available. Try another track.',
+      );
+      return false;
+    }
+    final applied = await _setSubtitleTrackWithDiagnostics(
+      track,
+      source: 'player-menu-embedded',
+    );
+    if (!applied) return false;
     _selectedStremioSubtitleId = null;
-    await _player.setSubtitleTrack(track);
     await _menuApplyTrackChange(audioId, subId);
+    return true;
   }
 
   /// Returns false when the download/apply failed — the panel keeps the
@@ -13196,7 +13548,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final token = _addonSubtitleFetchToken;
     try {
       final filePath = await _downloadStremioSubtitleToTempFile(sub);
-      if (filePath == null || token != _addonSubtitleFetchToken || !mounted) {
+      if (filePath == null) {
+        _showSubtitleFailureMessage(
+          'Couldn’t load subtitles. Check your connection or try another track.',
+        );
+        return false;
+      }
+      if (token != _addonSubtitleFetchToken || !mounted) {
         return false;
       }
       final track = mk.SubtitleTrack.uri(
@@ -13204,7 +13562,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: sub.displayName,
         language: sub.lang,
       );
-      await _applyExternalSubtitleTrack(track);
+      final applied = await _applyExternalSubtitleTrack(track);
+      if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _selectedStremioSubtitleId = sub.id;
       _activeExternalSubtitlePath = filePath;
@@ -13212,6 +13571,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return true;
     } catch (e) {
       debugPrint('PlayerMenu: subtitle apply failed - $e');
+      _showSubtitleFailureMessage(
+        'Couldn’t apply subtitles. Try another embedded or online track.',
+      );
       return false;
     }
   }
@@ -13220,21 +13582,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final token = _addonSubtitleFetchToken;
     try {
       final filePath = await _downloadStremioSubtitleToTempFile(sub);
-      if (filePath == null || token != _addonSubtitleFetchToken || !mounted) {
+      if (filePath == null) {
+        _showSubtitleFailureMessage(
+          'Couldn’t load subtitles. Check your connection or try another track.',
+        );
         return false;
       }
-      await _applyExternalSubtitleTrack(
+      if (token != _addonSubtitleFetchToken || !mounted) {
+        return false;
+      }
+      final applied = await _applyExternalSubtitleTrack(
         mk.SubtitleTrack.uri(
           filePath,
           title: sub.displayName,
           language: sub.lang,
         ),
       );
+      if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _activeExternalSubtitlePath = filePath;
       return true;
     } catch (e) {
       debugPrint('TracksSheet: subtitle apply failed - $e');
+      _showSubtitleFailureMessage(
+        'Couldn’t apply subtitles. Try another embedded or online track.',
+      );
       return false;
     }
   }
@@ -13336,6 +13708,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _userManuallySelectedSubtitle = false;
     _trackPreferencesReadyForAddonSubtitles = false;
     _addonSubtitleFetchToken++;
+    _subtitleDiagnosticGeneration++;
+    _activeSubtitleApplyAttempt = null;
     _cleanupTempSubtitleFilesSync();
     _activeExternalSubtitlePath = null;
     _showSyncOverlay = false;
@@ -13443,8 +13817,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Check if the stored track actually exists in this video
           final trackExists = tracks.subtitle.any(
             (t) =>
-                t.id == subtitleTrackId &&
-                !isAppManagedAddonSubtitleTrack(t),
+                t.id == subtitleTrackId && !isAppManagedAddonSubtitleTrack(t),
           );
           if (trackExists) {
             final subtitleTrack = tracks.subtitle.firstWhere(
@@ -13484,8 +13857,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 'SubAuto: applying STORED subtitle track id=$subtitleTrackId '
                 '(lang=${subtitleTrack.language}/${subtitleTrack.title}) — blocks addon auto-select',
               );
-              await _player.setSubtitleTrack(subtitleTrack);
-              subtitleApplied = true;
+              subtitleApplied = await _setSubtitleTrackWithDiagnostics(
+                subtitleTrack,
+                source: 'restore-stored-embedded',
+              );
             }
           } else {
             // Stored track doesn't exist in this video - fall through to default
@@ -13607,8 +13982,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (defaultLang == 'off') {
         // Explicitly disable subtitles
-        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
-        return true; // User explicitly disabled, don't try addon
+        final applied = await _setSubtitleTrackWithDiagnostics(
+          mk.SubtitleTrack.no(),
+          source: 'default-language-off',
+        );
+        return applied; // User explicitly disabled, don't try addon
       }
 
       // Find a subtitle track matching the preferred language using robust matching
@@ -13631,8 +14009,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint(
           'SubAuto: matched EMBEDDED track id=${matchingTrack.id} lang=${matchingTrack.language} title=${matchingTrack.title} — applying',
         );
-        await _player.setSubtitleTrack(matchingTrack);
-        return true;
+        return _setSubtitleTrackWithDiagnostics(
+          matchingTrack,
+          source: 'default-language-embedded',
+        );
       }
       debugPrint(
         'SubAuto: no $defaultLang embedded track → returning false (addon auto-select may run)',
@@ -13726,7 +14106,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Load a replacement first, then unload older addon tracks. A malformed
   /// replacement therefore leaves the currently working subtitle untouched.
-  Future<void> _applyExternalSubtitleTrack(mk.SubtitleTrack track) async {
+  Future<bool> _applyExternalSubtitleTrack(mk.SubtitleTrack track) async {
     // Track IDs are small mpv ordinals and may be reused by the next media.
     // Keep the content generation with this operation so a delayed apply can
     // never remove a same-numbered subtitle from newly opened content.
@@ -13736,7 +14116,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         .map((subtitle) => subtitle.id)
         .toList(growable: false);
 
-    await _player.setSubtitleTrack(track);
+    final applied = await _setSubtitleTrackWithDiagnostics(
+      track,
+      source: 'addon-external',
+    );
+    if (!applied) return false;
 
     final platform = _player.platform;
     if (platform is mk.NativePlayer) {
@@ -13746,7 +14130,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             'VideoPlayer: Content changed during addon subtitle cleanup; '
             'stopping before track $id',
           );
-          return;
+          return false;
         }
         try {
           await platform.command(['sub-remove', id]);
@@ -13755,6 +14139,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
       }
     }
+    return true;
   }
 
   /// Delete any temp subtitle files we've written. Called from dispose.
@@ -13948,6 +14333,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint(
           'SubAuto: FAILED to download addon subtitle ${matchingSub.url}',
         );
+        _showSubtitleFailureMessage(
+          'Couldn’t load the preferred subtitles. Choose another subtitle track.',
+        );
         return;
       }
 
@@ -13956,7 +14344,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: matchingSub.displayName,
         language: matchingSub.lang,
       );
-      await _applyExternalSubtitleTrack(track);
+      final applied = await _applyExternalSubtitleTrack(track);
+      if (!applied) return;
       _selectedStremioSubtitleId = matchingSub.id;
       _activeExternalSubtitlePath = filePath;
 
@@ -13984,6 +14373,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _persistTrackChoice(String audio, String subtitle) async {
+    final attempt = _activeSubtitleApplyAttempt;
+    Completer<void>? persistenceDone;
+    if (attempt != null &&
+        attempt.successReturned &&
+        _subtitlePreferenceMatchesAttempt(subtitle, attempt)) {
+      attempt.persisted = true;
+      attempt.persistedAudioId = audio;
+      persistenceDone = Completer<void>();
+      attempt.persistenceDone = persistenceDone;
+    }
     try {
       final seriesPlaylist = _seriesPlaylist;
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
@@ -14004,7 +14403,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           subtitleTrackId: subtitle,
         );
       }
-    } catch (e) {}
+    } catch (e) {
+      // Track persistence is best-effort; playback selection still succeeds.
+    } finally {
+      if (persistenceDone != null && !persistenceDone.isCompleted) {
+        persistenceDone.complete();
+      }
+    }
+  }
+
+  static bool _subtitlePreferenceMatchesAttempt(
+    String subtitle,
+    _SubtitleApplyAttempt attempt,
+  ) {
+    if (attempt.requested.id == 'no') return subtitle == 'no';
+    if (attempt.requested.uri || attempt.requested.data) {
+      return subtitle.startsWith('stremio:');
+    }
+    return subtitle == attempt.requested.id;
   }
 
   /// Generate a stable hash from filename for non-series playlist state tracking

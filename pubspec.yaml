@@ -153,6 +153,16 @@ dependencies:
 dependency_overrides:
   media_kit:
     path: packages/media_kit_patched
+  # Android TV uses ExoPlayer and is unaffected. Android phones use MediaKit's
+  # restricted FFmpeg build, which omits Blu-ray PGS and other bitmap/text
+  # subtitle decoders. Release CI fills this package with a pinned patch build.
+  media_kit_libs_android_video:
+    path: packages/media_kit_libs_android_video_patched
+  # The hosted macOS FFmpeg binary omits Blu-ray PGS and several other common
+  # subtitle decoders. This local package keeps MediaKit's framework layout but
+  # receives a minimally patched, pinned upstream build in macOS release CI.
+  media_kit_libs_macos_video:
+    path: packages/media_kit_libs_macos_video_patched
   path_provider_tvos:
     path: packages/path_provider_tvos_patched
 

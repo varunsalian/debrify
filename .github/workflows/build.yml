@@ -64,6 +64,28 @@ jobs:
     - name: Get dependencies
       run: flutter pub get
 
+    - name: Install Android native build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake libtool ninja-build nasm pkg-config python3-pip python3-setuptools unzip wget zip
+        python3 -m pip install --user meson==1.2.3
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Select Java 11 for pinned MediaKit native build
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+
+    - name: Build PGS-capable MediaKit Android libraries
+      run: scripts/build_android_media_kit_libraries.sh packages/media_kit_libs_android_video_patched/android/libs
+
+    - name: Restore Java 21 for Debrify Android build
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '21'
+
     - name: Decode keystore
       run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
 
@@ -78,6 +100,9 @@ jobs:
 
     - name: Build APK
       run: flutter build apk --release
+
+    - name: Verify packaged Android subtitle decoders
+      run: scripts/verify_android_subtitle_decoders.sh build/app/outputs/flutter-apk/app-release.apk
 
     - name: Rename APK (release)
       if: github.event_name == 'release'
@@ -111,11 +136,29 @@ jobs:
         flutter-version: '3.44.8'
         channel: 'stable'
 
+    - name: Install Nix for pinned libmpv build
+      uses: DeterminateSystems/nix-installer-action@v22
+      with:
+        extra-conf: |
+          sandbox = true
+          sandbox-fallback = false
+
+    - name: Cache native build dependencies
+      uses: DeterminateSystems/magic-nix-cache-action@v13
+      with:
+        use-flakehub: false
+
     - name: Get dependencies
       run: flutter pub get
 
+    - name: Build PGS-capable MediaKit frameworks
+      run: scripts/build_macos_media_kit_frameworks.sh packages/media_kit_libs_macos_video_patched/macos/Frameworks
+
     - name: Build macOS app
       run: flutter build macos --release
+
+    - name: Verify packaged subtitle decoders
+      run: scripts/verify_macos_subtitle_decoders.sh build/macos/Build/Products/Release/debrify.app/Contents/Frameworks
 
     - name: Install create-dmg
       run: HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
