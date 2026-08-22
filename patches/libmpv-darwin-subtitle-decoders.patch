@@ -19,3 +19,20 @@ index 94f1f22..b5c171a 100644
      '--enable-decoder=srt',
      '--enable-decoder=stl',
      '--enable-decoder=subrip',
+diff --git a/nix/packages/mk-pkg-libpng/default.nix b/nix/packages/mk-pkg-libpng/default.nix
+index 00162fb..73a5872 100644
+--- a/nix/packages/mk-pkg-libpng/default.nix
++++ b/nix/packages/mk-pkg-libpng/default.nix
+@@ -39,6 +39,12 @@ let
+         unzip ${libpngPatch} -d libpng-patch
+         rsync -a libpng-patch/libpng-*/ $src/
+ 
++        # Meson's Apple config defines TARGET_OS_MAC for modern clang, but
++        # libpng treats mere presence as an obsolete classic-Mac compiler and
++        # includes the long-removed fp.h. Modern Apple targets use math.h.
++        substituteInPlace $src/pngpriv.h \
++          --replace-fail 'defined(__SC__) || defined(TARGET_OS_MAC)' 'defined(__SC__)'
++
+         cp -r $src $out
+       '';
+ in

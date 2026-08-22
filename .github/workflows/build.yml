@@ -125,9 +125,7 @@ jobs:
 
   macos:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'macos'
-    # The pinned MediaKit/Nix graph predates Xcode 26, whose SDK removed fp.h
-    # and breaks its libpng build. Keep this native toolchain on Xcode 16.
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
