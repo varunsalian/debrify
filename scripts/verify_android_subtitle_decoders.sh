@@ -53,12 +53,22 @@ if [[ -d "$INPUT" ]]; then
   done
 elif [[ -f "$INPUT" && "$INPUT" == *.apk ]]; then
   unzip -q "$INPUT" 'lib/*/libmpv.so' -d "$WORK/apk"
+  # Flutter release APKs target its three supported Android architectures.
+  # The native package also builds x86 for downstream consumers, but Flutter
+  # does not package that legacy emulator ABI.
+  packaged_abis=(armeabi-v7a arm64-v8a x86_64)
+  for abi in "${packaged_abis[@]}"; do
+    if [[ ! -f "$WORK/apk/lib/$abi/libmpv.so" ]]; then
+      echo "error: expected lib/$abi/libmpv.so in $INPUT" >&2
+      exit 1
+    fi
+  done
   while IFS= read -r binary; do
     verify_binary "$binary" "${binary#"$WORK/apk/"}"
     verified=$((verified + 1))
   done < <(find "$WORK/apk" -type f -name libmpv.so -print | sort)
-  if [[ "$verified" -ne 4 ]]; then
-    echo "error: expected four libmpv ABIs in $INPUT, found $verified" >&2
+  if [[ "$verified" -ne "${#packaged_abis[@]}" ]]; then
+    echo "error: expected ${#packaged_abis[@]} libmpv ABIs in $INPUT, found $verified" >&2
     exit 1
   fi
 else
