@@ -41,12 +41,12 @@ git -C "$WORK/source" apply --check "$PATCH"
 git -C "$WORK/source" apply "$PATCH"
 
 # Avoid the upstream script's package-manager branch. GitHub's Android runner
-# already has Java/Flutter; this build installs only its pinned Android SDK/NDK.
+# already has Java/Flutter; the pinned build downloads its own matching Android
+# command-line tools & NDK. Reusing the runner's newer sdkmanager would require
+# Java 17, while the helper Gradle project in this recipe still requires 11.
 # v1.1.5's cleanup predicates expect these directories to exist before their
 # first invocation (the release workflow normally primes the workspace).
 mkdir -p "$WORK/source/buildscripts/deps" "$WORK/source/buildscripts/prefix"
-mkdir -p "$WORK/source/buildscripts/sdk"
-ln -s "$ANDROID_HOME" "$WORK/source/buildscripts/sdk/android-sdk-linux"
 (
   cd "$WORK/source/buildscripts"
   TRAVIS=1 ./bundle_default.sh
