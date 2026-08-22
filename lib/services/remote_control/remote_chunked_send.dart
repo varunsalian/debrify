@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -28,6 +29,13 @@ bool fitsSinglePacketEncrypted(String payload) {
   // Ciphertext = inner + 16B tag, then base64 (padded up to +4).
   final ctB64 = ((inner + 16) * 4 / 3).ceil() + 4;
   return ctB64 + kEcmdEnvelopeOverhead <= kChunkMaxBytes;
+}
+
+String createRemoteTransferRequestId() {
+  final random = Random.secure();
+  return base64UrlEncode(
+    List<int>.generate(18, (_) => random.nextInt(256)),
+  ).replaceAll('=', '');
 }
 
 /// Split a payload into base64 slices sized so the JSON packet carrying one
@@ -64,6 +72,7 @@ String chunkStartBody({
   required int totalChunks,
   String? encSidB64,
   int? encN,
+  String? resultRequestId,
 }) {
   return jsonEncode({
     'transferId': transferId,
@@ -78,7 +87,22 @@ String chunkStartBody({
       'sid': encSidB64,
       'n': encN,
     },
+    if (resultRequestId != null) 'resultRequestId': resultRequestId,
   });
+}
+
+String? parseChunkResultRequestId(String? data) {
+  if (data == null) return null;
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['resultRequestId'];
+    if (requestId is! String || requestId.isEmpty || requestId.length > 128) {
+      return null;
+    }
+    return requestId;
+  } catch (_) {
+    return null;
+  }
 }
 
 /// One chunk packet's body.
@@ -182,6 +206,200 @@ String addonTransferResultBody({required String requestId, required bool ok}) =>
   } catch (_) {
     return null;
   }
+}
+
+String remoteTransferRequestBody(
+  String requestId, {
+  Iterable<String> expectedCommands = const <String>[],
+}) {
+  final expected = <String, int>{};
+  for (final command in expectedCommands) {
+    expected.update(command, (count) => count + 1, ifAbsent: () => 1);
+  }
+  return jsonEncode({
+    'version': 1,
+    'requestId': requestId,
+    if (expected.isNotEmpty) 'expected': expected,
+  });
+}
+
+({String requestId, Map<String, int> expected})? parseRemoteTransferRequestBody(
+  String? data,
+) {
+  if (data == null) return null;
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['requestId'];
+    if (map['version'] != 1 ||
+        requestId is! String ||
+        requestId.isEmpty ||
+        requestId.length > 128) {
+      return null;
+    }
+    final expectedRaw = map['expected'];
+    final expected = <String, int>{};
+    if (expectedRaw != null) {
+      if (expectedRaw is! Map<String, dynamic> || expectedRaw.length > 64) {
+        return null;
+      }
+      var total = 0;
+      for (final entry in expectedRaw.entries) {
+        final count = entry.value;
+        if (entry.key.isEmpty ||
+            entry.key.length > 64 ||
+            count is! int ||
+            count < 1 ||
+            count > 200) {
+          return null;
+        }
+        total += count;
+        if (total > 200) return null;
+        expected[entry.key] = count;
+      }
+    }
+    return (requestId: requestId, expected: Map.unmodifiable(expected));
+  } catch (_) {
+    return null;
+  }
+}
+
+String remoteTransferItemBody({
+  required String requestId,
+  required String payload,
+}) => jsonEncode({'version': 1, 'requestId': requestId, 'payload': payload});
+
+({String requestId, String payload})? parseRemoteTransferItemBody(String data) {
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['requestId'];
+    final payload = map['payload'];
+    if (map['version'] != 1 ||
+        requestId is! String ||
+        requestId.isEmpty ||
+        requestId.length > 128 ||
+        payload is! String) {
+      return null;
+    }
+    return (requestId: requestId, payload: payload);
+  } catch (_) {
+    return null;
+  }
+}
+
+String remoteTransferResultBody({
+  required String requestId,
+  required bool ok,
+  required String message,
+}) => jsonEncode({'requestId': requestId, 'ok': ok, 'message': message});
+
+({String requestId, bool ok, String message})? parseRemoteTransferResultBody(
+  String data,
+) {
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['requestId'];
+    final ok = map['ok'];
+    final message = map['message'];
+    if (requestId is! String ||
+        requestId.isEmpty ||
+        requestId.length > 128 ||
+        ok is! bool ||
+        message is! String ||
+        message.isEmpty ||
+        message.length > 500) {
+      return null;
+    }
+    return (requestId: requestId, ok: ok, message: message);
+  } catch (_) {
+    return null;
+  }
+}
+
+String remoteChannelTransferBody({
+  required String requestId,
+  required String uri,
+}) => jsonEncode({'version': 1, 'requestId': requestId, 'uri': uri});
+
+({String requestId, String uri})? parseRemoteChannelTransferBody(String data) {
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final requestId = map['requestId'];
+    final uri = map['uri'];
+    if (map['version'] != 1 ||
+        requestId is! String ||
+        requestId.isEmpty ||
+        requestId.length > 128 ||
+        uri is! String ||
+        !uri.startsWith('debrify://')) {
+      return null;
+    }
+    return (requestId: requestId, uri: uri);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Reliably emits a v4 batch completion request. The receiver deduplicates
+/// [requestId] while it is applying and replays its cached outcome afterward,
+/// so retrying a lost UDP request cannot apply the batch twice.
+Future<bool> sendRemoteTransferCompletion(
+  RemoteControlState state,
+  String targetIp, {
+  required String requestId,
+  required Iterable<String> expectedCommands,
+}) async {
+  final body = remoteTransferRequestBody(
+    requestId,
+    expectedCommands: expectedCommands,
+  );
+  var sent = false;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    try {
+      sent =
+          await state.sendConfigCommandToDevice(
+            ConfigCommand.complete,
+            targetIp,
+            configData: body,
+          ) ||
+          sent;
+    } catch (_) {
+      // Preserve an earlier successful emission. The receiver revalidates
+      // authorization before applying and deduplicates this request ID.
+    }
+  }
+  return sent;
+}
+
+/// Opens a fresh v4 batch before its item packets are emitted. Repeating the
+/// same request ID is idempotent on the receiver, so a lost UDP start packet
+/// does not leave later items attached to an older interrupted transfer.
+Future<bool> beginRemoteTransfer(
+  RemoteControlState state,
+  String targetIp, {
+  required String requestId,
+}) async {
+  final body = remoteTransferRequestBody(requestId);
+  var sent = false;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    try {
+      sent =
+          await state.sendConfigCommandToDevice(
+            ConfigCommand.remoteTransferStart,
+            targetIp,
+            configData: body,
+          ) ||
+          sent;
+    } catch (_) {
+      // Retain an earlier successful emission and keep retrying.
+    }
+  }
+  return sent;
 }
 
 /// Sent chunks kept for gap repair. Chunks are SEALED ciphertext slices —
@@ -299,18 +517,23 @@ Future<bool> sendConfigPayloadToDevice(
   String payload, {
   required String label,
   Duration chunkPace = kChunkPace,
+  String? resultRequestId,
+  String? transferRequestId,
 }) async {
+  final transferPayload = transferRequestId == null
+      ? payload
+      : remoteTransferItemBody(requestId: transferRequestId, payload: payload);
   final session = state.sessionFor(targetIp);
 
   if (session == null
-      ? fitsSinglePacket(payload)
-      : fitsSinglePacketEncrypted(payload)) {
+      ? fitsSinglePacket(transferPayload)
+      : fitsSinglePacketEncrypted(transferPayload)) {
     // Small payloads ride the command envelope directly — which is itself
     // sealed end-to-end when a session exists.
     return state.sendConfigCommandToDevice(
       command,
       targetIp,
-      configData: payload,
+      configData: transferPayload,
     );
   }
 
@@ -338,7 +561,7 @@ Future<bool> sendConfigPayloadToDevice(
     n: encN,
     transferId: transferId,
     kind: command,
-    payload: payload,
+    payload: transferPayload,
   );
 
   final chunks = encodePayloadChunks(wirePayload);
@@ -356,6 +579,7 @@ Future<bool> sendConfigPayloadToDevice(
     totalChunks: chunks.length,
     encSidB64: encSidB64,
     encN: encN,
+    resultRequestId: resultRequestId,
   );
   final startOk = await state.sendConfigCommandToDevice(
     ConfigCommand.debrifyChannelStart,

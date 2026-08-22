@@ -33,10 +33,12 @@ class RemoteMessageType {
 
 /// Protocol version advertised in discovery. v1 = plaintext only (implied by
 /// the field's absence), v2 = X25519/AES-GCM sessions + pairing codes, v3 =
-/// correlated receiver outcomes for single-addon transfers.
-const int kProtoVersion = 3;
+/// correlated receiver outcomes for single-addon transfers, v4 = correlated
+/// outcomes for configuration batches and Debrify TV channels.
+const int kProtoVersion = 4;
 
 const int kAddonResultProtocolVersion = 3;
+const int kRemoteTransferResultProtocolVersion = 4;
 
 /// First Debrify release whose RECEIVER speaks [kProtoVersion] 2, quoted to
 /// the user when a send is refused. v2 landed after 0.8.1-alpha.1 shipped, so
@@ -192,6 +194,12 @@ class ConfigCommand {
   // sender must not treat local UDP acceptance as proof that the TV applied
   // the add-on.
   static const String addonTransferResult = 'addon_transfer_result';
+  // Receiver → sender: correlated application outcome for v4 configuration
+  // batches and Debrify TV channel imports.
+  static const String remoteTransferResult = 'remote_transfer_result';
+  // Sender → receiver: opens a fresh correlated v4 batch before any config
+  // or addon items are emitted, preventing reuse of stale staged data.
+  static const String remoteTransferStart = 'remote_transfer_start';
   static const String complete =
       'complete'; // Signals all configs sent, TV should restart
 }

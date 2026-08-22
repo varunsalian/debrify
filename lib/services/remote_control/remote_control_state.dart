@@ -55,6 +55,12 @@ class RemoteControlState extends ChangeNotifier {
   final StreamController<({String requestId, bool ok})> addonTransferResults =
       StreamController<({String requestId, bool ok})>.broadcast();
 
+  final StreamController<({String requestId, bool ok, String message})>
+  remoteTransferResults =
+      StreamController<
+        ({String requestId, bool ok, String message})
+      >.broadcast();
+
   // Services
   UdpDiscoveryService? _discoveryService;
   UdpCommandService? _commandService;
@@ -987,6 +993,14 @@ class RemoteControlState extends ChangeNotifier {
       if (data != null && context.encrypted && context.authorized) {
         final result = parseAddonTransferResultBody(data);
         if (result != null) addonTransferResults.add(result);
+      }
+      return;
+    }
+    if (action == RemoteAction.config &&
+        command == ConfigCommand.remoteTransferResult) {
+      if (data != null && context.encrypted && context.authorized) {
+        final result = parseRemoteTransferResultBody(data);
+        if (result != null) remoteTransferResults.add(result);
       }
       return;
     }

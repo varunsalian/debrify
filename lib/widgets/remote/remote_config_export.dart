@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -390,14 +391,37 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
 
     final targetIp = connectedDevice.ip;
     final state = RemoteControlState();
+    final supportsApplicationResult =
+        connectedDevice.supportsRemoteTransferResult;
+    final requestId = createRemoteTransferRequestId();
+    final applicationResult = Completer<({bool ok, String message})>();
+    StreamSubscription<({String requestId, bool ok, String message})>?
+    resultSubscription;
+    if (supportsApplicationResult) {
+      resultSubscription = state.remoteTransferResults.stream.listen((result) {
+        if (result.requestId == requestId && !applicationResult.isCompleted) {
+          applicationResult.complete((ok: result.ok, message: result.message));
+        }
+      });
+    }
     int successCount = 0;
     int failCount = 0;
     final List<String> results = [];
+    final List<String> deliveredCommands = [];
+    String transferData(String value) => supportsApplicationResult
+        ? remoteTransferItemBody(requestId: requestId, payload: value)
+        : value;
 
     try {
+      if (supportsApplicationResult &&
+          !await beginRemoteTransfer(state, targetIp, requestId: requestId)) {
+        throw StateError('The TV refused to start the configuration transfer');
+      }
+
       Future<void> sendSelected(
         bool selected,
         String label,
+        String command,
         Future<bool> Function() send,
       ) async {
         if (!selected) return;
@@ -410,6 +434,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         if (sent) {
           successCount++;
           results.add(label);
+          deliveredCommands.add(command);
         } else {
           failCount++;
         }
@@ -425,13 +450,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             await state.sendConfigCommandToDevice(
               command,
               targetIp,
-              configData: value,
+              configData: transferData(value),
             );
       }
 
       await sendSelected(
         _realDebrid?.selected == true,
         'Real-Debrid',
+        ConfigCommand.realDebrid,
         () => sendScalar(
           ConfigCommand.realDebrid,
           () => StorageService.getApiKey(forRemoteTransfer: true),
@@ -440,6 +466,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       await sendSelected(
         _torbox?.selected == true,
         'Torbox',
+        ConfigCommand.torbox,
         () => sendScalar(
           ConfigCommand.torbox,
           () => StorageService.getTorboxApiKey(forRemoteTransfer: true),
@@ -448,6 +475,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       await sendSelected(
         _premiumize?.selected == true,
         'Premiumize',
+        ConfigCommand.premiumize,
         () => sendScalar(
           ConfigCommand.premiumize,
           () => StorageService.getPremiumizeApiKey(forRemoteTransfer: true),
@@ -456,69 +484,92 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       await sendSelected(
         _allDebrid?.selected == true,
         'AllDebrid',
+        ConfigCommand.allDebrid,
         () => sendScalar(
           ConfigCommand.allDebrid,
           () => StorageService.getAllDebridApiKey(forRemoteTransfer: true),
         ),
       );
-      await sendSelected(_pikpak?.selected == true, 'PikPak', () async {
-        final email = await StorageService.getPikPakEmail(
-          forRemoteTransfer: true,
-        );
-        if (email == null || email.isEmpty) return false;
-        return state.sendConfigCommandToDevice(
-          ConfigCommand.pikpak,
-          targetIp,
-          configData: jsonEncode(<String, Object?>{
-            'email': email,
-            'password': _pikpakPasswordController.text,
-          }),
-        );
-      });
-      await sendSelected(_trakt?.selected == true, 'Trakt', () async {
-        final access = await StorageService.getTraktAccessToken(
-          forRemoteTransfer: true,
-        );
-        final refresh = await StorageService.getTraktRefreshToken(
-          forRemoteTransfer: true,
-        );
-        if (access == null ||
-            access.isEmpty ||
-            refresh == null ||
-            refresh.isEmpty) {
-          return false;
-        }
-        final expiry = await StorageService.getTraktTokenExpiry();
-        final username = await StorageService.getTraktUsername();
-        return state.sendConfigCommandToDevice(
-          ConfigCommand.trakt,
-          targetIp,
-          configData: jsonEncode(<String, Object?>{
-            'access_token': access,
-            'refresh_token': refresh,
-            if (expiry != null) 'expiry_ms': expiry,
-            if (username != null) 'username': username,
-          }),
-        );
-      });
-      await sendSelected(_simkl?.selected == true, 'Simkl', () async {
-        final access = await StorageService.getSimklAccessToken(
-          forRemoteTransfer: true,
-        );
-        if (access == null || access.isEmpty) return false;
-        final username = await StorageService.getSimklUsername();
-        return state.sendConfigCommandToDevice(
-          ConfigCommand.simkl,
-          targetIp,
-          configData: jsonEncode(<String, Object?>{
-            'access_token': access,
-            if (username != null) 'username': username,
-          }),
-        );
-      });
+      await sendSelected(
+        _pikpak?.selected == true,
+        'PikPak',
+        ConfigCommand.pikpak,
+        () async {
+          final email = await StorageService.getPikPakEmail(
+            forRemoteTransfer: true,
+          );
+          if (email == null || email.isEmpty) return false;
+          return state.sendConfigCommandToDevice(
+            ConfigCommand.pikpak,
+            targetIp,
+            configData: transferData(
+              jsonEncode(<String, Object?>{
+                'email': email,
+                'password': _pikpakPasswordController.text,
+              }),
+            ),
+          );
+        },
+      );
+      await sendSelected(
+        _trakt?.selected == true,
+        'Trakt',
+        ConfigCommand.trakt,
+        () async {
+          final access = await StorageService.getTraktAccessToken(
+            forRemoteTransfer: true,
+          );
+          final refresh = await StorageService.getTraktRefreshToken(
+            forRemoteTransfer: true,
+          );
+          if (access == null ||
+              access.isEmpty ||
+              refresh == null ||
+              refresh.isEmpty) {
+            return false;
+          }
+          final expiry = await StorageService.getTraktTokenExpiry();
+          final username = await StorageService.getTraktUsername();
+          return state.sendConfigCommandToDevice(
+            ConfigCommand.trakt,
+            targetIp,
+            configData: transferData(
+              jsonEncode(<String, Object?>{
+                'access_token': access,
+                'refresh_token': refresh,
+                if (expiry != null) 'expiry_ms': expiry,
+                if (username != null) 'username': username,
+              }),
+            ),
+          );
+        },
+      );
+      await sendSelected(
+        _simkl?.selected == true,
+        'Simkl',
+        ConfigCommand.simkl,
+        () async {
+          final access = await StorageService.getSimklAccessToken(
+            forRemoteTransfer: true,
+          );
+          if (access == null || access.isEmpty) return false;
+          final username = await StorageService.getSimklUsername();
+          return state.sendConfigCommandToDevice(
+            ConfigCommand.simkl,
+            targetIp,
+            configData: transferData(
+              jsonEncode(<String, Object?>{
+                'access_token': access,
+                if (username != null) 'username': username,
+              }),
+            ),
+          );
+        },
+      );
       await sendSelected(
         _searchEngines?.selected == true,
         'Search Engines',
+        ConfigCommand.searchEngines,
         () async {
           await LocalEngineStorage.instance.initialize();
           final engineIds = await LocalEngineStorage.instance
@@ -527,27 +578,35 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
               await state.sendConfigCommandToDevice(
                 ConfigCommand.searchEngines,
                 targetIp,
-                configData: jsonEncode(engineIds),
+                configData: transferData(jsonEncode(engineIds)),
               );
         },
       );
-      await sendSelected(_webDav?.selected == true, 'WebDAV', () async {
-        final servers = await StorageService.getWebDavServers(
-          forSettings: false,
-          forRemoteTransfer: true,
-        );
-        if (servers.isEmpty) return false;
-        return state.sendConfigCommandToDevice(
-          ConfigCommand.webDav,
-          targetIp,
-          configData: jsonEncode([
-            for (final server in servers) server.toTransferJson(),
-          ]),
-        );
-      });
+      await sendSelected(
+        _webDav?.selected == true,
+        'WebDAV',
+        ConfigCommand.webDav,
+        () async {
+          final servers = await StorageService.getWebDavServers(
+            forSettings: false,
+            forRemoteTransfer: true,
+          );
+          if (servers.isEmpty) return false;
+          return state.sendConfigCommandToDevice(
+            ConfigCommand.webDav,
+            targetIp,
+            configData: transferData(
+              jsonEncode([
+                for (final server in servers) server.toTransferJson(),
+              ]),
+            ),
+          );
+        },
+      );
       await sendSelected(
         _indexerManagers?.selected == true,
         'Jackett/Prowlarr',
+        ConfigCommand.indexerManagers,
         () async {
           final managers = await StorageService.getIndexerManagerConfigs(
             forSettings: false,
@@ -557,15 +616,18 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           return state.sendConfigCommandToDevice(
             ConfigCommand.indexerManagers,
             targetIp,
-            configData: jsonEncode([
-              for (final manager in managers) manager.toTransferJson(),
-            ]),
+            configData: transferData(
+              jsonEncode([
+                for (final manager in managers) manager.toTransferJson(),
+              ]),
+            ),
           );
         },
       );
       await sendSelected(
         _iptvPlaylists?.selected == true,
         'IPTV Providers',
+        ConfigCommand.iptvPlaylists,
         () async {
           final payload = await IptvTransferPayload.buildPlaylists(
             forRemoteTransfer: true,
@@ -577,12 +639,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                 targetIp,
                 jsonEncode(payload),
                 label: 'IPTV providers',
+                transferRequestId: supportsApplicationResult ? requestId : null,
               );
         },
       );
       await sendSelected(
         _iptvFavorites?.selected == true,
         'IPTV Favorites',
+        ConfigCommand.iptvFavorites,
         () async {
           final payload = await IptvTransferPayload.buildFavorites(
             forRemoteTransfer: true,
@@ -594,28 +658,56 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                 targetIp,
                 jsonEncode(payload),
                 label: 'IPTV favorites',
+                transferRequestId: supportsApplicationResult ? requestId : null,
               );
         },
       );
-      await sendSelected(_iptvLists?.selected == true, 'IPTV Lists', () async {
-        final payload = await IptvTransferPayload.buildCustomLists(
-          forRemoteTransfer: true,
-        );
-        return payload.isNotEmpty &&
-            await sendConfigPayloadToDevice(
-              state,
-              ConfigCommand.iptvLists,
-              targetIp,
-              jsonEncode(payload),
-              label: 'IPTV lists',
-            );
-      });
+      await sendSelected(
+        _iptvLists?.selected == true,
+        'IPTV Lists',
+        ConfigCommand.iptvLists,
+        () async {
+          final payload = await IptvTransferPayload.buildCustomLists(
+            forRemoteTransfer: true,
+          );
+          return payload.isNotEmpty &&
+              await sendConfigPayloadToDevice(
+                state,
+                ConfigCommand.iptvLists,
+                targetIp,
+                jsonEncode(payload),
+                label: 'IPTV lists',
+                transferRequestId: supportsApplicationResult ? requestId : null,
+              );
+        },
+      );
 
       // Send complete signal to trigger TV restart (only if at least one succeeded)
       if (successCount > 0) {
         // Small delay to ensure previous commands are processed
         await Future.delayed(const Duration(milliseconds: 500));
-        await state.sendConfigCommandToDevice(ConfigCommand.complete, targetIp);
+        final completed = supportsApplicationResult
+            ? await sendRemoteTransferCompletion(
+                state,
+                targetIp,
+                requestId: requestId,
+                expectedCommands: deliveredCommands,
+              )
+            : await state.sendConfigCommandToDevice(
+                ConfigCommand.complete,
+                targetIp,
+              );
+        if (!completed) {
+          throw StateError('Remote configuration completion was refused');
+        }
+        if (supportsApplicationResult) {
+          final result = await applicationResult.future.timeout(
+            const Duration(minutes: 3),
+            onTimeout: () =>
+                (ok: false, message: 'No application result received from TV'),
+          );
+          if (!result.ok) throw StateError(result.message);
+        }
       }
 
       // Show result
@@ -623,8 +715,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         if (failCount == 0 && successCount > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Sent ${results.join(", ")} to TV'),
-              backgroundColor: const Color(0xFF10B981),
+              content: Text(
+                supportsApplicationResult
+                    ? 'Applied ${results.join(", ")} on TV'
+                    : 'Delivered ${results.join(", ")} — confirm on TV',
+              ),
+              backgroundColor: supportsApplicationResult
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFFF59E0B),
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 3),
             ),
@@ -640,7 +738,10 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Sent ${results.join(", ")}, but some failed'),
+              content: Text(
+                '${supportsApplicationResult ? 'Applied' : 'Delivered'} '
+                '${results.join(", ")}, but some failed',
+              ),
               backgroundColor: const Color(0xFFF59E0B),
               behavior: SnackBarBehavior.floating,
             ),
@@ -659,6 +760,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         );
       }
     } finally {
+      await resultSubscription?.cancel();
       if (mounted) {
         setState(() => _sending = false);
       }

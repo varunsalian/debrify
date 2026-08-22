@@ -206,7 +206,7 @@ void main() {
     );
 
     expect((await registry.getProfile(id))!.avatarKey, startsWith('file:'));
-    expect(replies, <String>['profile_avatar:request-1:ok']);
+    expect(replies, List<String>.filled(3, 'profile_avatar:request-1:ok'));
   });
 
   test('overlapping avatar writers publish and prune in queue order', () async {
