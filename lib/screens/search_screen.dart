@@ -12,6 +12,7 @@ import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/artwork_accent.dart';
 import '../utils/platform_util.dart';
+import '../utils/tvos_device.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
@@ -1199,9 +1200,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Trailers only on the TV Home board's full spotlight — never the Search
   /// tab's compact strip (too small, and results should dominate) or off-TV
-  /// (the hero itself isn't rendered there).
+  /// (the hero itself isn't rendered there). Low-memory Apple TV generations
+  /// are excluded outright: an mpv trailer engine alongside the board's
+  /// artwork is exactly the load that jetsam-kills a 3 GB first-gen 4K, and
+  /// the probe is warmed pre-runApp so this getter stays constant for the
+  /// State's lifetime (the init/dispose registrations must agree).
   bool get _heroTrailerActive =>
-      widget.isTelevision && !widget.searchMode && !widget.discoverMode;
+      widget.isTelevision &&
+      !widget.searchMode &&
+      !widget.discoverMode &&
+      !TvosDevice.isLowMemoryCached;
 
   /// The hero trailer off-TV: the Spotlight home board's reel, rendered on
   /// phones/tablets/desktop. Deliberately SEPARATE from [_heroTrailerActive]
