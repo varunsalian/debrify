@@ -212,6 +212,43 @@ void main() {
       isFalse,
     );
   });
+
+  group('native bitmap subtitle rendering', () {
+    test('recognizes image metadata and common bitmap codecs', () {
+      expect(
+        requiresNativeSubtitleRendering(
+          const mk.SubtitleTrack('1', 'English', 'en', image: true),
+        ),
+        isTrue,
+      );
+      for (final codec in const [
+        'hdmv_pgs_subtitle',
+        'pgssub',
+        'dvb_subtitle',
+        'dvd_subtitle',
+        'xsub',
+      ]) {
+        expect(
+          requiresNativeSubtitleRendering(
+            mk.SubtitleTrack('1', 'English', 'en', codec: codec),
+          ),
+          isTrue,
+          reason: codec,
+        );
+      }
+    });
+
+    test('keeps text, external, auto, and off tracks in Flutter rendering', () {
+      for (final track in <mk.SubtitleTrack>[
+        const mk.SubtitleTrack('1', 'English', 'en', codec: 'subrip'),
+        mk.SubtitleTrack.uri('/tmp/subtitle.ass'),
+        mk.SubtitleTrack.auto(),
+        mk.SubtitleTrack.no(),
+      ]) {
+        expect(requiresNativeSubtitleRendering(track), isFalse);
+      }
+    });
+  });
 }
 
 void _overwriteZipUncompressedSizes(Uint8List bytes, int size) {

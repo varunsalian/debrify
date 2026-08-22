@@ -32,3 +32,24 @@ List<mk.SubtitleTrack> embeddedSubtitleTracks(
           track.id.toLowerCase() != 'no',
     )
     .toList(growable: false);
+
+/// Whether mpv must composite [track] into the video output itself.
+///
+/// MediaKit normally hides mpv subtitles and paints text cues in Flutter.
+/// Bitmap formats have no text cue to expose, so leaving native visibility
+/// disabled makes a successfully decoded track invisible.
+bool requiresNativeSubtitleRendering(mk.SubtitleTrack track) {
+  if (track.image == true) return true;
+
+  final codec = track.codec?.trim().toLowerCase();
+  return switch (codec) {
+    'hdmv_pgs_subtitle' ||
+    'pgssub' ||
+    'dvb_subtitle' ||
+    'dvbsub' ||
+    'dvd_subtitle' ||
+    'dvdsub' ||
+    'xsub' => true,
+    _ => false,
+  };
+}

@@ -548,10 +548,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The generation in force when the current scrub began.
   int _tvScrubStartedAtGeneration = 0;
 
-  // NOTE: do NOT drive mpv's `sub-visibility` here. media_kit renders
-  // subtitles as a Flutter widget and keeps mpv's own renderer switched off;
-  // turning it back on draws every subtitle twice. Lifting subtitles clear of
-  // the bar belongs in the subtitle view's padding instead.
+  // Text subtitles stay in MediaKit's Flutter renderer. Bitmap subtitles are
+  // the narrow exception: their decoded image cues cannot enter a text widget,
+  // so the selection path temporarily enables mpv's native compositor.
   bool _isSeekingWithSlider = false;
   Duration? _lastSliderSeekPos;
 
@@ -3637,6 +3636,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // call owns the player now.
       if (_screenDisposed || generation != _decoderProbeGeneration) return;
     }
+    // `sub-visibility` is player-global. Reset it before a reused player opens
+    // new media so a previous bitmap track cannot make auto-selected text draw
+    // both natively and in Flutter. Restored bitmap selections re-enable it.
+    if (platform is mk.NativePlayer) {
+      try {
+        await platform.setProperty('sub-visibility', 'no');
+      } catch (error) {
+        debugPrint('Player: subtitle visibility reset failed: $error');
+      }
+    }
     return _player.open(media, play: play);
   }
 
@@ -3735,6 +3744,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   static String _diagnosticSubtitleId(mk.SubtitleTrack track) =>
       track.uri || track.data ? '<external>' : track.id;
 
+  Future<void> _setNativeSubtitleVisibilityForTrack(
+    mk.SubtitleTrack track,
+  ) async {
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) return;
+    await platform.setProperty(
+      'sub-visibility',
+      requiresNativeSubtitleRendering(track) ? 'yes' : 'no',
+    );
+  }
+
   /// Records both media_kit's optimistic Dart state and libmpv's authoritative
   /// properties. This distinction matters for subtitle selection: media_kit
   /// updates `state.track.subtitle` after the property-set request completes,
@@ -3764,6 +3784,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       requested: track,
     );
     try {
+      await _setNativeSubtitleVisibilityForTrack(track);
       await _player.setSubtitleTrack(track);
     } catch (error, stackTrace) {
       debugPrint(
@@ -3830,6 +3851,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         : previous;
     var restoredOriginalSelection = fallback.id == previous.id;
     try {
+      await _setNativeSubtitleVisibilityForTrack(fallback);
       await _player.setSubtitleTrack(fallback);
     } catch (error) {
       restoredOriginalSelection = false;
@@ -3837,7 +3859,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         '[SubtitleDiag] rollback FAILED source=${attempt.source} error=$error',
       );
       try {
-        await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+        final noTrack = mk.SubtitleTrack.no();
+        await _setNativeSubtitleVisibilityForTrack(noTrack);
+        await _player.setSubtitleTrack(noTrack);
       } catch (_) {
         // The original actionable error is surfaced below. A second snackbar
         // for rollback failure would obscure it without giving the user a
@@ -10948,9 +10972,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Build subtitle view configuration from settings
   // NOTE: the television bar deliberately does NOT move subtitles.
   //
-  // Two attempts made things worse: driving mpv's `sub-visibility` drew every
-  // line twice (media_kit renders subtitles itself and keeps mpv's own
-  // renderer off), and padding them upward fought the user's own subtitle
+  // Native visibility remains off for text tracks because enabling it draws
+  // every line twice (MediaKit also renders those cues in Flutter). Bitmap
+  // selections toggle it separately because they have no text cues. Padding
+  // subtitles upward fought the user's own subtitle
   // elevation setting and threw them into the middle of the screen. The bar is
   // transient and the elevation setting already exists for exactly this
   // preference, so subtitles stay where the user put them.
