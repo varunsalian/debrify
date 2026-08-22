@@ -27,6 +27,59 @@ class SourceProviderRef {
 class SourcePriority {
   SourcePriority._();
 
+  /// Put each addon's ready-to-play links ahead of that same addon's
+  /// torrent-backed rows. Rows from engines and other addons keep their
+  /// original slots, so this does not otherwise change relevance/provider
+  /// ordering. Explicit user-selected sorts are applied afterwards.
+  static List<Torrent> directAddonLinksFirst(List<Torrent> torrents) {
+    if (torrents.length < 2) return torrents;
+
+    final byAddon = <String, List<Torrent>>{};
+    for (final torrent in torrents) {
+      final key = torrent.source.trim().toLowerCase();
+      if (key.startsWith('stremio:')) {
+        byAddon.putIfAbsent(key, () => <Torrent>[]).add(torrent);
+      }
+    }
+    if (byAddon.isEmpty) return torrents;
+
+    var changed = false;
+    final reordered = <String, List<Torrent>>{};
+    for (final entry in byAddon.entries) {
+      final direct = entry.value
+          .where((torrent) => torrent.streamType == StreamType.directUrl)
+          .toList();
+      final remaining = entry.value
+          .where((torrent) => torrent.streamType != StreamType.directUrl)
+          .toList();
+      if (direct.isEmpty || remaining.isEmpty) continue;
+      final ordered = [...direct, ...remaining];
+      if (!changed) {
+        for (var i = 0; i < ordered.length; i++) {
+          if (!identical(ordered[i], entry.value[i])) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      reordered[entry.key] = ordered;
+    }
+    if (!changed) return torrents;
+
+    final offsets = <String, int>{};
+    return [
+      for (final torrent in torrents)
+        if (reordered[torrent.source.trim().toLowerCase()] case final rows?)
+          rows[offsets.update(
+            torrent.source.trim().toLowerCase(),
+            (value) => value + 1,
+            ifAbsent: () => 0,
+          )]
+        else
+          torrent,
+    ];
+  }
+
   /// Addons that use Stremio's stream resource exclusively to return detail
   /// navigation links. They feed recommendation rails, not playable sources,
   /// so they do not belong in scraper priority or source-status controls.
