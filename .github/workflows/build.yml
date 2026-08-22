@@ -125,7 +125,9 @@ jobs:
 
   macos:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'macos'
-    runs-on: macos-latest
+    # The pinned native dependency set predates Xcode 26; HarfBuzz 8.1.1
+    # references sincosf, which is no longer publicly declared by that SDK.
+    runs-on: macos-15
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
