@@ -28,4 +28,13 @@ void main() {
     await StorageService.setTvosForceSoftwareDecode(true);
     expect(await StorageService.getTvosForceSoftwareDecode(), isTrue);
   });
+
+  test('subtitle auto-sync stays opt-in and round-trips', () async {
+    SharedPreferences.setMockInitialValues({});
+    expect(await StorageService.getSubtitleAutoSyncEnabled(), isFalse);
+    await StorageService.setSubtitleAutoSyncEnabled(true);
+    expect(await StorageService.getSubtitleAutoSyncEnabled(), isTrue);
+    await StorageService.setSubtitleAutoSyncEnabled(false);
+    expect(await StorageService.getSubtitleAutoSyncEnabled(), isFalse);
+  });
 }

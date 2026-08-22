@@ -25,6 +25,7 @@ required=(
   ass ssa dvbsub dvdsub pgssub xsub ccaption jacosub microdvd movtext mpl2
   pjs realtext sami srt stl subrip subviewer subviewer1 text vplayer webvtt
 )
+required_filters=(astats aspectralstats)
 verified=0
 verify_binary() {
   local binary="$1"
@@ -44,6 +45,13 @@ verify_binary() {
       missing=$((missing + 1))
     fi
   done
+  local filter
+  for filter in "${required_filters[@]}"; do
+    if [[ "$config" != *"--enable-filter=$filter"* ]]; then
+      echo "error: $label is missing FFmpeg auto-sync filter: $filter" >&2
+      missing=$((missing + 1))
+    fi
+  done
   [[ "$missing" -eq 0 ]]
 }
 
@@ -59,4 +67,4 @@ for binary in "${binaries[@]}"; do
   binary_index=$((binary_index + 1))
 done
 
-echo "verified ${#required[@]} subtitle decoders across $verified macOS architecture slices"
+echo "verified ${#required[@]} subtitle decoders and ${#required_filters[@]} auto-sync filters across $verified macOS architecture slices"

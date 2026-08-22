@@ -1321,6 +1321,40 @@ class NativePlayer extends PlatformPlayer {
     calloc.free(name);
   }
 
+  /// Observes a libmpv property whose native value is a string-keyed node map.
+  ///
+  /// Unlike [observeProperty], this keeps the value structured instead of
+  /// asking libmpv to stringify it. Filter metadata (`af-metadata/...`) is one
+  /// such property: libmpv explicitly does not support retrieving it as a raw
+  /// string. The callback is synchronous on purpose so the event-owned node is
+  /// copied before libmpv releases it.
+  Future<void> observePropertyMap(
+    String property,
+    void Function(Map<String, String>) listener, {
+    bool waitForInitialization = true,
+  }) async {
+    if (disposed) {
+      throw AssertionError('[Player] has been disposed');
+    }
+    if (waitForInitialization) {
+      await waitForPlayerInitialization;
+      await waitForVideoControllerInitializationIfAttached;
+    }
+    if (observed.containsKey(property) || observedMaps.containsKey(property)) {
+      throw ArgumentError.value(property, 'property', 'Already observed');
+    }
+    final reply = property.hashCode;
+    observedMaps[property] = listener;
+    final name = property.toNativeUtf8();
+    mpv.mpv_observe_property(
+      ctx,
+      reply,
+      name.cast(),
+      generated.mpv_format.MPV_FORMAT_NODE,
+    );
+    calloc.free(name);
+  }
+
   /// Unobserves property for the internal libmpv instance of this [Player].
   /// Please use this method only if you know what you are doing, existing methods in [Player] implementation are suited for the most use cases.
   ///
@@ -1341,7 +1375,8 @@ class NativePlayer extends PlatformPlayer {
       await waitForVideoControllerInitializationIfAttached;
     }
 
-    if (!observed.containsKey(property)) {
+    if (!observed.containsKey(property) &&
+        !observedMaps.containsKey(property)) {
       throw ArgumentError.value(
         property,
         'property',
@@ -1350,6 +1385,7 @@ class NativePlayer extends PlatformPlayer {
     }
     final reply = property.hashCode;
     observed.remove(property);
+    observedMaps.remove(property);
     mpv.mpv_unobserve_property(ctx, reply);
   }
 
@@ -1362,6 +1398,7 @@ class NativePlayer extends PlatformPlayer {
   Future<void> command(
     List<String> command, {
     bool waitForInitialization = true,
+    bool throwOnError = false,
   }) async {
     if (disposed) {
       throw AssertionError('[Player] has been disposed');
@@ -1372,7 +1409,7 @@ class NativePlayer extends PlatformPlayer {
       await waitForVideoControllerInitializationIfAttached;
     }
 
-    await _command(command);
+    await _command(command, throwOnError: throwOnError);
   }
 
   Future<void> _handler(Pointer<generated.mpv_event> event) async {
@@ -2068,6 +2105,20 @@ class NativePlayer extends PlatformPlayer {
           }
         }
       }
+      final propertyName = prop.ref.name.cast<Utf8>().toDartString();
+      final mapListener = observedMaps[propertyName];
+      if (mapListener != null &&
+          prop.ref.format == generated.mpv_format.MPV_FORMAT_NODE) {
+        final node = prop.ref.data.cast<generated.mpv_node>();
+        if (node.ref.format == generated.mpv_format.MPV_FORMAT_NODE_MAP) {
+          try {
+            mapListener(_stringNodeMap(node));
+          } catch (exception, stacktrace) {
+            print(exception);
+            print(stacktrace);
+          }
+        }
+      }
     }
     if (event.ref.event_id == generated.mpv_event_id.MPV_EVENT_LOG_MESSAGE) {
       final eventLogMessage =
@@ -2690,6 +2741,8 @@ class NativePlayer extends PlatformPlayer {
   /// Currently observed properties through [observeProperty].
   final HashMap<String, Future<void> Function(String)> observed =
       HashMap<String, Future<void> Function(String)>();
+  final HashMap<String, void Function(Map<String, String>)> observedMaps =
+      HashMap<String, void Function(Map<String, String>)>();
 
   /// The methods which must execute synchronously before playback of a source can begin.
   final List<Future<void> Function()> onLoadHooks = [];
@@ -2715,6 +2768,30 @@ class NativePlayer extends PlatformPlayer {
 //
 // TODO: Maybe eventually move all methods to [Isolate]?
 // --------------------------------------------------
+
+Map<String, String> _stringNodeMap(Pointer<generated.mpv_node> node) {
+  final result = <String, String>{};
+  final list = node.ref.u.list.ref;
+  for (var i = 0; i < list.num; i++) {
+    final key = list.keys[i].cast<Utf8>().toDartString();
+    final value = list.values[i];
+    switch (value.format) {
+      case generated.mpv_format.MPV_FORMAT_STRING:
+        result[key] = value.u.string.cast<Utf8>().toDartString();
+        break;
+      case generated.mpv_format.MPV_FORMAT_INT64:
+        result[key] = value.u.int64.toString();
+        break;
+      case generated.mpv_format.MPV_FORMAT_DOUBLE:
+        result[key] = value.u.double_.toString();
+        break;
+      case generated.mpv_format.MPV_FORMAT_FLAG:
+        result[key] = value.u.flag == 0 ? 'no' : 'yes';
+        break;
+    }
+  }
+  return Map<String, String>.unmodifiable(result);
+}
 
 class _ScreenshotData {
   final int ctx;

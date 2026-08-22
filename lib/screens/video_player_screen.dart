@@ -85,6 +85,7 @@ import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/network_tuning.dart';
 import 'video_player/services/subtitle_settings_service.dart';
+import 'video_player/services/media_kit_subtitle_auto_sync.dart';
 import 'video_player/services/playback_ui_clock.dart';
 import 'video_player/services/skip_segment_ui_controller.dart';
 import 'video_player/services/android_renderer_startup_fallback.dart';
@@ -1126,6 +1127,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Windows-125x, etc.) instead of our http client pre-decoding as UTF-8.
   final Set<String> _tempSubtitleFiles = {};
   String? _activeExternalSubtitlePath;
+  bool _subtitleAutoSyncEnabled = false;
+  MediaKitSubtitleAutoSync? _subtitleAutoSync;
 
   // media_kit state
   bool _isReady = false;
@@ -1159,6 +1162,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   StreamSubscription? _durSub;
   StreamSubscription? _playSub;
   StreamSubscription? _paramsSub;
+  StreamSubscription? _trackSub;
   StreamSubscription? _completedSub;
   StreamSubscription? _bufferingSub;
   StreamSubscription? _iptvErrorSub;
@@ -2301,6 +2305,76 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_applyAspectVideoZoom());
   }
 
+  void _installSubtitleAutoSyncForPlayer(mk.Player player) {
+    if (!_subtitleAutoSyncEnabled ||
+        kIsWeb ||
+        (!Platform.isAndroid && !Platform.isMacOS)) {
+      return;
+    }
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+    _subtitleAutoSync = MediaKitSubtitleAutoSync(
+      player: platform,
+      enabled: _subtitleAutoSyncEnabled,
+      passthroughEnabled:
+          !kIsWeb && Platform.isAndroid && _audioPassthroughEnabled,
+      currentPositionMs: () => _position.inMilliseconds,
+      isPlaying: () => _isPlaying,
+      currentOffsetMs: () => _subtitleSettings?.syncOffsetMs ?? 0,
+      applyOffsetMs: _applyAutoSubtitleSyncOffset,
+      onNotice: _showSubtitleAutoSyncNotice,
+    );
+  }
+
+  Future<void> _disposeSubtitleAutoSync() async {
+    final controller = _subtitleAutoSync;
+    _subtitleAutoSync = null;
+    await controller?.dispose();
+  }
+
+  Future<void> _applyAutoSubtitleSyncOffset(int milliseconds) async {
+    final clamped = milliseconds.clamp(
+      SubtitleSettingsService.syncOffsetMinMs,
+      SubtitleSettingsService.syncOffsetMaxMs,
+    );
+    if (!mounted) return;
+    _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: clamped);
+    _applySubtitleSyncOffset(clamped);
+    setState(() {});
+    try {
+      await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
+    } catch (error) {
+      // The live player already has the safe, bounded offset. A preference
+      // write failure must not escape a timer callback or affect playback.
+      debugPrint('SubtitleAutoSync: offset persistence failed: $error');
+    }
+  }
+
+  void _showSubtitleAutoSyncNotice(SubtitleAutoSyncNotice notice) {
+    if (!mounted || notice.kind == SubtitleAutoSyncNoticeKind.listening) return;
+    debugPrint('SubtitleAutoSync: ${notice.message}');
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(notice.message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _setActiveExternalSubtitlePath(String? path) {
+    if (_activeExternalSubtitlePath == path) return;
+    _activeExternalSubtitlePath = path;
+    final controller = _subtitleAutoSync;
+    if (controller == null) return;
+    if (path == null) {
+      unawaited(controller.deactivateSubtitle());
+    } else {
+      unawaited(controller.activateSubtitle(path));
+    }
+  }
+
   Future<void> _applyAspectVideoZoom() async {
     final platform = _player.platform;
     if (platform is! mk.NativePlayer) return;
@@ -2339,6 +2413,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _audioPassthroughEnabled = enabled;
     try {
       await StorageService.setAudioPassthroughEnabled(enabled);
+      // An audio filter would force compressed passthrough formats through a
+      // PCM decoder. Remove the passive analysis chain before the aid cycle;
+      // when passthrough is disabled, re-arm only after PCM output is restored.
+      if (enabled) {
+        await _subtitleAutoSync?.setPassthroughEnabled(true);
+      }
       final platform = _player.platform;
       if (platform is! mk.NativePlayer) return;
       for (final (property, value)
@@ -2352,6 +2432,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (aid.isNotEmpty && aid != 'no') {
         await platform.setProperty('aid', 'no');
         await platform.setProperty('aid', aid);
+      }
+      if (!enabled) {
+        await _subtitleAutoSync?.setPassthroughEnabled(false);
       }
     } catch (e) {
       debugPrint('VideoPlayer: live passthrough toggle failed: $e');
@@ -2620,6 +2703,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     _createPlayerInstance(_androidVideoRendererMode);
     await _configurePlayerAudio(_player);
+    _installSubtitleAutoSyncForPlayer(_player);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
     // finished file being publishable at all. Below API 29 there is no
@@ -2836,6 +2920,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _posSub = player.stream.position.listen((d) {
       if (!isCurrent()) return;
+      _subtitleAutoSync?.observePosition(d.inMilliseconds);
       _iptvDiag.onProgress(d, playing: _isPlaying);
       // _isPlaying tracks mpv's pause property: a cache-stall keeps it true
       // (stall detector armed), a user pause flips it false (excluded).
@@ -2848,6 +2933,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _syncActiveSkipSegmentUi();
       _checkAndApplyLocalCompletion();
     });
+    if (_subtitleAutoSyncEnabled) {
+      var lastAudioTrackId = player.state.track.audio.id;
+      _trackSub = player.stream.track.listen((track) {
+        if (!isCurrent()) return;
+        final audioTrackId = track.audio.id;
+        if (audioTrackId != lastAudioTrackId) {
+          lastAudioTrackId = audioTrackId;
+          _subtitleAutoSync?.audioTrackChanged();
+        }
+      });
+    }
     _durSub = player.stream.duration.listen((d) {
       if (!isCurrent()) return;
       _duration = d;
@@ -2958,6 +3054,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _durSub,
       _playSub,
       _paramsSub,
+      _trackSub,
       _completedSub,
       _bufferingSub,
       _iptvErrorSub,
@@ -2968,6 +3065,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _durSub = null;
     _playSub = null;
     _paramsSub = null;
+    _trackSub = null;
     _completedSub = null;
     _bufferingSub = null;
     _iptvErrorSub = null;
@@ -3181,6 +3279,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       await _cancelPlayerInstanceSubscriptions();
+      await _disposeSubtitleAutoSync();
+      _activeExternalSubtitlePath = null;
       _releaseAudioEffectSession();
       try {
         await oldPlayer.pause();
@@ -3214,6 +3314,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!mounted) return;
       _createPlayerInstance(AndroidVideoRendererMode.automatic);
       await _configurePlayerAudio(_player);
+      _installSubtitleAutoSyncForPlayer(_player);
       await _attachAudioEffectSession();
       if (!mounted) return;
       setState(() {});
@@ -3826,9 +3927,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _selectedStremioSubtitleId = restoredOriginalSelection
         ? attempt.previousStremioId
         : null;
-    _activeExternalSubtitlePath = restoredOriginalSelection
-        ? attempt.previousExternalPath
-        : null;
+    _setActiveExternalSubtitlePath(
+      restoredOriginalSelection ? attempt.previousExternalPath : null,
+    );
     final String restoredSelection;
     if (restoredOriginalSelection && attempt.previousStremioId != null) {
       restoredSelection = 'stremio:${attempt.previousStremioId}';
@@ -4904,6 +5005,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadPlayerDefaults() async {
+    _subtitleAutoSyncEnabled =
+        await StorageService.getSubtitleAutoSyncEnabled();
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
@@ -4966,6 +5069,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _subtitleSettings = settings;
     });
     if (offsetChanged) {
+      _subtitleAutoSync?.manualOffsetChanged(settings.syncOffsetMs);
       _applySubtitleSyncOffset(settings.syncOffsetMs);
     }
   }
@@ -5019,6 +5123,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         currentOffsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
         onOffsetChanged: (ms) async {
           await SubtitleSettingsService.instance.setSyncOffsetMs(ms);
+          _subtitleAutoSync?.manualOffsetChanged(ms);
           _applySubtitleSyncOffset(ms);
           if (mounted) {
             setState(() {
@@ -5042,6 +5147,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           SubtitleSettingsService.syncOffsetMaxMs,
         );
         await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
+        _subtitleAutoSync?.manualOffsetChanged(clamped);
         _applySubtitleSyncOffset(clamped);
         if (mounted) {
           setState(() {
@@ -9206,6 +9312,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playSub?.cancel();
     _lastLiveChannelTimer?.cancel();
     _paramsSub?.cancel();
+    _trackSub?.cancel();
     _tvosDecodeRemedy?.dispose();
     _tvosDecodeRemedy = null;
     _completedSub?.cancel();
@@ -9216,11 +9323,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
     _screenDisposed = true;
+    final subtitleAutoSync = _subtitleAutoSync;
+    _subtitleAutoSync = null;
     if (_playerCreated) {
       // The slot frees only once the native output has actually gone, not when
       // disposal is requested — the same rule the trailer engines follow.
-      _player.dispose().whenComplete(_releaseVideoOutput);
-    } else {
+      () async {
+        await subtitleAutoSync?.dispose();
+        await _player.dispose();
+      }().whenComplete(_releaseVideoOutput);
+    } else if (subtitleAutoSync != null) {
+      unawaited(subtitleAutoSync.dispose());
       _releaseVideoOutput();
     }
     _transitionStopTimer?.cancel();
@@ -13251,7 +13364,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       onTrackChanged: (audioId, subtitleId) async {
         _userManuallySelectedSubtitle = true;
         if (!subtitleId.startsWith('stremio:')) {
-          _activeExternalSubtitlePath = null;
+          _setActiveExternalSubtitlePath(null);
         }
         // Remember the chosen audio language for this IPTV series (carries to
         // later episodes and future sessions). No-op off IPTV.
@@ -13405,7 +13518,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
     _userManuallySelectedSubtitle = true;
     if (!subtitleId.startsWith('stremio:')) {
-      _activeExternalSubtitlePath = null;
+      _setActiveExternalSubtitlePath(null);
     }
     _captureIptvAudioLanguage(audioId);
     await _persistTrackChoice(audioId, subtitleId);
@@ -13481,7 +13594,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _selectedStremioSubtitleId = sub.id;
-      _activeExternalSubtitlePath = filePath;
+      _setActiveExternalSubtitlePath(filePath);
       await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
       return true;
     } catch (e) {
@@ -13515,7 +13628,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _activeExternalSubtitlePath = filePath;
+      _setActiveExternalSubtitlePath(filePath);
       return true;
     } catch (e) {
       debugPrint('TracksSheet: subtitle apply failed - $e');
@@ -13626,7 +13739,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _subtitleDiagnosticGeneration++;
     _activeSubtitleApplyAttempt = null;
     _cleanupTempSubtitleFilesSync();
-    _activeExternalSubtitlePath = null;
+    _setActiveExternalSubtitlePath(null);
     _showSyncOverlay = false;
     // The menu's subtitle pane is keyed to the outgoing item's identity.
     _showPlayerMenu = false;
@@ -14262,7 +14375,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final applied = await _applyExternalSubtitleTrack(track);
       if (!applied) return;
       _selectedStremioSubtitleId = matchingSub.id;
-      _activeExternalSubtitlePath = filePath;
+      _setActiveExternalSubtitlePath(filePath);
 
       debugPrint(
         'SubAuto: APPLIED addon subtitle "${matchingSub.displayName}" lang=${matchingSub.lang} source=${matchingSub.source}',

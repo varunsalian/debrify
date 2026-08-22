@@ -12,6 +12,7 @@ required=(
   ass ssa dvbsub dvdsub pgssub xsub ccaption jacosub microdvd movtext mpl2
   pjs realtext sami srt stl subrip subviewer subviewer1 text vplayer webvtt
 )
+required_filters=(astats aspectralstats)
 
 verify_binary() {
   local binary="$1"
@@ -29,6 +30,13 @@ verify_binary() {
     if [[ "$config" != *"--enable-decoder=$decoder"* && \
           "$config" != *"--enable-decoder='$decoder'"* ]]; then
       echo "error: $label is missing FFmpeg subtitle decoder: $decoder" >&2
+      missing=$((missing + 1))
+    fi
+  done
+  local filter
+  for filter in "${required_filters[@]}"; do
+    if [[ "$config" != *"--enable-filter=$filter"* ]]; then
+      echo "error: $label is missing FFmpeg auto-sync filter: $filter" >&2
       missing=$((missing + 1))
     fi
   done
@@ -76,4 +84,4 @@ else
   exit 1
 fi
 
-echo "verified ${#required[@]} subtitle decoders across $verified Android ABIs"
+echo "verified ${#required[@]} subtitle decoders and ${#required_filters[@]} auto-sync filters across $verified Android ABIs"

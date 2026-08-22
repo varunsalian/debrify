@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build MediaKit's exact Android v1.1.11 native bundle with Debrify's subtitle
-# decoder patch. This intentionally keeps mpv, FFmpeg, helper code and all
-# non-subtitle options aligned with the bundle currently shipped by Debrify.
+# decoders and passive auto-sync analysis filters. This intentionally keeps
+# mpv, FFmpeg, helper code and every unrelated option at the pinned versions.
 
 set -euo pipefail
 
@@ -76,4 +76,4 @@ cp "$STAGE"/default-*.jar "$OUTPUT"/
 "$ROOT/scripts/verify_android_subtitle_decoders.sh" "$OUTPUT"
 printf '%s\n' "$UPSTREAM_COMMIT" > "$OUTPUT/.debrify-subtitle-build"
 
-echo "==> Installed PGS-capable MediaKit Android libraries at $OUTPUT"
+echo "==> Installed subtitle/auto-sync MediaKit Android libraries at $OUTPUT"

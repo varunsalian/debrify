@@ -7818,13 +7818,10 @@ class StorageService {
     await prefs.setBool(_uiHapticsKey, enabled);
   }
 
-  /// Whether the native TV player silently aligns addon subtitles to the
-  /// audio as playback runs (Settings → Playback, Android TV only). Read by
-  /// the NATIVE side as `flutter.subtitle_auto_sync_enabled` — a plain
-  /// SharedPreferences bool is exactly what FlutterSharedPreferences stores,
-  /// the same bridge the recording engine flag rides. OFF by default; the
-  /// toggle is the opt-in. The NATIVE read's default must stay in lock-step
-  /// or an untouched toggle would mean different things on the two sides.
+  /// Whether native players silently align addon subtitles to the audio as
+  /// playback runs. Android TV reads the same profile preference natively;
+  /// MediaKit reads it in Dart and attaches its passive analysis filter only
+  /// while an addon subtitle is active. OFF by default on both engines.
   static Future<bool> getSubtitleAutoSyncEnabled() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_subtitleAutoSyncKey) ?? false;
