@@ -920,7 +920,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       VideoPlayerLaunchArgs(
         videoUrl: playUrl,
         audioUrl: streams?.audioUrl,
-        fallbackUrl: streams?.downloadUrl,
+        fallbackUrl: streams?.muxedPlaybackFallback,
         title: '${_item.name} — Trailer',
         viewMode: PlaylistViewMode.sorted,
       ),

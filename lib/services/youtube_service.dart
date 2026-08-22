@@ -135,6 +135,11 @@ class YoutubeResolvedStreams {
   });
 
   bool get hasPlayable => playUrl != null && playUrl!.isNotEmpty;
+
+  /// A single-file playback fallback only when it is known to contain audio.
+  /// [downloadUrl] itself may still be video-only in the rare no-muxed-stream
+  /// case so downloads can retain their existing best-effort behavior.
+  String? get muxedPlaybackFallback => downloadHasAudio ? downloadUrl : null;
 }
 
 /// A resolved-streams cache entry with the time it was resolved (for TTL).
@@ -159,6 +164,14 @@ class _StreamSelection {
     required this.bestMuxedUrl,
     required this.bestMuxedHeight,
   });
+
+  _StreamSelection withoutMuxedFallback() => _StreamSelection(
+        playUrl: playUrl,
+        audioUrl: audioUrl,
+        qualities: qualities,
+        bestMuxedUrl: null,
+        bestMuxedHeight: null,
+      );
 }
 
 /// Service for searching and resolving YouTube videos fully on-device.
@@ -523,6 +536,7 @@ class YoutubeService {
         ('android', [yt_explode.YoutubeApiClient.android]),
       ];
       _StreamSelection? selection;
+      _StreamSelection? usableWithoutMuxedFallback;
       for (final (label, clients) in rungs) {
         yt_explode.StreamManifest manifest;
         try {
@@ -538,9 +552,22 @@ class YoutubeService {
               'YoutubeService: $videoId [$label] had no playable streams');
           continue;
         }
-        if (!await _chosenUrlsUsable(candidate.playUrl, candidate.audioUrl)) {
+        final usability = await _chosenUrlsUsable(
+          candidate.playUrl,
+          candidate.audioUrl,
+          candidate.bestMuxedUrl,
+        );
+        if (!usability.primary) {
           debugPrint(
               'YoutubeService: $videoId [$label] chosen URLs returned 403');
+          continue;
+        }
+        if (!usability.muxedFallback) {
+          // Keep the working adaptive pair as a last resort, but try the next
+          // client for a muxed URL that single-URL players can actually open.
+          usableWithoutMuxedFallback ??= candidate.withoutMuxedFallback();
+          debugPrint(
+              'YoutubeService: $videoId [$label] muxed fallback returned 403');
           continue;
         }
         if (label != 'androidVr') {
@@ -550,6 +577,7 @@ class YoutubeService {
         selection = candidate;
         break;
       }
+      selection ??= usableWithoutMuxedFallback;
       if (selection == null) {
         debugPrint('YoutubeService: $videoId — every client rung failed');
         return null;
@@ -758,11 +786,15 @@ class YoutubeService {
     );
   }
 
-  /// Probe the URLs the player will actually open. Rejects a client rung ONLY
-  /// on an explicit HTTP 403 — the signature of YouTube's PO-token/Range
-  /// gating — and fails OPEN on timeouts or transport errors, so a flaky
-  /// probe can never take down a playback that would have worked.
-  static Future<bool> _chosenUrlsUsable(String playUrl, String? audioUrl) async {
+  /// Probe the primary pair and muxed fallback separately. An explicit HTTP
+  /// 403 marks that path unusable — the signature of YouTube's PO-token/Range
+  /// gating — while timeouts and transport errors fail open so a flaky probe
+  /// can never take down playback that would have worked.
+  static Future<({bool primary, bool muxedFallback})> _chosenUrlsUsable(
+    String playUrl,
+    String? audioUrl,
+    String? muxedFallbackUrl,
+  ) async {
     Future<bool> usable(String url) async {
       try {
         final resp = await http
@@ -774,11 +806,18 @@ class YoutubeService {
       }
     }
 
-    final checks = await Future.wait([
+    final primaryCheck = Future.wait([
       usable(playUrl),
       if (audioUrl != null && audioUrl.isNotEmpty) usable(audioUrl),
-    ]);
-    return !checks.contains(false);
+    ]).then((checks) => !checks.contains(false));
+    final fallbackCheck = audioUrl != null &&
+            audioUrl.isNotEmpty &&
+            muxedFallbackUrl != null &&
+            muxedFallbackUrl.isNotEmpty
+        ? usable(muxedFallbackUrl)
+        : Future<bool>.value(true);
+    final checks = await Future.wait([primaryCheck, fallbackCheck]);
+    return (primary: checks[0], muxedFallback: checks[1]);
   }
 
   // ============== URL helpers (shared with Lemmy) ==============
