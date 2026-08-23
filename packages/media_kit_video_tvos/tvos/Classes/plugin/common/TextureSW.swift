@@ -9,6 +9,10 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
 
   private let handle: OpaquePointer
   private let updateCallback: UpdateCallback
+  // Guards renderContext/disposed: initMPV runs async on the main thread while
+  // render/dispose arrive on other threads.
+  private let stateLock = NSRecursiveLock()
+  private var disposed = false
   private var renderContext: OpaquePointer?
   private var textureContexts = SwappableObjectManager<TextureSWContext>(
     objects: [],
@@ -29,9 +33,27 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
     }
   }
 
+  // Serialized against `render`/`resize` by SafeResizableTexture's lock.
+  public func dispose() {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+
+    if disposed {
+      return
+    }
+    disposed = true
+    if renderContext != nil {
+      disposeMPV()
+    }
+  }
+
   deinit {
     disposePixelBuffer()
-    disposeMPV()
+    // Fallback only: the normal path frees the render context via `dispose()`,
+    // ordered before `mpv_terminate_destroy`.
+    if !disposed && renderContext != nil {
+      disposeMPV()
+    }
   }
 
   public func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
@@ -44,6 +66,15 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
   }
 
   private func initMPV() {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+
+    // Disposed before the async init ran: creating the render context now
+    // would leak it past core teardown.
+    if disposed {
+      return
+    }
+
     let api = UnsafeMutableRawPointer(
       mutating: (MPV_RENDER_API_TYPE_SW as NSString).utf8String
     )
@@ -71,6 +102,7 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
   private func disposeMPV() {
     mpv_render_context_set_update_callback(renderContext, nil, nil)
     mpv_render_context_free(renderContext)
+    renderContext = nil
   }
 
   public func resize(_ size: CGSize) {
@@ -100,6 +132,13 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
   }
 
   public func render(_ size: CGSize) {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+
+    if renderContext == nil {
+      return
+    }
+
     let textureContext = textureContexts.nextAvailable()
     if textureContext == nil {
       return

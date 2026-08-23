@@ -28,9 +28,22 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
     self.initMPV()
   }
 
+  // Serialized against `render`/`resize` by SafeResizableTexture's lock.
+  public func dispose() {
+    if renderContext == nil {
+      return
+    }
+    disposeMPV()
+  }
+
   deinit {
     disposePixelBuffer()
-    disposeMPV()
+    // Fallback only: the normal path frees the render context via `dispose()`
+    // (ordered before `mpv_terminate_destroy`). `deinit` runs on the raster
+    // thread whenever Flutter drops the texture, which is too late.
+    if renderContext != nil {
+      disposeMPV()
+    }
     OpenGLESHelpers.deleteTextureCache(textureCache)
 
     // Deleting the context may cause potential RAM or VRAM memory leaks, as it
@@ -106,6 +119,7 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
 
     mpv_render_context_set_update_callback(renderContext, nil, nil)
     mpv_render_context_free(renderContext)
+    renderContext = nil
   }
 
   public func resize(_ size: CGSize) {
@@ -147,6 +161,10 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
   }
 
   public func render(_ size: CGSize) {
+    if renderContext == nil {
+      return
+    }
+
     let textureContext = textureContexts.nextAvailable()
     if textureContext == nil {
       return

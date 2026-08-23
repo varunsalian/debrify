@@ -62,8 +62,37 @@ public class VideoOutput: NSObject {
   deinit {
     worker.cancel()
 
-    disposed = true
+    // Fallback for outputs never disposed through the method channel. The
+    // texture's render context is freed here synchronously; freeing it lazily
+    // in the texture's own deinit (raster thread) races mpv core teardown.
+    if !disposed {
+      disposed = true
+      texture?.dispose()
+    }
     disposeTextureId()
+  }
+
+  // Frees the mpv render context, then unregisters the texture and calls
+  // `completion`. The platform Dispose call must not return to Dart before the
+  // render context is gone: mpv requires `mpv_render_context_free` strictly
+  // before `mpv_terminate_destroy`, and Dart terminates the core as soon as
+  // the Dispose call completes.
+  public func dispose(completion: @escaping () -> Void) {
+    if disposed {
+      completion()
+      return
+    }
+    disposed = true
+
+    // Run on the worker so this is ordered after `_init` (which creates the
+    // texture) and after any in-flight render.
+    worker.enqueue {
+      self.texture?.dispose()
+      DispatchQueue.main.async {
+        self.disposeTextureId()
+        completion()
+      }
+    }
   }
 
   public func setSize(width: Int64?, height: Int64?) {
@@ -134,6 +163,9 @@ public class VideoOutput: NSObject {
   private func disposeTextureId() {
     let registry_ = self.registry
     let textureId_ = self.textureId
+    if textureId_ == -1 {
+      return
+    }
     textureId = -1
     DispatchQueue.main.async {
       // Textures must be unregistered on the platform thread
@@ -148,6 +180,13 @@ public class VideoOutput: NSObject {
   }
 
   private func _updateCallback() {
+    // Jobs queued behind the dispose job run after the render context is freed
+    // and Dart may already have terminated the mpv core; `videoSize` reads
+    // core properties, so it must not run past disposal.
+    if disposed {
+      return
+    }
+
     let size = videoSize
 
     if size.width == 0 || size.height == 0 {

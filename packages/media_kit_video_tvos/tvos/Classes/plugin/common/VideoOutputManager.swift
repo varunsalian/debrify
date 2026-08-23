@@ -44,13 +44,18 @@ public class VideoOutputManager: NSObject {
   }
 
   public func destroy(
-    handle: Int64
+    handle: Int64,
+    completion: @escaping () -> Void
   ) {
     let videoOutput = self.videoOutputs[handle]
     if videoOutput == nil {
+      completion()
       return
     }
 
+    // `completion` must only fire once the mpv render context is freed: the
+    // Dart side destroys the mpv core right after the Dispose call returns.
+    videoOutput!.dispose(completion: completion)
     self.videoOutputs[handle] = nil
   }
 }
