@@ -268,6 +268,9 @@ class MediaKitSubtitleAutoSync {
     _ladderDone = false;
     _ladderTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (_ladderDone || _disposed || _subtitlePath == null) return;
+      if (_running || currentOffsetMs() != 0) return;
+      // Below the offset gate on purpose: a manually-offset session never
+      // announced auto-sync, so it must not surface a failure for it either.
       if (!_tap.reliable) {
         // The transport demonstrably lost audio; any alignment would be
         // against a time-warped feature timeline. Decline for good.
@@ -281,7 +284,6 @@ class MediaKitSubtitleAutoSync {
         );
         return;
       }
-      if (_running || currentOffsetMs() != 0) return;
       if (_ladderIndex >= _ladderSeconds.length) return;
       debugPrint(
         'SubtitleAutoSync: ladder tick — anchored '
@@ -326,7 +328,10 @@ class MediaKitSubtitleAutoSync {
     if (_disposed ||
         generation != _generation ||
         run != _alignmentRun ||
-        path != _subtitlePath) {
+        path != _subtitlePath ||
+        // The tap may have been distrusted while the isolate computed; a
+        // verdict from a just-distrusted timeline must never be applied.
+        !_tap.reliable) {
       return;
     }
 
@@ -447,8 +452,13 @@ class MediaKitSubtitleAutoSync {
     if (_disposed ||
         generation != _generation ||
         run != _alignmentRun ||
-        path != _subtitlePath) {
+        path != _subtitlePath ||
+        // Distrusted mid-compute: discard the residual and stop verifying —
+        // "correcting" a good offset from a distorted timeline is the one
+        // failure the feature must never have.
+        !_tap.reliable) {
       if (!_disposed &&
+          _tap.reliable &&
           generation == _generation &&
           path == _subtitlePath &&
           _appliedOffsetMs == applied) {

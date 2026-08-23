@@ -92,9 +92,6 @@ class _BlockingTap implements MediaKitAudioFeatureTap {
   void ingestMetadata(Map<String, String> metadata) {}
 
   @override
-  void ingestMetadataRecord(Map<String, String> metadata, {required int ptsMs}) {}
-
-  @override
   void ingestPrintOutput(String text) {}
 
   @override

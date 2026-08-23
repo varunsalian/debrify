@@ -138,6 +138,26 @@ void main() {
     expect(tap.anchoredDurationMs, greaterThan(25000));
   });
 
+  test('segment trimming never masquerades as frame loss', () {
+    // 70 min of full-rate property-mode playback: _trim() caps the segment
+    // buffer at ~64 min, but the reliability counter must stay monotonic —
+    // a long unbroken film is not "loss".
+    final tap = MediaKitAudioFeatureTap.forTesting(
+      currentPositionMs: () => 0,
+      fileMode: false,
+    );
+    tap.observePosition(0);
+    for (var t = 1000; t <= 4200000; t += 1000) {
+      tap.ingestMetadata(const <String, String>{
+        'lavfi.astats.Overall.RMS_level': '-24.5',
+        'lavfi.astats.Overall.Number_of_samples': '48000.000000',
+      });
+      tap.observePosition(t);
+    }
+    expect(tap.anchoredDurationMs, lessThan(4100000)); // trim engaged
+    expect(tap.reliable, isTrue);
+  });
+
   test('property fallback stays reliable at full-rate accrual', () {
     final tap = MediaKitAudioFeatureTap.forTesting(
       currentPositionMs: () => 0,

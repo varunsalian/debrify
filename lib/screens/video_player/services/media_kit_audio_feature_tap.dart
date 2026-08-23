@@ -111,6 +111,7 @@ class MediaKitAudioFeatureTap {
   // File transport state.
   File? _metadataFile;
   Timer? _tailTimer;
+  bool _polling = false;
   int _tailOffset = 0;
   String _tailPartial = '';
   int? _pendingPtsMs;
@@ -118,8 +119,11 @@ class MediaKitAudioFeatureTap {
 
   // Reliability accounting (matters for the property fallback): how much
   // forward playback the tap has witnessed vs how much feature audio it has
-  // accrued over that same span.
+  // accrued over that same span. Accrual is a monotonic counter, NOT derived
+  // from anchoredDurationMs — _trim() caps that at ~64 min, which would make
+  // a long unbroken session read as ever-growing "loss".
   double _witnessedAdvanceMs = 0;
+  double _totalAccruedMs = 0;
   double _accruedAtWitnessStartMs = 0;
   bool _reliable = true;
 
@@ -181,8 +185,31 @@ class MediaKitAudioFeatureTap {
     }
   }
 
+  /// Best-effort sweep of logs orphaned by force-quits/crashes — they are
+  /// uniquely named, so nothing else ever deletes them. Anything older than
+  /// a day cannot belong to a live player.
+  Future<void> _sweepStaleMetadataLogs() async {
+    try {
+      final cutoff = DateTime.now().subtract(const Duration(days: 1));
+      await for (final entry in Directory.systemTemp.list()) {
+        if (entry is! File) continue;
+        final name = entry.uri.pathSegments.last;
+        if (!name.startsWith('debrify_autosync_') || !name.endsWith('.log')) {
+          continue;
+        }
+        try {
+          final stat = await entry.stat();
+          if (stat.modified.isBefore(cutoff)) await entry.delete();
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Hygiene only; never let a listing failure block the transport.
+    }
+  }
+
   Future<bool> _installFileTransport() async {
     File? file;
+    await _sweepStaleMetadataLogs();
     try {
       final path =
           '${Directory.systemTemp.path}${Platform.pathSeparator}'
@@ -237,26 +264,52 @@ class MediaKitAudioFeatureTap {
   }
 
   Future<void> _pollMetadataFile() async {
-    final file = _metadataFile;
-    if (file == null || _disposed || !_installed) return;
-    String chunk;
+    // Re-entrancy guard: a poll that outlasts the 500ms tick (large buffered
+    // flush) must not overlap itself — _tailOffset commits only after the
+    // reads, and an overlapping tick would double-ingest the same bytes.
+    if (_polling) return;
+    _polling = true;
     try {
-      final raf = await file.open();
+      final file = _metadataFile;
+      if (file == null || _disposed || !_installed) return;
+      String chunk;
       try {
-        final length = await raf.length();
-        if (length <= _tailOffset) return;
-        await raf.setPosition(_tailOffset);
-        final bytes = await raf.read(length - _tailOffset);
-        _tailOffset = length;
-        chunk = String.fromCharCodes(bytes);
-      } finally {
-        await raf.close();
+        final raf = await file.open();
+        try {
+          final length = await raf.length();
+          if (length < _tailOffset) {
+            // FFmpeg reopens the log with O_TRUNC whenever the filter graph
+            // re-initializes (audio track switch, layout change). A shrunken
+            // file means our offset points into discarded history — restart
+            // the tail from the top or the tap goes silent for hours.
+            _tailOffset = 0;
+            _tailPartial = '';
+            _pendingPtsMs = null;
+            _pendingRecord.clear();
+          }
+          if (length <= _tailOffset) return;
+          await raf.setPosition(_tailOffset);
+          final bytes = await raf.read(length - _tailOffset);
+          _tailOffset = length;
+          chunk = String.fromCharCodes(bytes);
+        } finally {
+          await raf.close();
+        }
+      } catch (error) {
+        // A transient read failure only delays features; the next poll
+        // retries.
+        return;
       }
-    } catch (error) {
-      // A transient read failure only delays features; the next poll retries.
-      return;
+      if (_disposed || !_installed) return;
+      _consumeChunk(chunk);
+    } finally {
+      _polling = false;
     }
-    if (_disposed || !_installed) return;
+  }
+
+  /// One framing path for both production tailing and tests: buffer the
+  /// trailing partial line, consume every complete one.
+  void _consumeChunk(String chunk) {
     final text = _tailPartial + chunk;
     final lines = text.split('\n');
     _tailPartial = lines.removeLast();
@@ -317,6 +370,7 @@ class MediaKitAudioFeatureTap {
   /// [_maxDriftMs] (seek, dropped write, accounting error — any cause)
   /// re-anchors, so no segment ever carries a time-warped frame grid.
   void _ingestTimestamped(AudioFrameStatistics statistics, int ptsMs) {
+    _totalAccruedMs += statistics.samples * 1000.0 / _sampleRate;
     var segment = _current;
     if (segment != null) {
       final expectedMs = segment.anchorMs + segment.elapsedMs;
@@ -368,7 +422,7 @@ class MediaKitAudioFeatureTap {
     _current = null;
     _lastObservedPositionMs = anchorMs;
     _witnessedAdvanceMs = 0;
-    _accruedAtWitnessStartMs = 0;
+    _accruedAtWitnessStartMs = _totalAccruedMs;
     _reliable = true;
     _pendingPtsMs = null;
     _pendingRecord.clear();
@@ -409,7 +463,7 @@ class MediaKitAudioFeatureTap {
       // fallback has no pts and must anchor from the seek target.
       if (!_fileMode) _openSegment(positionMs);
       _witnessedAdvanceMs = 0;
-      _accruedAtWitnessStartMs = anchoredDurationMs;
+      _accruedAtWitnessStartMs = _totalAccruedMs;
       return true;
     }
     if (delta > 0) {
@@ -435,7 +489,7 @@ class MediaKitAudioFeatureTap {
     if (_fileMode) return;
     if (!_reliable) return;
     if (_witnessedAdvanceMs < 30000) return;
-    final accrued = anchoredDurationMs - _accruedAtWitnessStartMs;
+    final accrued = _totalAccruedMs - _accruedAtWitnessStartMs;
     if (accrued / _witnessedAdvanceMs < 0.8) {
       _reliable = false;
       debugPrint(
@@ -501,6 +555,7 @@ class MediaKitAudioFeatureTap {
   void ingestMetadata(Map<String, String> metadata) {
     final statistics = decodeMetadata(metadata, _sampleRate);
     if (statistics == null) return;
+    _totalAccruedMs += statistics.samples * 1000.0 / _sampleRate;
 
     var segment = _current;
     segment ??= _MutableFeatureSegment(
@@ -521,24 +576,10 @@ class MediaKitAudioFeatureTap {
     }
   }
 
-  /// Drives file-mode ingestion in tests without touching the filesystem.
+  /// Feeds raw ametadata print output in tests through the SAME framing path
+  /// the production tail uses.
   @visibleForTesting
-  void ingestMetadataRecord(Map<String, String> metadata, {required int ptsMs}) {
-    final statistics = decodeMetadata(metadata, _sampleRate);
-    if (statistics == null) return;
-    _ingestTimestamped(statistics, ptsMs);
-  }
-
-  /// Feeds raw ametadata print output in tests.
-  @visibleForTesting
-  void ingestPrintOutput(String text) {
-    final full = _tailPartial + text;
-    final lines = full.split('\n');
-    _tailPartial = lines.removeLast();
-    for (final line in lines) {
-      _consumeMetadataLine(line.trimRight());
-    }
-  }
+  void ingestPrintOutput(String text) => _consumeChunk(text);
 
   @visibleForTesting
   static AudioFrameStatistics? decodeMetadata(
