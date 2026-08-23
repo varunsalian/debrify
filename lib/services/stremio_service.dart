@@ -1259,6 +1259,7 @@ class StremioService {
     int? season,
     int? episode,
     Duration? timeout,
+    bool preserveOrder = false,
   }) async {
     StremioAddon? addon;
     for (final candidate in await getStreamingAddons()) {
@@ -1275,7 +1276,7 @@ class StremioService {
       streamId,
       timeout: timeout,
     );
-    return _convertToTorrents(streams);
+    return _convertToTorrents(streams, preserveOrder: preserveOrder);
   }
 
   /// Smart fallback for series search without specific season/episode

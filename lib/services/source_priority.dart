@@ -122,6 +122,24 @@ class SourcePriority {
     return [for (final i in indexed) torrents[i]];
   }
 
+  /// Provider-priority order followed by stable identity dedupe. The first
+  /// provider in [priority] wins a shared torrent hash; within each provider,
+  /// the exact returned sequence is retained. Direct/external rows already
+  /// carry transport-specific synthetic identities, so they remain distinct
+  /// from a real torrent row for the same stream.
+  static List<Torrent> orderAndDedupe(
+    List<Torrent> torrents,
+    List<String> priority, {
+    Map<String, String>? aliases,
+  }) {
+    final ordered = order(torrents, priority, aliases: aliases);
+    final seen = <String>{};
+    return [
+      for (final torrent in ordered)
+        if (seen.add(torrent.infohash.toLowerCase())) torrent,
+    ];
+  }
+
   /// Ordering for bare provider keys (chips, addon strips). Same contract as
   /// [order]: empty priority = unchanged.
   static List<T> orderBy<T>(
