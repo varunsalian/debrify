@@ -8043,10 +8043,11 @@ class StorageService {
 
   /// Whether native players silently align addon subtitles to the audio as
   /// playback runs. Android TV reads the same profile preference natively;
-  /// MediaKit reads it in Dart and attaches its passive analysis filter only
-  /// while an addon subtitle is active. OFF by default on both engines —
-  /// experimental opt-in. The default must stay in lock-step with the native
-  /// read in AndroidTvTorrentPlayerActivity.isAutoSyncPrefEnabled.
+  /// MediaKit reads it in Dart (Android, macOS, Linux, tvOS — platforms whose
+  /// bundled libmpv carries the analysis filters) and attaches its passive
+  /// filter only while an addon subtitle is active. OFF by default on both
+  /// engines — experimental opt-in. The default must stay in lock-step with
+  /// the native read in AndroidTvTorrentPlayerActivity.isAutoSyncPrefEnabled.
   static Future<bool> getSubtitleAutoSyncEnabled() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_subtitleAutoSyncKey) ?? false;

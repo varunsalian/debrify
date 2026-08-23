@@ -25,7 +25,7 @@ case "$(uname -s)" in
   *) echo "error: private libmpv must be built on Linux" >&2; exit 1 ;;
 esac
 
-for tool in git meson ninja pkg-config readelf strip; do
+for tool in git meson ninja pkg-config readelf strip strings; do
   command -v "$tool" >/dev/null || {
     echo "error: missing build tool: $tool" >&2
     exit 1
@@ -97,6 +97,23 @@ mkdir -p "$OUTPUT/include/mpv" "$OUTPUT/pkgconfig"
 cp -L "$MPV_LIBRARY" "$OUTPUT/libmpv.so.2"
 chmod 0755 "$OUTPUT/libmpv.so.2"
 strip --strip-unneeded "$OUTPUT/libmpv.so.2"
+
+# Subtitle auto-sync depends on these passive FFmpeg analysis filters. This
+# build compiles full FFmpeg so they are present by default, but a future
+# trim of ffmpeg_options must not silently drop them — fail the build instead.
+# strings runs ONCE into a file: piping it straight into `grep -q` would let
+# grep's early exit kill strings with SIGPIPE, which pipefail (set above)
+# turns into a false "missing filter" failure on every successful build.
+STRINGS_DUMP="$(mktemp)"
+strings "$OUTPUT/libmpv.so.2" > "$STRINGS_DUMP"
+for autosync_filter in astats aspectralstats ametadata; do
+  if ! grep -qx "$autosync_filter" "$STRINGS_DUMP"; then
+    rm -f "$STRINGS_DUMP"
+    echo "error: private libmpv is missing auto-sync filter: $autosync_filter" >&2
+    exit 1
+  fi
+done
+rm -f "$STRINGS_DUMP"
 
 # media_kit_video is a C++ plugin and hard-links libmpv. Give the subsequent
 # Flutter build the headers and pkg-config metadata from this exact source

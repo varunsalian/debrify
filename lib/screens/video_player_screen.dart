@@ -2495,9 +2495,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _installSubtitleAutoSyncForPlayer(mk.Player player) {
-    if (!_subtitleAutoSyncEnabled ||
-        kIsWeb ||
-        (!Platform.isAndroid && !Platform.isMacOS)) {
+    if (!_subtitleAutoSyncEnabled || !PlatformUtil.supportsSubtitleAutoSync) {
       debugPrint(
         'SubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled '
         'web=$kIsWeb platform=${Platform.operatingSystem}',

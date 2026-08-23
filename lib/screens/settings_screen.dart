@@ -2521,7 +2521,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'hardware decoding',
           ],
         ),
-      if (_isAndroid && PlatformUtil.isAndroidTvCached)
+      if (PlatformUtil.supportsSubtitleAutoSync)
         leaf(
           'Playback',
           'Auto-sync addon subtitles',

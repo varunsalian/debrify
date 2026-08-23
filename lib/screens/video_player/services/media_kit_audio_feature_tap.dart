@@ -5,6 +5,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 
+import '../../../utils/app_storage.dart';
+import '../../../utils/platform_util.dart';
 import 'subtitle_aligner.dart';
 
 typedef AudioFrameStatistics = ({
@@ -112,6 +114,7 @@ class MediaKitAudioFeatureTap {
   File? _metadataFile;
   Timer? _tailTimer;
   bool _polling = false;
+  int _pollFailures = 0;
   int _tailOffset = 0;
   String _tailPartial = '';
   int? _pendingPtsMs;
@@ -158,6 +161,20 @@ class MediaKitAudioFeatureTap {
         return true;
       }
 
+      // tvOS never falls back: mpv_observe_property is the suspected window
+      // for a past tvOS SIGABRT (see _installTvosDecodeRemedy's avoidance of
+      // it), and this codebase deliberately keeps observers off that
+      // platform. No transport ⇒ no auto-sync, fail closed.
+      if (PlatformUtil.isTvOS) {
+        debugPrint(
+          'SubtitleAutoSync: file transport unavailable on tvOS — '
+          'no fallback, auto-sync disabled for this session',
+        );
+        _installed = false;
+        _current = null;
+        return false;
+      }
+
       // Legacy frameworks without the ametadata filter: fall back to the
       // coalescing-prone property observation, guarded by [reliable].
       _openSegment(_currentPositionMs());
@@ -185,13 +202,20 @@ class MediaKitAudioFeatureTap {
     }
   }
 
+  /// Where the metadata log lives: the app cache directory, NOT systemTemp.
+  /// tvOS purges tmp aggressively under storage pressure (Caches is the
+  /// platform's sanctioned scratch space — see AppStorage), and on Linux
+  /// /tmp is commonly a RAM-backed tmpfs where a multi-hour log would park
+  /// tens of MB in memory; the cache dir is disk-backed.
+  Future<Directory> _metadataLogDirectory() => AppStorage.cache();
+
   /// Best-effort sweep of logs orphaned by force-quits/crashes — they are
   /// uniquely named, so nothing else ever deletes them. Anything older than
   /// a day cannot belong to a live player.
   Future<void> _sweepStaleMetadataLogs() async {
     try {
       final cutoff = DateTime.now().subtract(const Duration(days: 1));
-      await for (final entry in Directory.systemTemp.list()) {
+      await for (final entry in (await _metadataLogDirectory()).list()) {
         if (entry is! File) continue;
         final name = entry.uri.pathSegments.last;
         if (!name.startsWith('debrify_autosync_') || !name.endsWith('.log')) {
@@ -212,7 +236,7 @@ class MediaKitAudioFeatureTap {
     await _sweepStaleMetadataLogs();
     try {
       final path =
-          '${Directory.systemTemp.path}${Platform.pathSeparator}'
+          '${(await _metadataLogDirectory()).path}${Platform.pathSeparator}'
           'debrify_autosync_${DateTime.now().microsecondsSinceEpoch}.log';
       // The path is spliced into a lavfi graph, where these characters are
       // syntax. Temp paths never contain them on our platforms; if one ever
@@ -296,10 +320,22 @@ class MediaKitAudioFeatureTap {
           await raf.close();
         }
       } catch (error) {
-        // A transient read failure only delays features; the next poll
-        // retries.
+        // A transient read failure only delays features — but a PERSISTENT
+        // one (tvOS purging Caches under storage pressure, tmpfs ENOSPC)
+        // means the transport is dead and would otherwise become a forever
+        // silent no-op: the ladder ticking against a frozen 0s of audio.
+        // ~10s of consecutive failures declares the tap unreliable so the
+        // controller declines honestly.
+        if (++_pollFailures >= 20 && _reliable) {
+          _reliable = false;
+          debugPrint(
+            'SubtitleAutoSync: metadata log unreadable for '
+            '$_pollFailures polls ($error) — declining',
+          );
+        }
         return;
       }
+      _pollFailures = 0;
       if (_disposed || !_installed) return;
       _consumeChunk(chunk);
     } finally {
@@ -424,6 +460,7 @@ class MediaKitAudioFeatureTap {
     _witnessedAdvanceMs = 0;
     _accruedAtWitnessStartMs = _totalAccruedMs;
     _reliable = true;
+    _pollFailures = 0;
     _pendingPtsMs = null;
     _pendingRecord.clear();
     // File mode anchors from record pts; only the property fallback needs a
