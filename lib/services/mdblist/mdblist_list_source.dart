@@ -1,5 +1,6 @@
 import '../../models/stremio_addon.dart';
 import 'mdblist_item_transformer.dart';
+import 'mdblist_models.dart';
 import 'mdblist_service.dart';
 
 /// A selectable MDBList list. Value-equal by its numeric id so a dropdown can
@@ -94,6 +95,35 @@ class MdblistListSource {
   /// Searches MDBList's public lists by name. Same shape as the others.
   Future<List<MdblistListChoice>> searchLists(String query) async =>
       _mapChoices(await service.searchLists(query));
+
+  /// Typed counterpart used by dedicated search surfaces that must distinguish
+  /// a genuine empty result from auth, quota, transport, and parse failures.
+  Future<MdblistResult<List<MdblistListChoice>>> searchListsResult(
+    String query,
+  ) async {
+    final raw = await service.searchListsResult(query);
+    final data = raw.data;
+    if (data == null) {
+      return MdblistResult.failure(
+        raw.kind,
+        statusCode: raw.statusCode,
+        retryAfter: raw.retryAfter,
+        headers: raw.headers,
+      );
+    }
+    final mapped = _mapChoices(data);
+    return raw.kind == MdblistResultKind.partial
+        ? MdblistResult.partial(
+            mapped,
+            statusCode: raw.statusCode,
+            headers: raw.headers,
+          )
+        : MdblistResult.success(
+            mapped,
+            statusCode: raw.statusCode,
+            headers: raw.headers,
+          );
+  }
 
   List<MdblistListChoice> _mapChoices(List<Map<String, dynamic>> raw) {
     final out = <MdblistListChoice>[];

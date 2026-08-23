@@ -153,6 +153,7 @@ String? _seLabel(int? season, int? episode) {
 ///   query searches every searchable addon and shows one horizontal row of
 ///   results per addon (same board layout).
 /// * KEYWORD mode — raw torrent search → tap a result to add/play.
+/// * LISTS mode — MDBList public-list search, isolated from title catalogs.
 ///
 /// All playback (catalog auto-best, sources list, keyword) runs in-tab through
 /// the isolated [TorrentPlaybackService]; the Home engine is never invoked.
@@ -160,9 +161,9 @@ class SearchScreen extends StatefulWidget {
   final bool isTelevision;
 
   /// Dedicated-search-tab mode (TV only). When true the screen is *only* the
-  /// search field + Catalog/Keyword toggle over a blank prompt until the user
-  /// types — no hero/board. When false it's the "Home New" board (chrome-free on
-  /// TV; persistent search bar on desktop/mobile).
+  /// search field + Catalog/Keyword/Lists selector over a blank prompt until
+  /// the user types — no hero/board. When false it's the "Home New" board
+  /// (chrome-free on TV; persistent search bar on desktop/mobile).
   final bool searchMode;
 
   /// Discover-tab mode. A single browsable grid with a "Source" dropdown
@@ -181,7 +182,7 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-enum _Mode { catalog, keyword }
+enum _Mode { catalog, keyword, lists }
 
 /// Snapshot of an in-progress keyword search, preserved across a tab switch so
 /// returning restores results + scroll instead of a blank prompt — the nav
@@ -430,17 +431,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
-  // DPAD focus targets for the Catalog / Keyword toggle (TV only), so the
+  // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
   final FocusNode _modeKeywordNode = FocusNode(debugLabel: 'mode_keyword');
+  final FocusNode _modeListsNode = FocusNode(debugLabel: 'mode_lists');
+  final FocusNode _modeDropdownNode = FocusNode(debugLabel: 'mode_dropdown');
 
-  // MDBList list-search state. Runs in parallel with a Catalog search and
-  // surfaces as a "MDBList Lists" card rail at the top of the results board;
-  // each card hands off to the Discover tab via
+  // Dedicated MDBList list-search state. Lists is its own Search mode; it
+  // never runs as part of Catalog search. Each result card hands off via
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
   String _listsQuery = '';
   List<MdblistListChoice> _listsResults = const [];
+  bool _listsSearching = false;
+  String? _listsError;
   int _listsToken = 0;
   final List<FocusNode> _listsNodes = [];
   // Debounce for opening a list from the rail — one fast double-press must not
@@ -1808,7 +1812,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Future<void> _refreshMdblistAuthState() async {
     final auth = await MdblistService.instance.isAuthenticated();
     if (!mounted || auth == _isMdblistAuthenticated) return;
-    setState(() => _isMdblistAuthenticated = auth);
+    final leaveLists = !auth && _mode == _Mode.lists;
+    if (leaveLists) {
+      _listsToken++;
+      _disposeListsNodes();
+    }
+    setState(() {
+      _isMdblistAuthenticated = auth;
+      if (leaveLists) {
+        _mode = _Mode.catalog;
+        _listsQuery = '';
+        _listsResults = const [];
+        _listsSearching = false;
+        _listsError = null;
+      }
+    });
+    // A disconnect can remove the currently selected mode. Keep the shared
+    // query useful by resolving it through Catalog after the selector falls
+    // back, unless those exact Catalog results are already present.
+    if (leaveLists) {
+      final query = _searchController.text.trim();
+      if (query.isNotEmpty && query != _catalogQuery) {
+        _runCatalogSearch(query);
+      }
+      if (widget.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _searchFocusNode.requestFocus();
+        });
+      }
+    }
   }
 
   /// Restore a preserved keyword search into this instance if one exists for
@@ -2003,6 +2035,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
+    _modeListsNode.dispose();
+    _modeDropdownNode.dispose();
     _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
@@ -5195,6 +5229,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_searchFocusNode.hasFocus ||
         _modeCatalogNode.hasFocus ||
         _modeKeywordNode.hasFocus ||
+        _modeListsNode.hasFocus ||
+        _modeDropdownNode.hasFocus ||
         _discSourceNode.hasFocus ||
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
@@ -5337,6 +5373,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
         return;
       }
+      if (_mode == _Mode.lists) {
+        if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
+          _listsNodes.first.requestFocus();
+        } else {
+          _searchFocusNode.requestFocus();
+        }
+        return;
+      }
       // Only when result rows are actually mounted. Mid-search is fine now:
       // the board clears at search start and rows stream in, so a non-empty
       // _rowNodes always belongs to the CURRENT query (never a stale set).
@@ -5344,10 +5388,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
         _rowNodes.first.first.requestFocus();
-      } else if (_listsRailVisible && _listsNodes.isNotEmpty) {
-        // Catalog found nothing but MDBList lists did — land on the rail so the
-        // remote never bounces back to the field with results on screen.
-        _listsNodes.first.requestFocus();
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -5360,6 +5400,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // search field rather than a stale, detached result node.
       if (_kwToolbarVisible) {
         _kwToolbarNodes.first.requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
+      return;
+    }
+    if (_mode == _Mode.lists) {
+      if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
+        _listsNodes.first.requestFocus();
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -5389,10 +5437,26 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Focus the Catalog/Keyword/Lists toggle, landing on the segment for the
   /// current mode so its highlight lines up with where the remote cursor sits.
   void _focusModeToggle() {
+    if (_useCompactModeMenu) {
+      _modeDropdownNode.requestFocus();
+      return;
+    }
     (switch (_mode) {
       _Mode.catalog => _modeCatalogNode,
       _Mode.keyword => _modeKeywordNode,
+      _Mode.lists => _modeListsNode,
     }).requestFocus();
+  }
+
+  /// Three labelled segments need more room than the two-mode selector did.
+  /// Collapse to one dropdown only when the available header width cannot
+  /// carry them comfortably. The TV threshold also protects 720-wide logical
+  /// canvases, where the centered search field would otherwise be crushed.
+  bool get _useCompactModeMenu {
+    if (!kMdblistEnabled) return false;
+    final width = MediaQuery.sizeOf(context).width;
+    if (widget.isTelevision) return width < 900;
+    return width < 342;
   }
 
   /// Return focus to the search field with the caret at the end of the text, so
@@ -5562,9 +5626,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// covered by the focus latch (one can only type while the field is
   /// focused, and focus latches [_searchSheetOpen]); this covers the states
   /// that arrive WITHOUT the field being touched: the async keyword-default
-  /// restore, preserved keyword results, and a committed catalog search.
+  /// restore, preserved keyword results, a committed catalog search, or the
+  /// dedicated Lists surface.
   bool get _sheetForced =>
-      _mode == _Mode.keyword ||
+      _mode != _Mode.catalog ||
       _catalogQuery.isNotEmpty ||
       _catalogSearching ||
       // Belt to the focus latch's braces: interactive typing always comes
@@ -6688,13 +6753,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// Every non-empty Home rail in the board's built-in order.
-  /// The MDBList lists rail is NOT here by design — it's a
-  /// catalog-SEARCH results rail (`_listsRailVisible` requires a query) and
-  /// the TV home board is chrome-free, so it can never appear on this
-  /// surface. FocusNode lists are reused from the classic board's per-row
-  /// lists — only one view is ever mounted, and reuse keeps node counts
-  /// synced through paging for free.
+  /// Every non-empty Home rail in the board's built-in order. Search's
+  /// dedicated Lists mode has its own body and never enters this collection.
+  /// FocusNode lists are reused from the classic board's per-row lists — only
+  /// one view is ever mounted, and reuse keeps node counts synced through
+  /// paging for free.
   List<_CanvasRail> get _canonicalCanvasRails {
     final rails = <_CanvasRail>[];
     if (_cwVisible) {
@@ -10237,48 +10300,61 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // ── Search field ─────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
-    if (_mode != _Mode.catalog) return;
-    // Catalog search runs on SUBMIT (keyboard Enter / TV keyboard "Search"
-    // action) — see _onQuerySubmitted — not per keystroke. The only thing we do
-    // as the text changes is snap back to the prompt/board the moment the field
-    // is emptied, so clearing an active query doesn't leave stale results up.
-    // (Cheap, no network — so no debounce needed.)
+    // Every mode searches on SUBMIT. Because the field is shared, emptying it
+    // must invalidate EVERY mode's cached query/result state; otherwise a mode
+    // switch can reveal results for text the field no longer contains.
     _catalogDebounce?.cancel();
-    if (value.trim().isEmpty && _catalogQuery.isNotEmpty) {
-      _restoreHome();
+    if (value.trim().isEmpty) {
+      _clearQuery();
     }
   }
 
   void _onQuerySubmitted(String value) {
     _catalogDebounce?.cancel();
     final q = value.trim();
-    if (_mode == _Mode.keyword) {
-      _runKeyword(q);
-    } else if (q.isEmpty) {
-      _restoreHome();
-    } else {
-      _runCatalogSearch(q);
-      // In parallel with the catalog search: MDBList lists matching the query
-      // surface as a card rail at the top of the results board (best-effort —
-      // silently absent when MDBList isn't connected or nothing matches).
-      _runListsSearch(q);
+    switch (_mode) {
+      case _Mode.keyword:
+        _runKeyword(q);
+        return;
+      case _Mode.catalog:
+        if (q.isEmpty) {
+          _restoreHome();
+        } else {
+          _runCatalogSearch(q);
+        }
+        return;
+      case _Mode.lists:
+        if (q.isEmpty) {
+          _clearListsSearch();
+        } else {
+          _runListsSearch(q);
+        }
+        return;
     }
   }
 
   void _clearQuery() {
     _catalogDebounce?.cancel();
     _searchController.clear();
+    _kwSearchToken++;
     _disposeKwNodes();
     _disposeListsNodes();
     setState(() {
+      _kwSearching = false;
+      _kwLoading = false;
       _kwQuery = '';
       _kwAll = [];
       _kwResults = [];
       _kwCache = {};
       _kwError = null;
+      _kwPending = null;
+      _kwSelectionMode = false;
+      _kwSelected.clear();
       _listsToken++; // cancel an in-flight lists search
       _listsQuery = '';
       _listsResults = const [];
+      _listsSearching = false;
+      _listsError = null;
     });
     _restoreHome();
   }
@@ -10288,6 +10364,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       n.dispose();
     }
     _listsNodes.clear();
+  }
+
+  void _clearListsSearch() {
+    _listsToken++;
+    _disposeListsNodes();
+    if (!mounted) return;
+    setState(() {
+      _listsQuery = '';
+      _listsResults = const [];
+      _listsSearching = false;
+      _listsError = null;
+    });
   }
 
   /// One focus node per result row, rebuilt to match the current result set.
@@ -10300,38 +10388,75 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
   }
 
-  /// Search MDBList's public lists in parallel with a Catalog search; the
-  /// results render as a card rail atop the board (see [_buildListsRailRow]).
-  /// Best-effort: [_listsToken] discards a stale response after a newer submit
-  /// or a clear, and any not-connected / failed / empty case just clears the
-  /// rail (it renders only when [_listsResults] is non-empty). Does NOT steal
-  /// focus — the catalog search drives where the remote lands.
+  /// Search MDBList's public lists for the dedicated Lists mode. A generation
+  /// token prevents a late response from an earlier query or profile state
+  /// replacing the current result rail.
   Future<void> _runListsSearch(String query) async {
-    // MDBList is hidden for the alpha — never populate the lists rail, even for
-    // an already-connected device. See [kMdblistEnabled].
+    // Keep the runtime flag authoritative: when disabled, the selector omits
+    // Lists and no list-search request can be issued.
     if (!kMdblistEnabled) return;
     final q = query.trim();
     final token = ++_listsToken;
-    _listsQuery = q;
     if (q.isEmpty) {
-      _disposeListsNodes();
-      setState(() => _listsResults = const []);
+      _clearListsSearch();
       return;
     }
+    _disposeListsNodes();
+    setState(() {
+      _listsQuery = q;
+      _listsResults = const [];
+      _listsSearching = true;
+      _listsError = null;
+    });
     final connected = await MdblistService.instance.isAuthenticated();
     if (!mounted || token != _listsToken) return;
     if (!connected) {
-      _disposeListsNodes();
-      setState(() => _listsResults = const []);
+      setState(() {
+        _listsSearching = false;
+        _listsError = 'Connect MDBList in Settings to search public lists.';
+      });
       return;
     }
-    final results = await MdblistListSource.instance.searchLists(q);
+    MdblistResult<List<MdblistListChoice>> result;
+    try {
+      result = await MdblistListSource.instance.searchListsResult(q);
+    } catch (_) {
+      result = const MdblistResult.failure(MdblistResultKind.transientFailure);
+    }
     if (!mounted || token != _listsToken) return;
+    final results = result.data ?? const <MdblistListChoice>[];
     setState(() {
       _listsResults = results;
+      _listsSearching = false;
+      _listsError = result.isUsable ? null : _listsFailureMessage(result);
       _ensureListsNodes();
     });
   }
+
+  String _listsFailureMessage(
+    MdblistResult<List<MdblistListChoice>> result,
+  ) => switch (result.kind) {
+    MdblistResultKind.unauthenticated =>
+      'Your MDBList connection has expired. Reconnect it in Settings.',
+    MdblistResultKind.denied =>
+      'MDBList denied this list search for the connected account.',
+    MdblistResultKind.rateLimited =>
+      result.retryAfter == null
+          ? 'MDBList rate limit reached. Try again later.'
+          : 'MDBList rate limit reached. Try again in '
+                '${(result.retryAfter!.inSeconds / 60).ceil().clamp(1, 9999)} minutes.',
+    MdblistResultKind.malformedResponse =>
+      'MDBList returned an unreadable list-search response. Try again.',
+    MdblistResultKind.notFound =>
+      'MDBList list search is currently unavailable.',
+    MdblistResultKind.conflict =>
+      'MDBList could not complete this list search. Try again.',
+    MdblistResultKind.disabled =>
+      'MDBList list search is disabled for this build.',
+    MdblistResultKind.transientFailure =>
+      'MDBList is not responding right now. Try again shortly.',
+    MdblistResultKind.success || MdblistResultKind.partial => '',
+  };
 
   /// Hand the picked list to the Discover tab, which opens it focused (with
   /// the ♥ like toggle). Mirrors the pendingCatalogDetailOpen handoff.
@@ -11504,11 +11629,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // mode's search immediately instead of showing the empty state.
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
-    if (mode == _Mode.keyword) {
-      if (query != _kwQuery) _runKeyword(query);
-    } else {
-      if (query != _catalogQuery) _runCatalogSearch(query);
-      if (query != _listsQuery) _runListsSearch(query);
+    switch (mode) {
+      case _Mode.keyword:
+        if (query != _kwQuery) _runKeyword(query);
+        return;
+      case _Mode.catalog:
+        if (query != _catalogQuery) _runCatalogSearch(query);
+        return;
+      case _Mode.lists:
+        if (query != _listsQuery) _runListsSearch(query);
+        return;
     }
   }
 
@@ -13659,21 +13789,32 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   Widget _buildHeader() {
     final tv = widget.isTelevision;
-    // On narrow phones the search box + Catalog/Keyword toggle crowd each other
-    // in one row, so stack the toggle underneath. Wide/TV keeps them inline.
-    final narrow = !tv && MediaQuery.of(context).size.width < 620;
+    // On narrow phones the search box + mode selector crowd each other in one
+    // row, so stack the selector underneath. When even the stacked three labels
+    // cannot fit, [_ModeToggle] becomes a single dropdown.
+    final hasLists = kMdblistEnabled && _isMdblistAuthenticated;
+    // Reserve the three-mode layout whenever the integration is compiled in,
+    // even before the async auth check lands. This avoids a one-frame inline →
+    // stacked jump for connected users on medium-width windows.
+    final narrowBreakpoint = kMdblistEnabled ? 900.0 : 620.0;
+    final narrow = !tv && MediaQuery.of(context).size.width < narrowBreakpoint;
+    final compactModeMenu = _useCompactModeMenu;
 
     final field = _buildSearchField(tv);
     final toggle = _ModeToggle(
       mode: _mode,
       isTelevision: tv,
+      listsAvailable: hasLists,
       fullWidth: narrow,
+      compact: compactModeMenu,
       onChanged: _switchMode,
       // Keyboard/DPAD wiring (both desktop + TV): the segments are focusable;
       // up/left leave back to the search field, down drops into the content,
       // select switches mode.
       catalogNode: _modeCatalogNode,
       keywordNode: _modeKeywordNode,
+      listsNode: _modeListsNode,
+      dropdownNode: _modeDropdownNode,
       onLeaveToField: _focusSearchFieldAtEnd,
       onLeaveToContent: _focusContent,
     );
@@ -13695,7 +13836,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       padding: EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
       child: Row(
         children: [
-          const SizedBox(width: 252),
+          SizedBox(width: compactModeMenu ? 156 : 252),
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -13808,6 +13949,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               hintText: switch (_mode) {
                 _Mode.catalog => 'Search or paste link',
                 _Mode.keyword => 'Search torrents by keyword',
+                _Mode.lists => 'Search MDBList lists',
               },
               hintStyle: TextStyle(color: app.fade(app.core.tx, 0.32)),
               suffixIcon: hasText
@@ -13873,12 +14015,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   Widget _buildBody() {
     if (_mode == _Mode.keyword) return _buildKeyword();
+    if (_mode == _Mode.lists) return _buildListsSearch();
     // Full-screen spinner only until the FIRST result row streams in — after
     // that the board renders and late rows append beneath it (a slim progress
-    // strip in _buildBoard signals the search is still running). If the MDBList
-    // lists rail already resolved (it's usually faster than the catalog fan-out),
-    // skip the spinner and render the board so the rail shows immediately.
-    if (_catalogSearching && _sections.isEmpty && !_listsRailVisible) {
+    // strip in _buildBoard signals the search is still running).
+    if (_catalogSearching && _sections.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     // Dedicated Search tab: blank prompt until there's a query (no hero/board).
@@ -13886,21 +14027,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return _buildSearchPrompt();
     }
     return _buildBoard();
-  }
-
-  /// Whether the MDBList "Lists" card rail should show: a catalog search is
-  /// active AND lists matched. The rail is a leading board row and, because the
-  /// Continue Watching / favourites leading rows are all hidden during a search
-  /// (same `_catalogQuery.isEmpty` gate), it's the ONLY leading row on screen.
-  bool get _listsRailVisible =>
-      _catalogQuery.isNotEmpty && _listsResults.isNotEmpty;
-
-  /// Focus a card in the lists rail, clamping the column (same contract as
-  /// [_focusCwRow]/[_focusFavRowAt]). False when the rail has no cards.
-  bool _focusListsRailAt(int column) {
-    if (_listsNodes.isEmpty) return false;
-    _requestRowFocus(_listsNodes, column.clamp(0, _listsNodes.length - 1));
-    return true;
   }
 
   /// Open the full grid of every list that matched the current search. The rail
@@ -13966,12 +14092,74 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         });
   }
 
-  /// The "MDBList Lists" card rail shown atop the results board. Same 2:3 card
+  Widget _buildListsSearch() {
+    if (_listsSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_listsError != null) {
+      return _message(
+        Icons.error_outline_rounded,
+        'MDBList search failed',
+        _listsError!,
+      );
+    }
+    if (_listsQuery.isEmpty) {
+      final app = AppThemeScope.of(context);
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.playlist_play_rounded,
+                size: 54,
+                color: app.fade(app.core.tx, 0.22),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Search MDBList lists',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: app.fade(app.core.tx, 0.8),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Find public lists by name, then open or save them in MDBList.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: app.fade(app.core.tx, 0.5),
+                  fontSize: 13.5,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_listsResults.isEmpty) {
+      return _message(
+        Icons.playlist_remove_rounded,
+        'No MDBList lists found',
+        'No public lists matched "$_listsQuery".',
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.only(top: 6, bottom: 32),
+      children: [_buildListsRailRow()],
+    );
+  }
+
+  /// The MDBList list-search result rail. Same 2:3 card
   /// footprint as the poster rows; each card is a gradient tile (list glyph +
   /// centred name + items/likes footer, no artwork). Select opens the list's
   /// items — pushed over the board on TV (Back returns here), or in the
-  /// Discover tab on mobile/laptop. DPAD: up → search field, down → first
-  /// catalog row, left off card 0 → sidebar (TV).
+  /// Discover tab on mobile/laptop. DPAD: up → search field, left off card 0 →
+  /// sidebar (TV); the single result rail deliberately holds Down in place.
   Widget _buildListsRailRow() {
     final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
@@ -14042,9 +14230,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowDown) {
-          // Into the first catalog row, deferred until one loads if the catalog
-          // search is still in flight.
-          if (!_focusRow(0, 0)) _deferDownMove(column: 0);
+          // Lists is a dedicated single-rail search mode; there is no unrelated
+          // catalog row below it to receive focus.
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -15929,11 +16116,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // reserved — the skeletons below are the board's content until the fetch
     // settles, and showing "No catalogs yet" first would flip to rows with the
     // exact reflow the reservation exists to prevent.
-    if (_sections.isEmpty &&
-        !showCw &&
-        !_anyFavVisible &&
-        !_traktReserving &&
-        !_listsRailVisible) {
+    if (_sections.isEmpty && !showCw && !_anyFavVisible && !_traktReserving) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -16128,8 +16311,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       Builder(
                         builder: (context) {
                           // Home uses one globally ordered descriptor list across
-                          // every row family. Search results keep their dedicated
-                          // Lists + catalog shape and never read the Home order.
+                          // every row family. Catalog search results never read
+                          // that Home order.
                           final orderedHome = _homeRowOrderActive;
                           final homeRails = orderedHome
                               ? _classicHomeRails
@@ -16150,10 +16333,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             )];
                           }
 
-                          // The MDBList "Lists" rail, when a search matched
-                          // lists. It only renders during a search, where the
-                          // Home-only rows are hidden.
-                          final listsCount = _listsRailVisible ? 1 : 0;
                           final showFooter = _boardLoadingMore;
                           return ListView.builder(
                             controller: _boardScroll,
@@ -16171,7 +16350,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             itemCount:
                                 (orderedHome
                                     ? homeRails.length
-                                    : _sections.length + listsCount) +
+                                    : _sections.length) +
                                 (showFooter ? 1 : 0),
                             itemBuilder: (context, i) {
                               Widget row;
@@ -16200,10 +16379,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 }
                               } else if (orderedHome) {
                                 return _buildBoardFooter();
-                              } else if (i < listsCount) {
-                                row = _buildListsRailRow();
                               } else {
-                                final s = i - listsCount;
+                                final s = i;
                                 if (s >= _sections.length) {
                                   return _buildBoardFooter();
                                 }
@@ -16998,14 +17175,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 VoidCallback up(int col) => homeRowId != null
                     ? () => _focusRelativeHomeRail(homeRowId, -1, col)
                     : rowIndex == 0
-                    ? (_listsRailVisible
-                          ? () => _focusListsRailAt(col)
-                          : (_anyFavVisible
-                                ? () => _focusFavRowAt(_favRowCount - 1, col)
-                                : (_cwVisible
-                                      ? () =>
-                                            _focusCwRow(_cwRows.length - 1, col)
-                                      : () => _leaveBoardTop())))
+                    ? (_anyFavVisible
+                          ? () => _focusFavRowAt(_favRowCount - 1, col)
+                          : (_cwVisible
+                                ? () => _focusCwRow(_cwRows.length - 1, col)
+                                : () => _leaveBoardTop()))
                     : () => _focusRow(rowIndex - 1, col);
                 // Down past the last loaded row kicks the next batch load
                 // (inside _focusRow) and defers the move until it lands.

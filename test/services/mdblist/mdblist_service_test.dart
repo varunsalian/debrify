@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
+import 'package:debrify/services/mdblist/mdblist_list_source.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,6 +65,47 @@ void main() {
   });
 
   group('MDBList list transport', () {
+    test('typed list search preserves rate-limit failures', () async {
+      final source = MdblistListSource.forTesting(
+        serviceWith((request) async {
+          expect(request.url.path, '/lists/search');
+          expect(request.url.queryParameters['query'], 'documentary');
+          return http.Response('{}', 429, headers: {'retry-after': '120'});
+        }),
+      );
+
+      final result = await source.searchListsResult('documentary');
+
+      expect(result.kind, MdblistResultKind.rateLimited);
+      expect(result.data, isNull);
+      expect(result.retryAfter, const Duration(seconds: 120));
+    });
+
+    test('typed list search maps a genuine empty/success response', () async {
+      final source = MdblistListSource.forTesting(
+        serviceWith(
+          (_) async => http.Response(
+            jsonEncode([
+              {
+                'id': '42',
+                'name': 'Top Documentary Movies',
+                'items': 200,
+                'user_name': 'tvgeniekodi',
+              },
+            ]),
+            200,
+          ),
+        ),
+      );
+
+      final result = await source.searchListsResult('documentary');
+
+      expect(result.kind, MdblistResultKind.success);
+      expect(result.data, hasLength(1));
+      expect(result.data!.single.id, 42);
+      expect(result.data!.single.name, 'Top Documentary Movies');
+    });
+
     test('walks next_cursor and merges mixed movie/show pages', () async {
       final seen = <Uri>[];
       final service = serviceWith((request) async {
