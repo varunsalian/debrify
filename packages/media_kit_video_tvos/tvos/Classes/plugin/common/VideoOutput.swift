@@ -100,8 +100,11 @@ public class VideoOutput: NSObject {
     if !markDisposed() {
       // A disposal is already queued or done. Worker FIFO ordering runs this
       // job after the dispose job, so the completion still fires only once
-      // the render context is actually gone — never early.
+      // the render context is actually gone — never early. Retaining self
+      // keeps deinit's worker.cancel() from dropping this job (and the
+      // completion with it) before it runs.
       worker.enqueue {
+        withExtendedLifetime(self) {}
         DispatchQueue.main.async {
           completion()
         }
