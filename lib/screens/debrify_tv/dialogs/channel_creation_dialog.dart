@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../widgets/gradient_spinner.dart';
+import 'spotlight_dialog.dart';
 
 /// A dialog shown while creating/warming a new channel.
 ///
@@ -64,78 +65,52 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onReady(context);
     });
-    // Wrap in GestureDetector to absorb all taps and prevent click-through
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {}, // Absorb all taps
-      child: Center(
-        child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 32),
-        padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            // 0xFF101014 is the gradient's deep stop and no role holds it —
-            // nearest are `controlBg` 0xFF141414 and `dialogBg` 0xFF0F0F0F,
-            // both different colours. So the card is HALF themed: top stop
-            // follows the theme, bottom stop is pinned dark. The title and
-            // body ink below stay theme ink for that reason — on a paper
-            // theme no single ink reads over both halves, and scoring against
-            // one stop would only relocate the unreadable half. Fixing this
-            // properly needs a deep-stop role in DebrifyTvTokens.
-            colors: [tv.noticeBg, tv.dialogDeep],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          border: Border.all(color: tv.fillWeak, width: 1.4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 24,
-              offset: const Offset(0, 14),
+    return DebrifyTvSpotlightDialog(
+      eyebrow: 'Tuning · building channel',
+      title: widget.channelName,
+      subtitle: 'Fetching titles, applying filters, and preparing the pool.',
+      icon: Icons.auto_awesome_rounded,
+      maxWidth: 620,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const GradientSpinner(),
+          const SizedBox(height: 22),
+          Container(
+            width: double.infinity,
+            height: 7,
+            decoration: BoxDecoration(
+              color: tv.fillWeak,
+              borderRadius: BorderRadius.circular(99),
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const GradientSpinner(),
-            const SizedBox(height: 18),
-            Text(
-              'Building "${widget.channelName}"',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: 240,
-              child: Text(
-                'Fetching torrents and getting everything ready. Hang tight!',
-                style: TextStyle(
-                  color: tv.textDim,
-                  fontSize: 13,
-                  height: 1.4,
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: .62,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [tv.accent, tv.accent.withValues(alpha: .55)],
+                  ),
+                  borderRadius: BorderRadius.circular(99),
                 ),
-                textAlign: TextAlign.center,
               ),
             ),
-            if (widget.countdownSeconds != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _remainingSeconds != null && _remainingSeconds! > 0
-                    ? 'About ${_remainingSeconds!}s remaining…'
-                    : 'Taking longer than usual…',
-                style: TextStyle(color: tv.textDim, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            widget.countdownSeconds == null
+                ? 'Building the channel pool…'
+                : _remainingSeconds != null && _remainingSeconds! > 0
+                ? 'About ${_remainingSeconds!} seconds remaining…'
+                : 'This one is taking a little longer than usual…',
+            style: TextStyle(
+              color: tv.textDim,
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

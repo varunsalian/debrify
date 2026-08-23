@@ -5,12 +5,13 @@ import '../../../services/community/community_channels_service.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/tv_text_field.dart';
+import 'spotlight_dialog.dart';
 
 /// Dialog for browsing and selecting community shared channels
 class CommunityChannelsDialog extends StatefulWidget {
   final bool isAndroidTv;
 
-  const CommunityChannelsDialog({required this.isAndroidTv});
+  const CommunityChannelsDialog({super.key, required this.isAndroidTv});
 
   @override
   State<CommunityChannelsDialog> createState() =>
@@ -376,7 +377,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
         // Navigate up
         if (key == LogicalKeyboardKey.arrowUp) {
           if (currentIndex > 0) {
-            _channelFocusNodes[channelsList[currentIndex - 1].id]?.requestFocus();
+            _channelFocusNodes[channelsList[currentIndex - 1].id]
+                ?.requestFocus();
           } else {
             _selectAllFocusNode.requestFocus();
           }
@@ -386,7 +388,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
         // Navigate down
         if (key == LogicalKeyboardKey.arrowDown) {
           if (currentIndex < channelsList.length - 1) {
-            _channelFocusNodes[channelsList[currentIndex + 1].id]?.requestFocus();
+            _channelFocusNodes[channelsList[currentIndex + 1].id]
+                ?.requestFocus();
           } else {
             _cancelButtonFocusNode.requestFocus();
           }
@@ -419,60 +422,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
   Widget _buildChannelTile(CommunityChannel channel) {
     final focusNode = _channelFocusNodes[channel.id];
 
-    // Handle null focusNode gracefully - return simple tile without focus handling
-    if (focusNode == null) {
-      return Container(
-        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border.all(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-            width: 1,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: CheckboxListTile(
-          value: channel.isSelected,
-          onChanged: widget.isAndroidTv ? null : (_) => _toggleChannelSelection(channel),
-          activeColor: Theme.of(context).primaryColor,
-          // Ink on the filled box, scored against the fill above it.
-          checkColor: AppThemeScope.of(context)
-              .inkOn(Theme.of(context).primaryColor),
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          title: Text(channel.name),
-          subtitle: Text(channel.category),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
-        ),
-      );
-    }
-
-    // Define category colors for better visual appeal
-    Color getCategoryColor(String category) {
-      switch (category.toLowerCase()) {
-        case 'movies':
-          return const Color(0xFF9C27B0); // Purple
-        case 'series':
-        case 'tv':
-          return const Color(0xFF2196F3); // Blue
-        case 'sports':
-          return const Color(0xFF4CAF50); // Green
-        case 'news':
-          return const Color(0xFFFF5722); // Deep Orange
-        case 'kids':
-          return const Color(0xFFFFC107); // Amber
-        case 'documentary':
-          return const Color(0xFF00BCD4); // Cyan
-        case 'music':
-          return const Color(0xFFE91E63); // Pink
-        default:
-          return const Color(0xFF607D8B); // Blue Grey
-      }
-    }
+    if (focusNode == null) return const SizedBox.shrink();
 
     return Focus(
       focusNode: focusNode,
@@ -510,60 +460,46 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
       child: Builder(
         builder: (context) {
           final app = AppThemeScope.of(context);
-          // The Community dialog runs its own focus grammar (3px border, 0.25
-          // fill, 0.5 glow) — legacy's cyan. Real themes converge it with the
-          // house ring.
-          final focusAlt = app.debrifyTv.focusRingAlt;
+          final tv = app.debrifyTv;
           final hasFocus = Focus.of(context).hasFocus;
-          final categoryColor = getCategoryColor(channel.category);
+          final fill = hasFocus ? app.core.tx : tv.fillWeak;
+          final ink = hasFocus ? app.inkOn(app.core.tx) : app.core.tx;
 
           return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+            duration: const Duration(milliseconds: 160),
+            margin: const EdgeInsets.symmetric(vertical: 3),
+            transform: hasFocus
+                ? (Matrix4.identity()..translateByDouble(0, -2, 0, 1))
+                : Matrix4.identity(),
             decoration: BoxDecoration(
-              color: hasFocus
-                  ? focusAlt.withAlpha(64)
-                  : Theme.of(context).colorScheme.surface,
-              border: Border.all(
-                color: hasFocus
-                    ? focusAlt
-                    : Theme.of(context).dividerColor.withValues(alpha: 0.3),
-                width: hasFocus ? 3 : 1,
-              ),
-              borderRadius: app.shape.br(8),
+              color: fill,
+              border: Border.all(color: hasFocus ? app.core.tx : tv.hairline),
+              borderRadius: app.shape.br(14),
               boxShadow: hasFocus
-                  ? [
+                  ? const [
                       BoxShadow(
-                        color: focusAlt.withAlpha(128),
-                        blurRadius: 12,
-                        spreadRadius: 2,
+                        color: Color(0x66000000),
+                        blurRadius: 20,
+                        offset: Offset(0, 10),
                       ),
                     ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 2,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
+                  : null,
             ),
             child: CheckboxListTile(
               value: channel.isSelected,
-              onChanged: widget.isAndroidTv ? null : (_) => _toggleChannelSelection(channel),
-              activeColor: Theme.of(context).primaryColor,
-              checkColor: app.inkOn(Theme.of(context).primaryColor),
+              onChanged: widget.isAndroidTv
+                  ? null
+                  : (_) => _toggleChannelSelection(channel),
+              activeColor: hasFocus ? app.inkOn(app.core.tx) : tv.accent,
+              checkColor: hasFocus ? app.core.tx : app.inkOn(tv.accent),
               dense: true,
               visualDensity: VisualDensity.compact,
               title: Text(
                 channel.name,
                 style: TextStyle(
-                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
-                  fontSize: hasFocus ? 15 : 14,
-                  color: hasFocus
-                      ? Theme.of(context).colorScheme.onSurface
-                      : Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: ink,
                 ),
               ),
               subtitle: Column(
@@ -577,45 +513,34 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.7),
+                        color: hasFocus
+                            ? ink.withValues(alpha: .55)
+                            : tv.textDim,
                       ),
                     ),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
+                      Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
+                          horizontal: 7,
+                          vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              categoryColor.withValues(alpha: hasFocus ? 0.9 : 0.8),
-                              categoryColor.withValues(alpha: hasFocus ? 1.0 : 0.9),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: hasFocus
+                              ? ink.withValues(alpha: .08)
+                              : tv.accent.withValues(alpha: .14),
                           borderRadius: app.shape.br(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: categoryColor.withValues(alpha: 0.2),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
                         ),
                         child: Text(
                           channel.category.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.3,
+                          style: TextStyle(
+                            color: hasFocus ? ink : tv.accent,
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: .7,
                           ),
                         ),
                       ),
@@ -624,18 +549,18 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                         Icon(
                           Icons.update,
                           size: 12,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.5),
+                          color: hasFocus
+                              ? ink.withValues(alpha: .45)
+                              : tv.textFaint,
                         ),
                         const SizedBox(width: 3),
                         Text(
                           channel.updated,
                           style: TextStyle(
                             fontSize: 11,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: hasFocus
+                                ? ink.withValues(alpha: .45)
+                                : tv.textFaint,
                           ),
                         ),
                       ],
@@ -657,454 +582,175 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     final selectedCount = _getSelectedChannels().length;
     final totalCount = _manifest?.channels.length ?? 0;
-
-    // Wrap in GestureDetector to absorb taps that land outside the dialog content
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {}, // Absorb taps on the barrier area
-      child: Dialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      elevation: 8,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final screenWidth = MediaQuery.of(context).size.width;
-          final screenHeight = MediaQuery.of(context).size.height;
-          final isSmallScreen = screenWidth < 500;
-          final dialogWidth = screenWidth > 1200 ? 800.0 : (screenWidth > 800 ? 700.0 : screenWidth * 0.95);
-          final dialogHeight = screenHeight * (isSmallScreen ? 0.75 : 0.7);
-
-          return Container(
-            width: dialogWidth,
-            height: dialogHeight,
-            padding: EdgeInsets.all(isSmallScreen ? 12 : 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Title
-                Row(
-                  children: [
-                    Icon(
-                      Icons.cloud_download,
-                      color: Theme.of(context).primaryColor,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Community Channels',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Content
-                Expanded(
-                  child: Padding(
-        padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
+    final listHeight = (MediaQuery.sizeOf(context).height * .48)
+        .clamp(280.0, 580.0)
+        .toDouble();
+    return DebrifyTvSpotlightDialog(
+      eyebrow: 'Import · community',
+      title: 'Browse community channels',
+      subtitle:
+          'Fetch a repository, choose one or several channels, then import them together.',
+      icon: Icons.people_alt_rounded,
+      maxWidth: 900,
+      maxHeightFactor: .94,
+      scrollable: false,
+      actions: [
+        DebrifyTvDialogButton(
+          focusNode: _cancelButtonFocusNode,
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        DebrifyTvDialogButton(
+          focusNode: _importButtonFocusNode,
+          label: selectedCount > 0 ? 'Import $selectedCount' : 'Import',
+          icon: Icons.download_done_rounded,
+          tone: DebrifyTvDialogButtonTone.primary,
+          onPressed: selectedCount > 0
+              ? () => Navigator.of(context).pop(_getSelectedChannels())
+              : null,
+        ),
+      ],
+      child: SizedBox(
+        height: listHeight,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // URL Input and Fetch Button
-            Container(
-              padding: EdgeInsets.all(isSmallScreen ? 4 : 6),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surfaceVariant.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TvTextField(
-                      controller: _repoUrlController,
-                      focusNode: _repoUrlFocusNode,
-                      style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                      onDownArrow: () => _fetchButtonFocusNode.requestFocus(),
-                      onRightArrow: () => _fetchButtonFocusNode.requestFocus(),
-                      decoration: InputDecoration(
-                        hintText: 'Repository URL',
-                        errorText: _errorMessage,
-                        prefixIcon: Icon(
-                          Icons.link,
-                          size: isSmallScreen ? 16 : 20,
-                          color: Theme.of(
-                            context,
-                          ).primaryColor.withValues(alpha: 0.7),
-                        ),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).primaryColor,
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 8 : 12,
-                          vertical: isSmallScreen ? 6 : 8,
-                        ),
-                      ),
-                      autofocus: true,
-                      enabled: !_isLoading,
-                    ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final field = TvTextField(
+                  controller: _repoUrlController,
+                  focusNode: _repoUrlFocusNode,
+                  onDownArrow: () => _fetchButtonFocusNode.requestFocus(),
+                  onRightArrow: () => _fetchButtonFocusNode.requestFocus(),
+                  decoration: InputDecoration(
+                    labelText: 'Repository URL',
+                    errorText: _errorMessage,
+                    prefixIcon: const Icon(Icons.link_rounded),
                   ),
-                  const SizedBox(width: 8),
-                  Focus(
-                    focusNode: _fetchButtonFocusNode,
-                    child: Builder(
-                      builder: (context) {
-                        final focusAlt =
-                            AppThemeScope.of(context).debrifyTv.focusRingAlt;
-                        final hasFocus = Focus.of(context).hasFocus;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            gradient: LinearGradient(
-                              colors: _isLoading
-                                  ? [Colors.grey.shade400, Colors.grey.shade500]
-                                  : [
-                                      const Color(0xFF42A5F5),
-                                      const Color(0xFF2196F3),
-                                    ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            border: hasFocus ? Border.all(
-                              color: focusAlt,
-                              width: 3,
-                            ) : null,
-                            boxShadow: hasFocus
-                                ? [
-                                    BoxShadow(
-                                      color: focusAlt.withAlpha(128),
-                                      blurRadius: 12,
-                                      spreadRadius: 2,
-                                    ),
-                                  ]
-                                : [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.15),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                          ),
-                          child: IconButton(
-                            onPressed: _isLoading ? null : _fetchChannels,
-                            style: IconButton.styleFrom(
-                              padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.transparent,
-                              // LEFT LITERAL: this ink sits on the literal
-                              // blue/grey gradient above, which is not a token
-                              // — `inkOn` scored against it would flip today's
-                              // white glyph to near-black.
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            icon: _isLoading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.download_rounded, size: 22),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+                  autofocus: true,
+                  enabled: !_isLoading,
+                );
+                final fetch = DebrifyTvDialogButton(
+                  focusNode: _fetchButtonFocusNode,
+                  label: _isLoading ? 'Fetching…' : 'Fetch',
+                  icon: Icons.refresh_rounded,
+                  onPressed: _isLoading ? null : _fetchChannels,
+                );
+                if (constraints.maxWidth < 560) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [field, const SizedBox(height: 10), fetch],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: field),
+                    const SizedBox(width: 10),
+                    fetch,
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 8),
-
-            // Select All / Channel count - More compact
+            const SizedBox(height: 12),
             if (_manifest != null && _manifest!.channels.isNotEmpty) ...[
               Focus(
                 focusNode: _selectAllFocusNode,
                 child: Builder(
                   builder: (context) {
-                    final app = AppThemeScope.of(context);
-                    final focusAlt = app.debrifyTv.focusRingAlt;
-                    final hasFocus = Focus.of(context).hasFocus;
+                    final focused = Focus.of(context).hasFocus;
+                    final fill = focused ? app.core.tx : tv.fillWeak;
+                    final ink = focused ? app.inkOn(app.core.tx) : app.core.tx;
                     return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
+                      duration: const Duration(milliseconds: 160),
                       decoration: BoxDecoration(
-                        color: hasFocus
-                            ? focusAlt.withAlpha(64)
-                            : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        color: fill,
+                        borderRadius: app.shape.br(14),
                         border: Border.all(
-                          color: hasFocus
-                              ? focusAlt
-                              : Theme.of(context).dividerColor.withValues(alpha: 0.3),
-                          width: hasFocus ? 3 : 1,
+                          color: focused ? app.core.tx : tv.hairline,
                         ),
-                        borderRadius: app.shape.br(8),
-                        boxShadow: hasFocus
-                            ? [
-                                BoxShadow(
-                                  color: focusAlt.withAlpha(128),
-                                  blurRadius: 12,
-                                  spreadRadius: 2,
-                                ),
-                              ]
-                            : [],
                       ),
                       child: CheckboxListTile(
                         value: _selectAll,
-                        onChanged: widget.isAndroidTv ? null : (_) => _toggleSelectAll(),
-                        activeColor: Theme.of(context).primaryColor,
-                        checkColor: app.inkOn(Theme.of(context).primaryColor),
-                        dense: true,
-                        visualDensity: VisualDensity.compact,
-                        title: Row(
-                          children: [
-                            Text(
-                              'Select All',
-                              style: TextStyle(
-                                fontWeight: hasFocus
-                                    ? FontWeight.bold
-                                    : FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: selectedCount > 0
-                                    ? Theme.of(
-                                        context,
-                                      ).primaryColor.withValues(alpha: 0.2)
-                                    : Colors.grey.withValues(alpha: 0.2),
-                                borderRadius: app.shape.br(12),
-                              ),
-                              child: Text(
-                                '$selectedCount / $totalCount',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: selectedCount > 0
-                                      ? Theme.of(context).primaryColor
-                                      : Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                          ],
+                        onChanged: widget.isAndroidTv
+                            ? null
+                            : (_) => _toggleSelectAll(),
+                        activeColor: focused
+                            ? app.inkOn(app.core.tx)
+                            : tv.accent,
+                        checkColor: focused
+                            ? app.core.tx
+                            : app.inkOn(tv.accent),
+                        title: Text(
+                          'Select all',
+                          style: TextStyle(
+                            color: ink,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        controlAffinity: ListTileControlAffinity.leading,
+                        secondary: Text(
+                          '$selectedCount / $totalCount',
+                          style: TextStyle(
+                            color: focused
+                                ? ink.withValues(alpha: .55)
+                                : tv.accent,
+                            fontFamily: 'JetBrainsMono',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        dense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 4,
                         ),
                       ),
                     );
                   },
                 ),
               ),
-              const SizedBox(height: 6),
-              Divider(
-                color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
-                thickness: 0.5,
-                height: 1,
-              ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
             ],
-
-            // Channel List - Optimized padding
-            if (_manifest != null && _manifest!.channels.isNotEmpty)
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.background.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: ListView.builder(
-                    controller: _channelListScrollController,
-                    itemCount: _manifest!.channels.length,
-                    cacheExtent: 200.0, // Pre-cache items for smoother scrolling
-                    addRepaintBoundaries: true, // Optimize repainting
-                    itemBuilder: (context, index) {
-                      return RepaintBoundary(
-                        child: _buildChannelTile(_manifest!.channels[index]),
-                      );
-                    },
-                  ),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: tv.dialogDeep.withValues(alpha: .48),
+                  borderRadius: app.shape.br(16),
+                  border: Border.all(color: tv.hairline),
                 ),
-              )
-            else if (_manifest != null && _manifest!.channels.isEmpty)
-              const Expanded(
-                child: Center(
-                  child: Text('No channels found in this repository'),
-                ),
-              )
-            else if (!_isLoading && _errorMessage == null)
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'Enter a repository URL and click "Fetch Channels" to browse available channels',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              )
-            else if (_errorMessage != null)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+                child: _manifest != null && _manifest!.channels.isNotEmpty
+                    ? ListView.builder(
+                        controller: _channelListScrollController,
+                        padding: const EdgeInsets.all(6),
+                        itemCount: _manifest!.channels.length,
+                        // ignore: deprecated_member_use
+                        cacheExtent: 200,
+                        itemBuilder: (context, index) => RepaintBoundary(
+                          child: _buildChannelTile(_manifest!.channels[index]),
+                        ),
+                      )
+                    : Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: _isLoading
+                              ? CircularProgressIndicator(color: tv.accent)
+                              : Text(
+                                  _errorMessage ??
+                                      (_manifest == null
+                                          ? 'Fetching the community collection…'
+                                          : 'No channels found in this repository.'),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: tv.textDim),
+                                ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              const Spacer(),
+              ),
+            ),
           ],
         ),
-                  ),
-                ),
-                // Action buttons
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Focus(
-                      focusNode: _cancelButtonFocusNode,
-                      child: Builder(
-                        builder: (context) {
-                          final focusAlt =
-                              AppThemeScope.of(context).debrifyTv.focusRingAlt;
-                          final hasFocus = Focus.of(context).hasFocus;
-                          return Container(
-                            decoration: hasFocus ? BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: focusAlt, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: focusAlt.withAlpha(128),
-                                  blurRadius: 12,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ) : null,
-                            child: TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                // LEFT LITERAL: disabled/neutral greys and
-                                // the ink on them — no role holds either.
-                                backgroundColor: Colors.grey.shade600,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Focus(
-                      focusNode: _importButtonFocusNode,
-                      child: Builder(
-                        builder: (context) {
-                          final focusAlt =
-                              AppThemeScope.of(context).debrifyTv.focusRingAlt;
-                          final hasFocus = Focus.of(context).hasFocus;
-                          final hasSelection = selectedCount > 0;
-
-                          return Container(
-                            decoration: hasFocus ? BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: focusAlt, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: focusAlt.withAlpha(128),
-                                  blurRadius: 12,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ) : null,
-                            child: FilledButton(
-                              onPressed: hasSelection
-                                  ? () => Navigator.of(context).pop(_getSelectedChannels())
-                                  : null,
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                backgroundColor: hasSelection
-                                    ? const Color(0xFF4CAF50)
-                                    : Colors.grey.shade400,
-                                // LEFT LITERAL: `inkOn(0xFF4CAF50)` returns
-                                // near-black, so it would change the shipped
-                                // label.
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: Text(
-                                hasSelection ? 'Import ($selectedCount)' : 'Import',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: hasFocus ? FontWeight.bold : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
       ),
-    ),
     );
   }
 }
-
