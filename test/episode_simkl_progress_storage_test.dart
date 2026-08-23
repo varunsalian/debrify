@@ -1,4 +1,6 @@
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -77,6 +79,109 @@ void main() {
         await StorageService.getEpisodeSimklProgress(imdbId: 'tt001'),
         const {'1_1': 80.0},
       );
+    },
+  );
+
+  test(
+    'concurrent different-show writes are retained by every tracker store',
+    () async {
+      final stores =
+          <
+            ({
+              Future<void> Function(String, Map<String, double>) save,
+              Future<Map<String, double>> Function(String) read,
+            })
+          >[
+            (
+              save: (imdbId, percents) =>
+                  StorageService.saveEpisodeTraktProgress(
+                    imdbId: imdbId,
+                    percents: percents,
+                  ),
+              read: (imdbId) =>
+                  StorageService.getEpisodeTraktProgress(imdbId: imdbId),
+            ),
+            (
+              save: (imdbId, percents) =>
+                  StorageService.saveEpisodeSimklProgress(
+                    imdbId: imdbId,
+                    percents: percents,
+                  ),
+              read: (imdbId) =>
+                  StorageService.getEpisodeSimklProgress(imdbId: imdbId),
+            ),
+            (
+              save: (imdbId, percents) =>
+                  StorageService.saveEpisodeMdblistProgress(
+                    imdbId: imdbId,
+                    percents: percents,
+                  ),
+              read: (imdbId) =>
+                  StorageService.getEpisodeMdblistProgress(imdbId: imdbId),
+            ),
+          ];
+
+      for (final store in stores) {
+        // Ensure both concurrent saves take the asynchronous JSON decode path;
+        // without a serialized read/modify/write cycle they read this same base
+        // object and whichever completes last drops the other show's entry.
+        await store.save('tt-seed', const {'1_1': 10});
+        await Future.wait([
+          store.save('tt-concurrent-a', const {'1_2': 25}),
+          store.save('tt-concurrent-b', const {'2_3': 75}),
+        ]);
+
+        expect(await store.read('tt-concurrent-a'), const {'1_2': 25.0});
+        expect(await store.read('tt-concurrent-b'), const {'2_3': 75.0});
+      }
+    },
+  );
+
+  test(
+    'queued tracker writes remain bound to their initiating profile',
+    () async {
+      ProfileRuntime.debugReset();
+      final first = ProfileScope(
+        profileId: 'tracker-profile-a',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      final second = ProfileScope(
+        profileId: 'tracker-profile-b',
+        dataGeneration: 1,
+        sessionEpoch: 2,
+      );
+      ProfileRuntime.initializeCommitted(first);
+      addTearDown(() {
+        ProfileRuntime.debugReset();
+        ProfileRuntime.initializeLegacy();
+      });
+
+      final queued = <Future<void>>[
+        StorageService.saveEpisodeTraktProgress(
+          imdbId: 'tt-profile-a-one',
+          percents: const {'1_1': 20},
+        ),
+        StorageService.saveEpisodeTraktProgress(
+          imdbId: 'tt-profile-a-two',
+          percents: const {'1_2': 40},
+        ),
+      ];
+      ProfileRuntime.publish(second);
+      await Future.wait(queued);
+
+      expect(
+        await StorageService.getEpisodeTraktProgress(
+          imdbId: 'tt-profile-a-one',
+        ),
+        isEmpty,
+      );
+      final firstProfileSnapshot = await ProfileRuntime.withCapturedScope(
+        first,
+        () =>
+            StorageService.getEpisodeTraktProgress(imdbId: 'tt-profile-a-two'),
+      );
+      expect(firstProfileSnapshot, const {'1_2': 40.0});
     },
   );
 }

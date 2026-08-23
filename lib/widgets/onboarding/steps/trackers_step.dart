@@ -3,6 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../theme/widgets/parallax_focus.dart';
+import '../../../services/analytics_service.dart';
+import '../../../services/main_page_bridge.dart';
+import '../../../services/mdblist/mdblist_service.dart';
+import '../../../services/storage_service.dart';
+import '../../tv_text_field.dart';
 import '../controllers/tracker_auth_controller.dart';
 import '../onboarding_focus.dart';
 import '../onboarding_models.dart';
@@ -15,6 +20,8 @@ class TrackersStep extends StatelessWidget {
     required this.focusController,
     required this.trakt,
     required this.simkl,
+    required this.mdblistConnected,
+    required this.onMdblistConnected,
     required this.onDone,
   });
 
@@ -22,6 +29,8 @@ class TrackersStep extends StatelessWidget {
   final OnboardFocusController focusController;
   final TrackerAuthController trakt;
   final TrackerAuthController simkl;
+  final bool mdblistConnected;
+  final VoidCallback onMdblistConnected;
   final VoidCallback onDone;
 
   TrackerKind? get _active {
@@ -39,6 +48,7 @@ class TrackersStep extends StatelessWidget {
     final cards = <Widget>[
       _card(trakt, const OnboardCell(0, 0)),
       _card(simkl, const OnboardCell(0, 1)),
+      if (kMdblistEnabled) _mdblistCard(context, const OnboardCell(0, 2)),
     ];
     if (layout == OnboardLayout.phone) {
       return ListView.separated(
@@ -54,8 +64,172 @@ class TrackersStep extends StatelessWidget {
         Expanded(child: cards[0]),
         const SizedBox(width: 14),
         Expanded(child: cards[1]),
+        if (cards.length > 2) ...[
+          const SizedBox(width: 14),
+          Expanded(child: cards[2]),
+        ],
       ],
     );
+  }
+
+  Widget _mdblistCard(
+    BuildContext context,
+    OnboardCell cell,
+  ) => OnboardFocusable(
+    controller: focusController,
+    cell: cell,
+    onActivate: () => _connectMdblist(context),
+    radius: BorderRadius.circular(11),
+    semanticLabel: 'MDBList',
+    builder: (context, focused) => OnboardCardSurface(
+      focused: focused,
+      selected: mdblistConnected,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: const Text(
+              'M',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'MDBList',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Syncs watch progress, ratings, lists, and Up Next with an API key.',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10,
+              height: 1.42,
+              color: Colors.white.withValues(alpha: 0.52),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            mdblistConnected ? 'Connected' : 'Connect with API key',
+            style: TextStyle(
+              color: mdblistConnected
+                  ? const Color(0xFF34D399)
+                  : Colors.white70,
+              fontSize: 10.5,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _connectMdblist(BuildContext? context) async {
+    if (context == null || mdblistConnected) return;
+    final controller = TextEditingController();
+    final focusNode = FocusNode(debugLabel: 'onboarding-mdblist-key');
+    var obscure = true;
+    var saving = false;
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Connect MDBList'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TvTextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  obscureText: obscure,
+                  enabled: !saving,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'MDBList API Key',
+                    errorText: error,
+                    suffixIcon: IconButton(
+                      onPressed: () => setDialogState(() => obscure = !obscure),
+                      icon: Icon(
+                        obscure ? Icons.visibility : Icons.visibility_off,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Create or copy the key from mdblist.com/preferences.',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final key = controller.text.trim();
+                      if (key.isEmpty) {
+                        setDialogState(() => error = 'Enter an API key');
+                        return;
+                      }
+                      setDialogState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      final account = await MdblistService.instance.connect(
+                        key,
+                      );
+                      if (!dialogContext.mounted) return;
+                      if (account == null) {
+                        setDialogState(() {
+                          saving = false;
+                          error = 'Could not validate this API key';
+                        });
+                        return;
+                      }
+                      await StorageService.setMdblistSyncCatalogItems(true);
+                      AnalyticsService.integrationConnected('mdblist', {
+                        'surface': 'onboarding',
+                        'method': 'api_key',
+                      });
+                      MainPageBridge.notifyIntegrationChanged();
+                      onMdblistConnected();
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Connect'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    focusNode.dispose();
   }
 
   Widget _card(TrackerAuthController controller, OnboardCell cell) {
@@ -109,14 +283,15 @@ class TrackersStep extends StatelessWidget {
     final connected = <String>[
       if (trakt.connected) 'Trakt',
       if (simkl.connected) 'Simkl',
+      if (mdblistConnected) 'MDBList',
     ];
     return Row(
       children: [
         Expanded(
           child: Text(
             connected.isEmpty
-                ? 'Both optional'
-                : '${connected.join(' and ')} connected',
+                ? (kMdblistEnabled ? 'All optional' : 'Both optional')
+                : '${kMdblistEnabled ? connected.join(', ') : connected.join(' and ')} connected',
             style: TextStyle(
               fontSize: 11,
               color: Theme.of(
@@ -133,7 +308,9 @@ class TrackersStep extends StatelessWidget {
           radius: BorderRadius.circular(18),
           builder: (context, focused) => OnboardPillSurface(
             focused: focused,
-            label: connected.isEmpty ? 'Skip both' : 'Continue',
+            label: connected.isEmpty
+                ? (kMdblistEnabled ? 'Skip trackers' : 'Skip both')
+                : 'Continue',
           ),
         ),
         const SizedBox(width: 10),

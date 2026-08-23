@@ -1204,8 +1204,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       ),
                       onOpen: m.onManageSources ?? m.onSelectSource,
                       onBrowseAll: m.onBrowse,
-                      browseAllLabel:
-                          m.isMovie ? '⌕  Browse all' : '⌕  Season packs',
+                      browseAllLabel: m.isMovie
+                          ? '⌕  Browse all'
+                          : '⌕  Season packs',
                     ),
                   ),
                   if (m.recommendations.isNotEmpty)
@@ -1271,6 +1272,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (m.onToggleMyWatchlist != null) n++;
     if (m.onTrackers != null) n++;
     if (m.onTrackersSecondary != null) n++;
+    if (m.onTrackersTertiary != null) n++;
     if (m.hasTrailer) n++;
     // The source browse (movie list / series pack search) — mounted between
     // trailer and the app menu by ShowcaseIdentity; the count here is what

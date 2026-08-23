@@ -14,6 +14,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/remote_session.dart';
 import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
+import '../../services/mdblist/mdblist_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/profiles/profile_authorization.dart';
@@ -73,6 +74,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
 
   String? _traktUsername;
   String? _simklUsername;
+  String? _mdblistUsername;
   int _engineCount = 0;
   int _webDavCount = 0;
   int _indexerManagerCount = 0;
@@ -149,6 +151,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       );
       _simklUsername = await StorageService.getSimklUsername();
       final hasSimkl = simklAccessToken?.isNotEmpty ?? false;
+
+      final mdblistApiKey = kMdblistEnabled
+          ? await StorageService.getMdblistApiKey(forRemoteTransfer: true)
+          : null;
+      _mdblistUsername = await StorageService.getMdblistUsername();
+      final hasMdblist = mdblistApiKey?.isNotEmpty ?? false;
 
       await LocalEngineStorage.instance.initialize();
       final engineIds = await LocalEngineStorage.instance
@@ -285,6 +293,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                 : 'Simkl',
             icon: Icons.movie_filter_rounded,
             color: const Color(0xFF22D3EE),
+          ),
+        );
+      }
+      if (hasMdblist) {
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.mdblist,
+            label: _mdblistUsername != null
+                ? 'MDBList (${_mdblistUsername!})'
+                : 'MDBList',
+            icon: Icons.list_alt_rounded,
+            color: const Color(0xFF8B5CF6),
           ),
         );
       }
@@ -837,6 +857,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           configData: transferData(
             jsonEncode({
               'access_token': access,
+              if (username != null) 'username': username,
+            }),
+          ),
+        );
+      case ConfigCommand.mdblist:
+        final apiKey = await StorageService.getMdblistApiKey(
+          forRemoteTransfer: true,
+        );
+        if (apiKey == null || apiKey.isEmpty) return false;
+        final username = await StorageService.getMdblistUsername();
+        return state.sendConfigCommandToDevice(
+          ConfigCommand.mdblist,
+          targetIp,
+          configData: transferData(
+            jsonEncode({
+              'api_key': apiKey,
               if (username != null) 'username': username,
             }),
           ),

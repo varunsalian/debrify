@@ -90,6 +90,10 @@ import 'see_all/mdblist_lists_see_all_screen.dart';
 import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
+import '../services/mdblist/mdblist_continue_watching_service.dart';
+import '../services/mdblist/mdblist_sync_coordinator.dart';
+import '../services/mdblist/mdblist_models.dart';
+import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_shelf_scope.dart';
@@ -803,6 +807,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
   int _simklCwToken = 0;
+  List<StremioMeta> _mdblistMovies = [];
+  List<StremioMeta> _mdblistSeries = [];
+  List<StremioMeta> _mdblistAll = [];
+  final Map<String, double> _mdblistProgress = {};
+  final Map<String, String> _mdblistEpisode = {};
+  final Map<String, MdblistContinueWatchingItem> _mdblistByImdb = {};
+  final List<FocusNode> _mdblistMovieNodes = [];
+  final List<FocusNode> _mdblistSeriesNodes = [];
+  int _mdblistCwToken = 0;
+  int _mdblistRevisionRefreshToken = 0;
 
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
@@ -1017,6 +1031,42 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('series'),
       ),
+    if (_mdblistMovies.isNotEmpty && !_homeDisabled.contains('mdblist:movies'))
+      _CwRow(
+        rowId: 'mdblist:movies',
+        title: 'MDBList Continue Watching',
+        tag: 'Movies',
+        kind: _CwKind.mdblist,
+        items: _mdblistMovies,
+        nodes: _mdblistMovieNodes,
+        progressOf: (m) => _mdblistProgress[m.imdbId],
+        episodeOf: (_) => null,
+        remainingMinutesOf: (_) => null,
+        episodeArtworkOf: (_) => null,
+        onOpen: _openMdblistCwItem,
+        onQuickPlay: _playMdblistCwItem,
+        onRemove: _removeMdblistCwItem,
+        canRemove: _canRemoveMdblistCwItem,
+        onSeeAll: () => _openMdblistCwSeeAll('movie'),
+      ),
+    if (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows'))
+      _CwRow(
+        rowId: 'mdblist:shows',
+        title: 'MDBList Continue Watching',
+        tag: 'Shows',
+        kind: _CwKind.mdblist,
+        items: _mdblistSeries,
+        nodes: _mdblistSeriesNodes,
+        progressOf: (m) => _mdblistProgress[m.imdbId],
+        episodeOf: (m) => _mdblistEpisode[m.imdbId],
+        remainingMinutesOf: (_) => null,
+        episodeArtworkOf: (_) => null,
+        onOpen: _openMdblistCwItem,
+        onQuickPlay: _playMdblistCwItem,
+        onRemove: _removeMdblistCwItem,
+        canRemove: _canRemoveMdblistCwItem,
+        onSeeAll: () => _openMdblistCwSeeAll('series'),
+      ),
     // IPTV Continue Watching (Xtream VOD). Routes through [IptvCwRouter], not
     // the addon/tracker pipeline — a movie resumes playback, a series opens the
     // merged Xtream series page. Progress/episode key off the synthetic meta id
@@ -1069,6 +1119,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           (_simklMovies.isNotEmpty &&
               !_homeDisabled.contains('simkl:movies')) ||
           (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')) ||
+          (_mdblistMovies.isNotEmpty &&
+              !_homeDisabled.contains('mdblist:movies')) ||
+          (_mdblistSeries.isNotEmpty &&
+              !_homeDisabled.contains('mdblist:shows')) ||
           (_iptvCwMovies.isNotEmpty &&
               !_homeDisabled.contains('iptv:movies')) ||
           (_iptvCwSeries.isNotEmpty &&
@@ -1083,6 +1137,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       !widget.discoverMode &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
+
+  /// Saved Home orders created before MDBList was exposed do not contain its
+  /// CW ids. Seed those new ids after the Simkl CW family instead of allowing
+  /// the generic ordering projection to append them at the bottom. Any MDBList
+  /// id already saved keeps its chosen position untouched.
+  List<String> get _effectiveHomeRowOrder => HomeRowOrder.insertMissingAfter(
+    _homeRowOrder,
+    additions: const ['mdblist:movies', 'mdblist:shows'],
+    anchors: const ['simkl:movies', 'simkl:shows'],
+  );
 
   /// Whether the Trakt rows should be held open with skeleton placeholders: the
   /// account is connected, its (slow, network) Continue Watching fetch is in
@@ -1346,6 +1410,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       StorageService.localCompletionRevision.addListener(
         _onLocalCompletionChanged,
       );
+      MdblistService.instance.playbackRevision.addListener(
+        _onMdblistPlaybackRevision,
+      );
     }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
@@ -1576,6 +1643,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
         // here would be pure duplicate startup work on weak TV hardware.
         _loadSimklContinueWatching(refreshBound: false),
+        _loadMdblistContinueWatching(refreshBound: false),
         _loadIptvContinueWatching(),
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
@@ -1712,6 +1780,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!widget.searchMode) {
       _loadTraktContinueWatching();
       _loadSimklContinueWatching();
+      _loadMdblistContinueWatching();
     }
     // Opted-in tracker LIST rows live in the board's section pipeline, so a
     // connect/disconnect needs a board reload to add/drop them. Home board
@@ -1784,6 +1853,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   void dispose() {
+    _mdblistRevisionRefreshToken++;
     _spotlightHeroNode.dispose();
     // Preserve a COMPLETED keyword search so returning to this tab restores
     // results + scroll instead of the blank prompt (the nav rebuilds us fresh).
@@ -1832,6 +1902,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
     StorageService.localCompletionRevision.removeListener(
       _onLocalCompletionChanged,
+    );
+    MdblistService.instance.playbackRevision.removeListener(
+      _onMdblistPlaybackRevision,
     );
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.unregisterCatalogDetailOpenHandler(
@@ -1981,6 +2054,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._traktSeriesNodes,
       ..._simklMovieNodes,
       ..._simklSeriesNodes,
+      ..._mdblistMovieNodes,
+      ..._mdblistSeriesNodes,
       ..._tvFavNodes,
       ..._stvFavNodes,
       ..._iptvFavNodes,
@@ -1999,6 +2074,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _traktSeriesNodes.clear();
     _simklMovieNodes.clear();
     _simklSeriesNodes.clear();
+    _mdblistMovieNodes.clear();
+    _mdblistSeriesNodes.clear();
     _tvFavNodes.clear();
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
@@ -2480,6 +2557,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._traktSeries,
       ..._simklMovies,
       ..._simklSeries,
+      ..._mdblistMovies,
+      ..._mdblistSeries,
     ];
     for (final item in items) {
       final imdb = _imdbOf(item);
@@ -3886,6 +3965,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         item,
         _addonForContinue(item.sourceAddon?.id),
         isTraktSource: section.isTrakt,
+        isMdblistSource: section.isMdblist,
         heroTag: heroTag,
       );
       return;
@@ -3900,6 +3980,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (section is HomeListSection) {
       if (section.isTrakt) {
         _playTraktItem(item);
+      } else if (section.isMdblist) {
+        _onCatalogPlay(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        );
       } else {
         _playSimklItem(item);
       }
@@ -4090,6 +4176,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     belowNodes: [
       _simklMovieNodes,
       _simklSeriesNodes,
+      _mdblistMovieNodes,
+      _mdblistSeriesNodes,
       _iptvCwMovieNodes,
       _iptvCwSeriesNodes,
     ],
@@ -4109,6 +4197,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _cwSeriesNodes,
       _traktMovieNodes,
       _traktSeriesNodes,
+    ],
+    belowNodes: [
+      _mdblistMovieNodes,
+      _mdblistSeriesNodes,
+      _iptvCwMovieNodes,
+      _iptvCwSeriesNodes,
+    ],
+  );
+
+  void _maybeAnnounceMdblistRows() => _maybeAnnounceCwRows(
+    label: 'MDBList',
+    visible:
+        (_mdblistMovies.isNotEmpty &&
+            !_homeDisabled.contains('mdblist:movies')) ||
+        (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows')),
+    ownNodes: [_mdblistMovieNodes, _mdblistSeriesNodes],
+    aboveNodes: [
+      _cwMovieNodes,
+      _cwSeriesNodes,
+      _traktMovieNodes,
+      _traktSeriesNodes,
+      _simklMovieNodes,
+      _simklSeriesNodes,
     ],
     belowNodes: [_iptvCwMovieNodes, _iptvCwSeriesNodes],
   );
@@ -4320,14 +4431,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _cwMenuOpen = true;
     final isSeries = item.type == 'series';
     final playActionAvailable = row.kind == _CwKind.iptv || !_pikpakOnly;
+    final removeActionAvailable = row.canRemove?.call(item) ?? true;
+    if (!playActionAvailable && !removeActionAvailable) {
+      _cwMenuOpen = false;
+      return;
+    }
     // IPTV series use their primary action to open the series page; that is
     // still useful in the menu, but it is not the immediate playback this
     // preference promises.
     final quickPlayAvailable =
         playActionAvailable && !(row.kind == _CwKind.iptv && isSeries);
     try {
-      final holdToQuickPlay =
-          await StorageService.getHomeCwHoldToQuickPlay();
+      final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
       if (!mounted) return;
       if (holdToQuickPlay && quickPlayAvailable) {
         row.onQuickPlay(item);
@@ -4372,6 +4487,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ? 'Moves the show to On Hold on Simkl and clears the paused '
                   'position, so it stops resurfacing as up next.'
             : 'Clears this movie\'s paused position on Simkl.';
+      case _CwKind.mdblist:
+        playDescription = isSeries
+            ? 'Jump into the paused or next unwatched episode from MDBList.'
+            : 'Resume from the position saved on MDBList.';
+        removeDescription =
+            'Clears this paused playback position from MDBList.';
       case _CwKind.iptv:
         playDescription = isSeries
             ? 'Open the series and pick up where you left off.'
@@ -4395,6 +4516,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Mirrors the card's own long-press-to-play gate: PikPak-only setups
         // have no quick play, so the menu offers the removal alone.
         showPlay: playActionAvailable,
+        showRemove: removeActionAvailable,
         playLabel: playLabel,
         playDescription: playDescription,
         removeDescription: removeDescription,
@@ -4631,6 +4753,183 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       onReload: () async {
         await _refreshAfterPlayback(trackers: true);
         return List<StremioMeta>.of(_simklAll);
+      },
+    );
+  }
+
+  Future<void> _loadMdblistContinueWatching({
+    bool refreshBound = true,
+    bool force = false,
+  }) async {
+    final token = ++_mdblistCwToken;
+    debugPrint(
+      '[MDBListDiag] Home CW load start token=$token '
+      'refreshBound=$refreshBound force=$force flag=$kMdblistEnabled',
+    );
+    if (!kMdblistEnabled) {
+      if (!mounted) return;
+      setState(() {
+        _mdblistMovies = [];
+        _mdblistSeries = [];
+        _mdblistAll = [];
+        _mdblistByImdb.clear();
+      });
+      return;
+    }
+    await MdblistSyncCoordinator.instance.synchronizeInvalidations();
+    if (!mounted || token != _mdblistCwToken) return;
+    final result = await MdblistContinueWatchingService.instance.fetch(
+      force: force,
+    );
+    if (!mounted || token != _mdblistCwToken || !result.isUsable) {
+      debugPrint(
+        '[MDBListDiag] Home CW load discarded token=$token mounted=$mounted '
+        'currentToken=$_mdblistCwToken kind=${result.kind.name}',
+      );
+      return;
+    }
+    final snapshot = result.data!;
+    final movies = <StremioMeta>[];
+    final shows = <StremioMeta>[];
+    final progress = <String, double>{};
+    final episodes = <String, String>{};
+    final byImdb = <String, MdblistContinueWatchingItem>{};
+    StremioMeta metaFor(MdblistContinueWatchingItem item) {
+      final selection = item.selection;
+      return StremioMeta(
+        id: selection.imdbId,
+        imdbId: selection.imdbId,
+        type: selection.isSeries ? 'series' : 'movie',
+        name: selection.title,
+        poster: selection.posterUrl,
+        background:
+            'https://images.metahub.space/background/medium/${selection.imdbId}/img',
+        year: selection.year,
+      );
+    }
+
+    void ingest(
+      Iterable<MdblistContinueWatchingItem> items,
+      List<StremioMeta> target,
+    ) {
+      for (final item in items) {
+        final id = item.selection.imdbId;
+        if (byImdb.containsKey(id)) continue;
+        target.add(metaFor(item));
+        byImdb[id] = item;
+        final pct = item.selection.mdblistProgressPercent;
+        if (pct != null) progress[id] = (pct / 100).clamp(0, 1);
+        final se = _seLabel(item.selection.season, item.selection.episode);
+        if (se != null) episodes[id] = se;
+      }
+    }
+
+    ingest(snapshot.movies, movies);
+    ingest(snapshot.shows, shows);
+    debugPrint(
+      '[MDBListDiag] Home CW ingest token=$token movies=${movies.length} '
+      'shows=${shows.length}',
+    );
+    final all = [...movies, ...shows]
+      ..sort((a, b) {
+        final aa = byImdb[a.imdbId]?.updatedAt;
+        final bb = byImdb[b.imdbId]?.updatedAt;
+        return (bb ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+          aa ?? DateTime.fromMillisecondsSinceEpoch(0),
+        );
+      });
+    final hadRows = _mdblistMovies.isNotEmpty || _mdblistSeries.isNotEmpty;
+    _syncCwNodes(_mdblistMovieNodes, movies.length, 'mdbmovie');
+    _syncCwNodes(_mdblistSeriesNodes, shows.length, 'mdbseries');
+    setState(() {
+      _mdblistMovies = movies;
+      _mdblistSeries = shows;
+      _mdblistAll = all;
+      _mdblistProgress
+        ..clear()
+        ..addAll(progress);
+      _mdblistEpisode
+        ..clear()
+        ..addAll(episodes);
+      _mdblistByImdb
+        ..clear()
+        ..addAll(byImdb);
+    });
+    _maybeAutoFocusBoard();
+    if (!hadRows) _maybeAnnounceMdblistRows();
+    if (refreshBound) unawaited(_refreshBoundSources());
+  }
+
+  void _onMdblistPlaybackRevision() {
+    if (widget.searchMode || widget.discoverMode) return;
+    MdblistContinueWatchingService.instance.invalidate();
+    final token = ++_mdblistRevisionRefreshToken;
+    unawaited(_refreshMdblistAfterMutation(token));
+  }
+
+  Future<void> _refreshMdblistAfterMutation(int token) async {
+    // The stop response can arrive during the final frames of the player pop.
+    // Wait until Home is visible, then allow MDBList's watched snapshot a short
+    // propagation window before replacing the row with authoritative data.
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (!mounted || token != _mdblistRevisionRefreshToken) return;
+      if (ModalRoute.of(context)?.isCurrent ?? true) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted || token != _mdblistRevisionRefreshToken) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    await Future<void>.delayed(const Duration(milliseconds: 750));
+    if (!mounted || token != _mdblistRevisionRefreshToken) return;
+    await _loadMdblistContinueWatching(refreshBound: false, force: true);
+  }
+
+  void _openMdblistCwItem(StremioMeta item) {
+    final cw = _mdblistByImdb[_imdbOf(item)];
+    _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      initialSeason: cw?.selection.season,
+      initialEpisode: cw?.selection.episode,
+      isMdblistSource: true,
+    );
+  }
+
+  Future<void> _playMdblistCwItem(StremioMeta item) async {
+    final cw = _mdblistByImdb[_imdbOf(item)];
+    if (cw == null) {
+      await _onCatalogPlay(
+        item,
+        _addonForContinue(item.sourceAddon?.id),
+        isMdblistSource: true,
+      );
+      return;
+    }
+    _playSelection(cw.selection);
+  }
+
+  bool _canRemoveMdblistCwItem(StremioMeta item) =>
+      _mdblistByImdb[_imdbOf(item)]?.paused == true;
+
+  Future<void> _removeMdblistCwItem(StremioMeta item) async {
+    final cw = _mdblistByImdb[_imdbOf(item)];
+    if (cw == null || !cw.paused) return;
+    final removed = await MdblistContinueWatchingService.instance.clear(cw);
+    if (!mounted || !removed) return;
+    _snack('Removed from MDBList Continue Watching');
+    await _loadMdblistContinueWatching();
+  }
+
+  void _openMdblistCwSeeAll([String initialCategory = 'all']) {
+    _pushCwSeeAll(
+      title: 'MDBList Continue Watching',
+      initialCategory: initialCategory,
+      items: _mdblistAll,
+      progressOf: (m) => _mdblistProgress[m.imdbId],
+      onOpen: _openMdblistCwItem,
+      onQuickPlay: _pikpakOnly ? null : _playMdblistCwItem,
+      onReload: () async {
+        await _loadMdblistContinueWatching();
+        return List<StremioMeta>.of(_mdblistAll);
       },
     );
   }
@@ -4910,6 +5209,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         anyOf(_traktSeriesNodes) ||
         anyOf(_simklMovieNodes) ||
         anyOf(_simklSeriesNodes) ||
+        anyOf(_mdblistMovieNodes) ||
+        anyOf(_mdblistSeriesNodes) ||
         anyOf(_tvFavNodes) ||
         anyOf(_stvFavNodes) ||
         anyOf(_iptvFavNodes) ||
@@ -6102,10 +6403,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       shape: _homeLandscapeCards
           ? SpotlightCardShape.wide
           : SpotlightCardShape.poster,
-      watchedImdbId: item.type == 'movie' || item.type == 'series'
-          ? (item.effectiveImdbId ?? item.id)
-          : null,
-      watchedContentType: item.type,
       // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
       progress: (row.progressOf(item) ?? 0) * 100,
       onOpen: () => row.onOpen(item),
@@ -6422,7 +6719,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<_CanvasRail> get _canvasRails {
     final rails = _canonicalCanvasRails;
     return _homeRowOrderActive
-        ? HomeRowOrder.apply(rails, _homeRowOrder, _canvasRailRowId)
+        ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
         : rails;
   }
 
@@ -6448,7 +6745,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     return _homeRowOrderActive
-        ? HomeRowOrder.apply(rails, _homeRowOrder, _canvasRailRowId)
+        ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
         : rails;
   }
 
@@ -11229,6 +11526,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
     // Shared-element tag from the tapped board cell: the poster flies into the
     // detail page's backdrop. Null (non-board callers) = regular transition.
     String? heroTag,
@@ -11248,6 +11546,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Same for the Trakt Continue Watching rows — removal goes through the
     // Trakt playback/history APIs rather than local storage.
     final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
+    final inMdblistCw = imdb != null && _mdblistByImdb[imdb]?.paused == true;
 
     // Full quick-actions menu, mirroring the catalog/aggregated detail screens:
     // app actions (Select Source, Add to Stremio TV, Search Packs, Random
@@ -11312,6 +11611,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         );
     final simklOptions = buildSimklOptions(null);
 
+    List<MdblistMenuOption> buildMdblistOptions(MdblistTitleStatus? status) =>
+        buildMdblistMenuOptions(
+          authenticated: _isMdblistAuthenticated && imdb != null,
+          isSeries: item.type == 'series',
+          inContinueWatching: inMdblistCw,
+          status: status,
+        );
+    final mdblistOptions = buildMdblistOptions(null);
+
     // Experimental: series route to the merged detail+episodes page. Movies and
     // the flag-off path fall through to the existing CatalogItemDetailScreen.
     if ((item.type == 'series' || item.type == 'movie') && _mergedSeriesPage) {
@@ -11331,6 +11639,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 // behaviour as the tiles, so the hero button matches them.
                 showQuickPlay: true,
                 isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
                 heroTag: heroTag,
                 initialSeason: initialSeason,
                 initialEpisode: initialEpisode,
@@ -11338,11 +11647,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   item,
                   addon,
                   isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
                 ),
                 onResume: () => _onCatalogPlay(
                   item,
                   addon,
                   isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
                   skipEpisodeFallback: true,
                   // Play the Trakt paused episode when the Trakt-first label
                   // shows one, so the button and the action agree.
@@ -11354,6 +11665,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         item,
                         addon,
                         isTraktSource: isTraktSource,
+                        isMdblistSource: isMdblistSource,
                       )
                     : null,
                 onItemSelected: _browseSelection,
@@ -11400,6 +11712,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     ? () => SimklService.instance.fetchTitleStatus(imdb)
                     : null,
                 onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+                mdblistMenuOptions: mdblistOptions,
+                mdblistMenuBuilder: buildMdblistOptions,
+                mdblistStatusLoader: (_isMdblistAuthenticated && imdb != null)
+                    ? () => MdblistService.instance.fetchTitleStatus(
+                        imdb,
+                        item.type,
+                      )
+                    : null,
+                onMdblistAction: (a) =>
+                    _handleDetailMdblistQuickAction(item, a),
+                onMdblistRate: (rating) => _handleDetailMdblistQuickAction(
+                  item,
+                  MdblistItemMenuAction.rate,
+                  presetRating: rating,
+                ),
                 recommendationsLoader: imdb != null
                     ? () => _stremio.getRecommendations(
                         imdbId: imdb,
@@ -11442,8 +11769,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               showQuickPlay: !_pikpakOnly,
               // Gold-tint the Sources button when a source is already pinned.
               hasBoundSource: _isBound(item),
-              resumeInfoLoader: () =>
-                  _resolveResumeInfo(item, addon, isTraktSource: isTraktSource),
+              resumeInfoLoader: () => _resolveResumeInfo(
+                item,
+                addon,
+                isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
+              ),
               // preferTraktResume: this screen's resumeInfoLoader is the same
               // Trakt-authoritative _resolveResumeInfo the merged page uses, so
               // Play must honour the Trakt position too or the button label and
@@ -11452,10 +11783,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 item,
                 addon,
                 isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
                 preferTraktResume: true,
               ),
-              onBrowse: () =>
-                  _onCatalogBrowse(item, addon, isTraktSource: isTraktSource),
+              onBrowse: () => _onCatalogBrowse(
+                item,
+                addon,
+                isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
+              ),
               traktMenuOptions: options,
               onTraktAction: (a) => _handleDetailQuickAction(
                 item,
@@ -11466,6 +11802,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
               simklMenuOptions: simklOptions,
               onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+              mdblistMenuOptions: mdblistOptions,
+              onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
               // Live Simkl status — relabels Play → "Rewatch" for a completed
               // movie (matches the merged detail page's simklStatusLoader).
               simklStatusLoader: (_isSimklAuthenticated && imdb != null)
@@ -11575,6 +11913,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             action == SimklItemMenuAction.moveToOnHold ||
             action == SimklItemMenuAction.moveToWatching)) {
       _loadSimklContinueWatching(refreshBound: false);
+    }
+  }
+
+  Future<void> _handleDetailMdblistQuickAction(
+    StremioMeta item,
+    MdblistItemMenuAction action, {
+    int? presetRating,
+  }) async {
+    if (action == MdblistItemMenuAction.removeFromContinueWatching) {
+      await _removeMdblistCwItem(item);
+      return;
+    }
+    await handleMdblistMenuAction(
+      context,
+      item,
+      action,
+      presetRating: presetRating,
+    );
+    if (!mounted || widget.searchMode) return;
+    if (action == MdblistItemMenuAction.markWatched ||
+        action == MdblistItemMenuAction.markUnwatched ||
+        action == MdblistItemMenuAction.drop ||
+        action == MdblistItemMenuAction.restore) {
+      await _loadMdblistContinueWatching(refreshBound: false);
     }
   }
 
@@ -12224,6 +12586,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
     // Merged series page: episodes are already shown inline, so a no-IMDb
     // series must NOT fall back to pushing a standalone EpisodesScreen (that
     // would stack a duplicate episode list on top). It resolves the resume
@@ -12262,6 +12625,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // right addon id into meta.addonId (addon-stream resume/next), instead of a
       // stale one left over from a previously-browsed series.
       _activeAddonId = addon.id;
+
+      if (isMdblistSource) {
+        final owned = await _mdblistResumeItemFor(item);
+        if (!mounted || cancelled) return;
+        if (owned != null) {
+          await launch(owned.selection);
+          return;
+        }
+      }
 
       // Trakt-wins resume — resolve the SAME position the detail button advertised
       // (_resolveResumeInfo → _traktResumeFor) so label and Play never disagree.
@@ -12340,6 +12712,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
       }
 
+      if (_isMdblistAuthenticated &&
+          preferTraktResume &&
+          item.type == 'series') {
+        final mdblist = await _mdblistResumeItemFor(item);
+        if (!mounted || cancelled) return;
+        if (mdblist?.paused == true) {
+          await launch(mdblist!.selection);
+          return;
+        }
+      }
+
       if (item.type != 'series') {
         // Cross-device movie resume: on the detail-page Play/Resume flow
         // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
@@ -12350,6 +12733,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // quick-play (no preferTraktResume) keeps its local-only resume.
         double? traktPct;
         double? simklPct;
+        double? mdblistPct;
         if (preferTraktResume || isTraktSource) {
           // Concurrent and individually time-boxed: the Play press must never
           // stall behind a degraded tracker API (sequential awaits here could
@@ -12367,10 +12751,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     item,
                   ).timeout(const Duration(seconds: 4), onTimeout: () => null)
                 : Future<double?>.value(null),
+            _isMdblistAuthenticated
+                ? _mdblistMoviePercent(
+                    item,
+                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
+                : Future<double?>.value(null),
           ]);
           if (!mounted || cancelled) return;
           traktPct = lookups[0];
           simklPct = lookups[1];
+          mdblistPct = lookups[2];
         }
         // Rewatch (Simkl): a movie already marked `completed` on Simkl has no
         // resume session, and Simkl won't create one on replay — so it can never
@@ -12409,8 +12799,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _movieSelection(
             item,
             isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
             traktProgressPercent: traktPct,
             simklProgressPercent: simklPct,
+            mdblistProgressPercent: mdblistPct,
           ),
         );
         return;
@@ -12422,7 +12814,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // (episodes are inline there), where we play via the raw id's addon stream.
       if (ttId.isEmpty && !skipEpisodeFallback) {
         if (!cancelled) {
-          _openEpisodes(item, addon, isTraktSource: isTraktSource);
+          _openEpisodes(
+            item,
+            addon,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
+          );
         }
         return;
       }
@@ -12461,6 +12858,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           episode = next.episode;
         }
       }
+      if ((season == null || episode == null) &&
+          _isMdblistAuthenticated &&
+          preferTraktResume) {
+        final next = await _mdblistResumeItemFor(
+          item,
+        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+        if (!mounted || cancelled) return;
+        if (next != null) {
+          season = next.selection.season;
+          episode = next.selection.episode;
+        }
+      }
       season ??= 1;
       episode ??= 1;
       // If the last-played episode is finished, resume the NEXT one instead of
@@ -12491,6 +12900,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           contentType: item.type,
           posterUrl: item.poster,
           traktSource: isTraktSource,
+          mdblistSource: isMdblistSource,
         ),
       );
     } finally {
@@ -12587,11 +12997,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return SimklService.instance.fetchNextToWatch(id);
   }
 
+  Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(
+    StremioMeta item,
+  ) async {
+    final id = (item.effectiveImdbId ?? item.id).toLowerCase();
+    if (!id.startsWith('tt')) return null;
+    final result = await MdblistContinueWatchingService.instance.fetch();
+    if (!result.isUsable) return null;
+    for (final candidate in [...result.data!.movies, ...result.data!.shows]) {
+      if (candidate.selection.imdbId.toLowerCase() == id) return candidate;
+    }
+    return null;
+  }
+
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
   }) async {
+    if (isMdblistSource) {
+      final owned = await _mdblistResumeItemFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (owned != null) {
+        return (
+          started: true,
+          season: owned.selection.season,
+          episode: owned.selection.episode,
+        );
+      }
+    }
     // Trakt-wins: when connected, Trakt's paused position is authoritative for
     // "currently watching". Only when Trakt has NO in-progress entry do we fall
     // back to local history below, so a Trakt-tracked title always reflects
@@ -12625,6 +13060,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
 
+    if (_isMdblistAuthenticated && item.type == 'series') {
+      final mdblist = await _mdblistResumeItemFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (mdblist?.paused == true) {
+        return (
+          started: true,
+          season: mdblist!.selection.season,
+          episode: mdblist.selection.episode,
+        );
+      }
+    }
+
     // Movie: "started" if a local position OR a cross-device tracker position
     // exists — so the button reads "Resume" for a movie paused on another
     // device, matching what Play now seeks to (kept in lock-step with the
@@ -12640,6 +13087,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       if (!started && _isSimklAuthenticated) {
         started = (await _simklMoviePercent(item)) != null;
+        if (!mounted) return (started: false, season: null, episode: null);
+      }
+      if (!started && _isMdblistAuthenticated) {
+        started = (await _mdblistMoviePercent(item)) != null;
         if (!mounted) return (started: false, season: null, episode: null);
       }
       return (started: started, season: null, episode: null);
@@ -12681,6 +13132,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         started = true;
       }
     }
+    if (!started && _isMdblistAuthenticated) {
+      final next = await _mdblistResumeItemFor(
+        item,
+      ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (next != null) {
+        season = next.selection.season;
+        episode = next.selection.episode;
+        started = season != null && episode != null;
+      }
+    }
     season ??= 1;
     episode ??= 1;
     // Finished the last episode ⇒ the button plays the NEXT one, so show it.
@@ -12705,22 +13167,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
   }) {
     if (item.type == 'series') {
-      _openEpisodes(item, addon, isTraktSource: isTraktSource);
+      _openEpisodes(
+        item,
+        addon,
+        isTraktSource: isTraktSource,
+        isMdblistSource: isMdblistSource,
+      );
     } else {
-      _browseSelection(_movieSelection(item, isTraktSource: isTraktSource));
+      _browseSelection(
+        _movieSelection(
+          item,
+          isTraktSource: isTraktSource,
+          isMdblistSource: isMdblistSource,
+        ),
+      );
     }
   }
 
   AdvancedSearchSelection _movieSelection(
     StremioMeta item, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
     // Cross-device resume percents for a movie (0-100), when a tracker has a
     // paused position. Null = no tracker position → the player resumes from
     // the local byte offset as before.
     double? traktProgressPercent,
     double? simklProgressPercent,
+    double? mdblistProgressPercent,
   }) => AdvancedSearchSelection(
     // Keep the raw catalog id when there's no `tt…` id — for IPTV/TV channels
     // AND tmdb/kitsu-only movies — so playback/Sources resolve the addon's own
@@ -12740,6 +13216,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     traktSource: isTraktSource,
     traktProgressPercent: traktProgressPercent,
     simklProgressPercent: simklProgressPercent,
+    mdblistSource: isMdblistSource,
+    mdblistProgressPercent: mdblistProgressPercent,
   );
 
   /// Trakt's paused position (0-100) for a movie, or null when it has none.
@@ -12782,6 +13260,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
+  Future<double?> _mdblistMoviePercent(StremioMeta item) async {
+    final candidate = await _mdblistResumeItemFor(item);
+    if (candidate == null ||
+        !candidate.paused ||
+        candidate.selection.isSeries) {
+      return null;
+    }
+    return _resumableMdblistPercent(candidate.selection.mdblistProgressPercent);
+  }
+
+  double? _resumableMdblistPercent(double? pct) {
+    if (pct == null || pct < 1 || pct >= 80) return null;
+    return pct;
+  }
+
   /// A movie tracker percent, narrowed to what the player will actually
   /// forward-seek, or null. The player's resume window is bounded on BOTH ends
   /// (video_player_screen.dart): it seeks only `loMs < traktMs < hiMs`, where
@@ -12800,6 +13293,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
   }) {
     _activeAddonId = addon.id;
     Navigator.of(context)
@@ -12811,6 +13305,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               addon: addon,
               isTelevision: widget.isTelevision,
               isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
               // EpisodesScreen pops itself (and the detail route) before firing
               // these, so we're back on the Search screen when they run.
               onQuickPlay: _playSelection,
@@ -12915,6 +13410,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     traktScrobble: sel.traktSource,
     simklProgressPercent: sel.simklProgressPercent,
     simklScrobble: sel.simklSource,
+    mdblistProgressPercent: sel.mdblistProgressPercent,
+    mdblistScrobble: sel.mdblistSource,
   );
 
   /// Catalog auto-best play — the service picks the provider, shows the real
@@ -13448,13 +13945,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               initialList: list,
               isTelevision: widget.isTelevision,
               isBound: _isBound,
-              onOpen: (item) =>
-                  _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+              onOpen: (item) => _openItem(
+                item,
+                _addonForContinue(item.sourceAddon?.id),
+                isMdblistSource: true,
+              ),
               onQuickPlay: _pikpakOnly
                   ? null
                   : (item) => _onCatalogPlay(
                       item,
                       _addonForContinue(item.sourceAddon?.id),
+                      isMdblistSource: true,
                     ),
             ),
           ),
@@ -14815,6 +15316,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Populates _simklAll/_simklProgress for the Simkl source's Continue
       // Watching list (folded into that source, like Trakt's).
       _loadSimklContinueWatching(refreshBound: false),
+      _loadMdblistContinueWatching(refreshBound: false),
     ]);
     if (mounted) await _refreshBoundSources();
   }
@@ -15338,12 +15840,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return MdblistSeeAllScreen(
         key: const ValueKey('disc_mdblist'),
         initialList: _discMdblistList,
-        onOpen: (item) =>
-            _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+        onOpen: (item) => _openItem(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        ),
         onQuickPlay: _pikpakOnly
             ? null
-            : (item) =>
-                  _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id)),
+            : (item) => _onCatalogPlay(
+                item,
+                _addonForContinue(item.sourceAddon?.id),
+                isMdblistSource: true,
+              ),
         onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,
@@ -16120,7 +16628,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// quiet pill this feeds.
   String _sectionTag(CatalogSection section) {
     if (section is HomeListSection) {
-      return section.isTrakt ? 'Trakt' : 'Simkl';
+      return section.isTrakt
+          ? 'Trakt'
+          : section.isMdblist
+          ? 'MDBList'
+          : 'Simkl';
     }
     return section.addon.name;
   }
@@ -16181,6 +16693,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         isBound: _isBound,
         isTelevision: widget.isTelevision,
       );
+    } else if (section.isMdblist) {
+      screen = MdblistSeeAllScreen(
+        initialList: section.mdblistList,
+        onOpen: (item) => _openItem(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        ),
+        onQuickPlay: _pikpakOnly
+            ? null
+            : (item) => _onCatalogPlay(
+                item,
+                _addonForContinue(item.sourceAddon?.id),
+                isMdblistSource: true,
+              ),
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+      );
     } else {
       screen = SimklSeeAllScreen(
         initialList: section.simklList,
@@ -16237,6 +16767,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         await Future.wait([
           _loadTraktContinueWatching(refreshBound: false),
           _loadSimklContinueWatching(refreshBound: false),
+          _loadMdblistContinueWatching(refreshBound: false, force: true),
         ]);
         if (!mounted) return;
       }
@@ -16626,6 +17157,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           column: col,
                           rowNodes: nodes,
                           hasBoundSource: _isBound(item),
+                          // A Continue Watching progress bar describes the
+                          // active viewing session. A global "watched once"
+                          // check from another tracker reads as contradictory
+                          // here, especially during a rewatch.
+                          showWatchedBadge: false,
                           aspectRatio: _titleCardAspect,
                           artUrl: _titleArtUrl(item),
                           progress: row.progressOf(item),

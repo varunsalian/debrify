@@ -64,22 +64,31 @@ class MdblistListChoice {
 /// Step 2 scope: the user's OWN lists only. Top/public lists and list search
 /// are a later step (see project memory).
 class MdblistListSource {
-  MdblistListSource._();
-  static final MdblistListSource instance = MdblistListSource._();
+  final MdblistService service;
+
+  MdblistListSource._(this.service);
+  factory MdblistListSource.forTesting(MdblistService service) =>
+      MdblistListSource._(service);
+  static final MdblistListSource instance = MdblistListSource._(
+    MdblistService.instance,
+  );
 
   /// The user's own lists, ready to populate the "List" dropdown. Skips lists
   /// without a usable id. Returns [] when MDBList isn't connected or on error.
   Future<List<MdblistListChoice>> loadUserLists() async =>
-      _mapChoices(await MdblistService.instance.fetchUserLists());
+      _mapChoices(await service.fetchUserLists());
 
   /// MDBList's top/public lists (other users' popular lists). Same shape as
   /// [loadUserLists]; each choice carries its [MdblistListChoice.ownerName].
   Future<List<MdblistListChoice>> loadTopLists() async =>
-      _mapChoices(await MdblistService.instance.fetchTopLists());
+      _mapChoices(await service.fetchTopLists());
+
+  Future<List<MdblistListChoice>> loadLikedLists() async =>
+      _mapChoices(await service.fetchLikedLists());
 
   /// Searches MDBList's public lists by name. Same shape as the others.
   Future<List<MdblistListChoice>> searchLists(String query) async =>
-      _mapChoices(await MdblistService.instance.searchLists(query));
+      _mapChoices(await service.searchLists(query));
 
   List<MdblistListChoice> _mapChoices(List<Map<String, dynamic>> raw) {
     final out = <MdblistListChoice>[];
@@ -94,22 +103,29 @@ class MdblistListSource {
   /// failed. A genuinely empty list returns `(items: [], failed: false)`; only a
   /// network/parse failure sets `failed: true`, so the UI can tell "empty" from
   /// "couldn't load".
-  Future<({List<StremioMeta> items, bool failed})> loadListItems(
+  Future<({List<StremioMeta> items, bool failed, bool complete})> loadListItems(
     MdblistListChoice choice, {
     bool forceRefresh = false,
   }) async {
-    final data = await MdblistService.instance.fetchListItems(
+    final result = await service.fetchListItemsResult(
       choice.id,
       forceRefresh: forceRefresh,
     );
-    if (data == null) return (items: const <StremioMeta>[], failed: true);
+    final data = result.data;
+    if (data == null) {
+      return (items: const <StremioMeta>[], failed: true, complete: false);
+    }
     final movies = data['movies'];
     final shows = data['shows'];
     final metas = <StremioMeta>[
       if (movies is List) ...MdblistItemTransformer.transformItems(movies),
       if (shows is List) ...MdblistItemTransformer.transformItems(shows),
     ];
-    return (items: _dedup(metas), failed: false);
+    return (
+      items: _dedup(metas),
+      failed: !result.isUsable,
+      complete: result.isComplete,
+    );
   }
 
   List<StremioMeta> _dedup(List<StremioMeta> metas) {

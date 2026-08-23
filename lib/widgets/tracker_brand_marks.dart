@@ -16,6 +16,7 @@ const Color kTraktRed = Color(0xFFED1C24);
 /// Simkl's tint. Matches the cyan the Simkl status chips already used, so the
 /// colour language carries over from the previous design.
 const Color kSimklCyan = Color(0xFF22D3EE);
+const Color kMdblistPurple = Color(0xFF8B5CF6);
 
 /// Ink drawn *on* [kSimklCyan] — a dark teal rather than pure black so the
 /// mark doesn't punch a hole in a dark surface.
@@ -134,4 +135,33 @@ class SimklMark extends StatelessWidget {
       ),
     );
   }
+}
+
+class MdblistMark extends StatelessWidget {
+  const MdblistMark({super.key, this.size = 20, this.opacity = 1});
+  final double size;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: opacity,
+    child: Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: kMdblistPurple,
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
+      child: Text(
+        'M',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * 0.62,
+          fontWeight: FontWeight.w900,
+          height: 1,
+        ),
+      ),
+    ),
+  );
 }

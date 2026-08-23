@@ -1,6 +1,6 @@
 part of '../search_screen.dart';
 
-enum _CwKind { local, trakt, simkl, iptv }
+enum _CwKind { local, trakt, simkl, mdblist, iptv }
 
 /// A leading "Continue Watching" board row (local or Trakt). Carries its own
 /// header, focus nodes, per-item progress lookup, and open / quick-play
@@ -29,6 +29,7 @@ class _CwRow {
   /// Takes the title off THIS row's source and reloads it. Long-press (hold-OK
   /// on TV) offers it next to Play — see [_SearchScreenState._openCwCardMenu].
   final Future<void> Function(StremioMeta) onRemove;
+  final bool Function(StremioMeta)? canRemove;
 
   /// Opens the "See All" grid for this row's source, or null to hide the link.
   final VoidCallback? onSeeAll;
@@ -47,6 +48,7 @@ class _CwRow {
     required this.onOpen,
     required this.onQuickPlay,
     required this.onRemove,
+    this.canRemove,
     this.onSeeAll,
   });
 }
@@ -122,6 +124,7 @@ class _BoardCell extends StatelessWidget {
   final int column;
   final List<FocusNode> rowNodes;
   final bool hasBoundSource;
+  final bool showWatchedBadge;
 
   /// 0..1 watched fraction — draws a bottom progress bar when non-null (used by
   /// the Continue Watching row). Null on regular catalog rows.
@@ -184,6 +187,7 @@ class _BoardCell extends StatelessWidget {
     required this.column,
     required this.rowNodes,
     required this.hasBoundSource,
+    this.showWatchedBadge = true,
     this.progress,
     this.episodeLabel,
     this.onQuickPlay,
@@ -267,6 +271,7 @@ class _BoardCell extends StatelessWidget {
         isTelevision: isTelevision,
         focusNode: focusNode,
         hasBoundSource: hasBoundSource,
+        showWatchedBadge: showWatchedBadge,
         ringColor: ringColor,
         progress: progress,
         episodeLabel: episodeLabel,

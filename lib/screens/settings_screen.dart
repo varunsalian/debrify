@@ -3902,6 +3902,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (s.hasPikpak) lines.add('PikPak');
     if (s.hasTrakt) lines.add('Trakt');
     if (s.hasSimkl) lines.add('Simkl');
+    if (s.hasMdblist) lines.add('MDBList');
     if (s.searchEngineCount > 0) {
       lines.add('Search engines (${s.searchEngineCount})');
     }
@@ -3936,6 +3937,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (r.pikpak) parts.add('PikPak');
     if (r.trakt) parts.add('Trakt');
     if (r.simkl) parts.add('Simkl');
+    if (r.mdblist) parts.add('MDBList');
     if (r.searchEnginesImported > 0) {
       parts.add('${r.searchEnginesImported} new engine(s)');
     }

@@ -154,6 +154,7 @@ class ConfigCommand {
   static const String pikpak = 'pikpak';
   static const String trakt = 'trakt';
   static const String simkl = 'simkl';
+  static const String mdblist = 'mdblist';
   static const String searchEngines = 'search_engines';
   static const String webDav = 'webdav';
   static const String indexerManagers = 'indexer_managers';

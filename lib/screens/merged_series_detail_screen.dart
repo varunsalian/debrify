@@ -41,6 +41,8 @@ import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
+import '../services/mdblist/mdblist_models.dart';
+import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/tracker_brand_marks.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
@@ -49,6 +51,7 @@ import '../theme/theme_core_resolver.dart';
 import '../theme/theme_overrides.dart';
 import '../theme/shipped_themes.dart' show effectiveDetailTheme;
 import '../utils/artwork_url.dart';
+import '../utils/episode_progress_merge.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -66,6 +69,7 @@ class MergedDetailScreen extends StatefulWidget {
   final bool isTelevision;
   final bool showQuickPlay;
   final bool isTraktSource;
+  final bool isMdblistSource;
 
   /// Primary play action. Series: resume-and-play (last-played → S01E01).
   /// Movie: play the movie. Mirrors the detail screen's "Play".
@@ -112,12 +116,18 @@ class MergedDetailScreen extends StatefulWidget {
   simklMenuBuilder;
   final Future<void> Function(SimklItemMenuAction action)? onSimklAction;
   final Future<SimklTitleStatus?> Function()? simklStatusLoader;
+  final List<MdblistMenuOption> mdblistMenuOptions;
+  final List<MdblistMenuOption> Function(MdblistTitleStatus? status)?
+  mdblistMenuBuilder;
+  final Future<void> Function(MdblistItemMenuAction action)? onMdblistAction;
+  final Future<MdblistTitleStatus?> Function()? mdblistStatusLoader;
 
   /// Submits a 1–10 rating straight from the tracker sheet's inline strip.
   /// When null the strip falls back to firing the sheet's `rate` action, which
   /// opens that tracker's rating dialog instead.
   final Future<void> Function(int rating)? onTraktRate;
   final Future<void> Function(int rating)? onSimklRate;
+  final Future<void> Function(int rating)? onMdblistRate;
 
   /// "More Like This" rail + sparse-item meta backfill (same loaders the detail
   /// screen receives).
@@ -155,6 +165,7 @@ class MergedDetailScreen extends StatefulWidget {
     this.isTelevision = false,
     this.showQuickPlay = true,
     this.isTraktSource = false,
+    this.isMdblistSource = false,
     this.onItemSelected,
     this.onQuickPlay,
     this.boundSourceCount,
@@ -167,8 +178,13 @@ class MergedDetailScreen extends StatefulWidget {
     this.simklMenuBuilder,
     this.onSimklAction,
     this.simklStatusLoader,
+    this.mdblistMenuOptions = const [],
+    this.mdblistMenuBuilder,
+    this.onMdblistAction,
+    this.mdblistStatusLoader,
     this.onTraktRate,
     this.onSimklRate,
+    this.onMdblistRate,
     this.recommendationsLoader,
     this.onRecommendationTap,
     this.metaEnricher,
@@ -362,6 +378,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   bool _resumeStarted = false;
   int? _resumeSeason;
   int? _resumeEpisode;
+  bool _hasMergedEpisodeTarget = false;
 
   /// The user's live Trakt relationship to this title (watchlist / collection /
   /// watched / rating). Null until [traktStatusLoader] resolves — the menu then
@@ -374,6 +391,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// isn't in yet, and the pill must not claim the title is untracked.
   bool _traktStatusResolved = false;
   bool _simklStatusResolved = false;
+  bool _mdblistStatusResolved = false;
 
   /// The quick-actions strip to render: rebuilt against [_traktStatus] when a
   /// builder was supplied, else the static list passed in.
@@ -407,6 +425,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// The user's live Simkl relationship to this title. Null until
   /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
   SimklTitleStatus? _simklStatus;
+  MdblistTitleStatus? _mdblistStatus;
   bool _localMovieFinished = false;
   bool _showcaseOpeningDataReady = false;
 
@@ -423,6 +442,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// when a builder was supplied, else the static list passed in.
   List<SimklMenuOption> get _menuOptionsSimkl =>
       widget.simklMenuBuilder?.call(_simklStatus) ?? widget.simklMenuOptions;
+  List<MdblistMenuOption> get _menuOptionsMdblist =>
+      widget.mdblistMenuBuilder?.call(_mdblistStatus) ??
+      widget.mdblistMenuOptions;
 
   @override
   void initState() {
@@ -437,6 +459,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       _loadResumeInfo();
       _loadTraktStatus();
       _loadSimklStatus();
+      _loadMdblistStatus();
       _loadLocalMovieFinished();
       _loadMyWatchlistState();
     });
@@ -530,6 +553,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // away — re-read the Trakt status too.
     _loadTraktStatus();
     _loadSimklStatus();
+    _loadMdblistStatus();
     _loadLocalMovieFinished();
     _loadMyWatchlistState();
     // And the episode list's ticks/progress: episode quick-play now plays on
@@ -613,6 +637,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
+  Future<void> _loadMdblistStatus() async {
+    final loader = widget.mdblistStatusLoader;
+    if (loader == null) return;
+    try {
+      final status = await loader();
+      if (!mounted || status == null) return;
+      setState(() => _mdblistStatus = status);
+    } catch (_) {
+    } finally {
+      if (mounted && !_mdblistStatusResolved) {
+        setState(() => _mdblistStatusResolved = true);
+      }
+    }
+  }
+
   Future<void> _loadLocalMovieFinished() async {
     if (!_isMovie) return;
     final imdbId =
@@ -630,6 +669,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     try {
       final info = await loader();
       if (!mounted) return;
+      // Once the mounted episode engine has resolved all tracker/local
+      // progress, its coordinate is newer and richer than the host loader's
+      // cached Continue Watching snapshot. Do not let a slower stale loader
+      // overwrite (for example) E7 back to a completed E6.
+      if (!_isMovie && _hasMergedEpisodeTarget) return;
       setState(() {
         _resumeLoaded = true;
         _resumeStarted = info.started;
@@ -639,6 +683,23 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     } catch (_) {
       // Non-critical — leave the static label.
     }
+  }
+
+  void _onNextEpisodeChanged(EpisodeCoordinate next) {
+    if (!mounted || _isMovie) return;
+    if (_resumeLoaded &&
+        _resumeStarted &&
+        _resumeSeason == next.season &&
+        _resumeEpisode == next.episode) {
+      return;
+    }
+    setState(() {
+      _hasMergedEpisodeTarget = true;
+      _resumeLoaded = true;
+      _resumeStarted = true;
+      _resumeSeason = next.season;
+      _resumeEpisode = next.episode;
+    });
   }
 
   /// The primary-button label: "Start Watching" before any progress, otherwise
@@ -1271,6 +1332,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       simklTracked: _simklTracked,
       simklLabel: _simklPillLabel,
       simklRating: _simklStatus?.rating,
+      hasMdblist: _menuOptionsMdblist.isNotEmpty,
+      mdblistTracked: _mdblistTracked,
+      mdblistLabel: _mdblistPillLabel,
+      mdblistRating: _mdblistStatus?.rating,
       showPrimary: widget.showQuickPlay,
       onPrimary: _playPrimary,
       // A movie browses the full source list the host supplies; a series
@@ -1300,6 +1365,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onSimklMenu: widget.onSimklAction != null
           ? _showSimklQuickActionsMenu
           : null,
+      onMdblistMenu: widget.onMdblistAction != null
+          ? _showMdblistQuickActionsMenu
+          : null,
       inMyWatchlist: _inMyWatchlist,
       onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
       // Both trackers behind one affordance, for a layout whose action row has
@@ -1324,7 +1392,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ? _showQuickActionsMenu
           : (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null
                 ? _showSimklQuickActionsMenu
-                : null),
+                : (_menuOptionsMdblist.isNotEmpty &&
+                          widget.onMdblistAction != null
+                      ? _showMdblistQuickActionsMenu
+                      : null)),
       // Only when Trakt already took the first slot; otherwise Simkl IS the
       // first slot above and this would mount the same sheet twice.
       onTrackersSecondary:
@@ -1333,6 +1404,22 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
               _menuOptionsSimkl.isNotEmpty &&
               widget.onSimklAction != null)
           ? _showSimklQuickActionsMenu
+          : (((_traktOnlyMenuOptions.isNotEmpty &&
+                        widget.onTraktAction != null) ||
+                    (_menuOptionsSimkl.isNotEmpty &&
+                        widget.onSimklAction != null)) &&
+                _menuOptionsMdblist.isNotEmpty &&
+                widget.onMdblistAction != null)
+          ? _showMdblistQuickActionsMenu
+          : null,
+      onTrackersTertiary:
+          (_traktOnlyMenuOptions.isNotEmpty &&
+              widget.onTraktAction != null &&
+              _menuOptionsSimkl.isNotEmpty &&
+              widget.onSimklAction != null &&
+              _menuOptionsMdblist.isNotEmpty &&
+              widget.onMdblistAction != null)
+          ? _showMdblistQuickActionsMenu
           : null,
       // There is no per-source host API, so a card in the Sources band and the
       // "Find sources" tile both land on the title-level manager — and the
@@ -1936,6 +2023,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   bool get _simklTracked =>
       _simklStatus?.currentStatus != null || _simklStatus?.rating != null;
 
+  bool get _mdblistTracked {
+    final s = _mdblistStatus;
+    return s != null &&
+        (s.inWatchlist ||
+            s.collected ||
+            s.watched ||
+            s.completed == true ||
+            s.dropped == true ||
+            s.rating != null);
+  }
+
   /// The live Trakt state, compressed to fit inside the pill. Trakt allows
   /// several relationships at once, so they're joined with "·" and capped at
   /// two — the rating rides in the pill's own compartment, not here.
@@ -1974,6 +2072,24 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       return 'Checking…';
     }
     return 'Not tracked';
+  }
+
+  String get _mdblistPillLabel {
+    final s = _mdblistStatus;
+    if (s == null &&
+        !_mdblistStatusResolved &&
+        widget.mdblistStatusLoader != null) {
+      return 'Checking…';
+    }
+    if (s == null) return 'Not tracked';
+    final parts = <String>[
+      if (s.inWatchlist) 'Watchlist',
+      if (s.collected) 'Collected',
+      if (s.completed == true || s.watched) 'Watched',
+      if (s.dropped == true) 'Dropped',
+    ];
+    if (parts.isEmpty) return s.rating == null ? 'Not tracked' : 'Rated';
+    return parts.take(2).join(' · ');
   }
 
   static String _simklStatusLabel(String status) {
@@ -2157,6 +2273,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             tracked: _simklTracked,
             tooltip: 'Simkl options',
             onTap: _showSimklQuickActionsMenu,
+          ),
+        if (_menuOptionsMdblist.isNotEmpty && widget.onMdblistAction != null)
+          _TrackerPill(
+            mark: MdblistMark(size: 21, opacity: _mdblistTracked ? 1 : 0.55),
+            brand: 'MDBLIST',
+            state: _mdblistPillLabel,
+            rating: _mdblistStatus?.rating,
+            accent: kMdblistPurple,
+            tracked: _mdblistTracked,
+            tooltip: 'MDBList options',
+            onTap: _showMdblistQuickActionsMenu,
           ),
       ],
     );
@@ -2343,6 +2470,50 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     );
   }
 
+  void _showMdblistQuickActionsMenu() {
+    if (_menuOptionsMdblist.isEmpty || widget.onMdblistAction == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 620),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            children: [
+              Text(
+                _item.name,
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'MDBList',
+                style: TextStyle(
+                  color: kMdblistPurple,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final option in _menuOptionsMdblist)
+                ListTile(
+                  leading: Icon(option.icon, color: option.color),
+                  title: Text(option.label),
+                  onTap: () async {
+                    await widget.onMdblistAction?.call(option.action);
+                    await _loadMdblistStatus();
+                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Bodies ────────────────────────────────────────────────────────────────
 
   /// [contentBuilder] non-null hands the arrangement to an alternate layout;
@@ -2364,6 +2535,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // PikPak-only. Only the hero Resume (≙ detail "Play") is PikPak-gated.
       showQuickPlay: true,
       isTraktSource: widget.isTraktSource,
+      isMdblistSource: widget.isMdblistSource,
       // Sources / fallback-search render in-tab on the Search host, so tear
       // down every merged/detail route first — popUntil the route name because
       // a single pop would leave a *parent* merged screen (series A →
@@ -2395,6 +2567,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       seasonsLoader: widget.seasonsLoader,
       onPlayEpisode: widget.onPlayEpisode == null ? null : _playDirectEpisode,
       watchProgressLoader: widget.watchProgressLoader,
+      onNextEpisodeChanged: _onNextEpisodeChanged,
     );
   }
 

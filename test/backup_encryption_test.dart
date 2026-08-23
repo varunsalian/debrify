@@ -227,6 +227,8 @@ void main() {
         'real_debrid_api_key': 'rdSecret',
         'trakt_access_token': 'traktAccess',
         'trakt_refresh_token': 'traktRefresh',
+        'mdblist_api_key': 'mdblistSecret',
+        'mdblist_username': 'viewer',
         'webdav_servers_v1': jsonEncode([
           {
             'id': 's1',
@@ -270,6 +272,7 @@ void main() {
       final json = jsonEncode(stripped);
       expect(json, isNot(contains('rdSecret')));
       expect(json, isNot(contains('traktAccess')));
+      expect(json, isNot(contains('mdblistSecret')));
       expect(json, isNot(contains('hunter2')));
       expect(json, isNot(contains('indexerSecret')));
       // Nothing that EMBEDS credentials survives either: no Xtream provider
@@ -279,6 +282,7 @@ void main() {
       expect(json, isNot(contains('p1')));
       expect(stripped.containsKey('realDebridApiKey'), isFalse);
       expect(stripped.containsKey('trakt'), isFalse);
+      expect(stripped.containsKey('mdblist'), isFalse);
       expect(stripped.containsKey('indexerManagers'), isFalse);
       expect(stripped.containsKey('addonManifestUrls'), isFalse);
       expect(stripped.containsKey('iptvFavorites'), isFalse);
@@ -297,6 +301,7 @@ void main() {
       // Control: the same store with credentials on does include them.
       final full = await BackupRestoreService.buildBackup();
       expect(full['realDebridApiKey'], 'rdSecret');
+      expect((full['mdblist'] as Map)['api_key'], 'mdblistSecret');
       expect((full['webDavServers'] as List).first['password'], 'hunter2');
       expect(
         (full['indexerManagers'] as List).first['api_key'],

@@ -9,7 +9,6 @@ import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
-import '../../services/storage_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/mdblist_save_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
@@ -85,17 +84,17 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   String _category = 'mine';
   List<MdblistListChoice> _myLists = const [];
   bool _myLoaded = false;
+  List<MdblistListChoice> _likedLists = const [];
+  bool _likedLoaded = false;
   List<MdblistListChoice> _topLists = const [];
   bool _topLoaded = false;
   List<MdblistListChoice> _foundLists = const [];
 
-  // "Save" state for the found list (the button only shows on that path). A
-  // save CLONES the list into "My Lists"; [_savedCloneId] is the id of that
-  // clone (null when not saved) so un-save can delete it. Kept as local state
-  // because MdblistListChoice is immutable.
+  // Like state for a public list handed off from Search. Cloning remains an
+  // explicit, separately named snapshot action.
   bool _foundSaved = false;
   bool _saveBusy = false;
-  int? _savedCloneId;
+  bool _cloneBusy = false;
 
   MdblistListChoice? _selected;
 
@@ -118,6 +117,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   final FocusNode _showNode = FocusNode(debugLabel: 'msa_show');
   final FocusNode _sortNode = FocusNode(debugLabel: 'msa_sort');
   final FocusNode _saveNode = FocusNode(debugLabel: 'msa_save');
+  final FocusNode _cloneNode = FocusNode(debugLabel: 'msa_clone');
   final FocusNode _randomNode = FocusNode(debugLabel: 'msa_random');
 
   final Random _random = Random();
@@ -128,11 +128,12 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   bool get _quiet => widget.embedded && widget.isTelevision;
 
-  List<MdblistListChoice> get _categoryLists => _category == 'top'
-      ? _topLists
-      : _category == 'found'
-      ? _foundLists
-      : _myLists;
+  List<MdblistListChoice> get _categoryLists => switch (_category) {
+    'top' => _topLists,
+    'liked' => _likedLists,
+    'found' => _foundLists,
+    _ => _myLists,
+  };
 
   /// The Save toggle only exists on the search-handoff path (the found list).
   bool get _showSave => _category == 'found' && _selected != null;
@@ -146,6 +147,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (_connected && _selected != null) _showNode,
     if (_connected && _selected != null) _sortNode,
     if (_showSave) _saveNode,
+    if (_showSave) _cloneNode,
     if (_connected && _selected != null && _showRandom) _randomNode,
   ];
 
@@ -192,7 +194,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         _selected = found;
         _listsLoading = false;
       });
-      _loadSavedState(found);
+      _foundSaved = found.liked;
       _fetchItems(found);
       return;
     }
@@ -203,12 +205,12 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   /// list and fetch its items. Safe against rapid category switches: every
   /// await re-checks that [cat] is still the active category.
   Future<void> _loadCategory(String cat) async {
-    final alreadyLoaded = cat == 'top'
-        ? _topLoaded
-        : cat == 'found'
-        // The found list is in-memory from the handoff — never fetched here.
-        ? true
-        : _myLoaded;
+    final alreadyLoaded = switch (cat) {
+      'top' => _topLoaded,
+      'liked' => _likedLoaded,
+      'found' => true,
+      _ => _myLoaded,
+    };
     setState(() {
       // Cancel any in-flight items fetch from the previous category (else its
       // result could land under the new category) and clear its loading flag —
@@ -223,9 +225,11 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     });
 
     if (!alreadyLoaded) {
-      final lists = cat == 'top'
-          ? await MdblistListSource.instance.loadTopLists()
-          : await MdblistListSource.instance.loadUserLists();
+      final lists = switch (cat) {
+        'top' => await MdblistListSource.instance.loadTopLists(),
+        'liked' => await MdblistListSource.instance.loadLikedLists(),
+        _ => await MdblistListSource.instance.loadUserLists(),
+      };
       if (!mounted || _category != cat) return;
       setState(() {
         // Cache only a non-empty result. The loaders return [] on network
@@ -235,6 +239,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         if (cat == 'top') {
           _topLists = lists;
           _topLoaded = lists.isNotEmpty;
+        } else if (cat == 'liked') {
+          _likedLists = lists;
+          _likedLoaded = lists.isNotEmpty;
         } else {
           _myLists = lists;
           _myLoaded = lists.isNotEmpty;
@@ -281,6 +288,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     _showNode.dispose();
     _sortNode.dispose();
     _saveNode.dispose();
+    _cloneNode.dispose();
     _randomNode.dispose();
     super.dispose();
   }
@@ -379,66 +387,45 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     play(_visible[_random.nextInt(_visible.length)]);
   }
 
-  /// Load whether the found list is already saved (a clone exists), from the
-  /// local source-id -> clone-id map.
-  Future<void> _loadSavedState(MdblistListChoice found) async {
-    final clones = await StorageService.getMdblistSavedClones();
-    if (!mounted) return;
-    final id = clones[found.id];
-    setState(() {
-      _savedCloneId = id;
-      _foundSaved = id != null;
-    });
-  }
-
-  /// Toggle "Save" on the found list. MDBList has no link/like-into-account API,
-  /// so saving CLONES the list into the user's "My Lists" (create a static list
-  /// + copy items); un-saving deletes that clone. The clone is a snapshot — it
-  /// won't auto-update if the source list changes.
+  /// Toggle MDBList's real like relationship. This keeps the source list live;
+  /// an explicit Clone action below creates a static snapshot instead.
   Future<void> _toggleSave() async {
     final list = _foundLists.isNotEmpty ? _foundLists.first : null;
     if (list == null || _saveBusy) return;
     final wasSaved = _foundSaved;
     setState(() => _saveBusy = true);
 
-    if (wasSaved) {
-      final cloneId = _savedCloneId;
-      final ok = cloneId == null
-          ? false
-          : await MdblistService.instance.deleteSavedClone(
-              sourceListId: list.id,
-              cloneListId: cloneId,
-            );
-      if (!mounted) return;
-      setState(() {
-        _saveBusy = false;
-        if (ok) {
-          _foundSaved = false;
-          _savedCloneId = null;
-          _myLoaded = false; // My Lists changed — refetch on next visit
-        }
-      });
-      _snackSave(ok, saved: false, name: list.name);
-      return;
+    final ok = wasSaved
+        ? await MdblistService.instance.unlikeList(list.id)
+        : await MdblistService.instance.likeList(list.id);
+    if (!mounted) return;
+    setState(() {
+      _saveBusy = false;
+      if (ok) {
+        _foundSaved = !wasSaved;
+        _likedLoaded = false;
+      }
+    });
+    if (ok && !wasSaved) {
+      AnalyticsService.trackInBackground('mdblist_list_save', const {});
     }
+    _snackSave(ok, saved: !wasSaved, name: list.name);
+  }
 
+  Future<void> _cloneList() async {
+    final list = _selected;
+    if (list == null || _cloneBusy) return;
+    setState(() => _cloneBusy = true);
     final newId = await MdblistService.instance.saveListAsClone(
       sourceListId: list.id,
       name: list.name,
     );
     if (!mounted) return;
     setState(() {
-      _saveBusy = false;
-      if (newId != null) {
-        _foundSaved = true;
-        _savedCloneId = newId;
-        _myLoaded = false; // My Lists gained a list — refetch on next visit
-      }
+      _cloneBusy = false;
+      if (newId != null) _myLoaded = false;
     });
-    if (newId != null) {
-      AnalyticsService.trackInBackground('mdblist_list_save', const {});
-    }
-    _snackSave(newId != null, saved: true, name: list.name);
+    _snackClone(newId != null, list.name);
   }
 
   void _snackSave(bool ok, {required bool saved, required String name}) {
@@ -447,13 +434,23 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (!ok) {
       msg = saved ? "Couldn't save the list" : "Couldn't remove the list";
     } else {
-      msg = saved
-          ? 'Saved "$name" to My Lists'
-          : 'Removed "$name" from My Lists';
+      msg = saved ? 'Liked "$name"' : 'Unliked "$name"';
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
+        backgroundColor: ok ? null : Colors.red.shade700,
+      ),
+    );
+  }
+
+  void _snackClone(bool ok, String name) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Cloned "$name" to My Lists' : "Couldn't clone the list",
+        ),
         backgroundColor: ok ? null : Colors.red.shade700,
       ),
     );
@@ -540,6 +537,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                 focusNode: _categoryNode,
                 options: [
                   const StremioDropdownOption('mine', 'My Lists'),
+                  const StremioDropdownOption('liked', 'Liked Lists'),
                   const StremioDropdownOption('top', 'Top Lists'),
                   // Only exists while a search-handoff list is held.
                   if (_foundLists.isNotEmpty)
@@ -621,15 +619,33 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
             onPressed: _playRandom,
           )
         : null;
-    if (like == null && random == null) return null;
-    if (like == null) return random;
-    if (random == null) return like;
+    final clone = _showSave
+        ? OutlinedButton.icon(
+            focusNode: _cloneNode,
+            onPressed: _cloneBusy ? null : _cloneList,
+            icon: _cloneBusy
+                ? const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.copy_rounded, size: 16),
+            label: const Text('Clone'),
+          )
+        : null;
+    final actions = <Widget>[
+      if (like != null) like,
+      if (clone != null) clone,
+      if (random != null) random,
+    ];
+    if (actions.isEmpty) return null;
+    if (actions.length == 1) return actions.single;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        like,
-        SizedBox(width: _quiet ? 6 : 8),
-        random,
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0) SizedBox(width: _quiet ? 6 : 8),
+          actions[i],
+        ],
       ],
     );
   }

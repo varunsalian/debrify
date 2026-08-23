@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/storage_service.dart';
+import '../../services/mdblist/mdblist_service.dart';
 import '../../services/iptv_transfer_payload.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_control_state.dart';
@@ -52,6 +53,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _pikpak;
   _ConfigItem? _trakt;
   _ConfigItem? _simkl;
+  _ConfigItem? _mdblist;
   _ConfigItem? _searchEngines;
   _ConfigItem? _webDav;
   _ConfigItem? _indexerManagers;
@@ -62,6 +64,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   // Non-secret account labels used only for the transfer inventory.
   String? _traktUsername;
   String? _simklUsername;
+  String? _mdblistUsername;
 
   // PikPak password (entered by user)
   final _pikpakPasswordController = TextEditingController();
@@ -157,6 +160,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       );
       _simklUsername = await StorageService.getSimklUsername();
       final hasSimkl = simklAccessToken != null && simklAccessToken.isNotEmpty;
+
+      final mdblistApiKey = kMdblistEnabled
+          ? await StorageService.getMdblistApiKey(forRemoteTransfer: true)
+          : null;
+      _mdblistUsername = await StorageService.getMdblistUsername();
+      final hasMdblist = mdblistApiKey?.isNotEmpty ?? false;
 
       // Load Search Engines
       await LocalEngineStorage.instance.initialize();
@@ -272,6 +281,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: hasSimkl,
         );
 
+        _mdblist = _ConfigItem(
+          id: ConfigCommand.mdblist,
+          name: 'MDBList',
+          icon: 'ml',
+          isConfigured: hasMdblist,
+          selected: hasMdblist,
+        );
+
         _searchEngines = _ConfigItem(
           id: ConfigCommand.searchEngines,
           name: 'Search Engines',
@@ -339,6 +356,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       _pikpak,
       _trakt,
       _simkl,
+      _mdblist,
       _searchEngines,
       _webDav,
       _indexerManagers,
@@ -560,6 +578,28 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             configData: transferData(
               jsonEncode(<String, Object?>{
                 'access_token': access,
+                if (username != null) 'username': username,
+              }),
+            ),
+          );
+        },
+      );
+      await sendSelected(
+        _mdblist?.selected == true,
+        'MDBList',
+        ConfigCommand.mdblist,
+        () async {
+          final apiKey = await StorageService.getMdblistApiKey(
+            forRemoteTransfer: true,
+          );
+          if (apiKey == null || apiKey.isEmpty) return false;
+          final username = await StorageService.getMdblistUsername();
+          return state.sendConfigCommandToDevice(
+            ConfigCommand.mdblist,
+            targetIp,
+            configData: transferData(
+              jsonEncode(<String, Object?>{
+                'api_key': apiKey,
                 if (username != null) 'username': username,
               }),
             ),
@@ -840,7 +880,9 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           ],
 
           // Trakt / Simkl section
-          if (_trakt?.isConfigured == true || _simkl?.isConfigured == true) ...[
+          if (_trakt?.isConfigured == true ||
+              _simkl?.isConfigured == true ||
+              _mdblist?.isConfigured == true) ...[
             _buildSectionHeader('TRACKING'),
             const SizedBox(height: 8),
             if (_trakt?.isConfigured == true)
@@ -852,6 +894,11 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
               _buildConfigTile(
                 _simkl!,
                 subtitle: _simklUsername ?? 'Signed in',
+              ),
+            if (_mdblist?.isConfigured == true)
+              _buildConfigTile(
+                _mdblist!,
+                subtitle: _mdblistUsername ?? 'Signed in',
               ),
             const SizedBox(height: 16),
           ],
@@ -1297,6 +1344,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.history_rounded;
       case ConfigCommand.simkl:
         return Icons.movie_filter_rounded;
+      case ConfigCommand.mdblist:
+        return Icons.list_alt_rounded;
       case ConfigCommand.searchEngines:
         return Icons.search;
       case ConfigCommand.webDav:
@@ -1330,6 +1379,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFFED1C24); // Trakt red
       case ConfigCommand.simkl:
         return const Color(0xFF22D3EE); // Simkl cyan
+      case ConfigCommand.mdblist:
+        return const Color(0xFF8B5CF6);
       case ConfigCommand.searchEngines:
         return const Color(0xFF8B5CF6); // Purple
       case ConfigCommand.webDav:

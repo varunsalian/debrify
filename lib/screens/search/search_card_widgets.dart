@@ -5,6 +5,7 @@ class _StremioCard extends StatefulWidget {
   final bool isTelevision;
   final FocusNode focusNode;
   final bool hasBoundSource;
+  final bool showWatchedBadge;
 
   /// Focus ring override (Canvas cells pass white). Null keeps the classic
   /// violet-on-TV grammar.
@@ -46,6 +47,7 @@ class _StremioCard extends StatefulWidget {
     required this.isTelevision,
     required this.focusNode,
     required this.hasBoundSource,
+    this.showWatchedBadge = true,
     this.ringColor,
     this.progress,
     this.episodeLabel,
@@ -201,7 +203,7 @@ class _StremioCardState extends State<_StremioCard>
           ),
         ),
       ],
-      if (supportsWatched)
+      if (supportsWatched && widget.showWatchedBadge)
         Positioned(
           top: 7,
           right: 7,
@@ -214,8 +216,8 @@ class _StremioCardState extends State<_StremioCard>
       if (widget.hasBoundSource)
         Positioned(
           top: 8,
-          left: supportsWatched ? 8 : null,
-          right: supportsWatched ? null : 8,
+          left: supportsWatched && widget.showWatchedBadge ? 8 : null,
+          right: supportsWatched && widget.showWatchedBadge ? null : 8,
           child: Icon(
             Icons.bookmark_rounded,
             size: 18,

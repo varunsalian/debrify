@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/series_playlist.dart';
 import 'package:debrify/screens/video_player/models/playlist_entry.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/series_browser.dart';
 
 void main() {
@@ -34,6 +37,9 @@ void main() {
     required SeriesPlaylist playlist,
     required bool showAllEpisodes,
     required List<(int, int)> selections,
+    String? imdbId,
+    bool? imdbKnownAtLaunch,
+    Future<void>? metadataReady,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -47,6 +53,9 @@ void main() {
                       seriesPlaylist: playlist,
                       currentEpisodeIndex: 0,
                       showAllEpisodes: showAllEpisodes,
+                      imdbId: imdbId,
+                      imdbKnownAtLaunch: imdbKnownAtLaunch ?? (imdbId != null),
+                      metadataReady: metadataReady,
                       onEpisodeSelected: (season, episode) =>
                           selections.add((season, episode)),
                     ),
@@ -131,4 +140,83 @@ void main() {
     // label, no popup affordance.
     expect(find.byType(PopupMenuButton<int>), findsNothing);
   });
+
+  testWidgets('local completion survives an alternate release title', (
+    tester,
+  ) async {
+    await StorageService.markEpisodeAsFinished(
+      seriesTitle: 'Completely Different Release Name',
+      season: 1,
+      episode: 2,
+      imdbId: 'tt-local-guide',
+    );
+
+    await pumpBrowser(
+      tester,
+      playlist: buildPlaylist(),
+      showAllEpisodes: true,
+      selections: <(int, int)>[],
+      imdbId: 'tt-local-guide',
+    );
+    await tester.pump();
+
+    expect(find.text('Watched'), findsOneWidget);
+  });
+
+  test('tracker refresh policy checks every authenticated provider', () {
+    final knownPack = SeriesBrowser.trackerRefreshPolicy(
+      imdbKnownAtLaunch: true,
+      singleEntryGuide: false,
+    );
+    expect(knownPack.trakt, isTrue);
+    expect(knownPack.simkl, isTrue);
+    expect(knownPack.mdblist, isTrue);
+
+    final discoveredPack = SeriesBrowser.trackerRefreshPolicy(
+      imdbKnownAtLaunch: false,
+      singleEntryGuide: false,
+    );
+    expect(discoveredPack.trakt, isTrue);
+    expect(discoveredPack.simkl, isTrue);
+    expect(discoveredPack.mdblist, isTrue);
+
+    final knownSingleton = SeriesBrowser.trackerRefreshPolicy(
+      imdbKnownAtLaunch: true,
+      singleEntryGuide: true,
+    );
+    expect(knownSingleton.trakt, isTrue);
+    expect(knownSingleton.simkl, isTrue);
+    expect(knownSingleton.mdblist, isTrue);
+  });
+
+  testWidgets(
+    'metadata completion rebinds a guide opened before IMDb discovery',
+    (tester) async {
+      final playlist = buildPlaylist();
+      final ready = Completer<void>();
+      await StorageService.markEpisodeAsFinished(
+        seriesTitle: 'Completely Different Late Release',
+        season: 1,
+        episode: 2,
+        imdbId: 'tt-late-guide',
+      );
+
+      await pumpBrowser(
+        tester,
+        playlist: playlist,
+        showAllEpisodes: true,
+        selections: <(int, int)>[],
+        imdbKnownAtLaunch: false,
+        metadataReady: ready.future,
+      );
+      expect(find.text('Watched'), findsNothing);
+
+      playlist.imdbId = 'tt-late-guide';
+      ready.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Watched'), findsOneWidget);
+    },
+  );
 }

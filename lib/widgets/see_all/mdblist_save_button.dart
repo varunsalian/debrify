@@ -5,16 +5,14 @@ import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 
 /// The Discover filter bar's "Save" action for an MDBList list opened from
-/// search. Saves the list into the user's own MDBList "My Lists" by CLONING it
-/// (create a static list + copy its items) — MDBList has no API to link/like a
-/// list, so a clone is the only way to make it appear in the user's lists.
+/// search. Save uses MDBList's real like/unlike relationship, so the source
+/// stays live in Liked Lists. Cloning is exposed as a separate action.
 ///
 /// Styled to sit beside [SeeAllRandomButton] — a boxed glass pill normally, a
 /// bare quiet segment on the Discover TV stage — with the same constant-size
 /// focus decoration so DPAD moves never reflow the row.
 ///
-/// [busy] swaps the icon for a spinner while the save/remove request is in
-/// flight (presses are ignored). [saved] is true once a clone exists.
+/// [busy] swaps the icon for a spinner while the like request is in flight.
 class MdblistSaveButton extends StatefulWidget {
   final bool quiet;
   final bool saved;
@@ -55,9 +53,7 @@ class _MdblistSaveButtonState extends State<MdblistSaveButton> {
       );
     }
     return Icon(
-      widget.saved
-          ? Icons.bookmark_added_rounded
-          : Icons.bookmark_add_outlined,
+      widget.saved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
       size: size,
       color: color,
     );

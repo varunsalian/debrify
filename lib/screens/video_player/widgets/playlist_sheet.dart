@@ -7,6 +7,7 @@ import '../../../widgets/movie_collection_browser.dart';
 import '../models/playlist_entry.dart';
 import '../constants/color_constants.dart';
 import '../../../services/storage_service.dart';
+import '../../../utils/episode_progress_merge.dart';
 import '../constants/timing_constants.dart';
 
 /// Modal bottom sheet for browsing and selecting playlist items
@@ -23,6 +24,8 @@ class PlaylistSheet {
   /// - [seriesPlaylist]: Optional series playlist metadata
   /// - [playlistItemData]: Additional playlist item data
   /// - [imdbId]: Show IMDb id, used to look up per-episode tracker progress
+  /// - [imdbKnownAtLaunch]: Whether that identity existed before TVMaze ran
+  /// - [metadataReady]: Player-side TVMaze enrichment completion signal
   /// - [onSelect]: Callback when episode/movie is selected (index, allowResume)
   /// - [viewMode]: Optional view mode to determine collection organization
   /// - [onFetchEpisode]: When set, the series guide lists EVERY episode of
@@ -35,6 +38,8 @@ class PlaylistSheet {
     SeriesPlaylist? seriesPlaylist,
     Map<String, dynamic>? playlistItemData,
     String? imdbId,
+    required bool imdbKnownAtLaunch,
+    Future<void>? metadataReady,
     required Future<void> Function(int index, {bool allowResume}) onSelect,
     PlaylistViewMode? viewMode,
     Future<void> Function(int season, int episode)? onFetchEpisode,
@@ -66,42 +71,65 @@ class PlaylistSheet {
                     currentEpisodeIndex: currentIndex,
                     playlistItem: playlistItemData,
                     imdbId: imdbId,
+                    imdbKnownAtLaunch: imdbKnownAtLaunch,
+                    metadataReady: metadataReady,
                     showAllEpisodes: onFetchEpisode != null,
                     onEpisodeSelected: (season, episode) async {
                       // Find the original index in the PlaylistEntry array
                       final originalIndex = seriesPlaylist
                           .findOriginalIndexBySeasonEpisode(season, episode);
                       if (originalIndex != -1) {
-                        // Check if this episode has saved progress — local,
-                        // Trakt, or Simkl — so a partially watched episode from
-                        // another device resumes when selected here.
+                        // Check if this episode has saved progress — local or
+                        // any connected tracker — so a partially watched
+                        // episode from another device resumes when selected.
                         final title =
                             seriesPlaylist.seriesTitle ?? 'Unknown Series';
-                        final playbackState =
-                            await StorageService.getSeriesPlaybackState(
+                        final resolvedImdbId =
+                            (seriesPlaylist.imdbId?.trim().isNotEmpty == true
+                            ? seriesPlaylist.imdbId!.trim()
+                            : imdbId?.trim());
+                        final localProgress =
+                            await StorageService.getMergedEpisodeProgress(
                               seriesTitle: title,
-                              season: season,
-                              episode: episode,
+                              imdbId: resolvedImdbId,
                             );
-                        final trackerMaps = imdbId != null && imdbId.isNotEmpty
+                        final trackerMaps =
+                            resolvedImdbId != null && resolvedImdbId.isNotEmpty
                             ? await Future.wait([
                                 StorageService.getEpisodeTraktProgress(
-                                  imdbId: imdbId,
+                                  imdbId: resolvedImdbId,
                                 ),
                                 StorageService.getEpisodeSimklProgress(
-                                  imdbId: imdbId,
+                                  imdbId: resolvedImdbId,
+                                ),
+                                StorageService.getEpisodeMdblistProgress(
+                                  imdbId: resolvedImdbId,
                                 ),
                               ])
                             : const <Map<String, double>>[];
                         final episodeKey = '${season}_$episode';
-                        final hasTracker = trackerMaps.any(
-                          (progress) => (progress[episodeKey] ?? 0) > 0,
-                        );
+                        final localState = localProgress[episodeKey];
+                        final localPosition =
+                            (localState?['positionMs'] as num?)?.toInt() ?? 0;
+                        final localDuration =
+                            (localState?['durationMs'] as num?)?.toInt() ?? 0;
+                        final hasLocalResume =
+                            localPosition > 0 &&
+                            localDuration > 0 &&
+                            localPosition < localDuration;
+                        final trackerPercent = furthestEpisodeTrackerPercent([
+                          for (final progress in trackerMaps)
+                            progress[episodeKey],
+                        ]);
+                        final hasTrackerResume =
+                            trackerPercent != null &&
+                            trackerPercent > 0 &&
+                            trackerPercent < 95;
 
                         // Allow resuming if the episode has saved progress
                         await onSelect(
                           originalIndex,
-                          allowResume: playbackState != null || hasTracker,
+                          allowResume: hasLocalResume || hasTrackerResume,
                         );
                       } else if (onFetchEpisode != null) {
                         // Not in the playlist: fetch it in-player (the guide

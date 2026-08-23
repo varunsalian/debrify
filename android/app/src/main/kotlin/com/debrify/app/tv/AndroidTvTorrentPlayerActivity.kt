@@ -1816,6 +1816,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             description = if (g.has("description")) g.optString("description") else null,
                             rating = if (g.has("rating")) g.optDouble("rating") else null,
                             runtime = if (g.has("runtime")) g.optInt("runtime") else null,
+                            resumePositionMs = if (g.has("resumePositionMs")) g.optLong("resumePositionMs") else null,
+                            durationMs = if (g.has("durationMs")) g.optLong("durationMs") else null,
+                            trackerProgressPercent = if (g.has("trackerProgressPercent")) g.optDouble("trackerProgressPercent") else null,
+                            watched = g.optBoolean("watched", false),
                         )
                     )
                 }
@@ -1852,9 +1856,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             var skippedCount = 0
             for (i in 0 until updatesArray.length()) {
                 val update = updatesArray.getJSONObject(i)
-                val originalIndex = update.optInt("originalIndex", -1)
+                val requestedIndex = update.optInt("originalIndex", -1)
+                val updateSeason = if (update.has("season")) update.optInt("season") else null
+                val updateEpisode = if (update.has("episode")) update.optInt("episode") else null
+                val originalIndex = if (updateSeason != null && updateEpisode != null) {
+                    val requestedItem = model.items.getOrNull(requestedIndex)
+                    if (requestedItem?.season == updateSeason && requestedItem.episode == updateEpisode) {
+                        requestedIndex
+                    } else {
+                        model.items.indexOfFirst {
+                            it.season == updateSeason && it.episode == updateEpisode
+                        }
+                    }
+                } else {
+                    requestedIndex
+                }
                 if (originalIndex < 0 || originalIndex >= model.items.size) {
-                    android.util.Log.w("TVMazeUpdate", "Skipping invalid originalIndex=$originalIndex (items.size=${model.items.size})")
+                    android.util.Log.w("TVMazeUpdate", "Skipping unmatched update index=$requestedIndex S${updateSeason}E${updateEpisode} (items.size=${model.items.size})")
                     skippedCount++
                     continue
                 }
@@ -1864,13 +1882,47 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val newDescription: String? = if (update.has("description")) update.optString("description") else null
                 val newArtwork: String? = if (update.has("artwork")) update.optString("artwork") else null
                 val newRating = if (update.has("rating")) update.optDouble("rating") else null
+                val newResumePositionMs = if (update.has("resumePositionMs")) update.optLong("resumePositionMs") else null
+                val newDurationMs = if (update.has("durationMs")) update.optLong("durationMs") else null
+                val hasWatchedUpdate = update.has("watched")
+                val watched = if (hasWatchedUpdate) update.optBoolean("watched", false) else item.watched
+                val newTrackerProgress = when {
+                    hasWatchedUpdate && watched -> 100.0
+                    update.has("trackerProgressPercent") -> update.optDouble("trackerProgressPercent")
+                    else -> null
+                }
+                val isCurrentItem = originalIndex == currentIndex
+                val livePositionMs = if (isCurrentItem) {
+                    (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+                val liveDurationMs = if (isCurrentItem) {
+                    (player?.duration ?: 0L).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
 
                 // Create updated item with new metadata
                 val updatedItem = item.copy(
                     title = if (!newTitle.isNullOrEmpty()) newTitle else item.title,
                     description = if (!newDescription.isNullOrEmpty()) newDescription else item.description,
                     artwork = if (!newArtwork.isNullOrEmpty()) newArtwork else item.artwork,
-                    rating = newRating ?: item.rating
+                    rating = newRating ?: item.rating,
+                    resumePositionMs = mergeLateMetadataResumePosition(
+                        existingPositionMs = item.resumePositionMs,
+                        incomingPositionMs = newResumePositionMs,
+                        livePositionMs = livePositionMs,
+                        isCurrentItem = isCurrentItem,
+                    ),
+                    durationMs = mergeLateMetadataDuration(
+                        existingDurationMs = item.durationMs,
+                        incomingDurationMs = newDurationMs,
+                        liveDurationMs = liveDurationMs,
+                        isCurrentItem = isCurrentItem,
+                    ),
+                    traktProgressPercent = newTrackerProgress ?: item.traktProgressPercent,
+                    watched = watched,
                 )
                 model.items[originalIndex] = updatedItem
                 anyUpdated = true
@@ -3380,7 +3432,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
-        // payload field is the furthest of Trakt + Simkl); STATE_READY resumes
+        // payload field is the furthest of Trakt + Simkl + MDBList); STATE_READY resumes
         // the FURTHER of the two (never backward). Suppress trackers during
         // auto-advance (binge starts the next episode fresh) and during a source
         // switch on the same content (must honour the captured live position).
@@ -16601,6 +16653,39 @@ private data class PlaybackPayload(
     val guideEpisodes: MutableList<GuideEpisode> = mutableListOf(),
 )
 
+/**
+ * Merge a late cache/network snapshot into a playlist row. Non-current rows
+ * honour explicit zeroes so a successful refresh can clear stale progress.
+ * The currently playing row never moves behind the live player clock.
+ */
+internal fun mergeLateMetadataResumePosition(
+    existingPositionMs: Long,
+    incomingPositionMs: Long?,
+    livePositionMs: Long,
+    isCurrentItem: Boolean,
+): Long {
+    val snapshotPositionMs = incomingPositionMs ?: existingPositionMs
+    return if (isCurrentItem) {
+        maxOf(snapshotPositionMs, livePositionMs.coerceAtLeast(0L))
+    } else {
+        snapshotPositionMs
+    }
+}
+
+/** Keep the live media duration authoritative while its item is playing. */
+internal fun mergeLateMetadataDuration(
+    existingDurationMs: Long,
+    incomingDurationMs: Long?,
+    liveDurationMs: Long,
+    isCurrentItem: Boolean,
+): Long {
+    return if (isCurrentItem && liveDurationMs > 0L) {
+        liveDurationMs
+    } else {
+        incomingDurationMs ?: existingDurationMs
+    }
+}
+
 /** One episode of the show's full TVMaze list, for the episode guide. */
 private data class GuideEpisode(
     val season: Int,
@@ -16610,6 +16695,10 @@ private data class GuideEpisode(
     val description: String?,
     val rating: Double?,
     val runtime: Int?,
+    val resumePositionMs: Long?,
+    val durationMs: Long?,
+    val trackerProgressPercent: Double?,
+    val watched: Boolean,
 )
 
 private data class PlaybackItem(
@@ -16634,10 +16723,13 @@ private data class PlaybackItem(
     val rating: Double?,
     val provider: String?,
     // Cross-device progress for this episode (0-100), or null. The legacy JSON
-    // key is named traktProgressPercent, but Flutter sends the furthest of Trakt
-    // and Simkl. Display-only fallback for the playlist bar and a resume source
+    // key is named traktProgressPercent, but Flutter sends the furthest of Trakt,
+    // Simkl, and MDBList. Display-only fallback for the playlist bar and a resume source
     // when there's no local position.
     val traktProgressPercent: Double? = null,
+    // Explicit local completion. Unlike tracker 100%, this must not yield to
+    // an old partial position as an assumed active rewatch.
+    val watched: Boolean = false,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -16656,6 +16748,7 @@ private data class PlaybackItem(
      *  real in-progress local position — shows the live local percent, or the
      *  card would dim into the watched state while you're 20% into a rewatch. */
     fun displayProgressPercent(): Int {
+        if (watched) return 100
         val local = if (durationMs > 0 && resumePositionMs > 0) {
             ((resumePositionMs.toDouble() / durationMs.toDouble()) * 100).toInt()
         } else {
@@ -16690,6 +16783,7 @@ private data class PlaybackItem(
                 rating = if (obj.has("rating")) obj.optDouble("rating") else null,
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
+                watched = obj.optBoolean("watched", false),
             )
         }
     }
@@ -16851,13 +16945,16 @@ private class PlaylistAdapter(
                     episode = g.episode,
                     artwork = g.artwork,
                     description = g.description,
-                    resumePositionMs = 0,
-                    durationMs = (g.runtime ?: 0) * 60_000L,
+                    resumePositionMs = g.resumePositionMs ?: 0,
+                    durationMs = g.durationMs?.takeIf { it > 0 }
+                        ?: (g.runtime ?: 0) * 60_000L,
                     updatedAt = 0,
                     resumeId = null,
                     sizeBytes = null,
                     rating = g.rating,
                     provider = null,
+                    traktProgressPercent = g.trackerProgressPercent,
+                    watched = g.watched,
                 )
                 (holder as EpisodeViewHolder).bindMissing(synthetic) {
                     onFetchEpisode?.invoke(g.season, g.episode)

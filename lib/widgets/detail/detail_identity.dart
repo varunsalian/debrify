@@ -724,6 +724,17 @@ class DetailActionRow extends StatelessWidget {
           compact: compactTrackers,
           onTap: model.onSimklMenu!,
         ),
+      if (model.hasMdblist && model.onMdblistMenu != null)
+        DetailTrackerPill(
+          mark: MdblistMark(size: 19, opacity: model.mdblistTracked ? 1 : 0.55),
+          brand: 'MDBLIST',
+          state: model.mdblistLabel,
+          rating: model.mdblistRating,
+          accent: kMdblistPurple,
+          tracked: model.mdblistTracked,
+          compact: compactTrackers,
+          onTap: model.onMdblistMenu!,
+        ),
     ];
 
     return Focus(

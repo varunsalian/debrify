@@ -5,6 +5,8 @@ import '../models/trakt/trakt_calendar_entry.dart';
 import '../services/analytics_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
+import '../services/mdblist/mdblist_calendar_service.dart';
+import '../services/mdblist/mdblist_service.dart';
 import '../services/simkl/simkl_calendar_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/trakt/trakt_calendar_service.dart';
@@ -35,14 +37,15 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   final Map<DateTime, Future<void>> _inFlightMonthLoads =
       <DateTime, Future<void>>{};
 
-  // Calendar source: 'trakt' or 'simkl'. Both trackers can be connected at once,
-  // in which case a Source dropdown swaps between them; a single-tracker user
-  // sees no dropdown and their one calendar (identical to the pre-Simkl page).
+  // A single connected tracker keeps the original no-selector experience;
+  // multiple connected trackers can be switched independently.
   static const String _sourceTrakt = 'trakt';
   static const String _sourceSimkl = 'simkl';
+  static const String _sourceMdblist = 'mdblist';
   String _source = _sourceTrakt;
   bool _traktAuthed = false;
   bool _simklAuthed = false;
+  bool _mdblistAuthed = false;
   // Bumped on every source switch; an in-flight month load carries the value it
   // started with and drops its result if the source changed underneath it.
   int _sourceGen = 0;
@@ -55,8 +58,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   bool _isTelevision = false;
   int _latestMonthChangeRequestId = 0;
 
-  bool get _bothAuthed => _traktAuthed && _simklAuthed;
-  String get _sourceName => _source == _sourceSimkl ? 'Simkl' : 'Trakt';
+  int get _authenticatedSourceCount =>
+      [_traktAuthed, _simklAuthed, _mdblistAuthed].where((v) => v).length;
+  String get _sourceName => switch (_source) {
+    _sourceSimkl => 'Simkl',
+    _sourceMdblist => 'MDBList',
+    _ => 'Trakt',
+  };
 
   // Remember the last-viewed month across this app session. Opening a title from
   // the calendar switches to the Home tab (which hosts the detail page), which
@@ -101,24 +109,37 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     final results = await Future.wait([
       TraktService.instance.isAuthenticated(),
       SimklService.instance.isAuthenticated(),
+      MdblistService.instance.isAuthenticated(),
     ]);
     if (!mounted) return;
     final traktAuthed = results[0];
     final simklAuthed = results[1];
+    final mdblistAuthed = results[2];
     // Keep the source chosen earlier this session (across the detail round-trip)
     // IF it's still connected; otherwise default to Trakt when connected
     // (preserves the pre-Simkl behaviour), falling back to Simkl-only.
     final remembered = _lastSource;
-    final source =
-        (remembered == _sourceSimkl && simklAuthed) ||
-                (remembered == _sourceTrakt && traktAuthed)
-            ? remembered!
-            : (traktAuthed ? _sourceTrakt : (simklAuthed ? _sourceSimkl : _sourceTrakt));
-    final isAuth = source == _sourceSimkl ? simklAuthed : traktAuthed;
+    final rememberedAvailable = switch (remembered) {
+      _sourceTrakt => traktAuthed,
+      _sourceSimkl => simklAuthed,
+      _sourceMdblist => mdblistAuthed,
+      _ => false,
+    };
+    final source = rememberedAvailable
+        ? remembered!
+        : traktAuthed
+        ? _sourceTrakt
+        : simklAuthed
+        ? _sourceSimkl
+        : mdblistAuthed
+        ? _sourceMdblist
+        : _sourceTrakt;
+    final isAuth = traktAuthed || simklAuthed || mdblistAuthed;
 
     setState(() {
       _traktAuthed = traktAuthed;
       _simklAuthed = simklAuthed;
+      _mdblistAuthed = mdblistAuthed;
       _source = source;
     });
     _lastSource = source;
@@ -186,9 +207,17 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     final source = _source;
     final future = () async {
       final monthEnd = DateTime(normalized.year, normalized.month + 1, 0);
-      final grouped = source == _sourceSimkl
-          ? await SimklCalendarService.instance.getRange(normalized, monthEnd)
-          : await TraktCalendarService.instance.getRange(normalized, monthEnd);
+      final grouped = switch (source) {
+        _sourceSimkl => await SimklCalendarService.instance.getRange(
+          normalized,
+          monthEnd,
+        ),
+        _sourceMdblist => await MdblistCalendarService.instance.getRange(
+          normalized,
+          monthEnd,
+        ),
+        _ => await TraktCalendarService.instance.getRange(normalized, monthEnd),
+      };
       if (!mounted) return;
       // The source was switched while this fetch was in flight — its result is
       // for the old tracker, so discard it (the new source reloads separately).
@@ -371,7 +400,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
         child: Padding(
           padding: EdgeInsets.all(32),
           child: Text(
-            'Connect Trakt or Simkl to see your calendar.',
+            'Connect Trakt, Simkl, or MDBList to see your calendar.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
@@ -465,20 +494,33 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
-  /// The Trakt/Simkl source dropdown — only when BOTH trackers are connected
-  /// (a single-tracker user has nothing to switch). Returns null otherwise so
+  /// The tracker source dropdown — only when multiple trackers are connected.
+  /// A single-tracker user has nothing to switch. Returns null otherwise so
   /// callers can conditionally omit it. Styled like the Year/Month selectors,
   /// so DPAD steps into/out of it identically.
   Widget? _buildSourceSelector({bool dense = false}) {
-    if (!_bothAuthed) return null;
+    if (_authenticatedSourceCount < 2) return null;
     return _SelectorField<String>(
       label: 'Source',
       value: _source,
       focusNode: _sourceFocusNode,
       dense: dense,
-      items: const [
-        DropdownMenuItem<String>(value: _sourceTrakt, child: Text('Trakt')),
-        DropdownMenuItem<String>(value: _sourceSimkl, child: Text('Simkl')),
+      items: [
+        if (_traktAuthed)
+          const DropdownMenuItem<String>(
+            value: _sourceTrakt,
+            child: Text('Trakt'),
+          ),
+        if (_simklAuthed)
+          const DropdownMenuItem<String>(
+            value: _sourceSimkl,
+            child: Text('Simkl'),
+          ),
+        if (_mdblistAuthed)
+          const DropdownMenuItem<String>(
+            value: _sourceMdblist,
+            child: Text('MDBList'),
+          ),
       ],
       onChanged: _onSourceChanged,
     );
@@ -561,10 +603,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                   dense: true,
                   items: [
                     for (final year in _yearOptions)
-                      DropdownMenuItem<int>(
-                        value: year,
-                        child: Text('$year'),
-                      ),
+                      DropdownMenuItem<int>(value: year, child: Text('$year')),
                   ],
                   onChanged: (value) {
                     if (value == null) return;
@@ -600,9 +639,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             decoration: BoxDecoration(
               borderRadius: app.shape.brPill,
               color: app.fade(app.calendar.accent, 0.14),
-              border: Border.all(
-                color: app.fade(app.calendar.accent, 0.22),
-              ),
+              border: Border.all(color: app.fade(app.calendar.accent, 0.22)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -709,7 +746,8 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          if (_buildSourceSelector(dense: isCompact) case final sourceField?) ...[
+          if (_buildSourceSelector(dense: isCompact)
+              case final sourceField?) ...[
             sourceField,
             SizedBox(height: isCompact ? 10 : 12),
           ],
@@ -941,10 +979,7 @@ class _SelectorField<T> extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(18)),
-          borderSide: BorderSide(
-            color: app.calendar.accent,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: app.calendar.accent, width: 2),
         ),
         contentPadding: EdgeInsets.symmetric(
           horizontal: 14,
@@ -1271,7 +1306,11 @@ class _AiringDayCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _CountPill(count: entries.length, accent: accent, compact: true),
+                  _CountPill(
+                    count: entries.length,
+                    accent: accent,
+                    compact: true,
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -1281,9 +1320,9 @@ class _AiringDayCard extends StatelessWidget {
                   child: _EpisodeRow(
                     entry: entry,
                     app: app,
-              palette: app.calendar.accentPalette,
-              rowGround: app.calendar.row,
-              rowLine: app.calendar.line,
+                    palette: app.calendar.accentPalette,
+                    rowGround: app.calendar.row,
+                    rowLine: app.calendar.line,
                     compact: true,
                   ),
                 ),
@@ -1415,7 +1454,11 @@ class _DateBadge extends StatelessWidget {
 }
 
 class _CountPill extends StatelessWidget {
-  const _CountPill({required this.count, required this.accent, this.compact = false});
+  const _CountPill({
+    required this.count,
+    required this.accent,
+    this.compact = false,
+  });
 
   final int count;
   final Color accent;
@@ -1496,7 +1539,12 @@ class _EpisodeRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _PosterThumb(posterUrl: entry.posterUrl, width: 28, height: 40, radius: 7),
+            _PosterThumb(
+              posterUrl: entry.posterUrl,
+              width: 28,
+              height: 40,
+              radius: 7,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -1535,7 +1583,11 @@ class _EpisodeRow extends StatelessWidget {
               ),
               child: Text(
                 time,
-                style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],

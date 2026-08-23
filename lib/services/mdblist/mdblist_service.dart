@@ -1,18 +1,22 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../storage_service.dart';
+import '../episode_tracker_snapshot_revision.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_credential_facade.dart';
+import 'mdblist_models.dart';
+import 'mdblist_transport.dart';
 
 /// Feature flag — MDBList is unfinished, so its Settings entry is hidden for
 /// the alpha. Flip to `true` to re-expose it. (Deliberately not `const` so the
 /// gated branches don't read as dead code to the analyzer.) The Discover/Search
 /// surfaces gate on being connected instead, so with this off and no stored key
 /// nothing MDBList is reachable.
-final bool kMdblistEnabled = false;
+final bool kMdblistEnabled = true;
 
 /// A small snapshot of the connected MDBList account, used to render the
 /// settings page's status/account card. Not persisted as a whole — only the
@@ -44,10 +48,50 @@ class MdblistAccount {
 /// account snapshot, and log out. Browsing the actual lists lives elsewhere
 /// (a later step).
 class MdblistService {
-  MdblistService._();
+  MdblistService._({
+    http.Client? client,
+    MdblistApiKeyProvider? apiKeyProvider,
+    bool Function()? featureEnabled,
+    Uri? baseUri,
+  }) : _client = client ?? http.Client(),
+       _apiKeyProvider =
+           apiKeyProvider ?? (() => StorageService.getMdblistApiKey()),
+       _featureEnabled = featureEnabled ?? (() => kMdblistEnabled),
+       _baseUri = baseUri ?? Uri.parse(_base) {
+    _transport = MdblistTransport(
+      client: _client,
+      apiKeyProvider: _apiKeyProvider,
+      featureEnabled: _featureEnabled,
+      baseUri: _baseUri,
+    );
+  }
+
+  factory MdblistService.forTesting({
+    required http.Client client,
+    required MdblistApiKeyProvider apiKeyProvider,
+    bool Function()? featureEnabled,
+    Uri? baseUri,
+  }) => MdblistService._(
+    client: client,
+    apiKeyProvider: apiKeyProvider,
+    featureEnabled: featureEnabled ?? (() => true),
+    baseUri: baseUri,
+  );
+
   static final MdblistService instance = MdblistService._();
 
+  /// Changes after the server accepts a playback mutation. Detail views use
+  /// this to refresh after an asynchronous player-exit scrobble finishes.
+  final ValueNotifier<int> playbackRevision = ValueNotifier<int>(0);
+
   static const String _base = 'https://api.mdblist.com';
+  final http.Client _client;
+  final MdblistApiKeyProvider _apiKeyProvider;
+  final bool Function() _featureEnabled;
+  final Uri _baseUri;
+  late final MdblistTransport _transport;
+
+  bool get networkEnabled => _featureEnabled();
 
   /// Last successful account snapshot, kept so the settings page can render
   /// account details across rebuilds without re-hitting the network.
@@ -63,7 +107,12 @@ class MdblistService {
   DateTime? _userListsAt;
   List<Map<String, dynamic>>? _topListsCache;
   DateTime? _topListsAt;
+  List<Map<String, dynamic>>? _likedListsCache;
+  DateTime? _likedListsAt;
   final Map<int, ({Map<String, dynamic> data, DateTime at})> _itemsCache = {};
+  Set<String>? _droppedImdbCache;
+  DateTime? _droppedImdbAt;
+  Future<Set<String>?>? _droppedImdbInFlight;
 
   bool _fresh(DateTime? at) =>
       at != null && DateTime.now().difference(at) < _cacheTtl;
@@ -73,13 +122,36 @@ class MdblistService {
     _userListsAt = null;
     _topListsCache = null;
     _topListsAt = null;
+    _likedListsCache = null;
+    _likedListsAt = null;
     _itemsCache.clear();
+    _droppedImdbCache = null;
+    _droppedImdbAt = null;
+    _droppedImdbInFlight = null;
   }
 
   /// Clear account-derived state without modifying the scoped credentials.
   void resetProfileScope() {
     currentAccount = null;
     _clearCache();
+  }
+
+  /// Drop only caches whose server activity bucket changed. The incremental
+  /// sync coordinator invalidates owning caches so their next surface fetches
+  /// authoritative state instead of maintaining a second local tracker DB.
+  void invalidateSyncBuckets(Set<String> buckets, {bool all = false}) {
+    if (all || buckets.contains('lists')) {
+      _userListsCache = null;
+      _userListsAt = null;
+      _likedListsCache = null;
+      _likedListsAt = null;
+      _itemsCache.clear();
+    }
+    if (all || buckets.contains('dropped')) {
+      _droppedImdbCache = null;
+      _droppedImdbAt = null;
+      _droppedImdbInFlight = null;
+    }
   }
 
   Future<ProfileAsyncAuthorization?> _captureCapability({
@@ -95,8 +167,12 @@ class MdblistService {
     );
   }
 
+  Future<ProfileAsyncAuthorization?> capturePlaybackCapability() =>
+      _captureCapability();
+
   Future<bool> isAuthenticated() async {
-    final key = await StorageService.getMdblistApiKey();
+    if (!networkEnabled) return false;
+    final key = await _apiKeyProvider();
     return key != null && key.isNotEmpty;
   }
 
@@ -107,16 +183,18 @@ class MdblistService {
   /// it. On any failure (rejected key, network error) nothing is persisted and
   /// null is returned.
   Future<MdblistAccount?> connect(String apiKey) async {
+    if (!networkEnabled) return null;
     final capability = await _captureCapability(requireExistingResource: false);
     final key = apiKey.trim();
     if (key.isEmpty) return null;
 
-    final snapshot = await _fetchAccount(key);
+    final snapshot = await _fetchAccount(key, capability: capability);
     if (snapshot == null) return null;
 
     Future<void> commit() async {
       await StorageService.saveMdblistApiKey(key);
       await StorageService.setMdblistUsername(snapshot.username);
+      await StorageService.setMdblistSyncCheckpoint(null);
       if (capability == null || capability.isCurrentlyActive) {
         _clearCache();
         currentAccount = snapshot;
@@ -135,10 +213,11 @@ class MdblistService {
   /// settings page's account card). Returns null if not connected or the fetch
   /// fails; a transient failure does NOT clear stored auth.
   Future<MdblistAccount?> refreshAccount() async {
+    if (!networkEnabled) return null;
     final capability = await _captureCapability();
-    final key = await StorageService.getMdblistApiKey();
+    final key = await _apiKeyProvider();
     if (key == null || key.isEmpty) return null;
-    final snapshot = await _fetchAccount(key);
+    final snapshot = await _fetchAccount(key, capability: capability);
     if (snapshot != null) {
       Future<void> commit() async {
         if (snapshot.username != null) {
@@ -173,104 +252,98 @@ class MdblistService {
     }
   }
 
-  /// Fetches the authenticated user's own lists (raw JSON maps from
-  /// `GET /lists/user`). Returns `[]` when not connected or on any failure —
-  /// callers treat that the same as "no lists".
-  Future<List<Map<String, dynamic>>> fetchUserLists() async {
+  Future<MdblistResult<List<Map<String, dynamic>>>> _fetchLists(
+    String path, {
+    Map<String, Object?> query = const {},
+    List<Map<String, dynamic>>? cached,
+    DateTime? cachedAt,
+    void Function(List<Map<String, dynamic>>, DateTime)? publish,
+  }) async {
     final capability = await _captureCapability();
-    if (_userListsCache != null && _fresh(_userListsAt)) {
+    if (cached != null && _fresh(cachedAt)) {
       await capability?.runIfCurrent(() async {});
-      return _userListsCache!;
+      return MdblistResult.success(cached);
     }
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return const [];
-    try {
-      final res = await http
-          .get(Uri.parse('$_base/lists/user?apikey=$key'))
-          .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) return const [];
-      final decoded = jsonDecode(res.body);
-      if (decoded is List) {
-        final lists = [
-          for (final e in decoded)
-            if (e is Map<String, dynamic>) e,
-        ];
-        await capability?.runIfCurrent(() async {});
-        _userListsCache = lists;
-        _userListsAt = DateTime.now();
-        return lists;
-      }
-    } catch (_) {
-      // Fall through to empty — offline/parse errors read as "no lists".
+    final response = await _transport.request(
+      'GET',
+      path,
+      query: query,
+      capability: capability,
+    );
+    final decoded = response.data;
+    if (!response.isSuccess || decoded is! List) {
+      return MdblistResult.failure(
+        response.isSuccess
+            ? MdblistResultKind.malformedResponse
+            : response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+      );
     }
-    return const [];
+    final lists = <Map<String, dynamic>>[
+      for (final entry in decoded)
+        if (entry is Map<String, dynamic>) entry,
+    ];
+    if (lists.length != decoded.length) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    await capability?.runIfCurrent(() async {});
+    publish?.call(lists, DateTime.now());
+    return MdblistResult.success(lists, statusCode: response.statusCode);
   }
 
-  /// Fetches MDBList's top/public lists (raw JSON maps from `GET /lists/top`).
-  /// Each entry is another user's public list (carries `user_name`). Returns
-  /// `[]` when not connected or on any failure.
-  Future<List<Map<String, dynamic>>> fetchTopLists() async {
-    final capability = await _captureCapability();
-    if (_topListsCache != null && _fresh(_topListsAt)) {
-      await capability?.runIfCurrent(() async {});
-      return _topListsCache!;
-    }
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return const [];
-    try {
-      final res = await http
-          .get(Uri.parse('$_base/lists/top?apikey=$key'))
-          .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) return const [];
-      final decoded = jsonDecode(res.body);
-      if (decoded is List) {
-        final lists = [
-          for (final e in decoded)
-            if (e is Map<String, dynamic>) e,
-        ];
-        await capability?.runIfCurrent(() async {});
-        _topListsCache = lists;
-        _topListsAt = DateTime.now();
-        return lists;
-      }
-    } catch (_) {
-      // Fall through to empty.
-    }
-    return const [];
-  }
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchUserListsResult() =>
+      _fetchLists(
+        '/lists/user',
+        cached: _userListsCache,
+        cachedAt: _userListsAt,
+        publish: (data, at) {
+          _userListsCache = data;
+          _userListsAt = at;
+        },
+      );
 
-  /// Searches MDBList's public lists by name (`GET /lists/search?query=`).
-  /// Returns raw list maps (same shape as the other list endpoints). Not
-  /// cached — every query is different. Returns `[]` when not connected, on
-  /// an empty query, or on any failure.
-  Future<List<Map<String, dynamic>>> searchLists(String query) async {
-    final capability = await _captureCapability();
+  Future<List<Map<String, dynamic>>> fetchUserLists() async =>
+      (await fetchUserListsResult()).data ?? const [];
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchTopListsResult() =>
+      _fetchLists(
+        '/lists/top',
+        cached: _topListsCache,
+        cachedAt: _topListsAt,
+        publish: (data, at) {
+          _topListsCache = data;
+          _topListsAt = at;
+        },
+      );
+
+  Future<List<Map<String, dynamic>>> fetchTopLists() async =>
+      (await fetchTopListsResult()).data ?? const [];
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchLikedListsResult() =>
+      _fetchLists(
+        '/lists/liked',
+        cached: _likedListsCache,
+        cachedAt: _likedListsAt,
+        publish: (data, at) {
+          _likedListsCache = data;
+          _likedListsAt = at;
+        },
+      );
+
+  Future<List<Map<String, dynamic>>> fetchLikedLists() async =>
+      (await fetchLikedListsResult()).data ?? const [];
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> searchListsResult(
+    String query,
+  ) async {
     final q = query.trim();
-    if (q.isEmpty) return const [];
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return const [];
-    try {
-      final res = await http
-          .get(
-            Uri.parse(
-              '$_base/lists/search?query=${Uri.encodeQueryComponent(q)}&apikey=$key',
-            ),
-          )
-          .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) return const [];
-      final decoded = jsonDecode(res.body);
-      if (decoded is List) {
-        await capability?.runIfCurrent(() async {});
-        return [
-          for (final e in decoded)
-            if (e is Map<String, dynamic>) e,
-        ];
-      }
-    } catch (_) {
-      // Fall through to empty.
-    }
-    return const [];
+    if (q.isEmpty) return const MdblistResult.success([]);
+    return _fetchLists('/lists/search', query: {'query': q});
   }
+
+  Future<List<Map<String, dynamic>>> searchLists(String query) async =>
+      (await searchListsResult(query)).data ?? const [];
 
   /// Fetches a list's items via `GET /lists/{id}/items`, following pagination.
   ///
@@ -282,7 +355,7 @@ class MdblistService {
   /// request. Returns null on a first-page failure so callers can tell error
   /// from an empty list; a *later*-page failure returns whatever loaded so far
   /// (and is not cached, so it retries).
-  Future<Map<String, dynamic>?> fetchListItems(
+  Future<MdblistResult<Map<String, dynamic>>> fetchListItemsResult(
     int listId, {
     bool forceRefresh = false,
   }) async {
@@ -291,15 +364,14 @@ class MdblistService {
       final cached = _itemsCache[listId];
       if (cached != null && _fresh(cached.at)) {
         await capability?.runIfCurrent(() async {});
-        return cached.data;
+        return MdblistResult.success(cached.data);
       }
     }
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return null;
 
     final movies = <dynamic>[];
     final shows = <dynamic>[];
-    var offset = 0;
+    String? cursor;
+    var fallbackOffset = 0;
     var fetchedAny = false;
     // Cache ONLY a cleanly-finished walk (X-Has-More went false). A mid-way
     // failure or a maxPages cutoff leaves this false so the partial isn't cached
@@ -309,54 +381,72 @@ class MdblistService {
     // 1000/page × 25 = 25k items, far beyond any real MDBList list.
     const maxPages = 25;
 
-    try {
-      for (var page = 0; page < maxPages; page++) {
-        final res = await http
-            .get(
-              Uri.parse(
-                '$_base/lists/$listId/items?apikey=$key&offset=$offset',
-              ),
-            )
-            .timeout(const Duration(seconds: 20));
-        if (res.statusCode != 200) {
-          if (!fetchedAny) return null; // first page failed → error
-          break; // later page failed → keep partial, leave complete=false
-        }
-        final decoded = jsonDecode(res.body);
-        List<dynamic> pageMovies = const [];
-        List<dynamic> pageShows = const [];
-        if (decoded is Map<String, dynamic>) {
-          // A 200 can still carry an error body (bad/expired key, gone list).
-          if (decoded['error'] != null || decoded['response'] == false) {
-            if (!fetchedAny) return null;
-            break;
-          }
-          final mv = decoded['movies'];
-          final sh = decoded['shows'];
-          if (mv is List) pageMovies = mv;
-          if (sh is List) pageShows = sh;
-        } else if (decoded is List) {
-          // Defensive: a flat array shape — treat as movies.
-          pageMovies = decoded;
-        } else {
-          if (!fetchedAny) return null;
-          break;
-        }
-        movies.addAll(pageMovies);
-        shows.addAll(pageShows);
-        fetchedAny = true;
-        final got = pageMovies.length + pageShows.length;
-        final hasMore =
-            (res.headers['x-has-more'] ?? '').trim().toLowerCase() == 'true';
-        if (!hasMore || got == 0) {
-          complete = true; // walked the whole list
-          break;
-        }
-        offset += got;
+    MdblistResult<dynamic>? lastFailure;
+    for (var page = 0; page < maxPages; page++) {
+      final response = await _transport.request(
+        'GET',
+        '/lists/$listId/items',
+        query: {
+          'limit': 1000,
+          if (cursor != null) 'cursor': cursor,
+          if (cursor == null && fallbackOffset > 0) 'offset': fallbackOffset,
+        },
+        capability: capability,
+      );
+      if (!response.isSuccess) {
+        lastFailure = response;
+        break;
       }
-    } catch (_) {
-      if (!fetchedAny) return null; // nothing loaded → error
-      // else: partial — return it below but leave complete=false (not cached).
+      final decoded = response.data;
+      List<dynamic> pageMovies = const [];
+      List<dynamic> pageShows = const [];
+      if (decoded is Map<String, dynamic>) {
+        final mv = decoded['movies'];
+        final sh = decoded['shows'];
+        if (mv is List) pageMovies = mv;
+        if (sh is List) pageShows = sh;
+      } else if (decoded is List) {
+        // Defensive: a flat array shape — treat as movies.
+        pageMovies = decoded;
+      } else {
+        lastFailure = const MdblistResult.failure(
+          MdblistResultKind.malformedResponse,
+        );
+        break;
+      }
+      movies.addAll(pageMovies);
+      shows.addAll(pageShows);
+      fetchedAny = true;
+      final got = pageMovies.length + pageShows.length;
+      final pagination = decoded is Map<String, dynamic>
+          ? decoded['pagination']
+          : null;
+      final next = pagination is Map
+          ? pagination['next_cursor']?.toString().trim()
+          : null;
+      if (next != null && next.isNotEmpty) {
+        cursor = next;
+        continue;
+      }
+      // Old servers may omit pagination but still return a full page. Use a
+      // bounded offset fallback only in that compatibility case.
+      if (got >= 1000) {
+        fallbackOffset += got;
+        cursor = null;
+        continue;
+      }
+      if (got == 0 || next == null || next.isEmpty) {
+        complete = true;
+        break;
+      }
+    }
+
+    if (!fetchedAny) {
+      return MdblistResult.failure(
+        lastFailure?.kind ?? MdblistResultKind.transientFailure,
+        statusCode: lastFailure?.statusCode,
+        retryAfter: lastFailure?.retryAfter,
+      );
     }
 
     // 'complete' flags a fully-walked list (X-Has-More reached false). A partial
@@ -371,13 +461,868 @@ class MdblistService {
     if (complete) {
       _itemsCache[listId] = (data: data, at: DateTime.now());
     }
-    return data;
+    return complete
+        ? MdblistResult.success(data)
+        : MdblistResult.partial(data, statusCode: lastFailure?.statusCode);
   }
 
-  // ── Saving lists (clone into "My Lists") ───────────────────────────────────
-  // MDBList has no API to link/like a list into a user's account, so "Save"
-  // creates a static list and copies the source list's items into it. See
-  // [saveListAsClone].
+  Future<Map<String, dynamic>?> fetchListItems(
+    int listId, {
+    bool forceRefresh = false,
+  }) async =>
+      (await fetchListItemsResult(listId, forceRefresh: forceRefresh)).data;
+
+  Future<bool> likeList(int listId) => _setListLike(listId, true);
+
+  Future<bool> unlikeList(int listId) => _setListLike(listId, false);
+
+  Future<bool> _setListLike(int listId, bool liked) async {
+    final capability = await _captureCapability();
+    final response = await _transport.request(
+      liked ? 'PUT' : 'DELETE',
+      '/lists/$listId/like',
+      capability: capability,
+      allowNotFound: !liked,
+    );
+    final success =
+        response.isSuccess ||
+        (!liked && response.kind == MdblistResultKind.notFound) ||
+        (liked && response.kind == MdblistResultKind.conflict);
+    if (success) {
+      await capability?.runIfCurrent(() async {});
+      _likedListsCache = null;
+      _likedListsAt = null;
+      _topListsCache = null;
+      _topListsAt = null;
+    }
+    return success;
+  }
+
+  // ── Tracker API ───────────────────────────────────────────────────────────
+
+  Future<MdblistResult<dynamic>> _trackerRequest(
+    String method,
+    String path, {
+    Map<String, Object?> query = const {},
+    Object? body,
+    ProfileAsyncAuthorization? capability,
+  }) async {
+    capability ??= await _captureCapability();
+    return _transport.request(
+      method,
+      path,
+      query: query,
+      body: body,
+      capability: capability,
+    );
+  }
+
+  Future<MdblistResult<Map<String, dynamic>>> _mapRequest(
+    String method,
+    String path, {
+    Map<String, Object?> query = const {},
+    Object? body,
+    ProfileAsyncAuthorization? capability,
+  }) async {
+    final response = await _trackerRequest(
+      method,
+      path,
+      query: query,
+      body: body,
+      capability: capability,
+    );
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+      );
+    }
+    if (response.data is! Map<String, dynamic>) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    return MdblistResult.success(
+      response.data! as Map<String, dynamic>,
+      statusCode: response.statusCode,
+    );
+  }
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> _listRequest(
+    String path, {
+    Map<String, Object?> query = const {},
+  }) async {
+    final response = await _trackerRequest('GET', path, query: query);
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+      );
+    }
+    final raw = response.data;
+    if (raw is! List) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final result = <Map<String, dynamic>>[];
+    for (final entry in raw) {
+      if (entry is! Map<String, dynamic>) {
+        return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+      }
+      result.add(entry);
+    }
+    return MdblistResult.success(result, statusCode: response.statusCode);
+  }
+
+  Future<MdblistResult<Map<String, dynamic>>> scrobbleStart(
+    MdblistScrobbleTarget target,
+    double progress, {
+    ProfileAsyncAuthorization? capability,
+  }) => _scrobble('start', target, progress, capability: capability);
+
+  Future<MdblistResult<Map<String, dynamic>>> scrobblePause(
+    MdblistScrobbleTarget target,
+    double progress, {
+    ProfileAsyncAuthorization? capability,
+  }) => _scrobble('pause', target, progress, capability: capability);
+
+  Future<MdblistResult<Map<String, dynamic>>> scrobbleStop(
+    MdblistScrobbleTarget target,
+    double progress, {
+    ProfileAsyncAuthorization? capability,
+  }) => _scrobble('stop', target, progress, capability: capability);
+
+  Future<MdblistResult<Map<String, dynamic>>> scrobbleClear(
+    MdblistScrobbleTarget target, {
+    ProfileAsyncAuthorization? capability,
+  }) => _scrobble('clear', target, 0, capability: capability);
+
+  Future<MdblistResult<Map<String, dynamic>>> _scrobble(
+    String action,
+    MdblistScrobbleTarget target,
+    double progress, {
+    ProfileAsyncAuthorization? capability,
+  }) async {
+    final payload = target.payload(progress);
+    if (payload == null) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final result = await _mapRequest(
+      'POST',
+      '/scrobble/$action',
+      body: payload,
+      capability: capability,
+    );
+    if (result.isSuccess) {
+      if (target.isEpisode) {
+        EpisodeTrackerSnapshotRevision.invalidateTitle(
+          'mdblist',
+          target.ids.imdb,
+        );
+      }
+      playbackRevision.value++;
+    }
+    return result;
+  }
+
+  Future<MdblistResult<List<MdblistPlaybackSession>>>
+  fetchPlaybackSessions() async {
+    final response = await _listRequest('/sync/playback');
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+      );
+    }
+    try {
+      return MdblistResult.success([
+        for (final row in response.data!) MdblistPlaybackSession.fromJson(row),
+      ]);
+    } catch (_) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+  }
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchNowPlaying() =>
+      _listRequest('/sync/now-playing');
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchUpNext({
+    bool watchlist = false,
+    bool upcoming = false,
+  }) async {
+    assert(!(watchlist && upcoming));
+    final path = watchlist
+        ? '/upnext/watchlist'
+        : upcoming
+        ? '/upnext/upcoming'
+        : '/upnext';
+    final items = <Map<String, dynamic>>[];
+    var offset = 0;
+    for (var page = 0; page < 100; page++) {
+      final response = await _mapRequest(
+        'GET',
+        path,
+        query: {'limit': 100, 'offset': offset},
+      );
+      if (!response.isSuccess) {
+        return items.isEmpty
+            ? MdblistResult.failure(
+                response.kind,
+                statusCode: response.statusCode,
+                retryAfter: response.retryAfter,
+              )
+            : MdblistResult.partial(items, statusCode: response.statusCode);
+      }
+      final pageItems = response.data?['items'];
+      if (pageItems is! List) {
+        return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+      }
+      for (final row in pageItems) {
+        if (row is! Map<String, dynamic>) {
+          return const MdblistResult.failure(
+            MdblistResultKind.malformedResponse,
+          );
+        }
+        items.add(row);
+      }
+      if (response.data?['has_more'] != true) {
+        return MdblistResult.success(items);
+      }
+      offset += pageItems.length;
+      if (pageItems.isEmpty) break;
+    }
+    return MdblistResult.partial(items);
+  }
+
+  Map<String, dynamic>? _singleTitlePayload(
+    MdblistMediaIds ids,
+    String type, {
+    int? season,
+    int? episode,
+    int? rating,
+    String? timestampField,
+  }) {
+    if (ids.isEmpty) return null;
+    final timestamp = DateTime.now().toUtc().toIso8601String();
+    final attributes = <String, dynamic>{
+      if (rating != null) 'rating': rating,
+      if (timestampField != null) timestampField: timestamp,
+    };
+    if (type == 'episode') {
+      if (season == null || episode == null) return null;
+      return {
+        'shows': [
+          {
+            'ids': ids.toJson(),
+            'seasons': [
+              {
+                'number': season,
+                'episodes': [
+                  {'number': episode, ...attributes},
+                ],
+              },
+            ],
+          },
+        ],
+      };
+    }
+    final bucket = type == 'series' || type == 'show' ? 'shows' : 'movies';
+    return {
+      bucket: [
+        {'ids': ids.toJson(), ...attributes},
+      ],
+    };
+  }
+
+  Future<bool> _mutateTitle(
+    String path,
+    MdblistMediaIds ids,
+    String type, {
+    int? season,
+    int? episode,
+    int? rating,
+    String? timestampField,
+  }) async {
+    final payload = _singleTitlePayload(
+      ids,
+      type,
+      season: season,
+      episode: episode,
+      rating: rating,
+      timestampField: timestampField,
+    );
+    if (payload == null) return false;
+    final response = await _trackerRequest('POST', path, body: payload);
+    final success = response.isSuccess;
+    if (success &&
+        (type == 'episode' || type == 'series' || type == 'show') &&
+        (path == '/sync/watched' || path == '/sync/watched/remove')) {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('mdblist', ids.imdb);
+    }
+    return success;
+  }
+
+  Future<bool> addToWatchlist(MdblistMediaIds ids, String type) =>
+      _mutateTitle('/watchlist/items/add', ids, type);
+  Future<bool> removeFromWatchlist(MdblistMediaIds ids, String type) =>
+      _mutateTitle('/watchlist/items/remove', ids, type);
+  Future<bool> markWatched(
+    MdblistMediaIds ids,
+    String type, {
+    int? season,
+    int? episode,
+  }) => _mutateTitle(
+    '/sync/watched',
+    ids,
+    type,
+    season: season,
+    episode: episode,
+    timestampField: 'watched_at',
+  );
+  Future<bool> markUnwatched(
+    MdblistMediaIds ids,
+    String type, {
+    int? season,
+    int? episode,
+  }) => _mutateTitle(
+    '/sync/watched/remove',
+    ids,
+    type,
+    season: season,
+    episode: episode,
+  );
+  Future<bool> rateTitle(
+    MdblistMediaIds ids,
+    String type,
+    int rating, {
+    int? season,
+    int? episode,
+  }) {
+    if (rating < 1 || rating > 10) return Future.value(false);
+    return _mutateTitle(
+      '/sync/ratings',
+      ids,
+      type,
+      season: season,
+      episode: episode,
+      rating: rating,
+      timestampField: 'rated_at',
+    );
+  }
+
+  Future<bool> removeRating(
+    MdblistMediaIds ids,
+    String type, {
+    int? season,
+    int? episode,
+  }) => _mutateTitle(
+    '/sync/ratings/remove',
+    ids,
+    type,
+    season: season,
+    episode: episode,
+  );
+  Future<bool> addToCollection(MdblistMediaIds ids, String type) =>
+      _mutateTitle(
+        '/sync/collection',
+        ids,
+        type,
+        timestampField: 'collected_at',
+      );
+  Future<bool> removeFromCollection(MdblistMediaIds ids, String type) =>
+      _mutateTitle('/sync/collection/remove', ids, type);
+  Future<bool> setDropped(MdblistMediaIds ids, {required bool dropped}) =>
+      _setDropped(ids, dropped: dropped);
+
+  Future<bool> _setDropped(MdblistMediaIds ids, {required bool dropped}) async {
+    final success = await _mutateTitle(
+      dropped ? '/sync/dropped' : '/sync/dropped/remove',
+      ids,
+      'show',
+      timestampField: dropped ? 'dropped_at' : null,
+    );
+    if (!success) return false;
+    final imdb = ids.imdb?.toLowerCase();
+    if (imdb != null && _droppedImdbCache != null) {
+      dropped ? _droppedImdbCache!.add(imdb) : _droppedImdbCache!.remove(imdb);
+      _droppedImdbAt = DateTime.now();
+    } else {
+      _droppedImdbCache = null;
+      _droppedImdbAt = null;
+    }
+    return true;
+  }
+
+  Future<bool> setSeasonDropped(
+    MdblistMediaIds ids,
+    int season, {
+    required bool dropped,
+  }) async {
+    if (ids.isEmpty || season < 0) return false;
+    final row = <String, dynamic>{'number': season};
+    if (dropped) {
+      row['dropped_at'] = DateTime.now().toUtc().toIso8601String();
+    }
+    final response = await _trackerRequest(
+      'POST',
+      dropped ? '/sync/seasons/dropped' : '/sync/seasons/dropped/remove',
+      body: {
+        'shows': [
+          {
+            'ids': ids.toJson(),
+            'seasons': [row],
+          },
+        ],
+      },
+    );
+    return response.isSuccess;
+  }
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchWatchlist() async {
+    final rows = <Map<String, dynamic>>[];
+    String? cursor;
+    for (var page = 0; page < 100; page++) {
+      final response = await _mapRequest(
+        'GET',
+        '/watchlist/items',
+        query: {'limit': 1000, if (cursor != null) 'cursor': cursor},
+      );
+      if (!response.isSuccess) {
+        return rows.isEmpty
+            ? MdblistResult.failure(
+                response.kind,
+                statusCode: response.statusCode,
+                retryAfter: response.retryAfter,
+              )
+            : MdblistResult.partial(rows);
+      }
+      for (final bucket in ['movies', 'shows']) {
+        final values = response.data?[bucket];
+        if (values is! List) continue;
+        for (final value in values) {
+          if (value is Map<String, dynamic>) rows.add(value);
+        }
+      }
+      final pagination = response.data?['pagination'];
+      final next = pagination is Map
+          ? pagination['next_cursor']?.toString().trim()
+          : null;
+      if (next == null || next.isEmpty) {
+        return MdblistResult.success(rows);
+      }
+      cursor = next;
+    }
+    return MdblistResult.partial(rows);
+  }
+
+  Future<MdblistResult<Map<Object, MdblistTitleStatus>>> fetchTitleStates({
+    required String mediaType,
+    required String provider,
+    required List<Object> ids,
+  }) async {
+    if (ids.length > 100 || ids.isEmpty) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final response = await _mapRequest(
+      'POST',
+      '/sync/state/$mediaType/$provider',
+      body: {'ids': ids},
+    );
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+      );
+    }
+    final items = response.data?['items'];
+    if (items is! List) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final statuses = <Object, MdblistTitleStatus>{};
+    for (final item in items) {
+      if (item is! Map<String, dynamic> || item['id'] == null) continue;
+      final status = MdblistTitleStatus.fromJson(item);
+      statuses[status.id] = status;
+    }
+    return MdblistResult.success(statuses);
+  }
+
+  Future<MdblistResult<Map<String, dynamic>>> resolveImdb(
+    String imdbId,
+    String type,
+  ) => _mapRequest('GET', '/imdb/${type == 'series' ? 'show' : type}/$imdbId/');
+
+  Future<MdblistResult<Map<String, dynamic>>> resolveTmdb(
+    int tmdbId,
+    String type,
+  ) => _mapRequest('GET', '/tmdb/${type == 'series' ? 'show' : type}/$tmdbId/');
+
+  Future<MdblistTitleStatus?> fetchTitleStatus(
+    String imdbId,
+    String type,
+  ) async {
+    final resolved = await resolveImdb(imdbId, type);
+    if (!resolved.isSuccess) return null;
+    final ids = resolved.data?['ids'];
+    final rawTmdb = ids is Map ? ids['tmdb'] : null;
+    final tmdb = rawTmdb is num
+        ? rawTmdb.toInt()
+        : int.tryParse(rawTmdb?.toString() ?? '');
+    if (tmdb == null) return null;
+    final isSeries = type == 'series';
+    final reads = await Future.wait<Object?>([
+      fetchTitleStates(
+        mediaType: isSeries ? 'show' : 'movie',
+        provider: 'tmdb',
+        ids: [tmdb],
+      ),
+      if (isSeries) _fetchDroppedImdbIds() else Future.value(null),
+    ]);
+    final states = reads[0] as MdblistResult<Map<Object, MdblistTitleStatus>>;
+    if (!states.isSuccess || states.data!.isEmpty) return null;
+    final status =
+        states.data![tmdb] ??
+        states.data![tmdb.toString()] ??
+        states.data!.values.first;
+    final droppedIds = reads[1] as Set<String>?;
+    return status.copyWith(
+      dropped: isSeries
+          ? droppedIds?.contains(imdbId.toLowerCase())
+          : status.dropped,
+    );
+  }
+
+  Future<Set<String>?> _fetchDroppedImdbIds() async {
+    if (_droppedImdbCache != null && _fresh(_droppedImdbAt)) {
+      return Set.of(_droppedImdbCache!);
+    }
+    final existing = _droppedImdbInFlight;
+    if (existing != null) return existing;
+    final future = () async {
+      final result = await fetchSyncSnapshot('dropped');
+      if (!result.isSuccess) return null;
+      final ids = <String>{};
+      for (final row in result.data!) {
+        final show = row['show'];
+        final rawIds = show is Map ? show['ids'] : row['ids'];
+        if (rawIds is! Map) continue;
+        final imdb = rawIds['imdb']?.toString().trim().toLowerCase();
+        if (imdb != null && imdb.isNotEmpty) ids.add(imdb);
+      }
+      _droppedImdbCache = ids;
+      _droppedImdbAt = DateTime.now();
+      return Set.of(ids);
+    }();
+    _droppedImdbInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_droppedImdbInFlight, future)) {
+        _droppedImdbInFlight = null;
+      }
+    }
+  }
+
+  Future<MdblistResult<Map<String, double>>> fetchShowEpisodeProgress(
+    String imdbId,
+  ) async {
+    final reads = await Future.wait([
+      resolveImdb(imdbId, 'series'),
+      fetchPlaybackSessions(),
+    ]);
+    final resolved = reads[0] as MdblistResult<Map<String, dynamic>>;
+    final playback = reads[1] as MdblistResult<List<MdblistPlaybackSession>>;
+    final merged = <String, double>{};
+    if (playback.isUsable) {
+      for (final session in playback.data!) {
+        if (!session.isEpisode ||
+            session.imdbId?.toLowerCase() != imdbId.toLowerCase() ||
+            session.season == null ||
+            session.episode == null ||
+            !session.isResumable) {
+          continue;
+        }
+        merged['${session.season}-${session.episode}'] = session.progress;
+      }
+    }
+    if (!resolved.isSuccess) {
+      return playback.isUsable
+          ? MdblistResult.partial(merged)
+          : const MdblistResult.failure(MdblistResultKind.transientFailure);
+    }
+    final ids = resolved.data?['ids'];
+    final rawTmdb = ids is Map ? ids['tmdb'] : null;
+    final tmdb = rawTmdb is num
+        ? rawTmdb.toInt()
+        : int.tryParse(rawTmdb?.toString() ?? '');
+    if (tmdb == null) return MdblistResult.partial(merged);
+    final history = await _mapRequest('GET', '/sync/history/show/tmdb/$tmdb');
+    if (!history.isSuccess) return MdblistResult.partial(merged);
+    final plays = history.data?['plays'];
+    if (plays is! List) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    for (final play in plays.whereType<Map<String, dynamic>>()) {
+      final season = play['season_num'];
+      final episode = play['episode_num'];
+      if (season is num && episode is num) {
+        merged['${season.toInt()}-${episode.toInt()}'] = 100;
+      }
+    }
+    if (!playback.isSuccess) return MdblistResult.partial(merged);
+    return history.data?['truncated'] == true
+        ? MdblistResult.partial(merged)
+        : MdblistResult.success(merged);
+  }
+
+  /// Returns the authenticated user's episode ratings for one show, keyed as
+  /// `season-episode`. The sync API has emitted both flattened episode rows
+  /// and nested show/season payloads over its lifetime, so accept both shapes
+  /// while still requiring the parent IMDb id to match.
+  Future<MdblistResult<Map<String, int>>> fetchShowEpisodeRatings(
+    String imdbId,
+  ) async {
+    final snapshot = await fetchSyncSnapshot('ratings', mediaType: 'episode');
+    if (!snapshot.isUsable) {
+      return MdblistResult.failure(
+        snapshot.kind,
+        statusCode: snapshot.statusCode,
+        retryAfter: snapshot.retryAfter,
+      );
+    }
+
+    final wanted = imdbId.trim().toLowerCase();
+    final ratings = <String, int>{};
+
+    int? integer(dynamic value) {
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '');
+    }
+
+    String? parentImdb(Map<dynamic, dynamic> row) {
+      final show = row['show'];
+      final candidates = <dynamic>[
+        if (show is Map) show['ids'],
+        row['show_ids'],
+        row['ids'],
+      ];
+      for (final candidate in candidates) {
+        if (candidate is Map) {
+          final imdb = candidate['imdb']?.toString().trim().toLowerCase();
+          if (imdb != null && imdb.isNotEmpty) return imdb;
+        }
+      }
+      return null;
+    }
+
+    void addEpisode(Map<dynamic, dynamic> row, int? inheritedSeason) {
+      final episodeValue = row['episode'];
+      final episodeMap = episodeValue is Map ? episodeValue : null;
+      final season =
+          integer(
+            row['season'] is Map ? row['season']['number'] : row['season'],
+          ) ??
+          integer(row['season_num']) ??
+          inheritedSeason;
+      final episode =
+          integer(episodeMap?['number']) ??
+          integer(episodeValue) ??
+          integer(row['episode_num']) ??
+          integer(row['number']);
+      final rating = integer(row['rating']) ?? integer(episodeMap?['rating']);
+      if (season != null &&
+          episode != null &&
+          rating != null &&
+          rating >= 1 &&
+          rating <= 10) {
+        ratings['$season-$episode'] = rating;
+      }
+    }
+
+    void addNested(Map<dynamic, dynamic> row) {
+      final show = row['show'];
+      final owner = show is Map ? show : row;
+      if (parentImdb(row) != wanted && parentImdb(owner) != wanted) return;
+      final seasons = owner['seasons'];
+      if (seasons is List) {
+        for (final seasonValue in seasons.whereType<Map>()) {
+          final season = integer(seasonValue['number']);
+          final episodes = seasonValue['episodes'];
+          if (episodes is List) {
+            for (final episodeValue in episodes.whereType<Map>()) {
+              addEpisode(episodeValue, season);
+            }
+          }
+        }
+        return;
+      }
+      addEpisode(row, null);
+    }
+
+    for (final row in snapshot.data!) {
+      addNested(row);
+    }
+    return snapshot.kind == MdblistResultKind.partial
+        ? MdblistResult.partial(ratings)
+        : MdblistResult.success(ratings);
+  }
+
+  Future<MdblistResult<Map<String, dynamic>>> fetchLastActivities() =>
+      _mapRequest('GET', '/sync/last_activities');
+
+  Future<MdblistResult<Map<String, dynamic>>> fetchJournal({
+    DateTime? since,
+    String? cursor,
+    int limit = 1000,
+  }) => _mapRequest(
+    'GET',
+    '/sync/journal',
+    query: {
+      if (cursor != null) 'cursor': cursor,
+      if (cursor == null && since != null)
+        'since': since.toUtc().toIso8601String(),
+      'limit': limit.clamp(1, 1000),
+    },
+  );
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchSyncSnapshot(
+    String bucket, {
+    String? mediaType,
+    DateTime? since,
+  }) async {
+    if (!const {
+      'watched',
+      'ratings',
+      'collection',
+      'dropped',
+    }.contains(bucket)) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final rows = <Map<String, dynamic>>[];
+    String? cursor;
+    const maxPages = 100;
+    for (var page = 0; page < maxPages; page++) {
+      final response = await _trackerRequest(
+        'GET',
+        '/sync/$bucket',
+        query: {
+          'limit': 1000,
+          if (cursor != null) 'cursor': cursor,
+          if (cursor == null && since != null)
+            'since': since.toUtc().toIso8601String(),
+          if (mediaType != null) 'mediatype': mediaType,
+        },
+      );
+      if (!response.isSuccess) {
+        if (rows.isNotEmpty) return MdblistResult.partial(rows);
+        return MdblistResult.failure(
+          response.kind,
+          statusCode: response.statusCode,
+          retryAfter: response.retryAfter,
+        );
+      }
+      final data = response.data;
+      if (data is List) {
+        for (final row in data) {
+          if (row is Map<String, dynamic>) rows.add(row);
+        }
+        return MdblistResult.success(rows);
+      }
+      if (data is! Map<String, dynamic>) {
+        return rows.isEmpty
+            ? const MdblistResult.failure(MdblistResultKind.malformedResponse)
+            : MdblistResult.partial(rows);
+      }
+      for (final key in ['movies', 'shows', 'seasons', 'episodes', 'items']) {
+        final values = data[key];
+        if (values is List) {
+          for (final row in values) {
+            if (row is Map<String, dynamic>) rows.add(row);
+          }
+        }
+      }
+      final pagination = data['pagination'];
+      final next = pagination is Map
+          ? pagination['next_cursor']?.toString().trim()
+          : null;
+      if (next == null || next.isEmpty) {
+        return MdblistResult.success(rows);
+      }
+      cursor = next;
+    }
+    // A pathological cursor loop/max-page walk is useful but never complete.
+    return MdblistResult.partial(rows);
+  }
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchCalendarEvents({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final response = await _mapRequest(
+      'GET',
+      '/calendar/events',
+      query: {
+        'start': start.toIso8601String().split('T').first,
+        'end': end.toIso8601String().split('T').first,
+        'limit': 1000,
+        'favorite_cast': false,
+        'append_to_response': 'description',
+      },
+    );
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+      );
+    }
+    final values = response.data?['events'];
+    if (values is! List) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    return MdblistResult.success(
+      values.whereType<Map<String, dynamic>>().toList(),
+    );
+  }
+
+  Future<({Set<String> movies, Set<String> series})?>
+  fetchCompletedTitleIds() async {
+    if (!networkEnabled) return (movies: <String>{}, series: <String>{});
+    if (!await isAuthenticated()) {
+      return (movies: <String>{}, series: <String>{});
+    }
+    final results = await Future.wait([
+      fetchSyncSnapshot('watched', mediaType: 'movie'),
+      fetchSyncSnapshot('watched', mediaType: 'show'),
+    ]);
+    if (!results[0].isSuccess || !results[1].isSuccess) return null;
+    String? imdbOf(Map<String, dynamic> row) {
+      final container = row['movie'] ?? row['show'];
+      final ids = container is Map ? container['ids'] : row['ids'];
+      final id = ids is Map
+          ? ids['imdb']?.toString()
+          : row['imdb_id']?.toString();
+      return id?.trim().toLowerCase();
+    }
+
+    final movies = <String>{};
+    for (final row in results[0].data!) {
+      final id = imdbOf(row);
+      if (id != null && id.isNotEmpty) movies.add(id);
+    }
+    final series = <String>{};
+    for (final row in results[1].data!) {
+      final complete = row['completed'] == true || row['watched'] == true;
+      final id = imdbOf(row);
+      if (complete && id != null && id.isNotEmpty) series.add(id);
+    }
+    return (movies: movies, series: series);
+  }
+
+  // ── Explicit static-list cloning ───────────────────────────────────────────
+  // Public-list Save uses the real like API. Cloning remains a separately
+  // labelled operation for users who want an editable point-in-time copy.
 
   /// Create an empty static list on the user's account. Returns the new list id
   /// (or null on failure).
@@ -387,19 +1332,15 @@ class MdblistService {
     ProfileAsyncAuthorization? capability,
   }) async {
     capability ??= await _captureCapability();
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return null;
+    final response = await _transport.request(
+      'POST',
+      '/lists/user/add',
+      body: {'name': name, 'private': private},
+      capability: capability,
+    );
+    if (!response.isSuccess) return null;
     try {
-      await capability?.runIfCurrent(() async {});
-      final res = await http
-          .post(
-            Uri.parse('$_base/lists/user/add?apikey=$key'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'name': name, 'private': private}),
-          )
-          .timeout(const Duration(seconds: 15));
-      if (res.statusCode != 200 && res.statusCode != 201) return null;
-      final decoded = jsonDecode(res.body);
+      final decoded = response.data;
       final obj = decoded is List && decoded.isNotEmpty
           ? decoded.first
           : decoded;
@@ -420,22 +1361,13 @@ class MdblistService {
   }) async {
     capability ??= await _captureCapability();
     if (movies.isEmpty && shows.isEmpty) return true;
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return false;
-    try {
-      await capability?.runIfCurrent(() async {});
-      final res = await http
-          .post(
-            Uri.parse('$_base/lists/$listId/items/add?apikey=$key'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'movies': movies, 'shows': shows}),
-          )
-          .timeout(const Duration(seconds: 30));
-      await capability?.runIfCurrent(() async {});
-      return res.statusCode == 200 || res.statusCode == 201;
-    } catch (_) {
-      return false;
-    }
+    final response = await _transport.request(
+      'POST',
+      '/lists/$listId/items/add',
+      body: {'movies': movies, 'shows': shows},
+      capability: capability,
+    );
+    return response.isSuccess;
   }
 
   /// Delete one of the user's static lists. Treats "already gone" (404) and a
@@ -447,19 +1379,13 @@ class MdblistService {
     ProfileAsyncAuthorization? capability,
   }) async {
     capability ??= await _captureCapability();
-    final key = await StorageService.getMdblistApiKey();
-    if (key == null || key.isEmpty) return false;
-    try {
-      await capability?.runIfCurrent(() async {});
-      final res = await http
-          .delete(Uri.parse('$_base/lists/$listId?apikey=$key'))
-          .timeout(const Duration(seconds: 15));
-      final c = res.statusCode;
-      await capability?.runIfCurrent(() async {});
-      return c == 200 || c == 204 || c == 404;
-    } catch (_) {
-      return false;
-    }
+    final response = await _transport.request(
+      'DELETE',
+      '/lists/$listId',
+      capability: capability,
+      allowNotFound: true,
+    );
+    return response.isSuccess || response.kind == MdblistResultKind.notFound;
   }
 
   Future<bool> deleteSavedClone({
@@ -515,27 +1441,28 @@ class MdblistService {
 
     final newId = await createList(name, capability: capability);
     if (newId == null) return null;
-    final added = await addItemsToList(
-      newId,
-      movies: movies,
-      shows: shows,
-      capability: capability,
-    );
-    if (!added) {
-      await deleteList(
+    const chunkSize = 500;
+    for (
+      var movieAt = 0, showAt = 0;
+      movieAt < movies.length || showAt < shows.length;
+    ) {
+      final movieEnd = (movieAt + chunkSize).clamp(0, movies.length);
+      final remaining = chunkSize - (movieEnd - movieAt);
+      final showEnd = (showAt + remaining).clamp(0, shows.length);
+      final added = await addItemsToList(
         newId,
+        movies: movies.sublist(movieAt, movieEnd),
+        shows: shows.sublist(showAt, showEnd),
         capability: capability,
-      ); // roll back the empty list
-      return null;
+      );
+      if (!added) {
+        await deleteList(newId, capability: capability);
+        return null;
+      }
+      movieAt = movieEnd;
+      showAt = showEnd;
     }
     await capability?.runIfCurrent(() async {});
-    if (capability == null) {
-      await StorageService.setMdblistSavedClone(sourceListId, newId);
-    } else {
-      await capability.runIfCurrent(
-        () => StorageService.setMdblistSavedClone(sourceListId, newId),
-      );
-    }
     // My Lists now has a new entry — force a refetch on next read.
     _userListsCache = null;
     _userListsAt = null;
@@ -546,11 +1473,21 @@ class MdblistService {
   /// the display username (from the first list's `user_name`) and the list
   /// count. Returns null if the key is rejected (non-200 on /user) or the
   /// network call throws.
-  Future<MdblistAccount?> _fetchAccount(String key) async {
+  Future<MdblistAccount?> _fetchAccount(
+    String key, {
+    ProfileAsyncAuthorization? capability,
+  }) async {
+    if (!networkEnabled) return null;
     try {
-      final userRes = await http
-          .get(Uri.parse('$_base/user?apikey=$key'))
-          .timeout(const Duration(seconds: 15));
+      Future<http.Response> get(Uri uri) =>
+          _client.get(uri).timeout(const Duration(seconds: 15));
+      final userUri = _baseUri.replace(
+        path: '/user',
+        queryParameters: {'apikey': key},
+      );
+      final userRes = capability == null
+          ? await get(userUri)
+          : await capability.runIfCurrentAsOutbound(() => get(userUri));
       // MDBList returns 4xx for a bad key; a 200 means it was accepted.
       if (userRes.statusCode != 200) return null;
 
@@ -575,9 +1512,13 @@ class MdblistService {
       String? username;
       int listCount = 0;
       try {
-        final listsRes = await http
-            .get(Uri.parse('$_base/lists/user?apikey=$key'))
-            .timeout(const Duration(seconds: 15));
+        final listsUri = _baseUri.replace(
+          path: '/lists/user',
+          queryParameters: {'apikey': key},
+        );
+        final listsRes = capability == null
+            ? await get(listsUri)
+            : await capability.runIfCurrentAsOutbound(() => get(listsUri));
         if (listsRes.statusCode == 200) {
           final decoded = jsonDecode(listsRes.body);
           if (decoded is List) {

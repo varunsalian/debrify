@@ -14,6 +14,7 @@ import '../services/tvmaze_service.dart';
 import '../services/storage_service.dart';
 import '../services/local_series_completion_service.dart';
 import '../utils/platform_util.dart';
+import '../utils/episode_progress_merge.dart';
 import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../theme/app_theme_scope.dart';
@@ -23,6 +24,10 @@ import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
+import '../services/mdblist/mdblist_service.dart';
+import '../services/mdblist/mdblist_continue_watching_service.dart';
+import '../services/mdblist/mdblist_models.dart';
+import '../services/mdblist/mdblist_menu_helpers.dart';
 import 'home/home_theme.dart';
 
 /// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
@@ -147,6 +152,7 @@ class EpisodesPanel extends StatefulWidget {
   /// episode view. Left false for plain catalog/addon items so their scrobble
   /// stays governed by the user's "Sync Catalog Items" setting.
   final bool isTraktSource;
+  final bool isMdblistSource;
 
   /// Callback when user selects an episode (Sources) or the series falls back
   /// to a direct search.
@@ -209,6 +215,9 @@ class EpisodesPanel extends StatefulWidget {
   /// watch-progress map, replacing the IMDb-keyed local/Trakt/Simkl merge.
   final Future<Map<String, double>> Function()? watchProgressLoader;
 
+  /// Publishes the merged next-to-watch coordinate to a hosting detail hero.
+  final ValueChanged<EpisodeCoordinate>? onNextEpisodeChanged;
+
   /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
   /// when set, the panel renders ONLY what this returns — no chrome of its own —
   /// and suppresses its internal scroll/focus side effects, which target widgets
@@ -224,6 +233,7 @@ class EpisodesPanel extends StatefulWidget {
     this.isTelevision = false,
     this.showQuickPlay = true,
     this.isTraktSource = false,
+    this.isMdblistSource = false,
     this.onItemSelected,
     this.onQuickPlay,
     this.boundSourceCount,
@@ -236,6 +246,7 @@ class EpisodesPanel extends StatefulWidget {
     this.seasonsLoader,
     this.onPlayEpisode,
     this.watchProgressLoader,
+    this.onNextEpisodeChanged,
     this.contentBuilder,
   });
 
@@ -250,6 +261,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   final StremioService _stremioService = StremioService.instance;
   final TraktService _traktService = TraktService.instance;
   final SimklService _simklService = SimklService.instance;
+  final MdblistService _mdblistService = MdblistService.instance;
 
   // Episode drill-down state
   int _episodeModeGeneration = 0;
@@ -265,6 +277,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action that preserves the catalog pack-search path on demand.
   bool _episodesUnavailable = false;
   Map<String, double> _episodeWatchProgress = {};
+  Map<String, int> _episodeMdblistRatings = {};
 
   /// Bumped when resolved episodes are PUBLISHED and on every season swap —
   /// see [EpisodesPanelView.generation] for why this is not the load
@@ -277,9 +290,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// that targets a widget only the classic tree contains.
   bool get _custom => widget.contentBuilder != null;
 
-  /// The next episode to watch for the current show (from Trakt), used only to
-  /// highlight the corresponding tile. Landing still prefers the last-played
-  /// episode; this is purely a visual "up next" marker.
+  /// The next episode to watch for the current show. Trakt supplies the initial
+  /// hint; merged local/Trakt/Simkl/MDBList progress reconciles the final badge.
   ({int season, int episode})? _nextEpisode;
 
   /// Whether a Trakt account is connected. This screen is reachable from
@@ -290,6 +302,15 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Whether a Simkl account is connected — mirrors [_isTraktAuthenticated],
   /// gating the separate Simkl episode menu rows.
   bool _isSimklAuthenticated = false;
+  bool _isMdblistAuthenticated = false;
+
+  // MDBList can acknowledge a completed scrobble just before the player route
+  // finishes popping, and its watched snapshot can trail that acknowledgement
+  // briefly. Keep only the newest mutation refresh, wait until this panel's
+  // route is visible, then perform one consistency retry. Without this, the
+  // pre-stop refresh could leave a completed episode showing its old local
+  // progress until the detail page was reopened.
+  int _mdblistRefreshToken = 0;
 
   final List<FocusNode> _episodeFocusNodes = [];
   final ScrollController _episodeScrollController = ScrollController();
@@ -319,6 +340,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
     _resolveTraktAuth();
     _resolveSimklAuth();
+    _resolveMdblistAuth();
+    _mdblistService.playbackRevision.addListener(_onMdblistPlaybackRevision);
     _enterEpisodeMode(
       widget.show,
       initialSeason: widget.initialSeason,
@@ -328,6 +351,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   @override
   void dispose() {
+    _mdblistRefreshToken++;
+    _mdblistService.playbackRevision.removeListener(_onMdblistPlaybackRevision);
     _episodeScrollController.dispose();
     _episodeBackButtonFocusNode.dispose();
     _episodeSeasonDropdownFocusNode.dispose();
@@ -345,7 +370,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// the old catalog view only read local storage; a series opened from
   /// Discover→Trakt needs both. All three sources key episodes as
   /// `'<season>-<episode>'`, so they merge directly.
-  Future<void> _loadEpisodeWatchProgress(StremioMeta show, int generation) async {
+  Future<void> _loadEpisodeWatchProgress(
+    StremioMeta show,
+    int generation,
+  ) async {
     // Direct-source mode: the host owns progress (URL-keyed player positions
     // mapped to S-E), and none of the IMDb-keyed sources below can know these
     // episodes.
@@ -413,8 +441,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
         if (!mounted || generation != _episodeModeGeneration) return;
-        final playback =
-            await _simklService.fetchEpisodePlaybackProgress(imdbId);
+        final playback = await _simklService.fetchEpisodePlaybackProgress(
+          imdbId,
+        );
         if (!mounted || generation != _episodeModeGeneration) return;
 
         for (final key in watched) {
@@ -432,9 +461,83 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
     }
 
-    if (mounted && generation == _episodeModeGeneration) {
-      setState(() => _episodeWatchProgress = merged);
+    if (await _mdblistService.isAuthenticated()) {
+      try {
+        final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+        if (result.isUsable) {
+          for (final entry in result.data!.entries) {
+            final existing = merged[entry.key] ?? 0;
+            if (entry.value >= 100 || entry.value > existing) {
+              merged[entry.key] = entry.value;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('EpisodesPanel: MDBList episode progress fetch failed: $e');
+      }
+      try {
+        final result = await _mdblistService.fetchShowEpisodeRatings(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+        if (result.isUsable) {
+          _episodeMdblistRatings = result.data!;
+        }
+      } catch (e) {
+        debugPrint('EpisodesPanel: MDBList episode ratings fetch failed: $e');
+      }
     }
+
+    if (mounted && generation == _episodeModeGeneration) {
+      final next = _mergedUpNext(merged, _nextEpisode);
+      setState(() {
+        _episodeWatchProgress = merged;
+        _nextEpisode = next;
+      });
+      if (next != null) widget.onNextEpisodeChanged?.call(next);
+    }
+  }
+
+  ({int season, int episode})? _mergedUpNext(
+    Map<String, double> progress,
+    ({int season, int episode})? trackerNext,
+  ) => mergedEpisodeUpNext(
+    episodes: [
+      for (final season in _episodeSeasons)
+        for (final episode in season.episodes)
+          (season: episode.season, episode: episode.number),
+    ],
+    progress: progress,
+    trackerNext: trackerNext,
+  );
+
+  void _onMdblistPlaybackRevision() {
+    if (!mounted || _isDirectSource) return;
+    MdblistContinueWatchingService.instance.invalidate();
+    final token = ++_mdblistRefreshToken;
+    unawaited(_refreshAfterMdblistMutation(token));
+  }
+
+  Future<void> _refreshAfterMdblistMutation(int token) async {
+    // A successful stop is reported while the player route may still cover the
+    // detail page. Do not discard that notification; wait for the pop instead.
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (!mounted || token != _mdblistRefreshToken) return;
+      if (ModalRoute.of(context)?.isCurrent ?? true) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted || token != _mdblistRefreshToken) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+
+    await refreshWatchProgress();
+    if (!mounted || token != _mdblistRefreshToken) return;
+
+    // MDBList's /scrobble/stop response can precede /sync/watched becoming
+    // readable. A sequential retry also prevents an older concurrent refresh
+    // from being the final state painted by this panel.
+    await Future<void>.delayed(const Duration(milliseconds: 750));
+    if (!mounted || token != _mdblistRefreshToken) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    await refreshWatchProgress();
   }
 
   /// Re-read watch progress (local + Trakt) for the current show. Called by the
@@ -465,6 +568,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final authed = await _simklService.isAuthenticated();
     if (mounted && authed != _isSimklAuthenticated) {
       setState(() => _isSimklAuthenticated = authed);
+    }
+  }
+
+  Future<void> _resolveMdblistAuth() async {
+    if (_isDirectSource) return;
+    final authed = await _mdblistService.isAuthenticated();
+    if (mounted && authed != _isMdblistAuthenticated) {
+      setState(() => _isMdblistAuthenticated = authed);
     }
   }
 
@@ -599,6 +710,91 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     );
   }
 
+  Future<void> _onEpisodeMdblistMenuAction(
+    TraktEpisode episode,
+    MdblistEpisodeMenuAction action,
+  ) async {
+    final show = _selectedShow;
+    if (show == null) return;
+    final imdb = show.effectiveImdbId ?? show.id;
+    if (!imdb.startsWith('tt')) return;
+    final ids = MdblistMediaIds(imdb: imdb);
+    final key = '${episode.season}-${episode.number}';
+    bool success;
+    String label;
+    switch (action) {
+      case MdblistEpisodeMenuAction.markWatched:
+        success = await _mdblistService.markWatched(
+          ids,
+          'episode',
+          season: episode.season,
+          episode: episode.number,
+        );
+        label = 'Marked watched on MDBList';
+        if (success && mounted) {
+          MdblistContinueWatchingService.instance.invalidate();
+          setState(() {
+            _episodeWatchProgress[key] = 100;
+            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+          });
+          final next = _nextEpisode;
+          if (next != null) widget.onNextEpisodeChanged?.call(next);
+        }
+      case MdblistEpisodeMenuAction.markUnwatched:
+        success = await _mdblistService.markUnwatched(
+          ids,
+          'episode',
+          season: episode.season,
+          episode: episode.number,
+        );
+        label = 'Marked unwatched on MDBList';
+        if (success && mounted) {
+          MdblistContinueWatchingService.instance.invalidate();
+          setState(() {
+            _episodeWatchProgress.remove(key);
+            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+          });
+          final next = _nextEpisode;
+          if (next != null) widget.onNextEpisodeChanged?.call(next);
+        }
+      case MdblistEpisodeMenuAction.rate:
+        if (!mounted) return;
+        final rating = await showMdblistRatingDialog(context);
+        if (rating == null) return;
+        success = await _mdblistService.rateTitle(
+          ids,
+          'episode',
+          rating,
+          season: episode.season,
+          episode: episode.number,
+        );
+        label = 'Rated $rating/10 on MDBList';
+        if (success && mounted) {
+          setState(() => _episodeMdblistRatings[key] = rating);
+        }
+      case MdblistEpisodeMenuAction.removeRating:
+        success = await _mdblistService.removeRating(
+          ids,
+          'episode',
+          season: episode.season,
+          episode: episode.number,
+        );
+        label = 'Removed rating from MDBList';
+        if (success && mounted) {
+          setState(() => _episodeMdblistRatings.remove(key));
+        }
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? label : 'Failed: $label'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+      ),
+    );
+  }
+
   // ── Episode drill-down ──────────────────────────────────────────────────
 
   /// Fallback: dispatch series directly to torrent search (bypasses episode mode).
@@ -665,8 +861,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             raw
                 .map((s) => TraktSeason.fromJson(s))
                 // Keep Specials (season 0); drop negatives and duplicate numbers.
-                .where((s) =>
-                    s.number >= 0 && s.episodes.isNotEmpty && seen.add(s.number))
+                .where(
+                  (s) =>
+                      s.number >= 0 &&
+                      s.episodes.isNotEmpty &&
+                      seen.add(s.number),
+                )
                 .toList()
               ..sort(seasonsSpecialsLast);
         if (seasons.isNotEmpty) return seasons;
@@ -681,7 +881,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Group raw Stremio addon meta `videos` into seasons, sorted by season then
   /// episode with Specials (season 0) last. Returns an empty list when there is
   /// nothing usable (null/empty input).
-  List<TraktSeason> _groupVideosIntoSeasons(List<Map<String, dynamic>>? videos) {
+  List<TraktSeason> _groupVideosIntoSeasons(
+    List<Map<String, dynamic>>? videos,
+  ) {
     if (videos == null || videos.isEmpty) return [];
 
     final seasonMap = <int, List<TraktEpisode>>{};
@@ -755,6 +957,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _isLoadingEpisodes = true;
       _episodesUnavailable = false;
       _episodeSeasons = [];
+      _episodeMdblistRatings = {};
       _selectedSeasonNumber = initialSeason ?? 1;
       _nextEpisode = null;
     });
@@ -786,18 +989,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       final nextEpisodeFuture = _isDirectSource
           ? Future<({int season, int episode})?>.value(null)
           : _traktService
-              .fetchNextEpisode(show.effectiveImdbId ?? show.id)
-              .catchError((Object e) {
-              debugPrint('EpisodesPanel: next-episode fetch failed: $e');
-              return null;
-            });
+                .fetchNextEpisode(show.effectiveImdbId ?? show.id)
+                .catchError((Object e) {
+                  debugPrint('EpisodesPanel: next-episode fetch failed: $e');
+                  return null;
+                });
 
       // Trakt-sourced items carry a stub addon (no base URL) and their
       // episodes arrive without stills — warm the TVMaze map alongside the
       // seasons fetch so tiles can show real stills at (or right after) first
       // paint instead of swapping in seconds later. Direct-source episodes
       // bring their own stills (or none) — TVMaze can't know them.
-      final addonHasMeta = widget.addon.baseUrl.isNotEmpty ||
+      final addonHasMeta =
+          widget.addon.baseUrl.isNotEmpty ||
           widget.addon.manifestUrl.isNotEmpty;
       final prefetchedThumbs = (addonHasMeta || _isDirectSource)
           ? null
@@ -921,12 +1125,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       setState(() {
         _episodeSeasons = seasons;
+        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
         _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;
         _focusIntent = EpisodeFocusIntent.landing;
         _viewGeneration++;
       });
+      final mergedNext = _nextEpisode;
+      if (mergedNext != null) {
+        widget.onNextEpisodeChanged?.call(mergedNext);
+      }
 
       // Fill in per-episode thumbnails from TVMaze for any episode that didn't
       // come with one (Trakt-sourced items have none; addon items keep theirs).
@@ -987,8 +1196,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (p > 0) lastStarted = i;
     }
     if (lastStarted < 0) return null;
-    final p = _episodeWatchProgress[
-            '${flat[lastStarted].season}-${flat[lastStarted].number}'] ??
+    final p =
+        _episodeWatchProgress['${flat[lastStarted].season}-${flat[lastStarted].number}'] ??
         0;
     final target = (p >= 95 && lastStarted + 1 < flat.length)
         ? flat[lastStarted + 1]
@@ -1008,8 +1217,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     int generation,
   ) async {
     // Nothing to do if the episodes already carry real ratings.
-    final hasRealRating =
-        seasons.any((s) => s.episodes.any((e) => (e.rating ?? 0) > 0));
+    final hasRealRating = seasons.any(
+      (s) => s.episodes.any((e) => (e.rating ?? 0) > 0),
+    );
     if (hasRealRating) return;
 
     final imdbId = show.effectiveImdbId ?? show.id;
@@ -1067,7 +1277,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         final s = ep['season'] as int?;
         final e = ep['number'] as int?;
         final image = ep['image'] as Map<String, dynamic>?;
-        final url = image?['medium'] as String? ?? image?['original'] as String?;
+        final url =
+            image?['medium'] as String? ?? image?['original'] as String?;
         if (s != null && e != null && url != null) {
           imageMap['$s-$e'] = url;
         }
@@ -1233,6 +1444,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       traktProgressPercent: widget.isTraktSource
           ? _episodeWatchProgress['${episode.season}-${episode.number}']
           : null,
+      mdblistSource: widget.isMdblistSource,
+      mdblistProgressPercent: widget.isMdblistSource
+          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          : null,
       // Lets the host send the user back to this episode list (not the
       // catalog grid) when they back out of the torrent results.
       fromCatalogEpisodeDrillDown: true,
@@ -1260,6 +1475,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       posterUrl: show.poster,
       traktSource: widget.isTraktSource,
       traktProgressPercent: widget.isTraktSource
+          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          : null,
+      mdblistSource: widget.isMdblistSource,
+      mdblistProgressPercent: widget.isMdblistSource
           ? _episodeWatchProgress['${episode.season}-${episode.number}']
           : null,
       fromCatalogEpisodeDrillDown: true,
@@ -1452,9 +1671,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             color: Colors.white.withValues(alpha: hasFocus ? 0.12 : 0.06),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: hasFocus
-                  ? t.focus
-                  : Colors.white.withValues(alpha: 0.10),
+              color: hasFocus ? t.focus : Colors.white.withValues(alpha: 0.10),
               width: hasFocus ? 2.0 : 1.0,
             ),
             boxShadow: (hasFocus && !widget.isTelevision)
@@ -1528,10 +1745,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             const SizedBox(height: 14),
             const Text(
               "Couldn't load episodes",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
@@ -1622,15 +1836,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               focusNode: index < _episodeFocusNodes.length
                   ? _episodeFocusNodes[index]
                   : null,
-              watchProgress: _episodeWatchProgress[
-                  '${episode.season}-${episode.number}'],
-              isNext: _nextEpisode != null &&
+              watchProgress:
+                  _episodeWatchProgress['${episode.season}-${episode.number}'],
+              isNext:
+                  _nextEpisode != null &&
                   _nextEpisode!.season == episode.season &&
                   _nextEpisode!.episode == episode.number,
               onPlay: () => _onEpisodeQuickPlay(episode),
               onSources: () => _onEpisodeTap(episode),
               onMenuAction: _isTraktAuthenticated
                   ? (action) => _onEpisodeMenuAction(episode, action)
+                  : null,
+              onTrackerOptions: _isSimklAuthenticated || _isMdblistAuthenticated
+                  ? () => _showEpisodeOptions(episode)
                   : null,
             ),
           );
@@ -1843,7 +2061,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             isTelevision: widget.isTelevision,
             watchProgress:
                 _episodeWatchProgress['${episode.season}-${episode.number}'],
-            isNext: _nextEpisode != null &&
+            isNext:
+                _nextEpisode != null &&
                 _nextEpisode!.season == episode.season &&
                 _nextEpisode!.episode == episode.number,
             focusNode: index < _episodeFocusNodes.length
@@ -1874,18 +2093,25 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // quick-actions sheets).
       isScrollControlled: true,
       builder: (sheetCtx) {
-        Widget tile(IconData icon, String label, VoidCallback onTap,
-            {Color? color, bool autofocus = false}) {
+        Widget tile(
+          IconData icon,
+          String label,
+          VoidCallback onTap, {
+          Color? color,
+          bool autofocus = false,
+        }) {
           return ListTile(
             autofocus: autofocus,
             // Default focus overlay is invisible on the dark sheet — make the
             // DPAD cursor obvious.
             focusColor: Colors.white.withValues(alpha: 0.12),
             leading: Icon(icon, color: color ?? Colors.white),
-            title: Text(label,
-                style: TextStyle(
-                    color: color ??
-                        Theme.of(sheetCtx).colorScheme.onSurface)),
+            title: Text(
+              label,
+              style: TextStyle(
+                color: color ?? Theme.of(sheetCtx).colorScheme.onSurface,
+              ),
+            ),
             onTap: () {
               Navigator.of(sheetCtx).pop();
               onTap();
@@ -1895,39 +2121,106 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
         final tiles = <Widget>[
           // Autofocus Play on TV so the sheet opens with a live target.
-          tile(Icons.play_arrow_rounded, 'Play',
-              () => _onEpisodeQuickPlay(episode),
-              autofocus: widget.isTelevision),
+          tile(
+            Icons.play_arrow_rounded,
+            'Play',
+            () => _onEpisodeQuickPlay(episode),
+            autofocus: widget.isTelevision,
+          ),
           // Direct-source episodes ARE the source — no torrent list to open.
           if (widget.onPlayEpisode == null)
-            tile(Icons.layers_rounded, 'Sources',
-                () => _onEpisodeTap(episode)),
+            tile(Icons.layers_rounded, 'Sources', () => _onEpisodeTap(episode)),
           if (_isTraktAuthenticated) ...[
             if (!watched)
-              tile(Icons.check_circle_rounded, 'Mark as Watched',
-                  () => _onEpisodeMenuAction(
-                      episode, TraktEpisodeMenuAction.markWatched)),
-            if (watched)
-              tile(Icons.visibility_off_rounded, 'Mark as Unwatched',
-                  () => _onEpisodeMenuAction(
-                      episode, TraktEpisodeMenuAction.markUnwatched)),
-            tile(Icons.star_rounded, 'Rate on Trakt',
+              tile(
+                Icons.check_circle_rounded,
+                'Mark as Watched',
                 () => _onEpisodeMenuAction(
-                    episode, TraktEpisodeMenuAction.rate)),
+                  episode,
+                  TraktEpisodeMenuAction.markWatched,
+                ),
+              ),
+            if (watched)
+              tile(
+                Icons.visibility_off_rounded,
+                'Mark as Unwatched',
+                () => _onEpisodeMenuAction(
+                  episode,
+                  TraktEpisodeMenuAction.markUnwatched,
+                ),
+              ),
+            tile(
+              Icons.star_rounded,
+              'Rate on Trakt',
+              () => _onEpisodeMenuAction(episode, TraktEpisodeMenuAction.rate),
+            ),
           ],
           // Simkl's own rows — separate from Trakt's above, not merged.
           // No live per-episode Simkl watched state is tracked, so both
           // Mark Watched and Mark Unwatched are always offered.
           if (_isSimklAuthenticated) ...[
-            tile(Icons.check_circle_rounded, 'Mark as Watched (Simkl)',
-                () => _onEpisodeSimklMenuAction(
-                    episode, SimklEpisodeMenuAction.markWatched)),
-            tile(Icons.visibility_off_rounded, 'Mark as Unwatched (Simkl)',
-                () => _onEpisodeSimklMenuAction(
-                    episode, SimklEpisodeMenuAction.markUnwatched)),
-            tile(Icons.star_rounded, 'Rate on Simkl',
-                () => _onEpisodeSimklMenuAction(
-                    episode, SimklEpisodeMenuAction.rate)),
+            tile(
+              Icons.check_circle_rounded,
+              'Mark as Watched (Simkl)',
+              () => _onEpisodeSimklMenuAction(
+                episode,
+                SimklEpisodeMenuAction.markWatched,
+              ),
+            ),
+            tile(
+              Icons.visibility_off_rounded,
+              'Mark as Unwatched (Simkl)',
+              () => _onEpisodeSimklMenuAction(
+                episode,
+                SimklEpisodeMenuAction.markUnwatched,
+              ),
+            ),
+            tile(
+              Icons.star_rounded,
+              'Rate on Simkl',
+              () => _onEpisodeSimklMenuAction(
+                episode,
+                SimklEpisodeMenuAction.rate,
+              ),
+            ),
+          ],
+          if (_isMdblistAuthenticated) ...[
+            if (!watched)
+              tile(
+                Icons.check_circle_rounded,
+                'Mark as Watched (MDBList)',
+                () => _onEpisodeMdblistMenuAction(
+                  episode,
+                  MdblistEpisodeMenuAction.markWatched,
+                ),
+              ),
+            if (watched)
+              tile(
+                Icons.visibility_off_rounded,
+                'Mark as Unwatched (MDBList)',
+                () => _onEpisodeMdblistMenuAction(
+                  episode,
+                  MdblistEpisodeMenuAction.markUnwatched,
+                ),
+              ),
+            if (_episodeMdblistRatings[key] == null)
+              tile(
+                Icons.star_rounded,
+                'Rate on MDBList',
+                () => _onEpisodeMdblistMenuAction(
+                  episode,
+                  MdblistEpisodeMenuAction.rate,
+                ),
+              ),
+            if (_episodeMdblistRatings[key] != null)
+              tile(
+                Icons.star_outline_rounded,
+                'Remove MDBList rating (${_episodeMdblistRatings[key]}/10)',
+                () => _onEpisodeMdblistMenuAction(
+                  episode,
+                  MdblistEpisodeMenuAction.removeRating,
+                ),
+              ),
           ],
         ];
 
@@ -2068,12 +2361,7 @@ class _CatalogSelectSourceButtonState
               width: _isFocused ? 2 : 1,
             ),
             boxShadow: (_isFocused && !PlatformUtil.isTelevision)
-                ? [
-                    BoxShadow(
-                      color: t.fade(t.focus, 0.32),
-                      blurRadius: 12,
-                    ),
-                  ]
+                ? [BoxShadow(color: t.fade(t.focus, 0.32), blurRadius: 12)]
                 : null,
           ),
           child: Row(
@@ -2291,10 +2579,12 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                             // is a full-size poster; never decode it full-res
                             // for a row thumbnail (×N rows on a 2 GB box).
                             memCacheWidth: 300,
-                            fadeInDuration:
-                                HomeTheme.imageFadeIn(widget.isTelevision),
-                            fadeOutDuration:
-                                HomeTheme.imageFadeOut(widget.isTelevision),
+                            fadeInDuration: HomeTheme.imageFadeIn(
+                              widget.isTelevision,
+                            ),
+                            fadeOutDuration: HomeTheme.imageFadeOut(
+                              widget.isTelevision,
+                            ),
                             // Solid fill while loading — without it the tile
                             // is a transparent hole until the bytes land.
                             placeholder: (_, __) =>
@@ -2320,7 +2610,9 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                             left: 5,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: t.focus,
                                 borderRadius: BorderRadius.circular(4),
@@ -2440,8 +2732,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (watched)
-                      Icon(Icons.check_circle_rounded,
-                          color: t.focus, size: 18)
+                      Icon(Icons.check_circle_rounded, color: t.focus, size: 18)
                     else if (partial)
                       Text(
                         '${progress.round()}%',
@@ -2457,15 +2748,18 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                       Icon(
                         Icons.more_vert_rounded,
                         size: 20,
-                        color: Colors.white
-                            .withValues(alpha: _focused ? 0.9 : 0.35),
+                        color: Colors.white.withValues(
+                          alpha: _focused ? 0.9 : 0.35,
+                        ),
                       )
                     else
                       IconButton(
                         visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.more_vert_rounded,
-                            color: Colors.white.withValues(alpha: 0.6),
-                            size: 20),
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          color: Colors.white.withValues(alpha: 0.6),
+                          size: 20,
+                        ),
                         onPressed: widget.onOptions,
                       ),
                   ],

@@ -25,6 +25,7 @@ import '../services/debrid_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/next_episode_service.dart';
 import '../services/analytics_service.dart';
+import '../services/episode_tracker_snapshot_service.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
@@ -37,6 +38,9 @@ import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
+import '../services/mdblist/mdblist_models.dart';
+import '../services/mdblist/mdblist_scrobble_session.dart';
+import '../services/mdblist/mdblist_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_policy_guard.dart';
 
@@ -272,12 +276,16 @@ class VideoPlayerLaunchArgs {
   // Prevent launcher-level Trakt auto-sync upgrade for playlist-origin playback.
   // Context-scoped, not Trakt-specific: contexts that suppress Trakt auto-sync
   // (playlists, Stremio TV) suppress the Simkl auto-sync upgrade too.
-  final bool suppressTraktAutoSync;
+  final bool suppressTrackerAutoSync;
+  @Deprecated('Use suppressTrackerAutoSync')
+  bool get suppressTraktAutoSync => suppressTrackerAutoSync;
   // Trakt progress: resume fallback when no local resume exists (0-100)
   final double? traktProgressPercent;
   // Simkl scrobble/progress — fully parallel to the Trakt pair above.
   final bool simklScrobble;
   final double? simklProgressPercent;
+  final bool mdblistScrobble;
+  final double? mdblistProgressPercent;
 
   // Continue watching metadata (for home screen section)
   final String? contentTitle; // Clean display name (IMDB title)
@@ -350,16 +358,102 @@ class VideoPlayerLaunchArgs {
     this.stremioTvChannelSwitchProvider,
     this.stremioTvNextProvider,
     this.traktScrobble = false,
-    this.suppressTraktAutoSync = false,
+    bool? suppressTrackerAutoSync,
+    bool suppressTraktAutoSync = false,
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.mdblistScrobble = false,
+    this.mdblistProgressPercent,
     this.contentTitle,
     this.posterUrl,
     this.contentYear,
     this.addonId,
     this.initialSubtitles,
-  });
+  }) : suppressTrackerAutoSync =
+           suppressTrackerAutoSync ?? suppressTraktAutoSync;
+
+  VideoPlayerLaunchArgs copyWith({
+    bool? traktScrobble,
+    bool? simklScrobble,
+    bool? mdblistScrobble,
+    double? traktProgressPercent,
+    double? simklProgressPercent,
+    double? mdblistProgressPercent,
+    bool? suppressTrackerAutoSync,
+  }) => VideoPlayerLaunchArgs(
+    videoUrl: videoUrl,
+    audioUrl: audioUrl,
+    fallbackUrl: fallbackUrl,
+    title: title,
+    subtitle: subtitle,
+    playlist: playlist,
+    startIndex: startIndex,
+    rdTorrentId: rdTorrentId,
+    torboxTorrentId: torboxTorrentId,
+    pikpakCollectionId: pikpakCollectionId,
+    webDavServerId: webDavServerId,
+    webDavBaseUrl: webDavBaseUrl,
+    webDavPath: webDavPath,
+    requestMagicNext: requestMagicNext,
+    requestNextChannel: requestNextChannel,
+    startFromRandom: startFromRandom,
+    randomStartMaxPercent: randomStartMaxPercent,
+    startAtPercent: startAtPercent,
+    hideSeekbar: hideSeekbar,
+    showChannelName: showChannelName,
+    channelName: channelName,
+    channelNumber: channelNumber,
+    showVideoTitle: showVideoTitle,
+    hideOptions: hideOptions,
+    hideBackButton: hideBackButton,
+    httpHeaders: httpHeaders,
+    disableExternalPlayer: disableExternalPlayer,
+    isAndroidTvOverride: isAndroidTvOverride,
+    disableAutoResume: disableAutoResume,
+    viewMode: viewMode,
+    contentImdbId: contentImdbId,
+    contentType: contentType,
+    contentSeason: contentSeason,
+    contentEpisode: contentEpisode,
+    iptvChannels: iptvChannels,
+    iptvStartIndex: iptvStartIndex,
+    iptvCategories: iptvCategories,
+    iptvSourceId: iptvSourceId,
+    iptvSourceName: iptvSourceName,
+    iptvSelectedCategory: iptvSelectedCategory,
+    iptvContentType: iptvContentType,
+    iptvSources: iptvSources,
+    iptvLists: iptvLists,
+    iptvBrowseProvider: iptvBrowseProvider,
+    stremioSources: stremioSources,
+    stremioCurrentSourceIndex: stremioCurrentSourceIndex,
+    resolveStremioSource: resolveStremioSource,
+    resolveSourceToPlaylist: resolveSourceToPlaylist,
+    seriesSourceFetcher: seriesSourceFetcher,
+    stremioTvChannels: stremioTvChannels,
+    stremioTvCurrentChannelId: stremioTvCurrentChannelId,
+    stremioTvRotationMinutes: stremioTvRotationMinutes,
+    stremioTvSeriesRotationMinutes: stremioTvSeriesRotationMinutes,
+    stremioTvMixSalt: stremioTvMixSalt,
+    stremioTvGuideDataProvider: stremioTvGuideDataProvider,
+    stremioTvChannelSwitchProvider: stremioTvChannelSwitchProvider,
+    stremioTvNextProvider: stremioTvNextProvider,
+    traktScrobble: traktScrobble ?? this.traktScrobble,
+    traktProgressPercent: traktProgressPercent ?? this.traktProgressPercent,
+    simklScrobble: simklScrobble ?? this.simklScrobble,
+    simklProgressPercent: simklProgressPercent ?? this.simklProgressPercent,
+    mdblistScrobble: mdblistScrobble ?? this.mdblistScrobble,
+    mdblistProgressPercent:
+        mdblistProgressPercent ?? this.mdblistProgressPercent,
+    suppressTrackerAutoSync:
+        suppressTrackerAutoSync ?? this.suppressTrackerAutoSync,
+    contentTitle: contentTitle,
+    posterUrl: posterUrl,
+    contentYear: contentYear,
+    addonId: addonId,
+    initialSubtitles: initialSubtitles,
+  );
 
   VideoPlayerScreen toWidget() {
     return VideoPlayerScreen(
@@ -415,6 +509,8 @@ class VideoPlayerLaunchArgs {
       traktProgressPercent: traktProgressPercent,
       simklScrobble: simklScrobble,
       simklProgressPercent: simklProgressPercent,
+      mdblistScrobble: mdblistScrobble,
+      mdblistProgressPercent: mdblistProgressPercent,
       initialSubtitles: initialSubtitles,
     );
   }
@@ -469,150 +565,50 @@ class VideoPlayerLauncher {
     return nameWithoutExt.hashCode.toString();
   }
 
-  /// Seed the local finished-episodes store from Trakt watched history so the
-  /// in-player playlist (SeriesBrowser, which reads local playback state) shows
-  /// Trakt-watched episodes. Runs on every series launch that has an IMDb id;
-  /// a no-op when Trakt isn't connected or has nothing for the show. Only fully
-  /// watched (>=95%) episodes are written — partial progress is left to the
-  /// per-episode `traktProgressPercent` resume so we never store a fake
-  /// position/duration. Best-effort: any failure is swallowed.
-  static Future<void> _seedTraktWatchedEpisodes(
-    List<PlaylistEntry> playlist,
-    String imdbId,
-    String fallbackTitle,
-  ) async {
+  /// Refresh the replaceable Trakt snapshot used by every guide surface.
+  ///
+  /// Older builds also copied remote completion into local finished/resume
+  /// stores here. That made a later Trakt rewatch impossible to represent and
+  /// had no provenance for safe deletion. New launches never create that
+  /// pollution; legacy values are neutralized non-destructively when snapshots
+  /// are merged for display/resume.
+  static Future<void> _refreshTraktEpisodeProgress(String imdbId) async {
     try {
-      final trakt = TraktService.instance;
-      if (!await trakt.isAuthenticated()) return;
-
-      final results = await Future.wait([
-        trakt.fetchWatchedShowEpisodes(imdbId),
-        trakt.fetchEpisodePlaybackProgress(imdbId),
-      ]);
-      final watchedSet = results[0] as Set<String>; // "season-episode" keys
-      final playbackMap = results[1] as Map<String, double>; // key → 0-100
-
-      final merged = <String, double>{};
-      for (final key in watchedSet) {
-        merged[key] = 100.0;
-      }
-      for (final entry in playbackMap.entries) {
-        if (entry.value > 0) merged[entry.key] = entry.value;
-      }
-
-      final filenames = playlist.map((e) => e.title).toList();
-      // Title used only for the title-keyed sibling stores below (finished-
-      // episode badges + season bars). The per-episode Trakt store is now keyed
-      // by IMDb id (see saveEpisodeTraktProgress below), so it no longer depends
-      // on this derivation matching the readers'.
-      final effectiveTitle =
-          SeriesParser.extractCommonSeriesTitle(filenames) ?? fallbackTitle;
-
-      // The complete per-episode Trakt truth for the show ("season_episode" →
-      // 0-100), for the playlist bars + cross-device resume. Kept in a dedicated
-      // store apart from the ms-based resume state (the players convert % → ms at
-      // play time), so partial progress never seeds a fake position. Built from
-      // ALL Trakt episodes (every season, not just this playlist) so a show split
-      // across torrents keeps each season's bars; written whole (replace) so
-      // un-watched episodes clear — including the empty case below.
-      final traktPercents = <String, double>{};
-      merged.forEach((key, pct) {
-        // Trakt keys are "season-episode"; store as "season_episode".
-        final dash = key.indexOf('-');
-        if (dash > 0) {
-          traktPercents['${key.substring(0, dash)}_${key.substring(dash + 1)}'] =
-              pct;
-        }
-      });
-      await StorageService.saveEpisodeTraktProgress(
-        imdbId: imdbId,
-        percents: traktPercents,
-      );
-
-      if (merged.isEmpty) return;
-
-      final parsed = SeriesParser.parsePlaylist(filenames);
-
-      for (var i = 0; i < parsed.length; i++) {
-        final info = parsed[i];
-        if (info.season == null || info.episode == null) continue;
-        final traktPercent = merged['${info.season}-${info.episode}'];
-        if (traktPercent == null || traktPercent <= 0) continue;
-
-        // Fully-watched: also mark finished (badge) + seed native watched state.
-        if (traktPercent < 95) continue;
-
-        // Writes to 'finishedEpisodes' (badges) + 'seasons' (bars), preserving
-        // any existing local progress.
-        await StorageService.markEpisodeAsFinished(
-          seriesTitle: effectiveTitle,
-          season: info.season!,
-          episode: info.episode!,
-          imdbId: imdbId,
-        );
-
-        // Video format (Kotlin Android TV player) — only if no local state, so
-        // we never clobber a real resume position.
-        final resumeId = resumeIdForEntry(
-          playlist[i],
-          fallbackTitle: effectiveTitle,
-        );
-        final existingState = await StorageService.getVideoPlaybackState(
-          videoTitle: resumeId,
-        );
-        if (existingState == null) {
-          await StorageService.saveVideoPlaybackState(
-            videoTitle: resumeId,
-            videoUrl: '',
-            positionMs: 100,
-            durationMs: 100,
-          );
-        }
-      }
+      await EpisodeTrackerSnapshotService.refreshTrakt(imdbId);
     } catch (e) {
-      debugPrint('VideoPlayerLauncher: Trakt watched seed failed: $e');
+      debugPrint('VideoPlayerLauncher: Trakt snapshot refresh failed: $e');
     }
   }
 
-  /// Refresh the player-only Simkl episode snapshot for [imdbId]. Unlike the
-  /// legacy Trakt seed above, this never writes remote completion into local
-  /// finished/resume state: every player surface reads this dedicated snapshot
-  /// and merges it with local + Trakt at display/resume time.
+  /// Refresh the replaceable Simkl snapshot. Like Trakt, it remains remote
+  /// truth and is merged at display/resume time rather than copied locally.
   static Future<void> _seedSimklEpisodeProgress(String imdbId) async {
-    try {
-      final simkl = SimklService.instance;
-      if (!await simkl.isAuthenticated()) {
-        await StorageService.saveEpisodeSimklProgress(
-          imdbId: imdbId,
-          percents: const {},
-        );
-        return;
-      }
+    await EpisodeTrackerSnapshotService.refreshSimkl(imdbId);
+  }
 
-      final results = await Future.wait([
-        simkl.fetchWatchedShowEpisodes(imdbId),
-        simkl.fetchEpisodePlaybackProgress(imdbId),
-      ]);
-      final watchedSet = results[0] as Set<String>;
-      final playbackMap = results[1] as Map<String, double>;
+  static Future<void> _seedMdblistEpisodeProgress(String imdbId) async {
+    if (!kMdblistEnabled) return;
+    await EpisodeTrackerSnapshotService.seedMdblistPlayback(imdbId);
+  }
 
-      final percents = buildEpisodeTrackerSnapshot(
-        watched: watchedSet,
-        playback: playbackMap,
-      );
-      await StorageService.saveEpisodeSimklProgress(
-        imdbId: imdbId,
-        percents: percents,
-      );
-    } catch (e) {
-      // A failed refresh should not show a stale remote tick from an older
-      // launch. Local and Trakt state remain available.
-      await StorageService.saveEpisodeSimklProgress(
-        imdbId: imdbId,
-        percents: const {},
-      );
-      debugPrint('VideoPlayerLauncher: Simkl episode seed failed: $e');
-    }
+  /// Resolves the one MDBList ownership decision used by every playback
+  /// surface. A launch originating from an MDBList row is still only a
+  /// *request* to use MDBList: disabling playback/library sync or disconnecting
+  /// the account must hand completion and Continue Watching back to Debrify.
+  @visibleForTesting
+  static bool shouldEnableMdblistTracking({
+    required bool requested,
+    required bool autoEligible,
+    required bool featureEnabled,
+    required bool identityAvailable,
+    required bool syncEnabled,
+    required bool authenticated,
+  }) {
+    return featureEnabled &&
+        identityAvailable &&
+        syncEnabled &&
+        authenticated &&
+        (requested || autoEligible);
   }
 
   /// [onPlayerHandoff] (optional) fires exactly once, at the moment a player
@@ -748,6 +744,8 @@ class VideoPlayerLauncher {
           traktProgressPercent: args.traktProgressPercent,
           simklScrobble: args.simklScrobble,
           simklProgressPercent: args.simklProgressPercent,
+          mdblistScrobble: args.mdblistScrobble,
+          mdblistProgressPercent: args.mdblistProgressPercent,
           contentTitle: args.contentTitle,
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
@@ -839,6 +837,8 @@ class VideoPlayerLauncher {
           traktProgressPercent: args.traktProgressPercent,
           simklScrobble: true,
           simklProgressPercent: args.simklProgressPercent,
+          mdblistScrobble: args.mdblistScrobble,
+          mdblistProgressPercent: args.mdblistProgressPercent,
           contentTitle: args.contentTitle,
           posterUrl: args.posterUrl,
           contentYear: args.contentYear,
@@ -853,6 +853,56 @@ class VideoPlayerLauncher {
       }
     }
 
+    final mdblistRequested = args.mdblistScrobble;
+    final mdblistIdentityAvailable =
+        args.contentImdbId?.trim().isNotEmpty == true;
+    final mdblistAutoEligible =
+        !mdblistRequested &&
+        !args.suppressTrackerAutoSync &&
+        mdblistIdentityAvailable &&
+        args.stremioTvChannels == null;
+    var mdblistSyncEnabled = false;
+    var mdblistAuthenticated = false;
+    if (kMdblistEnabled &&
+        mdblistIdentityAvailable &&
+        (mdblistRequested || mdblistAutoEligible)) {
+      final results = await Future.wait([
+        StorageService.getMdblistSyncCatalogItems(),
+        MdblistService.instance.isAuthenticated(),
+      ]);
+      mdblistSyncEnabled = results[0];
+      mdblistAuthenticated = results[1];
+    }
+    final effectiveMdblistTracking = shouldEnableMdblistTracking(
+      requested: mdblistRequested,
+      autoEligible: mdblistAutoEligible,
+      featureEnabled: kMdblistEnabled,
+      identityAvailable: mdblistIdentityAvailable,
+      syncEnabled: mdblistSyncEnabled,
+      authenticated: mdblistAuthenticated,
+    );
+    if (args.mdblistScrobble != effectiveMdblistTracking) {
+      args = args.copyWith(mdblistScrobble: effectiveMdblistTracking);
+    }
+
+    if (kMdblistEnabled && args.contentImdbId != null) {
+      debugPrint(
+        '[MDBListDiag] launch candidate imdb=${args.contentImdbId} '
+        'type=${args.contentType} requested=$mdblistRequested '
+        'suppressAuto=${args.suppressTrackerAutoSync} '
+        'stremioTv=${args.stremioTvChannels != null} '
+        'syncCatalog=$mdblistSyncEnabled '
+        'authenticated=$mdblistAuthenticated '
+        'effective=$effectiveMdblistTracking',
+      );
+    }
+    if (effectiveMdblistTracking && !mdblistRequested) {
+      debugPrint(
+        '[MDBListDiag] launch tracking enabled imdb=${args.contentImdbId}',
+      );
+      await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+    }
+
     // Persist before launching playback so Android TV handoff cannot race the write.
     // Skip when a tracker already owns this title's Continue Watching entry —
     // Trakt (its own CW row) OR Simkl (its own CW row) — so it lives in exactly
@@ -863,6 +913,7 @@ class VideoPlayerLauncher {
         args.contentType != null &&
         !args.traktScrobble &&
         !args.simklScrobble &&
+        !args.mdblistScrobble &&
         args.stremioTvChannels == null) {
       await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,
@@ -875,7 +926,7 @@ class VideoPlayerLauncher {
     }
 
     // Starting a saved title graduates it from My Watchlist into whichever
-    // Continue Watching owner applies above (local, Trakt, or Simkl). Keep
+    // Continue Watching owner applies above (local or a connected tracker). Keep
     // this on the shared pre-launch path so opening details alone changes
     // nothing and native Android TV playback follows the same rule.
     if (args.contentType != null && args.stremioTvChannels == null) {
@@ -887,25 +938,23 @@ class VideoPlayerLauncher {
       );
     }
 
-    // Refresh both trackers' per-episode snapshots before either player is
-    // launched. Trakt retains its legacy local-finished seed; Simkl stays in a
-    // dedicated replaceable store so remote "unwatched" changes cannot leave
-    // stale local completion behind.
+    // Real packs retain the existing Trakt/Simkl launch-time snapshots because
+    // their immediately visible rows need them. MDBList always renders its
+    // cached snapshot first and refreshes in the background: even its compact
+    // playback endpoint has a 20-second transport timeout and must never hold
+    // the player handoff. Complete history follows asynchronously with the
+    // guide.
     if (args.contentType != 'movie' &&
         args.contentImdbId != null &&
         (args.playlist?.length ?? 0) > 1) {
       await Future.wait([
-        _seedTraktWatchedEpisodes(
-          args.playlist!,
-          args.contentImdbId!,
-          args.contentTitle ?? args.title,
-        ),
+        _refreshTraktEpisodeProgress(args.contentImdbId!),
         _seedSimklEpisodeProgress(args.contentImdbId!),
       ]);
+      unawaited(_seedMdblistEpisodeProgress(args.contentImdbId!));
     } else if (args.contentType == 'series' && args.contentImdbId != null) {
-      // Single-episode launches may grow into a pack through source switching,
-      // so have the Simkl snapshot ready for that in-session playlist too.
       await _seedSimklEpisodeProgress(args.contentImdbId!);
+      unawaited(_seedMdblistEpisodeProgress(args.contentImdbId!));
     }
 
     AnalyticsService.trackInBackground('playback_started', <String, Object?>{
@@ -913,6 +962,8 @@ class VideoPlayerLauncher {
       'provider': _analyticsProviderLabel(args),
       'has_playlist': args.playlist?.isNotEmpty ?? false,
       'trakt_scrobble': args.traktScrobble,
+      'simkl_scrobble': args.simklScrobble,
+      'mdblist_scrobble': args.mdblistScrobble,
       'platform': AnalyticsService.currentPlatformLabel(),
     });
 
@@ -1016,17 +1067,17 @@ class VideoPlayerLauncher {
   /// app (external player / DeoVR).
   ///
   /// The shared pre-launch path already writes LOCAL Continue Watching for
-  /// untracked titles, but deliberately skips it when Trakt or Simkl owns the
+  /// untracked titles, but deliberately skips it when a tracker owns the
   /// row — and an external player can never scrobble back, so without this
   /// the title lands in NO row at all. A ~1% scrobble is each tracker's own
-  /// idiom for "started watching" — start→pause for Trakt, a bare pause for
-  /// Simkl (whose start would CLEAR an existing session) — and both keep
+  /// idiom for "started watching" — start→pause for Trakt and a bare pause for
+  /// Simkl/MDBList (Simkl start would CLEAR an existing session) — and all keep
   /// sub-80% sessions as resumable playback, so the item appears in their CW.
   /// The existing CW row menus then let the user mark it watched on return,
   /// and if the external app scrobbles real progress itself (Infuse + Trakt),
   /// that simply overwrites the seed.
   ///
-  /// Fail-soft and fire-and-forget: both services no-op without a token, and
+  /// Fail-soft and fire-and-forget: every service no-ops without credentials, and
   /// the handoff must never wait on tracker HTTP.
   static Future<void> _seedTrackerContinueWatching(
     VideoPlayerLaunchArgs args, {
@@ -1037,7 +1088,9 @@ class VideoPlayerLauncher {
     if (imdbId == null || imdbId.isEmpty) return;
     // Channel rotation is not a watchable title; mirrors the local CW skip.
     if (args.stremioTvChannels != null) return;
-    if (!args.traktScrobble && !args.simklScrobble) return;
+    if (!args.traktScrobble && !args.simklScrobble && !args.mdblistScrobble) {
+      return;
+    }
 
     // A series seed needs BOTH season and episode — both scrobble services
     // refuse a lone half, and a series imdb id in a movie-shaped body would
@@ -1104,6 +1157,18 @@ class VideoPlayerLauncher {
             );
           } catch (err) {
             debugPrint('ExternalPlayer: Simkl CW seed failed: $err');
+          }
+        }(),
+      if (args.mdblistScrobble)
+        () async {
+          try {
+            final ids = MdblistMediaIds(imdb: imdbId);
+            final target = isSeries
+                ? MdblistScrobbleTarget.episode(ids, season: s!, episode: e!)
+                : MdblistScrobbleTarget.movie(ids);
+            await MdblistService.instance.scrobblePause(target, progress);
+          } catch (err) {
+            debugPrint('ExternalPlayer: MDBList CW seed failed: $err');
           }
         }(),
     ]);
@@ -1925,12 +1990,21 @@ class VideoPlayerLauncher {
     _simklLastKnownSeason = null;
     _simklLastKnownEpisode = null;
 
+    _AndroidTvPlaybackPayload? builtPayload;
     try {
       final builder = _AndroidTvPlaybackPayloadBuilder(args);
       final result = await builder.build();
       if (result == null) {
         return false;
       }
+      builtPayload = result.payload;
+      await _initializeNativeMdblist(result.payload);
+
+      // TVMaze may discover a stable show id after native playback starts.
+      // Resolver callbacks read this mutable payload value at invocation time
+      // so source switches and dynamically fetched episodes inherit it.
+      String? effectiveContentImdbId() =>
+          result.payload.imdbId ?? args.contentImdbId;
 
       final resolver = _AndroidTvPlaylistResolver(
         entries: result.entries,
@@ -2047,7 +2121,9 @@ class VideoPlayerLauncher {
           // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
           if (isSeries && seriesPlaylist != null) {
             try {
-              await seriesPlaylist.fetchEpisodeInfo();
+              await seriesPlaylist.fetchEpisodeInfo(
+                imdbId: effectiveContentImdbId(),
+              );
               debugPrint(
                 'VideoPlayerLauncher: TVMaze fetch complete for source playlist',
               );
@@ -2067,13 +2143,13 @@ class VideoPlayerLauncher {
             }
           }
 
-          final sourceTrackerMaps = args.contentImdbId != null
+          final sourceImdbId = effectiveContentImdbId();
+          final sourceTrackerMaps = sourceImdbId != null
               ? await Future.wait([
-                  StorageService.getEpisodeTraktProgress(
-                    imdbId: args.contentImdbId!,
-                  ),
-                  StorageService.getEpisodeSimklProgress(
-                    imdbId: args.contentImdbId!,
+                  StorageService.getEpisodeTraktProgress(imdbId: sourceImdbId),
+                  StorageService.getEpisodeSimklProgress(imdbId: sourceImdbId),
+                  StorageService.getEpisodeMdblistProgress(
+                    imdbId: sourceImdbId,
                   ),
                 ])
               : const <Map<String, double>>[];
@@ -2083,27 +2159,24 @@ class VideoPlayerLauncher {
           final sourceSimklProgress = sourceTrackerMaps.length > 1
               ? sourceTrackerMaps[1]
               : const <String, double>{};
+          final sourceMdblistProgress = sourceTrackerMaps.length > 2
+              ? sourceTrackerMaps[2]
+              : const <String, double>{};
 
           final stableSeriesTitle =
               args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
-          var localSeriesProgress = isSeries
-              ? await StorageService.getEpisodeProgress(
+          final localSeriesProgress = isSeries
+              ? await StorageService.getMergedEpisodeProgress(
                   seriesTitle: stableSeriesTitle,
+                  imdbId: sourceImdbId,
                 )
               : const <String, Map<String, dynamic>>{};
-          // Local series state is title-keyed, with IMDb stored as metadata.
-          // Merge older release-title records through the IMDb lookup, then
-          // let the stable catalog-title record win for duplicate episodes.
-          if (isSeries && args.contentImdbId != null) {
-            final imdbSeriesProgress =
-                await StorageService.getEpisodeProgressByImdbId(
-                  args.contentImdbId!,
-                );
-            localSeriesProgress = {
-              ...imdbSeriesProgress,
-              ...localSeriesProgress,
-            };
-          }
+          final localFinishedEpisodes = isSeries
+              ? await StorageService.getMergedFinishedEpisodes(
+                  seriesTitle: stableSeriesTitle,
+                  imdbId: sourceImdbId,
+                )
+              : const <String, Set<int>>{};
 
           // Convert PlaylistEntry list to Android TV PlaybackItem maps
           final items = <Map<String, dynamic>>[];
@@ -2121,11 +2194,36 @@ class VideoPlayerLauncher {
                 ? furthestEpisodeTrackerPercent([
                     sourceTraktProgress[episodeKey],
                     sourceSimklProgress[episodeKey],
+                    sourceMdblistProgress[episodeKey],
                   ])
                 : null;
             final localState = episodeKey != null
                 ? localSeriesProgress[episodeKey]
                 : null;
+            final locallyWatched = season != null && episodeNumber != null
+                ? localFinishedEpisodes[season.toString()]?.contains(
+                        episodeNumber,
+                      ) ??
+                      false
+                : false;
+            final localPositionMs =
+                (localState?['positionMs'] as num?)?.toInt() ?? 0;
+            final localDurationMs =
+                (localState?['durationMs'] as num?)?.toInt() ?? 0;
+            final resolvedLocal = resolveEpisodeLocalWatchState(
+              locallyWatched: locallyWatched,
+              localPositionMs: localPositionMs,
+              localDurationMs: localDurationMs,
+              traktPercent: episodeKey == null
+                  ? null
+                  : sourceTraktProgress[episodeKey],
+              simklPercent: episodeKey == null
+                  ? null
+                  : sourceSimklProgress[episodeKey],
+              mdblistPercent: episodeKey == null
+                  ? null
+                  : sourceMdblistProgress[episodeKey],
+            );
             items.add({
               'id': '${entry.title}_$i',
               // Mirror the resolver's own resumeId keying ('${title}_$i') so
@@ -2143,13 +2241,13 @@ class VideoPlayerLauncher {
               if (epInfo?.plot != null) 'description': epInfo!.plot,
               if (epInfo?.rating != null) 'rating': epInfo!.rating,
               if (entry.sizeBytes != null) 'sizeBytes': entry.sizeBytes,
-              'resumePositionMs':
-                  (localState?['positionMs'] as num?)?.toInt() ?? 0,
-              'durationMs': (localState?['durationMs'] as num?)?.toInt() ?? 0,
+              'resumePositionMs': resolvedLocal.positionMs,
+              'durationMs': localDurationMs,
               'updatedAt': (localState?['updatedAt'] as num?)?.toInt() ?? 0,
               if (entry.provider != null) 'provider': entry.provider,
               if (trackerPercent != null)
                 'traktProgressPercent': trackerPercent,
+              'watched': resolvedLocal.watched,
             });
           }
           debugPrint(
@@ -2404,41 +2502,68 @@ class VideoPlayerLauncher {
               row['episode'] = episode;
 
               final stableSeriesTitle = args.contentTitle ?? args.title;
-              var localProgress = await StorageService.getEpisodeProgress(
-                seriesTitle: stableSeriesTitle,
-              );
-              if (args.contentImdbId != null) {
-                final imdbProgress =
-                    await StorageService.getEpisodeProgressByImdbId(
-                      args.contentImdbId!,
-                    );
-                localProgress = {...imdbProgress, ...localProgress};
-                final trackerMaps = await Future.wait([
-                  StorageService.getEpisodeTraktProgress(
-                    imdbId: args.contentImdbId!,
-                  ),
-                  StorageService.getEpisodeSimklProgress(
-                    imdbId: args.contentImdbId!,
-                  ),
-                ]);
-                final episodeKey = '${season}_$episode';
+              final episodeImdbId = effectiveContentImdbId();
+              final localProgress =
+                  await StorageService.getMergedEpisodeProgress(
+                    seriesTitle: stableSeriesTitle,
+                    imdbId: episodeImdbId,
+                  );
+              final locallyFinished =
+                  await StorageService.getMergedFinishedEpisodes(
+                    seriesTitle: stableSeriesTitle,
+                    imdbId: episodeImdbId,
+                  );
+              final trackerMaps = episodeImdbId != null
+                  ? await Future.wait([
+                      StorageService.getEpisodeTraktProgress(
+                        imdbId: episodeImdbId,
+                      ),
+                      StorageService.getEpisodeSimklProgress(
+                        imdbId: episodeImdbId,
+                      ),
+                      StorageService.getEpisodeMdblistProgress(
+                        imdbId: episodeImdbId,
+                      ),
+                    ])
+                  : const <Map<String, double>>[];
+              final episodeKey = '${season}_$episode';
+              if (trackerMaps.isNotEmpty) {
                 final trackerPercent = furthestEpisodeTrackerPercent([
                   trackerMaps[0][episodeKey],
                   trackerMaps[1][episodeKey],
+                  trackerMaps[2][episodeKey],
                 ]);
                 if (trackerPercent != null) {
                   row['traktProgressPercent'] = trackerPercent;
                 }
               }
-              final localState = localProgress['${season}_$episode'];
-              if (localState != null) {
-                row['resumePositionMs'] =
-                    (localState['positionMs'] as num?)?.toInt() ?? 0;
-                row['durationMs'] =
-                    (localState['durationMs'] as num?)?.toInt() ?? 0;
-                row['updatedAt'] =
-                    (localState['updatedAt'] as num?)?.toInt() ?? 0;
-              }
+              final localState = localProgress[episodeKey];
+              final localPositionMs =
+                  (localState?['positionMs'] as num?)?.toInt() ?? 0;
+              final localDurationMs =
+                  (localState?['durationMs'] as num?)?.toInt() ?? 0;
+              final localWatched =
+                  locallyFinished[season.toString()]?.contains(episode) ??
+                  false;
+              final resolvedLocal = resolveEpisodeLocalWatchState(
+                locallyWatched: localWatched,
+                localPositionMs: localPositionMs,
+                localDurationMs: localDurationMs,
+                traktPercent: trackerMaps.isNotEmpty
+                    ? trackerMaps[0][episodeKey]
+                    : null,
+                simklPercent: trackerMaps.length > 1
+                    ? trackerMaps[1][episodeKey]
+                    : null,
+                mdblistPercent: trackerMaps.length > 2
+                    ? trackerMaps[2][episodeKey]
+                    : null,
+              );
+              row['resumePositionMs'] = resolvedLocal.positionMs;
+              row['durationMs'] = localDurationMs;
+              row['updatedAt'] =
+                  (localState?['updatedAt'] as num?)?.toInt() ?? 0;
+              row['watched'] = resolvedLocal.watched;
               items[1] = row;
             }
             return {
@@ -2724,6 +2849,8 @@ class VideoPlayerLauncher {
       );
 
       if (!launched) {
+        await result.payload.mdblistSession?.close();
+        result.payload.mdblistSession = null;
         resolver.dispose();
         return false;
       }
@@ -2748,6 +2875,8 @@ class VideoPlayerLauncher {
 
       return true;
     } catch (e) {
+      await builtPayload?.mdblistSession?.close();
+      if (builtPayload != null) builtPayload.mdblistSession = null;
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');
       return false;
     }
@@ -3052,103 +3181,258 @@ class VideoPlayerLauncher {
           webDavPath: webDavPath,
         );
 
-        // Build metadata updates for each item. Skipped for single-entry
-        // guide-only runs: a lone unparseable file classifies as S1E1 and
-        // would be decorated with the wrong episode's info.
-        final metadataUpdates = <Map<String, dynamic>>[];
-        int episodesWithInfo = 0;
-        int episodesWithoutInfo = 0;
-        if (!singleEntryGuideOnly) {
-          for (final episode in seriesPlaylist.allEpisodes) {
-            if (episode.episodeInfo == null) {
-              episodesWithoutInfo++;
-              continue;
-            }
-            episodesWithInfo++;
-
-            final info = episode.episodeInfo!;
-            metadataUpdates.add({
-              'originalIndex': episode.originalIndex,
-              'title': info.title,
-              'description': info.plot,
-              'artwork': info.poster,
-              'rating': info.rating,
-            });
-          }
-        }
-
-        // The show's FULL episode list for the native episode guide (every
-        // episode, present in the pack or not).
-        final guideEpisodes = <Map<String, dynamic>>[];
-        for (final m in seriesPlaylist.fullTvmazeEpisodes) {
-          final season = m['season'] as int?;
-          final number = m['number'] as int?;
-          if (season == null || number == null) continue;
-          final info = EpisodeInfo.fromTVMaze(m);
-          guideEpisodes.add({
-            'season': season,
-            'episode': number,
-            if (info.title != null) 'title': info.title,
-            if (info.poster != null) 'artwork': info.poster,
-            if (info.plot != null) 'description': info.plot,
-            if (info.rating != null) 'rating': info.rating,
-            if (info.runtime != null) 'runtime': info.runtime,
-          });
-        }
-
-        debugPrint(
-          'TVMazeAsync: Episodes with info=$episodesWithInfo, without info=$episodesWithoutInfo',
-        );
-
-        // Get discovered IMDB ID from TVMaze (may have been extracted from externals)
-        final discoveredImdbId = seriesPlaylist.imdbId;
+        // Get discovered IMDB ID from TVMaze (may have been extracted from externals).
+        final discoveredImdbId = seriesPlaylist.imdbId ?? contentImdbId;
+        if (discoveredImdbId != null) payload.imdbId = discoveredImdbId;
         debugPrint(
           'TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId',
         );
 
-        if (metadataUpdates.isEmpty &&
-            discoveredImdbId == null &&
-            guideEpisodes.isEmpty) {
-          debugPrint(
-            'TVMazeAsync: SKIPPED push - no metadata updates and no IMDB ID',
+        Future<
+          ({
+            List<Map<String, dynamic>> metadataUpdates,
+            List<Map<String, dynamic>> guideEpisodes,
+            int episodesWithInfo,
+            int episodesWithoutInfo,
+          })
+        >
+        buildUpdates() async {
+          final localEpisodeProgress =
+              await StorageService.getMergedEpisodeProgress(
+                seriesTitle: seriesPlaylist.seriesTitle ?? payload.title,
+                imdbId: discoveredImdbId,
+              );
+          final locallyFinished =
+              await StorageService.getMergedFinishedEpisodes(
+                seriesTitle: seriesPlaylist.seriesTitle ?? payload.title,
+                imdbId: discoveredImdbId,
+              );
+          final trackerMaps = discoveredImdbId != null
+              ? await Future.wait([
+                  StorageService.getEpisodeTraktProgress(
+                    imdbId: discoveredImdbId,
+                  ),
+                  StorageService.getEpisodeSimklProgress(
+                    imdbId: discoveredImdbId,
+                  ),
+                  StorageService.getEpisodeMdblistProgress(
+                    imdbId: discoveredImdbId,
+                  ),
+                ])
+              : const <Map<String, double>>[];
+
+          Map<String, dynamic> watchState(int season, int episode) {
+            final episodeKey = '${season}_$episode';
+            final local = localEpisodeProgress[episodeKey];
+            final positionMs = (local?['positionMs'] as num?)?.toInt() ?? 0;
+            final durationMs = (local?['durationMs'] as num?)?.toInt() ?? 0;
+            final locallyWatched =
+                locallyFinished[season.toString()]?.contains(episode) ?? false;
+            final traktPercent = trackerMaps.isNotEmpty
+                ? trackerMaps[0][episodeKey]
+                : null;
+            final simklPercent = trackerMaps.length > 1
+                ? trackerMaps[1][episodeKey]
+                : null;
+            final mdblistPercent = trackerMaps.length > 2
+                ? trackerMaps[2][episodeKey]
+                : null;
+            final localState = resolveEpisodeLocalWatchState(
+              locallyWatched: locallyWatched,
+              localPositionMs: positionMs,
+              localDurationMs: durationMs,
+              traktPercent: traktPercent,
+              simklPercent: simklPercent,
+              mdblistPercent: mdblistPercent,
+            );
+            final trackerPercent = furthestEpisodeTrackerPercent([
+              traktPercent,
+              simklPercent,
+              mdblistPercent,
+            ]);
+            return {
+              // Explicit zeros clear stale cached state on rows which are not
+              // currently playing. Native protects the live row from a late
+              // snapshot moving its position backwards.
+              'resumePositionMs': localState.positionMs,
+              'durationMs': durationMs,
+              // Always send a tracker value so a successful refresh can clear
+              // stale remote state already displayed by the native player.
+              'trackerProgressPercent': trackerPercent ?? 0.0,
+              // Explicit local completion differs from tracker 100%: remote
+              // completion yields to a local partial during an active rewatch.
+              'watched': localState.watched,
+            };
+          }
+
+          // Actual playlist rows need the same watch state as TVMaze-only
+          // placeholders. Include every classified row even when TVMaze lacks
+          // decorative metadata.
+          final metadataUpdates = <Map<String, dynamic>>[];
+          var episodesWithInfo = 0;
+          var episodesWithoutInfo = 0;
+          if (!singleEntryGuideOnly) {
+            for (final episode in seriesPlaylist.allEpisodes) {
+              final info = episode.episodeInfo;
+              if (info == null) {
+                episodesWithoutInfo++;
+              } else {
+                episodesWithInfo++;
+              }
+              final season = episode.seriesInfo.season;
+              final number = episode.seriesInfo.episode;
+              metadataUpdates.add({
+                'originalIndex': episode.originalIndex,
+                if (season != null) 'season': season,
+                if (number != null) 'episode': number,
+                if (info?.title != null) 'title': info!.title,
+                if (info?.plot != null) 'description': info!.plot,
+                if (info?.poster != null) 'artwork': info!.poster,
+                if (info?.rating != null) 'rating': info!.rating,
+                if (season != null && number != null)
+                  ...watchState(season, number),
+              });
+            }
+          } else {
+            // The parser cannot safely infer a lone file's identity, but the
+            // launch payload may already carry an authoritative catalog S/E.
+            // Decorate and update that real row so it does not mask the richer
+            // matching full-guide placeholder.
+            for (var i = 0; i < payload.items.length; i++) {
+              final item = payload.items[i];
+              if (item.season == null || item.episode == null) continue;
+              final rawInfo = seriesPlaylist.fullTvmazeEpisodes
+                  .firstWhereOrNull(
+                    (episode) =>
+                        episode['season'] == item.season &&
+                        episode['number'] == item.episode,
+                  );
+              final info = rawInfo == null
+                  ? null
+                  : EpisodeInfo.fromTVMaze(rawInfo);
+              if (info == null) {
+                episodesWithoutInfo++;
+              } else {
+                episodesWithInfo++;
+              }
+              metadataUpdates.add({
+                'originalIndex': i,
+                'season': item.season,
+                'episode': item.episode,
+                if (info?.title != null) 'title': info!.title,
+                if (info?.plot != null) 'description': info!.plot,
+                if (info?.poster != null) 'artwork': info!.poster,
+                if (info?.rating != null) 'rating': info!.rating,
+                ...watchState(item.season!, item.episode!),
+              });
+            }
+          }
+
+          // The show's FULL episode list for the native episode guide (every
+          // episode, present in the pack or not).
+          final guideEpisodes = <Map<String, dynamic>>[];
+          for (final m in seriesPlaylist.fullTvmazeEpisodes) {
+            final season = m['season'] as int?;
+            final number = m['number'] as int?;
+            if (season == null || number == null) continue;
+            final info = EpisodeInfo.fromTVMaze(m);
+            guideEpisodes.add({
+              'season': season,
+              'episode': number,
+              if (info.title != null) 'title': info.title,
+              if (info.poster != null) 'artwork': info.poster,
+              if (info.plot != null) 'description': info.plot,
+              if (info.rating != null) 'rating': info.rating,
+              if (info.runtime != null) 'runtime': info.runtime,
+              ...watchState(season, number),
+            });
+          }
+          return (
+            metadataUpdates: metadataUpdates,
+            guideEpisodes: guideEpisodes,
+            episodesWithInfo: episodesWithInfo,
+            episodesWithoutInfo: episodesWithoutInfo,
           );
-          return;
         }
 
-        // Check if this session is still current before sending metadata
-        // This prevents stale metadata from Series A being sent to Series B
-        if (!AndroidTvPlayerBridge.isCurrentSession(sessionId)) {
-          debugPrint(
-            'TVMazeAsync: DISCARDED - session $sessionId is no longer current (current: ${AndroidTvPlayerBridge.currentSessionId})',
+        var pushTail = Future<void>.value();
+        Future<bool> pushUpdates({required String phase}) {
+          final push = pushTail.then((_) async {
+            final updates = await buildUpdates();
+            debugPrint(
+              'TVMazeAsync: $phase episodes with info='
+              '${updates.episodesWithInfo}, without info='
+              '${updates.episodesWithoutInfo}, guide='
+              '${updates.guideEpisodes.length}, rows='
+              '${updates.metadataUpdates.length}',
+            );
+            if (updates.metadataUpdates.isEmpty &&
+                discoveredImdbId == null &&
+                updates.guideEpisodes.isEmpty) {
+              return false;
+            }
+            if (!AndroidTvPlayerBridge.isCurrentSession(sessionId)) {
+              debugPrint(
+                'TVMazeAsync: DISCARDED $phase - session $sessionId is stale',
+              );
+              return false;
+            }
+            AndroidTvPlayerBridge.storePendingMetadataUpdates(
+              updates.metadataUpdates,
+              sessionId: sessionId,
+              imdbId: discoveredImdbId,
+              guideEpisodes: updates.guideEpisodes,
+            );
+            await AndroidTvPlayerBridge.updateEpisodeMetadata(
+              updates.metadataUpdates,
+              sessionId: sessionId,
+              imdbId: discoveredImdbId,
+              guideEpisodes: updates.guideEpisodes,
+            );
+            return true;
+          });
+          pushTail = push.then<void>(
+            (_) {},
+            onError: (Object _, StackTrace __) {},
           );
-          return;
+          return push;
         }
 
-        // Store pending updates for fallback (in case broadcast arrives before receiver is registered)
-        // AND push directly to native player
-        debugPrint(
-          'TVMazeAsync: Storing ${metadataUpdates.length} pending metadata updates for fallback (imdbId=$discoveredImdbId)',
-        );
-        AndroidTvPlayerBridge.storePendingMetadataUpdates(
-          metadataUpdates,
-          sessionId: sessionId,
-          imdbId: discoveredImdbId,
-          guideEpisodes: guideEpisodes,
-        );
+        // First push is cache-only and makes the complete TVMaze guide usable
+        // immediately. Network histories refresh after that visible state.
+        if (!await pushUpdates(phase: 'cached')) return;
+        if (discoveredImdbId == null) return;
 
-        // Push metadata updates directly to native player (don't wait for request)
-        // Include discovered IMDB ID for Stremio subtitle fetching
-        debugPrint(
-          'TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates + '
-          '${guideEpisodes.length} guide episodes to native player (imdbId=$discoveredImdbId)',
-        );
-        await AndroidTvPlayerBridge.updateEpisodeMetadata(
-          metadataUpdates,
-          sessionId: sessionId,
-          imdbId: discoveredImdbId,
-          guideEpisodes: guideEpisodes,
-        );
-        debugPrint('TVMazeAsync: Metadata push complete');
+        final discoveredAfterLaunch = contentImdbId == null;
+        final standardTrackerRefreshes = <Future<Map<String, double>?>>[
+          if (singleEntryGuideOnly || discoveredAfterLaunch)
+            EpisodeTrackerSnapshotService.refreshTrakt(discoveredImdbId),
+          if (discoveredAfterLaunch)
+            EpisodeTrackerSnapshotService.refreshSimkl(discoveredImdbId),
+        ];
+
+        // Publish the established trackers as one update, independently from
+        // MDBList's larger history request. This avoids both provider coupling
+        // and a redundant full-guide broadcast for each established tracker.
+        final refreshGroups = <Future<void>>[
+          if (standardTrackerRefreshes.isNotEmpty)
+            () async {
+              final refreshed = await Future.wait(standardTrackerRefreshes);
+              if (refreshed.any((snapshot) => snapshot != null)) {
+                await pushUpdates(phase: 'Trakt/Simkl refreshed');
+              }
+            }(),
+          () async {
+            final refreshed =
+                await EpisodeTrackerSnapshotService.refreshMdblistHistory(
+                  discoveredImdbId,
+                );
+            if (refreshed != null) {
+              await pushUpdates(phase: 'MDBList refreshed');
+            }
+          }(),
+        ];
+        await Future.wait(refreshGroups);
       } catch (e, stack) {
         debugPrint('TVMazeAsync: ERROR - $e');
         debugPrint('TVMazeAsync: Stack - $stack');
@@ -3220,6 +3504,45 @@ class VideoPlayerLauncher {
   ) {
     if (payload.contentType != _PlaybackContentType.series) return false;
     return progress['season'] == null || progress['episode'] == null;
+  }
+
+  static MdblistScrobbleTarget? _nativeMdblistTarget(
+    _AndroidTvPlaybackPayload payload, {
+    int? season,
+    int? episode,
+  }) {
+    final imdbId = payload.imdbId;
+    if (imdbId == null || imdbId.isEmpty) return null;
+    final ids = MdblistMediaIds(imdb: imdbId);
+    if (payload.contentType != _PlaybackContentType.series) {
+      return MdblistScrobbleTarget.movie(ids);
+    }
+    if (season == null || episode == null) return null;
+    return MdblistScrobbleTarget.episode(ids, season: season, episode: episode);
+  }
+
+  static Future<void> _initializeNativeMdblist(
+    _AndroidTvPlaybackPayload payload,
+  ) async {
+    if (!payload.mdblistScrobble || !kMdblistEnabled) return;
+    if (payload.items.isEmpty) return;
+    final index = payload.startIndex.clamp(0, payload.items.length - 1);
+    final item = payload.items.isEmpty ? null : payload.items[index];
+    final target = _nativeMdblistTarget(
+      payload,
+      season: item?.season,
+      episode: item?.episode,
+    );
+    if (target == null) return;
+    final capability = await MdblistService.instance
+        .capturePlaybackCapability();
+    payload.mdblistSeason = item?.season;
+    payload.mdblistEpisode = item?.episode;
+    payload.mdblistSession = MdblistScrobbleSession.forService(
+      service: MdblistService.instance,
+      target: target,
+      capability: capability,
+    );
   }
 
   static Future<void> _handleProgressUpdate(
@@ -3555,6 +3878,50 @@ class VideoPlayerLauncher {
         }
       }
 
+      final mdblistSession = payload.mdblistSession;
+      if (mdblistSession != null && durationMs > 0) {
+        final isPlaying =
+            progress['isPlaying'] == true || progress['isBuffering'] == true;
+        final season = payload.contentType == _PlaybackContentType.series
+            ? progress['season'] as int?
+            : null;
+        final episode = payload.contentType == _PlaybackContentType.series
+            ? progress['episode'] as int?
+            : null;
+        if (payload.contentType != _PlaybackContentType.series ||
+            (season != null && episode != null)) {
+          if (season != payload.mdblistSeason ||
+              episode != payload.mdblistEpisode) {
+            final next = _nativeMdblistTarget(
+              payload,
+              season: season,
+              episode: episode,
+            );
+            if (next != null) {
+              await mdblistSession.switchTarget(
+                next,
+                position: Duration(milliseconds: positionMs),
+                duration: Duration(milliseconds: durationMs),
+              );
+              payload.mdblistSeason = season;
+              payload.mdblistEpisode = episode;
+            }
+          } else {
+            mdblistSession.seek(
+              Duration(milliseconds: positionMs),
+              Duration(milliseconds: durationMs),
+            );
+          }
+          if (completed) {
+            mdblistSession.complete();
+          } else if (isPlaying) {
+            mdblistSession.play();
+          } else {
+            mdblistSession.pause();
+          }
+        }
+      }
+
       if (payload.contentType == _PlaybackContentType.series) {
         final season = progress['season'] as int?;
         final episode = progress['episode'] as int?;
@@ -3741,6 +4108,10 @@ class VideoPlayerLauncher {
     _simklLastKnownProgress = 0.0;
     _simklLastKnownSeason = null;
     _simklLastKnownEpisode = null;
+    await payload.mdblistSession?.close();
+    payload.mdblistSession = null;
+    payload.mdblistSeason = null;
+    payload.mdblistEpisode = null;
   }
 
   static Future<String> _resolveEntryUrl(
@@ -3906,7 +4277,7 @@ class _AndroidTvPlaybackPayload {
   final Map<int, int> nextEpisodeMap;
   final Map<int, int> prevEpisodeMap;
   final List<_AndroidTvCollectionGroup>? collectionGroups;
-  final String? imdbId;
+  String? imdbId;
   final Map<String, String>? httpHeaders;
 
   final double? startAtPercent;
@@ -3919,6 +4290,11 @@ class _AndroidTvPlaybackPayload {
   // progress percent folds into the native resume seed via toMap below).
   final bool simklScrobble;
   final double? simklProgressPercent;
+  final bool mdblistScrobble;
+  final double? mdblistProgressPercent;
+  MdblistScrobbleSession? mdblistSession;
+  int? mdblistSeason;
+  int? mdblistEpisode;
 
   /// Local-only completion settings. Tracker sessions deliberately omit this
   /// path and continue to use the trackers' own completion rules.
@@ -3955,6 +4331,8 @@ class _AndroidTvPlaybackPayload {
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.mdblistScrobble = false,
+    this.mdblistProgressPercent,
     this.localCompletionTracking = false,
     this.movieCompletionThreshold =
         StorageService.defaultLocalCompletionThreshold,
@@ -3964,13 +4342,17 @@ class _AndroidTvPlaybackPayload {
   });
 
   /// The effective cross-tracker launch resume percent: the FURTHEST of the
-  /// Trakt and Simkl promises (each 0-100, exclusive). The native player only
+  /// Trakt, Simkl, and MDBList promises (each 0-100, exclusive). Native only
   /// knows one launch-resume input (`traktProgressPercent` in the map below),
   /// so the three-way merge happens here — native then reconciles this
   /// explicit percent against its local position as before.
   double? get _effectiveLaunchPercent {
     double? best;
-    for (final pct in [traktProgressPercent, simklProgressPercent]) {
+    for (final pct in [
+      traktProgressPercent,
+      simklProgressPercent,
+      mdblistProgressPercent,
+    ]) {
       if (pct == null || pct <= 0 || pct >= 100) continue;
       if (best == null || pct > best) best = pct;
     }
@@ -4043,8 +4425,9 @@ class _AndroidTvPlaybackItem {
   final String? provider;
   // Cross-device progress for this episode (0-100), or null. The legacy field
   // name is retained for the Kotlin payload, but the value is the furthest of
-  // Trakt and Simkl.
+  // Trakt, Simkl, and MDBList.
   final double? traktProgressPercent;
+  final bool watched;
 
   const _AndroidTvPlaybackItem({
     required this.id,
@@ -4064,6 +4447,7 @@ class _AndroidTvPlaybackItem {
     required this.resumeId,
     required this.provider,
     this.traktProgressPercent,
+    this.watched = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -4086,6 +4470,7 @@ class _AndroidTvPlaybackItem {
       'provider': provider,
       if (traktProgressPercent != null)
         'traktProgressPercent': traktProgressPercent,
+      'watched': watched,
     };
   }
 }
@@ -4301,6 +4686,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     final localCompletionTracking =
         !args.traktScrobble &&
         !args.simklScrobble &&
+        !args.mdblistScrobble &&
         args.stremioTvChannels == null &&
         args.iptvChannels == null;
     final completionThresholds = localCompletionTracking
@@ -4317,14 +4703,25 @@ class _AndroidTvPlaybackPayloadBuilder {
       contentType: contentType,
       seriesPlaylist: seriesPlaylist,
     );
+    final stableSeriesTitle =
+        args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
+    final locallyFinished = contentType == _PlaybackContentType.series
+        ? await StorageService.getMergedFinishedEpisodes(
+            seriesTitle: stableSeriesTitle,
+            imdbId: args.contentImdbId,
+          )
+        : const <String, Set<int>>{};
     // Cross-device per-episode progress ("season_episode" → 0-100) for playlist
     // bars and in-session episode resume. The native payload retains its legacy
-    // `traktProgressPercent` field name, but each value is the furthest of Trakt
-    // and Simkl.
+    // `traktProgressPercent` field name, but each value is the furthest of
+    // Trakt, Simkl, and MDBList.
     final trackerProgressMaps = args.contentImdbId != null
         ? await Future.wait([
             StorageService.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
             StorageService.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
+            StorageService.getEpisodeMdblistProgress(
+              imdbId: args.contentImdbId!,
+            ),
           ])
         : const <Map<String, double>>[];
     final traktProgress = trackerProgressMaps.isNotEmpty
@@ -4332,6 +4729,9 @@ class _AndroidTvPlaybackPayloadBuilder {
         : const <String, double>{};
     final simklProgress = trackerProgressMaps.length > 1
         ? trackerProgressMaps[1]
+        : const <String, double>{};
+    final mdblistProgress = trackerProgressMaps.length > 2
+        ? trackerProgressMaps[2]
         : const <String, double>{};
     final startIndex = await _determineStartIndex(
       contentType,
@@ -4404,6 +4804,22 @@ class _AndroidTvPlaybackPayloadBuilder {
                     (args.contentTitle?.isNotEmpty ?? false)
                 ? args.contentTitle!
                 : entry.title);
+      final season = episodeInfo.seriesInfo.season;
+      final episode = episodeInfo.seriesInfo.episode;
+      final episodeKey = season != null && episode != null
+          ? '${season}_$episode'
+          : null;
+      final locallyWatched = episodeKey != null
+          ? locallyFinished[season.toString()]?.contains(episode) ?? false
+          : false;
+      final resolvedLocal = resolveEpisodeLocalWatchState(
+        locallyWatched: locallyWatched,
+        localPositionMs: resumeInfo.positionMs,
+        localDurationMs: resumeInfo.durationMs,
+        traktPercent: episodeKey == null ? null : traktProgress[episodeKey],
+        simklPercent: episodeKey == null ? null : simklProgress[episodeKey],
+        mdblistPercent: episodeKey == null ? null : mdblistProgress[episodeKey],
+      );
 
       items.add(
         _AndroidTvPlaybackItem(
@@ -4413,22 +4829,22 @@ class _AndroidTvPlaybackPayloadBuilder {
           hdVideoUrl: entry.hdVideoUrl,
           audioUrl: entry.audioUrl,
           index: i,
-          season: episodeInfo.seriesInfo.season,
-          episode: episodeInfo.seriesInfo.episode,
+          season: season,
+          episode: episode,
           artwork: episodeInfo.episodeInfo?.poster,
           description: episodeInfo.episodeInfo?.plot,
           sizeBytes: entry.sizeBytes,
-          resumePositionMs: resumeInfo.positionMs,
+          resumePositionMs: resolvedLocal.positionMs,
           durationMs: resumeInfo.durationMs,
           updatedAt: resumeInfo.updatedAt,
           resumeId: resumeId,
           provider: entry.provider,
-          traktProgressPercent:
-              (episodeInfo.seriesInfo.season != null &&
-                  episodeInfo.seriesInfo.episode != null)
+          watched: resolvedLocal.watched,
+          traktProgressPercent: episodeKey != null
               ? furthestEpisodeTrackerPercent([
-                  traktProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}'],
-                  simklProgress['${episodeInfo.seriesInfo.season}_${episodeInfo.seriesInfo.episode}'],
+                  traktProgress[episodeKey],
+                  simklProgress[episodeKey],
+                  mdblistProgress[episodeKey],
                 ])
               : null,
         ),
@@ -4512,7 +4928,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       // Always carry the stable catalog title for series so local writes use
       // the same key regardless of which release wins Quick Play or a switch.
       seriesTitle: contentType == _PlaybackContentType.series
-          ? args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title
+          ? stableSeriesTitle
           : seriesPlaylist?.seriesTitle,
       seasons: seasons,
       nextEpisodeMap: navigationMaps.nextMap,
@@ -4530,6 +4946,8 @@ class _AndroidTvPlaybackPayloadBuilder {
       traktProgressPercent: args.traktProgressPercent,
       simklScrobble: args.simklScrobble,
       simklProgressPercent: args.simklProgressPercent,
+      mdblistScrobble: args.mdblistScrobble,
+      mdblistProgressPercent: args.mdblistProgressPercent,
       localCompletionTracking: localCompletionTracking,
       movieCompletionThreshold: completionThresholds[0],
       episodeCompletionThreshold: completionThresholds[1],
@@ -4729,17 +5147,12 @@ class _AndroidTvPlaybackPayloadBuilder {
   }) async {
     final stableSeriesTitle =
         args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
-    var seriesProgress = contentType == _PlaybackContentType.series
-        ? await StorageService.getEpisodeProgress(
+    final seriesProgress = contentType == _PlaybackContentType.series
+        ? await StorageService.getMergedEpisodeProgress(
             seriesTitle: stableSeriesTitle,
+            imdbId: args.contentImdbId,
           )
         : const <String, Map<String, dynamic>>{};
-    if (contentType == _PlaybackContentType.series &&
-        args.contentImdbId != null) {
-      final imdbSeriesProgress =
-          await StorageService.getEpisodeProgressByImdbId(args.contentImdbId!);
-      seriesProgress = {...imdbSeriesProgress, ...seriesProgress};
-    }
     final result = <_PerItemState>[];
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];

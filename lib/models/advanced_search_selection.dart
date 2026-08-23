@@ -5,18 +5,26 @@ class AdvancedSearchSelection {
   final String? year;
   final int? season;
   final int? episode;
+
   /// Content type for Stremio streams: 'movie', 'series', 'tv', 'channel', etc.
   final String? contentType;
+
   /// Poster image URL from catalog
   final String? posterUrl;
+
   /// Trakt watch progress (0-100) for resuming playback from Trakt
   final double? traktProgressPercent;
+
   /// Whether this selection originated from Trakt (continue watching, watchlist, etc.)
   final bool traktSource;
+
   /// Simkl watch progress (0-100) — parallel to [traktProgressPercent].
   final double? simklProgressPercent;
+
   /// Whether this selection's resume position came from Simkl.
   final bool simklSource;
+  final double? mdblistProgressPercent;
+  final bool mdblistSource;
 
   /// True only when built by [EpisodesScreen]'s episode "Browse/Sources" tap.
   /// Lets the host return to the episode list (not the catalog grid) when the
@@ -45,33 +53,39 @@ class AdvancedSearchSelection {
     this.traktSource = false,
     this.simklProgressPercent,
     this.simklSource = false,
+    this.mdblistProgressPercent,
+    this.mdblistSource = false,
     this.fromCatalogEpisodeDrillDown = false,
     this.fromCatalogItemDetail = false,
   });
 
   /// Whether this is a non-IMDB content type (TV channel, etc.)
-  bool get isNonImdb => contentType != null && contentType != 'movie' && contentType != 'series';
+  bool get isNonImdb =>
+      contentType != null && contentType != 'movie' && contentType != 'series';
 
   /// A copy of this selection scoped to [season] (null = whole series) with
   /// the episode cleared — a season-pack search scope (the Sources screen's
   /// Season chip). Kept in the model so a newly added field is carried here
   /// too instead of being silently dropped by an out-of-date inline copy.
-  AdvancedSearchSelection scopedToSeason(int? season) => AdvancedSearchSelection(
-    imdbId: imdbId,
-    isSeries: isSeries,
-    title: title,
-    year: year,
-    season: season,
-    episode: null,
-    contentType: contentType,
-    posterUrl: posterUrl,
-    traktProgressPercent: traktProgressPercent,
-    traktSource: traktSource,
-    simklProgressPercent: simklProgressPercent,
-    simklSource: simklSource,
-    fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
-    fromCatalogItemDetail: fromCatalogItemDetail,
-  );
+  AdvancedSearchSelection scopedToSeason(int? season) =>
+      AdvancedSearchSelection(
+        imdbId: imdbId,
+        isSeries: isSeries,
+        title: title,
+        year: year,
+        season: season,
+        episode: null,
+        contentType: contentType,
+        posterUrl: posterUrl,
+        traktProgressPercent: traktProgressPercent,
+        traktSource: traktSource,
+        simklProgressPercent: simklProgressPercent,
+        simklSource: simklSource,
+        mdblistProgressPercent: mdblistProgressPercent,
+        mdblistSource: mdblistSource,
+        fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
+        fromCatalogItemDetail: fromCatalogItemDetail,
+      );
 
   String get displayQuery {
     if (!isSeries || season == null || episode == null) {
@@ -101,6 +115,7 @@ class ImdbTitleResult {
   final String title;
   final String? year;
   final String? posterUrl;
+
   /// Content type for Stremio streams: 'movie', 'series', 'tv', 'channel', etc.
   /// Defaults to null for backward compatibility (treated as movie/series based on isSeries flag)
   final String? contentType;
@@ -114,7 +129,8 @@ class ImdbTitleResult {
   });
 
   /// Whether this is a non-IMDB content type (TV channel, etc.)
-  bool get isNonImdb => contentType != null && contentType != 'movie' && contentType != 'series';
+  bool get isNonImdb =>
+      contentType != null && contentType != 'movie' && contentType != 'series';
 
   factory ImdbTitleResult.fromJson(Map<String, dynamic> json) {
     final id = (json['#IMDB_ID'] ?? '').toString();

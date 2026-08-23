@@ -20,6 +20,7 @@ import '../../services/torbox_account_service.dart';
 import '../../services/premiumize_account_service.dart';
 import '../../services/alldebrid_account_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../services/mdblist/mdblist_service.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/engine/engine_registry.dart';
 import '../../services/engine/remote_engine_manager.dart';
@@ -112,6 +113,7 @@ class RemoteCommandRouter {
     ConfigCommand.pikpak,
     ConfigCommand.trakt,
     ConfigCommand.simkl,
+    ConfigCommand.mdblist,
     ConfigCommand.searchEngines,
     ConfigCommand.webDav,
     ConfigCommand.indexerManagers,
@@ -1776,6 +1778,9 @@ class RemoteCommandRouter {
       case ConfigCommand.simkl:
         payload['simkl'] = decoded();
         break;
+      case ConfigCommand.mdblist:
+        payload['mdblist'] = decoded();
+        break;
       case ConfigCommand.searchEngines:
         payload['searchEngineIds'] = decoded();
         break;
@@ -1822,6 +1827,7 @@ class RemoteCommandRouter {
       ConfigCommand.pikpak: 'pikpak',
       ConfigCommand.trakt: 'trakt',
       ConfigCommand.simkl: 'simkl',
+      ConfigCommand.mdblist: 'mdblist',
       ConfigCommand.searchEngines: 'searchEngineIds',
       ConfigCommand.webDav: 'webDavServers',
       ConfigCommand.indexerManagers: 'indexerManagers',
@@ -2227,6 +2233,7 @@ class RemoteCommandRouter {
         'pikpak': ConfigCommand.pikpak,
         'trakt': ConfigCommand.trakt,
         'simkl': ConfigCommand.simkl,
+        'mdblist': ConfigCommand.mdblist,
         'searchEngineIds': ConfigCommand.searchEngines,
         'webDavServers': ConfigCommand.webDav,
         'indexerManagers': ConfigCommand.indexerManagers,
@@ -2557,6 +2564,9 @@ class RemoteCommandRouter {
       case ConfigCommand.simkl:
         await _handleSimklConfig(data);
         break;
+      case ConfigCommand.mdblist:
+        await _handleMdblistConfig(data);
+        break;
       case ConfigCommand.searchEngines:
         await _handleSearchEnginesConfig(data);
         break;
@@ -2792,6 +2802,30 @@ class RemoteCommandRouter {
     } catch (_) {
       debugPrint('RemoteCommandRouter: Simkl configuration failed');
       _showSnackBar('Simkl: Configuration failed', isError: true);
+    }
+  }
+
+  /// Validate before replacing the destination profile's MDBList connection.
+  /// [connect] publishes credentials only after `/user` succeeds, so invalid
+  /// transfer data leaves the prior resource unchanged.
+  Future<void> _handleMdblistConfig(String jsonData) async {
+    try {
+      final data = jsonDecode(jsonData) as Map<String, dynamic>;
+      final apiKey = data['api_key'] as String?;
+      if (apiKey == null || apiKey.trim().isEmpty || !kMdblistEnabled) {
+        _showSnackBar('MDBList: Invalid connection data', isError: true);
+        return;
+      }
+      final account = await MdblistService.instance.connect(apiKey);
+      if (account == null) {
+        _showSnackBar('MDBList: API key validation failed', isError: true);
+        return;
+      }
+      await StorageService.setMdblistSyncCatalogItems(true);
+      MainPageBridge.notifyIntegrationChanged();
+      _showSnackBar('MDBList connected successfully');
+    } catch (_) {
+      _showSnackBar('MDBList: Configuration failed', isError: true);
     }
   }
 

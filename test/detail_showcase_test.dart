@@ -68,7 +68,9 @@ DetailModel _model({
   bool withCast = true,
   bool hasTrakt = true,
   bool hasSimkl = true,
+  bool hasMdblist = false,
   bool withSecondaryTracker = false,
+  bool withTertiaryTracker = false,
   bool inMyWatchlist = false,
   bool withMyWatchlist = false,
   List<SeriesSource> sources = const [],
@@ -115,6 +117,10 @@ DetailModel _model({
     simklTracked: false,
     simklLabel: 'Not tracked',
     simklRating: null,
+    hasMdblist: hasMdblist,
+    mdblistTracked: true,
+    mdblistLabel: 'Watchlist',
+    mdblistRating: 8,
     showPrimary: true,
     onPrimary: () {},
     onBrowse: null,
@@ -123,8 +129,10 @@ DetailModel _model({
     onAppMenu: () {},
     onTraktMenu: () {},
     onSimklMenu: () {},
+    onMdblistMenu: () {},
     onTrackers: () {},
     onTrackersSecondary: withSecondaryTracker ? () {} : null,
+    onTrackersTertiary: withTertiaryTracker ? () {} : null,
     inMyWatchlist: inMyWatchlist,
     onToggleMyWatchlist: withMyWatchlist ? () {} : null,
     onManageSources: () {},
@@ -371,6 +379,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TraktMark), findsNothing);
     expect(find.byType(SimklMark), findsOneWidget);
+
+    await tester.pumpWidget(
+      _host(_model(hasTrakt: false, hasSimkl: false, hasMdblist: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TraktMark), findsNothing);
+    expect(find.byType(SimklMark), findsNothing);
+    expect(find.byType(MdblistMark), findsOneWidget);
   });
 
   testWidgets('both connected trackers get their own branded action', (
@@ -380,6 +396,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TraktMark), findsOneWidget);
     expect(find.byType(SimklMark), findsOneWidget);
+  });
+
+  testWidgets('three connected trackers get independent branded actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        _model(
+          hasMdblist: true,
+          withSecondaryTracker: true,
+          withTertiaryTracker: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TraktMark), findsOneWidget);
+    expect(find.byType(SimklMark), findsOneWidget);
+    expect(find.byType(MdblistMark), findsOneWidget);
   });
 
   testWidgets('My Watchlist action reflects saved state', (tester) async {

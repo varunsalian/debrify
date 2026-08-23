@@ -88,7 +88,9 @@ class TraktCalendarEntry {
       episodeNumber: numberRaw,
       episodeTitle: episode['title'] as String?,
       episodeOverview: episode['overview'] as String?,
-      runtimeMinutes: episode['runtime'] is int ? episode['runtime'] as int : null,
+      runtimeMinutes: episode['runtime'] is int
+          ? episode['runtime'] as int
+          : null,
       posterUrl: poster,
     );
   }
@@ -118,7 +120,8 @@ class TraktCalendarEntry {
     final airedYear = int.tryParse(dateStr.substring(0, 4));
     final airedMonth = int.tryParse(dateStr.substring(5, 7));
     final airedDay = int.tryParse(dateStr.substring(8, 10));
-    if (airedYear == null || airedMonth == null || airedDay == null) return null;
+    if (airedYear == null || airedMonth == null || airedDay == null)
+      return null;
     final airedLocal = DateTime(airedYear, airedMonth, airedDay);
     final firstAiredUtc = airedLocal.toUtc();
 
@@ -154,6 +157,58 @@ class TraktCalendarEntry {
       episodeOverview: null,
       runtimeMinutes: null,
       posterUrl: 'https://images.metahub.space/poster/medium/$imdb/img',
+    );
+  }
+
+  /// Parse MDBList's `/calendar/events` episode shape. MDBList calendar dates
+  /// are nominal local days, not air-time instants. Movie/person events are
+  /// intentionally rejected because Debrify's Calendar is episode-only.
+  static TraktCalendarEntry? fromMdblistCalendarJson(
+    Map<String, dynamic> json, {
+    Map<String, dynamic>? resolvedShow,
+  }) {
+    if (json['type'] != 'episode') return null;
+    final date = json['start']?.toString();
+    if (date == null || date.length < 10) return null;
+    final year = int.tryParse(date.substring(0, 4));
+    final month = int.tryParse(date.substring(5, 7));
+    final day = int.tryParse(date.substring(8, 10));
+    if (year == null || month == null || day == null) return null;
+
+    int? integer(Object? value) => value is num
+        ? value.toInt()
+        : value is String
+        ? int.tryParse(value)
+        : null;
+    final season = integer(json['season_number']);
+    final episode = integer(json['episode_number']);
+    final title = json['title']?.toString().trim();
+    if (season == null || episode == null || title == null || title.isEmpty) {
+      return null;
+    }
+
+    final ids = resolvedShow?['ids'];
+    final imdb = ids is Map ? ids['imdb']?.toString() : null;
+    final trakt = ids is Map ? integer(ids['trakt']) : null;
+    final localDay = DateTime(year, month, day);
+    final poster = json['poster']?.toString();
+    return TraktCalendarEntry(
+      firstAiredUtc: localDay.toUtc(),
+      firstAiredLocal: localDay,
+      showTitle: title,
+      showYear: integer(resolvedShow?['year']),
+      showImdbId: imdb?.startsWith('tt') == true ? imdb : null,
+      showTraktId: trakt,
+      seasonNumber: season,
+      episodeNumber: episode,
+      episodeTitle: json['episode_title']?.toString(),
+      episodeOverview: json['description']?.toString(),
+      runtimeMinutes: null,
+      posterUrl: poster != null && poster.isNotEmpty
+          ? poster
+          : (imdb?.startsWith('tt') == true
+                ? 'https://images.metahub.space/poster/medium/$imdb/img'
+                : null),
     );
   }
 }

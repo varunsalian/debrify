@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/main_page_bridge.dart';
+import '../../services/mdblist/mdblist_list_source.dart';
+import '../../services/mdblist/mdblist_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/trakt/trakt_list_source.dart';
@@ -36,8 +38,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
   String _tvHomeStyle = 'canvas';
-  HomeCardOrientation _homeCardOrientation =
-      HomeCardOrientation.landscape;
+  HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 
@@ -90,10 +91,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// per-platform for continuity: a phone's stored values live under the
   /// detail keys (the only surface it had), a TV's under homeHero. The pairs
   /// converge on the first write.
-  static AmbientTrailerSurface get _ambientSurface =>
-      PlatformUtil.isTelevision
-          ? AmbientTrailerSurface.homeHero
-          : AmbientTrailerSurface.detail;
+  static AmbientTrailerSurface get _ambientSurface => PlatformUtil.isTelevision
+      ? AmbientTrailerSurface.homeHero
+      : AmbientTrailerSurface.detail;
 
   /// Writes the sound preference to every ambient surface this platform has.
   ///
@@ -145,8 +145,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final hideProviderCards = await StorageService.getHomeHideProviderCards();
       final continueWatchingEnabled =
           await StorageService.getHomeContinueWatchingEnabled();
-      final holdToQuickPlay =
-          await StorageService.getHomeCwHoldToQuickPlay();
+      final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
       final trailerAutoplayEnabled =
           await StorageService.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
@@ -271,9 +270,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       MainPageBridge.notifyHomeSettingsChanged();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save setting: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
     }
   }
 
@@ -315,6 +314,32 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       } catch (_) {
         // Same: enabled custom/liked entries become unavailable leaves.
       }
+      var mdblistMine = const <MdblistListChoice>[];
+      var mdblistLiked = const <MdblistListChoice>[];
+      var mdblistTop = const <MdblistListChoice>[];
+      try {
+        if (kMdblistEnabled &&
+            await MdblistService.instance.isAuthenticated()) {
+          final groups =
+              await Future.wait([
+                MdblistListSource.instance.loadUserLists(),
+                MdblistListSource.instance.loadLikedLists(),
+                MdblistListSource.instance.loadTopLists(),
+              ]).timeout(
+                const Duration(seconds: 5),
+                onTimeout: () => const [
+                  <MdblistListChoice>[],
+                  <MdblistListChoice>[],
+                  <MdblistListChoice>[],
+                ],
+              );
+          mdblistMine = groups[0];
+          mdblistLiked = groups[1];
+          mdblistTop = groups[2];
+        }
+      } catch (_) {
+        // Enabled MDBList entries remain visible as unavailable leaves.
+      }
       if (!mounted) return;
       final changed = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
@@ -324,6 +349,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
             extraRows: extras,
             rowOrder: rowOrder,
             traktUserLists: traktUserLists,
+            mdblistMine: mdblistMine,
+            mdblistLiked: mdblistLiked,
+            mdblistTop: mdblistTop,
             iptvLists: iptvLists,
             isTelevision: PlatformUtil.isTelevision,
           ),
@@ -423,8 +451,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       title: 'Landscape Cards',
                       subtitle:
                           'Use wide 16:9 artwork instead of portrait posters',
-                      value: _homeCardOrientation ==
-                          HomeCardOrientation.landscape,
+                      value:
+                          _homeCardOrientation == HomeCardOrientation.landscape,
                       onChanged: _setHomeLandscapeCards,
                     ),
                   ],

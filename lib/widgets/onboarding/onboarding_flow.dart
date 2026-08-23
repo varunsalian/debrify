@@ -35,6 +35,7 @@ import 'steps/key_step.dart';
 import 'steps/mode_step.dart';
 import 'steps/services_step.dart';
 import 'steps/trackers_step.dart';
+import '../../services/mdblist/mdblist_service.dart';
 import 'tv_keyboard_slot.dart';
 
 typedef OnboardingValidationOverride =
@@ -119,6 +120,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   late final TrackerAuthController _simkl = TrackerAuthController(
     TrackerKind.simkl,
   )..addListener(_trackerChanged);
+  bool _mdblistConnected = false;
 
   OnboardStep _step = OnboardStep.mode;
   List<IntegrationType> _providerFlow = <IntegrationType>[];
@@ -591,9 +593,20 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   }
 
   Future<void> _initializeTrackers() async {
-    await Future.wait(<Future<void>>[_trakt.initialize(), _simkl.initialize()]);
+    final initialized = await Future.wait<Object?>([
+      _trakt.initialize(),
+      _simkl.initialize(),
+      if (kMdblistEnabled)
+        MdblistService.instance.isAuthenticated()
+      else
+        Future.value(false),
+    ]);
     if (!mounted || _step != OnboardStep.trackers) return;
-    if (_trakt.connected || _simkl.connected) _hasConfigured = true;
+    _mdblistConnected = initialized[2] == true;
+    if (_trakt.connected || _simkl.connected || _mdblistConnected) {
+      _hasConfigured = true;
+    }
+    setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestLanding());
   }
 
@@ -766,6 +779,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     trackers: <String>[
       if (_trakt.connected) 'Trakt',
       if (_simkl.connected) 'Simkl',
+      if (_mdblistConnected) 'MDBList',
     ],
   );
 
@@ -895,6 +909,14 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           focusController: _focus,
           trakt: _trakt,
           simkl: _simkl,
+          mdblistConnected: _mdblistConnected,
+          onMdblistConnected: () {
+            if (!mounted) return;
+            setState(() {
+              _mdblistConnected = true;
+              _hasConfigured = true;
+            });
+          },
           onDone: _trackersDone,
         );
         content = step;

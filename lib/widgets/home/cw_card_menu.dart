@@ -32,6 +32,7 @@ Future<CwCardAction?> showCwCardMenu(
   /// False on PikPak-only setups, where the board hides quick-play entirely —
   /// the menu then exists purely to offer the removal.
   bool showPlay = true,
+  bool showRemove = true,
   String playLabel = 'Play',
   String removeLabel = 'Remove from Continue Watching',
 }) {
@@ -44,6 +45,7 @@ Future<CwCardAction?> showCwCardMenu(
       posterUrl: posterUrl,
       subtitle: subtitle,
       showPlay: showPlay,
+      showRemove: showRemove,
       playLabel: playLabel,
       playDescription: playDescription,
       removeLabel: removeLabel,
@@ -58,6 +60,7 @@ class _CwCardMenu extends StatefulWidget {
   final String? posterUrl;
   final String? subtitle;
   final bool showPlay;
+  final bool showRemove;
   final String playLabel;
   final String playDescription;
   final String removeLabel;
@@ -69,6 +72,7 @@ class _CwCardMenu extends StatefulWidget {
     required this.posterUrl,
     required this.subtitle,
     required this.showPlay,
+    required this.showRemove,
     required this.playLabel,
     required this.playDescription,
     required this.removeLabel,
@@ -146,15 +150,16 @@ class _CwCardMenuState extends State<_CwCardMenu> {
                     description: widget.playDescription,
                     onTap: () => _pick(CwCardAction.play),
                   ),
-                _MenuRow(
-                  focusNode: _removeNode,
-                  icon: Icons.playlist_remove_rounded,
-                  iconColor: _danger,
-                  accent: _danger,
-                  label: widget.removeLabel,
-                  description: widget.removeDescription,
-                  onTap: () => _pick(CwCardAction.remove),
-                ),
+                if (widget.showRemove)
+                  _MenuRow(
+                    focusNode: _removeNode,
+                    icon: Icons.playlist_remove_rounded,
+                    iconColor: _danger,
+                    accent: _danger,
+                    label: widget.removeLabel,
+                    description: widget.removeDescription,
+                    onTap: () => _pick(CwCardAction.remove),
+                  ),
               ],
             ),
           ),
@@ -313,9 +318,7 @@ class _MenuRowState extends State<_MenuRow> {
                   : app.fade(app.core.tx, 0.04),
               borderRadius: app.shape.br(14),
               border: Border.all(
-                color: _active
-                    ? widget.accent
-                    : app.fade(app.core.tx, 0.07),
+                color: _active ? widget.accent : app.fade(app.core.tx, 0.07),
                 width: _active ? 2 : 1,
               ),
             ),

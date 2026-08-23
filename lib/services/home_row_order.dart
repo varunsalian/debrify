@@ -30,6 +30,35 @@ class HomeRowOrder {
     return out;
   }
 
+  /// Insert newly introduced rows immediately after an existing family in a
+  /// saved order. Rows already present are never moved, so once the user has
+  /// arranged a new row their explicit position remains authoritative.
+  static List<String> insertMissingAfter(
+    Iterable<String> saved, {
+    required Iterable<String> additions,
+    required Iterable<String> anchors,
+  }) {
+    final out = normalize(saved);
+    final seen = out.toSet();
+    final missing = [
+      for (final id in additions)
+        if (seen.add(id)) id,
+    ];
+    if (missing.isEmpty) return out;
+
+    var insertionIndex = -1;
+    final anchorSet = anchors.toSet();
+    for (var i = 0; i < out.length; i++) {
+      if (anchorSet.contains(out[i])) insertionIndex = i;
+    }
+    // No saved anchor means there is no legacy family slot to inherit. Leave
+    // the additions undiscovered here so the caller's canonical reconciliation
+    // can place them normally (and an empty saved order remains canonical).
+    if (insertionIndex < 0) return out;
+    out.insertAll(insertionIndex + 1, missing);
+    return out;
+  }
+
   /// Sort [values] by the saved ids. Unranked values append stably.
   static List<T> apply<T>(
     Iterable<T> values,

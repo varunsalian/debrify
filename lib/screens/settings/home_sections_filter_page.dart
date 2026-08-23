@@ -7,6 +7,8 @@ import '../../services/home_list_rows.dart';
 import '../../services/home_row_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/simkl/simkl_list_source.dart';
+import '../../services/mdblist/mdblist_service.dart';
+import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_list_source.dart';
 import '../../services/analytics_service.dart';
@@ -49,6 +51,9 @@ class HomeSectionsFilterPage extends StatefulWidget {
   /// (empty when unauthenticated or the fetch failed — enabled entries then
   /// surface as unavailable leaves).
   final List<TraktListChoice> traktUserLists;
+  final List<MdblistListChoice> mdblistMine;
+  final List<MdblistListChoice> mdblistLiked;
+  final List<MdblistListChoice> mdblistTop;
 
   /// The user's IPTV lists (incl. Favorites, which is filtered out here — it
   /// already has the `fav:iptv` leaf).
@@ -63,6 +68,9 @@ class HomeSectionsFilterPage extends StatefulWidget {
     this.extraRows = const [],
     this.rowOrder = const [],
     this.traktUserLists = const [],
+    this.mdblistMine = const [],
+    this.mdblistLiked = const [],
+    this.mdblistTop = const [],
     this.iptvLists = const [],
     required this.isTelevision,
   });
@@ -145,7 +153,12 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     super.initState();
     AnalyticsService.screenView('home_sections_filter');
     _groups = _buildModel();
-    _orderIds = HomeRowOrder.reconcile(widget.rowOrder, _canonicalOrderIds());
+    final seededOrder = HomeRowOrder.insertMissingAfter(
+      widget.rowOrder,
+      additions: const ['mdblist:movies', 'mdblist:shows'],
+      anchors: const ['simkl:movies', 'simkl:shows'],
+    );
+    _orderIds = HomeRowOrder.reconcile(seededOrder, _canonicalOrderIds());
     _railNodes = List.generate(
       _groups.length,
       (i) => FocusNode(debugLabel: 'homeRail$i'),
@@ -229,6 +242,17 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
           if (l != SimklSeeAllList.continueWatching)
             opt(HomeExtraRowIds.simkl(l), l.label, badge: 'LIST'),
       ]),
+      if (kMdblistEnabled)
+        _Group('MDBList', [
+          _Item('mdblist:movies', 'Movies', on('mdblist:movies'), badge: 'CW'),
+          _Item('mdblist:shows', 'Shows', on('mdblist:shows'), badge: 'CW'),
+          for (final l in widget.mdblistMine)
+            opt(HomeExtraRowIds.mdblistMine(l), l.label, badge: 'MINE'),
+          for (final l in widget.mdblistLiked)
+            opt(HomeExtraRowIds.mdblistLiked(l), l.label, badge: 'LIKED'),
+          for (final l in widget.mdblistTop)
+            opt(HomeExtraRowIds.mdblistTop(l), l.label, badge: 'TOP'),
+        ]),
       _Group('IPTV Continue Watching', [
         _Item('iptv:movies', 'Movies', on('iptv:movies')),
         _Item('iptv:series', 'Series', on('iptv:series')),
@@ -274,6 +298,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         groupName = 'Trakt';
       } else if (r.id.startsWith(HomeExtraRowIds.simklPrefix)) {
         groupName = 'Simkl';
+      } else if (r.id.startsWith(HomeExtraRowIds.mdblistPrefix)) {
+        groupName = 'MDBList';
       } else if (r.id.startsWith(HomeExtraRowIds.iptvPrefix)) {
         groupName = 'IPTV Lists';
       } else {
@@ -330,6 +356,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       'trakt:shows',
       'simkl:movies',
       'simkl:shows',
+      'mdblist:movies',
+      'mdblist:shows',
       'iptv:movies',
       'iptv:series',
       'watchlist:movies',

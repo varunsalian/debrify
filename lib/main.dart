@@ -58,6 +58,7 @@ import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/tvos_top_shelf_service.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
+import 'services/mdblist/mdblist_service.dart';
 import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
@@ -1274,6 +1275,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // Whether a Simkl account is connected — also gates the Calendar tab (19),
   // which can show either tracker's schedule via an in-page Source dropdown.
   bool _simklAuthenticated = false;
+  // MDBList remains independently feature-gated; when disabled its service
+  // reports unauthenticated and cannot affect existing Calendar visibility.
+  bool _mdblistAuthenticated = false;
   // Seeded from the cache warmed in main() before runApp, so the very first
   // frame already builds the right layout branch — waiting for the async
   // platform check here used to flash the non-TV chrome (the old top bar) on
@@ -2736,6 +2740,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // fires notifyIntegrationChanged(), so this re-reads on those events too.
     final traktAuthed = await TraktService.instance.isAuthenticated();
     final simklAuthed = await SimklService.instance.isAuthenticated();
+    final mdblistAuthed = await MdblistService.instance.isAuthenticated();
 
     if (!mounted) return;
 
@@ -2766,6 +2771,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       allDebridHidden: allDebridHidden,
       traktAuthenticated: traktAuthed,
       simklAuthenticated: simklAuthed,
+      mdblistAuthenticated: mdblistAuthed,
     );
   }
 
@@ -2786,6 +2792,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     required bool allDebridHidden,
     required bool traktAuthenticated,
     required bool simklAuthenticated,
+    required bool mdblistAuthenticated,
   }) {
     final newVisible = _computeVisibleNavIndices(
       hasRealDebrid: hasRealDebrid,
@@ -2802,6 +2809,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       allDebridHidden: allDebridHidden,
       traktAuthenticated: traktAuthenticated,
       simklAuthenticated: simklAuthenticated,
+      mdblistAuthenticated: mdblistAuthenticated,
     );
 
     int nextIndex = _selectedIndex;
@@ -2829,6 +2837,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         _allDebridHiddenFromNav == allDebridHidden &&
         _traktAuthenticated == traktAuthenticated &&
         _simklAuthenticated == simklAuthenticated &&
+        _mdblistAuthenticated == mdblistAuthenticated &&
         nextIndex == _selectedIndex) {
       return;
     }
@@ -2850,6 +2859,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _allDebridHiddenFromNav = allDebridHidden;
       _traktAuthenticated = traktAuthenticated;
       _simklAuthenticated = simklAuthenticated;
+      _mdblistAuthenticated = mdblistAuthenticated;
       _selectedIndex = nextIndex;
     });
     AppSurfaceState.instance.publishTab(nextIndex);
@@ -2887,11 +2897,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     bool? allDebridHidden,
     bool? traktAuthenticated,
     bool? simklAuthenticated,
+    bool? mdblistAuthenticated,
   }) {
     final trakt = traktAuthenticated ?? _traktAuthenticated;
     final simkl = simklAuthenticated ?? _simklAuthenticated;
-    // The Calendar tab shows for EITHER tracker (the screen swaps sources).
-    final calendar = trakt || simkl;
+    final mdblist = mdblistAuthenticated ?? _mdblistAuthenticated;
+    // The Calendar tab shows for any connected tracker; the MDBList service
+    // returns false while its rollout flag is disabled.
+    final calendar = trakt || simkl || mdblist;
     if (_isAndroidTv) {
       final rd = hasRealDebrid ?? _hasRealDebridKey;
       final rdHidden = realDebridHidden ?? _rdHiddenFromNav;

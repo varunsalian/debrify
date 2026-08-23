@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
+import '../services/episode_tracker_snapshot_service.dart';
 import '../services/storage_service.dart';
 import '../services/tvmaze_service.dart';
 import '../utils/episode_progress_merge.dart';
@@ -45,6 +47,18 @@ class SeriesBrowser extends StatefulWidget {
   final Map<String, dynamic>? playlistItem; // For Fix Metadata feature
   final String? imdbId; // Show IMDb id, for per-episode Trakt progress lookup
 
+  /// Whether the show IMDb id was already available when playback launched.
+  /// Keep this separate from [imdbId]: TVMaze can populate the latter later,
+  /// and discovered identities need all provider snapshots refreshed because
+  /// no launch-time snapshot could have been seeded for them.
+  final bool imdbKnownAtLaunch;
+
+  /// Completes when the player-side TVMaze enrichment has finished mutating
+  /// [seriesPlaylist]. A guide can open while that work is still in flight;
+  /// awaiting this signal lets it publish the discovered IMDb identity and
+  /// full episode list without relying on an unrelated rebuild.
+  final Future<void>? metadataReady;
+
   /// Full-guide mode: render EVERY episode of the show (from TVMaze), not
   /// just the ones present in the pack. Absent episodes show dimmed with a
   /// fetch affordance; tapping one still calls [onEpisodeSelected], and the
@@ -59,8 +73,21 @@ class SeriesBrowser extends StatefulWidget {
     required this.currentEpisodeIndex,
     this.playlistItem, // Optional playlist item data
     this.imdbId,
+    required this.imdbKnownAtLaunch,
+    this.metadataReady,
     this.showAllEpisodes = false,
   });
+
+  static ({bool trakt, bool simkl, bool mdblist}) trackerRefreshPolicy({
+    required bool imdbKnownAtLaunch,
+    required bool singleEntryGuide,
+  }) {
+    // Snapshot refreshes are coordinator-cached and authentication-aware. Run
+    // every provider on a normal guide open so account mutations invalidate
+    // immediately, while publication below remains staged so MDBList cannot
+    // hold back Trakt/Simkl.
+    return (trakt: true, simkl: true, mdblist: true);
+  }
 
   @override
   State<SeriesBrowser> createState() => _SeriesBrowserState();
@@ -96,6 +123,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   // Simkl's launch-time snapshot, kept separate from local state so a remote
   // mark-unwatched can clear on the next launch without deleting local history.
   Map<String, double> _simklEpisodeProgress = {};
+  // MDBList's launch-time snapshot follows the same replaceable-store contract
+  // as Simkl and participates in every player-guide progress decision.
+  Map<String, double> _mdblistEpisodeProgress = {};
+  int _trackerRefreshGeneration = 0;
+  bool _initialDependencyPassSeen = false;
 
   // Top padding on the episode grid; part of the scroll-centering math.
   static const double _gridTopPadding = 4.0;
@@ -104,6 +136,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   // laid-out height is _lastRowExtent + this. The comfortable GridView has no
   // divider, so it's only added to the stride when _denseView is on.
   static const double _denseRowDivider = 1.0;
+
+  String? get _effectiveImdbId {
+    final supplied = widget.imdbId?.trim();
+    if (supplied != null && supplied.isNotEmpty) return supplied;
+    final discovered = widget.seriesPlaylist.imdbId?.trim();
+    return discovered != null && discovered.isNotEmpty ? discovered : null;
+  }
 
   // Layout values captured during build so _recenterCurrentEpisode can
   // compute offsets that match the grid actually on screen.
@@ -122,15 +161,56 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     _loadLastPlayedEpisode();
     _loadFinishedEpisodes();
     _loadEpisodeProgress();
+    unawaited(_refreshTrackerSnapshots());
+    final metadataReady = widget.metadataReady;
+    if (metadataReady != null) {
+      unawaited(_publishPlayerMetadataWhenReady(metadataReady));
+    }
     // Position (without animation) on the current episode after first layout.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _recenterCurrentEpisode(animate: false);
     });
   }
 
+  Future<void> _publishPlayerMetadataWhenReady(
+    Future<void> metadataReady,
+  ) async {
+    final imdbBeforeMetadata = _effectiveImdbId;
+    try {
+      await metadataReady;
+    } catch (_) {
+      // TVMaze enrichment is optional. Cached/local guide state still works.
+    }
+    if (!mounted) return;
+
+    final fullEpisodes = widget.seriesPlaylist.fullTvmazeEpisodes;
+    setState(() {
+      if (fullEpisodes.isNotEmpty) {
+        _fullEpisodes = fullEpisodes;
+        _mergedSeasonCache.clear();
+      }
+    });
+
+    // Most importantly, TVMaze may have populated seriesPlaylist.imdbId while
+    // this route was already open. Rebind every keyed store and refresh all
+    // authenticated providers now that the stable identity exists.
+    if (_effectiveImdbId == imdbBeforeMetadata) return;
+    await Future.wait([_loadFinishedEpisodes(), _loadEpisodeProgress()]);
+    if (!mounted) return;
+    await _refreshTrackerSnapshots();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // initState already started both reads. didChangeDependencies follows it
+    // immediately on the first mount, so repeating them here only decodes the
+    // same stores twice and races two redundant setState calls. Preserve the
+    // later dependency-change refresh behavior.
+    if (!_initialDependencyPassSeen) {
+      _initialDependencyPassSeen = true;
+      return;
+    }
     // Refresh finished episodes when dependencies change (e.g., when modal is shown)
     _loadFinishedEpisodes();
     _loadEpisodeProgress();
@@ -225,11 +305,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
 
     // If no show ID yet but we have IMDB ID, do IMDB lookup
-    if (showId == null && widget.seriesPlaylist.imdbId != null) {
+    final effectiveImdbId = _effectiveImdbId;
+    if (showId == null && effectiveImdbId != null) {
       try {
-        final showInfo = await TVMazeService.lookupByImdbId(
-          widget.seriesPlaylist.imdbId!,
-        );
+        final showInfo = await TVMazeService.lookupByImdbId(effectiveImdbId);
         if (showInfo != null && showInfo['id'] != null) {
           showId = showInfo['id'] as int;
           // Store for future use
@@ -343,11 +422,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   /// Load finished episodes for the entire series
   Future<void> _loadFinishedEpisodes() async {
     try {
-      if (widget.seriesPlaylist.isSeries &&
-          widget.seriesPlaylist.seriesTitle != null) {
-        final allFinishedEpisodes = await StorageService.getFinishedEpisodes(
-          seriesTitle: widget.seriesPlaylist.seriesTitle!,
-        );
+      if (widget.seriesPlaylist.isSeries) {
+        final allFinishedEpisodes =
+            await StorageService.getMergedFinishedEpisodes(
+              seriesTitle: widget.seriesPlaylist.seriesTitle ?? '',
+              imdbId: _effectiveImdbId,
+            );
         if (mounted) {
           setState(() {
             _finishedEpisodes = allFinishedEpisodes;
@@ -362,12 +442,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   /// Load episode progress for the entire series
   Future<void> _loadEpisodeProgress() async {
     try {
-      if (widget.seriesPlaylist.isSeries &&
-          widget.seriesPlaylist.seriesTitle != null) {
-        final imdbId = widget.imdbId;
+      if (widget.seriesPlaylist.isSeries) {
+        final imdbId = _effectiveImdbId;
         final results = await Future.wait([
-          StorageService.getEpisodeProgress(
-            seriesTitle: widget.seriesPlaylist.seriesTitle!,
+          StorageService.getMergedEpisodeProgress(
+            seriesTitle: widget.seriesPlaylist.seriesTitle ?? '',
+            imdbId: imdbId,
           ),
           (imdbId != null && imdbId.isNotEmpty)
               ? StorageService.getEpisodeTraktProgress(imdbId: imdbId)
@@ -375,18 +455,72 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           (imdbId != null && imdbId.isNotEmpty)
               ? StorageService.getEpisodeSimklProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
+          (imdbId != null && imdbId.isNotEmpty)
+              ? StorageService.getEpisodeMdblistProgress(imdbId: imdbId)
+              : Future.value(const <String, double>{}),
         ]);
         if (mounted) {
           setState(() {
             _episodeProgress = results[0] as Map<String, Map<String, dynamic>>;
             _traktEpisodeProgress = results[1] as Map<String, double>;
             _simklEpisodeProgress = results[2] as Map<String, double>;
+            _mdblistEpisodeProgress = results[3] as Map<String, double>;
           });
         }
       }
     } catch (e) {
       // Progress is optional
     }
+  }
+
+  /// Render the cached snapshots first, then refresh the network-backed truth.
+  /// A single-link guide has not already paid the pack launch refresh cost;
+  /// a show whose IMDb id was discovered by TVMaze has no launch snapshots at
+  /// all. In both cases the player remains usable while these reads run.
+  Future<void> _refreshTrackerSnapshots() async {
+    final imdbId = _effectiveImdbId;
+    if (imdbId == null) return;
+    final generation = ++_trackerRefreshGeneration;
+
+    final singleEntryGuide = widget.seriesPlaylist.allEpisodes.length <= 1;
+    final policy = SeriesBrowser.trackerRefreshPolicy(
+      imdbKnownAtLaunch: widget.imdbKnownAtLaunch,
+      singleEntryGuide: singleEntryGuide,
+    );
+    final standardTrackerRefreshes = <Future<Map<String, double>?>>[
+      if (policy.trakt) EpisodeTrackerSnapshotService.refreshTrakt(imdbId),
+      if (policy.simkl) EpisodeTrackerSnapshotService.refreshSimkl(imdbId),
+    ];
+    final refreshGroups = <Future<bool>>[
+      if (standardTrackerRefreshes.isNotEmpty)
+        Future.wait(
+          standardTrackerRefreshes,
+        ).then((snapshots) => snapshots.any((snapshot) => snapshot != null)),
+      if (policy.mdblist)
+        EpisodeTrackerSnapshotService.refreshMdblistHistory(
+          imdbId,
+        ).then((snapshot) => snapshot != null),
+    ];
+    var publishTail = Future<void>.value();
+    Future<void> publishWhenReady(Future<bool> refresh) async {
+      final changed = await refresh;
+      if (!changed || !mounted || generation != _trackerRefreshGeneration) {
+        return;
+      }
+      // The established trackers and MDBList publish independently. MDBList's
+      // larger history request cannot hold back Trakt/Simkl, while grouping the
+      // established pair avoids redundant whole-guide storage reloads.
+      final publish = publishTail.then((_) async {
+        if (!mounted || generation != _trackerRefreshGeneration) return;
+        await Future.wait([_loadFinishedEpisodes(), _loadEpisodeProgress()]);
+      });
+      publishTail = publish;
+      await publish;
+    }
+
+    await Future.wait([
+      for (final refresh in refreshGroups) publishWhenReady(refresh),
+    ]);
   }
 
   /// Show the Fix Metadata dialog to manually select a TV show
@@ -778,20 +912,42 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     }
     final episodeKey =
         '${episode.seriesInfo.season}_${episode.seriesInfo.episode}';
-    // FURTHEST-WATCHED WINS across local, Trakt, and Simkl, matching the merged
-    // details page. Tracker snapshots can fill episodes watched elsewhere but
-    // never regress a deeper local position.
+    // FURTHEST-WATCHED WINS across local and every connected tracker, matching
+    // the merged details page. Tracker snapshots can fill episodes watched
+    // elsewhere but never regress a deeper local position.
     double local = 0.0;
     final progressData = _episodeProgress[episodeKey];
+    var positionMs = 0;
+    var durationMs = 0;
     if (progressData != null) {
-      final positionMs = progressData['positionMs'] as int? ?? 0;
-      final durationMs = progressData['durationMs'] as int? ?? 1;
-      if (durationMs > 0) local = (positionMs / durationMs).clamp(0.0, 1.0);
+      positionMs = progressData['positionMs'] as int? ?? 0;
+      durationMs = progressData['durationMs'] as int? ?? 0;
     }
     final traktPercent = _traktEpisodeProgress[episodeKey];
     final simklPercent = _simklEpisodeProgress[episodeKey];
+    final mdblistPercent = _mdblistEpisodeProgress[episodeKey];
+    final localState = resolveEpisodeLocalWatchState(
+      locallyWatched:
+          _finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(
+            episode.seriesInfo.episode,
+          ) ??
+          false,
+      localPositionMs: positionMs,
+      localDurationMs: durationMs,
+      traktPercent: traktPercent,
+      simklPercent: simklPercent,
+      mdblistPercent: mdblistPercent,
+    );
+    if (durationMs > 0) {
+      local = (localState.positionMs / durationMs).clamp(0.0, 1.0);
+    }
     final tracker =
-        (furthestEpisodeTrackerPercent([traktPercent, simklPercent]) ?? 0.0) /
+        (furthestEpisodeTrackerPercent([
+              traktPercent,
+              simklPercent,
+              mdblistPercent,
+            ]) ??
+            0.0) /
         100;
     // Active rewatch: a tracker says finished but there's a real in-progress
     // local position — show the live local bar rather than a completed card.
@@ -803,22 +959,30 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     final season = episode.seriesInfo.season;
     final number = episode.seriesInfo.episode;
     if (season == null || number == null) return false;
-    if (_finishedEpisodes[season.toString()]?.contains(number) == true) {
-      return true;
-    }
     final key = '${season}_$number';
     final trakt = _traktEpisodeProgress[key] ?? 0.0;
     final simkl = _simklEpisodeProgress[key] ?? 0.0;
-    if (trakt < 95.0 && simkl < 95.0) return false;
+    final mdblist = _mdblistEpisodeProgress[key] ?? 0.0;
+    final progressData = _episodeProgress[key];
+    final positionMs = progressData?['positionMs'] as int? ?? 0;
+    final durationMs = progressData?['durationMs'] as int? ?? 0;
+    final localState = resolveEpisodeLocalWatchState(
+      locallyWatched:
+          _finishedEpisodes[season.toString()]?.contains(number) == true,
+      localPositionMs: positionMs,
+      localDurationMs: durationMs,
+      traktPercent: trakt,
+      simklPercent: simkl,
+      mdblistPercent: mdblist,
+    );
+    if (localState.watched) return true;
+    if (trakt < 95.0 && simkl < 95.0 && mdblist < 95.0) return false;
 
     // A real local partial means the user has started a rewatch; match the
     // progress-bar rule and show that active state instead of a remote tick.
-    final progressData = _episodeProgress[key];
     if (progressData != null) {
-      final positionMs = progressData['positionMs'] as int? ?? 0;
-      final durationMs = progressData['durationMs'] as int? ?? 0;
       if (durationMs > 0) {
-        final local = positionMs / durationMs;
+        final local = localState.positionMs / durationMs;
         if (local > 0 && local < 0.95) return false;
       }
     }
