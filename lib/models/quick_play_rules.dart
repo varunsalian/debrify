@@ -1,8 +1,8 @@
 /// User-selectable Quick Play behavior.
 ///
-/// The `debrifyDefault` factories below are the compatibility contract for
-/// the pre-profile Quick Play flow. Keep those values in sync with the legacy
-/// fallbacks in StorageService when the old behavior intentionally changes.
+/// The `debrifyDefault` factories below are the shipped Quick Play contract.
+/// Keep those values in sync with the legacy fallbacks in StorageService when
+/// the default behavior intentionally changes.
 enum QuickPlayPreset {
   debrifyDefault,
   addonOrder,
@@ -12,6 +12,8 @@ enum QuickPlayPreset {
 }
 
 enum QuickPlaySourceMode {
+  // Historical serialized names. The two mixed modes now represent the
+  // Prefer torrents switch; they no longer rank engines against addons.
   torrentsThenAddons,
   addonsThenTorrents,
   together,
@@ -53,10 +55,9 @@ class QuickPlayRules {
   final bool preferSeriesPacks;
   final QuickPlayPackPreference packPreference;
 
-  /// The shipped series pack search asks engines and addons together. This is
-  /// kept independently from [sourceMode] so changing an unrelated setting
-  /// does not silently change that legacy route. Choosing Source order in the
-  /// new UI turns this off and makes [sourceMode] authoritative for packs too.
+  /// Legacy serialized compatibility bit. Mixed provider modes now always
+  /// search packs together so Addon Priority can decide between engine and
+  /// addon packs; the field remains to round-trip existing custom profiles.
   final bool preserveLegacyCombinedPackSearch;
 
   /// Zero preserves the legacy behavior: wait for the engine search to
@@ -70,10 +71,9 @@ class QuickPlayRules {
   final int failedPackCacheHours;
 
   /// User-arranged provider order for this tab — normalized keys
-  /// ('engine:<id>' / 'stremio:<name>'), see SourcePriority. EMPTY means the
-  /// user never customized it: ordering everywhere keeps the shipped behavior
-  /// (mixed seeders-relevance), which is why this must never default to a
-  /// materialized list.
+  /// (`engine:id` / `stremio:name`), see SourcePriority. EMPTY means the
+  /// user never customized it: combined searches already arrive in shipped
+  /// provider order (enabled engines, then installed streaming addons).
   final List<String> sourcePriority;
 
   const QuickPlayRules({
@@ -99,7 +99,7 @@ class QuickPlayRules {
       QuickPlayRules(
         preset: QuickPlayPreset.debrifyDefault,
         sourceMode: QuickPlaySourceMode.torrentsThenAddons,
-        ranking: QuickPlayRanking.debrify,
+        ranking: QuickPlayRanking.exactOrder,
         useFilters: true,
         relaxFilters: true,
         tryNextOnFailure: true,
@@ -252,14 +252,21 @@ class QuickPlayRules {
         (preset == QuickPlayPreset.debrifyDefault ||
             (preset == QuickPlayPreset.custom &&
                 sourceMode == QuickPlaySourceMode.torrentsThenAddons));
+    final storedRanking = _enumValue(
+      QuickPlayRanking.values,
+      json['ranking'],
+      fallback.ranking,
+    );
+    // `debrify` was the old implicit seeder/relevance presentation order. The
+    // simplified Addon Priority UI has no ranking control, so profiles saved
+    // with that implicit value migrate to the new provider-returned order.
+    final ranking = storedRanking == QuickPlayRanking.debrify
+        ? QuickPlayRanking.exactOrder
+        : storedRanking;
     return QuickPlayRules(
       preset: preset,
       sourceMode: sourceMode,
-      ranking: _enumValue(
-        QuickPlayRanking.values,
-        json['ranking'],
-        fallback.ranking,
-      ),
+      ranking: ranking,
       useFilters: boolean('useFilters', fallback.useFilters),
       relaxFilters: boolean('relaxFilters', fallback.relaxFilters),
       tryNextOnFailure: boolean('tryNextOnFailure', fallback.tryNextOnFailure),
@@ -295,9 +302,9 @@ class QuickPlayRules {
         fallback.failedPackCacheHours,
       ).clamp(0, 168).toInt(),
       sourcePriority:
-          (json['sourcePriority'] as List?)
-              ?.whereType<String>()
-              .toList(growable: false) ??
+          (json['sourcePriority'] as List?)?.whereType<String>().toList(
+            growable: false,
+          ) ??
           const [],
     );
   }

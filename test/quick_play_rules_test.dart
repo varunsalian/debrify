@@ -18,9 +18,11 @@ Torrent _torrent(
   StreamType type = StreamType.torrent,
   int size = 0,
   int seeders = 0,
+  String source = 'test',
+  String? infohash,
 }) => Torrent(
   rowid: 0,
-  infohash: name.hashCode.abs().toRadixString(16).padLeft(40, '0'),
+  infohash: infohash ?? name.hashCode.abs().toRadixString(16).padLeft(40, '0'),
   name: name,
   sizeBytes: size,
   createdUnix: 0,
@@ -28,7 +30,7 @@ Torrent _torrent(
   leechers: 0,
   completed: 0,
   scrapedDate: 0,
-  source: 'test',
+  source: source,
   streamType: type,
   directUrl: type == StreamType.directUrl ? 'https://example.test/$name' : null,
 );
@@ -41,9 +43,8 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final realFactory = StreamUrlValidator.clientFactory;
       addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
-      StreamUrlValidator.clientFactory = () => MockClient(
-        (_) async => http.Response('gone', 404),
-      );
+      StreamUrlValidator.clientFactory = () =>
+          MockClient((_) async => http.Response('gone', 404));
       final fetcher = TorrentPlaybackService.seriesFetcherFor(
         meta: const PlaybackMeta(
           imdbId: 'tt1234567',
@@ -70,8 +71,7 @@ void main() {
         final realFactory = StreamUrlValidator.clientFactory;
         addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
         StreamUrlValidator.clientFactory = () => MockClient(
-          (_) async =>
-              throw StateError('torrent candidate must not make HTTP'),
+          (_) async => throw StateError('torrent candidate must not make HTTP'),
         );
         final fetcher = TorrentPlaybackService.seriesFetcherFor(
           meta: const PlaybackMeta(
@@ -83,10 +83,7 @@ void main() {
           ),
         );
 
-        expect(
-          await fetcher!.allowsCandidate(_torrent('pack')),
-          isTrue,
-        );
+        expect(await fetcher!.allowsCandidate(_torrent('pack')), isTrue);
       },
     );
   });
@@ -96,7 +93,7 @@ void main() {
       final rules = QuickPlayRules.debrifyDefault(isMovie: true);
       expect(rules.preset, QuickPlayPreset.debrifyDefault);
       expect(rules.sourceMode, QuickPlaySourceMode.torrentsThenAddons);
-      expect(rules.ranking, QuickPlayRanking.debrify);
+      expect(rules.ranking, QuickPlayRanking.exactOrder);
       expect(rules.useFilters, isTrue);
       expect(rules.relaxFilters, isTrue);
       expect(rules.tryNextOnFailure, isTrue);
@@ -267,9 +264,19 @@ void main() {
         isFalse,
       );
     });
+
+    test('old implicit ranking migrates to provider-returned order', () {
+      final json = QuickPlayRules.debrifyDefault(isMovie: true).toJson()
+        ..['ranking'] = QuickPlayRanking.debrify.name;
+
+      expect(
+        QuickPlayRules.fromJson(json, isMovie: true).ranking,
+        QuickPlayRanking.exactOrder,
+      );
+    });
   });
 
-  group('opt-in ranking', () {
+  group('provider-returned ranking', () {
     test(
       'Stremio conversion preserves an interleaved addon response exactly',
       () {
@@ -382,7 +389,123 @@ void main() {
       );
     });
 
-    test('exact order survives an active relaxed filter ladder', () {
+    test('prefer torrents follows provider priority, not source family', () {
+      final aioDirect = _torrent(
+        'aio direct',
+        type: StreamType.directUrl,
+        source: 'stremio:AIOStreams',
+      );
+      final aioTorrent = _torrent('aio torrent', source: 'stremio:AIOStreams');
+      final engineTorrent = _torrent('engine torrent', source: 'comet');
+      final rules = QuickPlayRules.debrifyDefault(
+        isMovie: true,
+      ).copyWith(sourcePriority: const ['stremio:aiostreams', 'engine:comet']);
+
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules([
+          engineTorrent,
+          aioDirect,
+          aioTorrent,
+        ], rules: rules),
+        [aioTorrent, engineTorrent, aioDirect],
+      );
+    });
+
+    test('prefer torrents advances when a provider has only direct links', () {
+      final aioDirect = _torrent(
+        'aio direct',
+        type: StreamType.directUrl,
+        source: 'stremio:AIOStreams',
+      );
+      final engineTorrent = _torrent('engine torrent', source: 'comet');
+      final rules = QuickPlayRules.debrifyDefault(
+        isMovie: true,
+      ).copyWith(sourcePriority: const ['stremio:aiostreams', 'engine:comet']);
+
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules([
+          engineTorrent,
+          aioDirect,
+        ], rules: rules),
+        [engineTorrent, aioDirect],
+      );
+    });
+
+    test('prefer torrents off keeps each prioritized provider response', () {
+      final aioDirect = _torrent(
+        'aio direct',
+        type: StreamType.directUrl,
+        source: 'stremio:AIOStreams',
+      );
+      final aioTorrent = _torrent('aio torrent', source: 'stremio:AIOStreams');
+      final engineTorrent = _torrent('engine torrent', source: 'comet');
+      final rules = QuickPlayRules.debrifyDefault(isMovie: true).copyWith(
+        sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+        sourcePriority: const ['stremio:aiostreams', 'engine:comet'],
+      );
+
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules([
+          engineTorrent,
+          aioDirect,
+          aioTorrent,
+        ], rules: rules),
+        [aioDirect, aioTorrent, engineTorrent],
+      );
+    });
+
+    test('earlier provider owns a shared torrent hash', () {
+      final hash = 'f' * 40;
+      final engine = _torrent('engine copy', source: 'comet', infohash: hash);
+      final aio = _torrent(
+        'aio copy',
+        source: 'stremio:AIOStreams',
+        infohash: hash,
+      );
+      final rules = QuickPlayRules.debrifyDefault(
+        isMovie: true,
+      ).copyWith(sourcePriority: const ['stremio:aiostreams', 'engine:comet']);
+
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules([
+          engine,
+          aio,
+        ], rules: rules),
+        [aio],
+      );
+    });
+
+    test('strict filters choose a matching duplicate representation', () {
+      final hash = 'e' * 40;
+      final aio1080 = _torrent(
+        'Movie 1080p WEB-DL',
+        source: 'stremio:AIOStreams',
+        infohash: hash,
+      );
+      final comet4k = _torrent(
+        'Movie 2160p WEB-DL',
+        source: 'comet',
+        infohash: hash,
+      );
+      final ladder = FilterLadder(
+        TorrentFilterState(qualities: {QualityTier.ultraHd}),
+      );
+      final rules = QuickPlayRules.debrifyDefault(isMovie: true).copyWith(
+        sourcePriority: const ['stremio:aiostreams', 'engine:comet'],
+        relaxFilters: false,
+      );
+
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules(
+          [comet4k, aio1080],
+          rules: rules,
+          ladder: ladder,
+        ),
+        [comet4k],
+      );
+    });
+
+    test('exact order honors an active relaxed filter ladder', () {
       final first = _torrent('Movie 720p WEB-DL', seeders: 1);
       final second = _torrent('Movie 1080p WEB-DL', seeders: 900);
       final ladder = FilterLadder(
@@ -404,7 +527,34 @@ void main() {
           rules: rules,
           ladder: ladder,
         ),
-        [first, second],
+        [second, first],
+      );
+    });
+
+    test('relaxed filters reorder only within Addon Priority groups', () {
+      final aio1080 = _torrent(
+        'Movie 1080p WEB-DL',
+        source: 'stremio:AIOStreams',
+      );
+      final aio4k = _torrent(
+        'Movie 2160p WEB-DL',
+        source: 'stremio:AIOStreams',
+      );
+      final comet4k = _torrent('Movie 2160p WEB-DL Comet', source: 'comet');
+      final ladder = FilterLadder(
+        TorrentFilterState(qualities: {QualityTier.ultraHd}),
+      );
+      final rules = QuickPlayRules.debrifyDefault(
+        isMovie: true,
+      ).copyWith(sourcePriority: const ['stremio:aiostreams', 'engine:comet']);
+
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules(
+          [comet4k, aio1080, aio4k],
+          rules: rules,
+          ladder: ladder,
+        ),
+        [aio4k, aio1080, comet4k],
       );
     });
 
@@ -448,6 +598,41 @@ void main() {
           uncached,
         ], rules: rules),
         [cached, uncached],
+      );
+    });
+
+    test('exact order keeps cached packs ahead of provider priority', () {
+      final cachedLowerProvider = _torrent('cached pack', source: 'comet');
+      final uncachedHigherProvider = _torrent(
+        'uncached pack',
+        source: 'stremio:AIOStreams',
+      );
+      final rules = QuickPlayRules.debrifyDefault(
+        isMovie: false,
+      ).copyWith(sourcePriority: const ['stremio:aiostreams', 'engine:comet']);
+
+      // `_cacheFirst` has already produced this cached/miss partition. The
+      // post-cache pass must not restore provider priority over cachedness.
+      expect(
+        TorrentPlaybackService.orderCacheCheckedCandidatesForRules([
+          cachedLowerProvider,
+          uncachedHigherProvider,
+        ], rules: rules),
+        [cachedLowerProvider, uncachedHigherProvider],
+      );
+    });
+
+    test('cache preparation reorders torrents without moving direct rows', () {
+      final uncached = _torrent('uncached torrent');
+      final direct = _torrent('direct', type: StreamType.directUrl);
+      final cached = _torrent('cached torrent');
+
+      expect(
+        TorrentPlaybackService.mergePreparedTorrentOrder(
+          [uncached, direct, cached],
+          [cached, uncached],
+        ),
+        [cached, direct, uncached],
       );
     });
 
@@ -534,58 +719,53 @@ void main() {
       expect(TorrentPlaybackService.isAutoPlayableCandidate(torrent), isTrue);
     });
 
-    test(
-      'addon-order defers provider prompts without changing default routes',
-      () {
-        final movieDefault = QuickPlayRules.debrifyDefault(isMovie: true);
-        final seriesDefault = QuickPlayRules.debrifyDefault(isMovie: false);
-        final movieAddonOrder = QuickPlayRules.forPreset(
-          QuickPlayPreset.addonOrder,
-          isMovie: true,
-        );
-        final seriesAddonOrder = QuickPlayRules.forPreset(
-          QuickPlayPreset.addonOrder,
-          isMovie: false,
-        );
+    test('only addon-only mode defers the provider prompt', () {
+      final movieDefault = QuickPlayRules.debrifyDefault(isMovie: true);
+      final seriesDefault = QuickPlayRules.debrifyDefault(isMovie: false);
+      final mixed = movieDefault.copyWith(
+        sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+      );
+      final addonOnly = movieDefault.copyWith(
+        sourceMode: QuickPlaySourceMode.addonsOnly,
+      );
 
-        expect(
-          TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
-            movieDefault,
-            isMovie: true,
-          ),
-          isFalse,
-        );
-        expect(
-          TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
-            seriesDefault,
-            isMovie: false,
-          ),
-          isFalse,
-        );
-        expect(
-          TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
-            movieAddonOrder,
-            isMovie: true,
-          ),
-          isTrue,
-        );
-        expect(
-          TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
-            seriesAddonOrder,
-            isMovie: false,
-          ),
-          isTrue,
-        );
-        expect(
-          TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
-            movieAddonOrder,
-            isMovie: true,
-            hasPreferredProvider: true,
-          ),
-          isFalse,
-        );
-      },
-    );
+      expect(
+        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+          movieDefault,
+          isMovie: true,
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+          seriesDefault,
+          isMovie: false,
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+          mixed,
+          isMovie: true,
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+          addonOnly,
+          isMovie: true,
+        ),
+        isTrue,
+      );
+      expect(
+        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+          addonOnly,
+          isMovie: true,
+          hasPreferredProvider: true,
+        ),
+        isFalse,
+      );
+    });
 
     test('torrents-only disables addon fast paths', () {
       final torrentsOnly = QuickPlayRules.debrifyDefault(
@@ -597,7 +777,7 @@ void main() {
       expect(TorrentPlaybackService.allowsAddonSearch(defaultRules), isTrue);
     });
 
-    test('direct-stream paths honor explicit source plans', () {
+    test('direct-stream paths combine mixed providers', () {
       final defaultSeries = QuickPlayRules.debrifyDefault(isMovie: false);
       final explicit = defaultSeries.copyWith(
         preset: QuickPlayPreset.custom,
@@ -611,7 +791,7 @@ void main() {
         TorrentPlaybackService.addonStreamSearchPlan(
           explicit.copyWith(sourceMode: QuickPlaySourceMode.addonsThenTorrents),
         ),
-        [QuickPlaySourceMode.addonsOnly, QuickPlaySourceMode.torrentsOnly],
+        [QuickPlaySourceMode.together],
       );
       expect(
         TorrentPlaybackService.addonStreamSearchPlan(
@@ -678,7 +858,7 @@ void main() {
       ]);
     });
 
-    test('explicit source priority expands into ordered fallback stages', () {
+    test('explicit source priority keeps pack searches combined', () {
       final base = QuickPlayRules.debrifyDefault(isMovie: false).copyWith(
         preset: QuickPlayPreset.custom,
         preserveLegacyCombinedPackSearch: false,
@@ -687,13 +867,13 @@ void main() {
         TorrentPlaybackService.seriesPackSearchPlan(
           base.copyWith(sourceMode: QuickPlaySourceMode.torrentsThenAddons),
         ),
-        [QuickPlaySourceMode.torrentsOnly, QuickPlaySourceMode.addonsOnly],
+        [QuickPlaySourceMode.together],
       );
       expect(
         TorrentPlaybackService.seriesPackSearchPlan(
           base.copyWith(sourceMode: QuickPlaySourceMode.addonsThenTorrents),
         ),
-        [QuickPlaySourceMode.addonsOnly, QuickPlaySourceMode.torrentsOnly],
+        [QuickPlaySourceMode.together],
       );
     });
   });

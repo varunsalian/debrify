@@ -154,10 +154,6 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         sourceMode: value
             ? QuickPlaySourceMode.torrentsThenAddons
             : QuickPlaySourceMode.addonsThenTorrents,
-        // The shipped combined pack route belongs to the torrent-first
-        // default; an addon-first order makes sourceMode authoritative for
-        // packs too.
-        preserveLegacyCombinedPackSearch: !_isMovie && value,
       ),
     );
   }
@@ -192,11 +188,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     });
     // Persist the full materialized order — from here on this tab is
     // "customized" and ordering everywhere follows the list.
-    _change(
-      (r) => r.copyWith(
-        sourcePriority: [for (final p in list) p.key],
-      ),
-    );
+    _change((r) => r.copyWith(sourcePriority: [for (final p in list) p.key]));
   }
 
   KeyEventResult _rowKey(int index, KeyEvent event) {
@@ -380,8 +372,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           icon: Icons.download_rounded,
           title: 'Prefer torrents',
           subtitle: _preferTorrents
-              ? 'Torrents play first; addon streams are the fallback.'
-              : 'Addon direct links play first; torrents are the fallback.',
+              ? 'Try torrents in Addon Priority order; direct links are the fallback.'
+              : 'Follow Addon Priority and each provider’s returned stream order.',
           subtitleMaxLines: 2,
           value: _preferTorrents,
           onChanged: _setPreferTorrents,
@@ -434,9 +426,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             isLast: i == _ordered.length - 1,
             showDivider: i < _ordered.length - 1,
             onKey: (event) => _rowKey(i, event),
-            onTap: () => setState(
-              () => _pickedKey = _pickedKey == p.key ? null : p.key,
-            ),
+            onTap: () =>
+                setState(() => _pickedKey = _pickedKey == p.key ? null : p.key),
             onMoveUp: i > 0 ? () => _moveRow(i, i - 1) : null,
             onMoveDown: i < _ordered.length - 1
                 ? () => _moveRow(i, i + 1)
