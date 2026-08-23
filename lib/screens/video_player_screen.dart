@@ -2414,6 +2414,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// seconds have passed, something is already wrong. It logs, and it still
   /// takes the slot when it finally frees, so the player never ends up
   /// untracked.
+  ///
+  /// tvOS waits longer before giving up: proceeding into the overlap is a
+  /// certain SIGABRT there, and since the native Dispose handshake became
+  /// completion-gated (mpv render context freed before the channel call
+  /// returns) a held lease reliably frees — a slow release is a wait, not a
+  /// lockout.
+  static final Duration _outputLeaseTimeout = PlatformUtil.isTvOS
+      ? const Duration(seconds: 10)
+      : const Duration(seconds: 3);
+
   Future<void> _claimVideoOutput() async {
     if (_outputLease != null) return; // renderer fallback reuses the claim
     if (!VideoOutputLease.isHeld) {
@@ -2428,11 +2438,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final pending = VideoOutputLease.acquire(debugLabel: 'player');
     VideoOutputLeaseHandle? handle;
     try {
-      handle = await pending.timeout(const Duration(seconds: 3));
+      handle = await pending.timeout(_outputLeaseTimeout);
     } on TimeoutException {
       debugPrint(
         'VideoOutputLease: player proceeding without the slot — a previous '
-        'video output has not released after 3s.',
+        'video output has not released after '
+        '${_outputLeaseTimeout.inSeconds}s.',
       );
       // The wait was abandoned, not cancelled. Take the slot whenever it does
       // arrive rather than handing it back: this player IS alive and holding a
@@ -2943,6 +2954,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     } else {}
 
+    // A stale launch index (resume record from a longer pack, negative
+    // startIndex) must not reach list indexing: _currentIndex is used
+    // unconditionally below and in later playback paths.
+    if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
+      initialIndex = initialIndex.clamp(0, _activePlaylist!.length - 1);
+    }
+
     // Get the initial URL from the determined index
     if (_activePlaylist != null &&
         _activePlaylist!.isNotEmpty &&
@@ -3047,11 +3065,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
 
       if ((isPikPak && _activePlaylist != null) || isPikPakUrl) {
+        // The continuation can sleep up to 10s in _waitForVideoReady; the
+        // screen may be left (player disposed) or the player replaced by a
+        // renderer fallback in that window, so it must re-check before every
+        // touch of _player.
+        final pikpakGeneration = _playerInstanceGeneration;
+        bool pikpakStillCurrent() =>
+            mounted &&
+            !_screenDisposed &&
+            pikpakGeneration == _playerInstanceGeneration;
         _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((
           _,
         ) async {
+          if (!pikpakStillCurrent()) return;
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
+          if (!pikpakStillCurrent()) return;
           // Random start takes precedence over resume, then startAtPercent
           if (widget.startFromRandom) {
             final offset = _randomStartOffset(_duration);
@@ -3068,6 +3097,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           } else {
             await _maybeRestoreResume();
           }
+          if (!pikpakStillCurrent()) return;
           // Restore audio and subtitle track preferences
           await _restoreTrackPreferences();
         });
