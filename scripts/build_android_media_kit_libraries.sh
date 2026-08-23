@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build MediaKit's exact Android v1.1.11 native bundle with Debrify's subtitle
-# decoder patch. This intentionally keeps mpv, FFmpeg, helper code and all
-# non-subtitle options aligned with the bundle currently shipped by Debrify.
+# decoders and passive auto-sync analysis filters. This intentionally keeps
+# mpv, FFmpeg, helper code and every unrelated option at the pinned versions.
 
 set -euo pipefail
 
@@ -37,8 +37,11 @@ trap 'rm -rf "$WORK"' EXIT
 
 git clone --quiet --filter=blob:none "$UPSTREAM_REPO" "$WORK/source"
 git -C "$WORK/source" checkout --quiet "$UPSTREAM_COMMIT"
-git -C "$WORK/source" apply --check "$PATCH"
-git -C "$WORK/source" apply "$PATCH"
+# This patch intentionally uses zero-context insertions against the exact
+# pinned upstream commit. Without --unidiff-zero, Git may relocate both hunks
+# to EOF, turning FFmpeg flags into shell commands after the build completes.
+git -C "$WORK/source" apply --unidiff-zero --check "$PATCH"
+git -C "$WORK/source" apply --unidiff-zero "$PATCH"
 
 # Avoid the upstream script's package-manager branch. GitHub's Android runner
 # already has Java 17, Flutter and the SDK; the recipe installs only its pinned
@@ -76,4 +79,4 @@ cp "$STAGE"/default-*.jar "$OUTPUT"/
 "$ROOT/scripts/verify_android_subtitle_decoders.sh" "$OUTPUT"
 printf '%s\n' "$UPSTREAM_COMMIT" > "$OUTPUT/.debrify-subtitle-build"
 
-echo "==> Installed PGS-capable MediaKit Android libraries at $OUTPUT"
+echo "==> Installed subtitle/auto-sync MediaKit Android libraries at $OUTPUT"

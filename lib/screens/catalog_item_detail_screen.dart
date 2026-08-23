@@ -19,6 +19,7 @@ import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
+import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../utils/artwork_url.dart';
 import '../utils/tv_keys.dart';
 
@@ -56,6 +57,8 @@ class CatalogItemDetailScreen extends StatefulWidget {
   /// next to Trakt's, not merged (both trackers run in parallel).
   final List<SimklMenuOption> simklMenuOptions;
   final void Function(SimklItemMenuAction action)? onSimklAction;
+  final List<MdblistMenuOption> mdblistMenuOptions;
+  final void Function(MdblistItemMenuAction action)? onMdblistAction;
 
   /// Loads the item's live Simkl watchlist status. Used only to relabel the
   /// primary button "Rewatch" (instead of "Play") for a movie already marked
@@ -92,6 +95,8 @@ class CatalogItemDetailScreen extends StatefulWidget {
     this.onTraktAction,
     this.simklMenuOptions = const [],
     this.onSimklAction,
+    this.mdblistMenuOptions = const [],
+    this.onMdblistAction,
     this.simklStatusLoader,
     this.recommendationsLoader,
     this.onRecommendationTap,
@@ -691,6 +696,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         ..add(SizedBox(height: t ? 14 : 26))
         ..add(sq);
     }
+    final mq = _secMdblistQuickActions(0.555);
+    if (mq != null) {
+      children
+        ..add(SizedBox(height: t ? 14 : 26))
+        ..add(mq);
+    }
     final dt = _secDetails(0.56);
     if (dt != null) {
       children
@@ -780,6 +791,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       children
         ..add(const SizedBox(height: 24))
         ..add(sq);
+    }
+    final mq = _secMdblistQuickActions(0.555);
+    if (mq != null) {
+      children
+        ..add(const SizedBox(height: 24))
+        ..add(mq);
     }
 
     // ── Glass details card: production details + parents guide ──
@@ -1386,6 +1403,20 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         tv: widget.isTelevision,
         phone: !_wide,
         onSelected: widget.onSimklAction!,
+      ),
+    );
+  }
+
+  Widget? _secMdblistQuickActions(double start) {
+    if (widget.mdblistMenuOptions.isEmpty || widget.onMdblistAction == null) {
+      return null;
+    }
+    return _Reveal(
+      parent: _revealCtrl,
+      start: start,
+      child: _MdblistQuickActions(
+        options: widget.mdblistMenuOptions,
+        onSelected: widget.onMdblistAction!,
       ),
     );
   }
@@ -2096,7 +2127,8 @@ class _RecCardState extends State<_RecCard> {
                               top: 7,
                               right: 7,
                               child: MovieWatchedBadge(
-                                imdbId: widget.item.effectiveImdbId ??
+                                imdbId:
+                                    widget.item.effectiveImdbId ??
                                     widget.item.id,
                                 contentType: widget.item.type,
                                 compact: true,
@@ -2666,6 +2698,42 @@ class _QuickActionState extends State<_QuickAction> {
       ),
     );
   }
+}
+
+class _MdblistQuickActions extends StatelessWidget {
+  const _MdblistQuickActions({required this.options, required this.onSelected});
+  final List<MdblistMenuOption> options;
+  final void Function(MdblistItemMenuAction) onSelected;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'MDBLIST ACTIONS',
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.5),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 2.2,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final option in options)
+            ActionChip(
+              avatar: Icon(option.icon, size: 18, color: option.color),
+              label: Text(option.caption),
+              tooltip: option.label,
+              onPressed: () => onSelected(option.action),
+            ),
+        ],
+      ),
+    ],
+  );
 }
 
 /// Simkl's quick-actions section — duplicated from [_QuickActions] rather

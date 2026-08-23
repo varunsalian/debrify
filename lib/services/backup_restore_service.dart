@@ -54,7 +54,7 @@ class BackupRestoreService {
   /// Build a backup payload from the current device's configuration.
   ///
   /// With [includeCredentials] false, account secrets are omitted entirely
-  /// (debrid keys, PikPak, Trakt, Simkl) or blanked in place (WebDAV
+  /// (debrid keys, PikPak, Trakt, Simkl, MDBList) or blanked in place (WebDAV
   /// passwords, indexer API keys, Xtream usernames/passwords) so a setup can
   /// be shared without handing over accounts. M3U playlist URLs are kept —
   /// the URL *is* the provider config; users who need those protected should
@@ -74,6 +74,12 @@ class BackupRestoreService {
     final traktUsername = await StorageService.getTraktUsername();
     final simklAccess = await StorageService.getSimklAccessToken();
     final simklUsername = await StorageService.getSimklUsername();
+    final mdblistApiKey = await StorageService.getMdblistApiKey();
+    final mdblistUsername = await StorageService.getMdblistUsername();
+    final mdblistSyncCatalogItems =
+        await StorageService.getMdblistSyncCatalogItems();
+    final mdblistSyncCheckpoint =
+        await StorageService.getMdblistSyncCheckpoint();
 
     await LocalEngineStorage.instance.initialize();
     final engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
@@ -189,6 +195,15 @@ class BackupRestoreService {
             if (simklUsername != null && simklUsername.isNotEmpty)
               'username': simklUsername,
           },
+        if (mdblistApiKey != null && mdblistApiKey.isNotEmpty)
+          'mdblist': <String, dynamic>{
+            'api_key': mdblistApiKey,
+            if (mdblistUsername != null && mdblistUsername.isNotEmpty)
+              'username': mdblistUsername,
+            'sync_catalog_items': mdblistSyncCatalogItems,
+            if (mdblistSyncCheckpoint != null)
+              'sync_checkpoint': mdblistSyncCheckpoint,
+          },
       },
       if (engineIds.isNotEmpty) 'searchEngineIds': engineIds,
       if (addonUrls.isNotEmpty) 'addonManifestUrls': addonUrls,
@@ -227,6 +242,9 @@ class BackupRestoreService {
           (map['simkl'] is Map) &&
           ((map['simkl'] as Map)['access_token'] as String?)?.isNotEmpty ==
               true,
+      hasMdblist:
+          (map['mdblist'] is Map) &&
+          ((map['mdblist'] as Map)['api_key'] as String?)?.isNotEmpty == true,
       searchEngineCount: (map['searchEngineIds'] as List?)?.length ?? 0,
       addonCount: (map['addonManifestUrls'] as List?)?.length ?? 0,
       webDavServerCount: (map['webDavServers'] as List?)?.length ?? 0,
@@ -584,6 +602,30 @@ class BackupRestoreService {
       }
     }
 
+    if (selection.mdblist) {
+      final m = map['mdblist'];
+      if (m is Map) {
+        final apiKey = m['api_key'] as String?;
+        if (apiKey != null && apiKey.isNotEmpty) {
+          try {
+            await StorageService.saveMdblistApiKey(apiKey);
+            final username = m['username'] as String?;
+            await StorageService.setMdblistUsername(username);
+            await StorageService.setMdblistSyncCatalogItems(
+              m['sync_catalog_items'] as bool? ?? true,
+            );
+            final checkpoint = m['sync_checkpoint'];
+            await StorageService.setMdblistSyncCheckpoint(
+              checkpoint is Map ? Map<String, dynamic>.from(checkpoint) : null,
+            );
+            report.mdblist = true;
+          } catch (_) {
+            report.errors.add('MDBList: restore failed');
+          }
+        }
+      }
+    }
+
     if (selection.searchEngines) {
       final ids = (map['searchEngineIds'] as List?)?.cast<String>() ?? const [];
       if (ids.isNotEmpty) {
@@ -855,6 +897,7 @@ class BackupSummary {
   final bool hasPikpak;
   final bool hasTrakt;
   final bool hasSimkl;
+  final bool hasMdblist;
   final int searchEngineCount;
   final int addonCount;
   final int webDavServerCount;
@@ -874,6 +917,7 @@ class BackupSummary {
     required this.hasPikpak,
     required this.hasTrakt,
     required this.hasSimkl,
+    required this.hasMdblist,
     required this.searchEngineCount,
     required this.addonCount,
     required this.webDavServerCount,
@@ -892,6 +936,7 @@ class BackupSummary {
       !hasPikpak &&
       !hasTrakt &&
       !hasSimkl &&
+      !hasMdblist &&
       searchEngineCount == 0 &&
       addonCount == 0 &&
       webDavServerCount == 0 &&
@@ -910,6 +955,7 @@ class BackupSelection {
   final bool pikpak;
   final bool trakt;
   final bool simkl;
+  final bool mdblist;
   final bool searchEngines;
   final bool addons;
   final bool webDav;
@@ -926,6 +972,7 @@ class BackupSelection {
     required this.pikpak,
     required this.trakt,
     required this.simkl,
+    this.mdblist = true,
     required this.searchEngines,
     required this.addons,
     required this.webDav,
@@ -943,6 +990,7 @@ class BackupSelection {
       pikpak = true,
       trakt = true,
       simkl = true,
+      mdblist = true,
       searchEngines = true,
       addons = true,
       webDav = true,
@@ -959,6 +1007,7 @@ class BackupSelection {
     bool? pikpak,
     bool? trakt,
     bool? simkl,
+    bool? mdblist,
     bool? searchEngines,
     bool? addons,
     bool? webDav,
@@ -975,6 +1024,7 @@ class BackupSelection {
       pikpak: pikpak ?? this.pikpak,
       trakt: trakt ?? this.trakt,
       simkl: simkl ?? this.simkl,
+      mdblist: mdblist ?? this.mdblist,
       searchEngines: searchEngines ?? this.searchEngines,
       addons: addons ?? this.addons,
       webDav: webDav ?? this.webDav,
@@ -998,6 +1048,7 @@ class RestoreReport {
   bool pikpakLoginFailed = false;
   bool trakt = false;
   bool simkl = false;
+  bool mdblist = false;
   int searchEnginesImported = 0;
   int searchEnginesAlreadyPresent = 0;
   int searchEnginesFailed = 0;
@@ -1032,6 +1083,7 @@ class RestoreReport {
       (pikpak ? 1 : 0) +
       (trakt ? 1 : 0) +
       (simkl ? 1 : 0) +
+      (mdblist ? 1 : 0) +
       searchEnginesImported +
       addonsImported +
       webDavServersImported +

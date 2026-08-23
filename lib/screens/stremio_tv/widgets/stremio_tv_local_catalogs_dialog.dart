@@ -275,6 +275,7 @@ class LocalCatalogImporter {
   static Future<String?> refreshMdblistCatalog(
     Map<String, dynamic> catalog,
   ) async {
+    if (!kMdblistEnabled) return 'MDBList integration is disabled';
     final listId = (catalog['mdblistListId'] as num?)?.toInt();
     if (listId == null) return 'Not an MDBList catalog';
 
@@ -282,7 +283,7 @@ class LocalCatalogImporter {
       MdblistListChoice(id: listId, name: ''),
       forceRefresh: true,
     );
-    if (loaded.items.isEmpty && loaded.failed) {
+    if (loaded.failed || !loaded.complete) {
       return 'Failed to refresh from MDBList';
     }
 
@@ -1048,7 +1049,11 @@ class StremioTvLocalCatalogsDialog extends StatefulWidget {
       // withData would otherwise load the whole file into RAM).
       if (result.files.first.size > 20 * 1024 * 1024) {
         if (context.mounted) {
-          _showSnackBar(context, 'That file is too large to be a catalog', true);
+          _showSnackBar(
+            context,
+            'That file is too large to be a catalog',
+            true,
+          );
         }
         return false;
       }
@@ -1424,7 +1429,11 @@ class _StremioTvLocalCatalogsDialogState
                         title: Text(name, style: theme.textTheme.bodyMedium),
                         subtitle: Text(
                           '${items.length} items'
-                          '${isTrakt ? ' · Trakt' : isMdblist ? ' · MDBList' : ''}',
+                          '${isTrakt
+                              ? ' · Trakt'
+                              : isMdblist
+                              ? ' · MDBList'
+                              : ''}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -1453,7 +1462,9 @@ class _StremioTvLocalCatalogsDialogState
                                       onPressed: _refreshingCatalogId != null
                                           ? null
                                           : () => isMdblist
-                                                ? _refreshMdblistCatalog(catalog)
+                                                ? _refreshMdblistCatalog(
+                                                    catalog,
+                                                  )
                                                 : _refreshTraktCatalog(catalog),
                                       tooltip: isMdblist
                                           ? 'Refresh from MDBList'
@@ -1673,9 +1684,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
               keyboardInkOnAccent: app.inkOn(app.youtube.focus),
               decoration: InputDecoration(
                 hintText: 'Catalog name (required for Trakt lists)',
-                border: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                ),
+                border: OutlineInputBorder(borderRadius: app.shape.br(12)),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -1688,30 +1697,28 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
           _backHopsTo(
             _cancelFocusNode,
             TvTextField(
-            controller: _urlController,
-            focusNode: _urlFocusNode,
-            onUpArrow: () => _nameFocusNode.requestFocus(),
-            onDownArrow: () => _importFocusNode.requestFocus(),
-            accent: app.youtube.focus,
-            keyboardGround: app.youtube.keyboardPanel,
-            keyboardInk: app.core.tx,
-            keyboardInkOnAccent: app.inkOn(app.youtube.focus),
-            decoration: InputDecoration(
-              hintText: 'https://example.com/catalog.json',
-              border: OutlineInputBorder(
-                borderRadius: app.shape.br(12),
+              controller: _urlController,
+              focusNode: _urlFocusNode,
+              onUpArrow: () => _nameFocusNode.requestFocus(),
+              onDownArrow: () => _importFocusNode.requestFocus(),
+              accent: app.youtube.focus,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.youtube.focus),
+              decoration: InputDecoration(
+                hintText: 'https://example.com/catalog.json',
+                border: OutlineInputBorder(borderRadius: app.shape.br(12)),
+                errorText: _error,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
-              errorText: _error,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-            ),
-            autofocus: true,
-            onSubmitted: (_) {
-              if (!_loading) _import();
-            },
+              autofocus: true,
+              onSubmitted: (_) {
+                if (!_loading) _import();
+              },
             ),
           ),
         ],
@@ -1911,9 +1918,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
               keyboardInkOnAccent: app.inkOn(app.youtube.focus),
               decoration: InputDecoration(
                 hintText: 'Catalog name (required for Trakt lists)',
-                border: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                ),
+                border: OutlineInputBorder(borderRadius: app.shape.br(12)),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -1930,9 +1935,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
             decoration: InputDecoration(
               hintText:
                   '{"name": "My Catalog", "items": [...]}\nor paste Trakt list JSON',
-              border: OutlineInputBorder(
-                borderRadius: app.shape.br(12),
-              ),
+              border: OutlineInputBorder(borderRadius: app.shape.br(12)),
               errorText: _error,
               contentPadding: const EdgeInsets.all(12),
             ),
@@ -2515,10 +2518,12 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 /// Which MDBList lists to browse in the import picker.
 enum _MdblistListCategory {
   mine,
+  liked,
   top;
 
   String get label => switch (this) {
     _MdblistListCategory.mine => 'My Lists',
+    _MdblistListCategory.liked => 'Liked Lists',
     _MdblistListCategory.top => 'Top Lists',
   };
 }
@@ -2575,9 +2580,14 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
       _lists = [];
     });
     try {
-      final lists = _category == _MdblistListCategory.top
-          ? await MdblistListSource.instance.loadTopLists()
-          : await MdblistListSource.instance.loadUserLists();
+      final lists = switch (_category) {
+        _MdblistListCategory.mine =>
+          await MdblistListSource.instance.loadUserLists(),
+        _MdblistListCategory.liked =>
+          await MdblistListSource.instance.loadLikedLists(),
+        _MdblistListCategory.top =>
+          await MdblistListSource.instance.loadTopLists(),
+      };
       if (!mounted) return;
       setState(() {
         _lists = lists;
@@ -2617,7 +2627,7 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
 
       final loaded = await MdblistListSource.instance.loadListItems(choice);
       if (!mounted) return;
-      if (loaded.items.isEmpty && loaded.failed) {
+      if (loaded.failed || !loaded.complete) {
         setState(() {
           _error = 'Failed to load "$name"';
           _importing = false;
@@ -2766,7 +2776,10 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   _error!,
-                  style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             if (_loading)
@@ -2803,10 +2816,7 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
                         color: theme.colorScheme.primary,
                         size: 20,
                       ),
-                      title: Text(
-                        list.name,
-                        style: theme.textTheme.bodyMedium,
-                      ),
+                      title: Text(list.name, style: theme.textTheme.bodyMedium),
                       subtitle: Text(
                         [
                           if (list.ownerName != null) 'by ${list.ownerName}',

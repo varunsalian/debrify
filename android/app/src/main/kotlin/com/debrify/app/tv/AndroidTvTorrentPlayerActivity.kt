@@ -2,7 +2,9 @@ package com.debrify.app.tv
 
 import android.animation.ValueAnimator
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -1135,7 +1137,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Auto-sync's toast (bottom-right, quiet): out of the subtitles' way at
     // bottom-center, and deliberately soft-spoken — sync happens by default
     // now, so its feedback must never feel like an alert.
-    private var autoSyncCard: TextView? = null
+    private var autoSyncPill: LinearLayout? = null
+    private var autoSyncPillRing: AutoSyncRingView? = null
+    private var autoSyncPillLabel: TextView? = null
+    private var autoSyncPillResultShowing = false
+    private var autoSyncPillWindowActive = false
+    private var autoSyncPillAnnounceShowing = false
+    // Dismiss the announce line only if it's still what's on screen — a
+    // status shown meanwhile (manual sync-now) must not be clobbered.
+    private val autoSyncPillAnnounceDismissRunnable = Runnable {
+        if (autoSyncPillAnnounceShowing) {
+            autoSyncPillAnnounceShowing = false
+            hideAutoSyncPillView()
+        }
+    }
     private val autoSyncCardHideRunnable = Runnable { hideAutoSyncCard() }
 
     /** Last auto-sync outcome, shown on the menu row while its subtitle is active. */
@@ -1816,6 +1831,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             description = if (g.has("description")) g.optString("description") else null,
                             rating = if (g.has("rating")) g.optDouble("rating") else null,
                             runtime = if (g.has("runtime")) g.optInt("runtime") else null,
+                            resumePositionMs = if (g.has("resumePositionMs")) g.optLong("resumePositionMs") else null,
+                            durationMs = if (g.has("durationMs")) g.optLong("durationMs") else null,
+                            trackerProgressPercent = if (g.has("trackerProgressPercent")) g.optDouble("trackerProgressPercent") else null,
+                            watched = g.optBoolean("watched", false),
                         )
                     )
                 }
@@ -1852,9 +1871,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             var skippedCount = 0
             for (i in 0 until updatesArray.length()) {
                 val update = updatesArray.getJSONObject(i)
-                val originalIndex = update.optInt("originalIndex", -1)
+                val requestedIndex = update.optInt("originalIndex", -1)
+                val updateSeason = if (update.has("season")) update.optInt("season") else null
+                val updateEpisode = if (update.has("episode")) update.optInt("episode") else null
+                val originalIndex = if (updateSeason != null && updateEpisode != null) {
+                    val requestedItem = model.items.getOrNull(requestedIndex)
+                    if (requestedItem?.season == updateSeason && requestedItem.episode == updateEpisode) {
+                        requestedIndex
+                    } else {
+                        model.items.indexOfFirst {
+                            it.season == updateSeason && it.episode == updateEpisode
+                        }
+                    }
+                } else {
+                    requestedIndex
+                }
                 if (originalIndex < 0 || originalIndex >= model.items.size) {
-                    android.util.Log.w("TVMazeUpdate", "Skipping invalid originalIndex=$originalIndex (items.size=${model.items.size})")
+                    android.util.Log.w("TVMazeUpdate", "Skipping unmatched update index=$requestedIndex S${updateSeason}E${updateEpisode} (items.size=${model.items.size})")
                     skippedCount++
                     continue
                 }
@@ -1864,13 +1897,47 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val newDescription: String? = if (update.has("description")) update.optString("description") else null
                 val newArtwork: String? = if (update.has("artwork")) update.optString("artwork") else null
                 val newRating = if (update.has("rating")) update.optDouble("rating") else null
+                val newResumePositionMs = if (update.has("resumePositionMs")) update.optLong("resumePositionMs") else null
+                val newDurationMs = if (update.has("durationMs")) update.optLong("durationMs") else null
+                val hasWatchedUpdate = update.has("watched")
+                val watched = if (hasWatchedUpdate) update.optBoolean("watched", false) else item.watched
+                val newTrackerProgress = when {
+                    hasWatchedUpdate && watched -> 100.0
+                    update.has("trackerProgressPercent") -> update.optDouble("trackerProgressPercent")
+                    else -> null
+                }
+                val isCurrentItem = originalIndex == currentIndex
+                val livePositionMs = if (isCurrentItem) {
+                    (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
+                val liveDurationMs = if (isCurrentItem) {
+                    (player?.duration ?: 0L).coerceAtLeast(0L)
+                } else {
+                    0L
+                }
 
                 // Create updated item with new metadata
                 val updatedItem = item.copy(
                     title = if (!newTitle.isNullOrEmpty()) newTitle else item.title,
                     description = if (!newDescription.isNullOrEmpty()) newDescription else item.description,
                     artwork = if (!newArtwork.isNullOrEmpty()) newArtwork else item.artwork,
-                    rating = newRating ?: item.rating
+                    rating = newRating ?: item.rating,
+                    resumePositionMs = mergeLateMetadataResumePosition(
+                        existingPositionMs = item.resumePositionMs,
+                        incomingPositionMs = newResumePositionMs,
+                        livePositionMs = livePositionMs,
+                        isCurrentItem = isCurrentItem,
+                    ),
+                    durationMs = mergeLateMetadataDuration(
+                        existingDurationMs = item.durationMs,
+                        incomingDurationMs = newDurationMs,
+                        liveDurationMs = liveDurationMs,
+                        isCurrentItem = isCurrentItem,
+                    ),
+                    traktProgressPercent = newTrackerProgress ?: item.traktProgressPercent,
+                    watched = watched,
                 )
                 model.items[originalIndex] = updatedItem
                 anyUpdated = true
@@ -3380,7 +3447,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val item = model.items[index]
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
-        // payload field is the furthest of Trakt + Simkl); STATE_READY resumes
+        // payload field is the furthest of Trakt + Simkl + MDBList); STATE_READY resumes
         // the FURTHER of the two (never backward). Suppress trackers during
         // auto-advance (binge starts the next episode fresh) and during a source
         // switch on the same content (must honour the captured live position).
@@ -12843,11 +12910,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
         autoSyncRunning = true
-        if (!auto) showSyncToast(
-            "●", AutoSyncColors.BUSY,
-            "Syncing subtitles…",
-            autoHideMs = null,
-        )
+        if (!auto) {
+            showSyncToast(
+                "●", AutoSyncColors.BUSY,
+                "Syncing subtitles…",
+                autoHideMs = null,
+            )
+        } else if (autoSyncPillWindowActive) {
+            // Ladder attempt: the heartbeat flips to its checking face
+            // (white dot + label) while the aligner runs.
+            showSyncToast("●", AutoSyncColors.BUSY, "Checking…", autoHideMs = null)
+            autoSyncPillRing?.arcColor = Color.WHITE
+        }
         subtitleScope.launch {
             val result = try {
                 val cues = rawCues.map { CueSpan(it.startMs, it.endMs, it.text) }
@@ -12863,6 +12937,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 autoSyncRunning = false
             }
             android.util.Log.d("AutoSync", "result: $result")
+            // An intermediate rung that stays silent hands the screen back
+            // its quiet; speaking results overwrite this at once.
+            if (auto && autoSyncPillWindowActive) {
+                hideAutoSyncPillView()
+            }
             // The user may have switched subtitles during the analysis — the
             // computed offset belongs to the cue timeline it was computed FROM.
             if (activeExternalSubtitleUrl != url) {
@@ -12888,9 +12967,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     remember("✓ $fmt")
                     // Shown in BOTH modes — an offset changing under the user
                     // must always announce itself, however quietly.
+                    // Number-free by design; the offset lives in the menu row
+                    // (autoSyncResultLabel) and logcat.
                     showSyncToast(
                         "✓", AutoSyncColors.OK,
-                        "Subtitles synced  $fmt",
+                        "Subtitles synced",
                         autoHideMs = 3_000,
                     )
                 }
@@ -12963,17 +13044,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun startAutoSyncLadder() {
         cancelAutoSyncLadder()
         if (!isAutoSyncPrefEnabled()) return
-        // The one up-front word (the user asked for exactly this): syncing is
-        // underway, and here's the escape hatch if it doesn't come through.
-        // Skipped when a remembered offset just restored — that toast already
-        // said everything.
+        // The one up-front sentence, then the heartbeat. Skipped when a
+        // remembered offset just restored — that pill already said everything.
         if (SubtitleSettings.getSyncOffsetMs(this) == 0L) {
-            showSyncToast(
-                "●", AutoSyncColors.BUSY,
-                "Trying to sync subs…",
-                hint = "Still off in a minute? Switch subs or adjust timing.",
-                autoHideMs = 5_500,
-            )
+            openAutoSyncPillWindow()
         }
         autoSyncLadderIdx = 0
         autoSyncLadderDone = false
@@ -13099,7 +13173,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         android.util.Log.d("AutoSync", "verify re-synced $applied -> $newOffset (escalated=$escalated)")
                         showSyncToast(
                             "↻", AutoSyncColors.OK,
-                            "Re-synced  ${SubtitleSettings.formatSyncOffset(newOffset)}",
+                            "Re-synced",
                             autoHideMs = 3_000,
                         )
                     } else {
@@ -13122,9 +13196,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /**
      * Settings → Playback → "Auto-sync addon subtitles" (Flutter-side pref).
      *
-     * OFF by default. Must stay in lock-step with the Dart default in
-     * StorageService.getSubtitleAutoSyncEnabled, or an untouched toggle would
-     * mean different things on the two sides.
+     * OFF by default — experimental opt-in. Must stay in lock-step with the
+     * Dart default in StorageService.getSubtitleAutoSyncEnabled, or an
+     * untouched toggle would mean different things on the two sides.
      */
     private fun isAutoSyncPrefEnabled(): Boolean =
         com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
@@ -13775,7 +13849,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             scheduleAutoSyncVerify()
             showSyncToast(
                 "↻", AutoSyncColors.OK,
-                "Sync restored  ${SubtitleSettings.formatSyncOffset(recalled)}",
+                "Sync restored",
                 autoHideMs = 3_000,
             )
         }
@@ -13922,56 +13996,153 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }.start()
     }
 
-    // ── Auto-sync feedback card ──────────────────────────────────────────────
-    // Auto-sync's outcomes need to be READ, not glimpsed: the status pill is
-    // 13sp for 1.4s at bottom-center — over the very subtitles being synced.
-    // This card sits top-center, color-codes the state, carries a detail line
-    // of the actual numbers (seconds heard, cues, confidence), and pulses
-    // while the aligner is listening.
+    // ── Auto-sync countdown pill ─────────────────────────────────────────────
+    // The quiet bottom-right status pill (design/mockups/
+    // subtitle_auto_sync_hint_mockup/countdown_devices.html, same component as
+    // the Dart player's AutoSyncPill): a draining 90-second ring + tracked
+    // uppercase label + tabular seconds while listening; colored glyph + label
+    // for results. Display-only, never focusable, anchored inside the overscan
+    // safe area. Numbers never appear in result states — offsets and hints
+    // live in logcat (adb logcat -s AutoSync).
 
     private object AutoSyncColors {
-        const val OK = 0xFF34D399.toInt() // emerald — matches the app's live dot
-        const val FAIL = 0xFFF87171.toInt() // muted red, never alarming
-        const val BUSY = 0xFFE8C468.toInt() // soft amber working-dot
+        const val OK = 0xFF82E0AD.toInt() // pill green — synced / restored
+        const val FAIL = 0xFFE8C07B.toInt() // pill amber — declined, never alarming
+        const val BUSY = 0xFF7BDCFF.toInt() // pill cyan — listening / checking
     }
 
-    private fun ensureAutoSyncCard(): TextView {
-        autoSyncCard?.let { return it }
-        val card = TextView(this).apply {
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setLineSpacing(0f, 1.12f)
-            gravity = Gravity.END
-            maxWidth = dp(400)
-            background = GradientDrawable().apply {
-                setColor(0xCC0F0F14.toInt())
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), 0x24FFFFFF)
+    /** The pill's leading glyph: a heartbeat — pulsing halo around a dot. */
+    private inner class AutoSyncRingView(context: android.content.Context) : View(context) {
+        var arcColor = AutoSyncColors.BUSY
+            set(value) { field = value; invalidate() }
+        private var pulse = 0f
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1_800
+            repeatCount = ValueAnimator.INFINITE
+            addUpdateListener {
+                pulse = it.animatedValue as Float
+                invalidate()
             }
-            setPadding(dp(14), dp(9), dp(14), dp(9))
+        }
+
+        /**
+         * Explicit, not attach-driven: the view lives on the content view for
+         * the whole activity, so an always-on animator would invalidate every
+         * frame forever after the first show — even while the pill is GONE.
+         */
+        fun setPulsing(on: Boolean) {
+            if (on) {
+                if (!pulseAnimator.isStarted) pulseAnimator.start()
+            } else if (pulseAnimator.isStarted) {
+                pulseAnimator.cancel()
+                pulse = 0f
+                invalidate()
+            }
+        }
+
+        override fun onDetachedFromWindow() {
+            pulseAnimator.cancel()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val w = width.toFloat()
+            val cx = w / 2f
+            val cy = height / 2f
+            val r = w / 2f
+            if (pulse > 0f) {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = w * 0.14f
+                paint.color = arcColor
+                paint.alpha = (82 * (1f - pulse)).toInt()
+                canvas.drawCircle(cx, cy, r * (0.35f + 0.65f * pulse), paint)
+                paint.alpha = 255
+            }
+            paint.style = Paint.Style.FILL
+            paint.color = arcColor
+            canvas.drawCircle(cx, cy, r * 0.32f, paint)
+        }
+    }
+
+    private fun ensureAutoSyncPill(): LinearLayout {
+        autoSyncPill?.let { return it }
+        val ring = AutoSyncRingView(this)
+        val label = TextView(this).apply {
+            textSize = 11f
+            setTextColor(0xEBFFFFFF.toInt())
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.08f
+            isSingleLine = true
+        }
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                setColor(0xA80C0E12.toInt())
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), 0x21FFFFFF)
+            }
+            minimumHeight = dp(36)
+            setPadding(dp(12), 0, dp(14), 0)
             elevation = dp(240).toFloat()
             visibility = View.GONE
+            isFocusable = false
+            addView(ring, LinearLayout.LayoutParams(dp(17), dp(17)))
+            addView(
+                label,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).also { it.marginStart = dp(8) },
+            )
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM or Gravity.END
             ).also {
-                it.bottomMargin = dp(34)
-                it.rightMargin = dp(28)
+                it.bottomMargin = dp(42)
+                it.rightMargin = dp(48)
             }
         }
-        findViewById<ViewGroup>(android.R.id.content).addView(card)
-        autoSyncCard = card
-        return card
+        findViewById<ViewGroup>(android.R.id.content).addView(pill)
+        autoSyncPill = pill
+        autoSyncPillRing = ring
+        autoSyncPillLabel = label
+        return pill
     }
 
     /**
-     * Bottom-right sync toast: a colored glyph, one quiet line, an optional
-     * dimmer hint underneath. Deliberately understated — dark glass, hairline
-     * border, a small rise-in — because sync feedback should read like the
-     * player talking under its breath, not an alert. [autoHideMs] null keeps
-     * it up until the next toast replaces it (the manual "syncing…" state).
+     * Open the auto-sync window: one plain sentence for ~5 seconds, then the
+     * screen stays quiet until a real event — a checking pass or a verdict —
+     * has something to say. No countdown, no persistent indicator.
+     */
+    private fun openAutoSyncPillWindow() {
+        stopAutoSyncPillWindow()
+        autoSyncPillWindowActive = true
+        showSyncToast(
+            "●", AutoSyncColors.BUSY,
+            "Trying to auto-sync subtitles — this may take a minute, keep watching",
+            autoHideMs = null,
+            uppercase = false,
+        )
+        autoSyncPillAnnounceShowing = true
+        externalSubtitleHandler.postDelayed(autoSyncPillAnnounceDismissRunnable, 5_000)
+    }
+
+    private fun stopAutoSyncPillWindow() {
+        externalSubtitleHandler.removeCallbacks(autoSyncPillAnnounceDismissRunnable)
+        autoSyncPillAnnounceShowing = false
+        autoSyncPillWindowActive = false
+    }
+
+    /**
+     * Auto-sync status, rendered on the pill. The [glyph] keys the face:
+     * "●" = active (pulsing dot + one line), anything else = result (colored
+     * glyph + label; the window closes). [hint] is no longer drawn — the pill
+     * stays one quiet line — so it goes to logcat instead. [autoHideMs] null
+     * keeps the pill up until replaced. [uppercase] false keeps a sentence
+     * (the announce line) in its natural case.
      */
     private fun showSyncToast(
         glyph: String,
@@ -13979,51 +14150,68 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         title: String,
         hint: String? = null,
         autoHideMs: Long?,
+        uppercase: Boolean = true,
     ) {
         externalSubtitleHandler.removeCallbacks(autoSyncCardHideRunnable)
-        val card = ensureAutoSyncCard()
-        val sb = android.text.SpannableStringBuilder()
-        sb.append(glyph).append("  ").append(title)
-        sb.setSpan(
-            android.text.style.ForegroundColorSpan(accent),
-            0, glyph.length,
-            android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        if (hint != null) Log.d("AutoSync", "pill: $title — $hint")
+        autoSyncPillAnnounceShowing = false
+        val pill = ensureAutoSyncPill()
+        val active = glyph == "●"
+        autoSyncPillResultShowing = !active
+        if (!active) stopAutoSyncPillWindow()
+        autoSyncPillRing?.visibility = if (active) View.VISIBLE else View.GONE
+        autoSyncPillRing?.setPulsing(active)
+        autoSyncPillRing?.arcColor = accent
+        pill.setPadding(dp(12), 0, dp(14), 0)
+        autoSyncPillLabel?.let { labelView ->
+            labelView.visibility = View.VISIBLE
+            val text = if (uppercase) title.uppercase() else title
+            if (active) {
+                labelView.setTextColor(0xEBFFFFFF.toInt())
+                labelView.letterSpacing = if (uppercase) 0.08f else 0.01f
+                labelView.text = text
+            } else {
+                labelView.setTextColor(accent)
+                labelView.letterSpacing = 0.08f
+                labelView.text = "$glyph  $text"
+            }
+        }
+        (pill.background as? GradientDrawable)?.setStroke(
+            dp(1),
+            if (active) 0x21FFFFFF else (accent and 0x00FFFFFF) or 0x4D000000,
         )
-        if (hint != null) {
-            val start = sb.length
-            sb.append("\n").append(hint)
-            sb.setSpan(
-                android.text.style.ForegroundColorSpan(0x8AFFFFFF.toInt()),
-                start, sb.length,
-                android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
-            )
-            sb.setSpan(
-                android.text.style.AbsoluteSizeSpan(11, true),
-                start, sb.length,
-                android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
-            )
-        }
-        card.text = sb
-        card.animate().cancel()
-        if (card.visibility != View.VISIBLE) {
-            card.alpha = 0f
-            card.translationY = dp(8).toFloat()
-            card.visibility = View.VISIBLE
-        }
-        card.animate().alpha(1f).translationY(0f).setDuration(220).start()
+        revealAutoSyncPill()
         if (autoHideMs != null) {
             externalSubtitleHandler.postDelayed(autoSyncCardHideRunnable, autoHideMs)
         }
     }
 
+    private fun revealAutoSyncPill() {
+        val pill = autoSyncPill ?: return
+        pill.animate().cancel()
+        if (pill.visibility != View.VISIBLE) {
+            pill.alpha = 0f
+            pill.translationY = dp(8).toFloat()
+            pill.visibility = View.VISIBLE
+        }
+        pill.animate().alpha(1f).translationY(0f).setDuration(220).start()
+    }
+
+    /** View-only fade; window state is untouched (idle-hide relies on this). */
+    private fun hideAutoSyncPillView() {
+        autoSyncPillRing?.setPulsing(false)
+        val pill = autoSyncPill ?: return
+        if (pill.visibility != View.VISIBLE) return
+        pill.animate().cancel()
+        pill.animate().alpha(0f).translationY(dp(6).toFloat()).setDuration(240).withEndAction {
+            pill.visibility = View.GONE
+        }.start()
+    }
+
     private fun hideAutoSyncCard() {
         externalSubtitleHandler.removeCallbacks(autoSyncCardHideRunnable)
-        val card = autoSyncCard ?: return
-        if (card.visibility != View.VISIBLE) return
-        card.animate().cancel()
-        card.animate().alpha(0f).translationY(dp(6).toFloat()).setDuration(240).withEndAction {
-            card.visibility = View.GONE
-        }.start()
+        stopAutoSyncPillWindow()
+        hideAutoSyncPillView()
     }
 
     /**
@@ -16601,6 +16789,39 @@ private data class PlaybackPayload(
     val guideEpisodes: MutableList<GuideEpisode> = mutableListOf(),
 )
 
+/**
+ * Merge a late cache/network snapshot into a playlist row. Non-current rows
+ * honour explicit zeroes so a successful refresh can clear stale progress.
+ * The currently playing row never moves behind the live player clock.
+ */
+internal fun mergeLateMetadataResumePosition(
+    existingPositionMs: Long,
+    incomingPositionMs: Long?,
+    livePositionMs: Long,
+    isCurrentItem: Boolean,
+): Long {
+    val snapshotPositionMs = incomingPositionMs ?: existingPositionMs
+    return if (isCurrentItem) {
+        maxOf(snapshotPositionMs, livePositionMs.coerceAtLeast(0L))
+    } else {
+        snapshotPositionMs
+    }
+}
+
+/** Keep the live media duration authoritative while its item is playing. */
+internal fun mergeLateMetadataDuration(
+    existingDurationMs: Long,
+    incomingDurationMs: Long?,
+    liveDurationMs: Long,
+    isCurrentItem: Boolean,
+): Long {
+    return if (isCurrentItem && liveDurationMs > 0L) {
+        liveDurationMs
+    } else {
+        incomingDurationMs ?: existingDurationMs
+    }
+}
+
 /** One episode of the show's full TVMaze list, for the episode guide. */
 private data class GuideEpisode(
     val season: Int,
@@ -16610,6 +16831,10 @@ private data class GuideEpisode(
     val description: String?,
     val rating: Double?,
     val runtime: Int?,
+    val resumePositionMs: Long?,
+    val durationMs: Long?,
+    val trackerProgressPercent: Double?,
+    val watched: Boolean,
 )
 
 private data class PlaybackItem(
@@ -16634,10 +16859,13 @@ private data class PlaybackItem(
     val rating: Double?,
     val provider: String?,
     // Cross-device progress for this episode (0-100), or null. The legacy JSON
-    // key is named traktProgressPercent, but Flutter sends the furthest of Trakt
-    // and Simkl. Display-only fallback for the playlist bar and a resume source
+    // key is named traktProgressPercent, but Flutter sends the furthest of Trakt,
+    // Simkl, and MDBList. Display-only fallback for the playlist bar and a resume source
     // when there's no local position.
     val traktProgressPercent: Double? = null,
+    // Explicit local completion. Unlike tracker 100%, this must not yield to
+    // an old partial position as an assumed active rewatch.
+    val watched: Boolean = false,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -16656,6 +16884,7 @@ private data class PlaybackItem(
      *  real in-progress local position — shows the live local percent, or the
      *  card would dim into the watched state while you're 20% into a rewatch. */
     fun displayProgressPercent(): Int {
+        if (watched) return 100
         val local = if (durationMs > 0 && resumePositionMs > 0) {
             ((resumePositionMs.toDouble() / durationMs.toDouble()) * 100).toInt()
         } else {
@@ -16690,6 +16919,7 @@ private data class PlaybackItem(
                 rating = if (obj.has("rating")) obj.optDouble("rating") else null,
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
+                watched = obj.optBoolean("watched", false),
             )
         }
     }
@@ -16851,13 +17081,16 @@ private class PlaylistAdapter(
                     episode = g.episode,
                     artwork = g.artwork,
                     description = g.description,
-                    resumePositionMs = 0,
-                    durationMs = (g.runtime ?: 0) * 60_000L,
+                    resumePositionMs = g.resumePositionMs ?: 0,
+                    durationMs = g.durationMs?.takeIf { it > 0 }
+                        ?: (g.runtime ?: 0) * 60_000L,
                     updatedAt = 0,
                     resumeId = null,
                     sizeBytes = null,
                     rating = g.rating,
                     provider = null,
+                    traktProgressPercent = g.trackerProgressPercent,
+                    watched = g.watched,
                 )
                 (holder as EpisodeViewHolder).bindMissing(synthetic) {
                     onFetchEpisode?.invoke(g.season, g.episode)

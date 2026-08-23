@@ -27,6 +27,7 @@ class EpisodeTile extends StatefulWidget {
 
   /// Trakt-only: mark watched/unwatched + rate. Null on the catalog path.
   final void Function(TraktEpisodeMenuAction action)? onMenuAction;
+  final VoidCallback? onTrackerOptions;
 
   const EpisodeTile({
     super.key,
@@ -40,6 +41,7 @@ class EpisodeTile extends StatefulWidget {
     this.isNext = false,
     this.focusNode,
     this.onMenuAction,
+    this.onTrackerOptions,
   });
 
   @override
@@ -108,12 +110,18 @@ class _EpisodeTileState extends State<EpisodeTile> {
           onTap: () => widget.onMenuAction!(TraktEpisodeMenuAction.rate),
         ),
       ],
+      if (widget.onTrackerOptions != null)
+        _EpAction(
+          icon: Icons.more_horiz_rounded,
+          label: 'Trackers',
+          iconOnly: true,
+          onTap: widget.onTrackerOptions!,
+        ),
     ];
   }
 
-  Duration get _fx => widget.isTelevision
-      ? Duration.zero
-      : const Duration(milliseconds: 170);
+  Duration get _fx =>
+      widget.isTelevision ? Duration.zero : const Duration(milliseconds: 170);
 
   @override
   Widget build(BuildContext context) {
@@ -343,8 +351,11 @@ class _EpisodeTileState extends State<EpisodeTile> {
           const Positioned(
             top: 8,
             left: 8,
-            child: _Chip(label: 'UP NEXT', color: Color(0xFFFBBF24),
-                filled: true),
+            child: _Chip(
+              label: 'UP NEXT',
+              color: Color(0xFFFBBF24),
+              filled: true,
+            ),
           )
         else if (watched)
           const Positioned(
@@ -354,11 +365,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
           ),
 
         if (e.rating != null && e.rating! > 0)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: _RatingPill(value: e.rating!),
-          ),
+          Positioned(top: 8, right: 8, child: _RatingPill(value: e.rating!)),
 
         if (progress > 0 && progress < 100)
           Positioned(
@@ -559,6 +566,7 @@ class _Chip extends StatelessWidget {
     );
   }
 }
+
 /// One action-row entry (Play / Sources / Watched / Rate).
 class _EpAction {
   final IconData icon;
@@ -601,8 +609,8 @@ class _ActionChip extends StatelessWidget {
     final border = selected
         ? gold
         : (action.primary
-            ? Colors.transparent
-            : Colors.white.withValues(alpha: 0.16));
+              ? Colors.transparent
+              : Colors.white.withValues(alpha: 0.16));
     final glow = selected
         ? [
             BoxShadow(
@@ -677,10 +685,7 @@ class _ActionChip extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: onTap,
-        child: Tooltip(
-          message: iconMode ? action.label : '',
-          child: child,
-        ),
+        child: Tooltip(message: iconMode ? action.label : '', child: child),
       ),
     );
   }

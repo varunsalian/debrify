@@ -1,4 +1,6 @@
-all: Frameworks/.symlinks
+VERIFY=../../../scripts/verify_macos_subtitle_decoders.sh
+
+all: verify
 
 # Local development remains buildable without Nix. Release CI installs the
 # patched frameworks before CocoaPods runs; when they are absent, use the exact
@@ -25,6 +27,9 @@ Frameworks/.symlinks: Frameworks/Mpv.xcframework
 	sh create_framework_symlinks.sh Frameworks/Mpv.xcframework Frameworks/.symlinks/mpv
 	touch Frameworks/.symlinks
 
-.PHONY: clean
+verify: Frameworks/.symlinks
+	"$(VERIFY)" Frameworks --architectures-only
+
+.PHONY: all clean verify
 clean:
 	rm -rf Frameworks .cache

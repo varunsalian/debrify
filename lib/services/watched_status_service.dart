@@ -6,6 +6,7 @@ import 'simkl/simkl_service.dart';
 import 'local_series_completion_service.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
+import 'mdblist/mdblist_service.dart';
 
 /// One asynchronous, account-wide watched snapshot for every poster card.
 ///
@@ -26,6 +27,8 @@ class WatchedStatusService extends ChangeNotifier {
   Set<String> _traktSeries = const {};
   Set<String> _simklMovies = const {};
   Set<String> _simklSeries = const {};
+  Set<String> _mdblistMovies = const {};
+  Set<String> _mdblistSeries = const {};
   int _generation = 0;
   bool _started = false;
   bool _refreshing = false;
@@ -38,11 +41,13 @@ class WatchedStatusService extends ChangeNotifier {
     if (contentType.toLowerCase() == 'series') {
       return _localSeries.contains(id) ||
           _traktSeries.contains(id) ||
-          _simklSeries.contains(id);
+          _simklSeries.contains(id) ||
+          _mdblistSeries.contains(id);
     }
     return _localMovies.contains(id) ||
         _traktMovies.contains(id) ||
-        _simklMovies.contains(id);
+        _simklMovies.contains(id) ||
+        _mdblistMovies.contains(id);
   }
 
   /// Starts loading without returning work for the UI to await.
@@ -108,6 +113,7 @@ class WatchedStatusService extends ChangeNotifier {
     // soon as it resolves rather than waiting for either tracker.
     final traktFuture = _fetchTrakt();
     final simklFuture = SimklService.instance.fetchCompletedTitleIds();
+    final mdblistFuture = MdblistService.instance.fetchCompletedTitleIds();
     final localSeriesFuture = LocalSeriesCompletionService.instance
         .caughtUpIds();
     final calendarFuture = LocalSeriesCompletionService.instance
@@ -128,6 +134,7 @@ class WatchedStatusService extends ChangeNotifier {
       traktFuture,
       simklFuture,
       calendarFuture,
+      mdblistFuture,
     ]);
     if (generation != _generation) return;
     final trakt =
@@ -145,6 +152,11 @@ class WatchedStatusService extends ChangeNotifier {
     }
     if (localGeneration == _localGeneration) {
       _localSeries = results[2] as Set<String>;
+    }
+    final mdblist = results[3] as ({Set<String> movies, Set<String> series})?;
+    if (mdblist != null) {
+      _mdblistMovies = mdblist.movies;
+      _mdblistSeries = mdblist.series;
     }
     notifyListeners();
   }

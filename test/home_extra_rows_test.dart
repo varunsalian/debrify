@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/home_list_rows.dart';
+import 'package:debrify/services/mdblist/mdblist_list_source.dart';
 import 'package:debrify/services/simkl/simkl_list_source.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_list_source.dart';
@@ -93,6 +94,7 @@ void main() {
       );
       expect(HomeExtraRowIds.isTracker('traktlist:watchlist'), isTrue);
       expect(HomeExtraRowIds.isTracker('simkllist:trending'), isTrue);
+      expect(HomeExtraRowIds.isTracker('mdblistlist:mine:7'), isTrue);
       expect(HomeExtraRowIds.isTracker('iptvlist:x'), isFalse);
       expect(HomeExtraRowIds.iptvListId('iptvlist:x'), 'x');
       expect(HomeExtraRowIds.iptvListId('traktlist:watchlist'), isNull);
@@ -100,6 +102,37 @@ void main() {
   });
 
   group('HomeListRowsService.resolve', () {
+    test(
+      'MDBList rows retain group order and require a complete item walk',
+      () async {
+        const mine = MdblistListChoice(id: 1, name: 'Mine');
+        const liked = MdblistListChoice(id: 2, name: 'Liked');
+        const top = MdblistListChoice(id: 3, name: 'Top');
+        final service = HomeListRowsService(
+          traktLoad: (_) async => _empty,
+          traktUserLists: () async => const [],
+          simklLoad: (_) async => _empty,
+          mdblistMine: () async => const [mine],
+          mdblistLiked: () async => const [liked],
+          mdblistTop: () async => const [top],
+          mdblistLoad: (choice) async => (
+            items: [_meta('${choice.id}')],
+            failed: choice.id == 2,
+            complete: choice.id != 2,
+          ),
+        );
+
+        final rows = await service.resolve(const [
+          (id: 'mdblistlist:top:3', title: ''),
+          (id: 'mdblistlist:liked:2', title: ''),
+          (id: 'mdblistlist:mine:1', title: ''),
+        ]);
+
+        expect(rows.map((row) => row.title), ['Mine', 'Top']);
+        expect(rows.every((row) => row.isMdblist), isTrue);
+      },
+    );
+
     test('returns immediately when no tracker ids are enabled', () async {
       var loaderCalls = 0;
       final service = HomeListRowsService(

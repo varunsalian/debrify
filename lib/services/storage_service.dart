@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
 import 'iptv_media_store.dart';
@@ -60,6 +61,12 @@ class StorageService {
 
   /// Local movie, episode, and derived-series completion invalidation.
   static final ValueNotifier<int> localCompletionRevision = ValueNotifier(0);
+
+  /// The tracker snapshots are each stored as one JSON object containing every
+  /// show. Serializing their read/modify/write cycle prevents two concurrent
+  /// show refreshes from both reading the same old object and dropping whichever
+  /// write finishes first.
+  static final Lock _episodeTrackerSnapshotWriteLock = Lock();
 
   static Future<bool> profileAllowsAdultContent() async {
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
@@ -268,8 +275,7 @@ class StorageService {
   static const String _homeHideProviderCardsKey = 'home_hide_provider_cards';
   static const String _homeContinueWatchingEnabledKey =
       'home_continue_watching_enabled';
-  static const String _homeCwHoldToQuickPlayKey =
-      'home_cw_hold_to_quick_play';
+  static const String _homeCwHoldToQuickPlayKey = 'home_cw_hold_to_quick_play';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
@@ -1862,6 +1868,7 @@ class StorageService {
     }
     await prefs.remove(_mdblistUsernameKey);
     await prefs.remove(_mdblistSavedClonesKey);
+    await prefs.remove(_mdblistSyncCheckpointKey);
   }
 
   // Maps a source MDBList list id -> the id of the static list we CLONED it
@@ -1907,6 +1914,38 @@ class StorageService {
       _mdblistSavedClonesKey,
       jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
     );
+  }
+
+  /// Retire the old clone-as-like UI bookkeeping. Remote lists are deliberately
+  /// untouched: an old clone is now simply a normal user-owned list.
+  static Future<void> retireMdblistSavedCloneMarkers() async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.remove(_mdblistSavedClonesKey);
+  }
+
+  static const String _mdblistSyncCheckpointKey = 'mdblist_sync_checkpoint_v1';
+
+  static Future<Map<String, dynamic>?> getMdblistSyncCheckpoint() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_mdblistSyncCheckpointKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final value = jsonDecode(raw);
+      return value is Map<String, dynamic> ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> setMdblistSyncCheckpoint(
+    Map<String, dynamic>? value,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
+    if (value == null) {
+      await prefs.remove(_mdblistSyncCheckpointKey);
+    } else {
+      await prefs.setString(_mdblistSyncCheckpointKey, jsonEncode(value));
+    }
   }
 
   static Future<bool> getAllDebridIntegrationEnabled() async {
@@ -2492,61 +2531,101 @@ class StorageService {
     required String seriesTitle,
     required int season,
     required int episode,
+    String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key =
+    final currentTitleKey =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final normalizedImdbId = imdbId?.trim().toLowerCase();
+    final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
+        ? null
+        : normalizedImdbId;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var changed = false;
+    var aliasesChanged = 0;
 
-    final seriesData = map[key];
-    if (seriesData == null || seriesData['type'] != 'series') return;
+    for (final entry in map.entries) {
+      final seriesData = entry.value;
+      if (seriesData is! Map<String, dynamic> ||
+          seriesData['type'] != 'series') {
+        continue;
+      }
+      final storedImdbId = seriesData['imdbId']
+          ?.toString()
+          .trim()
+          .toLowerCase();
+      final matchesCurrentTitle = entry.key == currentTitleKey;
+      final matchesStableId =
+          stableImdbId != null && storedImdbId == stableImdbId;
+      if (!matchesCurrentTitle && !matchesStableId) continue;
 
-    // Remove from finishedEpisodes map
-    final finishedEpisodes = seriesData['finishedEpisodes'];
-    if (finishedEpisodes != null) {
-      final seasonData = finishedEpisodes[season.toString()];
-      if (seasonData != null) {
-        seasonData.remove(episode.toString());
-
-        // Clean up empty season map
-        if (seasonData.isEmpty) {
-          finishedEpisodes.remove(season.toString());
-        }
+      if (_clearEpisodeCompletion(
+        seriesData: seriesData,
+        season: season,
+        episode: episode,
+        updatedAt: now,
+      )) {
+        changed = true;
+        aliasesChanged++;
       }
     }
 
-    // Also remove from seasons map if it only has dummy progress data (position 0)
-    // This keeps episodes that were actually watched with real progress
-    final seasons = seriesData['seasons'];
-    if (seasons != null) {
-      final seasonData = seasons[season.toString()];
-      if (seasonData != null) {
-        final episodeData = seasonData[episode.toString()];
-        if (episodeData != null) {
-          // Only remove if it's dummy data (position 0, duration 1)
-          final positionMs = episodeData['positionMs'] ?? 0;
-          final durationMs = episodeData['durationMs'] ?? 0;
-          if (positionMs == 0 && durationMs == 1) {
-            seasonData.remove(episode.toString());
-
-            // Clean up empty season map
-            if (seasonData.isEmpty) {
-              seasons.remove(season.toString());
-            }
-          } else {
-            // Episode has real progress, just reset it to 0
-            episodeData['positionMs'] = 0;
-            episodeData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
-          }
-        }
-      }
-    }
+    if (!changed) return;
 
     debugPrint(
-      'StorageService: unmarkEpisodeAsFinished title="$seriesTitle" S${season}E$episode',
+      'StorageService: unmarkEpisodeAsFinished title="$seriesTitle" '
+      'S${season}E$episode aliases=$aliasesChanged',
     );
 
     await _savePlaybackStateMap(map);
     localCompletionRevision.value++;
+  }
+
+  /// Remove one episode's explicit completion and any synthetic/completed
+  /// progress produced by marking it watched. Genuine partial progress remains
+  /// intact, including a rewatch in progress under another title alias.
+  static bool _clearEpisodeCompletion({
+    required Map<String, dynamic> seriesData,
+    required int season,
+    required int episode,
+    required int updatedAt,
+  }) {
+    final seasonKey = season.toString();
+    final episodeKey = episode.toString();
+    var changed = false;
+
+    final finishedEpisodes = seriesData['finishedEpisodes'];
+    if (finishedEpisodes is Map) {
+      final seasonData = finishedEpisodes[seasonKey];
+      if (seasonData is Map && seasonData.containsKey(episodeKey)) {
+        seasonData.remove(episodeKey);
+        if (seasonData.isEmpty) finishedEpisodes.remove(seasonKey);
+        changed = true;
+      }
+    }
+
+    final seasons = seriesData['seasons'];
+    if (seasons is! Map) return changed;
+    final seasonData = seasons[seasonKey];
+    if (seasonData is! Map) return changed;
+    final episodeData = seasonData[episodeKey];
+    if (episodeData is! Map) return changed;
+
+    final positionMs = (episodeData['positionMs'] as num?)?.toInt() ?? 0;
+    final durationMs = (episodeData['durationMs'] as num?)?.toInt() ?? 0;
+    final isDummy = positionMs == 0 && durationMs == 1;
+    final isCompleted = durationMs > 0 && positionMs >= durationMs;
+    if (isDummy) {
+      seasonData.remove(episodeKey);
+      if (seasonData.isEmpty) seasons.remove(seasonKey);
+      return true;
+    }
+    if (isCompleted) {
+      episodeData['positionMs'] = 0;
+      episodeData['updatedAt'] = updatedAt;
+      return true;
+    }
+    return changed;
   }
 
   /// Check if an episode is marked as finished
@@ -2554,21 +2633,39 @@ class StorageService {
     required String seriesTitle,
     required int season,
     required int episode,
+    String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key =
+    final currentTitleKey =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final normalizedImdbId = imdbId?.trim().toLowerCase();
+    final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
+        ? null
+        : normalizedImdbId;
 
-    final seriesData = map[key];
-    if (seriesData == null || seriesData['type'] != 'series') return false;
+    for (final entry in map.entries) {
+      final seriesData = entry.value;
+      if (seriesData is! Map<String, dynamic> ||
+          seriesData['type'] != 'series') {
+        continue;
+      }
+      final matchesCurrentTitle = entry.key == currentTitleKey;
+      final storedImdbId = seriesData['imdbId']
+          ?.toString()
+          .trim()
+          .toLowerCase();
+      final matchesStableId =
+          stableImdbId != null && storedImdbId == stableImdbId;
+      if (!matchesCurrentTitle && !matchesStableId) continue;
 
-    final finishedEpisodes = seriesData['finishedEpisodes'];
-    if (finishedEpisodes == null) return false;
-
-    final seasonData = finishedEpisodes[season.toString()];
-    if (seasonData == null) return false;
-
-    return seasonData.containsKey(episode.toString());
+      final finishedEpisodes = seriesData['finishedEpisodes'];
+      if (finishedEpisodes is! Map) continue;
+      final seasonData = finishedEpisodes[season.toString()];
+      if (seasonData is Map && seasonData.containsKey(episode.toString())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Get all finished episodes for a series
@@ -2736,20 +2833,11 @@ class StorageService {
   static Future<void> saveEpisodeTraktProgress({
     required String imdbId,
     required Map<String, double> percents,
-  }) async {
-    if (imdbId.isEmpty) return;
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_episodeTraktProgressKey);
-    Map<String, dynamic> all = {};
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = await decodeJsonAsync(raw);
-        if (decoded is Map<String, dynamic>) all = decoded;
-      } catch (_) {}
-    }
-    all[_episodeTraktKeyFor(imdbId)] = percents;
-    await prefs.setString(_episodeTraktProgressKey, jsonEncode(all));
-  }
+  }) => _saveEpisodeTrackerProgress(
+    storeKey: _episodeTraktProgressKey,
+    imdbId: imdbId,
+    percents: percents,
+  );
 
   // Kept separate from both local playback state and Trakt. This is a
   // replace-on-launch snapshot of Simkl's remote truth, so marking an episode
@@ -2790,19 +2878,80 @@ class StorageService {
   static Future<void> saveEpisodeSimklProgress({
     required String imdbId,
     required Map<String, double> percents,
+  }) => _saveEpisodeTrackerProgress(
+    storeKey: _episodeSimklProgressKey,
+    imdbId: imdbId,
+    percents: percents,
+  );
+
+  static const String _episodeMdblistProgressKey =
+      'episode_mdblist_progress_v1';
+
+  static Future<Map<String, double>> getEpisodeMdblistProgress({
+    required String imdbId,
   }) async {
-    if (imdbId.isEmpty) return;
+    if (imdbId.isEmpty) return {};
     final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_episodeSimklProgressKey);
-    Map<String, dynamic> all = {};
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final decoded = await decodeJsonAsync(raw);
-        if (decoded is Map<String, dynamic>) all = decoded;
-      } catch (_) {}
+    final raw = prefs.getString(_episodeMdblistProgressKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = await decodeJsonAsync(raw);
+      if (decoded is! Map) return {};
+      final series = decoded[_episodeTraktKeyFor(imdbId)];
+      if (series is! Map) return {};
+      return {
+        for (final entry in series.entries)
+          if (entry.value is num)
+            entry.key.toString(): (entry.value as num).toDouble(),
+      };
+    } catch (_) {
+      return {};
     }
-    all[_episodeSimklKeyFor(imdbId)] = percents;
-    await prefs.setString(_episodeSimklProgressKey, jsonEncode(all));
+  }
+
+  static Future<void> saveEpisodeMdblistProgress({
+    required String imdbId,
+    required Map<String, double> percents,
+  }) => _saveEpisodeTrackerProgress(
+    storeKey: _episodeMdblistProgressKey,
+    imdbId: imdbId,
+    percents: percents,
+  );
+
+  /// Replace one show's entry inside a provider's whole-store snapshot.
+  /// Capture the originating profile before this operation queues so a profile
+  /// switch cannot redirect a delayed write into the newly active profile.
+  static Future<void> _saveEpisodeTrackerProgress({
+    required String storeKey,
+    required String imdbId,
+    required Map<String, double> percents,
+  }) {
+    if (imdbId.isEmpty) return Future.value();
+    final normalizedKey = _episodeTraktKeyFor(imdbId);
+    final snapshot = Map<String, double>.from(percents);
+    final profileScope =
+        ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+        ? ProfileRuntime.capture()
+        : null;
+
+    Future<void> commit() =>
+        _episodeTrackerSnapshotWriteLock.synchronized(() async {
+          final prefs = await ProfilePreferences.instance();
+          final raw = prefs.getString(storeKey);
+          Map<String, dynamic> all = {};
+          if (raw != null && raw.isNotEmpty) {
+            try {
+              final decoded = await decodeJsonAsync(raw);
+              if (decoded is Map<String, dynamic>) all = decoded;
+            } catch (_) {}
+          }
+          all[normalizedKey] = snapshot;
+          await prefs.setString(storeKey, jsonEncode(all));
+        });
+
+    return profileScope == null
+        ? commit()
+        : ProfileRuntime.withCapturedScope(profileScope, commit);
   }
 
   /// Get episode progress by IMDB ID (scans playback state for matching imdbId)
@@ -2811,6 +2960,7 @@ class StorageService {
     String imdbId,
   ) async {
     final map = await _getPlaybackStateMap();
+    final normalizedImdbId = imdbId.trim().toLowerCase();
 
     // Merge every legacy title-keyed series entry with this IMDb id. Older
     // builds could save the same show under multiple release-derived titles;
@@ -2819,7 +2969,9 @@ class StorageService {
     Map<String, dynamic>? videoFallback;
     int videoFallbackUpdatedAt = -1;
     for (final entry in map.values) {
-      if (entry is Map<String, dynamic> && entry['imdbId'] == imdbId) {
+      if (entry is Map<String, dynamic> &&
+          entry['imdbId']?.toString().trim().toLowerCase() ==
+              normalizedImdbId) {
         if (entry['type'] == 'series') {
           final seasons = entry['seasons'];
           if (seasons is! Map) continue;
@@ -2871,6 +3023,67 @@ class StorageService {
     }
 
     return {};
+  }
+
+  /// Merge local episode progress across stable IMDb identity and the current
+  /// title-keyed record. The newest update wins duplicate coordinates. Equal
+  /// or missing timestamps prefer the current title deterministically, which
+  /// preserves legacy behavior without letting an older title record move a
+  /// newer cross-alias resume position backwards.
+  static Future<Map<String, Map<String, dynamic>>> getMergedEpisodeProgress({
+    required String seriesTitle,
+    String? imdbId,
+  }) async {
+    final reads = await Future.wait([
+      if (imdbId != null && imdbId.isNotEmpty)
+        getEpisodeProgressByImdbId(imdbId)
+      else
+        Future.value(const <String, Map<String, dynamic>>{}),
+      if (seriesTitle.isNotEmpty)
+        getEpisodeProgress(seriesTitle: seriesTitle)
+      else
+        Future.value(const <String, Map<String, dynamic>>{}),
+    ]);
+    int updatedAt(Map<String, dynamic> state) {
+      final value = state['updatedAt'];
+      if (value is! num || !value.isFinite) return 0;
+      final timestamp = value.toInt();
+      return timestamp > 0 ? timestamp : 0;
+    }
+
+    final merged = Map<String, Map<String, dynamic>>.from(reads[0]);
+    for (final entry in reads[1].entries) {
+      final previous = merged[entry.key];
+      if (previous == null || updatedAt(entry.value) >= updatedAt(previous)) {
+        merged[entry.key] = entry.value;
+      }
+    }
+    return merged;
+  }
+
+  /// IMDb-aware counterpart to [getFinishedEpisodes], unioning historical
+  /// release-title records with the current title record.
+  static Future<Map<String, Set<int>>> getMergedFinishedEpisodes({
+    required String seriesTitle,
+    String? imdbId,
+  }) async {
+    final reads = await Future.wait([
+      if (imdbId != null && imdbId.isNotEmpty)
+        getFinishedEpisodesByImdbId(imdbId: imdbId)
+      else
+        Future.value(const <String, Set<int>>{}),
+      if (seriesTitle.isNotEmpty)
+        getFinishedEpisodes(seriesTitle: seriesTitle)
+      else
+        Future.value(const <String, Set<int>>{}),
+    ]);
+    final merged = <String, Set<int>>{};
+    for (final snapshot in reads) {
+      for (final entry in snapshot.entries) {
+        merged.putIfAbsent(entry.key, () => <int>{}).addAll(entry.value);
+      }
+    }
+    return merged;
   }
 
   /// Get finished episodes for a specific season
@@ -5564,6 +5777,16 @@ class StorageService {
     return prefs.getBool('simkl_sync_catalog_items') ?? false;
   }
 
+  static Future<void> setMdblistSyncCatalogItems(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('mdblist_sync_catalog_items', value);
+  }
+
+  static Future<bool> getMdblistSyncCatalogItems() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('mdblist_sync_catalog_items') ?? false;
+  }
+
   static Future<String?> getSimklAccessToken({
     bool forRemoteTransfer = false,
   }) async {
@@ -7818,13 +8041,12 @@ class StorageService {
     await prefs.setBool(_uiHapticsKey, enabled);
   }
 
-  /// Whether the native TV player silently aligns addon subtitles to the
-  /// audio as playback runs (Settings → Playback, Android TV only). Read by
-  /// the NATIVE side as `flutter.subtitle_auto_sync_enabled` — a plain
-  /// SharedPreferences bool is exactly what FlutterSharedPreferences stores,
-  /// the same bridge the recording engine flag rides. OFF by default; the
-  /// toggle is the opt-in. The NATIVE read's default must stay in lock-step
-  /// or an untouched toggle would mean different things on the two sides.
+  /// Whether native players silently align addon subtitles to the audio as
+  /// playback runs. Android TV reads the same profile preference natively;
+  /// MediaKit reads it in Dart and attaches its passive analysis filter only
+  /// while an addon subtitle is active. OFF by default on both engines —
+  /// experimental opt-in. The default must stay in lock-step with the native
+  /// read in AndroidTvTorrentPlayerActivity.isAutoSyncPrefEnabled.
   static Future<bool> getSubtitleAutoSyncEnabled() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_subtitleAutoSyncKey) ?? false;

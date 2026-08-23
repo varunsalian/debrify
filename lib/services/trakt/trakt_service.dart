@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/profiles/profile_policy.dart';
+import '../episode_tracker_snapshot_revision.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import '../storage_service.dart';
@@ -651,6 +652,9 @@ class TraktService {
     final response = await _authenticatedPost(path, body);
     if (response == null) return false;
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (season != null && episode != null) {
+        EpisodeTrackerSnapshotRevision.invalidateTitle('trakt', imdbId);
+      }
       if (path == '/scrobble/stop' && progress > 80) {
         _invalidateLibraryCache();
         StorageService.movieFinishedRevision.value++;
@@ -695,6 +699,9 @@ class TraktService {
       // stale — drop them so the next title-status lookup reflects it.
       _invalidateLibraryCache();
       if (path == '/sync/history' || path == '/sync/history/remove') {
+        if (type == 'series') {
+          EpisodeTrackerSnapshotRevision.invalidateTitle('trakt', imdbId);
+        }
         StorageService.movieFinishedRevision.value++;
       }
     }
@@ -771,6 +778,7 @@ class TraktService {
       debugPrint('Trakt: Episode sync failed (${response.statusCode})');
     } else if (path == '/sync/history' || path == '/sync/history/remove') {
       _invalidateLibraryCache();
+      EpisodeTrackerSnapshotRevision.invalidateTitle('trakt', showImdbId);
       StorageService.movieFinishedRevision.value++;
     }
     return ok;
@@ -1403,10 +1411,7 @@ class TraktService {
 
   /// Failure-aware watched movie bulk read for background badge refreshes.
   Future<Map<String, double>?> fetchWatchedMoviesOrNull() async {
-    final list = await _fetchAllWatchedPages(
-      'movies',
-      limit: 250,
-    );
+    final list = await _fetchAllWatchedPages('movies', limit: 250);
     if (list == null) return null;
     try {
       return debugParseWatchedMovies(list);
@@ -1545,31 +1550,29 @@ class TraktService {
   /// Uses the per-show progress endpoint (much smaller than /sync/watched/shows).
   /// Returns a set of `"season-episode"` strings (e.g. `"1-5"`) for completed episodes.
   Future<Set<String>> fetchWatchedShowEpisodes(String showId) async {
+    return await fetchWatchedShowEpisodesOrNull(showId) ?? <String>{};
+  }
+
+  /// Failure-aware variant of [fetchWatchedShowEpisodes].
+  ///
+  /// An empty set is authoritative (the show has no completed episodes), while
+  /// `null` means transport, status, or payload validation failed. Snapshot
+  /// callers use that distinction to retain their last complete value instead
+  /// of replacing it with a false empty history during an outage.
+  Future<Set<String>?> fetchWatchedShowEpisodesOrNull(String showId) async {
     final response = await _authenticatedGet('/shows/$showId/progress/watched');
     if (response == null || response.statusCode != 200) {
       debugPrint(
         'Trakt: fetchWatchedShowEpisodes failed (${response?.statusCode})',
       );
-      return {};
+      return null;
     }
 
     try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final result = <String>{};
-      final seasons = data['seasons'] as List<dynamic>? ?? [];
-      for (final season in seasons) {
-        if (season is! Map<String, dynamic>) continue;
-        final seasonNum = season['number'] as int?;
-        if (seasonNum == null) continue;
-        final episodes = season['episodes'] as List<dynamic>? ?? [];
-        for (final ep in episodes) {
-          if (ep is! Map<String, dynamic>) continue;
-          final completed = ep['completed'] as bool? ?? false;
-          final epNum = ep['number'] as int?;
-          if (completed && epNum != null) {
-            result.add('$seasonNum-$epNum');
-          }
-        }
+      final decoded = jsonDecode(response.body);
+      final result = debugParseWatchedShowEpisodes(decoded);
+      if (result == null) {
+        debugPrint('Trakt: fetchWatchedShowEpisodes incomplete payload');
       }
       return result;
     } catch (error) {
@@ -1577,8 +1580,41 @@ class TraktService {
         'Trakt: fetchWatchedShowEpisodes parse error '
         '(${error.runtimeType})',
       );
-      return {};
+      return null;
     }
+  }
+
+  /// Strict parser for the per-show watched-progress response.
+  ///
+  /// Skipping malformed seasons/episodes would turn a truncated response into
+  /// apparently authoritative history. Return `null` instead so callers can
+  /// retain their last-good snapshot.
+  @visibleForTesting
+  static Set<String>? debugParseWatchedShowEpisodes(Object? decoded) {
+    if (decoded is! Map<String, dynamic>) return null;
+    final seasons = decoded['seasons'];
+    if (seasons is! List<dynamic>) return null;
+
+    final result = <String>{};
+    for (final rawSeason in seasons) {
+      if (rawSeason is! Map<String, dynamic>) return null;
+      final seasonValue = rawSeason['number'];
+      final episodes = rawSeason['episodes'];
+      if (seasonValue is! num || episodes is! List<dynamic>) return null;
+      final season = seasonValue.toInt();
+      if (seasonValue != season || season < 0) return null;
+
+      for (final rawEpisode in episodes) {
+        if (rawEpisode is! Map<String, dynamic>) return null;
+        final episodeValue = rawEpisode['number'];
+        final completed = rawEpisode['completed'];
+        if (episodeValue is! num || completed is! bool) return null;
+        final episode = episodeValue.toInt();
+        if (episodeValue != episode || episode <= 0) return null;
+        if (completed) result.add('$season-$episode');
+      }
+    }
+    return result;
   }
 
   /// Fetch the next episode to watch for a show.
@@ -1612,37 +1648,125 @@ class TraktService {
   Future<Map<String, double>> fetchEpisodePlaybackProgress(
     String showImdbId,
   ) async {
-    final response = await _authenticatedGet('/sync/playback/episodes');
-    if (response == null || response.statusCode != 200) {
-      debugPrint(
-        'Trakt: fetchEpisodePlaybackProgress failed (${response?.statusCode})',
+    return await fetchEpisodePlaybackProgressOrNull(showImdbId) ??
+        <String, double>{};
+  }
+
+  /// Failure-aware, pagination-complete variant of
+  /// [fetchEpisodePlaybackProgress].
+  ///
+  /// Trakt paginates `/sync/playback/episodes`; publishing only its first page
+  /// can silently erase checkpoints for shows on later pages. Every page must
+  /// load and validate before this returns an authoritative map.
+  Future<Map<String, double>?> fetchEpisodePlaybackProgressOrNull(
+    String showImdbId,
+  ) async {
+    // Trakt caps explicitly paginated endpoints at 250. Request the applied
+    // maximum rather than 1000 so a missing pagination header plus 250 items
+    // is correctly recognized as potentially truncated, not a short page.
+    const limit = 250;
+    final result = <String, double>{};
+    var page = 1;
+
+    while (true) {
+      final response = await _authenticatedGet(
+        '/sync/playback/episodes?page=$page&limit=$limit',
       );
-      return {};
-    }
-
-    try {
-      final list = jsonDecode(response.body) as List<dynamic>;
-      final result = <String, double>{};
-      for (final item in list) {
-        if (item is! Map<String, dynamic>) continue;
-        // Check if this episode belongs to the target show
-        final show = item['show'] as Map<String, dynamic>?;
-        final showIds = show?['ids'] as Map<String, dynamic>?;
-        final imdbId = showIds?['imdb'] as String?;
-        if (imdbId != showImdbId) continue;
-
-        final progress = item['progress'] as num?;
-        final episode = item['episode'] as Map<String, dynamic>?;
-        final season = episode?['season'] as int?;
-        final number = episode?['number'] as int?;
-        if (season != null && number != null && progress != null) {
-          result['$season-$number'] = progress.toDouble();
-        }
+      if (response == null || response.statusCode != 200) {
+        debugPrint(
+          'Trakt: fetchEpisodePlaybackProgress failed '
+          'page=$page (${response?.statusCode})',
+        );
+        return null;
       }
-      return result;
-    } catch (error) {
-      debugPrint('Trakt: episode playback parse error (${error.runtimeType})');
-      return {};
+
+      try {
+        final decoded = jsonDecode(response.body);
+        final parsed = debugParseEpisodePlaybackProgress(decoded, showImdbId);
+        if (parsed == null) {
+          debugPrint('Trakt: episode playback incomplete payload page=$page');
+          return null;
+        }
+        result.addAll(parsed);
+
+        final items = decoded as List<dynamic>;
+        final rawPageCount = response.headers['x-pagination-page-count'];
+        final pageCount = rawPageCount == null
+            ? null
+            : int.tryParse(rawPageCount);
+        if (rawPageCount != null && pageCount == null) {
+          debugPrint('Trakt: episode playback invalid pagination metadata');
+          return null;
+        }
+        if (pageCount != null) {
+          // Trakt may report zero pages for an authoritative empty collection.
+          if (pageCount == 0 && page == 1 && items.isEmpty) break;
+          if (pageCount < page) {
+            debugPrint('Trakt: episode playback invalid pagination metadata');
+            return null;
+          }
+          if (page >= pageCount) break;
+        } else {
+          // Trakt can cap the applied page size below the requested limit, so
+          // a non-empty "short" page does not prove completion. Only an empty
+          // first page is self-authenticating without pagination headers.
+          if (page == 1 && items.isEmpty) break;
+          debugPrint('Trakt: episode playback pagination metadata missing');
+          return null;
+        }
+        page++;
+      } catch (error) {
+        debugPrint(
+          'Trakt: episode playback parse error (${error.runtimeType})',
+        );
+        return null;
+      }
     }
+    return result;
+  }
+
+  /// Strictly parse one playback page, filtering it to [showImdbId].
+  @visibleForTesting
+  static Map<String, double>? debugParseEpisodePlaybackProgress(
+    Object? decoded,
+    String showImdbId,
+  ) {
+    if (decoded is! List<dynamic>) return null;
+    final target = showImdbId.trim().toLowerCase();
+    if (target.isEmpty) return null;
+
+    final result = <String, double>{};
+    for (final rawItem in decoded) {
+      if (rawItem is! Map<String, dynamic>) return null;
+      final show = rawItem['show'];
+      if (show is! Map<String, dynamic>) return null;
+      final ids = show['ids'];
+      if (ids is! Map<String, dynamic>) return null;
+      final imdb = ids['imdb'];
+      // IMDb can legitimately be absent for an unrelated Trakt item. It
+      // cannot identify the target show, so it contributes nothing.
+      if (imdb is! String || imdb.trim().toLowerCase() != target) continue;
+
+      final episode = rawItem['episode'];
+      final progressValue = rawItem['progress'];
+      if (episode is! Map<String, dynamic> || progressValue is! num) {
+        return null;
+      }
+      final seasonValue = episode['season'];
+      final episodeValue = episode['number'];
+      if (seasonValue is! num || episodeValue is! num) return null;
+      final season = seasonValue.toInt();
+      final number = episodeValue.toInt();
+      final progress = progressValue.toDouble();
+      if (seasonValue != season ||
+          episodeValue != number ||
+          season < 0 ||
+          number <= 0 ||
+          !progress.isFinite) {
+        return null;
+      }
+      result['$season-$number'] = progress;
+    }
+    return result;
   }
 }

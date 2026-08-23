@@ -469,6 +469,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   void _presentStreaming(List<Torrent> raw, int token) {
     if (!mounted || token != _searchToken) return;
     final sel = _effectiveSelection;
+    // Ready-to-play addon URLs are the most useful first choice on the Sources
+    // page. Keep the service's shared ranking untouched (Quick Play also uses
+    // it), and invert the transport order only for this view. Explicit toolbar
+    // sorts are applied later and therefore still win.
+    final sourceOrdered = SourcePriority.directAddonLinksFirst(raw);
     // Series pack/bind post-processing — ported from the old Home
     // (torrent_search_screen) so this list matches. For a specific episode
     // (episode drill-down), show EVERYTHING the episode-scoped query returned
@@ -483,9 +488,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // priority.
     final List<Torrent> torrents;
     if (sel.isSeries && sel.season != null && sel.episode != null) {
-      torrents = raw;
+      torrents = sourceOrdered;
     } else {
-      torrents = _sortSeriesPacks(_filterSeriesPacks(raw, sel), sel);
+      torrents = _sortSeriesPacks(_filterSeriesPacks(sourceOrdered, sel), sel);
     }
     if (_streamFrozen) {
       _pendingTorrents = torrents;

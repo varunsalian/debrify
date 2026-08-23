@@ -56,6 +56,63 @@ void main() {
     );
   });
 
+  test('new tracker family inherits the slot after its anchor family', () {
+    final seeded = HomeRowOrder.insertMissingAfter(
+      const [
+        'cw:movies',
+        'simkl:movies',
+        'simkl:shows',
+        'fav:playlist',
+        'catalog:a',
+      ],
+      additions: const ['mdblist:movies', 'mdblist:shows'],
+      anchors: const ['simkl:movies', 'simkl:shows'],
+    );
+
+    expect(seeded, [
+      'cw:movies',
+      'simkl:movies',
+      'simkl:shows',
+      'mdblist:movies',
+      'mdblist:shows',
+      'fav:playlist',
+      'catalog:a',
+    ]);
+  });
+
+  test('explicitly arranged tracker rows are not moved', () {
+    final seeded = HomeRowOrder.insertMissingAfter(
+      const [
+        'mdblist:movies',
+        'cw:movies',
+        'simkl:movies',
+        'simkl:shows',
+        'mdblist:shows',
+      ],
+      additions: const ['mdblist:movies', 'mdblist:shows'],
+      anchors: const ['simkl:movies', 'simkl:shows'],
+    );
+
+    expect(seeded, [
+      'mdblist:movies',
+      'cw:movies',
+      'simkl:movies',
+      'simkl:shows',
+      'mdblist:shows',
+    ]);
+  });
+
+  test('empty saved order remains canonical', () {
+    expect(
+      HomeRowOrder.insertMissingAfter(
+        const [],
+        additions: const ['mdblist:movies', 'mdblist:shows'],
+        anchors: const ['simkl:movies', 'simkl:shows'],
+      ),
+      isEmpty,
+    );
+  });
+
   test('temporary rows stay after their canonical leading family', () {
     final canonical = HomeRowOrder.insertAfterLeadingRun(
       const ['cw:movies', 'simkl:movies', 'fav:playlist', 'catalog:a'],

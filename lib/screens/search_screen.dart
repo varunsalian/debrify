@@ -90,6 +90,10 @@ import 'see_all/mdblist_lists_see_all_screen.dart';
 import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
+import '../services/mdblist/mdblist_continue_watching_service.dart';
+import '../services/mdblist/mdblist_sync_coordinator.dart';
+import '../services/mdblist/mdblist_models.dart';
+import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_shelf_scope.dart';
@@ -149,6 +153,7 @@ String? _seLabel(int? season, int? episode) {
 ///   query searches every searchable addon and shows one horizontal row of
 ///   results per addon (same board layout).
 /// * KEYWORD mode — raw torrent search → tap a result to add/play.
+/// * LISTS mode — MDBList public-list search, isolated from title catalogs.
 ///
 /// All playback (catalog auto-best, sources list, keyword) runs in-tab through
 /// the isolated [TorrentPlaybackService]; the Home engine is never invoked.
@@ -156,9 +161,9 @@ class SearchScreen extends StatefulWidget {
   final bool isTelevision;
 
   /// Dedicated-search-tab mode (TV only). When true the screen is *only* the
-  /// search field + Catalog/Keyword toggle over a blank prompt until the user
-  /// types — no hero/board. When false it's the "Home New" board (chrome-free on
-  /// TV; persistent search bar on desktop/mobile).
+  /// search field + Catalog/Keyword/Lists selector over a blank prompt until
+  /// the user types — no hero/board. When false it's the "Home New" board
+  /// (chrome-free on TV; persistent search bar on desktop/mobile).
   final bool searchMode;
 
   /// Discover-tab mode. A single browsable grid with a "Source" dropdown
@@ -177,7 +182,7 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-enum _Mode { catalog, keyword }
+enum _Mode { catalog, keyword, lists }
 
 /// Snapshot of an in-progress keyword search, preserved across a tab switch so
 /// returning restores results + scroll instead of a blank prompt — the nav
@@ -426,17 +431,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
-  // DPAD focus targets for the Catalog / Keyword toggle (TV only), so the
+  // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
   final FocusNode _modeKeywordNode = FocusNode(debugLabel: 'mode_keyword');
+  final FocusNode _modeListsNode = FocusNode(debugLabel: 'mode_lists');
+  final FocusNode _modeDropdownNode = FocusNode(debugLabel: 'mode_dropdown');
 
-  // MDBList list-search state. Runs in parallel with a Catalog search and
-  // surfaces as a "MDBList Lists" card rail at the top of the results board;
-  // each card hands off to the Discover tab via
+  // Dedicated MDBList list-search state. Lists is its own Search mode; it
+  // never runs as part of Catalog search. Each result card hands off via
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
   String _listsQuery = '';
   List<MdblistListChoice> _listsResults = const [];
+  bool _listsSearching = false;
+  String? _listsError;
   int _listsToken = 0;
   final List<FocusNode> _listsNodes = [];
   // Debounce for opening a list from the rail — one fast double-press must not
@@ -803,6 +811,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
   int _simklCwToken = 0;
+  List<StremioMeta> _mdblistMovies = [];
+  List<StremioMeta> _mdblistSeries = [];
+  List<StremioMeta> _mdblistAll = [];
+  final Map<String, double> _mdblistProgress = {};
+  final Map<String, String> _mdblistEpisode = {};
+  final Map<String, MdblistContinueWatchingItem> _mdblistByImdb = {};
+  final List<FocusNode> _mdblistMovieNodes = [];
+  final List<FocusNode> _mdblistSeriesNodes = [];
+  int _mdblistCwToken = 0;
+  int _mdblistRevisionRefreshToken = 0;
 
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
@@ -1017,6 +1035,42 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('series'),
       ),
+    if (_mdblistMovies.isNotEmpty && !_homeDisabled.contains('mdblist:movies'))
+      _CwRow(
+        rowId: 'mdblist:movies',
+        title: 'MDBList Continue Watching',
+        tag: 'Movies',
+        kind: _CwKind.mdblist,
+        items: _mdblistMovies,
+        nodes: _mdblistMovieNodes,
+        progressOf: (m) => _mdblistProgress[m.imdbId],
+        episodeOf: (_) => null,
+        remainingMinutesOf: (_) => null,
+        episodeArtworkOf: (_) => null,
+        onOpen: _openMdblistCwItem,
+        onQuickPlay: _playMdblistCwItem,
+        onRemove: _removeMdblistCwItem,
+        canRemove: _canRemoveMdblistCwItem,
+        onSeeAll: () => _openMdblistCwSeeAll('movie'),
+      ),
+    if (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows'))
+      _CwRow(
+        rowId: 'mdblist:shows',
+        title: 'MDBList Continue Watching',
+        tag: 'Shows',
+        kind: _CwKind.mdblist,
+        items: _mdblistSeries,
+        nodes: _mdblistSeriesNodes,
+        progressOf: (m) => _mdblistProgress[m.imdbId],
+        episodeOf: (m) => _mdblistEpisode[m.imdbId],
+        remainingMinutesOf: (_) => null,
+        episodeArtworkOf: (_) => null,
+        onOpen: _openMdblistCwItem,
+        onQuickPlay: _playMdblistCwItem,
+        onRemove: _removeMdblistCwItem,
+        canRemove: _canRemoveMdblistCwItem,
+        onSeeAll: () => _openMdblistCwSeeAll('series'),
+      ),
     // IPTV Continue Watching (Xtream VOD). Routes through [IptvCwRouter], not
     // the addon/tracker pipeline — a movie resumes playback, a series opens the
     // merged Xtream series page. Progress/episode key off the synthetic meta id
@@ -1069,6 +1123,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           (_simklMovies.isNotEmpty &&
               !_homeDisabled.contains('simkl:movies')) ||
           (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')) ||
+          (_mdblistMovies.isNotEmpty &&
+              !_homeDisabled.contains('mdblist:movies')) ||
+          (_mdblistSeries.isNotEmpty &&
+              !_homeDisabled.contains('mdblist:shows')) ||
           (_iptvCwMovies.isNotEmpty &&
               !_homeDisabled.contains('iptv:movies')) ||
           (_iptvCwSeries.isNotEmpty &&
@@ -1083,6 +1141,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       !widget.discoverMode &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
+
+  /// Saved Home orders created before MDBList was exposed do not contain its
+  /// CW ids. Seed those new ids after the Simkl CW family instead of allowing
+  /// the generic ordering projection to append them at the bottom. Any MDBList
+  /// id already saved keeps its chosen position untouched.
+  List<String> get _effectiveHomeRowOrder => HomeRowOrder.insertMissingAfter(
+    _homeRowOrder,
+    additions: const ['mdblist:movies', 'mdblist:shows'],
+    anchors: const ['simkl:movies', 'simkl:shows'],
+  );
 
   /// Whether the Trakt rows should be held open with skeleton placeholders: the
   /// account is connected, its (slow, network) Continue Watching fetch is in
@@ -1346,6 +1414,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       StorageService.localCompletionRevision.addListener(
         _onLocalCompletionChanged,
       );
+      MdblistService.instance.playbackRevision.addListener(
+        _onMdblistPlaybackRevision,
+      );
     }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
@@ -1576,6 +1647,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
         // here would be pure duplicate startup work on weak TV hardware.
         _loadSimklContinueWatching(refreshBound: false),
+        _loadMdblistContinueWatching(refreshBound: false),
         _loadIptvContinueWatching(),
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
@@ -1712,6 +1784,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!widget.searchMode) {
       _loadTraktContinueWatching();
       _loadSimklContinueWatching();
+      _loadMdblistContinueWatching();
     }
     // Opted-in tracker LIST rows live in the board's section pipeline, so a
     // connect/disconnect needs a board reload to add/drop them. Home board
@@ -1739,7 +1812,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Future<void> _refreshMdblistAuthState() async {
     final auth = await MdblistService.instance.isAuthenticated();
     if (!mounted || auth == _isMdblistAuthenticated) return;
-    setState(() => _isMdblistAuthenticated = auth);
+    final leaveLists = !auth && _mode == _Mode.lists;
+    if (leaveLists) {
+      _listsToken++;
+      _disposeListsNodes();
+    }
+    setState(() {
+      _isMdblistAuthenticated = auth;
+      if (leaveLists) {
+        _mode = _Mode.catalog;
+        _listsQuery = '';
+        _listsResults = const [];
+        _listsSearching = false;
+        _listsError = null;
+      }
+    });
+    // A disconnect can remove the currently selected mode. Keep the shared
+    // query useful by resolving it through Catalog after the selector falls
+    // back, unless those exact Catalog results are already present.
+    if (leaveLists) {
+      final query = _searchController.text.trim();
+      if (query.isNotEmpty && query != _catalogQuery) {
+        _runCatalogSearch(query);
+      }
+      if (widget.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _searchFocusNode.requestFocus();
+        });
+      }
+    }
   }
 
   /// Restore a preserved keyword search into this instance if one exists for
@@ -1784,6 +1885,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   void dispose() {
+    _mdblistRevisionRefreshToken++;
     _spotlightHeroNode.dispose();
     // Preserve a COMPLETED keyword search so returning to this tab restores
     // results + scroll instead of the blank prompt (the nav rebuilds us fresh).
@@ -1832,6 +1934,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
     StorageService.localCompletionRevision.removeListener(
       _onLocalCompletionChanged,
+    );
+    MdblistService.instance.playbackRevision.removeListener(
+      _onMdblistPlaybackRevision,
     );
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.unregisterCatalogDetailOpenHandler(
@@ -1930,6 +2035,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _searchFocusNode.dispose();
     _modeCatalogNode.dispose();
     _modeKeywordNode.dispose();
+    _modeListsNode.dispose();
+    _modeDropdownNode.dispose();
     _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
@@ -1981,6 +2088,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._traktSeriesNodes,
       ..._simklMovieNodes,
       ..._simklSeriesNodes,
+      ..._mdblistMovieNodes,
+      ..._mdblistSeriesNodes,
       ..._tvFavNodes,
       ..._stvFavNodes,
       ..._iptvFavNodes,
@@ -1999,6 +2108,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _traktSeriesNodes.clear();
     _simklMovieNodes.clear();
     _simklSeriesNodes.clear();
+    _mdblistMovieNodes.clear();
+    _mdblistSeriesNodes.clear();
     _tvFavNodes.clear();
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
@@ -2480,6 +2591,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._traktSeries,
       ..._simklMovies,
       ..._simklSeries,
+      ..._mdblistMovies,
+      ..._mdblistSeries,
     ];
     for (final item in items) {
       final imdb = _imdbOf(item);
@@ -3886,6 +3999,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         item,
         _addonForContinue(item.sourceAddon?.id),
         isTraktSource: section.isTrakt,
+        isMdblistSource: section.isMdblist,
         heroTag: heroTag,
       );
       return;
@@ -3900,6 +4014,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (section is HomeListSection) {
       if (section.isTrakt) {
         _playTraktItem(item);
+      } else if (section.isMdblist) {
+        _onCatalogPlay(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        );
       } else {
         _playSimklItem(item);
       }
@@ -4090,6 +4210,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     belowNodes: [
       _simklMovieNodes,
       _simklSeriesNodes,
+      _mdblistMovieNodes,
+      _mdblistSeriesNodes,
       _iptvCwMovieNodes,
       _iptvCwSeriesNodes,
     ],
@@ -4109,6 +4231,29 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _cwSeriesNodes,
       _traktMovieNodes,
       _traktSeriesNodes,
+    ],
+    belowNodes: [
+      _mdblistMovieNodes,
+      _mdblistSeriesNodes,
+      _iptvCwMovieNodes,
+      _iptvCwSeriesNodes,
+    ],
+  );
+
+  void _maybeAnnounceMdblistRows() => _maybeAnnounceCwRows(
+    label: 'MDBList',
+    visible:
+        (_mdblistMovies.isNotEmpty &&
+            !_homeDisabled.contains('mdblist:movies')) ||
+        (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows')),
+    ownNodes: [_mdblistMovieNodes, _mdblistSeriesNodes],
+    aboveNodes: [
+      _cwMovieNodes,
+      _cwSeriesNodes,
+      _traktMovieNodes,
+      _traktSeriesNodes,
+      _simklMovieNodes,
+      _simklSeriesNodes,
     ],
     belowNodes: [_iptvCwMovieNodes, _iptvCwSeriesNodes],
   );
@@ -4320,14 +4465,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _cwMenuOpen = true;
     final isSeries = item.type == 'series';
     final playActionAvailable = row.kind == _CwKind.iptv || !_pikpakOnly;
+    final removeActionAvailable = row.canRemove?.call(item) ?? true;
+    if (!playActionAvailable && !removeActionAvailable) {
+      _cwMenuOpen = false;
+      return;
+    }
     // IPTV series use their primary action to open the series page; that is
     // still useful in the menu, but it is not the immediate playback this
     // preference promises.
     final quickPlayAvailable =
         playActionAvailable && !(row.kind == _CwKind.iptv && isSeries);
     try {
-      final holdToQuickPlay =
-          await StorageService.getHomeCwHoldToQuickPlay();
+      final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
       if (!mounted) return;
       if (holdToQuickPlay && quickPlayAvailable) {
         row.onQuickPlay(item);
@@ -4372,6 +4521,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ? 'Moves the show to On Hold on Simkl and clears the paused '
                   'position, so it stops resurfacing as up next.'
             : 'Clears this movie\'s paused position on Simkl.';
+      case _CwKind.mdblist:
+        playDescription = isSeries
+            ? 'Jump into the paused or next unwatched episode from MDBList.'
+            : 'Resume from the position saved on MDBList.';
+        removeDescription =
+            'Clears this paused playback position from MDBList.';
       case _CwKind.iptv:
         playDescription = isSeries
             ? 'Open the series and pick up where you left off.'
@@ -4395,6 +4550,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Mirrors the card's own long-press-to-play gate: PikPak-only setups
         // have no quick play, so the menu offers the removal alone.
         showPlay: playActionAvailable,
+        showRemove: removeActionAvailable,
         playLabel: playLabel,
         playDescription: playDescription,
         removeDescription: removeDescription,
@@ -4631,6 +4787,183 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       onReload: () async {
         await _refreshAfterPlayback(trackers: true);
         return List<StremioMeta>.of(_simklAll);
+      },
+    );
+  }
+
+  Future<void> _loadMdblistContinueWatching({
+    bool refreshBound = true,
+    bool force = false,
+  }) async {
+    final token = ++_mdblistCwToken;
+    debugPrint(
+      '[MDBListDiag] Home CW load start token=$token '
+      'refreshBound=$refreshBound force=$force flag=$kMdblistEnabled',
+    );
+    if (!kMdblistEnabled) {
+      if (!mounted) return;
+      setState(() {
+        _mdblistMovies = [];
+        _mdblistSeries = [];
+        _mdblistAll = [];
+        _mdblistByImdb.clear();
+      });
+      return;
+    }
+    await MdblistSyncCoordinator.instance.synchronizeInvalidations();
+    if (!mounted || token != _mdblistCwToken) return;
+    final result = await MdblistContinueWatchingService.instance.fetch(
+      force: force,
+    );
+    if (!mounted || token != _mdblistCwToken || !result.isUsable) {
+      debugPrint(
+        '[MDBListDiag] Home CW load discarded token=$token mounted=$mounted '
+        'currentToken=$_mdblistCwToken kind=${result.kind.name}',
+      );
+      return;
+    }
+    final snapshot = result.data!;
+    final movies = <StremioMeta>[];
+    final shows = <StremioMeta>[];
+    final progress = <String, double>{};
+    final episodes = <String, String>{};
+    final byImdb = <String, MdblistContinueWatchingItem>{};
+    StremioMeta metaFor(MdblistContinueWatchingItem item) {
+      final selection = item.selection;
+      return StremioMeta(
+        id: selection.imdbId,
+        imdbId: selection.imdbId,
+        type: selection.isSeries ? 'series' : 'movie',
+        name: selection.title,
+        poster: selection.posterUrl,
+        background:
+            'https://images.metahub.space/background/medium/${selection.imdbId}/img',
+        year: selection.year,
+      );
+    }
+
+    void ingest(
+      Iterable<MdblistContinueWatchingItem> items,
+      List<StremioMeta> target,
+    ) {
+      for (final item in items) {
+        final id = item.selection.imdbId;
+        if (byImdb.containsKey(id)) continue;
+        target.add(metaFor(item));
+        byImdb[id] = item;
+        final pct = item.selection.mdblistProgressPercent;
+        if (pct != null) progress[id] = (pct / 100).clamp(0, 1);
+        final se = _seLabel(item.selection.season, item.selection.episode);
+        if (se != null) episodes[id] = se;
+      }
+    }
+
+    ingest(snapshot.movies, movies);
+    ingest(snapshot.shows, shows);
+    debugPrint(
+      '[MDBListDiag] Home CW ingest token=$token movies=${movies.length} '
+      'shows=${shows.length}',
+    );
+    final all = [...movies, ...shows]
+      ..sort((a, b) {
+        final aa = byImdb[a.imdbId]?.updatedAt;
+        final bb = byImdb[b.imdbId]?.updatedAt;
+        return (bb ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+          aa ?? DateTime.fromMillisecondsSinceEpoch(0),
+        );
+      });
+    final hadRows = _mdblistMovies.isNotEmpty || _mdblistSeries.isNotEmpty;
+    _syncCwNodes(_mdblistMovieNodes, movies.length, 'mdbmovie');
+    _syncCwNodes(_mdblistSeriesNodes, shows.length, 'mdbseries');
+    setState(() {
+      _mdblistMovies = movies;
+      _mdblistSeries = shows;
+      _mdblistAll = all;
+      _mdblistProgress
+        ..clear()
+        ..addAll(progress);
+      _mdblistEpisode
+        ..clear()
+        ..addAll(episodes);
+      _mdblistByImdb
+        ..clear()
+        ..addAll(byImdb);
+    });
+    _maybeAutoFocusBoard();
+    if (!hadRows) _maybeAnnounceMdblistRows();
+    if (refreshBound) unawaited(_refreshBoundSources());
+  }
+
+  void _onMdblistPlaybackRevision() {
+    if (widget.searchMode || widget.discoverMode) return;
+    MdblistContinueWatchingService.instance.invalidate();
+    final token = ++_mdblistRevisionRefreshToken;
+    unawaited(_refreshMdblistAfterMutation(token));
+  }
+
+  Future<void> _refreshMdblistAfterMutation(int token) async {
+    // The stop response can arrive during the final frames of the player pop.
+    // Wait until Home is visible, then allow MDBList's watched snapshot a short
+    // propagation window before replacing the row with authoritative data.
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (!mounted || token != _mdblistRevisionRefreshToken) return;
+      if (ModalRoute.of(context)?.isCurrent ?? true) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted || token != _mdblistRevisionRefreshToken) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    await Future<void>.delayed(const Duration(milliseconds: 750));
+    if (!mounted || token != _mdblistRevisionRefreshToken) return;
+    await _loadMdblistContinueWatching(refreshBound: false, force: true);
+  }
+
+  void _openMdblistCwItem(StremioMeta item) {
+    final cw = _mdblistByImdb[_imdbOf(item)];
+    _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      initialSeason: cw?.selection.season,
+      initialEpisode: cw?.selection.episode,
+      isMdblistSource: true,
+    );
+  }
+
+  Future<void> _playMdblistCwItem(StremioMeta item) async {
+    final cw = _mdblistByImdb[_imdbOf(item)];
+    if (cw == null) {
+      await _onCatalogPlay(
+        item,
+        _addonForContinue(item.sourceAddon?.id),
+        isMdblistSource: true,
+      );
+      return;
+    }
+    _playSelection(cw.selection);
+  }
+
+  bool _canRemoveMdblistCwItem(StremioMeta item) =>
+      _mdblistByImdb[_imdbOf(item)]?.paused == true;
+
+  Future<void> _removeMdblistCwItem(StremioMeta item) async {
+    final cw = _mdblistByImdb[_imdbOf(item)];
+    if (cw == null || !cw.paused) return;
+    final removed = await MdblistContinueWatchingService.instance.clear(cw);
+    if (!mounted || !removed) return;
+    _snack('Removed from MDBList Continue Watching');
+    await _loadMdblistContinueWatching();
+  }
+
+  void _openMdblistCwSeeAll([String initialCategory = 'all']) {
+    _pushCwSeeAll(
+      title: 'MDBList Continue Watching',
+      initialCategory: initialCategory,
+      items: _mdblistAll,
+      progressOf: (m) => _mdblistProgress[m.imdbId],
+      onOpen: _openMdblistCwItem,
+      onQuickPlay: _pikpakOnly ? null : _playMdblistCwItem,
+      onReload: () async {
+        await _loadMdblistContinueWatching();
+        return List<StremioMeta>.of(_mdblistAll);
       },
     );
   }
@@ -4896,6 +5229,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_searchFocusNode.hasFocus ||
         _modeCatalogNode.hasFocus ||
         _modeKeywordNode.hasFocus ||
+        _modeListsNode.hasFocus ||
+        _modeDropdownNode.hasFocus ||
         _discSourceNode.hasFocus ||
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
@@ -4910,6 +5245,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         anyOf(_traktSeriesNodes) ||
         anyOf(_simklMovieNodes) ||
         anyOf(_simklSeriesNodes) ||
+        anyOf(_mdblistMovieNodes) ||
+        anyOf(_mdblistSeriesNodes) ||
         anyOf(_tvFavNodes) ||
         anyOf(_stvFavNodes) ||
         anyOf(_iptvFavNodes) ||
@@ -5036,6 +5373,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
         return;
       }
+      if (_mode == _Mode.lists) {
+        if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
+          _listsNodes.first.requestFocus();
+        } else {
+          _searchFocusNode.requestFocus();
+        }
+        return;
+      }
       // Only when result rows are actually mounted. Mid-search is fine now:
       // the board clears at search start and rows stream in, so a non-empty
       // _rowNodes always belongs to the CURRENT query (never a stale set).
@@ -5043,10 +5388,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
         _rowNodes.first.first.requestFocus();
-      } else if (_listsRailVisible && _listsNodes.isNotEmpty) {
-        // Catalog found nothing but MDBList lists did — land on the rail so the
-        // remote never bounces back to the field with results on screen.
-        _listsNodes.first.requestFocus();
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -5059,6 +5400,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // search field rather than a stale, detached result node.
       if (_kwToolbarVisible) {
         _kwToolbarNodes.first.requestFocus();
+      } else {
+        _searchFocusNode.requestFocus();
+      }
+      return;
+    }
+    if (_mode == _Mode.lists) {
+      if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
+        _listsNodes.first.requestFocus();
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -5088,10 +5437,26 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Focus the Catalog/Keyword/Lists toggle, landing on the segment for the
   /// current mode so its highlight lines up with where the remote cursor sits.
   void _focusModeToggle() {
+    if (_useCompactModeMenu) {
+      _modeDropdownNode.requestFocus();
+      return;
+    }
     (switch (_mode) {
       _Mode.catalog => _modeCatalogNode,
       _Mode.keyword => _modeKeywordNode,
+      _Mode.lists => _modeListsNode,
     }).requestFocus();
+  }
+
+  /// Three labelled segments need more room than the two-mode selector did.
+  /// Collapse to one dropdown only when the available header width cannot
+  /// carry them comfortably. The TV threshold also protects 720-wide logical
+  /// canvases, where the centered search field would otherwise be crushed.
+  bool get _useCompactModeMenu {
+    if (!kMdblistEnabled) return false;
+    final width = MediaQuery.sizeOf(context).width;
+    if (widget.isTelevision) return width < 900;
+    return width < 342;
   }
 
   /// Return focus to the search field with the caret at the end of the text, so
@@ -5261,9 +5626,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// covered by the focus latch (one can only type while the field is
   /// focused, and focus latches [_searchSheetOpen]); this covers the states
   /// that arrive WITHOUT the field being touched: the async keyword-default
-  /// restore, preserved keyword results, and a committed catalog search.
+  /// restore, preserved keyword results, a committed catalog search, or the
+  /// dedicated Lists surface.
   bool get _sheetForced =>
-      _mode == _Mode.keyword ||
+      _mode != _Mode.catalog ||
       _catalogQuery.isNotEmpty ||
       _catalogSearching ||
       // Belt to the focus latch's braces: interactive typing always comes
@@ -6102,10 +6468,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       shape: _homeLandscapeCards
           ? SpotlightCardShape.wide
           : SpotlightCardShape.poster,
-      watchedImdbId: item.type == 'movie' || item.type == 'series'
-          ? (item.effectiveImdbId ?? item.id)
-          : null,
-      watchedContentType: item.type,
       // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
       progress: (row.progressOf(item) ?? 0) * 100,
       onOpen: () => row.onOpen(item),
@@ -6391,13 +6753,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// Every non-empty Home rail in the board's built-in order.
-  /// The MDBList lists rail is NOT here by design — it's a
-  /// catalog-SEARCH results rail (`_listsRailVisible` requires a query) and
-  /// the TV home board is chrome-free, so it can never appear on this
-  /// surface. FocusNode lists are reused from the classic board's per-row
-  /// lists — only one view is ever mounted, and reuse keeps node counts
-  /// synced through paging for free.
+  /// Every non-empty Home rail in the board's built-in order. Search's
+  /// dedicated Lists mode has its own body and never enters this collection.
+  /// FocusNode lists are reused from the classic board's per-row lists — only
+  /// one view is ever mounted, and reuse keeps node counts synced through
+  /// paging for free.
   List<_CanvasRail> get _canonicalCanvasRails {
     final rails = <_CanvasRail>[];
     if (_cwVisible) {
@@ -6422,7 +6782,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<_CanvasRail> get _canvasRails {
     final rails = _canonicalCanvasRails;
     return _homeRowOrderActive
-        ? HomeRowOrder.apply(rails, _homeRowOrder, _canvasRailRowId)
+        ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
         : rails;
   }
 
@@ -6448,7 +6808,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     return _homeRowOrderActive
-        ? HomeRowOrder.apply(rails, _homeRowOrder, _canvasRailRowId)
+        ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
         : rails;
   }
 
@@ -9940,48 +10300,61 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // ── Search field ─────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
-    if (_mode != _Mode.catalog) return;
-    // Catalog search runs on SUBMIT (keyboard Enter / TV keyboard "Search"
-    // action) — see _onQuerySubmitted — not per keystroke. The only thing we do
-    // as the text changes is snap back to the prompt/board the moment the field
-    // is emptied, so clearing an active query doesn't leave stale results up.
-    // (Cheap, no network — so no debounce needed.)
+    // Every mode searches on SUBMIT. Because the field is shared, emptying it
+    // must invalidate EVERY mode's cached query/result state; otherwise a mode
+    // switch can reveal results for text the field no longer contains.
     _catalogDebounce?.cancel();
-    if (value.trim().isEmpty && _catalogQuery.isNotEmpty) {
-      _restoreHome();
+    if (value.trim().isEmpty) {
+      _clearQuery();
     }
   }
 
   void _onQuerySubmitted(String value) {
     _catalogDebounce?.cancel();
     final q = value.trim();
-    if (_mode == _Mode.keyword) {
-      _runKeyword(q);
-    } else if (q.isEmpty) {
-      _restoreHome();
-    } else {
-      _runCatalogSearch(q);
-      // In parallel with the catalog search: MDBList lists matching the query
-      // surface as a card rail at the top of the results board (best-effort —
-      // silently absent when MDBList isn't connected or nothing matches).
-      _runListsSearch(q);
+    switch (_mode) {
+      case _Mode.keyword:
+        _runKeyword(q);
+        return;
+      case _Mode.catalog:
+        if (q.isEmpty) {
+          _restoreHome();
+        } else {
+          _runCatalogSearch(q);
+        }
+        return;
+      case _Mode.lists:
+        if (q.isEmpty) {
+          _clearListsSearch();
+        } else {
+          _runListsSearch(q);
+        }
+        return;
     }
   }
 
   void _clearQuery() {
     _catalogDebounce?.cancel();
     _searchController.clear();
+    _kwSearchToken++;
     _disposeKwNodes();
     _disposeListsNodes();
     setState(() {
+      _kwSearching = false;
+      _kwLoading = false;
       _kwQuery = '';
       _kwAll = [];
       _kwResults = [];
       _kwCache = {};
       _kwError = null;
+      _kwPending = null;
+      _kwSelectionMode = false;
+      _kwSelected.clear();
       _listsToken++; // cancel an in-flight lists search
       _listsQuery = '';
       _listsResults = const [];
+      _listsSearching = false;
+      _listsError = null;
     });
     _restoreHome();
   }
@@ -9991,6 +10364,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       n.dispose();
     }
     _listsNodes.clear();
+  }
+
+  void _clearListsSearch() {
+    _listsToken++;
+    _disposeListsNodes();
+    if (!mounted) return;
+    setState(() {
+      _listsQuery = '';
+      _listsResults = const [];
+      _listsSearching = false;
+      _listsError = null;
+    });
   }
 
   /// One focus node per result row, rebuilt to match the current result set.
@@ -10003,38 +10388,75 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
   }
 
-  /// Search MDBList's public lists in parallel with a Catalog search; the
-  /// results render as a card rail atop the board (see [_buildListsRailRow]).
-  /// Best-effort: [_listsToken] discards a stale response after a newer submit
-  /// or a clear, and any not-connected / failed / empty case just clears the
-  /// rail (it renders only when [_listsResults] is non-empty). Does NOT steal
-  /// focus — the catalog search drives where the remote lands.
+  /// Search MDBList's public lists for the dedicated Lists mode. A generation
+  /// token prevents a late response from an earlier query or profile state
+  /// replacing the current result rail.
   Future<void> _runListsSearch(String query) async {
-    // MDBList is hidden for the alpha — never populate the lists rail, even for
-    // an already-connected device. See [kMdblistEnabled].
+    // Keep the runtime flag authoritative: when disabled, the selector omits
+    // Lists and no list-search request can be issued.
     if (!kMdblistEnabled) return;
     final q = query.trim();
     final token = ++_listsToken;
-    _listsQuery = q;
     if (q.isEmpty) {
-      _disposeListsNodes();
-      setState(() => _listsResults = const []);
+      _clearListsSearch();
       return;
     }
+    _disposeListsNodes();
+    setState(() {
+      _listsQuery = q;
+      _listsResults = const [];
+      _listsSearching = true;
+      _listsError = null;
+    });
     final connected = await MdblistService.instance.isAuthenticated();
     if (!mounted || token != _listsToken) return;
     if (!connected) {
-      _disposeListsNodes();
-      setState(() => _listsResults = const []);
+      setState(() {
+        _listsSearching = false;
+        _listsError = 'Connect MDBList in Settings to search public lists.';
+      });
       return;
     }
-    final results = await MdblistListSource.instance.searchLists(q);
+    MdblistResult<List<MdblistListChoice>> result;
+    try {
+      result = await MdblistListSource.instance.searchListsResult(q);
+    } catch (_) {
+      result = const MdblistResult.failure(MdblistResultKind.transientFailure);
+    }
     if (!mounted || token != _listsToken) return;
+    final results = result.data ?? const <MdblistListChoice>[];
     setState(() {
       _listsResults = results;
+      _listsSearching = false;
+      _listsError = result.isUsable ? null : _listsFailureMessage(result);
       _ensureListsNodes();
     });
   }
+
+  String _listsFailureMessage(
+    MdblistResult<List<MdblistListChoice>> result,
+  ) => switch (result.kind) {
+    MdblistResultKind.unauthenticated =>
+      'Your MDBList connection has expired. Reconnect it in Settings.',
+    MdblistResultKind.denied =>
+      'MDBList denied this list search for the connected account.',
+    MdblistResultKind.rateLimited =>
+      result.retryAfter == null
+          ? 'MDBList rate limit reached. Try again later.'
+          : 'MDBList rate limit reached. Try again in '
+                '${(result.retryAfter!.inSeconds / 60).ceil().clamp(1, 9999)} minutes.',
+    MdblistResultKind.malformedResponse =>
+      'MDBList returned an unreadable list-search response. Try again.',
+    MdblistResultKind.notFound =>
+      'MDBList list search is currently unavailable.',
+    MdblistResultKind.conflict =>
+      'MDBList could not complete this list search. Try again.',
+    MdblistResultKind.disabled =>
+      'MDBList list search is disabled for this build.',
+    MdblistResultKind.transientFailure =>
+      'MDBList is not responding right now. Try again shortly.',
+    MdblistResultKind.success || MdblistResultKind.partial => '',
+  };
 
   /// Hand the picked list to the Discover tab, which opens it focused (with
   /// the ♥ like toggle). Mirrors the pendingCatalogDetailOpen handoff.
@@ -11207,11 +11629,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // mode's search immediately instead of showing the empty state.
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
-    if (mode == _Mode.keyword) {
-      if (query != _kwQuery) _runKeyword(query);
-    } else {
-      if (query != _catalogQuery) _runCatalogSearch(query);
-      if (query != _listsQuery) _runListsSearch(query);
+    switch (mode) {
+      case _Mode.keyword:
+        if (query != _kwQuery) _runKeyword(query);
+        return;
+      case _Mode.catalog:
+        if (query != _catalogQuery) _runCatalogSearch(query);
+        return;
+      case _Mode.lists:
+        if (query != _listsQuery) _runListsSearch(query);
+        return;
     }
   }
 
@@ -11229,6 +11656,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
     // Shared-element tag from the tapped board cell: the poster flies into the
     // detail page's backdrop. Null (non-board callers) = regular transition.
     String? heroTag,
@@ -11248,6 +11676,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Same for the Trakt Continue Watching rows — removal goes through the
     // Trakt playback/history APIs rather than local storage.
     final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
+    final inMdblistCw = imdb != null && _mdblistByImdb[imdb]?.paused == true;
 
     // Full quick-actions menu, mirroring the catalog/aggregated detail screens:
     // app actions (Select Source, Add to Stremio TV, Search Packs, Random
@@ -11312,6 +11741,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         );
     final simklOptions = buildSimklOptions(null);
 
+    List<MdblistMenuOption> buildMdblistOptions(MdblistTitleStatus? status) =>
+        buildMdblistMenuOptions(
+          authenticated: _isMdblistAuthenticated && imdb != null,
+          isSeries: item.type == 'series',
+          inContinueWatching: inMdblistCw,
+          status: status,
+        );
+    final mdblistOptions = buildMdblistOptions(null);
+
     // Experimental: series route to the merged detail+episodes page. Movies and
     // the flag-off path fall through to the existing CatalogItemDetailScreen.
     if ((item.type == 'series' || item.type == 'movie') && _mergedSeriesPage) {
@@ -11331,6 +11769,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 // behaviour as the tiles, so the hero button matches them.
                 showQuickPlay: true,
                 isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
                 heroTag: heroTag,
                 initialSeason: initialSeason,
                 initialEpisode: initialEpisode,
@@ -11338,11 +11777,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   item,
                   addon,
                   isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
                 ),
                 onResume: () => _onCatalogPlay(
                   item,
                   addon,
                   isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
                   skipEpisodeFallback: true,
                   // Play the Trakt paused episode when the Trakt-first label
                   // shows one, so the button and the action agree.
@@ -11354,6 +11795,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         item,
                         addon,
                         isTraktSource: isTraktSource,
+                        isMdblistSource: isMdblistSource,
                       )
                     : null,
                 onItemSelected: _browseSelection,
@@ -11400,6 +11842,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     ? () => SimklService.instance.fetchTitleStatus(imdb)
                     : null,
                 onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+                mdblistMenuOptions: mdblistOptions,
+                mdblistMenuBuilder: buildMdblistOptions,
+                mdblistStatusLoader: (_isMdblistAuthenticated && imdb != null)
+                    ? () => MdblistService.instance.fetchTitleStatus(
+                        imdb,
+                        item.type,
+                      )
+                    : null,
+                onMdblistAction: (a) =>
+                    _handleDetailMdblistQuickAction(item, a),
+                onMdblistRate: (rating) => _handleDetailMdblistQuickAction(
+                  item,
+                  MdblistItemMenuAction.rate,
+                  presetRating: rating,
+                ),
                 recommendationsLoader: imdb != null
                     ? () => _stremio.getRecommendations(
                         imdbId: imdb,
@@ -11442,8 +11899,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               showQuickPlay: !_pikpakOnly,
               // Gold-tint the Sources button when a source is already pinned.
               hasBoundSource: _isBound(item),
-              resumeInfoLoader: () =>
-                  _resolveResumeInfo(item, addon, isTraktSource: isTraktSource),
+              resumeInfoLoader: () => _resolveResumeInfo(
+                item,
+                addon,
+                isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
+              ),
               // preferTraktResume: this screen's resumeInfoLoader is the same
               // Trakt-authoritative _resolveResumeInfo the merged page uses, so
               // Play must honour the Trakt position too or the button label and
@@ -11452,10 +11913,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 item,
                 addon,
                 isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
                 preferTraktResume: true,
               ),
-              onBrowse: () =>
-                  _onCatalogBrowse(item, addon, isTraktSource: isTraktSource),
+              onBrowse: () => _onCatalogBrowse(
+                item,
+                addon,
+                isTraktSource: isTraktSource,
+                isMdblistSource: isMdblistSource,
+              ),
               traktMenuOptions: options,
               onTraktAction: (a) => _handleDetailQuickAction(
                 item,
@@ -11466,6 +11932,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
               simklMenuOptions: simklOptions,
               onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+              mdblistMenuOptions: mdblistOptions,
+              onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
               // Live Simkl status — relabels Play → "Rewatch" for a completed
               // movie (matches the merged detail page's simklStatusLoader).
               simklStatusLoader: (_isSimklAuthenticated && imdb != null)
@@ -11575,6 +12043,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             action == SimklItemMenuAction.moveToOnHold ||
             action == SimklItemMenuAction.moveToWatching)) {
       _loadSimklContinueWatching(refreshBound: false);
+    }
+  }
+
+  Future<void> _handleDetailMdblistQuickAction(
+    StremioMeta item,
+    MdblistItemMenuAction action, {
+    int? presetRating,
+  }) async {
+    if (action == MdblistItemMenuAction.removeFromContinueWatching) {
+      await _removeMdblistCwItem(item);
+      return;
+    }
+    await handleMdblistMenuAction(
+      context,
+      item,
+      action,
+      presetRating: presetRating,
+    );
+    if (!mounted || widget.searchMode) return;
+    if (action == MdblistItemMenuAction.markWatched ||
+        action == MdblistItemMenuAction.markUnwatched ||
+        action == MdblistItemMenuAction.drop ||
+        action == MdblistItemMenuAction.restore) {
+      await _loadMdblistContinueWatching(refreshBound: false);
     }
   }
 
@@ -12224,6 +12716,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
     // Merged series page: episodes are already shown inline, so a no-IMDb
     // series must NOT fall back to pushing a standalone EpisodesScreen (that
     // would stack a duplicate episode list on top). It resolves the resume
@@ -12262,6 +12755,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // right addon id into meta.addonId (addon-stream resume/next), instead of a
       // stale one left over from a previously-browsed series.
       _activeAddonId = addon.id;
+
+      if (isMdblistSource) {
+        final owned = await _mdblistResumeItemFor(item);
+        if (!mounted || cancelled) return;
+        if (owned != null) {
+          await launch(owned.selection);
+          return;
+        }
+      }
 
       // Trakt-wins resume — resolve the SAME position the detail button advertised
       // (_resolveResumeInfo → _traktResumeFor) so label and Play never disagree.
@@ -12340,6 +12842,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
       }
 
+      if (_isMdblistAuthenticated &&
+          preferTraktResume &&
+          item.type == 'series') {
+        final mdblist = await _mdblistResumeItemFor(item);
+        if (!mounted || cancelled) return;
+        if (mdblist?.paused == true) {
+          await launch(mdblist!.selection);
+          return;
+        }
+      }
+
       if (item.type != 'series') {
         // Cross-device movie resume: on the detail-page Play/Resume flow
         // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
@@ -12350,6 +12863,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // quick-play (no preferTraktResume) keeps its local-only resume.
         double? traktPct;
         double? simklPct;
+        double? mdblistPct;
         if (preferTraktResume || isTraktSource) {
           // Concurrent and individually time-boxed: the Play press must never
           // stall behind a degraded tracker API (sequential awaits here could
@@ -12367,10 +12881,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     item,
                   ).timeout(const Duration(seconds: 4), onTimeout: () => null)
                 : Future<double?>.value(null),
+            _isMdblistAuthenticated
+                ? _mdblistMoviePercent(
+                    item,
+                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
+                : Future<double?>.value(null),
           ]);
           if (!mounted || cancelled) return;
           traktPct = lookups[0];
           simklPct = lookups[1];
+          mdblistPct = lookups[2];
         }
         // Rewatch (Simkl): a movie already marked `completed` on Simkl has no
         // resume session, and Simkl won't create one on replay — so it can never
@@ -12409,8 +12929,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           _movieSelection(
             item,
             isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
             traktProgressPercent: traktPct,
             simklProgressPercent: simklPct,
+            mdblistProgressPercent: mdblistPct,
           ),
         );
         return;
@@ -12422,7 +12944,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // (episodes are inline there), where we play via the raw id's addon stream.
       if (ttId.isEmpty && !skipEpisodeFallback) {
         if (!cancelled) {
-          _openEpisodes(item, addon, isTraktSource: isTraktSource);
+          _openEpisodes(
+            item,
+            addon,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
+          );
         }
         return;
       }
@@ -12461,6 +12988,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           episode = next.episode;
         }
       }
+      if ((season == null || episode == null) &&
+          _isMdblistAuthenticated &&
+          preferTraktResume) {
+        final next = await _mdblistResumeItemFor(
+          item,
+        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+        if (!mounted || cancelled) return;
+        if (next != null) {
+          season = next.selection.season;
+          episode = next.selection.episode;
+        }
+      }
       season ??= 1;
       episode ??= 1;
       // If the last-played episode is finished, resume the NEXT one instead of
@@ -12491,6 +13030,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           contentType: item.type,
           posterUrl: item.poster,
           traktSource: isTraktSource,
+          mdblistSource: isMdblistSource,
         ),
       );
     } finally {
@@ -12587,11 +13127,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return SimklService.instance.fetchNextToWatch(id);
   }
 
+  Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(
+    StremioMeta item,
+  ) async {
+    final id = (item.effectiveImdbId ?? item.id).toLowerCase();
+    if (!id.startsWith('tt')) return null;
+    final result = await MdblistContinueWatchingService.instance.fetch();
+    if (!result.isUsable) return null;
+    for (final candidate in [...result.data!.movies, ...result.data!.shows]) {
+      if (candidate.selection.imdbId.toLowerCase() == id) return candidate;
+    }
+    return null;
+  }
+
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
   }) async {
+    if (isMdblistSource) {
+      final owned = await _mdblistResumeItemFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (owned != null) {
+        return (
+          started: true,
+          season: owned.selection.season,
+          episode: owned.selection.episode,
+        );
+      }
+    }
     // Trakt-wins: when connected, Trakt's paused position is authoritative for
     // "currently watching". Only when Trakt has NO in-progress entry do we fall
     // back to local history below, so a Trakt-tracked title always reflects
@@ -12625,6 +13190,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
 
+    if (_isMdblistAuthenticated && item.type == 'series') {
+      final mdblist = await _mdblistResumeItemFor(item);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (mdblist?.paused == true) {
+        return (
+          started: true,
+          season: mdblist!.selection.season,
+          episode: mdblist.selection.episode,
+        );
+      }
+    }
+
     // Movie: "started" if a local position OR a cross-device tracker position
     // exists — so the button reads "Resume" for a movie paused on another
     // device, matching what Play now seeks to (kept in lock-step with the
@@ -12640,6 +13217,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       if (!started && _isSimklAuthenticated) {
         started = (await _simklMoviePercent(item)) != null;
+        if (!mounted) return (started: false, season: null, episode: null);
+      }
+      if (!started && _isMdblistAuthenticated) {
+        started = (await _mdblistMoviePercent(item)) != null;
         if (!mounted) return (started: false, season: null, episode: null);
       }
       return (started: started, season: null, episode: null);
@@ -12681,6 +13262,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         started = true;
       }
     }
+    if (!started && _isMdblistAuthenticated) {
+      final next = await _mdblistResumeItemFor(
+        item,
+      ).timeout(const Duration(seconds: 4), onTimeout: () => null);
+      if (!mounted) return (started: false, season: null, episode: null);
+      if (next != null) {
+        season = next.selection.season;
+        episode = next.selection.episode;
+        started = season != null && episode != null;
+      }
+    }
     season ??= 1;
     episode ??= 1;
     // Finished the last episode ⇒ the button plays the NEXT one, so show it.
@@ -12705,22 +13297,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
   }) {
     if (item.type == 'series') {
-      _openEpisodes(item, addon, isTraktSource: isTraktSource);
+      _openEpisodes(
+        item,
+        addon,
+        isTraktSource: isTraktSource,
+        isMdblistSource: isMdblistSource,
+      );
     } else {
-      _browseSelection(_movieSelection(item, isTraktSource: isTraktSource));
+      _browseSelection(
+        _movieSelection(
+          item,
+          isTraktSource: isTraktSource,
+          isMdblistSource: isMdblistSource,
+        ),
+      );
     }
   }
 
   AdvancedSearchSelection _movieSelection(
     StremioMeta item, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
     // Cross-device resume percents for a movie (0-100), when a tracker has a
     // paused position. Null = no tracker position → the player resumes from
     // the local byte offset as before.
     double? traktProgressPercent,
     double? simklProgressPercent,
+    double? mdblistProgressPercent,
   }) => AdvancedSearchSelection(
     // Keep the raw catalog id when there's no `tt…` id — for IPTV/TV channels
     // AND tmdb/kitsu-only movies — so playback/Sources resolve the addon's own
@@ -12740,6 +13346,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     traktSource: isTraktSource,
     traktProgressPercent: traktProgressPercent,
     simklProgressPercent: simklProgressPercent,
+    mdblistSource: isMdblistSource,
+    mdblistProgressPercent: mdblistProgressPercent,
   );
 
   /// Trakt's paused position (0-100) for a movie, or null when it has none.
@@ -12782,6 +13390,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
+  Future<double?> _mdblistMoviePercent(StremioMeta item) async {
+    final candidate = await _mdblistResumeItemFor(item);
+    if (candidate == null ||
+        !candidate.paused ||
+        candidate.selection.isSeries) {
+      return null;
+    }
+    return _resumableMdblistPercent(candidate.selection.mdblistProgressPercent);
+  }
+
+  double? _resumableMdblistPercent(double? pct) {
+    if (pct == null || pct < 1 || pct >= 80) return null;
+    return pct;
+  }
+
   /// A movie tracker percent, narrowed to what the player will actually
   /// forward-seek, or null. The player's resume window is bounded on BOTH ends
   /// (video_player_screen.dart): it seeks only `loMs < traktMs < hiMs`, where
@@ -12800,6 +13423,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
+    bool isMdblistSource = false,
   }) {
     _activeAddonId = addon.id;
     Navigator.of(context)
@@ -12811,6 +13435,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               addon: addon,
               isTelevision: widget.isTelevision,
               isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
               // EpisodesScreen pops itself (and the detail route) before firing
               // these, so we're back on the Search screen when they run.
               onQuickPlay: _playSelection,
@@ -12915,6 +13540,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     traktScrobble: sel.traktSource,
     simklProgressPercent: sel.simklProgressPercent,
     simklScrobble: sel.simklSource,
+    mdblistProgressPercent: sel.mdblistProgressPercent,
+    mdblistScrobble: sel.mdblistSource,
   );
 
   /// Catalog auto-best play — the service picks the provider, shows the real
@@ -13162,21 +13789,32 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   Widget _buildHeader() {
     final tv = widget.isTelevision;
-    // On narrow phones the search box + Catalog/Keyword toggle crowd each other
-    // in one row, so stack the toggle underneath. Wide/TV keeps them inline.
-    final narrow = !tv && MediaQuery.of(context).size.width < 620;
+    // On narrow phones the search box + mode selector crowd each other in one
+    // row, so stack the selector underneath. When even the stacked three labels
+    // cannot fit, [_ModeToggle] becomes a single dropdown.
+    final hasLists = kMdblistEnabled && _isMdblistAuthenticated;
+    // Reserve the three-mode layout whenever the integration is compiled in,
+    // even before the async auth check lands. This avoids a one-frame inline →
+    // stacked jump for connected users on medium-width windows.
+    final narrowBreakpoint = kMdblistEnabled ? 900.0 : 620.0;
+    final narrow = !tv && MediaQuery.of(context).size.width < narrowBreakpoint;
+    final compactModeMenu = _useCompactModeMenu;
 
     final field = _buildSearchField(tv);
     final toggle = _ModeToggle(
       mode: _mode,
       isTelevision: tv,
+      listsAvailable: hasLists,
       fullWidth: narrow,
+      compact: compactModeMenu,
       onChanged: _switchMode,
       // Keyboard/DPAD wiring (both desktop + TV): the segments are focusable;
       // up/left leave back to the search field, down drops into the content,
       // select switches mode.
       catalogNode: _modeCatalogNode,
       keywordNode: _modeKeywordNode,
+      listsNode: _modeListsNode,
+      dropdownNode: _modeDropdownNode,
       onLeaveToField: _focusSearchFieldAtEnd,
       onLeaveToContent: _focusContent,
     );
@@ -13198,7 +13836,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       padding: EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
       child: Row(
         children: [
-          const SizedBox(width: 252),
+          SizedBox(width: compactModeMenu ? 156 : 252),
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -13311,6 +13949,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               hintText: switch (_mode) {
                 _Mode.catalog => 'Search or paste link',
                 _Mode.keyword => 'Search torrents by keyword',
+                _Mode.lists => 'Search MDBList lists',
               },
               hintStyle: TextStyle(color: app.fade(app.core.tx, 0.32)),
               suffixIcon: hasText
@@ -13376,12 +14015,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   Widget _buildBody() {
     if (_mode == _Mode.keyword) return _buildKeyword();
+    if (_mode == _Mode.lists) return _buildListsSearch();
     // Full-screen spinner only until the FIRST result row streams in — after
     // that the board renders and late rows append beneath it (a slim progress
-    // strip in _buildBoard signals the search is still running). If the MDBList
-    // lists rail already resolved (it's usually faster than the catalog fan-out),
-    // skip the spinner and render the board so the rail shows immediately.
-    if (_catalogSearching && _sections.isEmpty && !_listsRailVisible) {
+    // strip in _buildBoard signals the search is still running).
+    if (_catalogSearching && _sections.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     // Dedicated Search tab: blank prompt until there's a query (no hero/board).
@@ -13389,21 +14027,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return _buildSearchPrompt();
     }
     return _buildBoard();
-  }
-
-  /// Whether the MDBList "Lists" card rail should show: a catalog search is
-  /// active AND lists matched. The rail is a leading board row and, because the
-  /// Continue Watching / favourites leading rows are all hidden during a search
-  /// (same `_catalogQuery.isEmpty` gate), it's the ONLY leading row on screen.
-  bool get _listsRailVisible =>
-      _catalogQuery.isNotEmpty && _listsResults.isNotEmpty;
-
-  /// Focus a card in the lists rail, clamping the column (same contract as
-  /// [_focusCwRow]/[_focusFavRowAt]). False when the rail has no cards.
-  bool _focusListsRailAt(int column) {
-    if (_listsNodes.isEmpty) return false;
-    _requestRowFocus(_listsNodes, column.clamp(0, _listsNodes.length - 1));
-    return true;
   }
 
   /// Open the full grid of every list that matched the current search. The rail
@@ -13448,13 +14071,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               initialList: list,
               isTelevision: widget.isTelevision,
               isBound: _isBound,
-              onOpen: (item) =>
-                  _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+              onOpen: (item) => _openItem(
+                item,
+                _addonForContinue(item.sourceAddon?.id),
+                isMdblistSource: true,
+              ),
               onQuickPlay: _pikpakOnly
                   ? null
                   : (item) => _onCatalogPlay(
                       item,
                       _addonForContinue(item.sourceAddon?.id),
+                      isMdblistSource: true,
                     ),
             ),
           ),
@@ -13465,12 +14092,74 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         });
   }
 
-  /// The "MDBList Lists" card rail shown atop the results board. Same 2:3 card
+  Widget _buildListsSearch() {
+    if (_listsSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_listsError != null) {
+      return _message(
+        Icons.error_outline_rounded,
+        'MDBList search failed',
+        _listsError!,
+      );
+    }
+    if (_listsQuery.isEmpty) {
+      final app = AppThemeScope.of(context);
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.playlist_play_rounded,
+                size: 54,
+                color: app.fade(app.core.tx, 0.22),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Search MDBList lists',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: app.fade(app.core.tx, 0.8),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Find public lists by name, then open or save them in MDBList.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: app.fade(app.core.tx, 0.5),
+                  fontSize: 13.5,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_listsResults.isEmpty) {
+      return _message(
+        Icons.playlist_remove_rounded,
+        'No MDBList lists found',
+        'No public lists matched "$_listsQuery".',
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.only(top: 6, bottom: 32),
+      children: [_buildListsRailRow()],
+    );
+  }
+
+  /// The MDBList list-search result rail. Same 2:3 card
   /// footprint as the poster rows; each card is a gradient tile (list glyph +
   /// centred name + items/likes footer, no artwork). Select opens the list's
   /// items — pushed over the board on TV (Back returns here), or in the
-  /// Discover tab on mobile/laptop. DPAD: up → search field, down → first
-  /// catalog row, left off card 0 → sidebar (TV).
+  /// Discover tab on mobile/laptop. DPAD: up → search field, left off card 0 →
+  /// sidebar (TV); the single result rail deliberately holds Down in place.
   Widget _buildListsRailRow() {
     final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
@@ -13541,9 +14230,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowDown) {
-          // Into the first catalog row, deferred until one loads if the catalog
-          // search is still in flight.
-          if (!_focusRow(0, 0)) _deferDownMove(column: 0);
+          // Lists is a dedicated single-rail search mode; there is no unrelated
+          // catalog row below it to receive focus.
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -14815,6 +15503,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Populates _simklAll/_simklProgress for the Simkl source's Continue
       // Watching list (folded into that source, like Trakt's).
       _loadSimklContinueWatching(refreshBound: false),
+      _loadMdblistContinueWatching(refreshBound: false),
     ]);
     if (mounted) await _refreshBoundSources();
   }
@@ -15338,12 +16027,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return MdblistSeeAllScreen(
         key: const ValueKey('disc_mdblist'),
         initialList: _discMdblistList,
-        onOpen: (item) =>
-            _openItem(item, _addonForContinue(item.sourceAddon?.id)),
+        onOpen: (item) => _openItem(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        ),
         onQuickPlay: _pikpakOnly
             ? null
-            : (item) =>
-                  _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id)),
+            : (item) => _onCatalogPlay(
+                item,
+                _addonForContinue(item.sourceAddon?.id),
+                isMdblistSource: true,
+              ),
         onItemFocused: _onDiscFocused,
         isBound: _isBound,
         isTelevision: widget.isTelevision,
@@ -15421,11 +16116,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // reserved — the skeletons below are the board's content until the fetch
     // settles, and showing "No catalogs yet" first would flip to rows with the
     // exact reflow the reservation exists to prevent.
-    if (_sections.isEmpty &&
-        !showCw &&
-        !_anyFavVisible &&
-        !_traktReserving &&
-        !_listsRailVisible) {
+    if (_sections.isEmpty && !showCw && !_anyFavVisible && !_traktReserving) {
       if (_catalogQuery.isNotEmpty) {
         return _message(
           Icons.search_off_rounded,
@@ -15620,8 +16311,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       Builder(
                         builder: (context) {
                           // Home uses one globally ordered descriptor list across
-                          // every row family. Search results keep their dedicated
-                          // Lists + catalog shape and never read the Home order.
+                          // every row family. Catalog search results never read
+                          // that Home order.
                           final orderedHome = _homeRowOrderActive;
                           final homeRails = orderedHome
                               ? _classicHomeRails
@@ -15642,10 +16333,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             )];
                           }
 
-                          // The MDBList "Lists" rail, when a search matched
-                          // lists. It only renders during a search, where the
-                          // Home-only rows are hidden.
-                          final listsCount = _listsRailVisible ? 1 : 0;
                           final showFooter = _boardLoadingMore;
                           return ListView.builder(
                             controller: _boardScroll,
@@ -15663,7 +16350,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             itemCount:
                                 (orderedHome
                                     ? homeRails.length
-                                    : _sections.length + listsCount) +
+                                    : _sections.length) +
                                 (showFooter ? 1 : 0),
                             itemBuilder: (context, i) {
                               Widget row;
@@ -15692,10 +16379,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 }
                               } else if (orderedHome) {
                                 return _buildBoardFooter();
-                              } else if (i < listsCount) {
-                                row = _buildListsRailRow();
                               } else {
-                                final s = i - listsCount;
+                                final s = i;
                                 if (s >= _sections.length) {
                                   return _buildBoardFooter();
                                 }
@@ -16120,7 +16805,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// quiet pill this feeds.
   String _sectionTag(CatalogSection section) {
     if (section is HomeListSection) {
-      return section.isTrakt ? 'Trakt' : 'Simkl';
+      return section.isTrakt
+          ? 'Trakt'
+          : section.isMdblist
+          ? 'MDBList'
+          : 'Simkl';
     }
     return section.addon.name;
   }
@@ -16181,6 +16870,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         isBound: _isBound,
         isTelevision: widget.isTelevision,
       );
+    } else if (section.isMdblist) {
+      screen = MdblistSeeAllScreen(
+        initialList: section.mdblistList,
+        onOpen: (item) => _openItem(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        ),
+        onQuickPlay: _pikpakOnly
+            ? null
+            : (item) => _onCatalogPlay(
+                item,
+                _addonForContinue(item.sourceAddon?.id),
+                isMdblistSource: true,
+              ),
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+      );
     } else {
       screen = SimklSeeAllScreen(
         initialList: section.simklList,
@@ -16237,6 +16944,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         await Future.wait([
           _loadTraktContinueWatching(refreshBound: false),
           _loadSimklContinueWatching(refreshBound: false),
+          _loadMdblistContinueWatching(refreshBound: false, force: true),
         ]);
         if (!mounted) return;
       }
@@ -16467,14 +17175,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 VoidCallback up(int col) => homeRowId != null
                     ? () => _focusRelativeHomeRail(homeRowId, -1, col)
                     : rowIndex == 0
-                    ? (_listsRailVisible
-                          ? () => _focusListsRailAt(col)
-                          : (_anyFavVisible
-                                ? () => _focusFavRowAt(_favRowCount - 1, col)
-                                : (_cwVisible
-                                      ? () =>
-                                            _focusCwRow(_cwRows.length - 1, col)
-                                      : () => _leaveBoardTop())))
+                    ? (_anyFavVisible
+                          ? () => _focusFavRowAt(_favRowCount - 1, col)
+                          : (_cwVisible
+                                ? () => _focusCwRow(_cwRows.length - 1, col)
+                                : () => _leaveBoardTop()))
                     : () => _focusRow(rowIndex - 1, col);
                 // Down past the last loaded row kicks the next batch load
                 // (inside _focusRow) and defers the move until it lands.
@@ -16626,6 +17331,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           column: col,
                           rowNodes: nodes,
                           hasBoundSource: _isBound(item),
+                          // A Continue Watching progress bar describes the
+                          // active viewing session. A global "watched once"
+                          // check from another tracker reads as contradictory
+                          // here, especially during a rewatch.
+                          showWatchedBadge: false,
                           aspectRatio: _titleCardAspect,
                           artUrl: _titleArtUrl(item),
                           progress: row.progressOf(item),

@@ -7,9 +7,10 @@ import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/mdblist/mdblist_discover_models.dart';
+import '../../services/mdblist/mdblist_discover_source.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
-import '../../services/mdblist/mdblist_service.dart';
-import '../../services/storage_service.dart';
+import '../../services/mdblist/mdblist_models.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/mdblist_save_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
@@ -20,41 +21,28 @@ import '../../widgets/see_all/see_all_random_button.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 import '../../widgets/skeleton_poster.dart';
 
-/// Sort orders for the grid. [natural] keeps the list's own MDBList order.
-/// (No IMDb sort — MDBList list items carry no rating.)
-enum _Sort { natural, az, za }
+enum _Sort { natural, az, za, newest, oldest }
 
-/// Full-screen / embedded "See All" for the MDBList source.
+/// Full-screen / embedded MDBList tracker and discovery browser.
 ///
-/// A "Category" dropdown switches between the user's OWN lists ('mine') and
-/// MDBList's top/public lists ('top'); a second "List" dropdown then picks a
-/// specific list within that category. Each list's movies + shows are merged
-/// into one grid. Own lists load on entry; Top loads lazily the first time the
-/// user switches to it, then is cached.
-///
-/// There is intentionally no movie/show toggle (deferred) and no list search
-/// (a later step). Mirrors [TraktSeeAllScreen]'s structure but simpler: no
-/// Continue Watching, no per-item progress, no State filter.
+/// Unlike the old list-only panel, this surface keeps the API's distinct
+/// library, recommendation, list-directory, and quota-limited catalog
+/// contracts separate while presenting them through one stable filter line.
 class MdblistSeeAllScreen extends StatefulWidget {
   final void Function(StremioMeta item) onOpen;
   final void Function(StremioMeta item)? onQuickPlay;
-
-  /// Fires when a grid tile gains focus — drives the Discover detail rail.
   final void Function(StremioMeta item)? onItemFocused;
   final bool Function(StremioMeta item)? isBound;
   final bool isTelevision;
-
-  /// Embedded mode (inside the Discover tab): drops the Scaffold + back header
-  /// so the host provides the chrome, and prepends [leading] (the Source
-  /// dropdown) to the filter bar with [leadingNode] in the DPAD focus row.
   final bool embedded;
   final Widget? leading;
   final FocusNode? leadingNode;
-
-  /// A list handed off from the Search tab's Lists search. When set, the
-  /// screen opens focused on it (a "Search Result" pseudo-category) and shows
-  /// the ♥ like toggle — the only path that gets the heart.
   final MdblistListChoice? initialList;
+
+  /// Injection seams used by contract/widget tests. Production callers leave
+  /// both null and use the account-bound singletons.
+  final MdblistDiscoverSource? source;
+  final Future<bool> Function()? isAuthenticated;
 
   const MdblistSeeAllScreen({
     super.key,
@@ -67,6 +55,8 @@ class MdblistSeeAllScreen extends StatefulWidget {
     this.leading,
     this.leadingNode,
     this.initialList,
+    this.source,
+    this.isAuthenticated,
   });
 
   @override
@@ -75,86 +65,109 @@ class MdblistSeeAllScreen extends StatefulWidget {
 
 class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   final GlobalKey<SeeAllPosterGridState> _gridKey = GlobalKey();
+  final Random _random = Random();
+
+  MdblistDiscoverSource get _source =>
+      widget.source ?? MdblistDiscoverSource.instance;
 
   bool _connected = false;
+  MdblistDiscoverGroup _group = MdblistDiscoverGroup.library;
+  MdblistLibraryView _libraryView = MdblistLibraryView.continueWatching;
+  MdblistListDirectory _directory = MdblistListDirectory.mine;
+  List<MdblistDiscoverChoice> _choices = const [];
+  MdblistDiscoverChoice? _selected;
+  MdblistDiscoverChoice? _searchResult;
+  bool _selectedLiked = false;
 
-  // Category: 'mine' (the user's own lists), 'top' (public/top lists), or
-  // 'found' (a single list handed off from the Search tab — only present when
-  // [widget.initialList] is set). Each fetched category's lists are loaded once
-  // and cached (flags below); 'found' is in-memory from the start.
-  String _category = 'mine';
-  List<MdblistListChoice> _myLists = const [];
-  bool _myLoaded = false;
-  List<MdblistListChoice> _topLists = const [];
-  bool _topLoaded = false;
-  List<MdblistListChoice> _foundLists = const [];
-
-  // "Save" state for the found list (the button only shows on that path). A
-  // save CLONES the list into "My Lists"; [_savedCloneId] is the id of that
-  // clone (null when not saved) so un-save can delete it. Kept as local state
-  // because MdblistListChoice is immutable.
-  bool _foundSaved = false;
-  bool _saveBusy = false;
-  int? _savedCloneId;
-
-  MdblistListChoice? _selected;
-
-  List<StremioMeta> _items = const [];
+  MdblistDiscoverPage _page = const MdblistDiscoverPage();
   List<StremioMeta> _visible = const [];
-
-  String _show = 'all'; // all | movie | series
+  String _show = 'all';
   _Sort _sort = _Sort.natural;
+  MdblistCatalogQuery _catalogDraft = const MdblistCatalogQuery();
+  bool _catalogApplied = false;
 
-  bool _listsLoading = true;
+  bool _menuLoading = true;
   bool _itemsLoading = false;
-  bool _error = false;
-
-  // Guards against a slow items fetch landing after the user moved on.
+  bool _loadingMore = false;
+  bool _saveBusy = false;
+  bool _cloneBusy = false;
+  bool _menuPartial = false;
+  MdblistResultKind? _errorKind;
   int _fetchToken = 0;
 
   final FocusNode _backNode = FocusNode(debugLabel: 'msa_back');
   final FocusNode _categoryNode = FocusNode(debugLabel: 'msa_category');
+  final FocusNode _viewNode = FocusNode(debugLabel: 'msa_view');
   final FocusNode _listNode = FocusNode(debugLabel: 'msa_list');
   final FocusNode _showNode = FocusNode(debugLabel: 'msa_show');
   final FocusNode _sortNode = FocusNode(debugLabel: 'msa_sort');
+  final FocusNode _orderNode = FocusNode(debugLabel: 'msa_order');
+  final FocusNode _filtersNode = FocusNode(debugLabel: 'msa_filters');
+  final FocusNode _applyNode = FocusNode(debugLabel: 'msa_apply');
+  final FocusNode _moreNode = FocusNode(debugLabel: 'msa_more');
   final FocusNode _saveNode = FocusNode(debugLabel: 'msa_save');
+  final FocusNode _cloneNode = FocusNode(debugLabel: 'msa_clone');
   final FocusNode _randomNode = FocusNode(debugLabel: 'msa_random');
 
-  final Random _random = Random();
-
-  /// The Random button is a Discover affordance: only the embedded host wires
-  /// Quick Play (and hides it in PikPak-only mode by passing null).
-  bool get _showRandom => widget.embedded && widget.onQuickPlay != null;
-
   bool get _quiet => widget.embedded && widget.isTelevision;
+  bool get _showRandom => widget.embedded && widget.onQuickPlay != null;
+  bool get _isCatalog => _group == MdblistDiscoverGroup.catalog;
+  bool get _catalogCanApply =>
+      !_itemsLoading &&
+      (_source.catalogQuota?.exhausted != true ||
+          _source.hasCachedCatalog(_catalogDraft));
+  bool get _catalogCanLoadMore =>
+      !_loadingMore && _source.catalogQuota?.exhausted != true;
+  bool get _showListPicker =>
+      (_group == MdblistDiscoverGroup.discover ||
+          _group == MdblistDiscoverGroup.lists) &&
+      _selected != null;
+  bool get _canLike {
+    final selected = _selected;
+    if (selected?.kind != MdblistDiscoverChoiceKind.regularList ||
+        selected?.numericId == null) {
+      return false;
+    }
+    return _directory == MdblistListDirectory.top ||
+        _directory == MdblistListDirectory.curated ||
+        _directory == MdblistListDirectory.liked ||
+        _directory == MdblistListDirectory.searchResult;
+  }
 
-  List<MdblistListChoice> get _categoryLists => _category == 'top'
-      ? _topLists
-      : _category == 'found'
-      ? _foundLists
-      : _myLists;
+  bool get _canClone =>
+      _selected?.kind == MdblistDiscoverChoiceKind.regularList &&
+      _selected?.numericId != null &&
+      _directory != MdblistListDirectory.mine;
 
-  /// The Save toggle only exists on the search-handoff path (the found list).
-  bool get _showSave => _category == 'found' && _selected != null;
-
-  /// Filter-bar focus order. Category is present whenever connected; List/Sort/
-  /// Like/Random only once a list is selected.
   List<FocusNode> get _filterNodes => [
     if (widget.leadingNode != null) widget.leadingNode!,
     if (_connected) _categoryNode,
-    if (_connected && _selected != null) _listNode,
-    if (_connected && _selected != null) _showNode,
-    if (_connected && _selected != null) _sortNode,
-    if (_showSave) _saveNode,
-    if (_connected && _selected != null && _showRandom) _randomNode,
+    if (_connected &&
+        !_isCatalog &&
+        !(_group == MdblistDiscoverGroup.forYou && _selected == null))
+      _viewNode,
+    if (_showListPicker) _listNode,
+    if (_connected) _showNode,
+    if (_connected) _sortNode,
+    if (_isCatalog) _orderNode,
+    if (_isCatalog) _filtersNode,
+    if (_isCatalog) _applyNode,
+    if (_isCatalog && !_page.exhausted) _moreNode,
+    if (_canLike) _saveNode,
+    if (_canClone) _cloneNode,
+    if (_showRandom && _page.items.isNotEmpty) _randomNode,
   ];
+
+  FocusNode get _gridExitNode {
+    if (_isCatalog) return _applyNode;
+    if (_showListPicker) return _listNode;
+    return _viewNode;
+  }
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('mdblist_see_all');
-    // Discover only: reopen on the order the user last picked for this source.
-    // Read before the lists load so the arriving grid paints already sorted.
     if (widget.embedded) {
       final saved = DiscoverPrefs.enumSortFor(
         DiscoverPrefs.mdblist,
@@ -163,105 +176,72 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       if (saved != null) _sort = saved;
     }
     _init();
-    // Embedded (Discover): the host focuses the Source dropdown on entry, and a
-    // source swap re-mounts this panel — so don't yank focus into the grid.
     if (widget.isTelevision && !widget.embedded) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusEntry());
     }
   }
 
   Future<void> _init() async {
-    final connected = await MdblistService.instance.isAuthenticated();
+    final connected =
+        await (widget.isAuthenticated?.call() ??
+            _source.service.isAuthenticated());
     if (!mounted) return;
     if (!connected) {
       setState(() {
         _connected = false;
-        _listsLoading = false;
+        _menuLoading = false;
       });
       return;
     }
-    setState(() => _connected = true);
-    // A list handed off from the Search tab: open focused on it instead of the
-    // default My Lists category. It stays available in the Category dropdown
-    // ("Search Result") for the rest of this screen's life.
-    final found = widget.initialList;
-    if (found != null) {
+    _connected = true;
+    final initial = widget.initialList;
+    if (initial != null) {
+      final choice = MdblistDiscoverChoice(
+        id: initial.id.toString(),
+        label: initial.name,
+        kind: MdblistDiscoverChoiceKind.regularList,
+        numericId: initial.id,
+        ownerName: initial.ownerName,
+        itemCount: initial.itemCount,
+        liked: initial.liked,
+        likes: initial.likes,
+      );
       setState(() {
-        _foundLists = [found];
-        _category = 'found';
-        _selected = found;
-        _listsLoading = false;
+        _group = MdblistDiscoverGroup.lists;
+        _directory = MdblistListDirectory.searchResult;
+        _searchResult = choice;
+        _choices = [choice];
+        _selected = choice;
+        _selectedLiked = choice.liked;
+        _menuLoading = false;
       });
-      _loadSavedState(found);
-      _fetchItems(found);
+      await _loadChoice(choice);
       return;
     }
-    await _loadCategory('mine');
+    setState(() => _menuLoading = false);
+    await _loadLibrary();
   }
 
-  /// Load [cat]'s lists (fetching once, then cached), then select its first
-  /// list and fetch its items. Safe against rapid category switches: every
-  /// await re-checks that [cat] is still the active category.
-  Future<void> _loadCategory(String cat) async {
-    final alreadyLoaded = cat == 'top'
-        ? _topLoaded
-        : cat == 'found'
-        // The found list is in-memory from the handoff — never fetched here.
-        ? true
-        : _myLoaded;
-    setState(() {
-      // Cancel any in-flight items fetch from the previous category (else its
-      // result could land under the new category) and clear its loading flag —
-      // otherwise switching into an empty category would strand the skeleton.
-      _fetchToken++;
-      _itemsLoading = false;
-      _listsLoading = !alreadyLoaded;
-      _selected = null;
-      _items = const [];
-      _visible = const [];
-      _error = false;
-    });
-
-    if (!alreadyLoaded) {
-      final lists = cat == 'top'
-          ? await MdblistListSource.instance.loadTopLists()
-          : await MdblistListSource.instance.loadUserLists();
-      if (!mounted || _category != cat) return;
-      setState(() {
-        // Cache only a non-empty result. The loaders return [] on network
-        // failure too (indistinguishable from genuinely empty), so NOT caching
-        // an empty result lets a transient failure retry on the next switch
-        // instead of being stuck on the empty state.
-        if (cat == 'top') {
-          _topLists = lists;
-          _topLoaded = lists.isNotEmpty;
-        } else {
-          _myLists = lists;
-          _myLoaded = lists.isNotEmpty;
-        }
-        _listsLoading = false;
-      });
+  @override
+  void dispose() {
+    for (final node in [
+      _backNode,
+      _categoryNode,
+      _viewNode,
+      _listNode,
+      _showNode,
+      _sortNode,
+      _orderNode,
+      _filtersNode,
+      _applyNode,
+      _moreNode,
+      _saveNode,
+      _cloneNode,
+      _randomNode,
+    ]) {
+      node.dispose();
     }
-
-    if (!mounted || _category != cat) return;
-    final lists = _categoryLists;
-    if (lists.isEmpty) {
-      setState(() => _selected = null);
-      if (widget.isTelevision) _categoryNode.requestFocus();
-      return;
-    }
-    setState(() => _selected = lists.first);
-    _fetchItems(lists.first);
-  }
-
-  void _switchCategory(String cat) {
-    if (cat == _category) return;
-    setState(() {
-      _category = cat;
-      _show = 'all';
-      _sort = _Sort.natural;
-    });
-    _loadCategory(cat);
+    super.dispose();
   }
 
   void _focusEntry() {
@@ -273,103 +253,643 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _backNode.dispose();
-    _categoryNode.dispose();
-    _listNode.dispose();
-    _showNode.dispose();
-    _sortNode.dispose();
-    _saveNode.dispose();
-    _randomNode.dispose();
-    super.dispose();
-  }
-
-  // ── Derived list ────────────────────────────────────────────────────────────
-
-  void _recompute() {
-    Iterable<StremioMeta> it = _items;
-    if (_show == 'movie') {
-      it = it.where((m) => m.type != 'series');
-    } else if (_show == 'series') {
-      it = it.where((m) => m.type == 'series');
-    }
-    final list = it.toList();
-    switch (_sort) {
-      case _Sort.natural:
-        break; // items already arrive in the list's natural order
-      case _Sort.az:
-        list.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
-        break;
-      case _Sort.za:
-        list.sort(
-          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
-        );
-        break;
-    }
-    _visible = list;
-  }
-
-  void _setShow(String v) {
+  Future<void> _switchGroup(MdblistDiscoverGroup group) async {
+    if (group == _group) return;
     setState(() {
-      _show = v;
-      _recompute();
+      _fetchToken++;
+      _group = group;
+      _show = group == MdblistDiscoverGroup.catalog
+          ? (_catalogDraft.mediaType == 'show' ? 'series' : 'movie')
+          : 'all';
+      _sort = _Sort.natural;
+      _choices = const [];
+      _selected = null;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+      _errorKind = null;
+      _menuPartial = false;
+      _itemsLoading = false;
+      _loadingMore = false;
+      _menuLoading =
+          group == MdblistDiscoverGroup.forYou ||
+          group == MdblistDiscoverGroup.discover ||
+          group == MdblistDiscoverGroup.lists;
+      _catalogApplied = false;
+      if (group == MdblistDiscoverGroup.discover) {
+        _directory = MdblistListDirectory.official;
+      } else if (group == MdblistDiscoverGroup.lists) {
+        _directory = _searchResult == null
+            ? MdblistListDirectory.mine
+            : MdblistListDirectory.searchResult;
+      }
     });
-  }
-
-  /// Sort picks are remembered (Discover only) so the next launch — and the next
-  /// swap back to this source — opens on the same order. Only an explicit pick
-  /// is stored: switching category/list resets the sort in-session, and that
-  /// reset must not erase the user's standing choice.
-  void _setSort(_Sort v) {
-    setState(() {
-      _sort = v;
-      _recompute();
-    });
-    if (widget.embedded) {
-      unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.mdblist, v));
+    switch (group) {
+      case MdblistDiscoverGroup.library:
+        await _loadLibrary();
+      case MdblistDiscoverGroup.forYou:
+        await _loadRecommendations();
+      case MdblistDiscoverGroup.discover:
+      case MdblistDiscoverGroup.lists:
+        await _loadDirectory();
+      case MdblistDiscoverGroup.catalog:
+        break;
     }
   }
 
-  void _selectList(MdblistListChoice choice) {
-    if (choice == _selected) return;
+  Future<void> _selectLibrary(MdblistLibraryView view) async {
+    if (view == _libraryView) return;
     setState(() {
-      _selected = choice;
+      _libraryView = view;
       _show = 'all';
       _sort = _Sort.natural;
     });
-    _fetchItems(choice);
+    await _loadLibrary();
   }
 
-  Future<void> _fetchItems(MdblistListChoice choice) async {
+  Future<void> _loadLibrary({bool force = false}) async {
     final token = ++_fetchToken;
     setState(() {
       _itemsLoading = true;
-      _error = false;
-      _items = const [];
+      _errorKind = null;
+      _page = const MdblistDiscoverPage();
       _visible = const [];
     });
-    final loaded = await MdblistListSource.instance.loadListItems(choice);
+    final page = await _source.loadLibrary(_libraryView, force: force);
     if (!mounted || token != _fetchToken) return;
-    if (loaded.items.isEmpty && loaded.failed) {
+    _acceptPage(page);
+  }
+
+  Future<void> _loadRecommendations({bool force = false}) async {
+    final token = ++_fetchToken;
+    setState(() {
+      _menuLoading = true;
+      _itemsLoading = false;
+      _errorKind = null;
+      _menuPartial = false;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+    });
+    final result = await _source.loadRecommendationChoices(force: force);
+    if (!mounted || token != _fetchToken) return;
+    if (!result.isUsable) {
       setState(() {
-        _itemsLoading = false;
-        _error = true;
+        _menuLoading = false;
+        _errorKind = result.kind;
       });
-      if (widget.isTelevision) _listNode.requestFocus();
+      return;
+    }
+    final selected = result.choices.isEmpty ? null : result.choices.first;
+    setState(() {
+      _menuLoading = false;
+      _choices = result.choices;
+      _selected = selected;
+      _menuPartial = result.kind == MdblistResultKind.partial;
+    });
+    if (selected != null) await _loadChoice(selected);
+  }
+
+  Future<void> _switchDirectory(MdblistListDirectory directory) async {
+    if (directory == _directory) return;
+    setState(() {
+      _directory = directory;
+      _show = 'all';
+      _sort = _Sort.natural;
+    });
+    await _loadDirectory();
+  }
+
+  Future<void> _loadDirectory({bool force = false}) async {
+    if (_directory == MdblistListDirectory.searchResult) {
+      final found = _searchResult;
+      setState(() {
+        _menuLoading = false;
+        _choices = found == null ? const [] : [found];
+        _selected = found;
+        _selectedLiked = found?.liked ?? false;
+      });
+      if (found != null) await _loadChoice(found);
+      return;
+    }
+    final token = ++_fetchToken;
+    setState(() {
+      _menuLoading = true;
+      _itemsLoading = false;
+      _errorKind = null;
+      _menuPartial = false;
+      _choices = const [];
+      _selected = null;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+    });
+    final result = await _source.loadDirectory(_directory, force: force);
+    if (!mounted || token != _fetchToken) return;
+    if (!result.isUsable) {
+      setState(() {
+        _menuLoading = false;
+        _errorKind = result.kind;
+      });
+      return;
+    }
+    final selected = result.choices.isEmpty ? null : result.choices.first;
+    setState(() {
+      _menuLoading = false;
+      _choices = result.choices;
+      _selected = selected;
+      _selectedLiked = selected?.liked ?? false;
+      _menuPartial = result.kind == MdblistResultKind.partial;
+    });
+    if (selected != null) await _loadChoice(selected);
+  }
+
+  Future<void> _selectChoice(MdblistDiscoverChoice choice) async {
+    if (choice == _selected) return;
+    setState(() {
+      _selected = choice;
+      _selectedLiked = choice.liked;
+      _show = 'all';
+      _sort = _Sort.natural;
+    });
+    await _loadChoice(choice);
+  }
+
+  Future<void> _loadChoice(MdblistDiscoverChoice choice) async {
+    final token = ++_fetchToken;
+    setState(() {
+      _itemsLoading = true;
+      _loadingMore = false;
+      _errorKind = null;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+    });
+    final page = await _source.loadChoice(choice);
+    if (!mounted || token != _fetchToken || choice != _selected) return;
+    _acceptPage(page);
+  }
+
+  Future<void> _loadMoreChoice() async {
+    final choice = _selected;
+    final cursor = _page.nextCursor;
+    if (choice == null || cursor == null || _loadingMore) return;
+    final token = _fetchToken;
+    setState(() => _loadingMore = true);
+    final next = await _source.loadChoice(choice, cursor: cursor);
+    if (!mounted || choice != _selected || token != _fetchToken) return;
+    if (!next.isUsable) {
+      setState(() {
+        _loadingMore = false;
+        _page = _page.copyWith(kind: MdblistResultKind.partial);
+      });
+      return;
+    }
+    final merged = _dedup([..._page.items, ...next.items]);
+    setState(() {
+      _loadingMore = false;
+      _page = MdblistDiscoverPage(
+        items: merged,
+        progressByImdb: {..._page.progressByImdb, ...next.progressByImdb},
+        kind: next.kind,
+        nextCursor: next.nextCursor,
+      );
+      _recompute();
+    });
+  }
+
+  void _acceptPage(MdblistDiscoverPage page) {
+    setState(() {
+      _itemsLoading = false;
+      _page = page;
+      _errorKind = page.isUsable ? null : page.kind;
+      _recompute();
+    });
+    if (widget.isTelevision && _visible.isEmpty) _gridExitNode.requestFocus();
+  }
+
+  void _recompute() {
+    Iterable<StremioMeta> items = _page.items;
+    if (!_isCatalog) {
+      if (_show == 'movie') {
+        items = items.where((item) => item.type != 'series');
+      } else if (_show == 'series') {
+        items = items.where((item) => item.type == 'series');
+      }
+    }
+    final visible = items.toList();
+    switch (_sort) {
+      case _Sort.natural:
+        break;
+      case _Sort.az:
+        visible.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+      case _Sort.za:
+        visible.sort(
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
+      case _Sort.newest:
+        visible.sort((a, b) => (b.addedAtMs ?? 0).compareTo(a.addedAtMs ?? 0));
+      case _Sort.oldest:
+        visible.sort((a, b) => (a.addedAtMs ?? 0).compareTo(b.addedAtMs ?? 0));
+    }
+    _visible = visible;
+  }
+
+  void _setShow(String value) {
+    setState(() {
+      _show = value;
+      if (_isCatalog) {
+        _fetchToken++;
+        _loadingMore = false;
+        _catalogDraft = _catalogDraft.copyWith(
+          mediaType: value == 'series' ? 'show' : 'movie',
+        );
+        _catalogApplied = false;
+        _page = const MdblistDiscoverPage();
+        _visible = const [];
+        _errorKind = null;
+      } else {
+        _recompute();
+      }
+    });
+  }
+
+  void _setSort(_Sort value) {
+    setState(() {
+      _sort = value;
+      _recompute();
+    });
+    if (widget.embedded) {
+      unawaited(DiscoverPrefs.setEnumSort(DiscoverPrefs.mdblist, value));
+    }
+  }
+
+  void _setCatalogSort(String value) {
+    setState(() {
+      _fetchToken++;
+      _loadingMore = false;
+      _catalogDraft = _catalogDraft.copyWith(sort: value);
+      _catalogApplied = false;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+      _errorKind = null;
+    });
+  }
+
+  void _setCatalogOrder(String value) {
+    setState(() {
+      _fetchToken++;
+      _loadingMore = false;
+      _catalogDraft = _catalogDraft.copyWith(sortOrder: value);
+      _catalogApplied = false;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+      _errorKind = null;
+    });
+  }
+
+  Future<void> _applyCatalog() async {
+    if (_itemsLoading) return;
+    final validationError = _catalogDraft.validationError;
+    if (validationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(validationError),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return;
+    }
+    final query = _catalogDraft.normalized;
+    final token = ++_fetchToken;
+    setState(() {
+      _catalogDraft = query;
+      _itemsLoading = true;
+      _errorKind = null;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+    });
+    final page = await _source.applyCatalog(query);
+    if (!mounted || token != _fetchToken) return;
+    setState(() => _catalogApplied = true);
+    _acceptPage(page);
+  }
+
+  Future<void> _loadMoreCatalog() async {
+    if (_loadingMore || _page.exhausted) return;
+    final token = _fetchToken;
+    final query = _catalogDraft.normalized;
+    setState(() => _loadingMore = true);
+    final page = await _source.loadMoreCatalog(query, _page);
+    if (!mounted ||
+        token != _fetchToken ||
+        !_isCatalog ||
+        query.cacheKey != _catalogDraft.normalized.cacheKey) {
       return;
     }
     setState(() {
-      _items = loaded.items;
-      _itemsLoading = false;
+      _loadingMore = false;
+      _page = page;
       _recompute();
     });
-    if (widget.isTelevision && _visible.isEmpty) _listNode.requestFocus();
   }
 
-  /// Quick-play a random title from the current list.
+  Future<void> _openCatalogFilters() async {
+    var draft = _catalogDraft;
+    final genre = TextEditingController(text: draft.genre ?? '');
+    final country = TextEditingController(text: draft.country ?? '');
+    final language = TextEditingController(text: draft.language ?? '');
+    final scoreMin = TextEditingController(
+      text: draft.scoreMin?.toString() ?? '',
+    );
+    final scoreMax = TextEditingController(
+      text: draft.scoreMax?.toString() ?? '',
+    );
+    final yearMin = TextEditingController(
+      text: draft.yearMin?.toString() ?? '',
+    );
+    final yearMax = TextEditingController(
+      text: draft.yearMax?.toString() ?? '',
+    );
+    final releasedFrom = TextEditingController(text: draft.releasedFrom ?? '');
+    final releasedTo = TextEditingController(text: draft.releasedTo ?? '');
+    final runtimeMax = TextEditingController(
+      text: draft.runtimeMax?.toString() ?? '',
+    );
+    final runtimeMin = TextEditingController(
+      text: draft.runtimeMin?.toString() ?? '',
+    );
+    final result = await showDialog<MdblistCatalogQuery>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('MDBList Catalog Filters'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: draft.mediaType,
+                    decoration: const InputDecoration(labelText: 'Media type'),
+                    items: const [
+                      DropdownMenuItem(value: 'movie', child: Text('Movies')),
+                      DropdownMenuItem(value: 'show', child: Text('Series')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(
+                          () => draft = draft.copyWith(mediaType: value),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: genre,
+                    decoration: const InputDecoration(
+                      labelText: 'Genre',
+                      hintText: 'e.g. Horror',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: releasedFrom,
+                          decoration: const InputDecoration(
+                            labelText: 'Released from',
+                            hintText: 'YYYY-MM-DD',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: releasedTo,
+                          decoration: const InputDecoration(
+                            labelText: 'Released to',
+                            hintText: 'YYYY-MM-DD',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: country,
+                          decoration: const InputDecoration(
+                            labelText: 'Country code',
+                            hintText: 'US',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: language,
+                          decoration: const InputDecoration(
+                            labelText: 'Language code',
+                            hintText: 'en',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: yearMin,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Year from',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: yearMax,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Year to',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: scoreMin,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Minimum score (0–100)',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: scoreMax,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Maximum score (0–100)',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: runtimeMin,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Minimum runtime',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: runtimeMax,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Maximum runtime',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(
+                context,
+                MdblistCatalogQuery(
+                  mediaType: draft.mediaType,
+                  sort: draft.sort,
+                  sortOrder: draft.sortOrder,
+                ),
+              ),
+              child: const Text('Reset'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                context,
+                MdblistCatalogQuery(
+                  mediaType: draft.mediaType,
+                  genre: genre.text,
+                  country: country.text,
+                  language: language.text,
+                  scoreMin: int.tryParse(scoreMin.text),
+                  scoreMax: int.tryParse(scoreMax.text),
+                  yearMin: int.tryParse(yearMin.text),
+                  yearMax: int.tryParse(yearMax.text),
+                  releasedFrom: releasedFrom.text,
+                  releasedTo: releasedTo.text,
+                  runtimeMin: int.tryParse(runtimeMin.text),
+                  runtimeMax: int.tryParse(runtimeMax.text),
+                  sort: draft.sort,
+                  sortOrder: draft.sortOrder,
+                ),
+              ),
+              child: const Text('Use Filters'),
+            ),
+          ],
+        ),
+      ),
+    );
+    genre.dispose();
+    country.dispose();
+    language.dispose();
+    scoreMin.dispose();
+    scoreMax.dispose();
+    yearMin.dispose();
+    yearMax.dispose();
+    releasedFrom.dispose();
+    releasedTo.dispose();
+    runtimeMax.dispose();
+    runtimeMin.dispose();
+    if (!mounted || result == null) return;
+    setState(() {
+      _fetchToken++;
+      _loadingMore = false;
+      _catalogDraft = result;
+      _show = result.mediaType == 'show' ? 'series' : 'movie';
+      _catalogApplied = false;
+      _page = const MdblistDiscoverPage();
+      _visible = const [];
+      _errorKind = null;
+    });
+  }
+
+  Future<void> _toggleLike() async {
+    final id = _selected?.numericId;
+    if (id == null || _saveBusy) return;
+    final wasLiked = _selectedLiked;
+    setState(() => _saveBusy = true);
+    final ok = wasLiked
+        ? await _source.service.unlikeList(id)
+        : await _source.service.likeList(id);
+    if (!mounted) return;
+    setState(() {
+      _saveBusy = false;
+      if (ok) _selectedLiked = !wasLiked;
+    });
+    if (ok) _source.invalidateListDirectories();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? (wasLiked ? 'Removed from Liked Lists' : 'Added to Liked Lists')
+              : "Couldn't update Liked Lists",
+        ),
+        backgroundColor: ok ? null : Colors.red.shade700,
+      ),
+    );
+  }
+
+  Future<void> _cloneList() async {
+    final selected = _selected;
+    if (selected?.numericId == null || _cloneBusy) return;
+    setState(() => _cloneBusy = true);
+    final id = await _source.service.saveListAsClone(
+      sourceListId: selected!.numericId!,
+      name: selected.label,
+    );
+    if (!mounted) return;
+    setState(() => _cloneBusy = false);
+    if (id != null) _source.invalidateListDirectories();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          id == null
+              ? "Couldn't clone the list"
+              : 'Cloned "${selected.label}" to My Lists',
+        ),
+        backgroundColor: id == null ? Colors.red.shade700 : null,
+      ),
+    );
+  }
+
   void _playRandom() {
     final play = widget.onQuickPlay;
     if (play == null || _visible.isEmpty) return;
@@ -378,88 +898,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     });
     play(_visible[_random.nextInt(_visible.length)]);
   }
-
-  /// Load whether the found list is already saved (a clone exists), from the
-  /// local source-id -> clone-id map.
-  Future<void> _loadSavedState(MdblistListChoice found) async {
-    final clones = await StorageService.getMdblistSavedClones();
-    if (!mounted) return;
-    final id = clones[found.id];
-    setState(() {
-      _savedCloneId = id;
-      _foundSaved = id != null;
-    });
-  }
-
-  /// Toggle "Save" on the found list. MDBList has no link/like-into-account API,
-  /// so saving CLONES the list into the user's "My Lists" (create a static list
-  /// + copy items); un-saving deletes that clone. The clone is a snapshot — it
-  /// won't auto-update if the source list changes.
-  Future<void> _toggleSave() async {
-    final list = _foundLists.isNotEmpty ? _foundLists.first : null;
-    if (list == null || _saveBusy) return;
-    final wasSaved = _foundSaved;
-    setState(() => _saveBusy = true);
-
-    if (wasSaved) {
-      final cloneId = _savedCloneId;
-      final ok = cloneId == null
-          ? false
-          : await MdblistService.instance.deleteSavedClone(
-              sourceListId: list.id,
-              cloneListId: cloneId,
-            );
-      if (!mounted) return;
-      setState(() {
-        _saveBusy = false;
-        if (ok) {
-          _foundSaved = false;
-          _savedCloneId = null;
-          _myLoaded = false; // My Lists changed — refetch on next visit
-        }
-      });
-      _snackSave(ok, saved: false, name: list.name);
-      return;
-    }
-
-    final newId = await MdblistService.instance.saveListAsClone(
-      sourceListId: list.id,
-      name: list.name,
-    );
-    if (!mounted) return;
-    setState(() {
-      _saveBusy = false;
-      if (newId != null) {
-        _foundSaved = true;
-        _savedCloneId = newId;
-        _myLoaded = false; // My Lists gained a list — refetch on next visit
-      }
-    });
-    if (newId != null) {
-      AnalyticsService.trackInBackground('mdblist_list_save', const {});
-    }
-    _snackSave(newId != null, saved: true, name: list.name);
-  }
-
-  void _snackSave(bool ok, {required bool saved, required String name}) {
-    if (!mounted) return;
-    final String msg;
-    if (!ok) {
-      msg = saved ? "Couldn't save the list" : "Couldn't remove the list";
-    } else {
-      msg = saved
-          ? 'Saved "$name" to My Lists'
-          : 'Removed "$name" from My Lists';
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? null : Colors.red.shade700,
-      ),
-    );
-  }
-
-  // ── TV filter-bar focus wiring ──────────────────────────────────────────────
 
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
     if (!widget.isTelevision) return KeyEventResult.ignored;
@@ -476,8 +914,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
@@ -489,7 +925,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         ],
       );
     }
-    final n = _visible.length;
     return Scaffold(
       backgroundColor: AppThemeScope.of(context).seeAll.bg,
       body: SafeArea(
@@ -498,9 +933,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
           children: [
             SeeAllHeader(
               title: 'MDBList',
-              subtitle: _itemsLoading
-                  ? '${_selected?.label ?? ''} · Loading…'
-                  : '${_selected?.label ?? ''} · $n ${n == 1 ? 'title' : 'titles'}',
+              subtitle: _subtitle(),
               isTelevision: widget.isTelevision,
               backNode: _backNode,
               onFilterDown: () =>
@@ -514,85 +947,392 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     );
   }
 
-  Widget _buildFilterBar() {
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: _handleFilterKeys,
-      child: Padding(
-        padding: _quiet
-            ? const EdgeInsets.fromLTRB(24, 16, 24, 10)
-            : const EdgeInsets.fromLTRB(24, 10, 24, 12),
-        child: SeeAllFilterBar(
-          isTelevision: widget.isTelevision,
-          leading: widget.leading,
-          quiet: _quiet,
-          activeCount:
-              (_sort != _Sort.natural ? 1 : 0) + (_show != 'all' ? 1 : 0),
-          trailing: _buildTrailing(),
-          buildChips: () => [
-            if (_connected) ...[
+  String _subtitle() {
+    if (_itemsLoading) return '${_activeLabel()} · Loading…';
+    final count = _visible.length;
+    return '${_activeLabel()} · $count ${count == 1 ? 'title' : 'titles'}';
+  }
+
+  String _activeLabel() {
+    if (_isCatalog) return 'Catalog';
+    if (_group == MdblistDiscoverGroup.library) return _libraryView.label;
+    return _selected?.label ?? _group.label;
+  }
+
+  Widget _buildFilterBar() => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onKeyEvent: _handleFilterKeys,
+    child: Padding(
+      padding: _quiet
+          ? const EdgeInsets.fromLTRB(24, 16, 24, 10)
+          : const EdgeInsets.fromLTRB(24, 10, 24, 12),
+      child: SeeAllFilterBar(
+        isTelevision: widget.isTelevision,
+        leading: widget.leading,
+        quiet: _quiet,
+        activeCount: _activeFilterCount,
+        trailing: _buildTrailing(),
+        buildChips: () => [
+          if (_connected) ...[
+            StremioDropdown<MdblistDiscoverGroup>(
+              label: 'Category',
+              value: _group,
+              isTelevision: widget.isTelevision,
+              quiet: _quiet,
+              focusNode: _categoryNode,
+              options: [
+                for (final group in MdblistDiscoverGroup.values)
+                  StremioDropdownOption(group, group.label),
+              ],
+              onSelected: _switchGroup,
+            ),
+            ..._buildViewControls(),
+            StremioDropdown<String>(
+              label: 'Show',
+              value: _show,
+              isTelevision: widget.isTelevision,
+              quiet: _quiet,
+              focusNode: _showNode,
+              options: _isCatalog
+                  ? const [
+                      StremioDropdownOption('movie', 'Movies'),
+                      StremioDropdownOption('series', 'Series'),
+                    ]
+                  : const [
+                      StremioDropdownOption('all', 'All'),
+                      StremioDropdownOption('movie', 'Movies'),
+                      StremioDropdownOption('series', 'Series'),
+                    ],
+              onSelected: _setShow,
+            ),
+            if (_isCatalog)
               StremioDropdown<String>(
-                label: 'Category',
-                value: _category,
+                label: 'Sort',
+                value: _catalogDraft.sort,
                 isTelevision: widget.isTelevision,
                 quiet: _quiet,
-                focusNode: _categoryNode,
-                options: [
-                  const StremioDropdownOption('mine', 'My Lists'),
-                  const StremioDropdownOption('top', 'Top Lists'),
-                  // Only exists while a search-handoff list is held.
-                  if (_foundLists.isNotEmpty)
-                    const StremioDropdownOption('found', 'Search Result'),
+                focusNode: _sortNode,
+                options: const [
+                  StremioDropdownOption('score', 'MDBList Score'),
+                  StremioDropdownOption('imdbpopular', 'IMDb Popular'),
+                  StremioDropdownOption('imdbrating', 'IMDb Rating'),
+                  StremioDropdownOption('imdbvotes', 'IMDb Votes'),
+                  StremioDropdownOption('letterrating', 'Letterboxd Rating'),
+                  StremioDropdownOption('metacritic', 'Metacritic'),
+                  StremioDropdownOption('rtaudience', 'RT Audience'),
+                  StremioDropdownOption('rtomatoes', 'RT Critics'),
+                  StremioDropdownOption('tmdbpopular', 'TMDB Popular'),
+                  StremioDropdownOption('released', 'Release Date'),
+                  StremioDropdownOption('releasedigital', 'Digital Release'),
+                  StremioDropdownOption('score_average', 'Average Score'),
+                  StremioDropdownOption('title', 'Title'),
                 ],
-                onSelected: _switchCategory,
+                onSelected: _setCatalogSort,
+              )
+            else
+              StremioDropdown<_Sort>(
+                label: 'Sort',
+                value: _sort,
+                isTelevision: widget.isTelevision,
+                quiet: _quiet,
+                focusNode: _sortNode,
+                options: const [
+                  StremioDropdownOption(_Sort.natural, 'Default'),
+                  StremioDropdownOption(_Sort.az, 'A–Z'),
+                  StremioDropdownOption(_Sort.za, 'Z–A'),
+                  StremioDropdownOption(_Sort.newest, 'Newest Activity'),
+                  StremioDropdownOption(_Sort.oldest, 'Oldest Activity'),
+                ],
+                onSelected: _setSort,
               ),
-              if (_selected != null) ...[
-                StremioDropdown<MdblistListChoice>(
-                  label: 'List',
-                  value: _selected!,
-                  isTelevision: widget.isTelevision,
-                  quiet: _quiet,
-                  focusNode: _listNode,
-                  options: [
-                    for (final l in _categoryLists)
-                      StremioDropdownOption(
-                        l,
-                        // Liked/top lists belong to other users — show the owner.
-                        (_category != 'mine' && l.ownerName != null)
-                            ? '${l.name} · ${l.ownerName}'
-                            : l.label,
-                      ),
-                  ],
-                  onSelected: _selectList,
+            if (_isCatalog)
+              StremioDropdown<String>(
+                label: 'Order',
+                value: _catalogDraft.sortOrder,
+                isTelevision: widget.isTelevision,
+                quiet: _quiet,
+                focusNode: _orderNode,
+                options: const [
+                  StremioDropdownOption('desc', 'Descending'),
+                  StremioDropdownOption('asc', 'Ascending'),
+                ],
+                onSelected: _setCatalogOrder,
+              ),
+          ],
+        ],
+      ),
+    ),
+  );
+
+  List<Widget> _buildViewControls() {
+    if (_group == MdblistDiscoverGroup.library) {
+      return [
+        StremioDropdown<MdblistLibraryView>(
+          label: 'View',
+          value: _libraryView,
+          isTelevision: widget.isTelevision,
+          quiet: _quiet,
+          focusNode: _viewNode,
+          options: [
+            for (final view in MdblistLibraryView.values)
+              StremioDropdownOption(view, view.label),
+          ],
+          onSelected: _selectLibrary,
+        ),
+      ];
+    }
+    if (_group == MdblistDiscoverGroup.forYou) {
+      if (_selected == null) return const [];
+      return [
+        StremioDropdown<MdblistDiscoverChoice>(
+          label: 'View',
+          value: _selected!,
+          isTelevision: widget.isTelevision,
+          quiet: _quiet,
+          focusNode: _viewNode,
+          options: [
+            for (final choice in _choices)
+              StremioDropdownOption(choice, choice.displayLabel),
+          ],
+          onSelected: _selectChoice,
+        ),
+      ];
+    }
+    if (_group == MdblistDiscoverGroup.discover ||
+        _group == MdblistDiscoverGroup.lists) {
+      final directories = _group == MdblistDiscoverGroup.discover
+          ? const [
+              MdblistListDirectory.official,
+              MdblistListDirectory.curated,
+              MdblistListDirectory.top,
+            ]
+          : [
+              MdblistListDirectory.mine,
+              MdblistListDirectory.liked,
+              MdblistListDirectory.external,
+              if (_searchResult != null) MdblistListDirectory.searchResult,
+            ];
+      return [
+        StremioDropdown<MdblistListDirectory>(
+          label: 'View',
+          value: _directory,
+          isTelevision: widget.isTelevision,
+          quiet: _quiet,
+          focusNode: _viewNode,
+          options: [
+            for (final directory in directories)
+              StremioDropdownOption(directory, directory.label),
+          ],
+          onSelected: _switchDirectory,
+        ),
+        if (_selected != null)
+          StremioDropdown<MdblistDiscoverChoice>(
+            label: 'List',
+            value: _selected!,
+            isTelevision: widget.isTelevision,
+            quiet: _quiet,
+            focusNode: _listNode,
+            options: [
+              for (final choice in _choices)
+                StremioDropdownOption(choice, choice.displayLabel),
+            ],
+            onSelected: _selectChoice,
+          ),
+      ];
+    }
+    return const [];
+  }
+
+  int get _activeFilterCount {
+    var count = 0;
+    if (_show != (_isCatalog ? 'movie' : 'all')) count++;
+    if (_sort != _Sort.natural ||
+        (_isCatalog &&
+            (_catalogDraft.sort != 'score' ||
+                _catalogDraft.sortOrder != 'desc'))) {
+      count++;
+    }
+    if (_isCatalog && _hasCatalogFilters) count++;
+    return count;
+  }
+
+  bool get _hasCatalogFilters =>
+      _catalogDraft.genre?.trim().isNotEmpty == true ||
+      _catalogDraft.country?.trim().isNotEmpty == true ||
+      _catalogDraft.language?.trim().isNotEmpty == true ||
+      _catalogDraft.scoreMin != null ||
+      _catalogDraft.scoreMax != null ||
+      _catalogDraft.yearMin != null ||
+      _catalogDraft.yearMax != null ||
+      _catalogDraft.releasedFrom != null ||
+      _catalogDraft.releasedTo != null ||
+      _catalogDraft.runtimeMin != null ||
+      _catalogDraft.runtimeMax != null;
+
+  Widget? _buildTrailing() {
+    final actions = <Widget>[
+      if (_isCatalog)
+        OutlinedButton.icon(
+          focusNode: _filtersNode,
+          onPressed: _openCatalogFilters,
+          icon: const Icon(Icons.tune_rounded, size: 16),
+          label: const Text('Filters'),
+        ),
+      if (_isCatalog)
+        FilledButton.icon(
+          focusNode: _applyNode,
+          onPressed: _catalogCanApply ? _applyCatalog : null,
+          icon: _itemsLoading
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.search_rounded, size: 16),
+          label: Text(_catalogApplied ? 'Reapply' : 'Apply'),
+        ),
+      if (_isCatalog && !_page.exhausted)
+        OutlinedButton.icon(
+          focusNode: _moreNode,
+          onPressed: _catalogCanLoadMore ? _loadMoreCatalog : null,
+          icon: _loadingMore
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.expand_more_rounded, size: 16),
+          label: const Text('More'),
+        ),
+      if (_canLike)
+        MdblistSaveButton(
+          quiet: _quiet,
+          saved: _selectedLiked,
+          busy: _saveBusy,
+          focusNode: _saveNode,
+          onPressed: _toggleLike,
+        ),
+      if (_canClone)
+        OutlinedButton.icon(
+          focusNode: _cloneNode,
+          onPressed: _cloneBusy ? null : _cloneList,
+          icon: _cloneBusy
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.copy_rounded, size: 16),
+          label: const Text('Clone'),
+        ),
+      if (_showRandom && _page.items.isNotEmpty)
+        SeeAllRandomButton(
+          quiet: _quiet,
+          enabled: _visible.isNotEmpty,
+          focusNode: _randomNode,
+          onPressed: _playRandom,
+        ),
+    ];
+    if (actions.isEmpty) return null;
+    if (actions.length == 1) return actions.single;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < actions.length; index++) ...[
+          if (index > 0) SizedBox(width: _quiet ? 6 : 8),
+          actions[index],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_menuLoading || _itemsLoading) {
+      return SkeletonPosterGrid(isTelevision: widget.isTelevision);
+    }
+    if (!_connected) return _buildEmpty();
+    if (_visible.isEmpty) {
+      final status = <String>[
+        if (_menuPartial) 'Some MDBList menu results could not be refreshed',
+        if (_page.kind == MdblistResultKind.partial)
+          'Showing retained or partial MDBList results',
+      ];
+      if (status.isEmpty) return _buildEmpty();
+      return Column(
+        children: [
+          for (final message in status) _statusStrip(message),
+          Expanded(child: _buildEmpty()),
+        ],
+      );
+    }
+    final grid = SeeAllPosterGrid(
+      key: _gridKey,
+      items: _visible,
+      isTelevision: widget.isTelevision,
+      loadingMore: _loadingMore,
+      exhausted: _isCatalog ? true : _page.exhausted,
+      onOpen: widget.onOpen,
+      onQuickPlay: widget.onQuickPlay,
+      onItemFocused: widget.onItemFocused,
+      showTypeBadge: !_quiet,
+      showRatingBadge: !_quiet,
+      progressOf: (item) => _page.progressByImdb[item.imdbId],
+      isBound: widget.isBound,
+      onLoadMore: _isCatalog ? () {} : _loadMoreChoice,
+      onExitTop: widget.isTelevision
+          ? () => _gridExitNode.requestFocus()
+          : null,
+      onExitLeft: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
+    );
+    final status = <String>[
+      if (_menuPartial) 'Some MDBList menu results could not be refreshed',
+      if (_page.kind == MdblistResultKind.partial)
+        'Showing retained or partial MDBList results',
+      if (_isCatalog) _quotaLabel(),
+    ];
+    if (status.isEmpty) return grid;
+    return Column(
+      children: [
+        for (final message in status) _statusStrip(message),
+        Expanded(child: grid),
+      ],
+    );
+  }
+
+  Widget _buildEmpty() {
+    final app = AppThemeScope.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _errorKind == null
+                  ? Icons.inbox_rounded
+                  : Icons.cloud_off_rounded,
+              size: 44,
+              color: app.fade(app.core.tx, 0.25),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              _emptyMessage(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: app.fade(app.core.tx, 0.7),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (_isCatalog) ...[
+              const SizedBox(height: 8),
+              Text(
+                _quotaLabel(),
+                style: TextStyle(
+                  color: app.fade(app.core.tx, 0.5),
+                  fontSize: 12,
                 ),
-                StremioDropdown<String>(
-                  label: 'Show',
-                  value: _show,
-                  isTelevision: widget.isTelevision,
-                  quiet: _quiet,
-                  focusNode: _showNode,
-                  options: const [
-                    StremioDropdownOption('all', 'All'),
-                    StremioDropdownOption('movie', 'Movies'),
-                    StremioDropdownOption('series', 'Series'),
-                  ],
-                  onSelected: _setShow,
-                ),
-                StremioDropdown<_Sort>(
-                  label: 'Sort',
-                  value: _sort,
-                  isTelevision: widget.isTelevision,
-                  quiet: _quiet,
-                  focusNode: _sortNode,
-                  options: const [
-                    StremioDropdownOption(_Sort.natural, 'Default'),
-                    StremioDropdownOption(_Sort.az, 'A–Z'),
-                    StremioDropdownOption(_Sort.za, 'Z–A'),
-                  ],
-                  onSelected: _setSort,
-                ),
-              ],
+              ),
             ],
           ],
         ),
@@ -600,108 +1340,73 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     );
   }
 
-  /// Trailing filter-bar actions: the Save toggle (search-handoff path only)
-  /// and the Random button. Order matches [_filterNodes] so DPAD left/right
-  /// walks them in visual order.
-  Widget? _buildTrailing() {
-    final like = _showSave
-        ? MdblistSaveButton(
-            quiet: _quiet,
-            saved: _foundSaved,
-            busy: _saveBusy,
-            focusNode: _saveNode,
-            onPressed: _toggleSave,
-          )
-        : null;
-    final random = (_showRandom && _selected != null)
-        ? SeeAllRandomButton(
-            quiet: _quiet,
-            enabled: _visible.isNotEmpty,
-            focusNode: _randomNode,
-            onPressed: _playRandom,
-          )
-        : null;
-    if (like == null && random == null) return null;
-    if (like == null) return random;
-    if (random == null) return like;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        like,
-        SizedBox(width: _quiet ? 6 : 8),
-        random,
-      ],
-    );
-  }
-
-  Widget _buildBody() {
-    if (_listsLoading || _itemsLoading) {
-      return SkeletonPosterGrid(isTelevision: widget.isTelevision);
-    }
-    if (_visible.isEmpty) {
-      final app = AppThemeScope.of(context);
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _error
-                    ? Icons.cloud_off_rounded
-                    : (!_connected
-                          ? Icons.link_off_rounded
-                          : Icons.inbox_rounded),
-                size: 44,
-                color: app.fade(app.core.tx, 0.25),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                _emptyMessage(),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: app.fade(app.core.tx, 0.7),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+  Widget _statusStrip(String text) {
+    final app = AppThemeScope.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+      color: app.fade(app.seeAll.accent, 0.12),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: app.fade(app.core.tx, 0.72),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
         ),
-      );
-    }
-    return SeeAllPosterGrid(
-      key: _gridKey,
-      items: _visible,
-      isTelevision: widget.isTelevision,
-      loadingMore: false,
-      exhausted: true, // finite, in-memory list — no paging
-      onOpen: widget.onOpen,
-      onQuickPlay: widget.onQuickPlay,
-      onItemFocused: widget.onItemFocused,
-      // Discover on TV has the detail rail naming the type — drop the badges there.
-      showTypeBadge: !_quiet,
-      showRatingBadge: !_quiet,
-      isBound: widget.isBound,
-      onLoadMore: () {},
-      onExitTop: widget.isTelevision ? () => _listNode.requestFocus() : null,
-      onExitLeft: widget.embedded
-          ? () => MainPageBridge.focusTvSidebar?.call()
-          : null,
+      ),
     );
   }
 
   String _emptyMessage() {
-    if (!_connected) return 'Connect MDBList in Settings to browse your lists';
-    if (_error) {
-      return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
+    if (!_connected) return 'Connect MDBList in Settings to browse it';
+    final error = _errorKind;
+    if (error != null) {
+      return switch (error) {
+        MdblistResultKind.denied =>
+          'This MDBList view is not available on your current plan',
+        MdblistResultKind.rateLimited =>
+          _isCatalog
+              ? 'MDBList Catalog query quota is exhausted'
+              : 'MDBList rate limit reached — try again later',
+        MdblistResultKind.unauthenticated => 'Reconnect MDBList in Settings',
+        _ => "Couldn't load ${_activeLabel()} from MDBList",
+      };
     }
-    if (_selected == null) {
-      if (_category == 'top') return 'No top lists available right now';
-      return 'You have no MDBList lists yet';
+    if (_isCatalog && !_catalogApplied) {
+      return 'Choose filters and press Apply — Catalog never runs automatically';
     }
-    // The list has items but the Show filter hid them all.
-    if (_items.isNotEmpty) return 'Nothing matches these filters';
-    return '"${_selected?.label ?? ''}" is empty';
+    if (_page.items.isNotEmpty) return 'Nothing matches these filters';
+    if (_group == MdblistDiscoverGroup.forYou && _selected == null) {
+      return 'No recommendation sections are available for this account';
+    }
+    if ((_group == MdblistDiscoverGroup.discover ||
+            _group == MdblistDiscoverGroup.lists) &&
+        _selected == null) {
+      return 'No ${_directory.label.toLowerCase()} available';
+    }
+    if (_group == MdblistDiscoverGroup.library &&
+        _libraryView == MdblistLibraryView.continueWatching) {
+      return 'Nothing to continue yet';
+    }
+    return 'Nothing in ${_activeLabel()}';
+  }
+
+  String _quotaLabel() {
+    final quota = _page.quota ?? _source.catalogQuota;
+    final remaining = quota?.remaining;
+    if (remaining == null) return 'Catalog quota appears after the first Apply';
+    final expiry = quota?.firstExpiresAt;
+    final reset = expiry == null
+        ? ''
+        : ' · next slot ${expiry.toLocal().toString().split('.').first}';
+    return '$remaining catalog ${remaining == 1 ? 'query' : 'queries'} remaining$reset';
+  }
+
+  List<StremioMeta> _dedup(Iterable<StremioMeta> items) {
+    final seen = <String>{};
+    return [
+      for (final item in items)
+        if (seen.add((item.imdbId ?? item.id).toLowerCase())) item,
+    ];
   }
 }

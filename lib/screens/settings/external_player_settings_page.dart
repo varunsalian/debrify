@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -92,7 +93,7 @@ class _ExternalPlayerSettingsPageState
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
-  bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
+  bool _subtitleAutoSync = false; // Native players only, experimental opt-in
   int _movieCompletionThreshold =
       StorageService.defaultLocalCompletionThreshold;
   int _episodeCompletionThreshold =
@@ -2308,13 +2309,14 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ],
 
-                          // Auto subtitle sync (Android TV only — the
-                          // native player is where the audio tap lives).
-                          if (Platform.isAndroid && _isAndroidTv) ...[
+                          // Only platforms whose bundled native player is
+                          // built with the required passive analysis filters.
+                          if (!kIsWeb &&
+                              (Platform.isAndroid || Platform.isMacOS)) ...[
                             const SizedBox(height: 4),
                             _buildCheckboxTile(
                               context,
-                              title: 'Auto-sync addon subtitles',
+                              title: 'Auto-sync addon subtitles (experimental)',
                               subtitle:
                                   'Quietly align downloaded subtitles to the audio '
                                   'as you watch. Applies only on a confident match; '

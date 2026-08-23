@@ -58,6 +58,7 @@ class EpisodesScreen extends StatefulWidget {
   /// episode view. Left false for plain catalog/addon items so their scrobble
   /// stays governed by the user's "Sync Catalog Items" setting.
   final bool isTraktSource;
+  final bool isMdblistSource;
 
   /// Callback when user selects an episode (Sources) or the series falls back
   /// to a direct search.
@@ -89,6 +90,7 @@ class EpisodesScreen extends StatefulWidget {
     this.isTelevision = false,
     this.showQuickPlay = true,
     this.isTraktSource = false,
+    this.isMdblistSource = false,
     this.onItemSelected,
     this.onQuickPlay,
     this.onExitedWithoutSelection,
@@ -150,6 +152,7 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
           isTelevision: widget.isTelevision,
           showQuickPlay: widget.showQuickPlay,
           isTraktSource: widget.isTraktSource,
+          isMdblistSource: widget.isMdblistSource,
           onItemSelected: widget.onItemSelected,
           onQuickPlay: widget.onQuickPlay,
           boundSourceCount: widget.boundSourceCount,

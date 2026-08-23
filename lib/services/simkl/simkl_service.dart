@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/profiles/profile_policy.dart';
+import '../episode_tracker_snapshot_revision.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import '../storage_service.dart';
@@ -585,6 +586,9 @@ class SimklService {
     // We do not know the previous status here, so every successful move must
     // invalidate; unlike ratings, any list move can remove an existing tick.
     StorageService.movieFinishedRevision.value++;
+    if (type == 'series') {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    }
     return true;
   }
 
@@ -654,6 +658,9 @@ class SimklService {
     if (!_wasMatched(result, typeKey)) return false;
     _invalidateLibraryCache();
     StorageService.movieFinishedRevision.value++;
+    if (type == 'series') {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    }
     return true;
   }
 
@@ -677,6 +684,9 @@ class SimklService {
     if (!_wasMatched(result, typeKey)) return false;
     _invalidateLibraryCache();
     StorageService.movieFinishedRevision.value++;
+    if (type == 'series') {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    }
     return true;
   }
 
@@ -699,6 +709,7 @@ class SimklService {
     );
     if (!_wasMatched(result, 'shows')) return false;
     _invalidateLibraryCache();
+    EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
     return true;
   }
 
@@ -720,6 +731,7 @@ class SimklService {
     );
     if (!_wasMatched(result, 'shows')) return false;
     _invalidateLibraryCache();
+    EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
     return true;
   }
 
@@ -870,7 +882,12 @@ class SimklService {
     );
     // Any scrobble write changes the account's paused sessions — drop the
     // read cache so a later resume/progress read reflects it.
-    if (result != null) _invalidatePlaybackCache();
+    if (result != null) {
+      _invalidatePlaybackCache();
+      if (s != null && e != null) {
+        EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+      }
+    }
     return result != null;
   }
 
@@ -1158,6 +1175,9 @@ class SimklService {
       if (!ok) allOk = false;
     }
     _invalidatePlaybackCache();
+    if (allOk) {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    }
     return allOk;
   }
 
@@ -1201,6 +1221,9 @@ class SimklService {
       if (!ok) allOk = false;
     }
     _invalidatePlaybackCache();
+    if (allOk) {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    }
     return allOk;
   }
 

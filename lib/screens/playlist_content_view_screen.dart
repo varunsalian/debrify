@@ -3297,6 +3297,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Get episode details
     final season = episode.seriesInfo.season ?? 1;
     final episodeNum = episode.seriesInfo.episode ?? 1;
+    final imdbId =
+        _seriesPlaylist?.imdbId ?? widget.playlistItem['imdbId'] as String?;
 
     try {
       // Check current watched state
@@ -3304,6 +3306,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         seriesTitle: seriesTitle,
         season: season,
         episode: episodeNum,
+        imdbId: imdbId,
       );
 
       if (isCurrentlyFinished) {
@@ -3313,6 +3316,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           seriesTitle: seriesTitle,
           season: season,
           episode: episodeNum,
+          imdbId: imdbId,
         );
       } else {
         // Episode is not watched, mark it as finished
@@ -3321,6 +3325,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           seriesTitle: seriesTitle,
           season: season,
           episode: episodeNum,
+          imdbId: imdbId,
         );
       }
 

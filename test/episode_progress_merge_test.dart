@@ -30,4 +30,105 @@ void main() {
       expect(furthestEpisodeTrackerPercent([null, double.infinity]), isNull);
     },
   );
+
+  group('active Trakt rewatch migration', () {
+    test('neutralizes an unproven local completion without deleting it', () {
+      final resolved = resolveEpisodeLocalWatchState(
+        locallyWatched: true,
+        localPositionMs: 3000000,
+        localDurationMs: 3000000,
+        traktPercent: 37,
+        simklPercent: null,
+        mdblistPercent: null,
+      );
+
+      expect(resolved.watched, isFalse);
+      expect(resolved.positionMs, 0);
+    });
+
+    test('keeps a genuine local partial during the remote rewatch', () {
+      final resolved = resolveEpisodeLocalWatchState(
+        locallyWatched: true,
+        localPositionMs: 1800000,
+        localDurationMs: 3000000,
+        traktPercent: 37,
+        simklPercent: 42,
+        mdblistPercent: null,
+      );
+
+      expect(resolved.watched, isFalse);
+      expect(resolved.positionMs, 1800000);
+    });
+
+    test('independent provider completion is never downgraded', () {
+      final resolved = resolveEpisodeLocalWatchState(
+        locallyWatched: true,
+        localPositionMs: 3000000,
+        localDurationMs: 3000000,
+        traktPercent: 37,
+        simklPercent: 100,
+        mdblistPercent: null,
+      );
+
+      expect(resolved.watched, isTrue);
+      expect(resolved.positionMs, 3000000);
+    });
+
+    test('zero and completed Trakt values are not active rewatches', () {
+      expect(
+        hasActiveTraktEpisodeRewatch(
+          traktPercent: 0,
+          simklPercent: null,
+          mdblistPercent: null,
+        ),
+        isFalse,
+      );
+      expect(
+        hasActiveTraktEpisodeRewatch(
+          traktPercent: 95,
+          simklPercent: null,
+          mdblistPercent: null,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('mergedEpisodeUpNext', () {
+    const episodes = [
+      (season: 1, episode: 1),
+      (season: 1, episode: 2),
+      (season: 1, episode: 3),
+    ];
+
+    test('active merged playback overrides a stale tracker suggestion', () {
+      final result = mergedEpisodeUpNext(
+        episodes: episodes,
+        progress: const {'1-1': 100, '1-2': 49.13},
+        trackerNext: const (season: 1, episode: 1),
+      );
+
+      expect(result, const (season: 1, episode: 2));
+    });
+
+    test('falls forward when the tracker suggestion is already watched', () {
+      final result = mergedEpisodeUpNext(
+        episodes: episodes,
+        progress: const {'1_1': 100},
+        trackerNext: const (season: 1, episode: 1),
+      );
+
+      expect(result, const (season: 1, episode: 2));
+    });
+
+    test('retains an unfinished tracker suggestion without playback', () {
+      final result = mergedEpisodeUpNext(
+        episodes: episodes,
+        progress: const {},
+        trackerNext: const (season: 1, episode: 2),
+      );
+
+      expect(result, const (season: 1, episode: 2));
+    });
+  });
 }

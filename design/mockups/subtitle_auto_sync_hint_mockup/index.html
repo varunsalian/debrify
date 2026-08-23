@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debrify — Subtitle auto-sync hints</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f7f7fa;
+      --muted: rgba(239, 240, 248, .62);
+      --line: rgba(255, 255, 255, .12);
+      --panel: rgba(18, 19, 24, .76);
+      --accent: #a987ff;
+      --accent-2: #74d7ff;
+      --good: #84e0b0;
+      --bad: #ffae9f;
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 80% 8%, rgba(89, 67, 144, .22), transparent 30rem),
+        radial-gradient(circle at 8% 90%, rgba(31, 93, 120, .15), transparent 28rem),
+        #090a0d;
+      color: var(--ink);
+      font: 500 15px/1.45 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button { font: inherit; }
+
+    .shell {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 28px clamp(18px, 4vw, 64px) 52px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    .eyebrow {
+      color: var(--accent-2);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 5px 0 4px;
+      font-size: clamp(25px, 3vw, 40px);
+      line-height: 1.08;
+      letter-spacing: -.035em;
+    }
+
+    .lede { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .toolbar, .segmented {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .045);
+    }
+
+    .toolbar { flex-wrap: wrap; justify-content: flex-end; }
+
+    .tool-button, .segmented button {
+      min-height: 35px;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 8px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      transition: background .2s, color .2s, transform .2s;
+    }
+
+    .tool-button:hover, .segmented button:hover { color: var(--ink); }
+    .tool-button:active, .segmented button:active { transform: scale(.97); }
+    .segmented button.active { color: #fff; background: rgba(255, 255, 255, .1); }
+    .tool-button { color: var(--ink); padding-inline: 14px; }
+
+    .stage-wrap {
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, .13);
+      border-radius: 18px;
+      overflow: hidden;
+      background: #050608;
+      box-shadow: 0 26px 80px rgba(0, 0, 0, .42);
+    }
+
+    .stage {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      min-height: 430px;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .cinema {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(1, 4, 8, .1), rgba(1, 3, 6, .1) 48%, rgba(1, 2, 4, .78)),
+        radial-gradient(ellipse at 68% 35%, rgba(244, 181, 115, .6) 0 2%, transparent 18%),
+        linear-gradient(118deg, transparent 0 37%, rgba(112, 171, 189, .13) 38% 44%, transparent 45%),
+        radial-gradient(ellipse at 65% 50%, #445a61 0 6%, #18252b 25%, transparent 52%),
+        linear-gradient(145deg, #070b0f 10%, #13252b 48%, #050609 100%);
+      transform: scale(1.03);
+      animation: camera 14s ease-in-out infinite alternate;
+    }
+
+    .cinema::before {
+      content: "";
+      position: absolute;
+      width: 31%;
+      height: 92%;
+      left: 15%;
+      top: 17%;
+      border-radius: 46% 46% 8% 8%;
+      background: linear-gradient(100deg, #080b0e 0 48%, #263b40 75%, #091014);
+      filter: blur(2px);
+      opacity: .85;
+      transform: rotate(-4deg);
+    }
+
+    .cinema::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .16;
+      mix-blend-mode: screen;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+    }
+
+    @keyframes camera { to { transform: scale(1.08) translate3d(-.7%, -.5%, 0); } }
+
+    .top-gradient, .bottom-gradient { position: absolute; z-index: 2; left: 0; right: 0; pointer-events: none; }
+    .top-gradient { top: 0; height: 24%; background: linear-gradient(#020305b8, transparent); }
+    .bottom-gradient { bottom: 0; height: 46%; background: linear-gradient(transparent, #020305ec); }
+
+    .player-top {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: clamp(20px, 3vw, 38px) clamp(22px, 4vw, 52px);
+    }
+
+    .back, .round-button {
+      display: grid;
+      place-items: center;
+      border: 0;
+      color: #fff;
+      background: transparent;
+    }
+
+    .back { width: 34px; height: 34px; }
+    .title { font-size: clamp(16px, 1.6vw, 22px); font-weight: 680; letter-spacing: -.015em; }
+    .meta { color: rgba(255, 255, 255, .62); font-size: 12px; margin-top: 2px; }
+
+    .subtitle-line {
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      bottom: 23%;
+      max-width: 68%;
+      transform: translateX(-50%);
+      padding: 3px 9px 5px;
+      border-radius: 4px;
+      color: #fff;
+      background: rgba(0, 0, 0, .62);
+      font-size: clamp(17px, 2.1vw, 29px);
+      font-weight: 620;
+      text-align: center;
+      text-shadow: 0 1px 2px #000;
+      white-space: nowrap;
+    }
+
+    .controls {
+      position: absolute;
+      z-index: 5;
+      left: clamp(22px, 4vw, 52px);
+      right: clamp(22px, 4vw, 52px);
+      bottom: clamp(20px, 3.6vw, 47px);
+    }
+
+    .times { display: flex; justify-content: space-between; color: rgba(255, 255, 255, .7); font-size: 11px; }
+    .scrub { position: relative; height: 4px; margin: 9px 0 18px; border-radius: 9px; background: rgba(255, 255, 255, .26); }
+    .progress { width: 39%; height: 100%; border-radius: inherit; background: #fff; }
+    .thumb { position: absolute; top: 50%; left: 39%; width: 12px; height: 12px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); }
+    .control-row { display: flex; align-items: center; justify-content: space-between; }
+    .control-group { display: flex; align-items: center; gap: clamp(13px, 2.4vw, 28px); }
+    .round-button { width: 32px; height: 32px; opacity: .92; }
+    .round-button svg, .back svg { width: 23px; height: 23px; fill: currentColor; }
+    .play svg { width: 31px; height: 31px; }
+    .cc { position: relative; overflow: visible; }
+
+    .hint {
+      position: absolute;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .hint-inner {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      height: 36px;
+      padding: 0 13px 0 10px;
+      border: 1px solid rgba(255, 255, 255, .15);
+      border-radius: 999px;
+      background: rgba(18, 19, 24, .82);
+      box-shadow: 0 9px 28px rgba(0, 0, 0, .28);
+      backdrop-filter: blur(18px) saturate(125%);
+      -webkit-backdrop-filter: blur(18px) saturate(125%);
+      color: rgba(255, 255, 255, .86);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .sync-glyph { position: relative; width: 17px; height: 17px; color: var(--accent-2); }
+    .sync-glyph svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+    .hint.visible { opacity: 1; }
+    .hint-inner { transition: border-color .35s, background .35s, transform .35s var(--ease); }
+    .hint.visible .hint-inner { animation: enter-hint .5s var(--ease) both; }
+    .hint.leaving { opacity: 0; transition: opacity .65s var(--ease); }
+    .hint.result .hint-inner { transform: scale(1.015); }
+    .hint.success .hint-inner { border-color: rgba(132, 224, 176, .3); background: rgba(17, 31, 27, .84); }
+    .hint.failure .hint-inner { border-color: rgba(255, 174, 159, .26); background: rgba(35, 24, 23, .84); }
+
+    .status-ring { width: 18px; height: 18px; transform: rotate(-90deg); overflow: visible; }
+    .status-ring circle { fill: none; stroke-width: 2; }
+    .status-ring .track { stroke: rgba(255, 255, 255, .14); }
+    .status-ring .value {
+      stroke: var(--accent-2);
+      stroke-linecap: round;
+      stroke-dasharray: 44;
+      stroke-dashoffset: calc(44 - (44 * var(--progress, 0)));
+      transition: stroke-dashoffset .25s linear, stroke .3s;
+    }
+    .hint.checking .status-ring { animation: ring-breathe .8s ease-in-out infinite alternate; }
+    .hint.success .status-ring .value { stroke: var(--good); }
+    .hint.failure .status-ring .value { stroke: var(--bad); }
+    .status-copy { display: flex; align-items: baseline; gap: 7px; }
+    .label { min-width: 116px; transition: opacity .16s; }
+    .elapsed { color: rgba(255, 255, 255, .42); font-variant-numeric: tabular-nums; font-size: 10px; }
+    .hint.result .elapsed { display: none; }
+
+    @keyframes enter-hint {
+      from { transform: translateY(7px) scale(.97); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    @keyframes ring-breathe { to { opacity: .5; transform: rotate(-90deg) scale(.88); } }
+
+    .hint.variant-control { right: clamp(22px, 4vw, 52px); bottom: clamp(67px, 8.3vw, 102px); }
+
+    .hint.variant-caption {
+      left: 50%;
+      bottom: calc(23% + 52px);
+      transform: translateX(-50%);
+    }
+    .hint.variant-caption .hint-inner { height: 30px; padding-inline: 9px 11px; background: rgba(6, 8, 10, .66); font-size: 11px; }
+
+    .hint.variant-corner { top: clamp(75px, 10vw, 122px); right: clamp(22px, 4vw, 52px); }
+
+    .stage.tv .hint-inner { font-size: 13px; height: 39px; }
+    .stage.tv .controls { bottom: 50px; }
+    .stage.tv .hint.variant-caption { bottom: 27%; }
+
+    .notes {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .035);
+      padding: 18px 20px;
+    }
+    .card h2 { margin: 0 0 5px; font-size: 15px; letter-spacing: -.01em; }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .verdict { display: inline-flex; align-items: center; gap: 7px; color: var(--good); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .verdict::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px var(--good); }
+    .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 13px; }
+    .rule { padding: 10px 11px; border-radius: 10px; background: rgba(255, 255, 255, .035); color: var(--muted); font-size: 11px; }
+    .rule strong { display: block; color: #eeeef4; font-size: 12px; margin-bottom: 2px; }
+    .timeline { display: flex; align-items: flex-start; gap: 0; margin-top: 14px; }
+    .moment { position: relative; flex: 1; padding-top: 15px; color: var(--muted); font-size: 10px; }
+    .moment::before { content: ""; position: absolute; top: 3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 10px rgba(116, 215, 255, .45); }
+    .moment::after { content: ""; position: absolute; top: 6px; left: 7px; right: 0; height: 1px; background: rgba(116, 215, 255, .25); }
+    .moment:last-child::after { display: none; }
+    .moment strong { display: block; color: #fff; font-size: 11px; }
+    .demo-note { display: inline-flex; margin-left: 8px; color: rgba(255,255,255,.42); font-size: 10px; }
+
+    @media (max-width: 820px) {
+      header { align-items: stretch; flex-direction: column; }
+      .toolbar { justify-content: flex-start; }
+      .stage { min-height: 0; }
+      .notes { grid-template-columns: 1fr; }
+      .rules { grid-template-columns: 1fr; }
+      .subtitle-line { max-width: 86%; bottom: 25%; }
+      .hint-inner { font-size: 10px; height: 31px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cinema, .hint.visible .hint-inner, .hint.checking .status-ring { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">Interaction study · default-on auto-sync</div>
+        <h1>Quietly present for the full sync.</h1>
+        <p class="lede">The indicator stays through the analysis—usually ~90 seconds, up to 3 minutes—then reports the outcome and disappears.</p>
+      </div>
+      <div class="toolbar">
+        <div class="segmented" aria-label="Player size">
+          <button class="active" data-platform="desktop">macOS</button>
+          <button data-platform="tv">Android TV</button>
+        </div>
+        <div class="segmented" aria-label="Sync outcome">
+          <button class="active" data-outcome="success">Success</button>
+          <button data-outcome="failure">Failure</button>
+        </div>
+        <button class="tool-button" id="replay">↻&nbsp;&nbsp;Replay</button>
+      </div>
+    </header>
+
+    <section class="stage-wrap">
+      <div class="stage run" id="stage">
+        <div class="cinema"></div>
+        <div class="top-gradient"></div>
+        <div class="bottom-gradient"></div>
+
+        <div class="player-top">
+          <button class="back" aria-label="Back">
+            <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20z"/></svg>
+          </button>
+          <div><div class="title">Silo</div><div class="meta">S02 E04 · The Harmonium</div></div>
+        </div>
+
+        <div class="subtitle-line">We should leave before the generator comes back.</div>
+
+        <div class="hint variant-control" id="hint">
+          <div class="hint-inner">
+            <svg class="status-ring" viewBox="0 0 18 18" aria-hidden="true">
+              <circle class="track" cx="9" cy="9" r="7"></circle>
+              <circle class="value" cx="9" cy="9" r="7"></circle>
+            </svg>
+            <span class="status-copy"><span class="label" id="status-label">Listening for dialogue</span><span class="elapsed" id="elapsed">0:00</span></span>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="times"><span>21:46</span><span>48:12</span></div>
+          <div class="scrub"><div class="progress"></div><div class="thumb"></div></div>
+          <div class="control-row">
+            <div class="control-group">
+              <button class="round-button play" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg></button>
+              <button class="round-button" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24"><path d="M11 6V3l-4 4 4 4V8c3.31 0 6 2.69 6 6a6 6 0 0 1-10.33 4.15l-1.42 1.42A8 8 0 1 0 11 6z"/></svg></button>
+              <button class="round-button" aria-label="Volume"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3zm12.5 3a3.5 3.5 0 0 0-2-3.15v6.3a3.5 3.5 0 0 0 2-3.15zm-2-6.93v2.06a5.5 5.5 0 0 1 0 9.74v2.06a7.5 7.5 0 0 0 0-13.86z"/></svg></button>
+            </div>
+            <div class="control-group">
+              <button class="round-button cc" aria-label="Subtitles"><svg viewBox="0 0 24 24"><path d="M19 4H5a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3zm-8 6H9.5v-.5h-3v5h3V14H11v.5A1.5 1.5 0 0 1 9.5 16h-3A1.5 1.5 0 0 1 5 14.5v-5A1.5 1.5 0 0 1 6.5 8h3A1.5 1.5 0 0 1 11 9.5v.5zm8 0h-1.5v-.5h-3v5h3V14H19v.5a1.5 1.5 0 0 1-1.5 1.5h-3a1.5 1.5 0 0 1-1.5-1.5v-5A1.5 1.5 0 0 1 14.5 8h3A1.5 1.5 0 0 1 19 9.5v.5z"/></svg></button>
+              <button class="round-button" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.4 7.4 0 0 0 .05-.94 7.4 7.4 0 0 0-.05-.94l2.03-1.58-1.92-3.32-2.39.96a7.1 7.1 0 0 0-1.62-.94L14.88 3h-3.84l-.36 3.18a7.1 7.1 0 0 0-1.62.94l-2.39-.96-1.92 3.32 2.03 1.58a7.4 7.4 0 0 0-.05.94c0 .32.02.63.06.94l-2.03 1.58 1.92 3.32 2.39-.96c.5.39 1.04.7 1.62.94l.36 3.18h3.84l.36-3.18c.58-.24 1.12-.55 1.62-.94l2.39.96 1.92-3.32-2.04-1.58zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
+              <button class="round-button" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zm-3-12v2h3v3h2V5h-5z"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="notes">
+      <div class="card">
+        <div class="segmented" id="variants" aria-label="Hint placement">
+          <button class="active" data-variant="control">A · Control anchor</button>
+          <button data-variant="caption">B · Caption halo</button>
+          <button data-variant="corner">C · Corner hint</button>
+        </div>
+        <div style="margin-top:16px">
+          <span class="verdict" id="verdict">Recommended</span>
+          <h2 id="variant-title">Persistent, but inside the subtitle-controls zone</h2>
+          <p id="variant-copy">It remains visible for the entire analysis without covering dialogue. Checkpoints change the copy briefly, and the ring gives slow ambient progress without demanding attention.</p>
+          <div class="timeline">
+            <div class="moment"><strong>0:00</strong>Listening</div>
+            <div class="moment"><strong>0:20</strong>First check</div>
+            <div class="moment"><strong>0:45</strong>Check again</div>
+            <div class="moment"><strong>1:30</strong>Likely result</div>
+            <div class="moment"><strong>3:00</strong>If needed</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Default-on guardrails</h2>
+        <p>The usual 90-second sequence is compressed to 12 seconds; the failure path runs 16 seconds to include the 3-minute fallback.<span class="demo-note">Real labels show real elapsed time.</span></p>
+        <div class="rules">
+          <div class="rule"><strong>Always present</strong>From capture start to final attempt.</div>
+          <div class="rule"><strong>Status, not toast</strong>No focus or playback interruption.</div>
+          <div class="rule"><strong>Outcome, then gone</strong>Hold result for 2 seconds and fade.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const stage = document.querySelector('#stage');
+    const hint = document.querySelector('#hint');
+    const replay = document.querySelector('#replay');
+    const variantTitle = document.querySelector('#variant-title');
+    const variantCopy = document.querySelector('#variant-copy');
+    const verdict = document.querySelector('#verdict');
+    const statusLabel = document.querySelector('#status-label');
+    const elapsed = document.querySelector('#elapsed');
+    let currentVariant = 'control';
+    let currentOutcome = 'success';
+    let timers = [];
+    let ticker = null;
+
+    const variants = {
+      control: {
+        title: 'Persistent, but inside the subtitle-controls zone',
+        copy: 'It remains visible for the entire analysis without covering dialogue. Checkpoints change the copy briefly, and the ring gives slow ambient progress without demanding attention.',
+        verdict: 'Recommended'
+      },
+      caption: {
+        title: 'Clear relationship, but present for too long',
+        copy: 'The full 90-second lifecycle sits close to the current caption. It is easy to understand, but sustained proximity makes it the most distracting option.',
+        verdict: 'Higher distraction'
+      },
+      corner: {
+        title: 'Best separation for a long-running status',
+        copy: 'The upper-right safe zone comfortably holds a persistent state. It never touches dialogue, though the connection to the subtitle control is less immediate.',
+        verdict: 'Good fallback'
+      }
+    };
+
+    function clearRun() {
+      timers.forEach(clearTimeout);
+      timers = [];
+      clearInterval(ticker);
+      ticker = null;
+    }
+
+    function after(milliseconds, callback) {
+      timers.push(setTimeout(callback, milliseconds));
+    }
+
+    function formatTime(totalSeconds) {
+      const seconds = Math.max(0, Math.round(totalSeconds));
+      return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+
+    function setStatus(label, state = '') {
+      hint.classList.remove('checking', 'result', 'success', 'failure');
+      if (state) state.split(' ').forEach(name => hint.classList.add(name));
+      statusLabel.textContent = label;
+    }
+
+    function run() {
+      clearRun();
+      stage.classList.remove('run');
+      hint.className = `hint variant-${currentVariant}`;
+      hint.style.setProperty('--progress', 0);
+      elapsed.textContent = '0:00';
+      setStatus('Listening for dialogue');
+      void stage.offsetWidth;
+      stage.classList.add('run');
+      hint.classList.add('visible');
+
+      const startedAt = performance.now();
+      const demoDurationMs = currentOutcome === 'success' ? 12000 : 16000;
+      const targetSeconds = currentOutcome === 'success' ? 90 : 180;
+      const atSecond = seconds => (seconds / targetSeconds) * demoDurationMs;
+      ticker = setInterval(() => {
+        if (hint.classList.contains('result')) return;
+        const simulatedSeconds = Math.min(targetSeconds, ((performance.now() - startedAt) / demoDurationMs) * targetSeconds);
+        elapsed.textContent = formatTime(simulatedSeconds);
+        hint.style.setProperty('--progress', simulatedSeconds / targetSeconds);
+      }, 120);
+
+      after(atSecond(20), () => setStatus('Checking timing…', 'checking'));
+      after(atSecond(20) + 650, () => setStatus('Need more audio · listening'));
+      after(atSecond(45), () => setStatus('Checking again…', 'checking'));
+      after(atSecond(45) + 650, () => setStatus('Refining subtitle timing'));
+
+      if (currentOutcome === 'failure') {
+        after(atSecond(90), () => setStatus('Checking at 1:30…', 'checking'));
+        after(atSecond(90) + 700, () => setStatus('One last pass · listening'));
+      }
+
+      after(demoDurationMs - 800, () => {
+        elapsed.textContent = formatTime(targetSeconds);
+        hint.style.setProperty('--progress', 1);
+        setStatus('Final timing check…', 'checking');
+      });
+      after(demoDurationMs, () => {
+        clearInterval(ticker);
+        ticker = null;
+        setStatus(
+          currentOutcome === 'success' ? 'Subtitles aligned · +1.2s' : 'No confident match',
+          `result ${currentOutcome}`
+        );
+      });
+      after(demoDurationMs + 2000, () => hint.classList.add('leaving'));
+      after(demoDurationMs + 2700, () => hint.classList.remove('visible'));
+    }
+
+    replay.addEventListener('click', run);
+
+    document.querySelectorAll('[data-platform]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-platform]').forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        stage.classList.toggle('tv', button.dataset.platform === 'tv');
+        run();
+      });
+    });
+
+    document.querySelectorAll('[data-variant]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-variant]').forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        const key = button.dataset.variant;
+        currentVariant = key;
+        variantTitle.textContent = variants[key].title;
+        variantCopy.textContent = variants[key].copy;
+        verdict.textContent = variants[key].verdict;
+        run();
+      });
+    });
+
+    document.querySelectorAll('[data-outcome]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-outcome]').forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        currentOutcome = button.dataset.outcome;
+        run();
+      });
+    });
+
+    const requestedOutcome = new URLSearchParams(location.search).get('outcome');
+    if (requestedOutcome === 'failure') {
+      currentOutcome = 'failure';
+      document.querySelectorAll('[data-outcome]').forEach(button => {
+        button.classList.toggle('active', button.dataset.outcome === currentOutcome);
+      });
+    }
+
+    run();
+  </script>
+</body>
+</html>

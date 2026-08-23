@@ -5,6 +5,7 @@ class _StremioCard extends StatefulWidget {
   final bool isTelevision;
   final FocusNode focusNode;
   final bool hasBoundSource;
+  final bool showWatchedBadge;
 
   /// Focus ring override (Canvas cells pass white). Null keeps the classic
   /// violet-on-TV grammar.
@@ -46,6 +47,7 @@ class _StremioCard extends StatefulWidget {
     required this.isTelevision,
     required this.focusNode,
     required this.hasBoundSource,
+    this.showWatchedBadge = true,
     this.ringColor,
     this.progress,
     this.episodeLabel,
@@ -201,7 +203,7 @@ class _StremioCardState extends State<_StremioCard>
           ),
         ),
       ],
-      if (supportsWatched)
+      if (supportsWatched && widget.showWatchedBadge)
         Positioned(
           top: 7,
           right: 7,
@@ -214,8 +216,8 @@ class _StremioCardState extends State<_StremioCard>
       if (widget.hasBoundSource)
         Positioned(
           top: 8,
-          left: supportsWatched ? 8 : null,
-          right: supportsWatched ? null : 8,
+          left: supportsWatched && widget.showWatchedBadge ? 8 : null,
+          right: supportsWatched && widget.showWatchedBadge ? null : 8,
           child: Icon(
             Icons.bookmark_rounded,
             size: 18,
@@ -910,10 +912,11 @@ class _ArtPosterState extends State<_ArtPoster> {
   }
 }
 
-/// Catalog / Keyword segmented toggle.
+/// Catalog / Keyword / Lists mode selector.
 class _ModeToggle extends StatelessWidget {
   final _Mode mode;
   final bool isTelevision;
+  final bool listsAvailable;
 
   /// When true the two segments split the full available width (used when the
   /// toggle is stacked below the search box on narrow screens).
@@ -924,6 +927,12 @@ class _ModeToggle extends StatelessWidget {
   /// InkWell handles pointer taps and normal Tab traversal instead).
   final FocusNode? catalogNode;
   final FocusNode? keywordNode;
+  final FocusNode? listsNode;
+  final FocusNode? dropdownNode;
+
+  /// Use a single DPAD-capable dropdown when three labelled segments cannot
+  /// fit without squeezing or overflowing the search header.
+  final bool compact;
 
   /// Leave the toggle back to the search field (arrow-up, or arrow-left off the
   /// leftmost segment) / down into the board content.
@@ -933,13 +942,36 @@ class _ModeToggle extends StatelessWidget {
   const _ModeToggle({
     required this.mode,
     required this.isTelevision,
+    required this.listsAvailable,
     required this.onChanged,
     this.fullWidth = false,
     this.catalogNode,
     this.keywordNode,
+    this.listsNode,
+    this.dropdownNode,
+    this.compact = false,
     this.onLeaveToField,
     this.onLeaveToContent,
   });
+
+  List<_Mode> get _modes => [
+    _Mode.catalog,
+    if (ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch))
+      _Mode.keyword,
+    if (listsAvailable) _Mode.lists,
+  ];
+
+  FocusNode? _nodeFor(_Mode value) => switch (value) {
+    _Mode.catalog => catalogNode,
+    _Mode.keyword => keywordNode,
+    _Mode.lists => listsNode,
+  };
+
+  String _labelFor(_Mode value) => switch (value) {
+    _Mode.catalog => 'Catalog',
+    _Mode.keyword => 'Keyword',
+    _Mode.lists => 'Lists',
+  };
 
   /// DPAD handling for a focused segment: select switches mode, arrows move
   /// between the segments and out to the field (up/left) or content (down).
@@ -959,20 +991,18 @@ class _ModeToggle extends StatelessWidget {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
-      switch (value) {
-        case _Mode.keyword:
-          catalogNode?.requestFocus();
-        case _Mode.catalog:
-          onLeaveToField?.call();
+      final index = _modes.indexOf(value);
+      if (index > 0) {
+        _nodeFor(_modes[index - 1])?.requestFocus();
+      } else {
+        onLeaveToField?.call();
       }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
-      switch (value) {
-        case _Mode.catalog:
-          keywordNode?.requestFocus();
-        case _Mode.keyword:
-          break; // rightmost — nothing beyond
+      final index = _modes.indexOf(value);
+      if (index >= 0 && index < _modes.length - 1) {
+        _nodeFor(_modes[index + 1])?.requestFocus();
       }
       return KeyEventResult.handled;
     }
@@ -983,11 +1013,27 @@ class _ModeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
-    // With the keyword surface gated off for this profile there is no
-    // choice to present — the toggle disappears rather than showing a
-    // single working segment beside a dead one.
-    if (!ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
+    final modes = _modes;
+    if (modes.length <= 1) {
       return const SizedBox.shrink();
+    }
+    if (compact) {
+      return SizedBox(
+        width: fullWidth ? double.infinity : 156,
+        child: StremioDropdown<_Mode>(
+          label: 'Search',
+          value: modes.contains(mode) ? mode : modes.first,
+          options: [
+            for (final value in modes)
+              StremioDropdownOption(value, _labelFor(value)),
+          ],
+          onSelected: onChanged,
+          isTelevision: isTelevision,
+          focusNode: dropdownNode,
+          onUpArrowPressed: onLeaveToField,
+          onDownArrowPressed: onLeaveToContent,
+        ),
+      );
     }
     final catalog = _segment(
       context,
@@ -1001,6 +1047,17 @@ class _ModeToggle extends StatelessWidget {
       'Keyword',
       Icons.bolt_rounded,
     );
+    final lists = _segment(
+      context,
+      _Mode.lists,
+      'Lists',
+      Icons.playlist_play_rounded,
+    );
+    final segments = <Widget>[
+      catalog,
+      if (modes.contains(_Mode.keyword)) keyword,
+      if (modes.contains(_Mode.lists)) lists,
+    ];
     return Container(
       height: isTelevision ? 54 : 48,
       padding: const EdgeInsets.all(4),
@@ -1012,8 +1069,8 @@ class _ModeToggle extends StatelessWidget {
       child: Row(
         mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
         children: fullWidth
-            ? [Expanded(child: catalog), Expanded(child: keyword)]
-            : [catalog, keyword],
+            ? [for (final segment in segments) Expanded(child: segment)]
+            : segments,
       ),
     );
   }
@@ -1029,6 +1086,7 @@ class _ModeToggle extends StatelessWidget {
     final node = switch (value) {
       _Mode.catalog => catalogNode,
       _Mode.keyword => keywordNode,
+      _Mode.lists => listsNode,
     };
 
     Widget content(bool focused) => AnimatedContainer(

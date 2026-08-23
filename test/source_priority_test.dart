@@ -16,10 +16,29 @@ Torrent _t(String name, String source) => Torrent(
   source: source,
 );
 
+Torrent _direct(String name, String source) => Torrent(
+  rowid: 0,
+  infohash: name,
+  name: name,
+  sizeBytes: 0,
+  createdUnix: 0,
+  seeders: 0,
+  leechers: 0,
+  completed: 0,
+  scrapedDate: 0,
+  source: source,
+  streamType: StreamType.directUrl,
+  directUrl: 'https://example.com/$name',
+  hasRealInfoHash: false,
+);
+
 void main() {
   group('keyForSource', () {
     test('addon rows keep their stremio key, engines get the prefix', () {
-      expect(SourcePriority.keyForSource('stremio:Torrentio'), 'stremio:torrentio');
+      expect(
+        SourcePriority.keyForSource('stremio:Torrentio'),
+        'stremio:torrentio',
+      );
       expect(SourcePriority.keyForSource('bitsearch'), 'engine:bitsearch');
     });
 
@@ -59,6 +78,39 @@ void main() {
     test('unlisted providers keep relative order after listed ones', () {
       final out = SourcePriority.order(torrents, const ['engine:engineb']);
       expect(out.map((t) => t.name).toList(), ['c1', 'a1', 'b1', 'a2']);
+    });
+  });
+
+  group('directAddonLinksFirst', () {
+    test(
+      'puts addon direct links before torrents and preserves stable order',
+      () {
+        final input = [
+          _t('torrent-a', 'stremio:Comet'),
+          _t('engine', 'bitsearch'),
+          _direct('direct-a', 'stremio:Comet'),
+          _t('torrent-b', 'stremio:Torrentio'),
+          _direct('direct-b', 'stremio:Torrentio'),
+        ];
+
+        final out = SourcePriority.directAddonLinksFirst(input);
+
+        expect(out.map((t) => t.name), [
+          'direct-a',
+          'engine',
+          'torrent-a',
+          'direct-b',
+          'torrent-b',
+        ]);
+      },
+    );
+
+    test('does not promote non-addon direct URLs', () {
+      final input = [_t('torrent', 'stremio:Comet'), _direct('direct', 'web')];
+
+      final out = SourcePriority.directAddonLinksFirst(input);
+
+      expect(identical(out, input), isTrue);
     });
   });
 

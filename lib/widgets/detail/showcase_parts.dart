@@ -71,8 +71,7 @@ class ShowcaseMetrics {
   /// both the LayoutBuilder width and the input axis); the MediaQuery
   /// subtraction is the fallback for callers outside the Showcase page.
   factory ShowcaseMetrics.of(BuildContext c) {
-    final scoped =
-        c.dependOnInheritedWidgetOfExactType<ShowcaseMetricsScope>();
+    final scoped = c.dependOnInheritedWidgetOfExactType<ShowcaseMetricsScope>();
     if (scoped != null) return scoped.metrics;
     final mq = MediaQuery.of(c);
     final w = mq.size.width - mq.padding.horizontal;
@@ -152,13 +151,11 @@ const _ink = Color(0xFFFFFFFF);
 /// itself: an empty slot has to read as a slot. Pointing it at the ground would
 /// make loading cards dissolve into the background instead of holding their
 /// place.
-Color _slotFill(AppTheme app) =>
-    Color.lerp(app.home.bg, app.core.tx, 0.045)!;
+Color _slotFill(AppTheme app) => Color.lerp(app.home.bg, app.core.tx, 0.045)!;
 
 /// A contained mark — a channel logo — needs a lighter plate than a poster
 /// slot, or a dark logo lands on a dark card.
-Color _plateFill(AppTheme app) =>
-    Color.lerp(app.home.bg, app.core.tx, 0.10)!;
+Color _plateFill(AppTheme app) => Color.lerp(app.home.bg, app.core.tx, 0.10)!;
 
 /// The bed the ambient field is laid on, and the veil over it.
 ///
@@ -183,7 +180,6 @@ TextStyle _t(double size, {FontWeight w = FontWeight.w400, double a = 1}) =>
       height: 1.3,
     );
 
-
 /// OK/Select/Enter, as a remote sends them.
 ///
 /// `GestureDetector.onTap` never fires for a DPAD, so a focusable built only
@@ -191,7 +187,8 @@ TextStyle _t(double size, {FontWeight w = FontWeight.w400, double a = 1}) =>
 KeyEventResult _activate(KeyEvent e, VoidCallback? onTap) {
   if (e is! KeyDownEvent || onTap == null) return KeyEventResult.ignored;
   final k = e.logicalKey;
-  final isOk = k == LogicalKeyboardKey.enter ||
+  final isOk =
+      k == LogicalKeyboardKey.enter ||
       k == LogicalKeyboardKey.select ||
       k == LogicalKeyboardKey.space ||
       k == LogicalKeyboardKey.gameButtonA;
@@ -245,10 +242,7 @@ class _Hover extends StatefulWidget {
   /// (cast, Did You Know) where a pointer press does nothing.
   final MouseCursor cursor;
 
-  const _Hover({
-    required this.builder,
-    this.cursor = SystemMouseCursors.click,
-  });
+  const _Hover({required this.builder, this.cursor = SystemMouseCursors.click});
 
   @override
   State<_Hover> createState() => _HoverState();
@@ -351,60 +345,58 @@ class ShowcaseBackdropScrim extends StatelessWidget {
     final compact = ShowcaseMetrics.of(context).compact;
     final gradient = compact
         ? (thinned
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x2E000000),
-                  Color(0x00000000),
-                  Color(0x00000000),
-                  Color(0x66000000),
-                  Color(0xA8000000),
-                ],
-                stops: [0, 0.14, 0.6, 0.86, 1],
-              )
-            : const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x66000000),
-                  Color(0x00000000),
-                  Color(0x00000000),
-                  Color(0xB3000000),
-                  Color(0xE6000000),
-                ],
-                stops: [0, 0.18, 0.42, 0.78, 1],
-              ))
+              ? const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x2E000000),
+                    Color(0x00000000),
+                    Color(0x00000000),
+                    Color(0x66000000),
+                    Color(0xA8000000),
+                  ],
+                  stops: [0, 0.14, 0.6, 0.86, 1],
+                )
+              : const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x66000000),
+                    Color(0x00000000),
+                    Color(0x00000000),
+                    Color(0xB3000000),
+                    Color(0xE6000000),
+                  ],
+                  stops: [0, 0.18, 0.42, 0.78, 1],
+                ))
         : (thinned
-            ? const LinearGradient(
-                begin: Alignment(-1, -0.2),
-                end: Alignment(1, 0.2),
-                colors: [
-                  Color(0x9E000000),
-                  Color(0x66000000),
-                  Color(0x1C000000),
-                  Color(0x00000000),
-                ],
-                stops: [0, 0.26, 0.52, 0.68],
-              )
-            : const LinearGradient(
-                begin: Alignment(-1, -0.2),
-                end: Alignment(1, 0.2),
-                colors: [
-                  Color(0xE0000000),
-                  Color(0xA8000000),
-                  Color(0x2E000000),
-                  Color(0x00000000),
-                ],
-                stops: [0, 0.26, 0.52, 0.68],
-              ));
+              ? const LinearGradient(
+                  begin: Alignment(-1, -0.2),
+                  end: Alignment(1, 0.2),
+                  colors: [
+                    Color(0x9E000000),
+                    Color(0x66000000),
+                    Color(0x1C000000),
+                    Color(0x00000000),
+                  ],
+                  stops: [0, 0.26, 0.52, 0.68],
+                )
+              : const LinearGradient(
+                  begin: Alignment(-1, -0.2),
+                  end: Alignment(1, 0.2),
+                  colors: [
+                    Color(0xE0000000),
+                    Color(0xA8000000),
+                    Color(0x2E000000),
+                    Color(0x00000000),
+                  ],
+                  stops: [0, 0.26, 0.52, 0.68],
+                ));
     return IgnorePointer(
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 550),
         opacity: visible ? 1 : 0,
-        child: DecoratedBox(
-          decoration: BoxDecoration(gradient: gradient),
-        ),
+        child: DecoratedBox(decoration: BoxDecoration(gradient: gradient)),
       ),
     );
   }
@@ -500,43 +492,67 @@ class ShowcaseIdentity extends StatelessWidget {
     }
 
     if (m.onToggleMyWatchlist != null && actionNodes.isNotEmpty) {
-      actions.add(_Circle(
-        node: next(),
-        icon: m.inMyWatchlist
-            ? Icons.bookmark_rounded
-            : Icons.bookmark_add_outlined,
-        label: m.inMyWatchlist ? 'In Watchlist' : 'Watchlist',
-        onTap: m.onToggleMyWatchlist!,
-      ));
+      actions.add(
+        _Circle(
+          node: next(),
+          icon: m.inMyWatchlist
+              ? Icons.bookmark_rounded
+              : Icons.bookmark_add_outlined,
+          label: m.inMyWatchlist ? 'In Watchlist' : 'Watchlist',
+          onTap: m.onToggleMyWatchlist!,
+        ),
+      );
     }
     if (m.onTrackers != null && actionNodes.isNotEmpty) {
       // The screen assigns Trakt to the primary slot when it is connected;
       // otherwise this callback opens Simkl. Keep the mark coupled to that
       // same rule instead of presenting an ambiguous generic `+`.
-      actions.add(_Circle.mark(
-        node: next(),
-        mark: m.hasTrakt ? const TraktMark() : const SimklMark(),
-        label: m.hasTrakt ? 'Trakt' : 'Simkl',
-        onTap: m.onTrackers!,
-      ));
+      actions.add(
+        _Circle.mark(
+          node: next(),
+          mark: m.hasTrakt
+              ? const TraktMark()
+              : m.hasSimkl
+              ? const SimklMark()
+              : const MdblistMark(),
+          label: m.hasTrakt ? 'Trakt' : (m.hasSimkl ? 'Simkl' : 'MDBList'),
+          onTap: m.onTrackers!,
+        ),
+      );
     }
     if (m.onTrackersSecondary != null && i < actionNodes.length) {
       // The secondary slot only exists when both are connected. Trakt owns
       // the primary slot above, so this callback always opens Simkl.
-      actions.add(_Circle.mark(
-        node: next(),
-        mark: const SimklMark(),
-        label: 'Simkl',
-        onTap: m.onTrackersSecondary!,
-      ));
+      actions.add(
+        _Circle.mark(
+          node: next(),
+          mark: m.hasTrakt && m.hasSimkl
+              ? const SimklMark()
+              : const MdblistMark(),
+          label: m.hasTrakt && m.hasSimkl ? 'Simkl' : 'MDBList',
+          onTap: m.onTrackersSecondary!,
+        ),
+      );
+    }
+    if (m.onTrackersTertiary != null && i < actionNodes.length) {
+      actions.add(
+        _Circle.mark(
+          node: next(),
+          mark: const MdblistMark(),
+          label: 'MDBList',
+          onTap: m.onTrackersTertiary!,
+        ),
+      );
     }
     if (m.hasTrailer && i < actionNodes.length) {
-      actions.add(_Circle(
-        node: next(),
-        icon: Icons.theaters_rounded,
-        label: 'Trailer',
-        onTap: m.onTrailer,
-      ));
+      actions.add(
+        _Circle(
+          node: next(),
+          icon: Icons.theaters_rounded,
+          label: 'Trailer',
+          onTap: m.onTrailer,
+        ),
+      );
     }
     // The source BROWSE. For a movie: the full searchable list, where a tap
     // plays. For a series: the season-pack search — the same thing the More
@@ -544,20 +560,24 @@ class ShowcaseIdentity extends StatelessWidget {
     // Distinct from the Sources band below, whose cards and "Pin source"
     // tile land on the title-level BINDING manager.
     if (m.onBrowse != null && i < actionNodes.length) {
-      actions.add(_Circle(
-        node: next(),
-        icon: Icons.layers_rounded,
-        label: m.isMovie ? 'Sources' : 'Season packs',
-        onTap: m.onBrowse!,
-      ));
+      actions.add(
+        _Circle(
+          node: next(),
+          icon: Icons.layers_rounded,
+          label: m.isMovie ? 'Sources' : 'Season packs',
+          onTap: m.onBrowse!,
+        ),
+      );
     }
     if (m.onAppMenu != null && i < actionNodes.length) {
-      actions.add(_Circle(
-        node: next(),
-        icon: Icons.more_horiz_rounded,
-        label: 'More',
-        onTap: m.onAppMenu!,
-      ));
+      actions.add(
+        _Circle(
+          node: next(),
+          icon: Icons.more_horiz_rounded,
+          label: 'More',
+          onTap: m.onAppMenu!,
+        ),
+      );
     }
 
     // A FIRST SCREENFUL, not a block in the flow.
@@ -800,8 +820,11 @@ class _ExpandableSynopsisState extends State<_ExpandableSynopsis> {
           const SizedBox(height: 3),
           Text(
             _open ? 'LESS' : 'MORE',
-            style: _t(10.5, w: FontWeight.w700, a: 0.9)
-                .copyWith(letterSpacing: 0.8),
+            style: _t(
+              10.5,
+              w: FontWeight.w700,
+              a: 0.9,
+            ).copyWith(letterSpacing: 0.8),
           ),
         ],
       ),
@@ -824,7 +847,9 @@ class _Chip extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(
-            horizontal: 7.5 * m.k, vertical: 3.5 * m.k),
+          horizontal: 7.5 * m.k,
+          vertical: 3.5 * m.k,
+        ),
         child: Text(label, style: _t(9.5 * m.k, w: FontWeight.w600)),
       ),
     );
@@ -860,11 +885,23 @@ class _MetaLine extends StatelessWidget {
         ],
         if (m.hasTrakt) ...[
           const SizedBox(width: 8),
-          _TrackerMark(letter: 'T', on: m.traktTracked, tint: const Color(0xFFED1C24)),
+          _TrackerMark(
+            letter: 'T',
+            on: m.traktTracked,
+            tint: const Color(0xFFED1C24),
+          ),
         ],
         if (m.hasSimkl) ...[
           const SizedBox(width: 5),
-          _TrackerMark(letter: 'S', on: m.simklTracked, tint: const Color(0xFF0B87C4)),
+          _TrackerMark(
+            letter: 'S',
+            on: m.simklTracked,
+            tint: const Color(0xFF0B87C4),
+          ),
+        ],
+        if (m.hasMdblist) ...[
+          const SizedBox(width: 5),
+          _TrackerMark(letter: 'M', on: m.mdblistTracked, tint: kMdblistPurple),
         ],
       ],
     );
@@ -876,7 +913,11 @@ class _TrackerMark extends StatelessWidget {
   final bool on;
   final Color tint;
 
-  const _TrackerMark({required this.letter, required this.on, required this.tint});
+  const _TrackerMark({
+    required this.letter,
+    required this.on,
+    required this.tint,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -918,8 +959,7 @@ class _RatingBox extends StatelessWidget {
         border: Border.all(color: _ink.withValues(alpha: 0.45), width: 0.75),
         borderRadius: BorderRadius.circular(2.5 * k),
       ),
-      child:
-          Text('★ ${value.toStringAsFixed(1)}', style: _t(7.5 * k, a: 0.9)),
+      child: Text('★ ${value.toStringAsFixed(1)}', style: _t(7.5 * k, a: 0.9)),
     );
   }
 }
@@ -965,8 +1005,12 @@ class _HonorsLine extends StatelessWidget {
     );
   }
 
-  Widget _honorChip(ShowcaseMetrics m, String label, String rank,
-      {String? drift}) {
+  Widget _honorChip(
+    ShowcaseMetrics m,
+    String label,
+    String rank, {
+    String? drift,
+  }) {
     final compact = m.compact;
     final size = compact ? 9.5 : 7.5 * m.k;
     return Container(
@@ -983,19 +1027,22 @@ class _HonorsLine extends StatelessWidget {
         children: [
           Text(
             '$label ',
-            style: _t(size, w: FontWeight.w700, a: 0.62)
-                .copyWith(letterSpacing: 0.8),
+            style: _t(
+              size,
+              w: FontWeight.w700,
+              a: 0.62,
+            ).copyWith(letterSpacing: 0.8),
           ),
           Text(
             rank,
-            style: _t(size, w: FontWeight.w700, a: 0.95)
-                .copyWith(letterSpacing: 0.4),
+            style: _t(
+              size,
+              w: FontWeight.w700,
+              a: 0.95,
+            ).copyWith(letterSpacing: 0.4),
           ),
           if (drift != null)
-            Text(
-              ' $drift',
-              style: _t(size, w: FontWeight.w700, a: 0.45),
-            ),
+            Text(' $drift', style: _t(size, w: FontWeight.w700, a: 0.45)),
         ],
       ),
     );
@@ -1017,8 +1064,10 @@ class _TechLine extends StatelessWidget {
       if ((model.certificate ?? '').isNotEmpty) model.certificate!,
     ];
     if (bits.isEmpty) return const SizedBox.shrink();
-    return Text(bits.join('  ·  '),
-        style: _t(9.5 * ShowcaseMetrics.of(context).k, a: 0.7));
+    return Text(
+      bits.join('  ·  '),
+      style: _t(9.5 * ShowcaseMetrics.of(context).k, a: 0.7),
+    );
   }
 }
 
@@ -1044,62 +1093,63 @@ class _PrimaryState extends State<_Primary> {
 
   @override
   Widget build(BuildContext context) => Focus(
-        focusNode: widget.node,
-        autofocus: true,
-        onFocusChange: (v) {
-          setState(() => _f = v);
-          if (v) widget.onFocused();
-        },
-        // By key IDENTITY, not by keyLabel string — a remote's Select has no
-        // label to match and would silently never activate.
-        onKeyEvent: (_, e) => _activate(e, widget.onTap),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Builder(builder: (context) {
-            // TV draws at the mock's 960-canvas numbers (k = 1); a wide touch
-            // surface scales them back to proportion, and a phone needs a real
-            // finger target and the phone type ramp — the Apple reference
-            // pill is 42pt with 15pt text, and SOLID white at rest (there is
-            // no focus state to flip through on touch).
-            final m = ShowcaseMetrics.of(context);
-            final compact = m.compact;
-            final solid = _f || compact;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              height: compact ? 44 : 30 * m.k,
-              padding:
-                  EdgeInsets.symmetric(horizontal: compact ? 24 : 17 * m.k),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                // The focus flip: ghost at rest, SOLID WHITE on black when
-                // focused. The reference's primary is the one thing that does
-                // not merely lift.
-                color: solid ? _ink : _ink.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(compact ? 22 : 15 * m.k),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.play_arrow_rounded,
-                    size: compact ? 20 : 14 * m.k,
+    focusNode: widget.node,
+    autofocus: true,
+    onFocusChange: (v) {
+      setState(() => _f = v);
+      if (v) widget.onFocused();
+    },
+    // By key IDENTITY, not by keyLabel string — a remote's Select has no
+    // label to match and would silently never activate.
+    onKeyEvent: (_, e) => _activate(e, widget.onTap),
+    child: GestureDetector(
+      onTap: widget.onTap,
+      child: Builder(
+        builder: (context) {
+          // TV draws at the mock's 960-canvas numbers (k = 1); a wide touch
+          // surface scales them back to proportion, and a phone needs a real
+          // finger target and the phone type ramp — the Apple reference
+          // pill is 42pt with 15pt text, and SOLID white at rest (there is
+          // no focus state to flip through on touch).
+          final m = ShowcaseMetrics.of(context);
+          final compact = m.compact;
+          final solid = _f || compact;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            height: compact ? 44 : 30 * m.k,
+            padding: EdgeInsets.symmetric(horizontal: compact ? 24 : 17 * m.k),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              // The focus flip: ghost at rest, SOLID WHITE on black when
+              // focused. The reference's primary is the one thing that does
+              // not merely lift.
+              color: solid ? _ink : _ink.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(compact ? 22 : 15 * m.k),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.play_arrow_rounded,
+                  size: compact ? 20 : 14 * m.k,
+                  color: solid ? Colors.black : _ink,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontSize: compact ? 15 : 10.5 * m.k,
+                    fontWeight: FontWeight.w600,
                     color: solid ? Colors.black : _ink,
                   ),
-                  const SizedBox(width: 5),
-                  Text(
-                    widget.label,
-                    style: TextStyle(
-                      fontSize: compact ? 15 : 10.5 * m.k,
-                      fontWeight: FontWeight.w600,
-                      color: solid ? Colors.black : _ink,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ),
-      );
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
 }
 
 class _Circle extends StatefulWidget {
@@ -1133,89 +1183,91 @@ class _CircleState extends State<_Circle> {
 
   @override
   Widget build(BuildContext context) => Focus(
-        focusNode: widget.node,
-        onFocusChange: (v) {
-          setState(() => _f = v);
-          if (v) _keepVisible(context);
-        },
-        // Without this the tracker, trailer and More buttons focus correctly
-        // and do NOTHING on a remote.
-        onKeyEvent: (_, e) => _activate(e, widget.onTap),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _h = true),
-          onExit: (_) => setState(() => _h = false),
-          child: GestureDetector(
-            onTap: widget.onTap,
-            child: Builder(builder: (context) {
-              final m = ShowcaseMetrics.of(context);
-              final compact = m.compact;
-              final d = compact ? 44.0 : 26.0 * m.k;
-              // Hover and focus both light the pill: DPAD/keyboard land on
-              // `_f`, a desktop pointer on `_h` — same treatment either way.
-              final lit = _f || _h;
-              final glyph = widget.mark ??
-                  Icon(
-                    widget.icon,
-                    size: compact ? 20 : 13 * m.k,
-                    color: lit ? Colors.black : _ink,
-                  );
-              // Lit (non-compact): the circle stretches into a pill that
-              // names itself — the tooltip a DPAD user can actually read.
-              // Compact stays a plain circle — touch has no dwell, and a pill
-              // popping under a finger would just shove its siblings — so it
-              // falls back to the platform's long-press Tooltip below.
-              final labelled = lit && !compact;
-              final body = AnimatedContainer(
+    focusNode: widget.node,
+    onFocusChange: (v) {
+      setState(() => _f = v);
+      if (v) _keepVisible(context);
+    },
+    // Without this the tracker, trailer and More buttons focus correctly
+    // and do NOTHING on a remote.
+    onKeyEvent: (_, e) => _activate(e, widget.onTap),
+    child: MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _h = true),
+      onExit: (_) => setState(() => _h = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Builder(
+          builder: (context) {
+            final m = ShowcaseMetrics.of(context);
+            final compact = m.compact;
+            final d = compact ? 44.0 : 26.0 * m.k;
+            // Hover and focus both light the pill: DPAD/keyboard land on
+            // `_f`, a desktop pointer on `_h` — same treatment either way.
+            final lit = _f || _h;
+            final glyph =
+                widget.mark ??
+                Icon(
+                  widget.icon,
+                  size: compact ? 20 : 13 * m.k,
+                  color: lit ? Colors.black : _ink,
+                );
+            // Lit (non-compact): the circle stretches into a pill that
+            // names itself — the tooltip a DPAD user can actually read.
+            // Compact stays a plain circle — touch has no dwell, and a pill
+            // popping under a finger would just shove its siblings — so it
+            // falls back to the platform's long-press Tooltip below.
+            final labelled = lit && !compact;
+            final body = AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              height: d,
+              decoration: BoxDecoration(
+                color: lit ? _ink : _ink.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(d / 2),
+              ),
+              child: AnimatedSize(
                 duration: const Duration(milliseconds: 140),
-                height: d,
-                decoration: BoxDecoration(
-                  color: lit ? _ink : _ink.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(d / 2),
-                ),
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 140),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.centerLeft,
-                  child: labelled
-                      ? Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 10 * m.k),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              glyph,
-                              SizedBox(width: 6 * m.k),
-                              Text(
-                                widget.label,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 11 * m.k,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.2,
-                                ),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.centerLeft,
+                child: labelled
+                    ? Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10 * m.k),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            glyph,
+                            SizedBox(width: 6 * m.k),
+                            Text(
+                              widget.label,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 11 * m.k,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
                               ),
-                            ],
-                          ),
-                        )
-                      : SizedBox(
-                          width: d,
-                          height: d,
-                          child: Center(child: glyph),
+                            ),
+                          ],
                         ),
-                ),
-              );
-              if (!compact) return body;
-              return Tooltip(
-                message: widget.label,
-                triggerMode: TooltipTriggerMode.longPress,
-                child: body,
-              );
-            }),
-          ),
+                      )
+                    : SizedBox(
+                        width: d,
+                        height: d,
+                        child: Center(child: glyph),
+                      ),
+              ),
+            );
+            if (!compact) return body;
+            return Tooltip(
+              message: widget.label,
+              triggerMode: TooltipTriggerMode.longPress,
+              child: body,
+            );
+          },
         ),
-      );
+      ),
+    ),
+  );
 }
 
 // ── seasons ────────────────────────────────────────────────────────────────
@@ -1344,8 +1396,11 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
                 style: _t(14, w: FontWeight.w600),
               ),
               const SizedBox(width: 7),
-              const Icon(Icons.keyboard_arrow_down_rounded,
-                  size: 17, color: Colors.white70),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 17,
+                color: Colors.white70,
+              ),
             ],
           ),
         ),
@@ -1410,8 +1465,11 @@ class _SeasonPillState extends State<_SeasonPill> {
             ),
             child: Text(
               widget.label,
-              style: _t(12.5 * k,
-                  w: FontWeight.w600, a: widget.active || _f ? 1 : 0.55),
+              style: _t(
+                12.5 * k,
+                w: FontWeight.w600,
+                a: widget.active || _f ? 1 : 0.55,
+              ),
             ),
           ),
         ),
@@ -1490,10 +1548,8 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                         fit: BoxFit.cover,
                         cacheManager: DebrifyImageCache.manager,
                         memCacheWidth: 500,
-                        placeholder: (_, __) =>
-                            ColoredBox(color: slot),
-                        errorWidget: (_, __, ___) =>
-                            ColoredBox(color: slot),
+                        placeholder: (_, __) => ColoredBox(color: slot),
+                        errorWidget: (_, __, ___) => ColoredBox(color: slot),
                       )
                     else
                       ColoredBox(color: slot),
@@ -1509,8 +1565,11 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                       const Positioned(
                         right: 6,
                         top: 6,
-                        child: Icon(Icons.check_rounded,
-                            size: 13, color: Colors.white),
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 13,
+                          color: Colors.white,
+                        ),
                       ),
                     if (p > 0 && p < 100)
                       Positioned(
@@ -1521,8 +1580,9 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                           value: p / 100,
                           minHeight: 2,
                           backgroundColor: Colors.black.withValues(alpha: 0.4),
-                          valueColor:
-                              const AlwaysStoppedAnimation(Color(0xFFFFFFFF)),
+                          valueColor: const AlwaysStoppedAnimation(
+                            Color(0xFFFFFFFF),
+                          ),
                         ),
                       ),
                     if ((episode.runtime ?? 0) > 0)
@@ -1562,12 +1622,12 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                 // the artwork). Trakt backfills ratings addons omit — see
                 // EpisodesPanel._enrichEpisodeRatings — and 0 means unrated.
                 Text(
-                    (episode.rating ?? 0) > 0
-                        ? 'EPISODE ${episode.number} · ★ '
+                  (episode.rating ?? 0) > 0
+                      ? 'EPISODE ${episode.number} · ★ '
                             '${episode.rating!.toStringAsFixed(1)}'
-                        : 'EPISODE ${episode.number}',
-                    style:
-                        _t(9.5 * m.k, a: 0.55).copyWith(letterSpacing: 0.4)),
+                      : 'EPISODE ${episode.number}',
+                  style: _t(9.5 * m.k, a: 0.55).copyWith(letterSpacing: 0.4),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   episode.title,
@@ -1586,8 +1646,10 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                   ),
                 ),
                 if ((episode.firstAired ?? '').isNotEmpty)
-                  Text(episode.firstAired!.split('T').first,
-                      style: _t(9.5 * m.k, a: 0.5)),
+                  Text(
+                    episode.firstAired!.split('T').first,
+                    style: _t(9.5 * m.k, a: 0.5),
+                  ),
               ],
             ),
           ),
@@ -1651,46 +1713,48 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                 width: m.epCell,
                 height: m.stillH,
                 child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (url != null && url.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: url,
-                      fit: BoxFit.cover,
-                      cacheManager: DebrifyImageCache.manager,
-                      memCacheWidth: 500,
-                      placeholder: (_, __) => ColoredBox(color: slot),
-                      errorWidget: (_, __, ___) => ColoredBox(color: slot),
-                    ),
-                  if (watched)
-                    ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
-                  if (isNext && !watched)
-                    Positioned(
-                      left: 7,
-                      top: 7,
-                      child: _Badge(label: 'UP NEXT'),
-                    ),
-                  if (watched)
-                    const Positioned(
-                      right: 7,
-                      top: 7,
-                      child: Icon(Icons.check_rounded,
-                          size: 14, color: Colors.white),
-                    ),
-                  if (p > 0 && p < 100)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: LinearProgressIndicator(
-                        value: p / 100,
-                        minHeight: 3,
-                        backgroundColor:
-                            Colors.black.withValues(alpha: 0.4),
-                        valueColor: AlwaysStoppedAnimation(app.core.accent),
+                  fit: StackFit.expand,
+                  children: [
+                    if (url != null && url.isNotEmpty)
+                      CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
+                        cacheManager: DebrifyImageCache.manager,
+                        memCacheWidth: 500,
+                        placeholder: (_, __) => ColoredBox(color: slot),
+                        errorWidget: (_, __, ___) => ColoredBox(color: slot),
                       ),
-                    ),
-                ],
+                    if (watched)
+                      ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
+                    if (isNext && !watched)
+                      Positioned(
+                        left: 7,
+                        top: 7,
+                        child: _Badge(label: 'UP NEXT'),
+                      ),
+                    if (watched)
+                      const Positioned(
+                        right: 7,
+                        top: 7,
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    if (p > 0 && p < 100)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: LinearProgressIndicator(
+                          value: p / 100,
+                          minHeight: 3,
+                          backgroundColor: Colors.black.withValues(alpha: 0.4),
+                          valueColor: AlwaysStoppedAnimation(app.core.accent),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1737,16 +1801,17 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                           const fs = 11.5;
                           final line =
                               MediaQuery.textScalerOf(context).scale(fs) * 1.4;
-                          final lines =
-                              (c.maxHeight / line).floor().clamp(1, 3);
+                          final lines = (c.maxHeight / line).floor().clamp(
+                            1,
+                            3,
+                          );
                           return Align(
                             alignment: Alignment.topLeft,
                             child: Text(
                               episode.overview ?? '',
                               maxLines: lines,
                               overflow: TextOverflow.ellipsis,
-                              style:
-                                  _t(fs, a: 0.55).copyWith(height: 1.4),
+                              style: _t(fs, a: 0.55).copyWith(height: 1.4),
                             ),
                           );
                         },
@@ -1755,18 +1820,25 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                     Row(
                       children: [
                         if ((episode.runtime ?? 0) > 0) ...[
-                          const Icon(Icons.play_arrow_rounded,
-                              size: 13, color: Colors.white70),
+                          const Icon(
+                            Icons.play_arrow_rounded,
+                            size: 13,
+                            color: Colors.white70,
+                          ),
                           const SizedBox(width: 3),
                           Text('${episode.runtime}m', style: _t(11.5, a: 0.7)),
                         ] else if ((episode.firstAired ?? '').isNotEmpty)
-                          Text(episode.firstAired!.split('T').first,
-                              style: _t(11.5, a: 0.5)),
+                          Text(
+                            episode.firstAired!.split('T').first,
+                            style: _t(11.5, a: 0.5),
+                          ),
                         // Same monochrome footer grammar as the runtime.
                         if ((episode.rating ?? 0) > 0) ...[
                           const SizedBox(width: 8),
-                          Text('★ ${episode.rating!.toStringAsFixed(1)}',
-                              style: _t(11.5, a: 0.7)),
+                          Text(
+                            '★ ${episode.rating!.toStringAsFixed(1)}',
+                            style: _t(11.5, a: 0.7),
+                          ),
                         ],
                         const Spacer(),
                         _KebabButton(onTap: onOptions),
@@ -1797,8 +1869,11 @@ class _KebabButton extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: EdgeInsets.all(6 * k),
-        child:
-            Icon(Icons.more_vert_rounded, size: 17 * k, color: Colors.white70),
+        child: Icon(
+          Icons.more_vert_rounded,
+          size: 17 * k,
+          color: Colors.white70,
+        ),
       ),
     );
   }
@@ -1845,11 +1920,8 @@ class ShowcaseCast extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: m.gutter),
         itemCount: cast.length,
         separatorBuilder: (_, __) => SizedBox(width: m.castGap),
-        itemBuilder: (context, i) => _CastTile(
-          member: cast[i],
-          node: nodes[i],
-          size: m.circle,
-        ),
+        itemBuilder: (context, i) =>
+            _CastTile(member: cast[i], node: nodes[i], size: m.circle),
       ),
     );
   }
@@ -1972,40 +2044,33 @@ class ShowcaseSources extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Band(
-        title: 'Sources',
-        height: 96 * ShowcaseMetrics.of(context).k,
-        child: ListView.separated(
-          clipBehavior: Clip.none,
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(
-              horizontal: ShowcaseMetrics.of(context).gutter),
-          itemCount: sources.length + 1 + (onBrowseAll != null ? 1 : 0),
-          separatorBuilder: (_, __) =>
-              SizedBox(width: ShowcaseMetrics.of(context).srcGap),
-          itemBuilder: (context, i) {
-            if (i == sources.length) {
-              return _SourceCard(
-                node: nodes[i],
-                onTap: onOpen,
-                add: true,
-              );
-            }
-            if (i == sources.length + 1) {
-              return _SourceCard(
-                node: nodes[i],
-                onTap: onBrowseAll,
-                add: true,
-                addLabel: browseAllLabel,
-              );
-            }
-            return _SourceCard(
-              node: nodes[i],
-              onTap: onOpen,
-              source: sources[i],
-            );
-          },
-        ),
-      );
+    title: 'Sources',
+    height: 96 * ShowcaseMetrics.of(context).k,
+    child: ListView.separated(
+      clipBehavior: Clip.none,
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.symmetric(
+        horizontal: ShowcaseMetrics.of(context).gutter,
+      ),
+      itemCount: sources.length + 1 + (onBrowseAll != null ? 1 : 0),
+      separatorBuilder: (_, __) =>
+          SizedBox(width: ShowcaseMetrics.of(context).srcGap),
+      itemBuilder: (context, i) {
+        if (i == sources.length) {
+          return _SourceCard(node: nodes[i], onTap: onOpen, add: true);
+        }
+        if (i == sources.length + 1) {
+          return _SourceCard(
+            node: nodes[i],
+            onTap: onBrowseAll,
+            add: true,
+            addLabel: browseAllLabel,
+          );
+        }
+        return _SourceCard(node: nodes[i], onTap: onOpen, source: sources[i]);
+      },
+    ),
+  );
 }
 
 class _SourceCard extends StatefulWidget {
@@ -2068,7 +2133,9 @@ class _SourceCardState extends State<_SourceCard> {
                 }(),
                 height: 66 * mm.k,
                 padding: EdgeInsets.symmetric(
-                    horizontal: 10 * mm.k, vertical: 9 * mm.k),
+                  horizontal: 10 * mm.k,
+                  vertical: 9 * mm.k,
+                ),
                 decoration: BoxDecoration(
                   color: widget.add ? null : _ink.withValues(alpha: 0.07),
                   border: Border.all(
@@ -2078,8 +2145,10 @@ class _SourceCardState extends State<_SourceCard> {
                 ),
                 child: widget.add
                     ? Center(
-                        child: Text(widget.addLabel,
-                            style: _t(10.5 * mm.k, a: 0.66)),
+                        child: Text(
+                          widget.addLabel,
+                          style: _t(10.5 * mm.k, a: 0.66),
+                        ),
                       )
                     : Row(
                         children: [
@@ -2225,21 +2294,25 @@ class _PosterState extends State<_Poster> {
 
 // ── parents guide ──────────────────────────────────────────────────────────
 
-List<ParentsGuideItem> _plainOf(ParentsGuideCategory c) =>
-    [for (final i in c.items) if (!i.isSpoiler) i];
+List<ParentsGuideItem> _plainOf(ParentsGuideCategory c) => [
+  for (final i in c.items)
+    if (!i.isSpoiler) i,
+];
 
-List<ParentsGuideItem> _spoilersOf(ParentsGuideCategory c) =>
-    [for (final i in c.items) if (i.isSpoiler) i];
+List<ParentsGuideItem> _spoilersOf(ParentsGuideCategory c) => [
+  for (final i in c.items)
+    if (i.isSpoiler) i,
+];
 
 /// Severity level for the four-segment meter. Unknown wordings render the
 /// word with an empty meter rather than guessing a level.
 int _severityLevel(String severity) => switch (severity.toLowerCase()) {
-      'none' => 1,
-      'mild' => 2,
-      'moderate' => 3,
-      'severe' => 4,
-      _ => 0,
-    };
+  'none' => 1,
+  'mild' => 2,
+  'moderate' => 3,
+  'severe' => 4,
+  _ => 0,
+};
 
 /// Small-caps severity word plus the segment meter — monochrome, per the
 /// approved mock: no traffic-light chips against the artwork.
@@ -2258,8 +2331,11 @@ class _SeverityMark extends StatelessWidget {
       children: [
         Text(
           severity.toUpperCase(),
-          style: _t(compact ? 9.5 : 7.5 * m.k, w: FontWeight.w700, a: 0.6)
-              .copyWith(letterSpacing: 1.0),
+          style: _t(
+            compact ? 9.5 : 7.5 * m.k,
+            w: FontWeight.w700,
+            a: 0.6,
+          ).copyWith(letterSpacing: 1.0),
         ),
         SizedBox(width: compact ? 8 : 6 * m.k),
         for (var i = 1; i <= 4; i++) ...[
@@ -2425,40 +2501,38 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
           for (final item in _plainOf(cat)) _entry(item.text, 10.0 * k),
           if (_spoilers)
             for (final item in spoilers) _entry(item.text, 10.0 * k),
-          if (spoilers.isNotEmpty) _spoilerRow(spoilers.length, _spoilers, () {
-            setState(() => _spoilers = !_spoilers);
-          }),
+          if (spoilers.isNotEmpty)
+            _spoilerRow(spoilers.length, _spoilers, () {
+              setState(() => _spoilers = !_spoilers);
+            }),
         ],
       ),
     );
   }
 
   Widget _entry(String text, double size) => Padding(
-        padding: const EdgeInsets.only(top: 5),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(top: size * 0.55),
-              child: Container(
-                width: 4,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: _ink.withValues(alpha: 0.28),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+    padding: const EdgeInsets.only(top: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: size * 0.55),
+          child: Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: _ink.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                text,
-                style: _t(size, a: 0.78).copyWith(height: 1.5),
-              ),
-            ),
-          ],
+          ),
         ),
-      );
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(text, style: _t(size, a: 0.78).copyWith(height: 1.5)),
+        ),
+      ],
+    ),
+  );
 
   Widget _spoilerRow(int count, bool shown, VoidCallback onToggle) {
     final m = ShowcaseMetrics.of(context);
@@ -2488,8 +2562,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
                 vertical: compact ? 4 : 2.5 * m.k,
               ),
               decoration: BoxDecoration(
-                border:
-                    Border.all(color: _ink.withValues(alpha: 0.24)),
+                border: Border.all(color: _ink.withValues(alpha: 0.24)),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
@@ -2518,8 +2591,10 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
         const SizedBox(height: 20),
         Padding(
           padding: EdgeInsets.only(left: m.gutter, bottom: 10),
-          child: Text('Parents Guide',
-              style: _t(19, w: FontWeight.w600, a: 0.84)),
+          child: Text(
+            'Parents Guide',
+            style: _t(19, w: FontWeight.w600, a: 0.84),
+          ),
         ),
         for (var i = 0; i < _cats.length; i++)
           Padding(
@@ -2555,8 +2630,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(cat.label,
-                        style: _t(14, w: FontWeight.w600)),
+                    child: Text(cat.label, style: _t(14, w: FontWeight.w600)),
                   ),
                   _SeverityMark(severity: cat.severity),
                   const SizedBox(width: 10),
@@ -2640,13 +2714,17 @@ class _GuideCardState extends State<_GuideCard> {
                 width: m.guideW,
                 height: m.guideH,
                 padding: EdgeInsets.fromLTRB(
-                    11 * m.k, 10 * m.k, 11 * m.k, 9 * m.k),
+                  11 * m.k,
+                  10 * m.k,
+                  11 * m.k,
+                  9 * m.k,
+                ),
                 decoration: BoxDecoration(
-                  color: _ink.withValues(
-                      alpha: widget.selected ? 0.12 : 0.07),
+                  color: _ink.withValues(alpha: widget.selected ? 0.12 : 0.07),
                   border: Border.all(
                     color: _ink.withValues(
-                        alpha: widget.selected ? 0.22 : 0.09),
+                      alpha: widget.selected ? 0.22 : 0.09,
+                    ),
                   ),
                   borderRadius: BorderRadius.circular(7 * m.k),
                 ),
@@ -2757,8 +2835,8 @@ class _UniverseCardState extends State<_UniverseCard> {
         setState(() => _f = v);
         if (v) _keepVisible(context);
       },
-      onKeyEvent: (_, e) => _activate(
-          e, widget.onOpen == null ? null : () => widget.onOpen!(u)),
+      onKeyEvent: (_, e) =>
+          _activate(e, widget.onOpen == null ? null : () => widget.onOpen!(u)),
       child: _Hover(
         builder: (context, hovered) => GestureDetector(
           onTap: () => widget.onOpen?.call(u),
@@ -2784,8 +2862,7 @@ class _UniverseCardState extends State<_UniverseCard> {
                                 fit: BoxFit.cover,
                                 cacheManager: DebrifyImageCache.manager,
                                 memCacheWidth: 300,
-                                placeholder: (_, __) =>
-                                    ColoredBox(color: slot),
+                                placeholder: (_, __) => ColoredBox(color: slot),
                                 errorWidget: (_, __, ___) =>
                                     ColoredBox(color: slot),
                               )
@@ -2798,17 +2875,22 @@ class _UniverseCardState extends State<_UniverseCard> {
                     u.relation.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(m.compact ? 9 : 7 * m.k,
-                            w: FontWeight.w700, a: 0.42)
-                        .copyWith(letterSpacing: 1.0),
+                    style: _t(
+                      m.compact ? 9 : 7 * m.k,
+                      w: FontWeight.w700,
+                      a: 0.42,
+                    ).copyWith(letterSpacing: 1.0),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     u.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(m.compact ? 12 : 10 * m.k,
-                        w: FontWeight.w600, a: 0.9),
+                    style: _t(
+                      m.compact ? 12 : 10 * m.k,
+                      w: FontWeight.w600,
+                      a: 0.9,
+                    ),
                   ),
                   if (u.yearLabel.isNotEmpty)
                     Text(
@@ -2908,8 +2990,11 @@ class _DykCardState extends State<_DykCard> {
               width: m.dykW,
               height: m.dykH,
               padding: EdgeInsets.fromLTRB(
-                  m.compact ? 15 : 13 * m.k, m.compact ? 13 : 11 * m.k,
-                  m.compact ? 15 : 13 * m.k, m.compact ? 13 : 11 * m.k),
+                m.compact ? 15 : 13 * m.k,
+                m.compact ? 13 : 11 * m.k,
+                m.compact ? 15 : 13 * m.k,
+                m.compact ? 13 : 11 * m.k,
+              ),
               decoration: BoxDecoration(
                 color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.07),
                 border: Border.all(color: _ink.withValues(alpha: 0.09)),
@@ -2920,9 +3005,11 @@ class _DykCardState extends State<_DykCard> {
                 children: [
                   Text(
                     e.kind.toUpperCase(),
-                    style: _t(m.compact ? 10 : 7.5 * m.k,
-                            w: FontWeight.w700, a: 0.42)
-                        .copyWith(letterSpacing: 1.2),
+                    style: _t(
+                      m.compact ? 10 : 7.5 * m.k,
+                      w: FontWeight.w700,
+                      a: 0.42,
+                    ).copyWith(letterSpacing: 1.2),
                   ),
                   SizedBox(height: m.compact ? 8 : 6),
                   Expanded(
@@ -2930,13 +3017,16 @@ class _DykCardState extends State<_DykCard> {
                       quote ? '“${e.text}”' : e.text,
                       maxLines: m.compact ? 6 : 7,
                       overflow: TextOverflow.ellipsis,
-                      style: _t(m.compact ? 12.5 : 9.5 * m.k,
-                              a: quote ? 0.88 : 0.8)
-                          .copyWith(
-                        height: 1.5,
-                        fontStyle:
-                            quote ? FontStyle.italic : FontStyle.normal,
-                      ),
+                      style:
+                          _t(
+                            m.compact ? 12.5 : 9.5 * m.k,
+                            a: quote ? 0.88 : 0.8,
+                          ).copyWith(
+                            height: 1.5,
+                            fontStyle: quote
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
                     ),
                   ),
                 ],
@@ -2997,9 +3087,11 @@ class _DykMoreCardState extends State<_DykMoreCard> {
                   const SizedBox(height: 3),
                   Text(
                     'ON IMDb',
-                    style: _t(m.compact ? 9 : 7 * m.k,
-                            w: FontWeight.w700, a: 0.4)
-                        .copyWith(letterSpacing: 1.1),
+                    style: _t(
+                      m.compact ? 9 : 7 * m.k,
+                      w: FontWeight.w700,
+                      a: 0.4,
+                    ).copyWith(letterSpacing: 1.1),
                   ),
                 ],
               ),
@@ -3047,15 +3139,21 @@ class _Band extends StatelessWidget {
             children: [
               Text(
                 title,
-                style:
-                    _t(m.compact ? 19 : 13 * m.k, w: FontWeight.w600, a: 0.84),
+                style: _t(
+                  m.compact ? 19 : 13 * m.k,
+                  w: FontWeight.w600,
+                  a: 0.84,
+                ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(width: 9),
                 Text(
                   subtitle!,
-                  style: _t(m.compact ? 11.5 : 8.5 * m.k,
-                      w: FontWeight.w600, a: 0.35),
+                  style: _t(
+                    m.compact ? 11.5 : 8.5 * m.k,
+                    w: FontWeight.w600,
+                    a: 0.35,
+                  ),
                 ),
               ],
             ],
@@ -3066,7 +3164,6 @@ class _Band extends StatelessWidget {
     );
   }
 }
-
 
 /// A band that has nothing to show yet, or could not load.
 ///
@@ -3099,11 +3196,7 @@ class ShowcaseBandNote extends StatelessWidget {
           Text(text, style: _t(11.5 * m.k, a: 0.66)),
           if (actionLabel != null && onAction != null) ...[
             const SizedBox(width: 12),
-            _RetryChip(
-              label: actionLabel!,
-              onTap: onAction!,
-              node: actionNode,
-            ),
+            _RetryChip(label: actionLabel!, onTap: onAction!, node: actionNode),
           ],
         ],
       ),
@@ -3156,7 +3249,6 @@ class _RetryChipState extends State<_RetryChip> {
   }
 }
 
-
 /// The Details band — Creator/Country/Language/Studio/Box Office, and awards.
 ///
 /// Reference material, not a row of verbs, so it sits at the very bottom and
@@ -3191,10 +3283,10 @@ class ShowcaseDetails extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
-                          width: 74 * m.k,
-                          child: Text(r.$1, style: _t(10 * m.k, a: 0.5))),
-                      Expanded(
-                          child: Text(r.$2, style: _t(10 * m.k, a: 0.82))),
+                        width: 74 * m.k,
+                        child: Text(r.$1, style: _t(10 * m.k, a: 0.5)),
+                      ),
+                      Expanded(child: Text(r.$2, style: _t(10 * m.k, a: 0.82))),
                     ],
                   ),
                 ),

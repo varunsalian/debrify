@@ -1,12 +1,14 @@
 diff --git a/nix/packages/mk-pkg-ffmpeg/meson.build b/nix/packages/mk-pkg-ffmpeg/meson.build
-index 94f1f22..b5c171a 100644
+index 1b8afa3..246677b 100644
 --- a/nix/packages/mk-pkg-ffmpeg/meson.build
 +++ b/nix/packages/mk-pkg-ffmpeg/meson.build
-@@ -200,7 +200,16 @@ video_default_options = video_base_options + [
-     '--enable-decoder=ssa',
-     '--enable-decoder=ass',
-     '--enable-decoder=dvbsub',
-     '--enable-decoder=dvdsub',
+@@ -169,1 +169,5 @@ audio_default_options = [
++    '--enable-filter=astats',
++    '--enable-filter=aspectralstats',
++    '--enable-filter=ametadata',
++    '--enable-filter=amovie',
+ ]
+@@ -214,1 +216,10 @@ video_default_options = [
 +    '--enable-decoder=pgssub',
 +    '--enable-decoder=xsub',
 +    '--enable-decoder=ccaption',
@@ -16,17 +18,12 @@ index 94f1f22..b5c171a 100644
 +    '--enable-decoder=pjs',
 +    '--enable-decoder=realtext',
 +    '--enable-decoder=sami',
-     '--enable-decoder=srt',
-     '--enable-decoder=stl',
-     '--enable-decoder=subrip',
+     # parsers
 diff --git a/nix/packages/mk-pkg-libpng/default.nix b/nix/packages/mk-pkg-libpng/default.nix
-index 00162fb..73a5872 100644
+index 9a5fafd..70a4e32 100644
 --- a/nix/packages/mk-pkg-libpng/default.nix
 +++ b/nix/packages/mk-pkg-libpng/default.nix
-@@ -39,6 +39,12 @@ let
-         unzip ${libpngPatch} -d libpng-patch
-         rsync -a libpng-patch/libpng-*/ $src/
- 
+@@ -42,1 +42,7 @@ let
 +        # Meson's Apple config defines TARGET_OS_MAC for modern clang, but
 +        # libpng treats mere presence as an obsolete classic-Mac compiler and
 +        # includes the long-removed fp.h. Modern Apple targets use math.h.
@@ -34,5 +31,3 @@ index 00162fb..73a5872 100644
 +          --replace-fail 'defined(__SC__) || defined(TARGET_OS_MAC)' 'defined(__SC__)'
 +
          cp -r $src $out
-       '';
- in

@@ -73,6 +73,8 @@ class PlaybackMeta {
   // Simkl parallel pair (see the Simkl integration plan).
   final double? simklProgressPercent;
   final bool simklScrobble;
+  final double? mdblistProgressPercent;
+  final bool mdblistScrobble;
   const PlaybackMeta({
     this.imdbId,
     this.contentType,
@@ -86,6 +88,8 @@ class PlaybackMeta {
     this.traktScrobble = false,
     this.simklProgressPercent,
     this.simklScrobble = false,
+    this.mdblistProgressPercent,
+    this.mdblistScrobble = false,
   });
 }
 
@@ -3657,6 +3661,7 @@ class TorrentPlaybackService {
         // episode's resume point. Same for the Simkl pair.
         traktScrobble: meta.traktScrobble,
         simklScrobble: meta.simklScrobble,
+        mdblistScrobble: meta.mdblistScrobble,
       );
       // Defer one frame (matching Home's addPostFrameCallback) so the previous
       // episode's entire play chain unwinds before the next one starts — an
@@ -3768,6 +3773,8 @@ class TorrentPlaybackService {
     traktProgressPercent: meta?.traktProgressPercent,
     simklScrobble: meta?.simklScrobble ?? false,
     simklProgressPercent: meta?.simklProgressPercent,
+    mdblistScrobble: meta?.mdblistScrobble ?? false,
+    mdblistProgressPercent: meta?.mdblistProgressPercent,
     // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
     // Playlist-library entry and power the in-player "Fix Metadata" action
     // (matching Home). PikPak is intentionally omitted: the launcher wants a

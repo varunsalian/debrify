@@ -1,6 +1,6 @@
 PODS:
   - FlutterMacOS (1.0.0)
-  - media_kit_libs_macos_video (1.0.4):
+  - media_kit_libs_macos_video (1.1.4):
     - FlutterMacOS
   - media_kit_video (0.0.1):
     - FlutterMacOS
@@ -40,7 +40,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  media_kit_libs_macos_video: 85a23e549b5f480e72cae3e5634b5514bc692f65
+  media_kit_libs_macos_video: 042c96160d6a30f9add2c0c9234f66cf2a780685
   media_kit_video: fa6564e3799a0a28bff39442334817088b7ca758
   screen_brightness_macos: 2a3ee243f8051c340381e8e51bcedced8360f421
   screen_retriever: 4f97c103641aab8ce183fa5af3b87029df167936

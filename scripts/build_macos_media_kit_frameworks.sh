@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build MediaKit's exact macOS libmpv framework set with the subtitle decoder
-# patch carried by Debrify. Keeping the upstream recipe pinned limits this
-# change to FFmpeg's decoder registry instead of swapping the whole player.
+# Build MediaKit's exact macOS libmpv framework set with Debrify's subtitle
+# decoders and passive auto-sync analysis filters. The upstream recipe stays
+# pinned so unrelated player components do not move under this feature.
 
 set -euo pipefail
 
@@ -42,7 +42,7 @@ XCODE_PATH="$(dirname "$(dirname "$(xcode-select -p)")")"
   cd "$WORK/source"
   nix develop -c make \
     XCODE_PATH="$XCODE_PATH" \
-    VERSION="debrify-subtitles-1" \
+    VERSION="debrify-subtitles-autosync-3" \
     TARGET="$TARGET"
 )
 
@@ -67,4 +67,4 @@ mkdir -p "$(dirname "$OUTPUT")"
 mv "$STAGE" "$OUTPUT"
 
 "$ROOT/scripts/verify_macos_subtitle_decoders.sh" "$OUTPUT"
-echo "==> Installed PGS-capable MediaKit frameworks at $OUTPUT"
+echo "==> Installed subtitle/auto-sync MediaKit frameworks at $OUTPUT"

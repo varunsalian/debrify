@@ -1,5 +1,6 @@
 import '../../models/stremio_addon.dart';
 import 'mdblist_item_transformer.dart';
+import 'mdblist_models.dart';
 import 'mdblist_service.dart';
 
 /// A selectable MDBList list. Value-equal by its numeric id so a dropdown can
@@ -32,18 +33,23 @@ class MdblistListChoice {
   });
 
   factory MdblistListChoice.fromJson(Map<String, dynamic> j) {
-    final rawName = j['name'] as String?;
-    final owner = (j['user_name'] as String?)?.trim();
+    int? integer(Object? value) => value is num
+        ? value.toInt()
+        : value is String
+        ? int.tryParse(value)
+        : null;
+    final rawName = j['name']?.toString();
+    final owner = j['user_name']?.toString().trim();
     return MdblistListChoice(
-      id: (j['id'] as num?)?.toInt() ?? -1,
+      id: integer(j['id']) ?? -1,
       name: (rawName == null || rawName.trim().isEmpty)
           ? 'Untitled list'
           : rawName,
-      itemCount: (j['items'] as num?)?.toInt() ?? 0,
-      mediatype: j['mediatype'] as String?,
+      itemCount: integer(j['items']) ?? 0,
+      mediatype: j['mediatype']?.toString(),
       ownerName: (owner == null || owner.isEmpty) ? null : owner,
       liked: j['liked'] == true,
-      likes: (j['likes'] as num?)?.toInt() ?? 0,
+      likes: integer(j['likes']) ?? 0,
     );
   }
 
@@ -64,22 +70,60 @@ class MdblistListChoice {
 /// Step 2 scope: the user's OWN lists only. Top/public lists and list search
 /// are a later step (see project memory).
 class MdblistListSource {
-  MdblistListSource._();
-  static final MdblistListSource instance = MdblistListSource._();
+  final MdblistService service;
+
+  MdblistListSource._(this.service);
+  factory MdblistListSource.forTesting(MdblistService service) =>
+      MdblistListSource._(service);
+  static final MdblistListSource instance = MdblistListSource._(
+    MdblistService.instance,
+  );
 
   /// The user's own lists, ready to populate the "List" dropdown. Skips lists
   /// without a usable id. Returns [] when MDBList isn't connected or on error.
   Future<List<MdblistListChoice>> loadUserLists() async =>
-      _mapChoices(await MdblistService.instance.fetchUserLists());
+      _mapChoices(await service.fetchUserLists());
 
   /// MDBList's top/public lists (other users' popular lists). Same shape as
   /// [loadUserLists]; each choice carries its [MdblistListChoice.ownerName].
   Future<List<MdblistListChoice>> loadTopLists() async =>
-      _mapChoices(await MdblistService.instance.fetchTopLists());
+      _mapChoices(await service.fetchTopLists());
+
+  Future<List<MdblistListChoice>> loadLikedLists() async =>
+      _mapChoices(await service.fetchLikedLists());
 
   /// Searches MDBList's public lists by name. Same shape as the others.
   Future<List<MdblistListChoice>> searchLists(String query) async =>
-      _mapChoices(await MdblistService.instance.searchLists(query));
+      _mapChoices(await service.searchLists(query));
+
+  /// Typed counterpart used by dedicated search surfaces that must distinguish
+  /// a genuine empty result from auth, quota, transport, and parse failures.
+  Future<MdblistResult<List<MdblistListChoice>>> searchListsResult(
+    String query,
+  ) async {
+    final raw = await service.searchListsResult(query);
+    final data = raw.data;
+    if (data == null) {
+      return MdblistResult.failure(
+        raw.kind,
+        statusCode: raw.statusCode,
+        retryAfter: raw.retryAfter,
+        headers: raw.headers,
+      );
+    }
+    final mapped = _mapChoices(data);
+    return raw.kind == MdblistResultKind.partial
+        ? MdblistResult.partial(
+            mapped,
+            statusCode: raw.statusCode,
+            headers: raw.headers,
+          )
+        : MdblistResult.success(
+            mapped,
+            statusCode: raw.statusCode,
+            headers: raw.headers,
+          );
+  }
 
   List<MdblistListChoice> _mapChoices(List<Map<String, dynamic>> raw) {
     final out = <MdblistListChoice>[];
@@ -94,22 +138,29 @@ class MdblistListSource {
   /// failed. A genuinely empty list returns `(items: [], failed: false)`; only a
   /// network/parse failure sets `failed: true`, so the UI can tell "empty" from
   /// "couldn't load".
-  Future<({List<StremioMeta> items, bool failed})> loadListItems(
+  Future<({List<StremioMeta> items, bool failed, bool complete})> loadListItems(
     MdblistListChoice choice, {
     bool forceRefresh = false,
   }) async {
-    final data = await MdblistService.instance.fetchListItems(
+    final result = await service.fetchListItemsResult(
       choice.id,
       forceRefresh: forceRefresh,
     );
-    if (data == null) return (items: const <StremioMeta>[], failed: true);
+    final data = result.data;
+    if (data == null) {
+      return (items: const <StremioMeta>[], failed: true, complete: false);
+    }
     final movies = data['movies'];
     final shows = data['shows'];
     final metas = <StremioMeta>[
       if (movies is List) ...MdblistItemTransformer.transformItems(movies),
       if (shows is List) ...MdblistItemTransformer.transformItems(shows),
     ];
-    return (items: _dedup(metas), failed: false);
+    return (
+      items: _dedup(metas),
+      failed: !result.isUsable,
+      complete: result.isComplete,
+    );
   }
 
   List<StremioMeta> _dedup(List<StremioMeta> metas) {

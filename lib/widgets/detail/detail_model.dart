@@ -130,6 +130,10 @@ class DetailModel {
   final bool simklTracked;
   final String simklLabel;
   final int? simklRating;
+  final bool hasMdblist;
+  final bool mdblistTracked;
+  final String mdblistLabel;
+  final int? mdblistRating;
 
   // ── Actions ──────────────────────────────────────────────────────────────
   final bool showPrimary;
@@ -142,6 +146,7 @@ class DetailModel {
   final VoidCallback? onAppMenu;
   final VoidCallback? onTraktMenu;
   final VoidCallback? onSimklMenu;
+  final VoidCallback? onMdblistMenu;
 
   /// Debrify's local, account-independent movie/series watchlist.
   final bool inMyWatchlist;
@@ -161,6 +166,7 @@ class DetailModel {
   /// rather than hiding one behind the other, both get a mark in the meta line
   /// and both get a button. Null whenever fewer than two are connected.
   final VoidCallback? onTrackersSecondary;
+  final VoidCallback? onTrackersTertiary;
 
   /// Open the title-level source manager. There is no per-source host API, so
   /// a card in the Sources band and the "Pin source" tile both land here.
@@ -208,6 +214,10 @@ class DetailModel {
     required this.simklTracked,
     required this.simklLabel,
     required this.simklRating,
+    this.hasMdblist = false,
+    this.mdblistTracked = false,
+    this.mdblistLabel = 'Not tracked',
+    this.mdblistRating,
     required this.showPrimary,
     required this.onPrimary,
     required this.onBrowse,
@@ -216,10 +226,12 @@ class DetailModel {
     required this.onAppMenu,
     required this.onTraktMenu,
     required this.onSimklMenu,
+    this.onMdblistMenu,
     this.inMyWatchlist = false,
     this.onToggleMyWatchlist,
     this.onTrackers,
     this.onTrackersSecondary,
+    this.onTrackersTertiary,
     this.onManageSources,
     required this.onRecommendationTap,
     required this.onAmbientStill,
