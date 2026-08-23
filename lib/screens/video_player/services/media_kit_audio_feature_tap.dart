@@ -419,12 +419,20 @@ class MediaKitAudioFeatureTap {
     return false;
   }
 
-  /// After 30s of witnessed continuous playback, the tap must have accrued
-  /// most of that span as features. Losing more than ~20% means the
-  /// transport is dropping frames (the measured macOS property-coalescing
-  /// failure ran at ~50%) and any alignment would be against a distorted
-  /// timeline.
+  /// Property fallback only: after 30s of witnessed continuous playback, the
+  /// tap must have accrued most of that span as features. Losing more than
+  /// ~20% means the transport is dropping frames (the measured macOS
+  /// property-coalescing failure ran at ~50%) and any alignment would be
+  /// against a distorted timeline.
+  ///
+  /// Deliberately NOT applied in file mode: FFmpeg's buffered writer holds
+  /// tens of seconds of records before flushing, so accrued always lags
+  /// witnessed by a constant latency that this ratio would misread as loss
+  /// (field-observed: 26.3s/32.9s ≈ 0.80 → false "unreliable"). File-mode
+  /// loss protection is structural instead — pts drift fragments segments
+  /// below the aligner's usability floor.
   void _updateReliability() {
+    if (_fileMode) return;
     if (!_reliable) return;
     if (_witnessedAdvanceMs < 30000) return;
     final accrued = anchoredDurationMs - _accruedAtWitnessStartMs;

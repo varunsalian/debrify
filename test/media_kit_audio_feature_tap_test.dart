@@ -121,6 +121,23 @@ void main() {
     expect(tap.reliable, isFalse);
   });
 
+  test('file mode ignores write-buffer latency in reliability accounting', () {
+    // Field case: FFmpeg's buffered writer had flushed only 26.3s of records
+    // after 32.9s of playback — latency, not loss. File mode must never read
+    // that as unreliable; pts fragmentation is its loss protection.
+    final tap = MediaKitAudioFeatureTap.forTesting(currentPositionMs: () => 0);
+    final buffer = StringBuffer();
+    for (var i = 0; i < 820; i++) {
+      buffer.write(record(i, i * 0.032)); // ~26.2s of contiguous records
+    }
+    tap.ingestPrintOutput(buffer.toString());
+    for (var t = 0; t <= 33000; t += 500) {
+      tap.observePosition(t);
+    }
+    expect(tap.reliable, isTrue);
+    expect(tap.anchoredDurationMs, greaterThan(25000));
+  });
+
   test('property fallback stays reliable at full-rate accrual', () {
     final tap = MediaKitAudioFeatureTap.forTesting(
       currentPositionMs: () => 0,
