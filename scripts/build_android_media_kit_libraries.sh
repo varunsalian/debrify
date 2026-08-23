@@ -37,8 +37,11 @@ trap 'rm -rf "$WORK"' EXIT
 
 git clone --quiet --filter=blob:none "$UPSTREAM_REPO" "$WORK/source"
 git -C "$WORK/source" checkout --quiet "$UPSTREAM_COMMIT"
-git -C "$WORK/source" apply --check "$PATCH"
-git -C "$WORK/source" apply "$PATCH"
+# This patch intentionally uses zero-context insertions against the exact
+# pinned upstream commit. Without --unidiff-zero, Git may relocate both hunks
+# to EOF, turning FFmpeg flags into shell commands after the build completes.
+git -C "$WORK/source" apply --unidiff-zero --check "$PATCH"
+git -C "$WORK/source" apply --unidiff-zero "$PATCH"
 
 # Avoid the upstream script's package-manager branch. GitHub's Android runner
 # already has Java 17, Flutter and the SDK; the recipe installs only its pinned
