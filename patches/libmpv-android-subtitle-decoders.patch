@@ -12,7 +12,8 @@ index 744bb61..1c5544a 100644
 +	--enable-decoder=pjs \
 +	--enable-decoder=realtext \
 +	--enable-decoder=sami \
-@@ -224,0 +234,3 @@ cpuflags=
+@@ -224,0 +234,4 @@ cpuflags=
 +	--enable-filter=astats \
 +	--enable-filter=aspectralstats \
 +	--enable-filter=ametadata \
++	--enable-filter=amovie \
