@@ -62,6 +62,7 @@ import 'video_player/utils/gesture_helpers.dart';
 import 'video_player/utils/language_mapping.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/constants/timing_constants.dart';
+import 'video_player/widgets/auto_sync_pill.dart';
 import 'video_player/widgets/seek_hud.dart';
 import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
@@ -1152,6 +1153,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _activeExternalSubtitlePath;
   bool _subtitleAutoSyncEnabled = false;
   MediaKitSubtitleAutoSync? _subtitleAutoSync;
+  // The quiet bottom-right auto-sync pill. Countdown ticks only while
+  // playing (the engine also only accrues anchored audio during playback).
+  final ValueNotifier<AutoSyncPillModel?> _autoSyncPill =
+      ValueNotifier<AutoSyncPillModel?>(null);
+  Timer? _autoSyncPillTicker;
+  Timer? _autoSyncPillHold;
+  int _autoSyncPillSeconds = 0;
+  // Last non-null model, kept so the dismiss fade has content to fade out.
+  AutoSyncPillModel? _autoSyncPillLastShown;
 
   // media_kit state
   bool _isReady = false;
@@ -2507,6 +2517,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _disposeSubtitleAutoSync() async {
     final controller = _subtitleAutoSync;
     _subtitleAutoSync = null;
+    _hideAutoSyncPill();
     await controller?.dispose();
   }
 
@@ -2529,16 +2540,97 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _showSubtitleAutoSyncNotice(SubtitleAutoSyncNotice notice) {
-    if (!mounted || notice.kind == SubtitleAutoSyncNoticeKind.listening) return;
+    if (!mounted) return;
+    // Full detail (offsets, advice) lives here; the pill stays number-free.
     debugPrint('SubtitleAutoSync: ${notice.message}');
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(notice.message),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
+    switch (notice.kind) {
+      case SubtitleAutoSyncNoticeKind.listening:
+        // A new window always restarts the countdown — even mid-checking, a
+        // subtitle switch must not inherit the old subtitle's drain.
+        _startAutoSyncPillCountdown();
+      case SubtitleAutoSyncNoticeKind.stillListening:
+        // Deterministic checking-revert: the pass ended with no verdict.
+        final model = _autoSyncPill.value;
+        if (_autoSyncPillTicker != null &&
+            model?.phase == AutoSyncPillPhase.checking) {
+          _autoSyncPill.value = AutoSyncPillModel(
+            AutoSyncPillPhase.listening,
+            _autoSyncPillSeconds,
+          );
+        }
+      case SubtitleAutoSyncNoticeKind.checking:
+        final model = _autoSyncPill.value;
+        if (model?.phase == AutoSyncPillPhase.listening) {
+          _autoSyncPill.value = AutoSyncPillModel(
+            AutoSyncPillPhase.checking,
+            _autoSyncPillSeconds,
+          );
+        }
+      case SubtitleAutoSyncNoticeKind.synced ||
+          SubtitleAutoSyncNoticeKind.resynced:
+        // A verify-pass re-sync corrects silently; only the first sync speaks.
+        if (notice.kind == SubtitleAutoSyncNoticeKind.resynced &&
+            _autoSyncPill.value == null) {
+          return;
+        }
+        _showAutoSyncPillResult(AutoSyncPillPhase.synced);
+      case SubtitleAutoSyncNoticeKind.failed:
+        _showAutoSyncPillResult(AutoSyncPillPhase.failed);
+    }
+  }
+
+  void _startAutoSyncPillCountdown() {
+    _autoSyncPillHold?.cancel();
+    _autoSyncPillHold = null;
+    _autoSyncPillSeconds = 90;
+    _autoSyncPill.value = const AutoSyncPillModel(
+      AutoSyncPillPhase.listening,
+      90,
     );
+    _autoSyncPillTicker?.cancel();
+    var idleTicks = 0;
+    _autoSyncPillTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final model = _autoSyncPill.value;
+      if (model == null ||
+          (model.phase != AutoSyncPillPhase.listening &&
+              model.phase != AutoSyncPillPhase.checking)) {
+        return;
+      }
+      if (!_isPlaying) {
+        // A short pause freezes the countdown honestly; a long one (or EOF)
+        // must not leave a frozen pill on screen forever.
+        if (++idleTicks >= 20) _hideAutoSyncPill();
+        return;
+      }
+      idleTicks = 0;
+      _autoSyncPillSeconds--;
+      if (_autoSyncPillSeconds <= 0) {
+        // The window elapsed without a verdict: leave quietly. The engine's
+        // wider 180s rung may still land later and re-show a result.
+        _hideAutoSyncPill();
+        return;
+      }
+      _autoSyncPill.value = AutoSyncPillModel(model.phase, _autoSyncPillSeconds);
+    });
+  }
+
+  void _showAutoSyncPillResult(AutoSyncPillPhase phase) {
+    _autoSyncPillTicker?.cancel();
+    _autoSyncPillTicker = null;
+    _autoSyncPillHold?.cancel();
+    _autoSyncPill.value = AutoSyncPillModel(phase, 0);
+    _autoSyncPillHold = Timer(
+      const Duration(milliseconds: 2400),
+      _hideAutoSyncPill,
+    );
+  }
+
+  void _hideAutoSyncPill() {
+    _autoSyncPillTicker?.cancel();
+    _autoSyncPillTicker = null;
+    _autoSyncPillHold?.cancel();
+    _autoSyncPillHold = null;
+    if (_autoSyncPill.value != null) _autoSyncPill.value = null;
   }
 
   void _setActiveExternalSubtitlePath(String? path) {
@@ -2548,6 +2640,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (controller == null) return;
     if (path == null) {
       unawaited(controller.deactivateSubtitle());
+      _hideAutoSyncPill();
     } else {
       unawaited(controller.activateSubtitle(path));
     }
@@ -5264,6 +5357,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     if (offsetChanged) {
       _subtitleAutoSync?.manualOffsetChanged(settings.syncOffsetMs);
+      _hideAutoSyncPill();
       _applySubtitleSyncOffset(settings.syncOffsetMs);
     }
   }
@@ -5318,6 +5412,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         onOffsetChanged: (ms) async {
           await SubtitleSettingsService.instance.setSyncOffsetMs(ms);
           _subtitleAutoSync?.manualOffsetChanged(ms);
+          _hideAutoSyncPill();
           _applySubtitleSyncOffset(ms);
           if (mounted) {
             setState(() {
@@ -5342,6 +5437,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
         _subtitleAutoSync?.manualOffsetChanged(clamped);
+        _hideAutoSyncPill();
         _applySubtitleSyncOffset(clamped);
         if (mounted) {
           setState(() {
@@ -9402,6 +9498,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvDiag.onSessionEnd();
     _iptvLiveRecovery.cancel();
     _iptvReconnectText.dispose();
+    _autoSyncPillTicker?.cancel();
+    _autoSyncPillHold?.cancel();
+    _autoSyncPill.dispose();
     // The sleep timer belongs to this playback session — a pending one must not
     // outlive the player and fire against a disposed state.
     _sleepTimer?.cancel();
@@ -12216,6 +12315,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 ],
                               ),
                             ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Subtitle auto-sync countdown pill: quiet bottom-right glass,
+                // display-only, outside the subtitle reading zone. TV keeps it
+                // inside the overscan safe area.
+                ValueListenableBuilder<AutoSyncPillModel?>(
+                  valueListenable: _autoSyncPill,
+                  builder: (context, model, _) {
+                    if (model != null) _autoSyncPillLastShown = model;
+                    // Fade out over the LAST shown model — swapping to an
+                    // empty box here would make the dismiss fade invisible.
+                    final display = model ?? _autoSyncPillLastShown;
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: model == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOutCubic,
+                        child: Align(
+                          alignment: Alignment.bottomRight,
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: AutoSyncPill.cornerInset,
+                              bottom: AutoSyncPill.cornerInset,
+                            ),
+                            child: display == null
+                                ? const SizedBox.shrink()
+                                : AutoSyncPill(model: display),
                           ),
                         ),
                       ),

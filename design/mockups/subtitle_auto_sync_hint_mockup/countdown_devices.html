@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrify — Auto-sync countdown at every size</title>
+<style>
+  :root {
+    --bg: #08090d;
+    --panel: rgba(255,255,255,.035);
+    --line: rgba(255,255,255,.12);
+    --text: rgba(255,255,255,.92);
+    --muted: rgba(148,158,178,.85);
+    --cyan: #7bdcff;
+    --green: #82e0ad;
+    --amber: #e8c07b;
+    --ease: cubic-bezier(.2,.8,.2,1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(60rem 30rem at 85% -5%, rgba(96,78,168,.14), transparent),
+      var(--bg);
+    color: var(--text);
+    font: 500 14px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .shell { width: min(1360px, 100%); margin: 0 auto; padding: 28px clamp(16px,4vw,56px) 56px; }
+
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
+  .eyebrow { color: var(--cyan); font-size: 10px; font-weight: 800; letter-spacing: .17em; text-transform: uppercase; }
+  h1 { margin: 6px 0 4px; font-size: clamp(24px, 3vw, 36px); letter-spacing: -.03em; line-height: 1.1; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--muted); }
+  .demo-controls { display: flex; gap: 8px; }
+  .demo-controls button {
+    min-height: 38px; padding: 8px 14px;
+    border: 1px solid var(--line); border-radius: 11px;
+    color: rgba(255,255,255,.82); background: rgba(255,255,255,.05);
+    font: inherit; font-size: 13px; cursor: pointer;
+    transition: background .2s, border-color .2s;
+  }
+  .demo-controls button:hover { background: rgba(255,255,255,.09); }
+  .demo-controls button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .demo-controls button[aria-pressed="true"] { border-color: rgba(232,192,123,.5); color: var(--amber); }
+
+  .timeline-note {
+    margin: 14px 0 22px; padding: 10px 14px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--muted); font-size: 12px;
+  }
+  .timeline-note strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  /* ---------- device frames ---------- */
+  .devices { display: grid; gap: 18px; }
+  .frame-wrap { display: grid; gap: 8px; }
+  .frame-label { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
+  .frame-label b { color: var(--text); font-weight: 700; letter-spacing: .04em; }
+  .frame-label span { font-variant-numeric: tabular-nums; }
+
+  .frame {
+    position: relative; overflow: hidden; isolation: isolate;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--line); border-radius: 16px;
+    background: #050608;
+    box-shadow: 0 22px 70px rgba(0,0,0,.4);
+  }
+  .frame.phone { aspect-ratio: 20 / 9; border-radius: 22px; }
+
+  .row2 { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; align-items: start; }
+
+  .scene { position: absolute; inset: -2%; }
+  .scene.tv {
+    background:
+      linear-gradient(180deg, rgba(2,4,7,.1), transparent 50%, rgba(2,3,6,.7)),
+      radial-gradient(ellipse at 70% 34%, rgba(238,176,116,.5) 0 2%, transparent 17%),
+      radial-gradient(ellipse at 62% 52%, #3f5a64 0 7%, #16242b 26%, transparent 55%),
+      linear-gradient(140deg, #070b10 12%, #122430 52%, #05070a 100%);
+  }
+  .scene.desktop {
+    background:
+      linear-gradient(180deg, rgba(2,4,7,.12), transparent 45%, rgba(2,3,6,.72)),
+      radial-gradient(ellipse at 30% 40%, rgba(210,120,96,.34) 0 3%, transparent 20%),
+      radial-gradient(ellipse at 38% 58%, #4d4358 0 8%, #1d1a26 30%, transparent 58%),
+      linear-gradient(150deg, #0a0810 12%, #241c30 55%, #060509 100%);
+  }
+  .scene.phone-scene {
+    background:
+      linear-gradient(180deg, rgba(2,4,7,.14), transparent 45%, rgba(2,3,6,.74)),
+      radial-gradient(ellipse at 74% 44%, rgba(120,190,170,.3) 0 3%, transparent 22%),
+      radial-gradient(ellipse at 66% 60%, #2c4a44 0 8%, #142420 30%, transparent 58%),
+      linear-gradient(150deg, #06090b 12%, #16292a 55%, #040707 100%);
+  }
+
+  .frame .fade { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 38%; pointer-events: none;
+    background: linear-gradient(transparent, rgba(2,3,5,.8)); }
+
+  .sub {
+    position: absolute; z-index: 4; left: 50%; transform: translateX(-50%);
+    max-width: 82%; padding: .12em .5em .2em; border-radius: .2em;
+    background: rgba(0,0,0,.6); color: #fff; text-align: center; white-space: nowrap;
+    font-weight: 650; text-shadow: 0 1px 2px #000;
+  }
+  .tvf  .sub { bottom: 18%; max-width: 76%; font-size: clamp(11px, 2.1vw, 30px); }
+  .dskf .sub { bottom: 19%; font-size: clamp(10px, 1.5vw, 20px); }
+  .phnf .sub { bottom: 20%; font-size: clamp(9px, 1.1vw, 14px); }
+
+  .chrome { position: absolute; z-index: 3; left: 5%; right: 5%; bottom: 6%; opacity: .18; }
+  .chrome .bar { height: 3px; border-radius: 3px; background: rgba(255,255,255,.25); }
+  .chrome .bar::before { content: ""; display: block; width: 37%; height: 100%; border-radius: inherit; background: rgba(255,255,255,.85); }
+
+  /* TV overscan guide */
+  .safe {
+    position: absolute; z-index: 2; inset: 5%;
+    border: 1px dashed rgba(123,220,255,.16); border-radius: 6px; pointer-events: none;
+  }
+  .safe::after {
+    content: "5% overscan safe area"; position: absolute; top: 6px; left: 8px;
+    color: rgba(123,220,255,.34); font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  }
+
+  /* ---------- the pill (one component, em-scaled) ---------- */
+  .pill {
+    position: absolute; z-index: 8;
+    display: flex; align-items: center; gap: .55em;
+    height: 2.4em; padding: 0 .95em 0 .7em;
+    border: 1px solid rgba(255,255,255,.13); border-radius: 999px;
+    color: var(--text);
+    background: rgba(12,14,18,.66);
+    box-shadow: 0 .5em 1.8em rgba(0,0,0,.28);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    transition: opacity .5s var(--ease), transform .5s var(--ease), border-color .5s;
+  }
+  .tvf  .pill { font-size: clamp(10px, 1.25vw, 17px); right: 7%; bottom: 7.5%; }   /* inside safe area */
+  .dskf .pill { font-size: clamp(9px, 1vw, 12.5px); right: 3.5%; bottom: 7%; }
+  .phnf .pill { font-size: clamp(8px, .85vw, 10px); right: 3%; bottom: 9%; }
+
+  .pill.hidden { opacity: 0; transform: translateY(.45em) scale(.98); }
+  .pill.ok   { border-color: rgba(130,224,173,.3); }
+  .pill.fail { border-color: rgba(232,192,123,.3); }
+
+  .ring { width: 1.15em; height: 1.15em; flex: 0 0 auto; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 2.6; }
+  .ring .track { stroke: rgba(255,255,255,.14); }
+  .ring .arc   { stroke: var(--cyan); stroke-linecap: round; stroke-dasharray: 60.8; transition: stroke-dashoffset .9s linear; }
+  .pill.checking .arc { stroke: #fff; }
+
+  .core {
+    position: absolute; width: .34em; height: .34em; left: .81em; border-radius: 50%;
+    background: var(--cyan); box-shadow: 0 0 0 0 rgba(123,220,255,.32);
+    animation: soft-pulse 1.8s ease-out infinite;
+  }
+  @keyframes soft-pulse { 45%,100% { box-shadow: 0 0 0 .35em rgba(123,220,255,0); } }
+
+  .pill .status { font-size: .78em; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+  .pill .sep { width: 1px; height: .95em; background: rgba(255,255,255,.16); }
+  .pill .secs {
+    min-width: 1.9em; text-align: right;
+    color: rgba(255,255,255,.6); font-size: .82em; font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .pill .mark { display: none; width: 1.05em; height: 1.05em; flex: 0 0 auto; }
+  .pill.ok .status, .pill.ok .mark { color: var(--green); }
+  .pill.fail .status, .pill.fail .mark { color: var(--amber); }
+  .pill.ok .ring, .pill.fail .ring, .pill.ok .core, .pill.fail .core,
+  .pill.ok .sep, .pill.fail .sep, .pill.ok .secs, .pill.fail .secs { display: none; }
+  .pill.ok .mark, .pill.fail .mark { display: block; }
+
+  /* ---------- state gallery ---------- */
+  h2 { margin: 40px 0 4px; font-size: 17px; letter-spacing: -.01em; }
+  .h2-sub { margin: 0 0 16px; color: var(--muted); font-size: 12.5px; max-width: 70ch; }
+  .states { display: flex; flex-wrap: wrap; gap: 12px; }
+  .state-card {
+    flex: 1 1 200px; max-width: 280px;
+    display: grid; gap: 10px; justify-items: start;
+    padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+  }
+  .state-card .pill { position: static; font-size: 12px; }
+  .state-card p { margin: 0; color: var(--muted); font-size: 11.5px; }
+  .state-card b { color: var(--text); font-size: 12px; }
+
+  .specs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .spec { padding: 8px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line);
+    color: var(--muted); font-size: 11px; }
+  .spec strong { color: var(--text); }
+
+  @media (max-width: 860px) {
+    .row2 { grid-template-columns: 1fr; }
+    .frame { border-radius: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .core { animation: none; }
+    .pill, .ring .arc { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header>
+    <div>
+      <div class="eyebrow">Design mock · subtitle auto-sync</div>
+      <h1>One quiet pill, three distances.</h1>
+      <p class="lede">A 90-second countdown with live sync status, sized for a phone in hand, a laptop at arm's length, and a TV across the room. The same component everywhere — only the em scale and the safe-area inset change.</p>
+    </div>
+    <div class="demo-controls">
+      <button id="replay" type="button">↻ Replay</button>
+      <button id="ending" type="button" aria-pressed="false">Preview: sync declined</button>
+    </div>
+  </header>
+
+  <p class="timeline-note">Demo time is compressed ≈7×: the real 90&nbsp;s ladder plays in ~13&nbsp;s. Attempts fire at the shipped rungs — <strong>20&nbsp;s</strong>, <strong>45&nbsp;s</strong>, <strong>90&nbsp;s</strong> — where the label briefly becomes “Checking”. Success ends the countdown immediately; it never waits for zero.</p>
+
+  <section class="devices">
+    <div class="frame-wrap">
+      <div class="frame-label"><b>TV · 10-foot</b><span>pill ≈ 40 px tall · anchored inside overscan · never focusable</span></div>
+      <div class="frame tvf" aria-label="TV player mockup">
+        <div class="scene tv"></div>
+        <div class="fade"></div>
+        <div class="safe"></div>
+        <div class="sub">We should leave before the generator comes back.</div>
+        <div class="chrome"><div class="bar"></div></div>
+        <div class="pill" data-pill>
+          <svg class="ring" viewBox="0 0 24 24" aria-hidden="true"><circle class="track" cx="12" cy="12" r="9.7"></circle><circle class="arc" cx="12" cy="12" r="9.7"></circle></svg>
+          <span class="core" aria-hidden="true"></span>
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.5l5 5 10-11"></path></svg>
+          <span class="status">Auto sync</span>
+          <span class="sep"></span>
+          <span class="secs">90</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="frame-wrap">
+        <div class="frame-label"><b>Desktop / macOS</b><span>pill ≈ 30 px tall · clears the traffic-light and controls zones</span></div>
+        <div class="frame dskf" aria-label="Desktop player mockup">
+          <div class="scene desktop"></div>
+          <div class="fade"></div>
+          <div class="sub">You knew about this the whole time.</div>
+          <div class="chrome"><div class="bar"></div></div>
+          <div class="pill" data-pill>
+            <svg class="ring" viewBox="0 0 24 24" aria-hidden="true"><circle class="track" cx="12" cy="12" r="9.7"></circle><circle class="arc" cx="12" cy="12" r="9.7"></circle></svg>
+            <span class="core" aria-hidden="true"></span>
+            <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.5l5 5 10-11"></path></svg>
+            <span class="status">Auto sync</span>
+            <span class="sep"></span>
+            <span class="secs">90</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="frame-wrap">
+        <div class="frame-label"><b>Phone · landscape</b><span>pill ≈ 24 px tall · inside display-cutout insets</span></div>
+        <div class="frame phone phnf" aria-label="Phone player mockup">
+          <div class="scene phone-scene"></div>
+          <div class="fade"></div>
+          <div class="sub">Hold the line. Two minutes.</div>
+          <div class="chrome"><div class="bar"></div></div>
+          <div class="pill" data-pill>
+            <svg class="ring" viewBox="0 0 24 24" aria-hidden="true"><circle class="track" cx="12" cy="12" r="9.7"></circle><circle class="arc" cx="12" cy="12" r="9.7"></circle></svg>
+            <span class="core" aria-hidden="true"></span>
+            <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.5l5 5 10-11"></path></svg>
+            <span class="status">Auto sync</span>
+            <span class="sep"></span>
+            <span class="secs">90</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <h2>The five states</h2>
+  <p class="h2-sub">Numbers never appear in results — only in the countdown. Success and failure both hold for about two seconds, then the pill leaves. “Restored” reuses the pill for the existing offset-memory toast, so the player owns one status surface, not two.</p>
+
+  <section class="states">
+    <div class="state-card">
+      <div class="pill"><svg class="ring" viewBox="0 0 24 24"><circle class="track" cx="12" cy="12" r="9.7"></circle><circle class="arc" cx="12" cy="12" r="9.7" style="stroke-dashoffset:15"></circle></svg><span class="core"></span><span class="status">Auto sync</span><span class="sep"></span><span class="secs">67</span></div>
+      <div><b>Listening</b><p>Ring drains over the 90-second window; seconds count with it. Dot pulses gently.</p></div>
+    </div>
+    <div class="state-card">
+      <div class="pill checking"><svg class="ring" viewBox="0 0 24 24"><circle class="track" cx="12" cy="12" r="9.7"></circle><circle class="arc" cx="12" cy="12" r="9.7" style="stroke-dashoffset:30"></circle></svg><span class="core"></span><span class="status">Checking…</span><span class="sep"></span><span class="secs">45</span></div>
+      <div><b>Checking</b><p>At each ladder rung the arc flips white and the label swaps for a few seconds.</p></div>
+    </div>
+    <div class="state-card">
+      <div class="pill ok"><svg class="mark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.5l5 5 10-11"></path></svg><span class="status">Subtitles synced</span></div>
+      <div><b>Synced</b><p>Countdown is replaced the moment an offset is applied — even at 12 seconds in.</p></div>
+    </div>
+    <div class="state-card">
+      <div class="pill fail"><svg class="mark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 5v9m0 4.5v.01"></path></svg><span class="status">Left unchanged</span></div>
+      <div><b>Declined</b><p>Confidence gate never cleared. Honest and calm — the system didn't guess.</p></div>
+    </div>
+    <div class="state-card">
+      <div class="pill ok"><svg class="mark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 4a8 8 0 1 1-7 4.5M5 4v4.5h4.5"></path></svg><span class="status">Sync restored</span></div>
+      <div><b>Restored</b><p>Remembered offset re-applied on load. No countdown — it's already done.</p></div>
+    </div>
+  </section>
+
+  <section class="specs">
+    <span class="spec"><strong>Anchor:</strong> bottom-right, outside the subtitle reading zone at every size</span>
+    <span class="spec"><strong>Scaling:</strong> everything in em; one font-size per device class scales the whole pill</span>
+    <span class="spec"><strong>Input:</strong> display-only; never takes DPAD or pointer focus</span>
+    <span class="spec"><strong>Motion:</strong> reduced-motion swaps the pulse and ring animation for stepped updates</span>
+    <span class="spec"><strong>Manual override:</strong> user-set offset removes the pill instantly and cancels the ladder</span>
+  </section>
+</main>
+
+<script>
+  (function () {
+    var CIRC = 60.8;                    // 2πr for r=9.7 at stroke-dasharray
+    var COMPRESS = 7;                   // demo speed-up
+    var RUNGS = [20, 45, 90];           // shipped ladder, in real seconds
+    var SUCCESS_AT = 51;                // real seconds when the demo "succeeds"
+    var CHECK_HOLD = 4;                 // real seconds a "Checking…" label holds
+    var pills = [].slice.call(document.querySelectorAll('[data-pill]'));
+    var replay = document.getElementById('replay');
+    var ending = document.getElementById('ending');
+    var declineMode = false;
+    var timer = null, start = 0, done = false;
+
+    function setAll(fn) { pills.forEach(fn); }
+
+    function render(real) {
+      var left = Math.max(0, Math.ceil(90 - real));
+      var checking = RUNGS.some(function (r) { return real >= r && real < r + CHECK_HOLD && left > 0; });
+      setAll(function (p) {
+        p.querySelector('.secs').textContent = left;
+        p.querySelector('.arc').style.strokeDashoffset = (CIRC * (90 - left) / 90).toFixed(1);
+        p.classList.toggle('checking', checking);
+        p.querySelector('.status').textContent = checking ? 'Checking…' : 'Auto sync';
+      });
+    }
+
+    function finish(ok) {
+      done = true;
+      setAll(function (p) {
+        p.classList.remove('checking');
+        p.classList.add(ok ? 'ok' : 'fail');
+        p.querySelector('.status').textContent = ok ? 'Subtitles synced' : 'Left unchanged';
+      });
+      setTimeout(function () { setAll(function (p) { p.classList.add('hidden'); }); }, 2200);
+      setTimeout(run, 5200);
+    }
+
+    function tick() {
+      if (done) return;
+      var real = (performance.now() - start) / 1000 * COMPRESS;
+      if (!declineMode && real >= SUCCESS_AT) { render(SUCCESS_AT); finish(true); return; }
+      if (real >= 90 + CHECK_HOLD) { finish(false); return; }
+      render(Math.min(real, 90));
+      timer = requestAnimationFrame(tick);
+    }
+
+    function run() {
+      cancelAnimationFrame(timer);
+      done = false;
+      start = performance.now();
+      setAll(function (p) {
+        p.classList.remove('ok', 'fail', 'hidden', 'checking');
+        p.querySelector('.status').textContent = 'Auto sync';
+      });
+      render(0);
+      timer = requestAnimationFrame(tick);
+    }
+
+    replay.addEventListener('click', run);
+    ending.addEventListener('click', function () {
+      declineMode = !declineMode;
+      ending.setAttribute('aria-pressed', String(declineMode));
+      ending.textContent = declineMode ? 'Preview: sync succeeds' : 'Preview: sync declined';
+      run();
+    });
+
+    run();
+  })();
+</script>
+</body>
+</html>

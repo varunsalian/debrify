@@ -7,7 +7,22 @@ import 'media_kit_audio_feature_tap.dart';
 import 'subtitle_aligner.dart';
 import 'subtitle_cue_parser.dart';
 
-enum SubtitleAutoSyncNoticeKind { listening, synced, resynced, failed }
+enum SubtitleAutoSyncNoticeKind {
+  /// A fresh listening window opened (subtitle activated / track restart).
+  listening,
+
+  /// An alignment pass started for the current window.
+  checking,
+
+  /// An alignment pass ended without a verdict; the window continues. Kept
+  /// distinct from [listening] so hosts never mistake a checking-revert for
+  /// a new window (or vice versa — a subtitle switch mid-checking must
+  /// restart the countdown, not inherit the old one).
+  stillListening,
+  synced,
+  resynced,
+  failed,
+}
 
 class SubtitleAutoSyncNotice {
   final SubtitleAutoSyncNoticeKind kind;
@@ -143,7 +158,20 @@ class MediaKitSubtitleAutoSync {
       return;
     }
     _tap.reset(anchorMs: currentPositionMs());
+    // A pre-existing manual/remembered offset gates every ladder tick, so a
+    // countdown would promise work that never runs. The ladder still arms —
+    // it starts attempting if the offset later returns to zero.
+    if (currentOffsetMs() == 0) _notifyListening();
     _startLadder();
+  }
+
+  void _notifyListening() {
+    onNotice(
+      const SubtitleAutoSyncNotice(
+        SubtitleAutoSyncNoticeKind.listening,
+        'Trying to sync subtitles…',
+      ),
+    );
   }
 
   Future<void> deactivateSubtitle() {
@@ -191,6 +219,9 @@ class MediaKitSubtitleAutoSync {
         if (_disposed || generation != _generation || !available) return;
         await _tap.resetForAudioTrack(anchorMs: currentPositionMs());
         if (_disposed || generation != _generation || !available) return;
+        // Same contract as activation: the restarted listen announces itself
+        // so a much later verdict never appears without context.
+        if (currentOffsetMs() == 0) _notifyListening();
         _startLadder();
       }),
     );
@@ -237,6 +268,12 @@ class MediaKitSubtitleAutoSync {
     final run = ++_alignmentRun;
     final segments = _tap.snapshot();
     _running = true;
+    onNotice(
+      const SubtitleAutoSyncNotice(
+        SubtitleAutoSyncNoticeKind.checking,
+        'Checking subtitle timing…',
+      ),
+    );
     SubtitleAlignResult result;
     try {
       result = await compute(
@@ -280,6 +317,16 @@ class MediaKitSubtitleAutoSync {
           ),
         );
       case SubtitleAlignNoMatch() || SubtitleAlignNotEnoughAudio():
+        if (auto && _ladderIndex < _ladderSeconds.length) {
+          // Intermediate rung declined silently: hand the UI back its
+          // listening face so "checking" reverts when the pass truly ended.
+          onNotice(
+            const SubtitleAutoSyncNotice(
+              SubtitleAutoSyncNoticeKind.stillListening,
+              'No verdict yet; still listening.',
+            ),
+          );
+        }
         if (!auto || _ladderIndex >= _ladderSeconds.length) {
           _ladderDone = true;
           _ladderTimer?.cancel();

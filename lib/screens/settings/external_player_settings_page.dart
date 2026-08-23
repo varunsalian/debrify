@@ -93,7 +93,7 @@ class _ExternalPlayerSettingsPageState
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
-  bool _subtitleAutoSync = false; // Native players only, opt-in
+  bool _subtitleAutoSync = true; // Native players only, on by default
   int _movieCompletionThreshold =
       StorageService.defaultLocalCompletionThreshold;
   int _episodeCompletionThreshold =
