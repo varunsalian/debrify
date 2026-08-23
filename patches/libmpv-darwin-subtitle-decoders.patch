@@ -1,11 +1,12 @@
 diff --git a/nix/packages/mk-pkg-ffmpeg/meson.build b/nix/packages/mk-pkg-ffmpeg/meson.build
-index 1b8afa3..88fe794 100644
+index 1b8afa3..246677b 100644
 --- a/nix/packages/mk-pkg-ffmpeg/meson.build
 +++ b/nix/packages/mk-pkg-ffmpeg/meson.build
-@@ -168,0 +169,2 @@ audio_default_options = [
+@@ -169,1 +169,3 @@ audio_default_options = [
 +    '--enable-filter=astats',
 +    '--enable-filter=aspectralstats',
-@@ -203,0 +206,9 @@ video_default_options = [
+ ]
+@@ -214,1 +216,10 @@ video_default_options = [
 +    '--enable-decoder=pgssub',
 +    '--enable-decoder=xsub',
 +    '--enable-decoder=ccaption',
@@ -15,14 +16,16 @@ index 1b8afa3..88fe794 100644
 +    '--enable-decoder=pjs',
 +    '--enable-decoder=realtext',
 +    '--enable-decoder=sami',
+     # parsers
 diff --git a/nix/packages/mk-pkg-libpng/default.nix b/nix/packages/mk-pkg-libpng/default.nix
-index 9a5fafd..5127da1 100644
+index 9a5fafd..70a4e32 100644
 --- a/nix/packages/mk-pkg-libpng/default.nix
 +++ b/nix/packages/mk-pkg-libpng/default.nix
-@@ -41,0 +42,6 @@ let
+@@ -42,1 +42,7 @@ let
 +        # Meson's Apple config defines TARGET_OS_MAC for modern clang, but
 +        # libpng treats mere presence as an obsolete classic-Mac compiler and
 +        # includes the long-removed fp.h. Modern Apple targets use math.h.
 +        substituteInPlace $src/pngpriv.h \
 +          --replace-fail 'defined(__SC__) || defined(TARGET_OS_MAC)' 'defined(__SC__)'
 +
+         cp -r $src $out
