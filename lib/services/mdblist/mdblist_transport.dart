@@ -123,7 +123,11 @@ class MdblistTransport {
         );
       }
       if (response.body.trim().isEmpty) {
-        return MdblistResult.success(null, statusCode: status);
+        return MdblistResult.success(
+          null,
+          statusCode: status,
+          headers: response.headers,
+        );
       }
       final decoded = jsonDecode(response.body);
       if (decoded is Map &&
@@ -133,7 +137,11 @@ class MdblistTransport {
           statusCode: status,
         );
       }
-      return MdblistResult.success(decoded, statusCode: status);
+      return MdblistResult.success(
+        decoded,
+        statusCode: status,
+        headers: response.headers,
+      );
     } on TimeoutException {
       return const MdblistResult.failure(MdblistResultKind.transientFailure);
     } on FormatException {

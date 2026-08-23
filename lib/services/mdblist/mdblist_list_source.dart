@@ -32,18 +32,23 @@ class MdblistListChoice {
   });
 
   factory MdblistListChoice.fromJson(Map<String, dynamic> j) {
-    final rawName = j['name'] as String?;
-    final owner = (j['user_name'] as String?)?.trim();
+    int? integer(Object? value) => value is num
+        ? value.toInt()
+        : value is String
+        ? int.tryParse(value)
+        : null;
+    final rawName = j['name']?.toString();
+    final owner = j['user_name']?.toString().trim();
     return MdblistListChoice(
-      id: (j['id'] as num?)?.toInt() ?? -1,
+      id: integer(j['id']) ?? -1,
       name: (rawName == null || rawName.trim().isEmpty)
           ? 'Untitled list'
           : rawName,
-      itemCount: (j['items'] as num?)?.toInt() ?? 0,
-      mediatype: j['mediatype'] as String?,
+      itemCount: integer(j['items']) ?? 0,
+      mediatype: j['mediatype']?.toString(),
       ownerName: (owner == null || owner.isEmpty) ? null : owner,
       liked: j['liked'] == true,
-      likes: (j['likes'] as num?)?.toInt() ?? 0,
+      likes: integer(j['likes']) ?? 0,
     );
   }
 

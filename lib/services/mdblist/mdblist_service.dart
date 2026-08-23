@@ -8,6 +8,7 @@ import '../episode_tracker_snapshot_revision.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_credential_facade.dart';
+import 'mdblist_discover_models.dart';
 import 'mdblist_models.dart';
 import 'mdblist_transport.dart';
 
@@ -84,6 +85,14 @@ class MdblistService {
   /// this to refresh after an asynchronous player-exit scrobble finishes.
   final ValueNotifier<int> playbackRevision = ValueNotifier<int>(0);
 
+  /// Changes when the active MDBList credential identity changes.
+  final ValueNotifier<int> authRevision = ValueNotifier<int>(0);
+
+  /// Changes whenever server-owned MDBList Library data mutates.
+  ///
+  /// This intentionally does not invalidate quota-sensitive catalog results.
+  final ValueNotifier<int> libraryRevision = ValueNotifier<int>(0);
+
   static const String _base = 'https://api.mdblist.com';
   final http.Client _client;
   final MdblistApiKeyProvider _apiKeyProvider;
@@ -134,12 +143,22 @@ class MdblistService {
   void resetProfileScope() {
     currentAccount = null;
     _clearCache();
+    authRevision.value++;
   }
 
   /// Drop only caches whose server activity bucket changed. The incremental
   /// sync coordinator invalidates owning caches so their next surface fetches
   /// authoritative state instead of maintaining a second local tracker DB.
   void invalidateSyncBuckets(Set<String> buckets, {bool all = false}) {
+    const libraryBuckets = {
+      'playback',
+      'watched',
+      'watchlist',
+      'collection',
+      'ratings',
+      'dropped',
+    };
+    if (all || buckets.any(libraryBuckets.contains)) libraryRevision.value++;
     if (all || buckets.contains('lists')) {
       _userListsCache = null;
       _userListsAt = null;
@@ -198,6 +217,7 @@ class MdblistService {
       if (capability == null || capability.isCurrentlyActive) {
         _clearCache();
         currentAccount = snapshot;
+        authRevision.value++;
       }
     }
 
@@ -243,6 +263,7 @@ class MdblistService {
       await StorageService.clearMdblistAuth();
       currentAccount = null;
       _clearCache();
+      authRevision.value++;
     }
 
     if (capability == null) {
@@ -259,37 +280,128 @@ class MdblistService {
     DateTime? cachedAt,
     void Function(List<Map<String, dynamic>>, DateTime)? publish,
   }) async {
+    int? integer(Object? value) => value is num
+        ? value.toInt()
+        : value is String
+        ? int.tryParse(value)
+        : null;
+
     final capability = await _captureCapability();
     if (cached != null && _fresh(cachedAt)) {
-      await capability?.runIfCurrent(() async {});
-      return MdblistResult.success(cached);
+      try {
+        await capability?.runIfCurrent(() async {});
+        return MdblistResult.success(cached);
+      } catch (_) {
+        return const MdblistResult.failure(MdblistResultKind.transientFailure);
+      }
     }
-    final response = await _transport.request(
-      'GET',
-      path,
-      query: query,
-      capability: capability,
-    );
-    final decoded = response.data;
-    if (!response.isSuccess || decoded is! List) {
-      return MdblistResult.failure(
-        response.isSuccess
-            ? MdblistResultKind.malformedResponse
-            : response.kind,
-        statusCode: response.statusCode,
-        retryAfter: response.retryAfter,
+    final lists = <Map<String, dynamic>>[];
+    var offset = 0;
+    String? cursor;
+    var reachedEnd = false;
+    final seenCursors = <String>{};
+    for (var page = 0; page < 25; page++) {
+      final response = await _transport.request(
+        'GET',
+        path,
+        query: {
+          ...query,
+          'limit': query['limit'] ?? 100,
+          if (cursor != null) 'cursor': cursor,
+          if (cursor == null && offset > 0) 'offset': offset,
+        },
+        capability: capability,
       );
+      if (!response.isSuccess) {
+        if (lists.isNotEmpty) {
+          return MdblistResult.partial(
+            lists,
+            statusCode: response.statusCode,
+            headers: response.headers,
+          );
+        }
+        return MdblistResult.failure(
+          response.kind,
+          statusCode: response.statusCode,
+          retryAfter: response.retryAfter,
+          headers: response.headers,
+        );
+      }
+
+      final decoded = response.data;
+      List<dynamic>? rawLists;
+      Map<dynamic, dynamic>? pagination;
+      if (decoded is List) {
+        rawLists = decoded;
+      } else if (decoded is Map && decoded['lists'] is List) {
+        rawLists = decoded['lists'] as List;
+        if (decoded['pagination'] is Map) {
+          pagination = decoded['pagination'] as Map;
+        }
+      }
+      if (rawLists == null || rawLists.any((value) => value is! Map)) {
+        return lists.isEmpty
+            ? const MdblistResult.failure(MdblistResultKind.malformedResponse)
+            : MdblistResult.partial(
+                lists,
+                statusCode: response.statusCode,
+                headers: response.headers,
+              );
+      }
+      for (final value in rawLists) {
+        lists.add(Map<String, dynamic>.from(value as Map));
+      }
+
+      final bodyCursor = pagination?['next_cursor']?.toString().trim();
+      final headerCursor = response.headers?['x-next-cursor']?.trim();
+      final nextCursor = bodyCursor?.isNotEmpty == true
+          ? bodyCursor
+          : headerCursor?.isNotEmpty == true
+          ? headerCursor
+          : null;
+      if (nextCursor != null) {
+        if (!seenCursors.add(nextCursor)) {
+          return MdblistResult.partial(
+            lists,
+            statusCode: response.statusCode,
+            headers: response.headers,
+          );
+        }
+        cursor = nextCursor;
+        continue;
+      }
+
+      final bodyHasMore = pagination?['has_more'];
+      final headerHasMore = response.headers?['x-has-more'];
+      final hasMore =
+          bodyHasMore == true ||
+          bodyHasMore?.toString().toLowerCase() == 'true' ||
+          headerHasMore?.toLowerCase() == 'true';
+      if (!hasMore) {
+        reachedEnd = true;
+        break;
+      }
+      if (rawLists.isEmpty) {
+        return MdblistResult.partial(
+          lists,
+          statusCode: response.statusCode,
+          headers: response.headers,
+        );
+      }
+      final pageOffset = integer(pagination?['offset']) ?? offset;
+      final pageLimit = integer(pagination?['limit']);
+      offset = pageOffset + (pageLimit ?? rawLists.length);
+      cursor = null;
     }
-    final lists = <Map<String, dynamic>>[
-      for (final entry in decoded)
-        if (entry is Map<String, dynamic>) entry,
-    ];
-    if (lists.length != decoded.length) {
-      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    if (!reachedEnd) return MdblistResult.partial(lists);
+    try {
+      await capability?.runIfCurrent(() async {
+        publish?.call(lists, DateTime.now());
+      });
+    } catch (_) {
+      return const MdblistResult.failure(MdblistResultKind.transientFailure);
     }
-    await capability?.runIfCurrent(() async {});
-    publish?.call(lists, DateTime.now());
-    return MdblistResult.success(lists, statusCode: response.statusCode);
+    return MdblistResult.success(lists);
   }
 
   Future<MdblistResult<List<Map<String, dynamic>>>> fetchUserListsResult() =>
@@ -344,6 +456,178 @@ class MdblistService {
 
   Future<List<Map<String, dynamic>>> searchLists(String query) async =>
       (await searchListsResult(query)).data ?? const [];
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> fetchCuratedListsResult() =>
+      _fetchLists('/lists/curated');
+
+  Future<MdblistResult<List<Map<String, dynamic>>>>
+  fetchOfficialListsResult() => _fetchLists('/lists/official');
+
+  Future<MdblistResult<List<Map<String, dynamic>>>>
+  fetchExternalListsResult() => _fetchLists(
+    '/external/lists/user',
+    query: const {'append_to_response': 'poster'},
+  );
+
+  Future<MdblistResult<List<Map<String, dynamic>>>>
+  fetchRecommendationSections() async {
+    final response = await _mapRequest('GET', '/lists/recommended');
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+        headers: response.headers,
+      );
+    }
+    final raw = response.data?['sections'];
+    if (raw is! List) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final sections = <Map<String, dynamic>>[];
+    for (final value in raw) {
+      if (value is! Map) {
+        return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+      }
+      sections.add(Map<String, dynamic>.from(value));
+    }
+    return MdblistResult.success(sections, statusCode: response.statusCode);
+  }
+
+  Future<MdblistResult<MdblistRawPage>> fetchRecommendationItemsPage(
+    String section, {
+    String? cursor,
+    String? mediaType,
+    int limit = 100,
+  }) => _fetchRawPage(
+    '/lists/recommended/${Uri.encodeComponent(section)}/items',
+    query: {
+      'limit': limit.clamp(1, 1000),
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (mediaType != null) 'mediatype': mediaType,
+      'unified': true,
+      'append_to_response': 'poster,ratings,description,genres',
+    },
+  );
+
+  Future<MdblistResult<MdblistRawPage>> fetchOfficialListItemsPage(
+    String slug, {
+    String? cursor,
+    String? mediaType,
+    int limit = 100,
+  }) => _fetchRawPage(
+    '/lists/official/${Uri.encodeComponent(slug)}/items',
+    query: {
+      'limit': limit.clamp(1, 1000),
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (mediaType != null) 'mediatype': mediaType,
+      'unified': true,
+      'append_to_response': 'poster,ratings,description,genres',
+    },
+  );
+
+  Future<MdblistResult<MdblistRawPage>> fetchExternalListItemsPage(
+    int listId, {
+    String? cursor,
+    String? mediaType,
+    int limit = 100,
+  }) => _fetchRawPage(
+    '/external/lists/$listId/items',
+    query: {
+      'limit': limit.clamp(1, 1000),
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (mediaType != null) 'mediatype': mediaType,
+      'unified': true,
+      'append_to_response': 'poster,ratings,description,genres',
+    },
+  );
+
+  Future<MdblistResult<MdblistRawPage>> fetchCatalogPage(
+    MdblistCatalogQuery catalogQuery, {
+    String? cursor,
+    int limit = 100,
+  }) {
+    final query = catalogQuery.normalized;
+    return _fetchRawPage(
+      '/catalog/${query.mediaType}',
+      query: query.toQuery(cursor: cursor, limit: limit),
+    );
+  }
+
+  Future<MdblistResult<MdblistRawPage>> _fetchRawPage(
+    String path, {
+    Map<String, Object?> query = const {},
+  }) async {
+    final response = await _trackerRequest('GET', path, query: query);
+    if (!response.isSuccess) {
+      return MdblistResult.failure(
+        response.kind,
+        statusCode: response.statusCode,
+        retryAfter: response.retryAfter,
+        headers: response.headers,
+      );
+    }
+    final decoded = response.data;
+    final items = <Map<String, dynamic>>[];
+    String? nextCursor;
+    MdblistCatalogQuota? quota;
+    if (decoded is List) {
+      for (final value in decoded) {
+        if (value is! Map) {
+          return const MdblistResult.failure(
+            MdblistResultKind.malformedResponse,
+          );
+        }
+        items.add(Map<String, dynamic>.from(value));
+      }
+    } else if (decoded is Map) {
+      final map = Map<String, dynamic>.from(decoded);
+      var foundBucket = false;
+      for (final key in const ['items', 'movies', 'shows']) {
+        final values = map[key];
+        if (values == null) continue;
+        if (values is! List) {
+          return const MdblistResult.failure(
+            MdblistResultKind.malformedResponse,
+          );
+        }
+        foundBucket = true;
+        for (final value in values) {
+          if (value is! Map) {
+            return const MdblistResult.failure(
+              MdblistResultKind.malformedResponse,
+            );
+          }
+          items.add(Map<String, dynamic>.from(value));
+        }
+      }
+      if (!foundBucket && map.isNotEmpty) {
+        return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+      }
+      final pagination = map['pagination'];
+      if (pagination is Map) {
+        final rawCursor = pagination['next_cursor']?.toString().trim();
+        if (rawCursor != null && rawCursor.isNotEmpty) nextCursor = rawCursor;
+      }
+      final rawQuota = map['quota'];
+      if (rawQuota is Map) {
+        quota = MdblistCatalogQuota.fromJson(
+          Map<String, dynamic>.from(rawQuota),
+        );
+      }
+    } else {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    final headerCursor = response.headers?['x-next-cursor']?.trim();
+    if (nextCursor == null && headerCursor != null && headerCursor.isNotEmpty) {
+      nextCursor = headerCursor;
+    }
+    return MdblistResult.success(
+      MdblistRawPage(items: items, nextCursor: nextCursor, quota: quota),
+      statusCode: response.statusCode,
+      headers: response.headers,
+    );
+  }
 
   /// Fetches a list's items via `GET /lists/{id}/items`, following pagination.
   ///
@@ -536,6 +820,7 @@ class MdblistService {
         response.kind,
         statusCode: response.statusCode,
         retryAfter: response.retryAfter,
+        headers: response.headers,
       );
     }
     if (response.data is! Map<String, dynamic>) {
@@ -544,6 +829,7 @@ class MdblistService {
     return MdblistResult.success(
       response.data! as Map<String, dynamic>,
       statusCode: response.statusCode,
+      headers: response.headers,
     );
   }
 
@@ -557,6 +843,7 @@ class MdblistService {
         response.kind,
         statusCode: response.statusCode,
         retryAfter: response.retryAfter,
+        headers: response.headers,
       );
     }
     final raw = response.data;
@@ -570,7 +857,11 @@ class MdblistService {
       }
       result.add(entry);
     }
-    return MdblistResult.success(result, statusCode: response.statusCode);
+    return MdblistResult.success(
+      result,
+      statusCode: response.statusCode,
+      headers: response.headers,
+    );
   }
 
   Future<MdblistResult<Map<String, dynamic>>> scrobbleStart(
@@ -620,6 +911,7 @@ class MdblistService {
         );
       }
       playbackRevision.value++;
+      libraryRevision.value++;
     }
     return result;
   }
@@ -759,6 +1051,7 @@ class MdblistService {
         (path == '/sync/watched' || path == '/sync/watched/remove')) {
       EpisodeTrackerSnapshotRevision.invalidateTitle('mdblist', ids.imdb);
     }
+    if (success) libraryRevision.value++;
     return success;
   }
 
@@ -880,12 +1173,19 @@ class MdblistService {
 
   Future<MdblistResult<List<Map<String, dynamic>>>> fetchWatchlist() async {
     final rows = <Map<String, dynamic>>[];
+    final seenCursors = <String>{};
     String? cursor;
+    var offset = 0;
     for (var page = 0; page < 100; page++) {
       final response = await _mapRequest(
         'GET',
         '/watchlist/items',
-        query: {'limit': 1000, if (cursor != null) 'cursor': cursor},
+        query: {
+          'limit': 1000,
+          if (cursor != null) 'cursor': cursor,
+          if (cursor == null && offset > 0) 'offset': offset,
+          'append_to_response': 'poster,ratings,description,genres',
+        },
       );
       if (!response.isSuccess) {
         return rows.isEmpty
@@ -893,24 +1193,58 @@ class MdblistService {
                 response.kind,
                 statusCode: response.statusCode,
                 retryAfter: response.retryAfter,
+                headers: response.headers,
               )
-            : MdblistResult.partial(rows);
+            : MdblistResult.partial(
+                rows,
+                statusCode: response.statusCode,
+                headers: response.headers,
+              );
       }
+      var pageRows = 0;
       for (final bucket in ['movies', 'shows']) {
         final values = response.data?[bucket];
         if (values is! List) continue;
         for (final value in values) {
-          if (value is Map<String, dynamic>) rows.add(value);
+          if (value is Map<String, dynamic>) {
+            rows.add(value);
+            pageRows++;
+          }
         }
       }
       final pagination = response.data?['pagination'];
-      final next = pagination is Map
+      final bodyCursor = pagination is Map
           ? pagination['next_cursor']?.toString().trim()
           : null;
-      if (next == null || next.isEmpty) {
+      final headerCursor = response.headers?['x-next-cursor']?.trim();
+      final next = bodyCursor?.isNotEmpty == true
+          ? bodyCursor
+          : headerCursor?.isNotEmpty == true
+          ? headerCursor
+          : null;
+      if (next != null) {
+        if (!seenCursors.add(next)) {
+          return MdblistResult.partial(
+            rows,
+            statusCode: response.statusCode,
+            headers: response.headers,
+          );
+        }
+        cursor = next;
+        continue;
+      }
+      final bodyHasMore =
+          pagination is Map &&
+          (pagination['has_more'] == true ||
+              pagination['has_more']?.toString().toLowerCase() == 'true');
+      final headerHasMore =
+          response.headers?['x-has-more']?.toLowerCase() == 'true';
+      if (!bodyHasMore && !headerHasMore) {
         return MdblistResult.success(rows);
       }
-      cursor = next;
+      if (pageRows == 0) return MdblistResult.partial(rows);
+      offset += pageRows;
+      cursor = null;
     }
     return MdblistResult.partial(rows);
   }

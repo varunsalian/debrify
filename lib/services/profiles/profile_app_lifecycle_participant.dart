@@ -11,6 +11,7 @@ import '../mdblist/mdblist_service.dart';
 import '../mdblist/mdblist_id_resolver.dart';
 import '../mdblist/mdblist_continue_watching_service.dart';
 import '../mdblist/mdblist_calendar_service.dart';
+import '../mdblist/mdblist_discover_source.dart';
 import '../mdblist/mdblist_sync_coordinator.dart';
 import '../main_page_bridge.dart';
 import '../pikpak_api_service.dart';
@@ -56,6 +57,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     MdblistIdResolver.instance.resetProfileScope();
     MdblistContinueWatchingService.instance.resetProfileScope();
     MdblistCalendarService.instance.resetProfileScope();
+    MdblistDiscoverSource.instance.resetProfileScope();
     MdblistSyncCoordinator.instance.resetProfileScope();
     IptvService.instance.clearCache();
     XtreamCodesService.instance.clearCache();

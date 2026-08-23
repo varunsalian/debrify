@@ -16,25 +16,49 @@ class MdblistResult<T> {
   final T? data;
   final int? statusCode;
   final Duration? retryAfter;
+  final Map<String, String>? headers;
 
   const MdblistResult._(
     this.kind, {
     this.data,
     this.statusCode,
     this.retryAfter,
+    this.headers,
   });
 
-  const MdblistResult.success(T data, {int? statusCode})
-    : this._(MdblistResultKind.success, data: data, statusCode: statusCode);
+  const MdblistResult.success(
+    T data, {
+    int? statusCode,
+    Map<String, String>? headers,
+  }) : this._(
+         MdblistResultKind.success,
+         data: data,
+         statusCode: statusCode,
+         headers: headers,
+       );
 
-  const MdblistResult.partial(T data, {int? statusCode})
-    : this._(MdblistResultKind.partial, data: data, statusCode: statusCode);
+  const MdblistResult.partial(
+    T data, {
+    int? statusCode,
+    Map<String, String>? headers,
+  }) : this._(
+         MdblistResultKind.partial,
+         data: data,
+         statusCode: statusCode,
+         headers: headers,
+       );
 
   const MdblistResult.failure(
     MdblistResultKind kind, {
     int? statusCode,
     Duration? retryAfter,
-  }) : this._(kind, statusCode: statusCode, retryAfter: retryAfter);
+    Map<String, String>? headers,
+  }) : this._(
+         kind,
+         statusCode: statusCode,
+         retryAfter: retryAfter,
+         headers: headers,
+       );
 
   bool get isSuccess => kind == MdblistResultKind.success;
   bool get isUsable => isSuccess || kind == MdblistResultKind.partial;
