@@ -12,7 +12,7 @@ required=(
   ass ssa dvbsub dvdsub pgssub xsub ccaption jacosub microdvd movtext mpl2
   pjs realtext sami srt stl subrip subviewer subviewer1 text vplayer webvtt
 )
-required_filters=(astats aspectralstats)
+required_filters=(astats aspectralstats ametadata)
 
 verify_binary() {
   local binary="$1"

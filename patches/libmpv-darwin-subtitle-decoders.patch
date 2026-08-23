@@ -2,9 +2,10 @@ diff --git a/nix/packages/mk-pkg-ffmpeg/meson.build b/nix/packages/mk-pkg-ffmpeg
 index 1b8afa3..246677b 100644
 --- a/nix/packages/mk-pkg-ffmpeg/meson.build
 +++ b/nix/packages/mk-pkg-ffmpeg/meson.build
-@@ -169,1 +169,3 @@ audio_default_options = [
+@@ -169,1 +169,4 @@ audio_default_options = [
 +    '--enable-filter=astats',
 +    '--enable-filter=aspectralstats',
++    '--enable-filter=ametadata',
  ]
 @@ -214,1 +216,10 @@ video_default_options = [
 +    '--enable-decoder=pgssub',

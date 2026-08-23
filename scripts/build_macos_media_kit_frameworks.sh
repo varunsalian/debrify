@@ -42,7 +42,7 @@ XCODE_PATH="$(dirname "$(dirname "$(xcode-select -p)")")"
   cd "$WORK/source"
   nix develop -c make \
     XCODE_PATH="$XCODE_PATH" \
-    VERSION="debrify-subtitles-autosync-2" \
+    VERSION="debrify-subtitles-autosync-3" \
     TARGET="$TARGET"
 )
 

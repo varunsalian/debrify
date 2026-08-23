@@ -268,6 +268,19 @@ class MediaKitSubtitleAutoSync {
     _ladderDone = false;
     _ladderTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (_ladderDone || _disposed || _subtitlePath == null) return;
+      if (!_tap.reliable) {
+        // The transport demonstrably lost audio; any alignment would be
+        // against a time-warped feature timeline. Decline for good.
+        _ladderDone = true;
+        _ladderTimer?.cancel();
+        onNotice(
+          const SubtitleAutoSyncNotice(
+            SubtitleAutoSyncNoticeKind.failed,
+            'Couldn’t analyze this stream’s audio reliably.',
+          ),
+        );
+        return;
+      }
       if (_running || currentOffsetMs() != 0) return;
       if (_ladderIndex >= _ladderSeconds.length) return;
       debugPrint(
@@ -285,6 +298,7 @@ class MediaKitSubtitleAutoSync {
 
   Future<void> _runAlignment({required bool auto}) async {
     if (_disposed || _running || !available || _cues.isEmpty) return;
+    if (!_tap.reliable) return;
     final path = _subtitlePath;
     if (path == null) return;
     final generation = _generation;
@@ -373,6 +387,9 @@ class MediaKitSubtitleAutoSync {
   Future<void> _verify() async {
     final applied = _appliedOffsetMs;
     final path = _subtitlePath;
+    // An unreliable tap ends verification outright: residuals computed from
+    // a distorted timeline would "correct" a good offset into a bad one.
+    if (!_tap.reliable) return;
     if (_disposed ||
         applied == null ||
         path == null ||

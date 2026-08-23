@@ -59,6 +59,9 @@ class _BlockingTap implements MediaKitAudioFeatureTap {
   bool get installed => _installed;
 
   @override
+  bool get reliable => true;
+
+  @override
   Future<bool> install() async {
     installCalls++;
     installStarted.complete();
@@ -87,6 +90,12 @@ class _BlockingTap implements MediaKitAudioFeatureTap {
 
   @override
   void ingestMetadata(Map<String, String> metadata) {}
+
+  @override
+  void ingestMetadataRecord(Map<String, String> metadata, {required int ptsMs}) {}
+
+  @override
+  void ingestPrintOutput(String text) {}
 
   @override
   Future<void> dispose() async {
