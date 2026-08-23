@@ -139,7 +139,14 @@ class MediaKitSubtitleAutoSync {
     _cues = const <SubtitleCueSpan>[];
     _appliedOffsetMs = null;
     _verifyMisses = 0;
-    if (!enabled || _passthroughEnabled) return;
+    if (!enabled || _passthroughEnabled) {
+      debugPrint(
+        'SubtitleAutoSync: activate skipped — enabled=$enabled '
+        'passthrough=$_passthroughEnabled',
+      );
+      return;
+    }
+    debugPrint('SubtitleAutoSync: activating for $path');
 
     final parsed = await SubtitleCueParser.parseFile(path);
     if (_disposed || generation != _generation || _subtitlePath != path) return;
@@ -151,8 +158,12 @@ class MediaKitSubtitleAutoSync {
       debugPrint('SubtitleAutoSync: no parseable cues in $path');
       return;
     }
+    debugPrint('SubtitleAutoSync: parsed ${_cues.length} cues');
     final installed = await _tap.install();
-    if (!installed) return;
+    if (!installed) {
+      debugPrint('SubtitleAutoSync: tap install failed — auto-sync abandoned');
+      return;
+    }
     if (_disposed || generation != _generation) {
       await _tap.uninstall();
       return;
@@ -161,7 +172,14 @@ class MediaKitSubtitleAutoSync {
     // A pre-existing manual/remembered offset gates every ladder tick, so a
     // countdown would promise work that never runs. The ladder still arms —
     // it starts attempting if the offset later returns to zero.
-    if (currentOffsetMs() == 0) _notifyListening();
+    if (currentOffsetMs() == 0) {
+      _notifyListening();
+    } else {
+      debugPrint(
+        'SubtitleAutoSync: listening suppressed — stored offset '
+        '${currentOffsetMs()}ms gates the ladder',
+      );
+    }
     _startLadder();
   }
 
@@ -252,6 +270,11 @@ class MediaKitSubtitleAutoSync {
       if (_ladderDone || _disposed || _subtitlePath == null) return;
       if (_running || currentOffsetMs() != 0) return;
       if (_ladderIndex >= _ladderSeconds.length) return;
+      debugPrint(
+        'SubtitleAutoSync: ladder tick — anchored '
+        '${(_tap.anchoredDurationMs / 1000).toStringAsFixed(1)}s of '
+        '${_ladderSeconds[_ladderIndex]}s needed for rung ${_ladderIndex + 1}',
+      );
       if (_tap.anchoredDurationMs < _ladderSeconds[_ladderIndex] * 1000) {
         return;
       }

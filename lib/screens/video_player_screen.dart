@@ -1153,13 +1153,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String? _activeExternalSubtitlePath;
   bool _subtitleAutoSyncEnabled = false;
   MediaKitSubtitleAutoSync? _subtitleAutoSync;
-  // The quiet bottom-right auto-sync pill. Countdown ticks only while
-  // playing (the engine also only accrues anchored audio during playback).
+  // The quiet bottom-right auto-sync surface: a 5s announce line, then
+  // nothing until a real event — statuses during passes, word-only results.
   final ValueNotifier<AutoSyncPillModel?> _autoSyncPill =
       ValueNotifier<AutoSyncPillModel?>(null);
-  Timer? _autoSyncPillTicker;
-  Timer? _autoSyncPillHold;
-  int _autoSyncPillSeconds = 0;
+  // True from listening until a verdict/terminal hide: the engine is trying.
+  bool _autoSyncWindowActive = false;
+  Timer? _autoSyncPillHold; // result auto-hide
+  Timer? _autoSyncPillPhaseTimer; // announce auto-dismiss
   // Last non-null model, kept so the dismiss fade has content to fade out.
   AutoSyncPillModel? _autoSyncPillLastShown;
 
@@ -2497,10 +2498,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!_subtitleAutoSyncEnabled ||
         kIsWeb ||
         (!Platform.isAndroid && !Platform.isMacOS)) {
+      debugPrint(
+        'SubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled '
+        'web=$kIsWeb platform=${Platform.operatingSystem}',
+      );
       return;
     }
     final platform = player.platform;
-    if (platform is! mk.NativePlayer) return;
+    if (platform is! mk.NativePlayer) {
+      debugPrint(
+        'SubtitleAutoSync: not installing — player backend is not NativePlayer '
+        '(${platform.runtimeType})',
+      );
+      return;
+    }
+    debugPrint(
+      'SubtitleAutoSync: controller installed '
+      '(passthrough=${!kIsWeb && Platform.isAndroid && _audioPassthroughEnabled})',
+    );
     _subtitleAutoSync = MediaKitSubtitleAutoSync(
       player: platform,
       enabled: _subtitleAutoSyncEnabled,
@@ -2545,31 +2560,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     debugPrint('SubtitleAutoSync: ${notice.message}');
     switch (notice.kind) {
       case SubtitleAutoSyncNoticeKind.listening:
-        // A new window always restarts the countdown — even mid-checking, a
-        // subtitle switch must not inherit the old subtitle's drain.
-        _startAutoSyncPillCountdown();
-      case SubtitleAutoSyncNoticeKind.stillListening:
-        // Deterministic checking-revert: the pass ended with no verdict.
-        final model = _autoSyncPill.value;
-        if (_autoSyncPillTicker != null &&
-            model?.phase == AutoSyncPillPhase.checking) {
-          _autoSyncPill.value = AutoSyncPillModel(
-            AutoSyncPillPhase.listening,
-            _autoSyncPillSeconds,
+        // A fresh window: announce for ~5s, then go quiet until an event.
+        _openAutoSyncPillWindow();
+      case SubtitleAutoSyncNoticeKind.checking:
+        // An alignment pass is genuinely running — surface it, even if the
+        // pill was idle-hidden in the meantime.
+        if (_autoSyncWindowActive) {
+          _autoSyncPillPhaseTimer?.cancel();
+          _autoSyncPill.value = const AutoSyncPillModel(
+            AutoSyncPillPhase.checking,
           );
         }
-      case SubtitleAutoSyncNoticeKind.checking:
-        final model = _autoSyncPill.value;
-        if (model?.phase == AutoSyncPillPhase.listening) {
-          _autoSyncPill.value = AutoSyncPillModel(
-            AutoSyncPillPhase.checking,
-            _autoSyncPillSeconds,
-          );
+      case SubtitleAutoSyncNoticeKind.stillListening:
+        // The pass ended with no verdict: leave the screen quiet again.
+        if (_autoSyncWindowActive &&
+            _autoSyncPill.value?.phase == AutoSyncPillPhase.checking) {
+          _autoSyncPill.value = null;
         }
       case SubtitleAutoSyncNoticeKind.synced ||
           SubtitleAutoSyncNoticeKind.resynced:
         // A verify-pass re-sync corrects silently; only the first sync speaks.
         if (notice.kind == SubtitleAutoSyncNoticeKind.resynced &&
+            !_autoSyncWindowActive &&
             _autoSyncPill.value == null) {
           return;
         }
@@ -2579,46 +2591,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  void _startAutoSyncPillCountdown() {
+  void _openAutoSyncPillWindow() {
     _autoSyncPillHold?.cancel();
     _autoSyncPillHold = null;
-    _autoSyncPillSeconds = 90;
-    _autoSyncPill.value = const AutoSyncPillModel(
-      AutoSyncPillPhase.listening,
-      90,
-    );
-    _autoSyncPillTicker?.cancel();
-    var idleTicks = 0;
-    _autoSyncPillTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      final model = _autoSyncPill.value;
-      if (model == null ||
-          (model.phase != AutoSyncPillPhase.listening &&
-              model.phase != AutoSyncPillPhase.checking)) {
-        return;
+    _autoSyncWindowActive = true;
+    _autoSyncPill.value = const AutoSyncPillModel(AutoSyncPillPhase.announce);
+    _autoSyncPillPhaseTimer?.cancel();
+    _autoSyncPillPhaseTimer = Timer(const Duration(seconds: 5), () {
+      // The sentence had its moment; the screen goes quiet until a real
+      // event (a checking pass or a verdict) has something to say.
+      if (_autoSyncWindowActive &&
+          _autoSyncPill.value?.phase == AutoSyncPillPhase.announce) {
+        _autoSyncPill.value = null;
       }
-      if (!_isPlaying) {
-        // A short pause freezes the countdown honestly; a long one (or EOF)
-        // must not leave a frozen pill on screen forever.
-        if (++idleTicks >= 20) _hideAutoSyncPill();
-        return;
-      }
-      idleTicks = 0;
-      _autoSyncPillSeconds--;
-      if (_autoSyncPillSeconds <= 0) {
-        // The window elapsed without a verdict: leave quietly. The engine's
-        // wider 180s rung may still land later and re-show a result.
-        _hideAutoSyncPill();
-        return;
-      }
-      _autoSyncPill.value = AutoSyncPillModel(model.phase, _autoSyncPillSeconds);
     });
   }
 
   void _showAutoSyncPillResult(AutoSyncPillPhase phase) {
-    _autoSyncPillTicker?.cancel();
-    _autoSyncPillTicker = null;
+    _autoSyncWindowActive = false;
+    _autoSyncPillPhaseTimer?.cancel();
+    _autoSyncPillPhaseTimer = null;
     _autoSyncPillHold?.cancel();
-    _autoSyncPill.value = AutoSyncPillModel(phase, 0);
+    _autoSyncPill.value = AutoSyncPillModel(phase);
     _autoSyncPillHold = Timer(
       const Duration(milliseconds: 2400),
       _hideAutoSyncPill,
@@ -2626,8 +2620,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _hideAutoSyncPill() {
-    _autoSyncPillTicker?.cancel();
-    _autoSyncPillTicker = null;
+    _autoSyncWindowActive = false;
+    _autoSyncPillPhaseTimer?.cancel();
+    _autoSyncPillPhaseTimer = null;
     _autoSyncPillHold?.cancel();
     _autoSyncPillHold = null;
     if (_autoSyncPill.value != null) _autoSyncPill.value = null;
@@ -2637,6 +2632,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_activeExternalSubtitlePath == path) return;
     _activeExternalSubtitlePath = path;
     final controller = _subtitleAutoSync;
+    debugPrint(
+      'SubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} '
+      '(controller=${controller == null ? 'MISSING' : 'present'})',
+    );
     if (controller == null) return;
     if (path == null) {
       unawaited(controller.deactivateSubtitle());
@@ -5294,6 +5293,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _loadPlayerDefaults() async {
     _subtitleAutoSyncEnabled =
         await StorageService.getSubtitleAutoSyncEnabled();
+    debugPrint('SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled');
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
@@ -9498,8 +9498,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvDiag.onSessionEnd();
     _iptvLiveRecovery.cancel();
     _iptvReconnectText.dispose();
-    _autoSyncPillTicker?.cancel();
     _autoSyncPillHold?.cancel();
+    _autoSyncPillPhaseTimer?.cancel();
     _autoSyncPill.dispose();
     // The sleep timer belongs to this playback session — a pending one must not
     // outlive the player and fire against a disposed state.

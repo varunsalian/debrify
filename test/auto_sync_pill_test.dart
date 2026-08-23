@@ -9,36 +9,35 @@ Widget _host(AutoSyncPillModel model) {
 }
 
 void main() {
-  testWidgets('listening shows the label and the countdown digits', (
-    tester,
-  ) async {
+  testWidgets('announce shows the keep-watching sentence', (tester) async {
     await tester.pumpWidget(
-      _host(const AutoSyncPillModel(AutoSyncPillPhase.listening, 67)),
+      _host(const AutoSyncPillModel(AutoSyncPillPhase.announce)),
     );
-    expect(find.text('AUTO SYNC'), findsOneWidget);
-    expect(find.text('67'), findsOneWidget);
+    expect(
+      find.textContaining('Trying to auto-sync subtitles'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('keep watching'), findsOneWidget);
   });
 
-  testWidgets('checking swaps the label but keeps counting', (tester) async {
+  testWidgets('checking surfaces its status', (tester) async {
     await tester.pumpWidget(
-      _host(const AutoSyncPillModel(AutoSyncPillPhase.checking, 45)),
+      _host(const AutoSyncPillModel(AutoSyncPillPhase.checking)),
     );
     expect(find.text('CHECKING…'), findsOneWidget);
-    expect(find.text('45'), findsOneWidget);
   });
 
-  testWidgets('results carry no digits', (tester) async {
+  testWidgets('results are word-only', (tester) async {
     await tester.pumpWidget(
-      _host(const AutoSyncPillModel(AutoSyncPillPhase.synced, 0)),
+      _host(const AutoSyncPillModel(AutoSyncPillPhase.synced)),
     );
     expect(find.text('SUBTITLES SYNCED'), findsOneWidget);
-    expect(find.text('0'), findsNothing);
 
     await tester.pumpWidget(
-      _host(const AutoSyncPillModel(AutoSyncPillPhase.failed, 0)),
+      _host(const AutoSyncPillModel(AutoSyncPillPhase.failed)),
     );
     await tester.pumpAndSettle();
     expect(find.text('LEFT UNCHANGED'), findsOneWidget);
-    expect(find.text('0'), findsNothing);
+    expect(find.textContaining(RegExp(r'\d')), findsNothing);
   });
 }

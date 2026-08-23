@@ -93,7 +93,7 @@ class _ExternalPlayerSettingsPageState
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
-  bool _subtitleAutoSync = true; // Native players only, on by default
+  bool _subtitleAutoSync = false; // Native players only, experimental opt-in
   int _movieCompletionThreshold =
       StorageService.defaultLocalCompletionThreshold;
   int _episodeCompletionThreshold =
@@ -2316,7 +2316,7 @@ class _ExternalPlayerSettingsPageState
                             const SizedBox(height: 4),
                             _buildCheckboxTile(
                               context,
-                              title: 'Auto-sync addon subtitles',
+                              title: 'Auto-sync addon subtitles (experimental)',
                               subtitle:
                                   'Quietly align downloaded subtitles to the audio '
                                   'as you watch. Applies only on a confident match; '

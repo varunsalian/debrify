@@ -1,30 +1,34 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../utils/platform_util.dart';
 
-enum AutoSyncPillPhase { listening, checking, synced, failed }
+enum AutoSyncPillPhase {
+  /// The one up-front sentence, shown for ~5s when a listening window opens.
+  announce,
+
+  /// An alignment pass is running right now.
+  checking,
+  synced,
+  failed,
+}
 
 class AutoSyncPillModel {
   final AutoSyncPillPhase phase;
 
-  /// Seconds left in the 90-second listening window. Only meaningful for
-  /// [AutoSyncPillPhase.listening] and [AutoSyncPillPhase.checking].
-  final int secondsLeft;
-
-  const AutoSyncPillModel(this.phase, this.secondsLeft);
+  const AutoSyncPillModel(this.phase);
 }
 
-/// The quiet bottom-right auto-sync status pill (design/mockups/
-/// subtitle_auto_sync_hint_mockup/countdown_devices.html).
+/// The quiet bottom-right auto-sync status surface.
 ///
+/// Lifecycle: an announce line for a few seconds, then NOTHING until
+/// something actually happens — brief status text during alignment passes
+/// and word-only results. No countdown, no persistent indicator: the engine's
+/// pace varies by platform and the surface only speaks on real events.
 /// Display-only: never focusable, never tappable — hosts must wrap it in
-/// IgnorePointer. One component at three em scales: ~24px tall on phones,
-/// ~30px on desktop, ~40px at TV distance. Result states carry no numbers;
-/// the countdown is the only digit that ever appears.
+/// IgnorePointer.
 class AutoSyncPill extends StatefulWidget {
   final AutoSyncPillModel model;
 
@@ -38,7 +42,7 @@ class AutoSyncPill extends StatefulWidget {
   static double get cornerInset =>
       PlatformUtil.isTelevision ? 48 : (_isDesktop ? 24 : 16);
 
-  /// The pill's em scale: 1.0 == the phone footprint from the mock.
+  /// The pill's em scale: 1.0 == the phone footprint.
   static double get scale =>
       PlatformUtil.isTelevision ? 40 / 24 : (_isDesktop ? 30 / 24 : 1.0);
 
@@ -67,6 +71,21 @@ class _AutoSyncPillState extends State<AutoSyncPill>
       widget.model.phase == AutoSyncPillPhase.synced ||
       widget.model.phase == AutoSyncPillPhase.failed;
 
+  Widget _dot(double u, bool reduceMotion) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        return CustomPaint(
+          size: Size.square(10 * u),
+          painter: _HeartbeatDotPainter(
+            color: _cyan,
+            pulse: reduceMotion ? 0 : _pulse.value,
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
@@ -78,47 +97,54 @@ class _AutoSyncPillState extends State<AutoSyncPill>
 
     final u = AutoSyncPill.scale;
     final phase = widget.model.phase;
-    final Color statusColor;
+
+    final decoration = BoxDecoration(
+      color: const Color(0xA80C0E12),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(
+        color: switch (phase) {
+          AutoSyncPillPhase.synced => _green.withValues(alpha: 0.30),
+          AutoSyncPillPhase.failed => _amber.withValues(alpha: 0.30),
+          _ => Colors.white.withValues(alpha: 0.13),
+        },
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.28),
+          blurRadius: 18 * u,
+          offset: Offset(0, 5 * u),
+        ),
+      ],
+    );
+
+    final Color textColor;
     final String label;
+    final bool upper;
     switch (phase) {
-      case AutoSyncPillPhase.listening:
-        statusColor = Colors.white.withValues(alpha: 0.92);
-        label = 'AUTO SYNC';
+      case AutoSyncPillPhase.announce:
+        textColor = Colors.white.withValues(alpha: 0.92);
+        label = 'Trying to auto-sync subtitles — this may take a minute, '
+            'keep watching';
+        upper = false;
       case AutoSyncPillPhase.checking:
-        statusColor = Colors.white.withValues(alpha: 0.92);
+        textColor = Colors.white.withValues(alpha: 0.92);
         label = 'CHECKING…';
+        upper = true;
       case AutoSyncPillPhase.synced:
-        statusColor = _green;
+        textColor = _green;
         label = 'SUBTITLES SYNCED';
+        upper = true;
       case AutoSyncPillPhase.failed:
-        statusColor = _amber;
+        textColor = _amber;
         label = 'LEFT UNCHANGED';
+        upper = true;
     }
 
-    // The pulse invalidates every frame; the boundary keeps that repaint
-    // from spilling into the player overlay above the video texture.
     return RepaintBoundary(
       child: Container(
         height: 24 * u,
-        padding: EdgeInsets.only(left: 7 * u, right: 9.5 * u),
-        decoration: BoxDecoration(
-          color: const Color(0xA80C0E12),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: switch (phase) {
-              AutoSyncPillPhase.synced => _green.withValues(alpha: 0.30),
-              AutoSyncPillPhase.failed => _amber.withValues(alpha: 0.30),
-              _ => Colors.white.withValues(alpha: 0.13),
-            },
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.28),
-              blurRadius: 18 * u,
-              offset: Offset(0, 5 * u),
-            ),
-          ],
-        ),
+        padding: EdgeInsets.only(left: 8 * u, right: 10 * u),
+        decoration: decoration,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -127,60 +153,22 @@ class _AutoSyncPillState extends State<AutoSyncPill>
                 phase == AutoSyncPillPhase.synced
                     ? Icons.check_rounded
                     : Icons.priority_high_rounded,
-                color: statusColor,
+                color: textColor,
                 size: 11.5 * u,
               )
             else
-              AnimatedBuilder(
-                animation: _pulse,
-                builder: (context, _) {
-                  return CustomPaint(
-                    size: Size.square(12 * u),
-                    painter: _CountdownRingPainter(
-                      progress:
-                          (90 - widget.model.secondsLeft).clamp(0, 90) / 90,
-                      arcColor: phase == AutoSyncPillPhase.checking
-                          ? Colors.white
-                          : _cyan,
-                      pulse: reduceMotion ? 0 : _pulse.value,
-                    ),
-                  );
-                },
-              ),
+              _dot(u, reduceMotion),
             SizedBox(width: 5.5 * u),
             Text(
               label,
               style: TextStyle(
-                color: statusColor,
+                color: textColor,
                 fontSize: 8.5 * u,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8 * u,
+                fontWeight: upper ? FontWeight.w800 : FontWeight.w600,
+                letterSpacing: (upper ? 0.8 : 0.1) * u,
                 height: 1,
               ),
             ),
-            if (!_isResult) ...[
-              SizedBox(width: 5.5 * u),
-              Container(
-                width: 1,
-                height: 9.5 * u,
-                color: Colors.white.withValues(alpha: 0.16),
-              ),
-              SizedBox(width: 5.5 * u),
-              SizedBox(
-                width: 17 * u,
-                child: Text(
-                  '${widget.model.secondsLeft.clamp(0, 90)}',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.60),
-                    fontSize: 9 * u,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    height: 1,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -188,65 +176,30 @@ class _AutoSyncPillState extends State<AutoSyncPill>
   }
 }
 
-class _CountdownRingPainter extends CustomPainter {
-  final double progress;
-  final Color arcColor;
+class _HeartbeatDotPainter extends CustomPainter {
+  final Color color;
   final double pulse;
 
-  const _CountdownRingPainter({
-    required this.progress,
-    required this.arcColor,
-    required this.pulse,
-  });
+  const _HeartbeatDotPainter({required this.color, required this.pulse});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.shortestSide / 2 - 1.2;
-    final stroke = size.shortestSide * 0.11;
-
+    final r = size.shortestSide / 2;
     if (pulse > 0) {
       canvas.drawCircle(
         center,
-        radius * 0.28 + radius * 0.5 * pulse,
+        r * (0.35 + 0.65 * pulse),
         Paint()
-          ..color = arcColor.withValues(alpha: 0.32 * (1 - pulse))
+          ..color = color.withValues(alpha: 0.32 * (1 - pulse))
           ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke,
+          ..strokeWidth = size.shortestSide * 0.14,
       );
     }
-
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.14)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke,
-    );
-    if (progress > 0) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -math.pi / 2,
-        2 * math.pi * progress.clamp(0.0, 1.0),
-        false,
-        Paint()
-          ..color = arcColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-    canvas.drawCircle(
-      center,
-      size.shortestSide * 0.14,
-      Paint()..color = arcColor,
-    );
+    canvas.drawCircle(center, r * 0.32, Paint()..color = color);
   }
 
   @override
-  bool shouldRepaint(_CountdownRingPainter old) =>
-      old.progress != progress ||
-      old.arcColor != arcColor ||
-      old.pulse != pulse;
+  bool shouldRepaint(_HeartbeatDotPainter old) =>
+      old.pulse != pulse || old.color != color;
 }
