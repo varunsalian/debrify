@@ -8326,7 +8326,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun hideIptvGuide() {
         restoreIptvCategoryAfterSearch()
         iptvGuideVisible = false
-        trimHiddenIptvZapWindow()
+        // Deferred: hide is often reached from inside a guide row's own click
+        // dispatch, and trimming can remove hundreds of rows (including the
+        // focused one) from the RecyclerView mid-event. Posting lets the click
+        // finish first; after a channel pick the trim then no-ops because the
+        // zap session has already replaced the window.
+        iptvBrowseHandler.post { trimHiddenIptvZapWindow() }
         hideIptvEpgPane()
         iptvGuideOverlay?.animate()?.cancel() // cancel any pending show animation
         iptvGuideOverlay?.animate()?.alpha(0f)?.setDuration(150)?.withEndAction {
@@ -9940,11 +9945,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ),
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
+                    // The flag belongs to the latest request (token), not to the
+                    // UI context: a context change while this page was in flight
+                    // must not strand iptvZapRequestInFlight at true, or every
+                    // later zap page is silently dropped for the whole session.
+                    if (token == iptvZapRequestToken) iptvZapRequestInFlight = false
                     if (token != iptvZapRequestToken ||
                         uiContext != iptvUiContextToken ||
                         !iptvZapOwnsUiContext
                     ) return
-                    iptvZapRequestInFlight = false
                     val response = result as? Map<*, *>
                     if (response == null) {
                         iptvZapPendingInputs.clear()
@@ -9981,11 +9990,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 override fun error(code: String, message: String?, details: Any?) {
+                    if (token == iptvZapRequestToken) iptvZapRequestInFlight = false
                     if (token != iptvZapRequestToken ||
                         uiContext != iptvUiContextToken ||
                         !iptvZapOwnsUiContext
                     ) return
-                    iptvZapRequestInFlight = false
                     iptvZapPendingInputs.clear()
                     onFailure?.invoke()
                     Toast.makeText(
@@ -9996,11 +10005,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 override fun notImplemented() {
+                    if (token == iptvZapRequestToken) iptvZapRequestInFlight = false
                     if (token != iptvZapRequestToken ||
                         uiContext != iptvUiContextToken ||
                         !iptvZapOwnsUiContext
                     ) return
-                    iptvZapRequestInFlight = false
                     iptvZapPendingInputs.clear()
                     onFailure?.invoke()
                 }
@@ -10286,7 +10295,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     ?.toMutableList()
                     ?: mutableListOf(entry.apply { index = 0 })
             } else {
-                mutableListOf(entry.apply { index = 0 })
+                // Copy: `entry` is still row N of the guide adapter's list, and
+                // DiffUtil keys on `index` — rewriting it in place desyncs the
+                // adapter from its own rows while the anchored page is in flight.
+                mutableListOf(entry.copy(index = 0))
             }
             selected = iptvChannels.firstOrNull { it === entry || it.url == entry.url }
                 ?: iptvChannels.first()
