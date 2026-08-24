@@ -2286,6 +2286,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Home Screen',
+        'Hide Titles and Ratings',
+        'Remove title and rating text from Home cards',
+        const ['hide', 'titles', 'ratings', 'cards', 'clean artwork'],
+      ),
+      leaf(
+        'Home Screen',
         'Home trailer & sound',
         'Ambient trailer playback and volume',
         const ['trailer', 'spotlight', 'hero', 'sound', 'volume', 'autoplay'],

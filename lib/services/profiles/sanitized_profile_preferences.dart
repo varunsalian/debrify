@@ -17,6 +17,7 @@ abstract final class SanitizedProfilePreferences {
       case 'recording_engine_enabled':
       case 'home_hero_trailer_enabled':
       case 'home_cw_hold_to_quick_play':
+      case 'home_hide_card_titles_and_ratings':
       case 'detail_trailer_autoplay_enabled':
       case 'home_hero_trailer_audio_enabled':
       case 'detail_trailer_audio_enabled':

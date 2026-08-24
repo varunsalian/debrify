@@ -127,6 +127,27 @@ void main() {
     );
   });
 
+  test('Home card text visibility transfers as a reviewed preference', () {
+    expect(
+      ProfileCreationService.copyablePreferenceKeys,
+      contains('home_hide_card_titles_and_ratings'),
+    );
+    expect(
+      SanitizedProfilePreferences.allowsEntry(
+        'home_hide_card_titles_and_ratings',
+        true,
+      ),
+      isTrue,
+    );
+    expect(
+      SanitizedProfilePreferences.allowsEntry(
+        'home_hide_card_titles_and_ratings',
+        'yes',
+      ),
+      isFalse,
+    );
+  });
+
   test('device preference allowlist rejects arbitrary state', () async {
     final prefs = await DevicePreferences.instance();
     expect(() => prefs.setString('profile_theme', 'dark'), throwsArgumentError);

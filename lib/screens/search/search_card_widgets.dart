@@ -39,6 +39,11 @@ class _StremioCard extends StatefulWidget {
   /// centre-cropped poster.
   final String? artUrl;
 
+  /// Whether the card may paint local title text, either on a landscape
+  /// artwork overlay or inside a loading/missing-art placeholder. Home can
+  /// suppress this while Search and Discover retain their defaults.
+  final bool showTitleOverlay;
+
   /// Dim while unfocused — see [CardFocusRise.restVeil].
   final Color? restVeil;
 
@@ -57,6 +62,7 @@ class _StremioCard extends StatefulWidget {
     this.heroTag,
     this.aspectRatio = 2 / 3,
     this.artUrl,
+    this.showTitleOverlay = true,
     this.restVeil,
   });
 
@@ -163,7 +169,7 @@ class _StremioCardState extends State<_StremioCard>
       // so a wide TOUCH card labels itself. TV keeps clean cards: browsing
       // there puts every focused title's name in the hero (Promenade
       // grammar). Sits under the badges; the scrim keeps them readable too.
-      if (wide && !widget.isTelevision) ...[
+      if (wide && !widget.isTelevision && widget.showTitleOverlay) ...[
         Positioned(
           left: 0,
           right: 0,
@@ -436,20 +442,22 @@ class _StremioCardState extends State<_StremioCard>
         ),
       ),
       alignment: Alignment.center,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Text(
-          title,
-          textAlign: TextAlign.center,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: app.fade(app.core.tx, 0.5),
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+      child: widget.showTitleOverlay
+          ? Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: app.fade(app.core.tx, 0.5),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -653,6 +661,7 @@ class _FavArtCell extends StatelessWidget {
 class _ArtPoster extends StatefulWidget {
   final String? imageUrl;
   final String title;
+  final bool showTitle;
 
   /// How the image fills the 2:3 tile — cover for posters, contain for logos.
   final BoxFit imageFit;
@@ -686,6 +695,7 @@ class _ArtPoster extends StatefulWidget {
   const _ArtPoster({
     required this.imageUrl,
     required this.title,
+    this.showTitle = true,
     required this.isTelevision,
     required this.focusNode,
     required this.onOpen,
@@ -891,19 +901,21 @@ class _ArtPosterState extends State<_ArtPoster> {
             mainAxisSize: MainAxisSize.min,
             children: [
               posterCard,
-              const SizedBox(height: _kArtTitleGap),
-              Text(
-                widget.title,
-                textAlign: TextAlign.center,
-                maxLines: _kArtTitleMaxLines,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: _active ? app.core.tx : app.fade(app.core.tx, 0.92),
-                  fontSize: _kArtTitleFontSize,
-                  fontWeight: FontWeight.w600,
-                  height: _kArtTitleHeight,
+              if (widget.showTitle) ...[
+                const SizedBox(height: _kArtTitleGap),
+                Text(
+                  widget.title,
+                  textAlign: TextAlign.center,
+                  maxLines: _kArtTitleMaxLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _active ? app.core.tx : app.fade(app.core.tx, 0.92),
+                    fontSize: _kArtTitleFontSize,
+                    fontWeight: FontWeight.w600,
+                    height: _kArtTitleHeight,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

@@ -279,6 +279,8 @@ class StorageService {
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
+  static const String _homeHideCardTitlesAndRatingsKey =
+      'home_hide_card_titles_and_ratings';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -5598,6 +5600,19 @@ class StorageService {
     await prefs.setString(_homeCardOrientationKey, orientation.name);
   }
 
+  /// Keeps Home artwork clean by suppressing the title and rating painted on
+  /// content cards. Row headings, hero identity, progress and context metadata
+  /// are separate presentation and remain visible.
+  static Future<bool> getHomeHideCardTitlesAndRatings() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeHideCardTitlesAndRatingsKey) ?? false;
+  }
+
+  static Future<void> setHomeHideCardTitlesAndRatings(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeHideCardTitlesAndRatingsKey, value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -5608,6 +5623,7 @@ class StorageService {
     await prefs.remove(_homeCwHoldToQuickPlayKey);
     await prefs.remove(_homeFavoritesOpenFolderKey);
     await prefs.remove(_homeCardOrientationKey);
+    await prefs.remove(_homeHideCardTitlesAndRatingsKey);
   }
 
   // Reddit Settings

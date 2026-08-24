@@ -2136,10 +2136,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
-    final orientation = await StorageService.getHomeCardOrientation();
+    final cardSettings = await Future.wait<Object>([
+      StorageService.getHomeCardOrientation(),
+      StorageService.getHomeHideCardTitlesAndRatings(),
+    ]);
     if (!mounted) return;
-    if (orientation != _homeCardOrientation) {
-      setState(() => _homeCardOrientation = orientation);
+    final orientation = cardSettings[0] as HomeCardOrientation;
+    final hideTitlesAndRatings = cardSettings[1] as bool;
+    if (orientation != _homeCardOrientation ||
+        hideTitlesAndRatings != _hideHomeCardTitlesAndRatings) {
+      setState(() {
+        _homeCardOrientation = orientation;
+        _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
+      });
     }
     // Off-TV the hero-trailer prefs ride this same signal — Settings is a
     // pushed route here, so nothing else tells a surviving Home about them.
@@ -5586,9 +5595,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // Landscape default matches the stored default, so a fresh boot doesn't
   // flash portrait rows before the async pref read lands.
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
+  bool _hideHomeCardTitlesAndRatings = false;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
+
+  double get _homeArtPosterCaptionBand =>
+      _hideHomeCardTitlesAndRatings ? 0 : _artPosterCaptionBand(context);
 
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;
@@ -5855,9 +5868,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   Future<void> _loadHomeCardOrientation() async {
-    final orientation = await StorageService.getHomeCardOrientation();
-    if (!mounted || orientation == _homeCardOrientation) return;
-    setState(() => _homeCardOrientation = orientation);
+    final values = await Future.wait<Object>([
+      StorageService.getHomeCardOrientation(),
+      StorageService.getHomeHideCardTitlesAndRatings(),
+    ]);
+    if (!mounted) return;
+    final orientation = values[0] as HomeCardOrientation;
+    final hideTitlesAndRatings = values[1] as bool;
+    if (orientation == _homeCardOrientation &&
+        hideTitlesAndRatings == _hideHomeCardTitlesAndRatings) {
+      return;
+    }
+    setState(() {
+      _homeCardOrientation = orientation;
+      _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
+    });
   }
 
   /// Settings picker fired: tear down live players BEFORE the relayout, so
@@ -5968,6 +5993,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         child: _ArtPoster(
           imageUrl: channel.logoUrl,
           title: channel.name,
+          showTitle: !_hideHomeCardTitlesAndRatings,
           imageFit: BoxFit.contain,
           isTelevision: true,
           ringColor: Colors.white,
@@ -6007,6 +6033,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: item.poster,
             title: item.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             isTelevision: true,
             ringColor: Colors.white,
             focusNode: nodes[col],
@@ -6037,6 +6064,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             imageFit: BoxFit.contain,
             isTelevision: true,
             ringColor: Colors.white,
@@ -6075,6 +6103,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: null,
             title: channel.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             badge: '$number',
             isTelevision: true,
             ringColor: Colors.white,
@@ -6107,6 +6136,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: _firstNonEmpty(item?.poster, item?.background),
             title: channel.displayName,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             live: true,
             isTelevision: true,
             ringColor: Colors.white,
@@ -6143,6 +6173,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: posterUrl,
             title: title,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             progress: _playlistProgressFor(item),
             isTelevision: true,
             ringColor: Colors.white,
@@ -6650,6 +6681,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       heroNode: _spotlightHeroNode,
       heroAddon: _spotlightHeroSection?.addon,
       dpad: widget.isTelevision,
+      showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;
@@ -7055,7 +7087,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // actually occupy — at any text scale, and whatever the shelf box
         // grows to next.
         final shelfBoxH =
-            cardH + _artPosterCaptionBand(context) + _kCanvasShelfSlack;
+            cardH + _homeArtPosterCaptionBand + _kCanvasShelfSlack;
         final shelfColumnH =
             _kCanvasShelfTail +
             shelfBoxH +
@@ -7421,7 +7453,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // make the poster taller than the space left by a scaled caption and
     // overflow the row — so the art simply gets whatever is left (never
     // below a hairline, so the cell is still hit-testable).
-    final art = boxH - _artPosterCaptionBand(context);
+    final art = boxH - _homeArtPosterCaptionBand;
     return (art < 16 ? 16.0 : art) * 2 / 3;
   }
 
@@ -7434,7 +7466,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     double preferred, {
     required double maxH,
   }) {
-    final floor = _artPosterCaptionBand(context) + _kStageMinPosterH;
+    final floor = _homeArtPosterCaptionBand + _kStageMinPosterH;
     final lo = min(floor, maxH);
     return preferred.clamp(lo, max(lo, maxH));
   }
@@ -7906,7 +7938,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // (scaled caption + a recognisable poster) don't fit inside it, show
         // ONE row rather than two clipped ones — the second rail is still one
         // DOWN away.
-        final floorH = _artPosterCaptionBand(context) + _kStageMinPosterH;
+        final floorH = _homeArtPosterCaptionBand + _kStageMinPosterH;
         double chromeFor(int rows) =>
             rows * (labelH + _kAtriumLabelGap) +
             (rows - 1) * _kAtriumRowGap +
@@ -8287,7 +8319,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // The extent is exactly what this rail's kind needs: the art box,
         // plus the caption band only when the cells actually carry one.
         final extent =
-            cellW / cellAspect + (favRail ? _artPosterCaptionBand(context) : 0);
+            cellW / cellAspect + (favRail ? _homeArtPosterCaptionBand : 0);
 
         return Stack(
           fit: StackFit.expand,
@@ -17242,6 +17274,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             hasBoundSource: _isBound(item),
                             aspectRatio: _titleCardAspect,
                             artUrl: _titleArtUrl(item),
+                            showTitleOverlay: !_hideHomeCardTitlesAndRatings,
                             onQuickPlay: _pikpakOnly
                                 ? null
                                 : () => _sectionQuickPlay(section, item),
@@ -17341,6 +17374,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           showWatchedBadge: false,
                           aspectRatio: _titleCardAspect,
                           artUrl: _titleArtUrl(item),
+                          showTitleOverlay: !_hideHomeCardTitlesAndRatings,
                           progress: row.progressOf(item),
                           episodeLabel: row.episodeOf(item),
                           // Long-press / hold-OK opens the Play + Remove menu
@@ -17430,6 +17464,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: item.poster,
             title: item.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             isTelevision: tv,
             focusNode: nodes[col],
             onOpen: () => _openMyWatchlistItem(item),
@@ -17455,7 +17490,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final posterH = posterW * 3 / 2;
     // Reserve the inline caption band so a long title — e.g. a full release-name
     // playlist item — doesn't overflow the cell into the next section's header.
-    final cellH = posterH + _artPosterCaptionBand(context);
+    final cellH = posterH + _homeArtPosterCaptionBand;
     final rowH = cellH + 14;
 
     return Column(
@@ -17538,6 +17573,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: null,
             title: channel.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             badge: '$number',
             isTelevision: tv,
             focusNode: _tvFavNodes[col],
@@ -17577,6 +17613,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: art,
             title: channel.displayName,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             live: true,
             isTelevision: tv,
             focusNode: _stvFavNodes[col],
@@ -17610,6 +17647,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             // Logos are usually square/wide, not 2:3 — contain so they aren't
             // cropped; the gradient shows around them.
             imageFit: BoxFit.contain,
@@ -17652,6 +17690,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             // Logos are usually square/wide, not 2:3 — contain so they aren't
             // cropped; the gradient shows around them.
             imageFit: BoxFit.contain,
@@ -17689,6 +17728,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           child: _ArtPoster(
             imageUrl: posterUrl,
             title: title,
+            showTitle: !_hideHomeCardTitlesAndRatings,
             progress: _playlistProgressFor(item),
             isTelevision: tv,
             focusNode: _playlistFavNodes[col],

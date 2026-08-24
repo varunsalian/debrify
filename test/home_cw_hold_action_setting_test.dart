@@ -22,4 +22,14 @@ void main() {
 
     expect(await StorageService.getHomeCwHoldToQuickPlay(), isFalse);
   });
+
+  test('Hide Home card titles and ratings defaults off and persists', () async {
+    expect(await StorageService.getHomeHideCardTitlesAndRatings(), isFalse);
+
+    await StorageService.setHomeHideCardTitlesAndRatings(true);
+    expect(await StorageService.getHomeHideCardTitlesAndRatings(), isTrue);
+
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getHomeHideCardTitlesAndRatings(), isFalse);
+  });
 }
