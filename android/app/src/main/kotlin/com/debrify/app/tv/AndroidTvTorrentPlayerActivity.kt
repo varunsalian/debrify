@@ -798,6 +798,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  (setIptvMediaItem), read on the extractor's loader thread. */
     @Volatile private var iptvStrictTsActive = false
 
+    /** The Google TV Streamer must use the same stock TS join policy as the
+     *  working browse preview from its first fullscreen tune. Other devices
+     *  retain the faster aggressive join and the existing adaptive fallback. */
+    private val iptvStartsWithStrictTs by lazy {
+        IptvDeviceQuirks.startsIptvWithStrictTs(
+            manufacturer = android.os.Build.MANUFACTURER,
+            model = android.os.Build.MODEL,
+            device = android.os.Build.DEVICE,
+        )
+    }
+
     // ── Xtream HLS→TS twin trial ─────────────────────────────────────────
     // Segmented streams never see the strict-demux remedy (they bypass the
     // progressive extractor factory), so an Xtream `.m3u8` channel whose
@@ -12149,13 +12160,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         ) {
             clearParkedIptvTwinRestore()
         }
-        // Demux mode for this tune: strict for channels that earned it — and
-        // for the whole session once two did (that's a strict-decoder device,
-        // not two odd channels). Read per media-period load by the extractor
-        // factory installed in setupPlayer. A twin — on trial or accepted —
-        // is always strict: it exists to reach the demux mode that works
-        // (see the twin-trial fields).
+        // Demux mode for this tune: strict immediately on known-strict devices,
+        // for channels that earned it, and for the whole session once two did
+        // (that's a strict-decoder device, not two odd channels). Read per
+        // media-period load by the extractor factory installed in setupPlayer.
+        // A twin — on trial or accepted — is always strict: it exists to reach
+        // the demux mode that works (see the twin-trial fields).
         iptvStrictTsActive =
+            iptvStartsWithStrictTs ||
             iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2 ||
             streamUrl == iptvTwinTrialUrl ||
             iptvTwinPreferredUrls.containsValue(streamUrl)
@@ -12165,6 +12177,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             entry.isLive,
             forcedHls = iptvHlsForcedUrls.contains(streamUrl),
         )
+        if (iptvStartsWithStrictTs) {
+            iptvTuneDiagnostics.note("demux=strict reason=device-quirk")
+        }
         // A machine-driven re-tune keeps its recovery episode (attempt count,
         // surrender budget); a real zap/launch resets the machine — and takes
         // any reconnect pill with it (the pill described the OLD channel).
