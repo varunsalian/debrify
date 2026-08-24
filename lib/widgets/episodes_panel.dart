@@ -215,8 +215,9 @@ class EpisodesPanel extends StatefulWidget {
   /// watch-progress map, replacing the IMDb-keyed local/Trakt/Simkl merge.
   final Future<Map<String, double>> Function()? watchProgressLoader;
 
-  /// Publishes the merged next-to-watch coordinate to a hosting detail hero.
-  final ValueChanged<EpisodeCoordinate>? onNextEpisodeChanged;
+  /// Publishes the merged next-to-watch coordinate and whether it represents
+  /// real playback (rather than the default first episode) to the detail hero.
+  final ValueChanged<EpisodeResumeTarget>? onNextEpisodeChanged;
 
   /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
   /// when set, the panel renders ONLY what this returns — no chrome of its own —
@@ -493,7 +494,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _episodeWatchProgress = merged;
         _nextEpisode = next;
       });
-      if (next != null) widget.onNextEpisodeChanged?.call(next);
+      if (next != null) _publishNextEpisode(next);
     }
   }
 
@@ -509,6 +510,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     progress: progress,
     trackerNext: trackerNext,
   );
+
+  void _publishNextEpisode(EpisodeCoordinate next) {
+    widget.onNextEpisodeChanged?.call(
+      episodeResumeTarget(next: next, progress: _episodeWatchProgress),
+    );
+  }
 
   void _onMdblistPlaybackRevision() {
     if (!mounted || _isDirectSource) return;
@@ -738,7 +745,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
           });
           final next = _nextEpisode;
-          if (next != null) widget.onNextEpisodeChanged?.call(next);
+          if (next != null) _publishNextEpisode(next);
         }
       case MdblistEpisodeMenuAction.markUnwatched:
         success = await _mdblistService.markUnwatched(
@@ -755,7 +762,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
           });
           final next = _nextEpisode;
-          if (next != null) widget.onNextEpisodeChanged?.call(next);
+          if (next != null) _publishNextEpisode(next);
         }
       case MdblistEpisodeMenuAction.rate:
         if (!mounted) return;
@@ -1134,7 +1141,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       });
       final mergedNext = _nextEpisode;
       if (mergedNext != null) {
-        widget.onNextEpisodeChanged?.call(mergedNext);
+        _publishNextEpisode(mergedNext);
       }
 
       // Fill in per-episode thumbnails from TVMaze for any episode that didn't

@@ -131,4 +131,24 @@ void main() {
       expect(result, const (season: 1, episode: 2));
     });
   });
+
+  group('episodeResumeTarget', () {
+    test('first episode without progress is a start, not a resume', () {
+      final result = episodeResumeTarget(
+        next: const (season: 1, episode: 1),
+        progress: const {},
+      );
+
+      expect(result, const (season: 1, episode: 1, started: false));
+    });
+
+    test('merged watch progress marks the target as resumable', () {
+      final result = episodeResumeTarget(
+        next: const (season: 1, episode: 2),
+        progress: const {'1-1': 100},
+      );
+
+      expect(result, const (season: 1, episode: 2, started: true));
+    });
+  });
 }

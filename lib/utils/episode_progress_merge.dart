@@ -103,6 +103,20 @@ bool hasActiveTraktEpisodeRewatch({
 }
 
 typedef EpisodeCoordinate = ({int season, int episode});
+typedef EpisodeResumeTarget = ({int season, int episode, bool started});
+
+/// Add the semantic distinction the detail CTA needs to an up-next coordinate.
+///
+/// A brand-new show still has a valid target (usually S1E1), but that target is
+/// not a resume until at least one episode has meaningful merged progress.
+EpisodeResumeTarget episodeResumeTarget({
+  required EpisodeCoordinate next,
+  required Map<String, double> progress,
+}) => (
+  season: next.season,
+  episode: next.episode,
+  started: progress.values.any((value) => value > 0),
+);
 
 /// Resolve the visual "up next" episode from the already-merged progress map.
 ///

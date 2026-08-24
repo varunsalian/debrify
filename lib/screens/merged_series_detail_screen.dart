@@ -685,18 +685,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
-  void _onNextEpisodeChanged(EpisodeCoordinate next) {
+  void _onNextEpisodeChanged(EpisodeResumeTarget next) {
     if (!mounted || _isMovie) return;
     if (_resumeLoaded &&
-        _resumeStarted &&
+        _resumeStarted == next.started &&
         _resumeSeason == next.season &&
         _resumeEpisode == next.episode) {
       return;
     }
     setState(() {
-      _hasMergedEpisodeTarget = true;
+      // A coordinate alone is not resume evidence: an untouched show also
+      // resolves to its first episode. Only merged playback progress outranks
+      // the host's independently loaded Continue Watching snapshot.
+      _hasMergedEpisodeTarget = next.started;
       _resumeLoaded = true;
-      _resumeStarted = true;
+      _resumeStarted = next.started;
       _resumeSeason = next.season;
       _resumeEpisode = next.episode;
     });
