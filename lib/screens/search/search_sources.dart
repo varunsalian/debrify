@@ -143,7 +143,24 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   String get _imdbId => widget.selection.imdbId;
   bool get _isMovie => !widget.selection.isSeries;
-  Set<String> get _boundHashes => _bound.map((s) => s.torrentHash).toSet();
+  SeriesSource? _bindingFor(Torrent torrent) {
+    for (final source in _bound) {
+      if (torrent.isDirectStream &&
+          source.matchesAddonDirect(
+            candidateAddonKey: torrent.stremioAddonKey,
+            candidateStreamKey: torrent.stremioStreamKey,
+            candidateStreamIndex: torrent.stremioStreamIndex,
+          )) {
+        return source;
+      }
+      if (torrent.streamType == StreamType.torrent &&
+          source.torrentHash.isNotEmpty &&
+          source.torrentHash == torrent.infohash) {
+        return source;
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -694,21 +711,26 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   Future<void> _pin(Torrent t) async {
-    // Direct / external streams have no infohash/magnet to bind as a reusable
-    // source — reject rather than store a broken pin.
-    if (t.isDirectStream || t.isExternalStream) {
-      _snack("Direct streams can't be pinned as a source.");
+    if (t.isExternalStream) {
+      _snack("External links can't be pinned as a playback source.");
       return;
     }
     if (_pinning) return; // guard concurrent binds (double-tap on TV)
     _pinning = true;
     try {
-      final ok = await TorrentPlaybackService.bindSource(
-        context,
-        t,
-        imdbId: _imdbId,
-        isMovie: _isMovie,
-      );
+      final ok = t.isDirectStream
+          ? await TorrentPlaybackService.bindDirectSource(
+              context,
+              t,
+              imdbId: _imdbId,
+              isMovie: _isMovie,
+            )
+          : await TorrentPlaybackService.bindSource(
+              context,
+              t,
+              imdbId: _imdbId,
+              isMovie: _isMovie,
+            );
       if (!mounted) return;
       if (ok) {
         await _reloadBound();
@@ -719,8 +741,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     }
   }
 
-  Future<void> _unpin(String hash) async {
-    await SeriesSourceService.removeSourceByHash(_imdbId, hash);
+  Future<void> _unpin(SeriesSource source) async {
+    await SeriesSourceService.removeSourceEntry(_imdbId, source);
     await _reloadBound();
   }
 
@@ -755,7 +777,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       return;
     }
     final app = AppThemeScope.of(context);
-    final bound = _boundHashes.contains(t.infohash);
+    final binding = _bindingFor(t);
+    final bound = binding != null;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: app.home.sheetBg,
@@ -788,7 +811,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
                 if (bound) {
-                  unawaited(_unpin(t.infohash));
+                  unawaited(_unpin(binding));
                 } else {
                   unawaited(_pin(t));
                 }
@@ -800,12 +823,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
-  /// Options sheet for a direct / external addon stream: play (in-app) or open
-  /// (external), plus copy the stream URL. No "Pin as source" — streams have no
-  /// infohash to bind.
+  /// Options sheet for a direct / external addon stream. Playable direct links
+  /// can be pinned by addon provenance; external browser links remain open-only.
   void _showStreamRowMenu(Torrent t, int i) {
     final app = AppThemeScope.of(context);
     final external = t.isExternalStream;
+    final binding = _bindingFor(t);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: app.home.sheetBg,
@@ -831,6 +854,29 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 _playNow(t, i);
               },
             ),
+            if (!external)
+              ListTile(
+                leading: Icon(
+                  binding != null ? Icons.link_off_rounded : Icons.link_rounded,
+                  color: const Color(0xFFF59E0B),
+                ),
+                title: Text(binding != null ? 'Unpin source' : 'Pin as source'),
+                subtitle: Text(
+                  binding != null
+                      ? 'Stop refreshing this stream for playback'
+                      : 'Re-fetch a fresh link from this addon when played',
+                  style: TextStyle(color: app.fade(app.core.tx, 0.5)),
+                ),
+                onTap: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(sheetCtx).pop();
+                  if (binding != null) {
+                    unawaited(_unpin(binding));
+                  } else {
+                    unawaited(_pin(t));
+                  }
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
               title: const Text('Copy URL'),
@@ -2099,7 +2145,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     ),
                   ),
                   InkWell(
-                    onTap: () => unawaited(_unpin(s.torrentHash)),
+                    onTap: () => unawaited(_unpin(s)),
                     borderRadius: BorderRadius.circular(8),
                     child: const Padding(
                       padding: EdgeInsets.all(4),

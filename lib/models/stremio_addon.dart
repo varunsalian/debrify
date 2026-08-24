@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import '../utils/stremio_url.dart';
 
 /// Represents an extra parameter for a catalog (e.g., genre, search, skip)
@@ -588,6 +592,12 @@ class StremioAddon {
   }) : addedAt = addedAt ?? DateTime.now();
 
   String get storageKey => connectionResourceId ?? manifestUrl;
+
+  /// Opaque, secret-free identity for persisted references to this exact addon
+  /// configuration. Configured Stremio URLs can contain API keys, so bound
+  /// sources store this digest instead of copying [manifestUrl]/[baseUrl].
+  String get sourceBindingKey =>
+      sha256.convert(utf8.encode(storageKey)).toString();
   bool get canManage => !connectionResourceReadOnly;
   bool get canRevealManifestUrl =>
       !connectionResourceCredentialsRedacted && manifestUrl.isNotEmpty;
@@ -926,6 +936,18 @@ class StremioStream {
   /// Source addon name
   final String source;
 
+  /// Provenance needed to re-fetch a fresh URL for an addon-backed pin. The
+  /// key is an opaque digest of the installed addon configuration; it never
+  /// contains the addon's configured URL or credentials.
+  final String? addonId;
+  final String? addonKey;
+
+  /// Stable-ish stream profile plus its original response position. The
+  /// profile deliberately excludes the URL (often signed/expiring) and
+  /// normalizes episode tokens, while the position disambiguates equal labels.
+  final String? streamKey;
+  final int streamIndex;
+
   StremioStream({
     this.infoHash,
     this.magnetUri,
@@ -936,6 +958,10 @@ class StremioStream {
     this.fileIdx,
     this.behaviorHints,
     required this.source,
+    this.addonId,
+    this.addonKey,
+    this.streamKey,
+    this.streamIndex = 0,
   });
 
   /// Whether this is a torrent stream (has infoHash)
@@ -1009,7 +1035,13 @@ class StremioStream {
     return match?.group(1)?.trim();
   }
 
-  factory StremioStream.fromJson(Map<String, dynamic> json, String source) {
+  factory StremioStream.fromJson(
+    Map<String, dynamic> json,
+    String source, {
+    String? addonId,
+    String? addonKey,
+    int streamIndex = 0,
+  }) {
     String? infoHash = json['infoHash'] as String?;
     final behaviorHints = json['behaviorHints'] as Map<String, dynamic>?;
 
@@ -1046,7 +1078,38 @@ class StremioStream {
       fileIdx: json['fileIdx'] as int?,
       behaviorHints: behaviorHints,
       source: source,
+      addonId: addonId,
+      addonKey: addonKey,
+      streamKey: _directStreamProfileKey(json),
+      streamIndex: streamIndex,
     );
+  }
+
+  /// Fingerprint the user-visible stream choice without retaining its URL.
+  /// Episode numbers, torrent hashes and file sizes commonly change between
+  /// episodes, so they are normalized out; quality/provider labels remain.
+  static String _directStreamProfileKey(Map<String, dynamic> json) {
+    final hints = json['behaviorHints'] as Map<String, dynamic>?;
+    String normalize(Object? raw) {
+      var value = raw?.toString().trim().toLowerCase() ?? '';
+      value = value
+          .replaceAll(RegExp(r'\b[a-f0-9]{40,64}\b'), '{hash}')
+          .replaceAll(RegExp(r'\bs\d{1,2}\s*e\d{1,3}\b'), '{episode}')
+          .replaceAll(RegExp(r'\b\d{1,2}x\d{1,3}\b'), '{episode}')
+          .replaceAll(RegExp(r'\bepisode\s*\d{1,3}\b'), '{episode}')
+          .replaceAll(RegExp(r'\b\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb)\b'), '{size}')
+          .replaceAll(RegExp(r'\s+'), ' ');
+      return value;
+    }
+
+    final identity = <String>[
+      normalize(json['name']),
+      normalize(json['description'] ?? json['title']),
+      normalize(hints?['filename']),
+      normalize(hints?['bingeGroup']),
+      normalize(json['fileIdx']),
+    ].join('|');
+    return sha256.convert(utf8.encode(identity)).toString();
   }
 
   @override

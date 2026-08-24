@@ -164,6 +164,9 @@ class StremioService {
   @visibleForTesting
   Future<StremioAddon> Function(String manifestUrl)? debugManifestFetcher;
 
+  @visibleForTesting
+  http.Client Function()? debugStreamHttpClientFactory;
+
   /// Add a listener to be notified when addons change
   void addAddonsChangedListener(VoidCallback listener) {
     _addonsChangedListeners.add(listener);
@@ -1279,6 +1282,89 @@ class StremioService {
     return _convertToTorrents(streams, preserveOrder: preserveOrder);
   }
 
+  /// Re-fetch the addon behind a pinned direct stream and select the fresh URL
+  /// representing the same stream profile. Signed playback URLs are never
+  /// persisted. Exact addon configuration identity wins; an id-only fallback
+  /// is allowed when there is exactly one installed configuration of that
+  /// addon (so a harmless addon reconfiguration can heal an old pin).
+  Future<Torrent?> resolvePinnedDirectStream({
+    required String addonId,
+    required String addonKey,
+    required String streamKey,
+    required int streamIndex,
+    required String type,
+    required String contentId,
+    int? season,
+    int? episode,
+    Duration? timeout,
+  }) async {
+    // Include disabled/non-stream addons while resolving identity so an exact
+    // pinned configuration cannot silently fall through to a different
+    // enabled configuration with the same manifest id.
+    final addons = await getAddons();
+    final exact = addons
+        .where((addon) => addon.sourceBindingKey == addonKey)
+        .toList(growable: false);
+    StremioAddon? addon;
+    if (exact.length == 1) {
+      addon = exact.single;
+    } else {
+      final sameId = addons
+          .where((candidate) => candidate.id == addonId)
+          .toList(growable: false);
+      if (sameId.length == 1) addon = sameId.single;
+    }
+    if (addon == null ||
+        !addon.enabled ||
+        !addon.supportsStreams ||
+        !_isApplicable(addon, type, contentId)) {
+      return null;
+    }
+
+    final streams = await _fetchStreamsFromAddon(
+      addon,
+      type,
+      _buildStreamId(contentId, season, episode),
+      timeout: timeout,
+    );
+    final direct = _convertToTorrents(
+      streams,
+      preserveOrder: true,
+    ).where((torrent) => torrent.isDirectStream).toList(growable: false);
+    return selectPinnedDirectStream(
+      direct,
+      streamKey: streamKey,
+      streamIndex: streamIndex,
+    );
+  }
+
+  /// Pure matching half of [resolvePinnedDirectStream], exposed for regression
+  /// tests. Profile identity survives episode-number/URL changes; response
+  /// position disambiguates addons that emit multiple identically-labelled
+  /// links and is the fallback when an episode-specific filename changes more
+  /// substantially than the normalizer can account for.
+  @visibleForTesting
+  static Torrent? selectPinnedDirectStream(
+    List<Torrent> direct, {
+    required String streamKey,
+    required int streamIndex,
+  }) {
+    final profileMatches = direct
+        .where((torrent) => torrent.stremioStreamKey == streamKey)
+        .toList(growable: false);
+    if (profileMatches.length == 1) return profileMatches.single;
+    if (profileMatches.isNotEmpty) {
+      for (final torrent in profileMatches) {
+        if (torrent.stremioStreamIndex == streamIndex) return torrent;
+      }
+      return profileMatches.first;
+    }
+    for (final torrent in direct) {
+      if (torrent.stremioStreamIndex == streamIndex) return torrent;
+    }
+    return direct.length == 1 ? direct.single : null;
+  }
+
   /// Smart fallback for series search without specific season/episode
   ///
   /// 1. First tries bare IMDB ID
@@ -1598,7 +1684,13 @@ class StremioService {
     try {
       final uri = Uri.parse(url);
       final effectiveTimeout = timeout ?? _requestTimeout;
-      final response = await http.get(uri).timeout(effectiveTimeout);
+      final client = debugStreamHttpClientFactory?.call() ?? http.Client();
+      late final http.Response response;
+      try {
+        response = await client.get(uri).timeout(effectiveTimeout);
+      } finally {
+        client.close();
+      }
 
       if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
@@ -1612,9 +1704,16 @@ class StremioService {
       }
 
       return streamsRaw
+          .asMap()
+          .entries
           .map(
-            (s) =>
-                StremioStream.fromJson(s as Map<String, dynamic>, addon.name),
+            (entry) => StremioStream.fromJson(
+              entry.value as Map<String, dynamic>,
+              addon.name,
+              addonId: addon.id,
+              addonKey: addon.sourceBindingKey,
+              streamIndex: entry.key,
+            ),
           )
           .where(
             (s) => s.isUsable,
@@ -1999,6 +2098,10 @@ class StremioService {
           streamType: variant.streamType,
           directUrl: variant.directUrl,
           hasRealInfoHash: variant.hasRealInfoHash,
+          stremioAddonId: stream.addonId,
+          stremioAddonKey: stream.addonKey,
+          stremioStreamKey: stream.streamKey,
+          stremioStreamIndex: stream.streamIndex,
         );
 
         // Exact addon mode preserves every returned playable entry, including

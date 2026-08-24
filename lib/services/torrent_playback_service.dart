@@ -2210,6 +2210,7 @@ class TorrentPlaybackService {
   static Future<String?> _effectiveFetchProvider(String? provider) async {
     if (provider != null &&
         provider != SeriesSource.localService &&
+        provider != SeriesSource.addonDirectService &&
         provider != 'stream') {
       return provider;
     }
@@ -2693,6 +2694,7 @@ class TorrentPlaybackService {
       'alldebrid',
       'pikpak',
       SeriesSource.localService,
+      SeriesSource.addonDirectService,
     };
     return supported.contains(stored);
   }
@@ -3120,6 +3122,77 @@ class TorrentPlaybackService {
         return true; // Cancel already dismissed the overlay.
       }
 
+      // Addon-direct pins store provenance, never the expiring URL. Resolve
+      // the current movie/episode endpoint now and launch the freshly returned
+      // link. If the addon/config/stream disappeared, keep the pin and try the
+      // next source; a transient addon outage should not destroy user intent.
+      if (source.isAddonDirect) {
+        fallbackHint =
+            'Saved direct source is unavailable. Falling back to search.';
+        try {
+          final fresh = await StremioService.instance.resolvePinnedDirectStream(
+            addonId: source.addonId!,
+            addonKey: source.addonKey!,
+            streamKey: source.streamKey ?? '',
+            streamIndex: source.streamIndex ?? 0,
+            type: meta.contentType == 'movie' ? 'movie' : 'series',
+            contentId: imdbId,
+            season: meta.season,
+            episode: meta.episode,
+          );
+          if (cancel.cancelled) return true;
+          final freshUrl = fresh?.directUrl;
+          if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
+            final rules = await StorageService.getQuickPlayRules(
+              isMovie: meta.contentType == 'movie',
+            );
+            if (cancel.cancelled) return true;
+            if (rules.validateDirectLinks) {
+              final minBytes = meta.contentType == 'series'
+                  ? 10 * 1024 * 1024
+                  : StreamUrlValidator.minContentBytes;
+              final alive = await StreamUrlValidator.isPlayableVideoUrl(
+                freshUrl,
+                minBytes: minBytes,
+                lenient: true,
+              );
+              if (cancel.cancelled) return true;
+              if (!alive) continue;
+            }
+            overlay.setStage(PlayLoadStage.starting);
+            if (!context.mounted) {
+              closeLoading();
+              return false;
+            }
+            await _launch(
+              context,
+              _Resolved(
+                title: fresh.displayTitle,
+                playUrl: freshUrl,
+                downloadUrls: [freshUrl],
+                fileName: fresh.displayTitle,
+              ),
+              fresh.displayTitle,
+              provider: SeriesSource.addonDirectService,
+              meta: meta,
+              sources: [fresh],
+              sourceIndex: 0,
+              seriesFetcher:
+                  seriesFetcherFor(meta: meta) ?? movieFetcherFor(meta: meta),
+              overlay: overlay,
+            );
+            return true;
+          }
+        } catch (_) {
+          // Fail soft and continue through lower-priority pins/search.
+        }
+        if (!context.mounted) {
+          closeLoading();
+          return false;
+        }
+        continue;
+      }
+
       // Cheap skip: a bound DEBRID source whose name is a single specific
       // episode can only serve that episode — skip it (no debrid round-trip)
       // when a different episode is requested, so a series pinned only as
@@ -3352,6 +3425,51 @@ class TorrentPlaybackService {
       await SeriesSourceService.addSource(imdbId, source);
     }
     if (context.mounted) _snack(context, 'Source pinned for instant playback.');
+    return true;
+  }
+
+  /// Pin a playable Stremio addon stream without persisting its usually
+  /// signed/temporary URL. Playback re-queries the same addon and stream
+  /// profile for each movie play or requested series episode.
+  static Future<bool> bindDirectSource(
+    BuildContext context,
+    Torrent torrent, {
+    required String imdbId,
+    required bool isMovie,
+  }) async {
+    if (imdbId.isEmpty) {
+      _snack(context, 'No IMDb match — can\'t pin a source.');
+      return false;
+    }
+    if (!torrent.isDirectStream ||
+        torrent.stremioAddonId == null ||
+        torrent.stremioAddonId!.isEmpty ||
+        torrent.stremioAddonKey == null ||
+        torrent.stremioAddonKey!.isEmpty ||
+        torrent.stremioStreamKey == null ||
+        torrent.stremioStreamKey!.isEmpty) {
+      _snack(context, 'This direct stream cannot be refreshed by its addon.');
+      return false;
+    }
+    final source = SeriesSource(
+      torrentHash: '',
+      torrentName: torrent.name,
+      debridService: SeriesSource.addonDirectService,
+      debridTorrentId: '',
+      boundAt: DateTime.now().millisecondsSinceEpoch,
+      addonId: torrent.stremioAddonId,
+      addonKey: torrent.stremioAddonKey,
+      streamKey: torrent.stremioStreamKey,
+      streamIndex: torrent.stremioStreamIndex ?? 0,
+    );
+    if (isMovie) {
+      await SeriesSourceService.setSources(imdbId, [source]);
+    } else {
+      await SeriesSourceService.addSource(imdbId, source);
+    }
+    if (context.mounted) {
+      _snack(context, 'Direct source pinned for fresh-link playback.');
+    }
     return true;
   }
 
@@ -3941,7 +4059,8 @@ class TorrentPlaybackService {
         meta.imdbId!.isEmpty ||
         winner == null ||
         winner.infohash.isEmpty ||
-        provider == SeriesSource.localService) {
+        provider == SeriesSource.localService ||
+        provider == SeriesSource.addonDirectService) {
       return;
     }
     try {
@@ -3987,6 +4106,7 @@ class TorrentPlaybackService {
         winner.infohash.isEmpty ||
         winner.streamType != StreamType.torrent ||
         provider == SeriesSource.localService ||
+        provider == SeriesSource.addonDirectService ||
         // Consistent with the pack-first block: the whole auto-pin feature is
         // off for PikPak (its bindings re-queue real downloads on each replay),
         // so a stale-true pref after switching default to PikPak stays inert.
@@ -4019,7 +4139,11 @@ class TorrentPlaybackService {
         if (_singleEpisodeOf(source.torrentName) != null) {
           final singles =
               list
-                  .where((s) => _singleEpisodeOf(s.torrentName) != null)
+                  .where(
+                    (s) =>
+                        !s.isAddonDirect &&
+                        _singleEpisodeOf(s.torrentName) != null,
+                  )
                   .toList()
                 ..sort((a, b) => a.boundAt.compareTo(b.boundAt));
           final overflow = singles.length + 1 - _maxAutoBoundSingles;
@@ -4123,7 +4247,8 @@ class TorrentPlaybackService {
             (sources != null &&
                 sources.isNotEmpty &&
                 (sources.length > 1 || seriesFetcher != null))
-            ? (provider == SeriesSource.localService
+            ? (provider == SeriesSource.localService ||
+                      provider == SeriesSource.addonDirectService
                   ? _lazySwitchAwareResolver(meta)
                   : _switchAwareResolver(provider, meta))
             : null,
@@ -4138,7 +4263,11 @@ class TorrentPlaybackService {
       final nextEpisodeHandler = _nextEpisodeHandlerFor(
         context,
         meta,
-        provider: provider == SeriesSource.localService ? null : provider,
+        provider:
+            provider == SeriesSource.localService ||
+                provider == SeriesSource.addonDirectService
+            ? null
+            : provider,
       );
       loaderHandedToLauncher = overlay != null;
       await VideoPlayerLauncher.push(
@@ -5861,6 +5990,8 @@ class TorrentPlaybackService {
         return 'PikPak';
       case SeriesSource.localService:
         return 'On-device';
+      case SeriesSource.addonDirectService:
+        return 'Direct addon';
       case 'stream':
         return 'Stream';
       default:
@@ -5885,6 +6016,8 @@ class TorrentPlaybackService {
         return 'PP';
       case 'stream':
         return 'TV';
+      case SeriesSource.addonDirectService:
+        return 'DL';
       default:
         return provider.isEmpty ? '·' : provider.substring(0, 1).toUpperCase();
     }

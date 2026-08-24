@@ -8,6 +8,7 @@ import 'profiles/profile_preferences.dart';
 /// When set, episode playback skips torrent search and uses this source directly.
 class SeriesSource {
   static const String localService = 'local';
+  static const String addonDirectService = 'stremio_direct';
   static const String localKindMovieFile = 'movie_file';
   static const String localKindSeriesFolder = 'series_folder';
   static const String cloudKindFile = 'file';
@@ -28,6 +29,10 @@ class SeriesSource {
   final String? localKind;
   final int? localSizeBytes;
   final int? localModifiedAt;
+  final String? addonId;
+  final String? addonKey;
+  final String? streamKey;
+  final int? streamIndex;
 
   const SeriesSource({
     required this.torrentHash,
@@ -41,6 +46,10 @@ class SeriesSource {
     this.localKind,
     this.localSizeBytes,
     this.localModifiedAt,
+    this.addonId,
+    this.addonKey,
+    this.streamKey,
+    this.streamIndex,
   });
 
   bool get isLocal => debridService == localService;
@@ -49,6 +58,10 @@ class SeriesSource {
       torrentHash.isEmpty &&
       debridTorrentId.trim().isNotEmpty &&
       (cloudSourceKind == cloudKindFile || cloudSourceKind == cloudKindFolder);
+  bool get isAddonDirect =>
+      debridService == addonDirectService &&
+      (addonId?.trim().isNotEmpty ?? false) &&
+      (addonKey?.trim().isNotEmpty ?? false);
 
   /// Stable identity used for dedupe, reorder keys, and removal. Existing
   /// hash-backed bindings retain their exact behavior; only hashless cloud
@@ -59,8 +72,21 @@ class SeriesSource {
       final path = (localPath ?? debridTorrentId).trim();
       return 'local:$path';
     }
+    if (isAddonDirect) {
+      return 'direct:${addonKey!.trim()}:${streamKey?.trim() ?? ''}:${streamIndex ?? 0}';
+    }
     return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
   }
+
+  bool matchesAddonDirect({
+    required String? candidateAddonKey,
+    required String? candidateStreamKey,
+    required int? candidateStreamIndex,
+  }) =>
+      isAddonDirect &&
+      addonKey == candidateAddonKey &&
+      streamKey == candidateStreamKey &&
+      (streamIndex ?? 0) == (candidateStreamIndex ?? 0);
 
   bool get isLocalMovieFile =>
       isLocal && (localKind == null || localKind == localKindMovieFile);
@@ -84,6 +110,10 @@ class SeriesSource {
     if (localKind != null) 'localKind': localKind,
     if (localSizeBytes != null) 'localSizeBytes': localSizeBytes,
     if (localModifiedAt != null) 'localModifiedAt': localModifiedAt,
+    if (addonId != null) 'addonId': addonId,
+    if (addonKey != null) 'addonKey': addonKey,
+    if (streamKey != null) 'streamKey': streamKey,
+    if (streamIndex != null) 'streamIndex': streamIndex,
   };
 
   factory SeriesSource.fromJson(Map<String, dynamic> json) => SeriesSource(
@@ -98,6 +128,10 @@ class SeriesSource {
     localKind: json['localKind'] as String?,
     localSizeBytes: json['localSizeBytes'] as int?,
     localModifiedAt: json['localModifiedAt'] as int?,
+    addonId: json['addonId'] as String?,
+    addonKey: json['addonKey'] as String?,
+    streamKey: json['streamKey'] as String?,
+    streamIndex: json['streamIndex'] as int?,
   );
 }
 
