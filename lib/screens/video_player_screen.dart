@@ -12848,6 +12848,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ValueListenableBuilder<bool>(
                   valueListenable: _showBufferingIndicator,
                   builder: (context, show, _) {
+                    // The startup gate has its own spinner and explanatory
+                    // status. Keeping the ordinary buffering indicator above
+                    // it produces two overlapping loaders while candidates
+                    // are being rejected and retried.
+                    if (_startupGateActive) {
+                      return const SizedBox.shrink();
+                    }
                     return IgnorePointer(
                       ignoring: true,
                       child: AnimatedOpacity(
