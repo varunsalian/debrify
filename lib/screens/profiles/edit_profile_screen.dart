@@ -38,12 +38,18 @@ class EditProfileScreen extends StatefulWidget {
   final ProfileAuthorizationContext authorization;
   final UserProfile? profile;
 
+  @visibleForTesting
+  final Future<(List<ConnectionResource>, List<ProfileEngineAssignment>)>
+  Function()?
+  setupOptionsLoader;
+
   const EditProfileScreen({
     super.key,
     required this.registry,
     required this.pins,
     required this.authorization,
     this.profile,
+    this.setupOptionsLoader,
   });
 
   /// Whether the per-feature policy editor is shown. Off pending its own
@@ -97,18 +103,77 @@ class _EnsureVisibleOnFocus extends StatelessWidget {
   );
 }
 
+/// Gives a read-only TV row a real DPAD stop. Flutter removes disabled
+/// ListTiles from focus traversal, which used to leave the active Admin's
+/// Access page with no way to advance (and therefore no way to scroll).
+class _TvReadOnlyScrollAnchor extends StatefulWidget {
+  const _TvReadOnlyScrollAnchor({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_TvReadOnlyScrollAnchor> createState() =>
+      _TvReadOnlyScrollAnchorState();
+}
+
+class _TvReadOnlyScrollAnchorState extends State<_TvReadOnlyScrollAnchor> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Focus(
+      onFocusChange: (focused) {
+        if (_focused != focused) setState(() => _focused = focused);
+        if (focused) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: .5,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      },
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.enter)) {
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _focused ? colors.primary : Colors.transparent,
+            width: 3,
+          ),
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _TvActionSurface extends StatefulWidget {
   const _TvActionSurface({
+    super.key,
     required this.child,
     required this.onPressed,
     this.selected = false,
     this.borderRadius = const BorderRadius.all(Radius.circular(14)),
+    this.focusNode,
+    this.onKeyEvent,
   });
 
   final Widget child;
   final VoidCallback? onPressed;
   final bool selected;
   final BorderRadius borderRadius;
+  final FocusNode? focusNode;
+  final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
 
   @override
   State<_TvActionSurface> createState() => _TvActionSurfaceState();
@@ -121,50 +186,56 @@ class _TvActionSurfaceState extends State<_TvActionSurface> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final active = _focused || widget.selected;
-    return AnimatedScale(
-      scale: _focused ? 1.025 : 1,
-      duration: const Duration(milliseconds: 120),
-      child: AnimatedContainer(
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: widget.onKeyEvent,
+      child: AnimatedScale(
+        scale: _focused ? 1.025 : 1,
         duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          color: active
-              ? colors.primary.withValues(alpha: widget.selected ? .15 : .1)
-              : colors.surfaceContainerHighest.withValues(alpha: .55),
-          borderRadius: widget.borderRadius,
-          border: Border.all(
-            color: active ? colors.primary : Colors.transparent,
-            width: _focused ? 3 : 2,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            color: active
+                ? colors.primary.withValues(alpha: widget.selected ? .15 : .1)
+                : colors.surfaceContainerHighest.withValues(alpha: .55),
+            borderRadius: widget.borderRadius,
+            border: Border.all(
+              color: active ? colors.primary : Colors.transparent,
+              width: _focused ? 3 : 2,
+            ),
+            boxShadow: _focused
+                ? [
+                    BoxShadow(
+                      color: colors.primary.withValues(alpha: .28),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
           ),
-          boxShadow: _focused
-              ? [
-                  BoxShadow(
-                    color: colors.primary.withValues(alpha: .28),
-                    blurRadius: 18,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onFocusChange: (focused) {
-            if (_focused != focused) setState(() => _focused = focused);
-            if (focused) {
-              Scrollable.ensureVisible(
-                context,
-                alignment: .35,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-              );
-            }
-          },
-          onTap: widget.onPressed,
-          borderRadius: widget.borderRadius,
-          child: IconTheme.merge(
-            data: IconThemeData(color: active ? colors.primary : null),
-            child: DefaultTextStyle.merge(
-              style: TextStyle(color: active ? colors.primary : null),
-              child: widget.child,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            focusNode: widget.focusNode,
+            onFocusChange: (focused) {
+              if (_focused != focused) setState(() => _focused = focused);
+              if (focused) {
+                Scrollable.ensureVisible(
+                  context,
+                  alignment: .35,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                );
+              }
+            },
+            onTap: widget.onPressed,
+            borderRadius: widget.borderRadius,
+            child: IconTheme.merge(
+              data: IconThemeData(color: active ? colors.primary : null),
+              child: DefaultTextStyle.merge(
+                style: TextStyle(color: active ? colors.primary : null),
+                child: widget.child,
+              ),
             ),
           ),
         ),
@@ -335,6 +406,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late int _inactivityMinutes;
   late String _avatarKey;
   _TvProfileSection _tvSection = _TvProfileSection.profile;
+  late final List<FocusNode> _tvTabFocusNodes;
 
   /// A picked-but-not-saved image. Held in memory and ingested at save time,
   /// once the target profile's id exists (a created profile has none until
@@ -353,6 +425,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _tvTabFocusNodes = [
+      for (final section in _TvProfileSection.values)
+        FocusNode(debugLabel: 'Edit profile ${section.name} tab'),
+    ];
     final profile = widget.profile;
     _name = TextEditingController(text: profile?.name ?? '');
     _role = profile?.role ?? UserProfileRole.member;
@@ -374,12 +450,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _loadSetupOptions() async {
     try {
       final actor = await _authorization.validate(widget.registry);
-      final resources = await widget.registry.listGrantedResources(actor.id);
-      final engines = await ProfileEngineAssignmentService(widget.registry)
-          .listForTarget(
-            actor: _authorization,
-            targetProfileId: widget.profile?.id,
-          );
+      final (resources, engines) = widget.setupOptionsLoader != null
+          ? await widget.setupOptionsLoader!()
+          : (
+              await widget.registry.listGrantedResources(actor.id),
+              await ProfileEngineAssignmentService(
+                widget.registry,
+              ).listForTarget(
+                actor: _authorization,
+                targetProfileId: widget.profile?.id,
+              ),
+            );
       final selectedResources = <String>{};
       final resourcePermissions = <String, Set<ResourcePermission>>{};
       final targetId = widget.profile?.id;
@@ -494,6 +575,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   void dispose() {
+    for (final node in _tvTabFocusNodes) {
+      node.dispose();
+    }
     _name.dispose();
     _pin
       ..clear()
@@ -1295,19 +1379,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
-          for (final tab in tabs)
+          for (var index = 0; index < tabs.length; index++)
             Expanded(
               child: _TvActionSurface(
-                selected: _tvSection == tab.$1,
+                key: ValueKey('tv-profile-tab-${tabs[index].$1.name}'),
+                selected: _tvSection == tabs[index].$1,
                 borderRadius: BorderRadius.zero,
-                onPressed: () => setState(() => _tvSection = tab.$1),
+                focusNode: _tvTabFocusNodes[index],
+                onKeyEvent: (_, event) => _handleTvTabKey(index, event),
+                onPressed: () => setState(() => _tvSection = tabs[index].$1),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(tab.$2, size: 24),
+                    Icon(tabs[index].$2, size: 24),
                     const SizedBox(width: 12),
                     Text(
-                      tab.$3,
+                      tabs[index].$3,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         letterSpacing: .8,
@@ -1320,6 +1407,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ],
       ),
     );
+  }
+
+  KeyEventResult _handleTvTabKey(int index, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final delta = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowLeft => -1,
+      LogicalKeyboardKey.arrowRight => 1,
+      _ => 0,
+    };
+    if (delta == 0) return KeyEventResult.ignored;
+
+    final target = (index + delta).clamp(0, _tvTabFocusNodes.length - 1);
+    if (target == index) return KeyEventResult.ignored;
+    _tvTabFocusNodes[target].requestFocus();
+    return KeyEventResult.handled;
   }
 
   Widget _buildTvProfileSection() {
@@ -2032,27 +2136,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           )
         else
           for (final engine in engines)
-            CheckboxListTile(
-              value: _selectedEngines.contains(engine.id),
-              title: Text(engine.displayName),
-              subtitle: !engine.availableFromManager
-                  ? Text(
-                      'Installed only in ${widget.profile?.name ?? 'this profile'}',
-                    )
-                  : null,
-              secondary: const Icon(Icons.travel_explore_rounded),
-              onChanged: ownEditor
-                  ? null
-                  : (selected) => setState(() {
-                      if (selected == true) {
-                        _selectedEngines.add(engine.id);
-                      } else {
-                        _selectedEngines.remove(engine.id);
-                      }
-                    }),
+            _tvAccessFocusRow(
+              interactive: !ownEditor,
+              child: CheckboxListTile(
+                value: _selectedEngines.contains(engine.id),
+                title: Text(engine.displayName),
+                subtitle: !engine.availableFromManager
+                    ? Text(
+                        'Installed only in ${widget.profile?.name ?? 'this profile'}',
+                      )
+                    : null,
+                secondary: const Icon(Icons.travel_explore_rounded),
+                onChanged: ownEditor
+                    ? null
+                    : (selected) => setState(() {
+                        if (selected == true) {
+                          _selectedEngines.add(engine.id);
+                        } else {
+                          _selectedEngines.remove(engine.id);
+                        }
+                      }),
+              ),
             ),
       ],
     );
+  }
+
+  Widget _tvAccessFocusRow({required bool interactive, required Widget child}) {
+    if (!PlatformUtil.isTelevision) return child;
+    return interactive
+        ? _EnsureVisibleOnFocus(child: child)
+        : _TvReadOnlyScrollAnchor(child: child);
   }
 
   /// The order and membership of the Access groups. Anything a future type
@@ -2171,38 +2285,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     ),
   );
 
-  List<Widget> _connectionRow(ConnectionResource resource) => [
-    CheckboxListTile(
-      value: _selectedResources.contains(resource.id),
-      title: Text(resource.label),
-      subtitle: Text(resource.type.name),
-      secondary:
-          widget.profile != null &&
-              resource.ownerProfileId != widget.profile!.id &&
-              _role != UserProfileRole.child &&
-              _features.contains(ProfileFeature.manageConnections)
-          ? IconButton(
-              tooltip: 'Transfer ownership to this profile',
-              onPressed: () => _transferOwnership(resource),
-              icon: const Icon(Icons.swap_horiz_rounded),
-            )
-          : const Icon(Icons.key_rounded),
-      onChanged: resource.ownerProfileId == widget.profile?.id
-          ? null
-          : (selected) => setState(() {
-              if (selected == true) {
-                _selectResource(resource);
-              } else {
-                _deselectResource(resource);
-              }
-            }),
-    ),
-    // Sharing is BINARY now (profile_features spec): the per-resource
-    // permission chips are gone. A newly ticked resource gets the mask
-    // DERIVED from the profile's feature policy (_defaultResourcePermissions);
-    // an already-granted one keeps its stored mask via the load-time seeding,
-    // so explicit grants never churn on an unrelated save.
-  ];
+  List<Widget> _connectionRow(ConnectionResource resource) {
+    final interactive = resource.ownerProfileId != widget.profile?.id;
+    return [
+      _tvAccessFocusRow(
+        interactive: interactive,
+        child: CheckboxListTile(
+          value: _selectedResources.contains(resource.id),
+          title: Text(resource.label),
+          subtitle: Text(resource.type.name),
+          secondary:
+              widget.profile != null &&
+                  resource.ownerProfileId != widget.profile!.id &&
+                  _role != UserProfileRole.child &&
+                  _features.contains(ProfileFeature.manageConnections)
+              ? IconButton(
+                  tooltip: 'Transfer ownership to this profile',
+                  onPressed: () => _transferOwnership(resource),
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                )
+              : const Icon(Icons.key_rounded),
+          onChanged: interactive
+              ? (selected) => setState(() {
+                  if (selected == true) {
+                    _selectResource(resource);
+                  } else {
+                    _deselectResource(resource);
+                  }
+                })
+              : null,
+        ),
+      ),
+      // Sharing is BINARY now (profile_features spec): the per-resource
+      // permission chips are gone. A newly ticked resource gets the mask
+      // DERIVED from the profile's feature policy (_defaultResourcePermissions);
+      // an already-granted one keeps its stored mask via the load-time seeding,
+      // so explicit grants never churn on an unrelated save.
+    ];
+  }
 
   static String _featureLabel(ProfileFeature feature) {
     final spaced = feature.name.replaceAllMapped(

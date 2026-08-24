@@ -1,10 +1,13 @@
 import 'dart:io';
 
+import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/screens/profiles/edit_profile_screen.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_avatar_policy.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_engine_assignment_service.dart';
 import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -12,6 +15,7 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -80,6 +84,7 @@ void main() {
   group('rendering', () {
     late Directory root;
     late ProfileRegistry registry;
+    late UserProfile admin;
     late ProfileAuthorizationContext authorization;
     late ProfilePinService pins;
 
@@ -98,7 +103,7 @@ void main() {
       registry = await ProfileRegistry.open(
         path: p.join(root.path, 'profiles.db'),
       );
-      final admin = await registry.createProfile(
+      admin = await registry.createProfile(
         name: 'Admin',
         role: UserProfileRole.admin,
         policy: ProfilePolicy.defaultsFor(UserProfileRole.admin),
@@ -125,13 +130,21 @@ void main() {
       if (await root.exists()) await root.delete(recursive: true);
     });
 
-    Future<void> pumpEditor(WidgetTester tester) async {
+    Future<void> pumpEditor(
+      WidgetTester tester, {
+      UserProfile? profile,
+      Future<(List<ConnectionResource>, List<ProfileEngineAssignment>)>
+      Function()?
+      setupOptionsLoader,
+    }) async {
       await tester.pumpWidget(
         MaterialApp(
           home: EditProfileScreen(
             registry: registry,
             pins: pins,
             authorization: authorization,
+            profile: profile,
+            setupOptionsLoader: setupOptionsLoader,
           ),
         ),
       );
@@ -222,5 +235,60 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets('TV rail reaches Lock and scrolls real read-only Access rows', (
+      tester,
+    ) async {
+      PlatformUtil.debugSetAndroidTvCached(true);
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() async {
+        PlatformUtil.debugSetAndroidTvCached(null);
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      final engines = [
+        for (var index = 0; index < 8; index++)
+          ProfileEngineAssignment(
+            id: 'engine_$index',
+            displayName: 'Engine $index',
+            assignedToTarget: true,
+            availableFromManager: true,
+          ),
+      ];
+      await pumpEditor(
+        tester,
+        profile: admin,
+        setupOptionsLoader: () async => (const <ConnectionResource>[], engines),
+      );
+
+      final accessSurface = find.byKey(const ValueKey('tv-profile-tab-access'));
+      final lockSurface = find.byKey(const ValueKey('tv-profile-tab-lock'));
+      final accessInkWell = tester.widget<InkWell>(
+        find.descendant(of: accessSurface, matching: find.byType(InkWell)),
+      );
+      final lockInkWell = tester.widget<InkWell>(
+        find.descendant(of: lockSurface, matching: find.byType(InkWell)),
+      );
+
+      await tester.tap(find.text('ACCESS'));
+      accessInkWell.focusNode!.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(lockInkWell.focusNode!.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(accessInkWell.focusNode!.hasFocus, isTrue);
+
+      for (var index = 0; index < engines.length; index++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      final accessScroll = Scrollable.of(tester.element(find.text('Engine 7')));
+      expect(accessScroll.position.pixels, greaterThan(0));
+
+      expect(tester.takeException(), isNull);
+    });
   });
 }
