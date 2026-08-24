@@ -11,8 +11,8 @@ are already fixed or already tracked.
 Raw arguments: `$ARGUMENTS`
 
 Parse a single optional number = **days** to look back (default **7**). Everything runs from the
-repo root; the Discord tooling lives in `discord/`. Secrets are in the gitignored
-`discord/.dev.vars` (bot token) and `gh` is already authenticated for issue creation.
+repo root; the Discord tooling lives in `tool/discord/`. Secrets are in the gitignored
+`tool/discord/.dev.vars` (bot token) and `gh` is already authenticated for issue creation.
 
 Tracker repo: **`varunsalian/debrify-tracker`** (private). App repo: `varunsalian/debrify` (public).
 
@@ -111,5 +111,5 @@ for a daily pass, `/triage 14` for a fortnight.
 - Dedupe hard — against the full tracker (open + closed) and within the sweep. Better to fold than to
   double-file.
 - Don't refile ALREADY SHIPPED / LIKELY FIXED items unless the user explicitly opts in.
-- Never print secrets; the bot token stays in `discord/.dev.vars`.
+- Never print secrets; the bot token stays in `tool/discord/.dev.vars`.
 - If the sweep returns nothing actionable, say so plainly and stop — don't invent tickets.

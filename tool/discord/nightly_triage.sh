@@ -6,7 +6,7 @@
 # NOTE: the copy that actually runs lives at
 #   ~/Library/Application Support/debrify-triage/nightly_triage.sh
 # (macOS TCC blocks launchd from exec'ing scripts under ~/Documents). If you edit this
-# file in the repo, re-copy it there (see discord/README.md).
+# file in the repo, re-copy it there (see tool/discord/README.md).
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 # Do NOT let Claude Code self-update mid-run: a background npm-global update swaps its
@@ -22,8 +22,8 @@ TOKEN_FILE="$HOME/Library/Application Support/debrify-triage/.claude_oauth_token
 REPO="/Users/varunbsalian/Documents/Projects/debrify"
 cd "$REPO" || { echo "nightly-triage: repo not found: $REPO" >&2; exit 1; }
 
-mkdir -p discord/nightly_logs
-LOG="discord/nightly_logs/$(date +%Y-%m-%d_%H%M).log"
+mkdir -p tool/discord/nightly_logs
+LOG="tool/discord/nightly_logs/$(date +%Y-%m-%d_%H%M).log"
 
 {
   echo "======== Debrify nightly triage :: $(date) ========"
@@ -42,4 +42,4 @@ LOG="discord/nightly_logs/$(date +%Y-%m-%d_%H%M).log"
 } >> "$LOG" 2>&1
 
 # Keep only the last 30 daily logs.
-ls -1t "$REPO/discord/nightly_logs"/*.log 2>/dev/null | tail -n +31 | xargs -r rm -f
+ls -1t "$REPO/tool/discord/nightly_logs"/*.log 2>/dev/null | tail -n +31 | xargs -r rm -f

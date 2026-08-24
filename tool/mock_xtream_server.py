@@ -6,7 +6,7 @@ panel: speaks the player_api.php protocol the app calls, and streams the files
 back over the /series/{user}/{pass}/{id}.{ext} URLs it builds.
 
 Usage:
-    python3 tools/mock_xtream_server.py /path/to/your/media [port]
+    python3 tool/mock_xtream_server.py /path/to/your/media [port]
 
 Media folder layout — each subfolder is a series; season/episode is parsed from
 the filename (SxxExx anywhere in the name or path). Nested "Season N" folders
