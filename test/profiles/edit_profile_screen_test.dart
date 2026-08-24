@@ -64,10 +64,28 @@ void main() {
       );
     });
 
-    test('the per-feature policy editor stays off', () {
+    test('the per-feature policy editor stays off on the phone form', () {
       // If this flips, policyFor starts honouring the selection and the
       // editor needs a Permissions section back.
       expect(EditProfileScreen.showFeaturePolicyControls, isFalse);
+    });
+
+    test('a touched Pages editor writes the selection (controlsShown)', () {
+      // The TV Pages section passes controlsShown once the user actually
+      // toggles something — only then does the selection become the author.
+      final selection = <ProfileFeature>{
+        ProfileFeature.cloud,
+        ProfileFeature.debrifyTv,
+      };
+      expect(
+        EditProfileScreen.policyFor(
+          role: UserProfileRole.member,
+          selected: selection,
+          existing: ProfilePolicy.defaultsFor(UserProfileRole.member),
+          controlsShown: true,
+        ).enabled,
+        selection,
+      );
     });
 
     test('a child never receives manageProfiles', () {
@@ -193,12 +211,14 @@ void main() {
 
         for (final section in const <String>[
           'PROFILE',
-          'LOCK',
+          'PAGES',
           'ACCESS',
+          'LOCK',
           'DATA',
         ]) {
           expect(find.text(section), findsOneWidget, reason: section);
         }
+        expect(find.text('SAVE'), findsOneWidget);
         expect(find.text('Choose an avatar'), findsOneWidget);
         expect(find.text('Choose image or GIF'), findsOneWidget);
         expect(find.byType(DropdownButtonFormField<int>), findsNothing);
@@ -228,6 +248,11 @@ void main() {
         await tester.tap(find.text('ACCESS'));
         await tester.pumpAndSettle();
         expect(find.text('Profile access'), findsOneWidget);
+
+        await tester.tap(find.text('PAGES'));
+        await tester.pumpAndSettle();
+        expect(find.text('Pages & abilities'), findsOneWidget);
+        expect(find.text('Keyword search'), findsOneWidget);
 
         await tester.tap(find.text('DATA'));
         await tester.pumpAndSettle();
@@ -273,14 +298,18 @@ void main() {
       await tester.tap(find.text('ACCESS'));
       accessInkWell.focusNode!.requestFocus();
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      // The rail is vertical now: DOWN reaches the next section, UP returns.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
       expect(lockInkWell.focusNode!.hasFocus, isTrue);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump();
       expect(accessInkWell.focusNode!.hasFocus, isTrue);
 
+      // RIGHT enters the content pane; DOWN then walks the engine rows.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 250));
       for (var index = 0; index < engines.length; index++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump(const Duration(milliseconds: 250));
