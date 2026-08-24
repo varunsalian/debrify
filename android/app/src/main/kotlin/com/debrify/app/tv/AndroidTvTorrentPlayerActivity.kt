@@ -7950,6 +7950,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val guideList = iptvGuideList ?: return
 
         guideList.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
+        // Guide rows own their DPAD scale animation through
+        // ViewPropertyAnimator. RecyclerView's DefaultItemAnimator uses that
+        // same animator for change/removal transitions; rebinding a row then
+        // cancels RecyclerView's animation from inside onBindViewHolder and
+        // can synchronously recycle a still-tmp-detached holder. Android 9
+        // throws in that state and kills the whole player process. List
+        // changes are still applied immediately by DiffUtil; only the
+        // conflicting decorative transition is disabled.
+        guideList.itemAnimator = null
         iptvChannelAdapter = IptvChannelAdapter(
             channels = iptvBrowseChannels.toMutableList(),
             onItemClick = { entry ->
