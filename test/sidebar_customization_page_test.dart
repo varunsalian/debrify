@@ -137,6 +137,27 @@ void main() {
       reason: 'editor viewport $editorRect did not reveal row $settingsRect',
     );
 
+    for (var i = 0; i < 10; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+    }
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'sidebar-customization-search',
+    );
+    final searchRect = tester.getRect(
+      find.byKey(const ValueKey('sidebar-item-search')),
+    );
+    expect(
+      tester.getRect(editorScroll).overlaps(searchRect),
+      isTrue,
+      reason: 'editor viewport did not reveal the earlier row $searchRect',
+    );
+
+    for (var i = 0; i < 10; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     expect(

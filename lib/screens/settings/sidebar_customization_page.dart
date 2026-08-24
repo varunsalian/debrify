@@ -62,14 +62,18 @@ class _SidebarCustomizationPageState extends State<SidebarCustomizationPage> {
     () => FocusNode(debugLabel: 'sidebar-customization-$id'),
   );
 
-  void _focusRow(String id) {
+  void _focusRow(
+    String id, {
+    ScrollPositionAlignmentPolicy alignmentPolicy =
+        ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+  }) {
     final node = _nodeFor(id);
     final rowContext = node.context;
     if (rowContext != null) {
       Scrollable.ensureVisible(
         rowContext,
         duration: Duration.zero,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        alignmentPolicy: alignmentPolicy,
       );
     }
     node.requestFocus();
@@ -85,7 +89,10 @@ class _SidebarCustomizationPageState extends State<SidebarCustomizationPage> {
     if (_isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _configuration.order.isEmpty) return;
-        _focusRow(_configuration.order.first);
+        _focusRow(
+          _configuration.order.first,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        );
       });
     }
   }
@@ -103,7 +110,13 @@ class _SidebarCustomizationPageState extends State<SidebarCustomizationPage> {
     });
     _schedulePersist();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusRow(moved);
+      if (!mounted) return;
+      _focusRow(
+        moved,
+        alignmentPolicy: to < from
+            ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
+            : ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
     });
   }
 
@@ -200,7 +213,10 @@ class _SidebarCustomizationPageState extends State<SidebarCustomizationPage> {
     if (_isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _configuration.order.isNotEmpty) {
-          _focusRow(_configuration.order.first);
+          _focusRow(
+            _configuration.order.first,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+          );
         }
       });
     }
@@ -220,7 +236,10 @@ class _SidebarCustomizationPageState extends State<SidebarCustomizationPage> {
       if (picked && index > 0) {
         _moveTo(index, index - 1);
       } else if (!picked && index > 0) {
-        _focusRow(_configuration.order[index - 1]);
+        _focusRow(
+          _configuration.order[index - 1],
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        );
       }
       return KeyEventResult.handled;
     }
