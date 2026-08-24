@@ -103,10 +103,17 @@ List<TvKey> _actionRow(int page, String submitLabel, bool voice) => [
   // which is the very reason this in-app keyboard is enabled on the platform.
   // The key would strand the user in a field they cannot complete.
   if (!PlatformUtil.isTvOS)
-    TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
-  if (voice)
-    TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
-  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 4 : 5),
+    TvKey.action(
+      TvKeyAction.systemIme,
+      icon: Icons.smartphone_rounded,
+      flex: 3,
+    ),
+  if (voice) TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
+  TvKey.action(
+    TvKeyAction.space,
+    icon: Icons.space_bar_rounded,
+    flex: voice ? 4 : 5,
+  ),
   TvKey.action(TvKeyAction.paste, icon: Icons.content_paste_rounded, flex: 3),
   TvKey.action(TvKeyAction.clear, label: 'Clear', flex: 3),
   TvKey.action(TvKeyAction.submit, label: submitLabel, flex: 4),
@@ -350,6 +357,9 @@ class TvKeyboardPanel extends StatelessWidget {
   const TvKeyboardPanel({
     super.key,
     required this.controller,
+    this.previewController,
+    this.previewHint,
+    this.previewObscure = false,
     this.accent = _accent,
     this.ground = _bg,
     this.ink = Colors.white,
@@ -357,6 +367,19 @@ class TvKeyboardPanel extends StatelessWidget {
   });
 
   final TvKeyboardController controller;
+
+  /// Live view of the field being edited, rendered above the keys. The
+  /// bottom-anchored overlay can cover the very field it edits (dialogs,
+  /// rows low on a settings page), so the panel shows what the field holds.
+  /// Null renders no preview — the onboarding slot keeps its field visible
+  /// directly above the keyboard band and passes nothing.
+  final TextEditingController? previewController;
+
+  /// Shown dimmed while the field is empty (the field's hint/label).
+  final String? previewHint;
+
+  /// Render bullets instead of the text — the field is a secret (API keys).
+  final bool previewObscure;
 
   /// Every filled accent on the panel: the highlighted keycap, the latched
   /// shift, the mic disc and its halo, the notice bar.
@@ -394,53 +417,90 @@ class TvKeyboardPanel extends StatelessWidget {
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
-            // Dictation takes over the panel's own body — no second surface,
-            // no system text box, same box in the same place.
+            // Dictation takes over the panel's key grid — no second surface,
+            // no system text box, same box in the same place. The preview
+            // stays through it: it renders OUTSIDE this branch so the panel
+            // doesn't jump when the mic opens, and the live view of the field
+            // survives into the mode most likely to need it.
             if (controller.listening) {
-              return _ListeningView(
-                controller: controller,
+              return _withPreview(
+                _ListeningView(
+                  controller: controller,
+                  accent: accent,
+                  ink: ink,
+                  inkOnAccent: inkOnAccent,
+                ),
                 accent: accent,
                 ink: ink,
-                inkOnAccent: inkOnAccent,
               );
             }
             final grid = controller.rows;
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (controller.notice != null)
-                  _NoticeBar(
-                    text: controller.notice!,
-                    icon: controller.noticeIcon,
-                    accent: accent,
-                    ink: ink,
-                  ),
-                for (var r = 0; r < grid.length; r++)
-                  Row(
-                    children: [
-                      for (var c = 0; c < grid[r].length; c++)
-                        Expanded(
-                          flex: grid[r][c].flex,
-                          child: _KeyCap(
-                            keyDef: grid[r][c],
-                            highlighted:
-                                r == controller.row && c == controller.col,
-                            lit:
-                                grid[r][c].action == TvKeyAction.shift &&
-                                controller.shift,
-                            accent: accent,
-                            ink: ink,
-                            inkOnAccent: inkOnAccent,
-                            onTap: () => controller.activate(grid[r][c]),
+            return _withPreview(
+              accent: accent,
+              ink: ink,
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (controller.notice != null)
+                    _NoticeBar(
+                      text: controller.notice!,
+                      icon: controller.noticeIcon,
+                      accent: accent,
+                      ink: ink,
+                    ),
+                  for (var r = 0; r < grid.length; r++)
+                    Row(
+                      children: [
+                        for (var c = 0; c < grid[r].length; c++)
+                          Expanded(
+                            flex: grid[r][c].flex,
+                            child: _KeyCap(
+                              keyDef: grid[r][c],
+                              highlighted:
+                                  r == controller.row && c == controller.col,
+                              lit:
+                                  grid[r][c].action == TvKeyAction.shift &&
+                                  controller.shift,
+                              accent: accent,
+                              ink: ink,
+                              inkOnAccent: inkOnAccent,
+                              onTap: () => controller.activate(grid[r][c]),
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-              ],
+                      ],
+                    ),
+                ],
+              ),
             );
           },
         ),
       ),
+    );
+  }
+
+  /// Stacks the live preview (when configured) above [body] — the key grid
+  /// and the dictation view alike, so the bar neither appears nor disappears
+  /// as modes change.
+  Widget _withPreview(
+    Widget body, {
+    required Color accent,
+    required Color ink,
+  }) {
+    final preview = previewController;
+    if (preview == null) return body;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _PreviewBar(
+          key: const ValueKey('tv-keyboard-preview'),
+          controller: preview,
+          hint: previewHint,
+          obscure: previewObscure,
+          accent: accent,
+          ink: ink,
+        ),
+        body,
+      ],
     );
   }
 }
@@ -491,11 +551,7 @@ class _ListeningView extends StatelessWidget {
                   color: accent,
                 ),
                 alignment: Alignment.center,
-                child: Icon(
-                  Icons.mic_rounded,
-                  size: 28,
-                  color: inkOnAccent,
-                ),
+                child: Icon(Icons.mic_rounded, size: 28, color: inkOnAccent),
               ),
             ],
           ),
@@ -514,10 +570,10 @@ class _ListeningView extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: heard.isEmpty ? 16 : 20,
-                    fontWeight: heard.isEmpty ? FontWeight.w500 : FontWeight.w600,
-                    color: heard.isEmpty
-                        ? ink.withValues(alpha: 0.55)
-                        : ink,
+                    fontWeight: heard.isEmpty
+                        ? FontWeight.w500
+                        : FontWeight.w600,
+                    color: heard.isEmpty ? ink.withValues(alpha: 0.55) : ink,
                   ),
                 ),
               ),
@@ -526,10 +582,7 @@ class _ListeningView extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             controller.status,
-            style: TextStyle(
-              fontSize: 12,
-              color: ink.withValues(alpha: 0.55),
-            ),
+            style: TextStyle(fontSize: 12, color: ink.withValues(alpha: 0.55)),
           ),
           const SizedBox(height: 12),
           Text(
@@ -541,6 +594,106 @@ class _ListeningView extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Live view of the field being edited, as the top row of the panel.
+///
+/// Its own [ListenableBuilder]: it repaints per keystroke off the text
+/// controller, independent of the key-grid rebuilds. The static caret bar
+/// marks where typing lands — no blink timer, per this file's "snap, don't
+/// tween" rule for weak TV GPUs. (The keyboard has no caret-movement keys,
+/// so the caret is drawn at the tail; a mid-text selection left over from a
+/// system-IME session still inserts at the real caret, the preview just
+/// doesn't draw it there.)
+class _PreviewBar extends StatelessWidget {
+  const _PreviewBar({
+    super.key,
+    required this.controller,
+    required this.hint,
+    required this.obscure,
+    required this.accent,
+    required this.ink,
+  });
+
+  final TextEditingController controller;
+  final String? hint;
+  final bool obscure;
+  final Color accent;
+  final Color ink;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      margin: const EdgeInsets.only(bottom: 6, left: 2, right: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: ink.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          final raw = controller.text;
+          final shown = obscure ? '•' * raw.characters.length : raw;
+          if (shown.isEmpty) {
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                hint ?? '',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: ink.withValues(alpha: 0.4),
+                ),
+              ),
+            );
+          }
+          // Long text keeps its TAIL (where the caret is) visible: the
+          // non-interactive reverse scroll view pins to the end, and the
+          // min-width floor keeps short text sitting left instead of being
+          // end-anchored by that same reverse pin.
+          return LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              physics: const NeverScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  // Both call sites bound the panel today; the guards keep an
+                  // unbounded future host from turning into a throw.
+                  minWidth: constraints.hasBoundedWidth
+                      ? constraints.maxWidth
+                      : 0,
+                  minHeight: constraints.hasBoundedHeight
+                      ? constraints.maxHeight
+                      : 0,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      shown,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: ink.withValues(alpha: 0.92),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Container(width: 2, height: 18, color: accent),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -635,9 +788,7 @@ class _KeyCap extends StatelessWidget {
             ? Icon(
                 keyDef.icon,
                 size: 18,
-                color: highlighted
-                    ? inkOnAccent
-                    : ink.withValues(alpha: 0.8),
+                color: highlighted ? inkOnAccent : ink.withValues(alpha: 0.8),
               )
             : FittedBox(
                 // Keycaps are fixed 40px boxes: at large TV font-scale
