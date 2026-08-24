@@ -1,3 +1,5 @@
+import '../../models/sidebar_configuration.dart';
+
 /// The complete preference schema permitted in an unencrypted, shareable
 /// profile package.
 ///
@@ -64,6 +66,8 @@ abstract final class SanitizedProfilePreferences {
       case 'desktop_sidebar_style':
         return value is String &&
             const <String>{'rail', 'pill'}.contains(value);
+      case 'sidebar_configuration_v1':
+        return value is String && SidebarConfiguration.tryDecode(value) != null;
       case 'phone_nav_style':
         return value is String &&
             const <String>{'classic', 'floating'}.contains(value);

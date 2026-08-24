@@ -5,6 +5,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme_scope.dart';
 import 'widgets/settings_widgets.dart';
+import 'sidebar_customization_page.dart';
 
 /// One selectable desktop/tablet sidebar style.
 class DesktopSidebarStyleChoice {
@@ -112,16 +113,29 @@ class _DesktopSidebarStylePageState extends State<DesktopSidebarStylePage> {
                       _optionRow(choice),
                   ],
                 ),
+                const SizedBox(height: 18),
+                SettingsSection(
+                  title: 'Items',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.low_priority_rounded,
+                      title: 'Order & Names',
+                      subtitle:
+                          'Rearrange destinations and rename sidebar labels',
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => pushSettingsPage(
+                        context,
+                        const SidebarCustomizationPage(),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 Text(
                   'Applies immediately. Phones keep their bottom '
                   'navigation; the TV rail has its own style in TV '
                   'settings.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: t.dim,
-                  ),
+                  style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
                 ),
               ],
             ),

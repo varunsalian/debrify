@@ -28,6 +28,7 @@ class ProfileCreationService {
     'home_cw_hold_to_quick_play',
     'tv_sidebar_style',
     'desktop_sidebar_style',
+    'sidebar_configuration_v1',
     'discover_layout',
     'detail_page_style',
     'detail_theme',
