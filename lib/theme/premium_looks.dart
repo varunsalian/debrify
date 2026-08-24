@@ -13,7 +13,7 @@ import 'theme_spec.dart';
 /// The five looks, as specs.
 ///
 /// Each is the Dart translation of an approved concept in
-/// `design/mockups/premium_looks_mockup/` — the values here and the CSS there are meant to
+/// `dev/design/mockups/premium_looks_mockup/` — the values here and the CSS there are meant to
 /// agree, and where they cannot (blur on TV, grain on TV) the mockup's own
 /// "on tv" note says so.
 ///

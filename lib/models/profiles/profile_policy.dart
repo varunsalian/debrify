@@ -99,7 +99,7 @@ class ProfilePolicy {
         .toSet(),
   );
 
-  /// The questionnaire's role presets (design/mockups/profile_features_mockup
+  /// The questionnaire's role presets (dev/design/mockups/profile_features_mockup
   /// — mock v6 matrix). Operations stay on where the mock only hides a
   /// surface: a Member without [ProfileFeature.cloudFiles] still streams
   /// through debrid; a Kid without [ProfileFeature.keywordSearch] still

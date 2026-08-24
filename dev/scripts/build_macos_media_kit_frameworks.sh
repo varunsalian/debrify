@@ -28,7 +28,7 @@ readonly UPSTREAM_COMMIT="b4e3ce98826cd4a28f6121b29f56ea203346e6e3"
 readonly TARGET="mk-out-archive-xcframeworks-macos-universal-video-default"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PATCH="$ROOT/scripts/patches/libmpv-darwin-subtitle-decoders.patch"
+PATCH="$ROOT/dev/scripts/patches/libmpv-darwin-subtitle-decoders.patch"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/debrify-libmpv-macos.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 

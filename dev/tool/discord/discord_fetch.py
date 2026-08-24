@@ -31,7 +31,7 @@ def load_token():
                 return line.split("=", 1)[1].strip()
     except FileNotFoundError:
         pass
-    sys.exit("No DISCORD_TOKEN (set env var or tool/discord/.dev.vars)")
+    sys.exit("No DISCORD_TOKEN (set env var or dev/tool/discord/.dev.vars)")
 
 
 TOKEN = load_token()

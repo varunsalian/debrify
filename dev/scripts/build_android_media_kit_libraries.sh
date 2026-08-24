@@ -31,7 +31,7 @@ readonly UPSTREAM_REPO="https://github.com/media-kit/libmpv-android-video-build.
 readonly UPSTREAM_COMMIT="1ecf5100ec0f75e1d0630f48851b85769c92eed2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PATCH="$ROOT/scripts/patches/libmpv-android-subtitle-decoders.patch"
+PATCH="$ROOT/dev/scripts/patches/libmpv-android-subtitle-decoders.patch"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/debrify-libmpv-android.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 

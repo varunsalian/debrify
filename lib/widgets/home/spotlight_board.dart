@@ -369,7 +369,7 @@ class _M {
   double get k => (dpad || compact) ? 1.0 : wideTouchScale(w);
 
   /// Compact values are MEASURED off the Apple TV phone app on the reference
-  /// device (see design/mockups/spotlight_responsive_mockup/, re-measured
+  /// device (see dev/design/mockups/spotlight_responsive_mockup/, re-measured
   /// 2026-08-16 for the home_rows_mockup pass): gutter 4.8%, posters 25.7%
   /// with 3.4% gaps — three cards and a real sliver of the fourth, the peek
   /// that says "this scrolls". The earlier 24.3%/4.6% pairing spent the

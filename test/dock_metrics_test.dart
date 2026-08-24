@@ -2,7 +2,7 @@ import 'package:debrify/screens/video_player/widgets/dock_style.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Phase A gate for `design/plans/PLAYER_DOCK_STYLES_PLAN.md` §7.1.
+/// Phase A gate for `dev/design/plans/PLAYER_DOCK_STYLES_PLAN.md` §7.1.
 ///
 /// The feature exists because the legacy dock's ~28lp targets fail Apple's
 /// 44pt and Material's 48dp minimum on every device. A density system that can

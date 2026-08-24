@@ -75,17 +75,17 @@ Until then, just run `/triage` manually in a normal Claude Code session — that
 ```bash
 # 1. Launcher must live OUTSIDE ~/Documents (macOS TCC blocks launchd from exec'ing scripts there)
 mkdir -p "$HOME/Library/Application Support/debrify-triage"
-cp tool/discord/nightly_triage.sh "$HOME/Library/Application Support/debrify-triage/nightly_triage.sh"
+cp dev/tool/discord/nightly_triage.sh "$HOME/Library/Application Support/debrify-triage/nightly_triage.sh"
 chmod +x "$HOME/Library/Application Support/debrify-triage/nightly_triage.sh"
 
 # 2. Install + load the launchd job (1am local, Hour=1)
-cp tool/discord/com.debrify.nightly-triage.plist "$HOME/Library/LaunchAgents/"
+cp dev/tool/discord/com.debrify.nightly-triage.plist "$HOME/Library/LaunchAgents/"
 launchctl bootout   gui/$(id -u)/com.debrify.nightly-triage 2>/dev/null
 launchctl bootstrap gui/$(id -u) "$HOME/Library/LaunchAgents/com.debrify.nightly-triage.plist"
 launchctl enable    gui/$(id -u)/com.debrify.nightly-triage
 
 # Run it now (test):   launchctl kickstart gui/$(id -u)/com.debrify.nightly-triage
-# Logs:                tool/discord/nightly_logs/  (gitignored, keeps last 30)
+# Logs:                dev/tool/discord/nightly_logs/  (gitignored, keeps last 30)
 ```
 
 **Requires:** Mac powered on + logged in at ~1am (screen may be locked). Asleep → runs at next wake.

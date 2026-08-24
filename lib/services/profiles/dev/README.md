@@ -4,8 +4,8 @@ Temporary. Built to find profile-isolation defects during development and to be
 removed once that work is done. Not localised, not in settings search, no
 schema-stability promise.
 
-Plan: `design/plans/PROFILE_AUDIT_EXPORT_PLAN.md`.
-Mockup: `design/mockups/profile_dashboard_mockup/index.html`.
+Plan: `dev/design/plans/PROFILE_AUDIT_EXPORT_PLAN.md`.
+Mockup: `dev/design/mockups/profile_dashboard_mockup/index.html`.
 
 ## What it is
 

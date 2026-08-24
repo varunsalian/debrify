@@ -14214,7 +14214,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // ── Auto-sync countdown pill ─────────────────────────────────────────────
-    // The quiet bottom-right status pill (design/mockups/
+    // The quiet bottom-right status pill (dev/design/mockups/
     // subtitle_auto_sync_hint_mockup/countdown_devices.html, same component as
     // the Dart player's AutoSyncPill): a draining 90-second ring + tracked
     // uppercase label + tabular seconds while listening; colored glyph + label

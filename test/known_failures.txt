@@ -1,5 +1,5 @@
-# Pre-existing failures, compared BY NAME by tool/test_baseline.py.
-# Regenerate deliberately: python3 tool/test_baseline.py --record
+# Pre-existing failures, compared BY NAME by dev/tool/test_baseline.py.
+# Regenerate deliberately: python3 dev/tool/test_baseline.py --record
 test/series_parser_test.dart::SeriesParser Tests should NOT treat 4-letter release code as series
 test/series_parser_test.dart::SeriesParser Tests should NOT treat 4-letter release code mp4 as series
 test/series_parser_test.dart::SeriesParser Tests should NOT treat 5-letter release code with brackets as series

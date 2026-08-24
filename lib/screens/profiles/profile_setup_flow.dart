@@ -19,7 +19,7 @@ import '../../widgets/tv_text_field.dart';
 import 'edit_profile_screen.dart';
 
 /// The profile questionnaire — the policy author now that the raw feature
-/// matrix is hidden (design/mockups/profile_features_mockup, mock v6).
+/// matrix is hidden (dev/design/mockups/profile_features_mockup, mock v6).
 ///
 /// Five steps: identity → role (the PRESET — picking one pre-answers every
 /// later step) → search power → source pages → abilities, then a Review that

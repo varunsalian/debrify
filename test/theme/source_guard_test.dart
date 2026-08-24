@@ -172,7 +172,7 @@ void main() {
     // FrozenLegacyPageRoute, or its list is themed while its detail is legacy.
     // Two deliberate exceptions, both allow-listed by name:
     //   * playback, which stays outside the app palette permanently (see
-    //     design/plans/APP_THEME_PHASE_TWO_PLAN.md hazard 2);
+    //     dev/design/plans/APP_THEME_PHASE_TWO_PLAN.md hazard 2);
     //   * a themed surface pushing INTO a frozen surface's own screen, which
     //     is not a leftover but the correct containment — see the sibling test
     //     below, which enforces the other direction.

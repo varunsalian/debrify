@@ -254,7 +254,7 @@ flutter:
       fonts:
         - asset: assets/fonts/NotoSans-Regular.ttf
 
-  # Style fonts — the IPTV premium looks (design/plans/IPTV_PREMIUM_STYLES_PLAN.md).
+  # Style fonts — the IPTV premium looks (dev/design/plans/IPTV_PREMIUM_STYLES_PLAN.md).
   # Static faces referenced by plain fontFamily strings; never via GoogleFonts.
     - family: Fraunces72
       fonts:
