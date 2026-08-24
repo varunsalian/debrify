@@ -119,6 +119,10 @@ import '../utils/tv_keys.dart';
 export 'video_player/models/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
 
+class _ManualSourceValidationFailure implements Exception {
+  const _ManualSourceValidationFailure();
+}
+
 class _SeasonEpisodeSelection {
   final int season;
   final int episode;
@@ -1168,6 +1172,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // media_kit state
   bool _isReady = false;
   bool _startupGateActive = false;
+  // A source explicitly picked from the in-player sheet is validated as one
+  // isolated candidate. While this is true, renderer events belong to an
+  // untrusted replacement and must not update local completion or any tracker.
+  bool _manualSourceGateActive = false;
   String _startupGateMessage = 'Checking stream…';
   bool _isPlaying = false;
   // True while the activity is shrunk into a Picture-in-Picture window; the
@@ -1782,6 +1790,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _traktScrobble(String action) {
+    if (_manualSourceGateActive) return;
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
@@ -1824,7 +1833,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _startTraktHeartbeat() {
     _traktHeartbeatTimer?.cancel();
     _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
+      if (_manualSourceGateActive ||
+          !_traktScrobbleEnabled ||
+          widget.contentImdbId == null) {
+        return;
+      }
       if (!_isPlaying || _duration.inMilliseconds <= 0) return;
       final imdbId = widget.contentImdbId!;
       final progress = _traktProgress();
@@ -1880,6 +1893,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Send updated progress to Trakt after a user seek (bypasses dedup guard).
   void _traktScrobbleSeek(Duration seekTarget) {
+    if (_manualSourceGateActive) return;
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
     final imdbId = widget.contentImdbId!;
@@ -1947,6 +1961,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       (se.season == null || se.episode == null);
 
   void _simklScrobble(String action) {
+    if (_manualSourceGateActive) return;
     if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
@@ -1995,7 +2010,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _startSimklHeartbeat() {
     _simklHeartbeatTimer?.cancel();
     _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
+      if (_manualSourceGateActive ||
+          !_simklScrobbleEnabled ||
+          widget.contentImdbId == null) {
+        return;
+      }
       if (!_isPlaying || _duration.inMilliseconds <= 0) return;
       final imdbId = widget.contentImdbId!;
       final progress = _traktProgress();
@@ -2047,6 +2066,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// after a stop (→ a new start). The 2-minute heartbeat carries fresh
   /// progress either way.
   void _simklScrobbleSeek(Duration seekTarget) {
+    if (_manualSourceGateActive) return;
     if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
     final imdbId = widget.contentImdbId!;
@@ -2153,20 +2173,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_isPlaying && _duration > Duration.zero) session.play();
   }
 
-  void _updateMdblistPosition() =>
-      _mdblistSession?.updatePosition(_position, _duration);
+  void _updateMdblistPosition() {
+    if (_manualSourceGateActive) return;
+    _mdblistSession?.updatePosition(_position, _duration);
+  }
 
   void _mdblistPlay() {
+    if (_manualSourceGateActive) return;
     _updateMdblistPosition();
     _mdblistSession?.play();
   }
 
   void _mdblistPause() {
+    if (_manualSourceGateActive) return;
     _updateMdblistPosition();
     _mdblistSession?.pause();
   }
 
   void _mdblistStop({bool complete = false}) {
+    if (_manualSourceGateActive) return;
     _updateMdblistPosition();
     debugPrint(
       '[MDBListDiag] player stop complete=$complete '
@@ -2182,10 +2207,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _mdblistScrobbleSeek(Duration target) {
+    if (_manualSourceGateActive) return;
     _mdblistSession?.seek(target, _duration);
   }
 
+  void _resumeTrackingAfterManualSourceGate() {
+    if (!mounted) return;
+    _updateMdblistPosition();
+    if (!_isPlaying || _duration <= Duration.zero) return;
+    _traktScrobble('start');
+    if (_traktLastScrobbleAction == 'start') _startTraktHeartbeat();
+    if (_simklScrobbleEnabled) {
+      // Simkl uses a local playing marker and pause-based checkpoints; sending
+      // its remote "start" would erase the resumable playback entry.
+      _simklLastScrobbleAction = 'start';
+      _startSimklHeartbeat();
+    }
+    _mdblistPlay();
+  }
+
   Future<void> _switchMdblistTarget() async {
+    if (_manualSourceGateActive) return;
     final target = _mdblistTarget();
     if (target == null) {
       _mdblistSession?.exit();
@@ -3308,31 +3350,39 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _syncWakelock(p);
       _pushPipState();
       if (p) _noteLiveChannelPlaying();
-      if (p && _duration > Duration.zero) {
+      if (!_manualSourceGateActive && p && _duration > Duration.zero) {
         _traktScrobble('start');
         if (_traktLastScrobbleAction == 'start') {
           _startTraktHeartbeat();
         }
-      } else if (!p &&
+      } else if (!_manualSourceGateActive &&
+          !p &&
           wasPlaying &&
           !_isTransitioning &&
           _traktLastScrobbleAction != 'stop') {
         _traktScrobble('pause');
         _stopTraktHeartbeat();
       }
-      if (_simklScrobbleEnabled && p && _duration > Duration.zero) {
+      if (!_manualSourceGateActive &&
+          _simklScrobbleEnabled &&
+          p &&
+          _duration > Duration.zero) {
         _simklLastScrobbleAction = 'start';
         _startSimklHeartbeat();
-      } else if (!p &&
+      } else if (!_manualSourceGateActive &&
+          !p &&
           wasPlaying &&
           !_isTransitioning &&
           _simklLastScrobbleAction != 'stop') {
         _simklScrobble('pause');
         _stopSimklHeartbeat();
       }
-      if (p && _duration > Duration.zero) {
+      if (!_manualSourceGateActive && p && _duration > Duration.zero) {
         _mdblistPlay();
-      } else if (!p && wasPlaying && !_isTransitioning) {
+      } else if (!_manualSourceGateActive &&
+          !p &&
+          wasPlaying &&
+          !_isTransitioning) {
         _mdblistPause();
       }
       if (p && _transitionRunning) {
@@ -4369,6 +4419,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _onPlaybackEnded() async {
+    // A manually selected replacement is not playback until its validation
+    // gate commits it. In particular, a short provider error video can emit
+    // `completed`; never let that become a watched/scrobble event.
+    if (_manualSourceGateActive) return;
     // LIVE IPTV: an ended live stream is a dropped connection, not a
     // finished item — the origin closed on us (mpv's keep-open parks on the
     // last frame, which is the "fake pause" from the Discord report). The
@@ -7815,7 +7869,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final pendingPlaylist = _pendingSourcePlaylist;
     _pendingSourcePlaylist = null;
     if (pendingPlaylist != null && pendingPlaylist.isNotEmpty) {
-      await _switchToSourcePlaylist(index, pendingPlaylist);
+      await _switchToSourcePlaylist(
+        index,
+        pendingPlaylist,
+        validateExplicitSelection: true,
+      );
     } else {
       await _switchToStremioSource(index, url);
     }
@@ -7883,9 +7941,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     List<PlaylistEntry> newPlaylist, {
     int? targetSeason,
     int? targetEpisode,
+    bool validateExplicitSelection = false,
   }) async {
     _hideSourceSheet();
     _clearBufferingIndicator();
+    final outgoingPlaylist = _activePlaylist == null
+        ? null
+        : List<PlaylistEntry>.of(_activePlaylist!);
+    final outgoingIndex = _currentIndex;
+    final outgoingSourceIndex = _currentSourceIndex;
+    final outgoingPosition = _position;
+    final outgoingDirectUrl = _currentStreamUrl;
+    final selectedSource =
+        (_effectiveSources != null &&
+            sourceIndex >= 0 &&
+            sourceIndex < _effectiveSources!.length)
+        ? _effectiveSources![sourceIndex]
+        : null;
     // Capture the episode we're on BEFORE swapping the playlist, so we can
     // land on it in the new source instead of jumping to the pack's first
     // entry (S1E1). Read from the current playlist entry (tracks auto-advance).
@@ -7952,6 +8024,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     var landedOnSameContent =
         !explicitTarget ||
         (targetSeason == current.season && targetEpisode == current.episode);
+    var containsRequestedEpisode = true;
     if (se.season != null && se.episode != null) {
       final sp = _seriesPlaylist;
       final idx =
@@ -7964,12 +8037,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         targetIndex = 0;
       } else {
         landedOnSameContent = false;
+        containsRequestedEpisode = false;
         // The exact episode isn't in this source. Don't fall back to raw entry
         // 0 — in torrent order that's often an extras/bonus clip. Land on the
         // first REAL episode (skips season 0 / specials) and warn the user.
         final firstReal = sp?.getFirstEpisodeOriginalIndex() ?? -1;
         if (firstReal >= 0) targetIndex = firstReal;
-        if (mounted) {
+        if (mounted && !validateExplicitSelection) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -7990,13 +8064,101 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Resume the checkpointed LOCAL position, not Trakt (this is a source swap
     // mid-episode, not a fresh open) — but only when the new source landed on
     // the same content; a fallback episode keeps its own Trakt resume.
-    await _loadPlaylistIndex(
-      targetIndex,
-      autoplay: true,
-      skipInitialSave: true,
-      preferLocalResume: landedOnSameContent,
-    );
+    var committed = false;
+    if (!validateExplicitSelection) {
+      committed = await _loadPlaylistIndex(
+        targetIndex,
+        autoplay: true,
+        skipInitialSave: true,
+        preferLocalResume: landedOnSameContent,
+      );
+    } else {
+      _manualSourceGateActive = true;
+      try {
+        try {
+          if (containsRequestedEpisode) {
+            committed = await _loadPlaylistIndex(
+              targetIndex,
+              autoplay: true,
+              skipInitialSave: true,
+              preferLocalResume: landedOnSameContent,
+              manualValidationSource: selectedSource,
+              manualValidationSourceIndex: sourceIndex,
+            );
+          }
+        } catch (error) {
+          debugPrint(
+            'Player: manual playlist source rejected '
+            '(${error.runtimeType})',
+          );
+          committed = false;
+        }
+        if (!mounted) return;
+        if (!committed &&
+            outgoingPlaylist != null &&
+            outgoingPlaylist.isNotEmpty) {
+          setState(() {
+            _activePlaylist = outgoingPlaylist;
+            _cachedSeriesPlaylist = null;
+            _playlistIdentityToken++;
+            _currentSourceIndex = outgoingSourceIndex;
+            _currentIndex = outgoingIndex.clamp(0, outgoingPlaylist.length - 1);
+          });
+          final restored = await _loadPlaylistIndex(
+            _currentIndex,
+            autoplay: true,
+            skipInitialSave: true,
+            preferLocalResume: true,
+          );
+          if (restored && outgoingPosition > Duration.zero) {
+            await _player.seek(outgoingPosition);
+          }
+        } else if (!committed &&
+            outgoingDirectUrl != null &&
+            outgoingDirectUrl.isNotEmpty) {
+          // A direct launch has no active playlist to restore. The candidate
+          // validator has stopped its media on failure, so explicitly rebuild
+          // the outgoing direct session instead of leaving the player stopped
+          // with the rejected playlist selected.
+          setState(() {
+            _activePlaylist = null;
+            _cachedSeriesPlaylist = null;
+            _playlistIdentityToken++;
+            _currentSourceIndex = outgoingSourceIndex;
+            _currentIndex = outgoingIndex;
+          });
+          try {
+            await _openMedia(
+              mk.Media(outgoingDirectUrl, httpHeaders: widget.httpHeaders),
+              play: true,
+            );
+            await _waitForVideoReady();
+            if (outgoingPosition > Duration.zero) {
+              await _player.seek(outgoingPosition);
+            }
+            _currentStreamUrl = outgoingDirectUrl;
+            unawaited(_restoreTrackPreferences());
+          } catch (restoreError) {
+            debugPrint(
+              'Player: outgoing direct source restore failed '
+              '(${restoreError.runtimeType})',
+            );
+          }
+        }
+      } finally {
+        _manualSourceGateActive = false;
+        _resumeTrackingAfterManualSourceGate();
+      }
+    }
     if (!mounted) return;
+
+    if (validateExplicitSelection && !committed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This source is unavailable. Choose another source.'),
+        ),
+      );
+    }
 
     // End transition (same pattern as _switchToStremioSource)
     _transitionStopTimer?.cancel();
@@ -8019,6 +8181,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Capture current position before switching so playback continues seamlessly
     final resumePosition = _position;
+    final previousUrl = _currentStreamUrl;
+    final previousSourceIndex = _currentSourceIndex;
+    final source =
+        (_effectiveSources != null &&
+            index >= 0 &&
+            index < _effectiveSources!.length)
+        ? _effectiveSources![index]
+        : null;
 
     _clearBufferingIndicator();
     setState(() {
@@ -8034,6 +8204,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {}
 
     if (!mounted) return;
+
+    _manualSourceGateActive = true;
 
     // For YouTube each quality is a video-only track sharing one audio stream
     // (widget.audioUrl). Mirror the initial-launch ordering: open PAUSED,
@@ -8053,14 +8225,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _resetSubtitleState();
     }
 
+    var committed = false;
     try {
-      await _openMedia(
-        mk.Media(url),
-        play: !hasExternalAudio,
-        desiredPlay: true,
-      );
-      // Wait for the new media to load before seeking
-      await _waitForVideoReady();
+      final valid = hasExternalAudio
+          ? await (() async {
+              await _openMedia(mk.Media(url), play: false, desiredPlay: true);
+              await _waitForVideoReady();
+              return _duration > Duration.zero;
+            })()
+          : await _tryOpenStartupVod(
+              url,
+              httpHeaders: widget.httpHeaders,
+              source: source,
+              sourceIndex: index,
+            );
+      if (!mounted) return;
+      if (!valid) {
+        throw const _ManualSourceValidationFailure();
+      }
       if (!mounted) return;
       if (hasExternalAudio) {
         await _setExternalAudioTrack(widget.audioUrl!);
@@ -8085,11 +8267,47 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // seek. Let it apply in the background; the overlay ends below on time.
         unawaited(_restoreTrackPreferences());
       }
+      _currentSourceIndex = index;
+      _currentStreamUrl = url;
+      committed = true;
     } catch (e) {
-      debugPrint('Player: Stremio source switch failed: $e');
+      debugPrint('Player: manual Stremio source rejected (${e.runtimeType})');
+      // The candidate player is stopped by the validator. Restore the known
+      // working stream when possible, but never validate/fail over to another
+      // row: this was an explicit user selection.
+      if (previousUrl != null && previousUrl.isNotEmpty) {
+        try {
+          await _openMedia(
+            mk.Media(previousUrl, httpHeaders: widget.httpHeaders),
+            play: true,
+          );
+          await _waitForVideoReady();
+          if (resumePosition > Duration.zero) {
+            await _player.seek(resumePosition);
+          }
+          _currentStreamUrl = previousUrl;
+        } catch (restoreError) {
+          debugPrint(
+            'Player: previous source restore failed '
+            '(${restoreError.runtimeType})',
+          );
+        }
+      }
+      _currentSourceIndex = previousSourceIndex;
+    } finally {
+      _manualSourceGateActive = false;
+      _resumeTrackingAfterManualSourceGate();
     }
 
     if (!mounted) return;
+
+    if (!committed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This source is unavailable. Choose another source.'),
+        ),
+      );
+    }
 
     _transitionStopTimer?.cancel();
     _transitionPhaseTimer?.cancel();
@@ -8726,7 +8944,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// purpose because it runs for every position update; actual writes stay
   /// unawaited and are guarded one-shot above/in [_markCurrentEpisodeAsFinished].
   void _checkAndApplyLocalCompletion() {
-    if (!_usesLocalCompletionTracking ||
+    if (_manualSourceGateActive ||
+        !_usesLocalCompletionTracking ||
         _duration <= Duration.zero ||
         _position <= Duration.zero) {
       return;
@@ -8784,13 +9003,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  Future<void> _loadPlaylistIndex(
+  Future<bool> _loadPlaylistIndex(
     int index, {
     bool autoplay = false,
     bool skipInitialSave = false,
     // Source switch on the same content: resume the checkpointed local position
     // exactly (see _maybeRestoreResume).
     bool preferLocalResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
   }) async {
     // A new item is being loaded: any scrub in flight belongs to the outgoing
     // one and must never land on this one.
@@ -8800,7 +9021,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         index < 0 ||
         index >= _activePlaylist!.length) {
       _clearTransitionOnFailure();
-      return;
+      return false;
     }
 
     // A sleep stop wins over anything already queued. Checked BEFORE any state
@@ -8813,7 +9034,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (autoplay && _isAutoAdvancing) {
         _isAutoAdvancing = false;
         _clearTransitionOnFailure();
-        return;
+        return false;
       }
       _sleepStopLatched = false;
     }
@@ -8898,7 +9119,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
       }
       _clearTransitionOnFailure();
-      return;
+      return false;
     }
 
     _currentStreamUrl = videoUrl;
@@ -8913,22 +9134,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (isPikPak) {
       // For PikPak, we need retry logic even if not autoplaying
       // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
-      if (autoplay) {
-        await _playPikPakVideoWithRetry(videoUrl);
-      } else {
-        // Still use retry but without autoplay
-        await _playPikPakVideoWithRetry(videoUrl);
+      final pikPakLoaded = await _playPikPakVideoWithRetry(
+        videoUrl,
+        // A manual source transaction owns its single failure message. The
+        // retry UI remains unchanged while cold storage is being reactivated.
+        showFailure: manualValidationSourceIndex == null,
+      );
+      if (manualValidationSourceIndex != null && !pikPakLoaded) return false;
+      if (!autoplay) {
+        // Still use retry but without autoplay; pause only after it succeeds.
         _activeMediaShouldPlay = false;
-        await _player.pause(); // Pause after loading if not autoplaying
+        if (pikPakLoaded) await _player.pause();
       }
     } else {
       // Non-PikPak videos play normally
       // Cancel any ongoing PikPak retry when switching to non-PikPak video
       _pikPakRetryId++;
-      await _openMedia(
-        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
-        play: autoplay,
-      );
+      if (manualValidationSourceIndex != null) {
+        final valid = await _tryOpenStartupVod(
+          videoUrl,
+          httpHeaders: widget.httpHeaders,
+          source: manualValidationSource,
+          sourceIndex: manualValidationSourceIndex,
+        );
+        if (!valid) return false;
+        if (!autoplay) await _player.pause();
+      } else {
+        await _openMedia(
+          mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+          play: autoplay,
+        );
+      }
     }
 
     // Wait for the video to load and duration to be available
@@ -8943,6 +9179,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _isTransitioning = false;
       });
     }
+    return true;
   }
 
   Future<String> _resolvePlaylistEntryUrl(int index) async {
@@ -9231,11 +9468,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Attempts to play a PikPak video with retry logic for cold storage
-  Future<void> _playPikPakVideoWithRetry(
+  Future<bool> _playPikPakVideoWithRetry(
     String videoUrl, {
     String? overrideProvider,
     String? overridePikPakFileId,
     bool isDebrifyTV = false,
+    bool showFailure = true,
   }) async {
     // Only apply retry logic for PikPak videos
     // Support both playlist entries and Debrify TV (requestMagicNext) flows
@@ -9265,7 +9503,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
-      return;
+      return true;
     }
 
     print('PikPak: Starting retry logic for cold storage handling');
@@ -9315,7 +9553,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (mounted) {
             setState(() {});
           }
-          return;
+          return false;
         }
 
         print('PikPak: Monitoring attempt ${attempt + 1}/${maxRetries + 1}...');
@@ -9344,7 +9582,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           print('PikPak: Video metadata loaded successfully - file is ready!');
           // Note: Retry state already cleared by _waitForVideoMetadata
           print('PikPak: Retry mechanism fully deactivated, playback ready');
-          return;
+          return true;
         }
 
         // Video didn't load even after monitoring during delay
@@ -9379,7 +9617,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               );
               await _goToNextEpisode();
-            } else {
+            } else if (showFailure) {
               // Show error for regular playlist
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -9393,7 +9631,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               );
             }
           }
-          return; // Exit function
+          return false; // Exhausted the cold-storage retries.
         }
 
         // Still have retries left - continue with retry logic
@@ -9419,7 +9657,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if widget was disposed
         if (!mounted) {
           print('PikPak: Widget disposed before retry');
-          return;
+          return false;
         }
 
         // Check if cancelled
@@ -9434,7 +9672,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (mounted) {
             setState(() {});
           }
-          return;
+          return false;
         }
 
         // Try reopening the player (might help reactivate cold storage file)
@@ -9481,7 +9719,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               );
               await _goToNextEpisode();
-            } else {
+            } else if (showFailure) {
               // Show error for regular playlist
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -9495,7 +9733,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               );
             }
           }
-          return; // Exit function
+          return false; // Exhausted the cold-storage retries.
         }
 
         // Still have retries left - continue with retry logic
@@ -9520,7 +9758,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if widget was disposed
         if (!mounted) {
           print('PikPak: Widget disposed during error handling');
-          return;
+          return false;
         }
 
         // Check if cancelled
@@ -9535,7 +9773,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (mounted) {
             setState(() {});
           }
-          return;
+          return false;
         }
 
         // Try reopening the player for next attempt
@@ -9554,6 +9792,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       attempt++;
     }
+    return false;
   }
 
   /// Preload episode information in the background
@@ -10470,7 +10709,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _saveResume({bool debounced = false}) async {
-    if (!_isReady) {
+    if (_manualSourceGateActive || !_isReady) {
       return;
     }
 
