@@ -1232,7 +1232,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot) _buildToolbar(),
-          if (_isAtRoot && !widget.selectSourceMode) _buildViewSelectorBar(),
+          if (_isAtRoot) _buildViewSelectorBar(),
           if (_isAtRoot && _searchActive) _buildSearchBar(),
           if (_isAtRoot && _selectionMode) _buildSelectionBar(),
           if (!_isAtRoot && _fileSearchActive) _buildFileSearchBar(),
@@ -1355,7 +1355,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
               ],
               if (widget.selectSourceMode && hasItems)
                 Tooltip(
-                  message: _searchActive ? 'Close search' : 'Search magnets',
+                  message: _searchActive
+                      ? 'Close search'
+                      : (isWeb ? 'Search links' : 'Search magnets'),
                   child: IconButton(
                     focusNode: _toolbarSearchFocusNode,
                     onPressed: _toggleSearch,
@@ -1869,6 +1871,31 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       if (l.size > 0) Formatters.formatFileSize(l.size),
       if (l.host.isNotEmpty) l.host,
     ].join(' · ');
+
+    if (widget.selectSourceMode) {
+      return CloudFileRow(
+        kind: isVideo ? CloudRowKind.video : CloudRowKind.file,
+        title: l.fileName,
+        meta: subtitle.isEmpty ? null : subtitle,
+        onTap: isVideo
+            ? () async {
+                await widget.onSourceSelected?.call(
+                  SeriesSource(
+                    torrentHash: '',
+                    torrentName: l.fileName,
+                    debridService: 'alldebrid',
+                    debridTorrentId: SeriesSource.opaqueCloudReference(l.link),
+                    cloudSourceKind: SeriesSource.cloudKindWebDownload,
+                    boundAt: DateTime.now().millisecondsSinceEpoch,
+                  ),
+                );
+                if (!mounted) return;
+                Navigator.of(context).pop();
+              }
+            : null,
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+      );
+    }
 
     final actions = <CloudRowAction>[
       if (isVideo)

@@ -221,6 +221,26 @@ class DebridService {
     }
   }
 
+  /// Find one saved direct download by its stable Real-Debrid download id.
+  /// The API exposes downloads only as a paginated collection, so walk it in
+  /// bounded pages rather than persisting its unrestricted playback URL.
+  static Future<DebridDownload?> getDownloadById(
+    String apiKey,
+    String downloadId, {
+    int maxPages = 100,
+  }) async {
+    const pageSize = 100;
+    for (var page = 1; page <= maxPages; page++) {
+      final result = await getDownloads(apiKey, page: page, limit: pageSize);
+      final downloads = (result['downloads'] as List).cast<DebridDownload>();
+      for (final download in downloads) {
+        if (download.id == downloadId) return download;
+      }
+      if (downloads.isEmpty || result['hasMore'] != true) return null;
+    }
+    return null;
+  }
+
   // Get torrents list with pagination
   static Future<Map<String, dynamic>> getTorrents(
     String apiKey, {

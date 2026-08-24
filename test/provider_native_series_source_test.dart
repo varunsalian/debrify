@@ -33,6 +33,28 @@ void main() {
     expect(restored.bindingKey, 'cloud:premiumize:folder:folder-1');
   });
 
+  test('provider web download is a native cloud source', () {
+    final source = cloudSource(
+      provider: 'torbox',
+      id: '42',
+      kind: SeriesSource.cloudKindWebDownload,
+    );
+    final restored = SeriesSource.fromJson(source.toJson());
+
+    expect(restored.isProviderNativeCloud, isTrue);
+    expect(restored.cloudSourceKind, SeriesSource.cloudKindWebDownload);
+    expect(restored.bindingKey, 'cloud:torbox:web_download:42');
+  });
+
+  test('opaque cloud reference does not persist a saved-link URL', () {
+    const link = 'https://host.test/private-token/video.mkv';
+    final reference = SeriesSource.opaqueCloudReference(link);
+
+    expect(reference, hasLength(64));
+    expect(reference, isNot(contains('private-token')));
+    expect(reference, SeriesSource.opaqueCloudReference(link));
+  });
+
   test('hash-backed binding identity remains hash based', () {
     final source = SeriesSource(
       torrentHash: 'ABC123',
@@ -47,8 +69,7 @@ void main() {
   });
 
   test('different hashless cloud sources coexist and dedupe exactly', () async {
-    final premiumize =
-        cloudSource(provider: 'premiumize', id: 'folder-1');
+    final premiumize = cloudSource(provider: 'premiumize', id: 'folder-1');
     final pikpak = cloudSource(provider: 'pikpak', id: 'folder-1');
     final premiumizeReplacement = SeriesSource(
       torrentHash: '',

@@ -15,6 +15,7 @@ import '../models/profiles/profile_policy.dart';
 import '../models/quick_play_rules.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_file.dart';
+import '../models/torbox_web_download.dart';
 import '../models/torrent.dart';
 import '../models/indexer_manager_config.dart';
 import '../screens/video_player/models/playlist_entry.dart';
@@ -2929,6 +2930,148 @@ class TorrentPlaybackService {
     if (!source.isProviderNativeCloud || sourceId.isEmpty) return null;
 
     switch (source.debridService) {
+      case 'rd':
+        if (source.cloudSourceKind != SeriesSource.cloudKindWebDownload) {
+          return null;
+        }
+        final apiKey = (await StorageService.getApiKey()) ?? '';
+        if (apiKey.isEmpty) return null;
+        final download = await DebridService.getDownloadById(apiKey, sourceId);
+        if (download == null) return null;
+        var url = download.download;
+        if (download.link.isNotEmpty) {
+          try {
+            final refreshed = await DebridService.unrestrictLink(
+              apiKey,
+              download.link,
+            );
+            final refreshedUrl = refreshed['download']?.toString() ?? '';
+            if (refreshedUrl.isNotEmpty) url = refreshedUrl;
+          } catch (_) {
+            // The freshly listed download URL is still a useful fallback when
+            // a host temporarily refuses to unrestrict the original link.
+          }
+        }
+        if (url.isEmpty) return null;
+        return _Resolved(
+          title: source.torrentName,
+          playUrl: url,
+          downloadUrls: [url],
+          fileName: download.filename.isNotEmpty
+              ? download.filename
+              : source.torrentName,
+        );
+
+      case 'torbox':
+        if (source.cloudSourceKind != SeriesSource.cloudKindWebDownload) {
+          return null;
+        }
+        final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
+        final webId = int.tryParse(sourceId);
+        if (apiKey.isEmpty || webId == null) return null;
+        final result = await TorboxService.getWebDownloads(
+          apiKey,
+          webId: webId,
+        );
+        final downloads = (result['webDownloads'] as List)
+            .cast<TorboxWebDownload>();
+        if (downloads.isEmpty) return null;
+        final download = downloads.firstWhere(
+          (candidate) => candidate.id == webId,
+          orElse: () => downloads.first,
+        );
+        final videos = download.files.where((file) {
+          if (file.zipped) return false;
+          final name = file.shortName.isNotEmpty
+              ? file.shortName
+              : FileUtils.getFileName(file.name);
+          return (file.mimetype?.startsWith('video/') ?? false) ||
+              FileUtils.isVideoFile(name);
+        }).toList();
+        if (videos.isEmpty) return null;
+
+        String displayName(TorboxFile file) => file.shortName.isNotEmpty
+            ? file.shortName
+            : FileUtils.getFileName(file.name);
+        String relativePath(TorboxFile file) =>
+            (file.absolutePath?.isNotEmpty ?? false)
+            ? file.absolutePath!
+            : file.name;
+
+        if (meta.contentType != 'series') {
+          final video = videos.reduce((a, b) => a.size >= b.size ? a : b);
+          final url = await TorboxService.requestWebDownloadFileLink(
+            apiKey: apiKey,
+            webId: webId,
+            fileId: video.id,
+          );
+          if (url.isEmpty) return null;
+          return _Resolved(
+            title: source.torrentName,
+            playUrl: url,
+            downloadUrls: [url],
+            fileName: displayName(video),
+          );
+        }
+
+        final (sorted, startIndex) = _orderBySeries(videos, relativePath);
+        final entries = <PlaylistEntry>[
+          for (var i = 0; i < sorted.length; i++)
+            PlaylistEntry(
+              url: '',
+              title: relativePath(sorted[i]),
+              relativePath: relativePath(sorted[i]),
+              provider: 'torbox',
+              torboxWebDownloadId: webId,
+              torboxFileId: sorted[i].id,
+              sizeBytes: sorted[i].size > 0 ? sorted[i].size : null,
+            ),
+        ];
+        final playUrl = await TorboxService.requestWebDownloadFileLink(
+          apiKey: apiKey,
+          webId: webId,
+          fileId: sorted[startIndex].id,
+        );
+        if (playUrl.isEmpty) return null;
+        entries[startIndex] = PlaylistEntry(
+          url: playUrl,
+          title: entries[startIndex].title,
+          relativePath: entries[startIndex].relativePath,
+          provider: entries[startIndex].provider,
+          torboxWebDownloadId: webId,
+          torboxFileId: sorted[startIndex].id,
+          sizeBytes: entries[startIndex].sizeBytes,
+        );
+        return _Resolved(
+          title: source.torrentName,
+          playUrl: playUrl,
+          downloadUrls: [playUrl],
+          playlist: entries.length > 1 ? entries : null,
+          startIndex: startIndex,
+          fileName: entries.length == 1 ? entries.first.title : null,
+        );
+
+      case 'alldebrid':
+        if (source.cloudSourceKind != SeriesSource.cloudKindWebDownload) {
+          return null;
+        }
+        final apiKey = (await StorageService.getAllDebridApiKey()) ?? '';
+        if (apiKey.isEmpty) return null;
+        final links = await AllDebridService.listSavedLinks(apiKey);
+        final matching = links.where(
+          (link) => SeriesSource.opaqueCloudReference(link.link) == sourceId,
+        );
+        if (matching.isEmpty) return null;
+        final link = matching.first;
+        final url = await AllDebridService.unlockLink(apiKey, link.link);
+        if (url.isEmpty) return null;
+        return _Resolved(
+          title: source.torrentName,
+          playUrl: url,
+          downloadUrls: [url],
+          fileName: link.fileName,
+        );
+
       case 'premiumize':
         final apiKey = (await StorageService.getPremiumizeApiKey()) ?? '';
         if (apiKey.isEmpty) return null;

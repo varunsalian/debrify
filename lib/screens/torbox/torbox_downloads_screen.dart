@@ -6165,7 +6165,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         children: [
           const SizedBox(height: 8),
           if (_isAtRoot && !widget.selectSourceMode) _buildToolbar(),
-          if (_isAtRoot && !widget.selectSourceMode) _buildViewSelectorBar(),
+          if (_isAtRoot) _buildViewSelectorBar(),
           if (_isAtRoot && _isTorrentSearchActive) _buildTorrentSearchBar(),
           if (_isAtRoot && _isSelectionMode) _buildSelectionBar(),
           if (!_isAtRoot) _buildViewModeDropdown(),
@@ -6359,8 +6359,33 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   Widget _buildWebDownloadCard(TorboxWebDownload webDownload, int index) {
     final videoCount = webDownload.files
-        .where(_torboxFileLooksLikeVideo)
+        .where((file) => !file.zipped && _torboxFileLooksLikeVideo(file))
         .length;
+
+    if (widget.selectSourceMode) {
+      return CloudFileRow(
+        kind: CloudRowKind.folder,
+        title: webDownload.name,
+        meta:
+            '${Formatters.formatFileSize(webDownload.size)} · ${webDownload.files.length} file${webDownload.files.length == 1 ? '' : 's'}',
+        onTap: videoCount > 0
+            ? () {
+                widget.onSourceSelected?.call(
+                  SeriesSource(
+                    torrentHash: '',
+                    torrentName: webDownload.name,
+                    debridService: 'torbox',
+                    debridTorrentId: webDownload.id.toString(),
+                    cloudSourceKind: SeriesSource.cloudKindWebDownload,
+                    boundAt: DateTime.now().millisecondsSinceEpoch,
+                  ),
+                );
+                Navigator.of(context).pop();
+              }
+            : null,
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+      );
+    }
 
     // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
     // offered; the row's tap now carries Open.
@@ -6599,6 +6624,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           _resetListScroll();
           setState(() {
             _selectedView = value;
+            // Source-selection mode arrives with torrent title search active.
+            // Suspend that search while Web Downloads is selected, then
+            // restore it if the user switches back to Torrents.
+            _isTorrentSearchActive =
+                value == _TorboxDownloadsView.torrents &&
+                _torrentSearchController.text.trim().isNotEmpty;
             // Exit selection mode when switching views
             if (_isSelectionMode) {
               _isSelectionMode = false;

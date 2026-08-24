@@ -13,15 +13,16 @@ class SeriesSource {
   static const String localKindSeriesFolder = 'series_folder';
   static const String cloudKindFile = 'file';
   static const String cloudKindFolder = 'folder';
+  static const String cloudKindWebDownload = 'web_download';
 
   final String torrentHash;
   final String torrentName;
   final String debridService;
   final String debridTorrentId;
-  // Provider-native cloud bindings (currently Premiumize/PikPak) do not expose
-  // an infohash. Their stable file/folder id lives in [debridTorrentId], while
-  // this discriminator tells playback how to resolve it without fabricating a
-  // magnet. Hash-backed RD/TorBox/AllDebrid records leave this null.
+  // Provider-native cloud bindings do not expose an infohash. Their stable
+  // file/folder/web-download reference lives in [debridTorrentId], while this
+  // discriminator tells playback how to resolve it without fabricating a
+  // magnet. Hash-backed records leave this null.
   final String? cloudSourceKind;
   final int boundAt; // epoch millis
   final String? localPath;
@@ -57,7 +58,9 @@ class SeriesSource {
       !isLocal &&
       torrentHash.isEmpty &&
       debridTorrentId.trim().isNotEmpty &&
-      (cloudSourceKind == cloudKindFile || cloudSourceKind == cloudKindFolder);
+      (cloudSourceKind == cloudKindFile ||
+          cloudSourceKind == cloudKindFolder ||
+          cloudSourceKind == cloudKindWebDownload);
   bool get isAddonDirect =>
       debridService == addonDirectService &&
       (addonId?.trim().isNotEmpty ?? false) &&
@@ -97,6 +100,11 @@ class SeriesSource {
     final digest = sha1.convert(utf8.encode(normalizedPath)).toString();
     return 'local:$digest';
   }
+
+  /// Secret-free stable reference for provider-native items whose provider
+  /// exposes only an original URL (for example AllDebrid saved links).
+  static String opaqueCloudReference(String value) =>
+      sha256.convert(utf8.encode(value.trim())).toString();
 
   Map<String, dynamic> toJson() => {
     'torrentHash': torrentHash,

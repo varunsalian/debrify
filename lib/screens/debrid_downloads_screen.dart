@@ -3320,7 +3320,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return Column(
       children: [
         if (!widget.selectSourceMode) _buildTorrentToolbar(),
-        if (!widget.selectSourceMode) _buildViewSelectorBar(),
+        _buildViewSelectorBar(),
         if (_isTorrentSearchActive) _buildTorrentSearchBar(),
         if (_isSelectionMode) _buildSelectionBar(),
         Expanded(
@@ -3602,7 +3602,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     return Column(
       children: [
-        _buildDownloadToolbar(),
+        if (!widget.selectSourceMode) _buildDownloadToolbar(),
         _buildViewSelectorBar(),
         if (_isSelectionMode) _buildSelectionBar(),
         Expanded(child: body),
@@ -3844,6 +3844,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildDownloadCard(DebridDownload download, int index) {
     final canStream = download.streamable == 1;
     final isVideo = FileUtils.isVideoFile(download.filename);
+
+    if (widget.selectSourceMode) {
+      final selectable = canStream || isVideo;
+      return CloudFileRow(
+        kind: selectable ? CloudRowKind.video : CloudRowKind.file,
+        title: download.filename,
+        meta:
+            '${Formatters.formatFileSize(download.filesize)} · ${download.host}',
+        onTap: selectable
+            ? () {
+                widget.onSourceSelected?.call(
+                  SeriesSource(
+                    torrentHash: '',
+                    torrentName: download.filename,
+                    debridService: 'rd',
+                    debridTorrentId: download.id,
+                    cloudSourceKind: SeriesSource.cloudKindWebDownload,
+                    boundAt: DateTime.now().millisecondsSinceEpoch,
+                  ),
+                );
+                Navigator.of(context).pop();
+              }
+            : null,
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+      );
+    }
 
     // Same action set the old Play/Download buttons + ⋮ menu offered; the
     // row's tap now carries Play for streamable downloads.
@@ -5879,7 +5905,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Play all videos in a folder with a playlist
   Future<void> _playFolder(RDFileNode folder) async {
-    if (_apiKey == null || _currentTorrentId == null || _currentTorrent == null) {
+    if (_apiKey == null ||
+        _currentTorrentId == null ||
+        _currentTorrent == null) {
       return;
     }
 
