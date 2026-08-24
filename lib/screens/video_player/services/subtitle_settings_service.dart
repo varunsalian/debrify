@@ -42,11 +42,35 @@ class SubtitleStyle {
 
   static const int defaultIndex = 1; // Outline
 
-  static List<Shadow> get _outlineShadows => [
-    const Shadow(offset: Offset(-1.5, -1.5), color: Colors.black),
-    const Shadow(offset: Offset(1.5, -1.5), color: Colors.black),
-    const Shadow(offset: Offset(-1.5, 1.5), color: Colors.black),
-    const Shadow(offset: Offset(1.5, 1.5), color: Colors.black),
+  // An 8-point ring on one circle, not the old 4 diagonal copies: diagonals
+  // alone leave the cardinal directions uncovered, so glyph tops, bottoms and
+  // sides showed notches that read as a broken, blurry outline (Discord
+  // report, "no matter the font").
+  static const double _outlineRadius = 1.5;
+  // _outlineRadius / sqrt2, so the diagonal copies sit on the same circle.
+  static const double _outlineDiagonal = 1.06;
+
+  static List<Shadow> get _outlineShadows => const [
+    Shadow(offset: Offset(-_outlineRadius, 0), color: Colors.black),
+    Shadow(offset: Offset(_outlineRadius, 0), color: Colors.black),
+    Shadow(offset: Offset(0, -_outlineRadius), color: Colors.black),
+    Shadow(offset: Offset(0, _outlineRadius), color: Colors.black),
+    Shadow(
+      offset: Offset(-_outlineDiagonal, -_outlineDiagonal),
+      color: Colors.black,
+    ),
+    Shadow(
+      offset: Offset(_outlineDiagonal, -_outlineDiagonal),
+      color: Colors.black,
+    ),
+    Shadow(
+      offset: Offset(-_outlineDiagonal, _outlineDiagonal),
+      color: Colors.black,
+    ),
+    Shadow(
+      offset: Offset(_outlineDiagonal, _outlineDiagonal),
+      color: Colors.black,
+    ),
   ];
 
   static List<Shadow> get _dropShadow => [
@@ -523,22 +547,29 @@ class SubtitleSettingsData {
   double _emboldenStroke(double fontSizePx) =>
       (fontSizePx * 0.055).clamp(0.8, 3.2);
 
-  /// The edge shadows pushed [expand] further out along their own direction.
+  /// The size the edge-style offsets were tuned at (Medium). Offsets and
+  /// blurs scale linearly from here, so the ring keeps its PROPORTION at
+  /// every size — a fixed 1.5px ring on a Giant 90px glyph was a hairline
+  /// that read as blur, not an outline.
+  static const double _edgeReferenceSizePx = 42;
+
+  /// The edge shadows scaled by [scale], then pushed [expand] further out
+  /// along their own direction.
   ///
   /// Emboldening grows the glyph by half the stroke, which would otherwise eat
   /// the rim from the inside and leave a thin, patchy outline. Moving each
   /// shadow out by the same amount keeps the rim's VISIBLE thickness the same
   /// whether bold is on or off.
-  List<Shadow>? _edgeShadows(double expand) {
+  List<Shadow>? _edgeShadows(double expand, {double scale = 1}) {
     final base = resolvedShadows;
-    if (base == null || expand <= 0) return base;
+    if (base == null || (expand <= 0 && scale == 1)) return base;
     return [
       for (final s in base)
         Shadow(
           offset: s.offset.distance == 0
               ? s.offset
-              : s.offset + (s.offset / s.offset.distance) * expand,
-          blurRadius: s.blurRadius,
+              : s.offset * scale + (s.offset / s.offset.distance) * expand,
+          blurRadius: s.blurRadius * scale,
           color: s.color,
         ),
     ];
@@ -573,7 +604,10 @@ class SubtitleSettingsData {
     final resolvedSize = fontSizePx ?? size.sizePx;
     final embolden = bold && !hasRealBoldFace;
     final stroke = embolden ? _emboldenStroke(resolvedSize) : 0.0;
-    final edges = _edgeShadows(stroke / 2);
+    final edges = _edgeShadows(
+      stroke / 2,
+      scale: resolvedSize / _edgeReferenceSizePx,
+    );
     // Null, not an empty list, when there is nothing to paint — so an
     // edge-style of "None" with bold off stays byte-identical to before.
     final shadows = <Shadow>[

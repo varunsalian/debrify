@@ -43,7 +43,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   // --- redesign toolbar state (unused when _redesign is false) ---
   TorrentFilterState _filters = const TorrentFilterState.empty();
-  String _sortBy = 'relevance'; // relevance | name | size | seeders | date
+  String _sortBy = 'source'; // source | name | size | seeders | date
   bool _sortAsc = false;
   String? _sourceFilter; // null = all sources; else a normalized provider key
 
@@ -61,7 +61,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   final Set<String> _retryingAddons = {};
 
   /// The user's Quick Play "Addon Priority" order for this tab (empty =
-  /// never customized = keep the shipped seeders/relevance ordering). Also
+  /// never customized = keep the shipped provider ordering). Also
   /// orders the source pills and their retry states.
   List<String> _sourcePriority = const [];
   Map<String, String> _sourceAliases = const {};
@@ -85,9 +85,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   // --- streaming search: rows appear per engine as each one finishes, instead
   // of waiting for the slowest engine's timeout. ---
-  /// Raw per-source batches accumulated for the CURRENT search token; merged
-  /// with [TorrentService.mergeSearchResults] so provisional sets match the
-  /// awaited search's final merge exactly.
+  /// Raw per-source batches accumulated for the CURRENT search token. Batches
+  /// retain each provider's response order; provider priority and stable
+  /// dedupe are applied when the rendered list is derived.
   final List<List<Torrent>> _streamBatches = [];
 
   /// True while engines are still in flight (drives the "Still searching…"
@@ -143,7 +143,24 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   String get _imdbId => widget.selection.imdbId;
   bool get _isMovie => !widget.selection.isSeries;
-  Set<String> get _boundHashes => _bound.map((s) => s.torrentHash).toSet();
+  SeriesSource? _bindingFor(Torrent torrent) {
+    for (final source in _bound) {
+      if (torrent.isDirectStream &&
+          source.matchesAddonDirect(
+            candidateAddonKey: torrent.stremioAddonKey,
+            candidateStreamKey: torrent.stremioStreamKey,
+            candidateStreamIndex: torrent.stremioStreamIndex,
+          )) {
+        return source;
+      }
+      if (torrent.streamType == StreamType.torrent &&
+          source.torrentHash.isNotEmpty &&
+          source.torrentHash == torrent.infohash) {
+        return source;
+      }
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -336,33 +353,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     return filtered;
   }
 
-  /// Order a series pack search exactly like the old Home's default "relevance"
-  /// sort: coverage priority ascending (completeSeries → multiSeason →
-  /// seasonPack → singleEpisode), then season count descending, then the search
-  /// service's existing seeders-descending order (preserved via a stable index
-  /// tiebreak). Only applies to a series search with no specific episode.
-  List<Torrent> _sortSeriesPacks(
-    List<Torrent> torrents,
-    AdvancedSearchSelection sel,
-  ) {
-    if (!(sel.isSeries && sel.episode == null) || torrents.length < 2) {
-      return torrents;
-    }
-    final indexed = [
-      for (var i = 0; i < torrents.length; i++) (i, torrents[i]),
-    ];
-    indexed.sort((a, b) {
-      final c = a.$2.coveragePriority.compareTo(b.$2.coveragePriority);
-      if (c != 0) return c;
-      final s = b.$2.seasonCount.compareTo(
-        a.$2.seasonCount,
-      ); // more seasons first
-      if (s != 0) return s;
-      return a.$1.compareTo(b.$1); // stable → keeps seeders-desc within a tier
-    });
-    return [for (final e in indexed) e.$2];
-  }
-
   /// Run the source search (free-text keyword pack search in keyword-bind mode,
   /// otherwise the IMDb-exact search) and rebuild the row focus nodes. Guarded
   /// by a token so a slow earlier re-search can't clobber a newer one's results
@@ -396,9 +386,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       final sel = _effectiveSelection;
       // Streaming: each engine's batch lands as soon as THAT engine finishes,
       // so first rows show in seconds instead of after the slowest engine's
-      // timeout. Batches merge exactly like the final result (dedupe + sort
-      // via mergeSearchResults); the awaited result below stays authoritative
-      // and snaps the list to it on completion.
+      // timeout. Raw batches retain each provider's order; provider priority
+      // and stable dedupe are applied by the toolbar presentation below. The
+      // awaited result stays authoritative and snaps the list to it on
+      // completion.
       void onBatch(String source, List<Torrent> batch) {
         if (!mounted || token != _searchToken || batch.isEmpty) return;
         // A timed-out engine's original future keeps running after the
@@ -407,7 +398,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         if (!_searching) return;
         _streamBatches.add(batch);
         _presentStreaming(
-          TorrentService.mergeSearchResults(_streamBatches),
+          TorrentService.mergeSearchResults(
+            _streamBatches,
+            preserveSourceOrder: true,
+          ),
           token,
         );
         // Badge THIS engine's new rows as soon as it lands — additive, so the
@@ -422,7 +416,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
       final res = _keywordMode
-          ? await TorrentService.searchAllEngines(_query, onBatch: onBatch)
+          ? await TorrentService.searchAllEngines(
+              _query,
+              onBatch: onBatch,
+              preserveSourceOrder: true,
+            )
           : await TorrentService.searchByImdbWithStremio(
               sel.imdbId,
               isMovie: !sel.isSeries,
@@ -435,6 +433,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   ? _availableSeasons
                   : null,
               onBatch: onBatch,
+              preserveSourceOrder: true,
             );
       if (!mounted || token != _searchToken) return;
       _searching = false;
@@ -483,14 +482,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // S/E token in the name and floated season packs, hiding exactly the
     // per-episode sources the user drilled down for. Pack-NAMED rows the
     // episode query genuinely returned stay visible by design. Otherwise
-    // (whole series/season, no episode) drop direct-link singles,
-    // season-filter, and float season/complete packs to the top by coverage
-    // priority.
+    // (whole series/season, no episode) drop direct-link singles and apply the
+    // requested season scope while retaining provider order. The Sources
+    // browser does not apply an implicit relevance sort.
     final List<Torrent> torrents;
     if (sel.isSeries && sel.season != null && sel.episode != null) {
       torrents = sourceOrdered;
     } else {
-      torrents = _sortSeriesPacks(_filterSeriesPacks(sourceOrdered, sel), sel);
+      torrents = _filterSeriesPacks(sourceOrdered, sel);
     }
     if (_streamFrozen) {
       _pendingTorrents = torrents;
@@ -712,21 +711,26 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   Future<void> _pin(Torrent t) async {
-    // Direct / external streams have no infohash/magnet to bind as a reusable
-    // source — reject rather than store a broken pin.
-    if (t.isDirectStream || t.isExternalStream) {
-      _snack("Direct streams can't be pinned as a source.");
+    if (t.isExternalStream) {
+      _snack("External links can't be pinned as a playback source.");
       return;
     }
     if (_pinning) return; // guard concurrent binds (double-tap on TV)
     _pinning = true;
     try {
-      final ok = await TorrentPlaybackService.bindSource(
-        context,
-        t,
-        imdbId: _imdbId,
-        isMovie: _isMovie,
-      );
+      final ok = t.isDirectStream
+          ? await TorrentPlaybackService.bindDirectSource(
+              context,
+              t,
+              imdbId: _imdbId,
+              isMovie: _isMovie,
+            )
+          : await TorrentPlaybackService.bindSource(
+              context,
+              t,
+              imdbId: _imdbId,
+              isMovie: _isMovie,
+            );
       if (!mounted) return;
       if (ok) {
         await _reloadBound();
@@ -737,8 +741,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     }
   }
 
-  Future<void> _unpin(String hash) async {
-    await SeriesSourceService.removeSourceByHash(_imdbId, hash);
+  Future<void> _unpin(SeriesSource source) async {
+    await SeriesSourceService.removeSourceEntry(_imdbId, source);
     await _reloadBound();
   }
 
@@ -773,7 +777,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       return;
     }
     final app = AppThemeScope.of(context);
-    final bound = _boundHashes.contains(t.infohash);
+    final binding = _bindingFor(t);
+    final bound = binding != null;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: app.home.sheetBg,
@@ -806,7 +811,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
                 if (bound) {
-                  unawaited(_unpin(t.infohash));
+                  unawaited(_unpin(binding));
                 } else {
                   unawaited(_pin(t));
                 }
@@ -818,12 +823,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
-  /// Options sheet for a direct / external addon stream: play (in-app) or open
-  /// (external), plus copy the stream URL. No "Pin as source" — streams have no
-  /// infohash to bind.
+  /// Options sheet for a direct / external addon stream. Playable direct links
+  /// can be pinned by addon provenance; external browser links remain open-only.
   void _showStreamRowMenu(Torrent t, int i) {
     final app = AppThemeScope.of(context);
     final external = t.isExternalStream;
+    final binding = _bindingFor(t);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: app.home.sheetBg,
@@ -849,6 +854,29 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 _playNow(t, i);
               },
             ),
+            if (!external)
+              ListTile(
+                leading: Icon(
+                  binding != null ? Icons.link_off_rounded : Icons.link_rounded,
+                  color: const Color(0xFFF59E0B),
+                ),
+                title: Text(binding != null ? 'Unpin source' : 'Pin as source'),
+                subtitle: Text(
+                  binding != null
+                      ? 'Stop refreshing this stream for playback'
+                      : 'Re-fetch a fresh link from this addon when played',
+                  style: TextStyle(color: app.fade(app.core.tx, 0.5)),
+                ),
+                onTap: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(sheetCtx).pop();
+                  if (binding != null) {
+                    unawaited(_unpin(binding));
+                  } else {
+                    unawaited(_pin(t));
+                  }
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
               title: const Text('Copy URL'),
@@ -1057,6 +1085,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         season: sel.season,
         episode: sel.episode,
         timeout: StremioService.manualRetryTimeout,
+        preserveOrder: true,
       );
       if (!mounted || token != _searchToken) return;
       setState(() {
@@ -1069,7 +1098,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       if (batch.isEmpty) return;
       _streamBatches.add(batch);
       _presentStreaming(
-        TorrentService.mergeSearchResults(_streamBatches),
+        TorrentService.mergeSearchResults(
+          _streamBatches,
+          preserveSourceOrder: true,
+        ),
         token,
       );
       _maybeCheckCache(batch);
@@ -1196,8 +1228,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   /// Derives the rendered list from [_torrents]: source-group filter →
-  /// quality/rip/language filter → sort. Order is preserved as the incoming
-  /// relevance sort unless the user picked an explicit sort mode.
+  /// quality/rip/language filter → provider priority + stable dedupe →
+  /// optional explicit field sort. "Addon order" is the default.
   List<Torrent> _applyToolbar(List<Torrent> src) {
     var list = src;
     if (_sourceFilter != null) {
@@ -1219,16 +1251,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ? _filters.copyWith(sizes: const <SizeBucket>{})
         : _filters;
     list = TorrentFilterMatcher.apply(list, effectiveFilters);
-    if (_sortBy == 'relevance') {
-      // Relevance keeps the incoming curated order — grouped by the user's
-      // Addon Priority when one is set (no-op otherwise).
-      list = SourcePriority.order(
-        list,
-        _sourcePriority,
-        aliases: _sourceAliases,
-      );
-    }
-    if (_sortBy != 'relevance') {
+    list = SourcePriority.orderAndDedupe(
+      list,
+      _sourcePriority,
+      aliases: _sourceAliases,
+    );
+    if (_sortBy != 'source') {
       list = List<Torrent>.from(list);
       int cmp(Torrent a, Torrent b) {
         switch (_sortBy) {
@@ -1491,7 +1519,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   _rebuildVisible();
                 },
                 itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'relevance', child: Text('Relevance')),
+                  PopupMenuItem(value: 'source', child: Text('Addon order')),
                   PopupMenuItem(value: 'name', child: Text('Name')),
                   PopupMenuItem(value: 'size', child: Text('Size')),
                   PopupMenuItem(value: 'seeders', child: Text('Seeders')),
@@ -1521,7 +1549,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 ),
               ),
               const SizedBox(width: 6),
-              if (_sortBy != 'relevance')
+              if (_sortBy != 'source')
                 InkWell(
                   borderRadius: app.shape.br(9),
                   onTap: () {
@@ -1799,7 +1827,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     'size' => 'Size',
     'seeders' => 'Seeders',
     'date' => 'Date',
-    _ => 'Relevance',
+    _ => 'Addon order',
   };
 
   static String _qualityFilterLabel(QualityTier q) => switch (q) {
@@ -2117,7 +2145,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     ),
                   ),
                   InkWell(
-                    onTap: () => unawaited(_unpin(s.torrentHash)),
+                    onTap: () => unawaited(_unpin(s)),
                     borderRadius: BorderRadius.circular(8),
                     child: const Padding(
                       padding: EdgeInsets.all(4),

@@ -79,6 +79,51 @@ void main() {
       final out = SourcePriority.order(torrents, const ['engine:engineb']);
       expect(out.map((t) => t.name).toList(), ['c1', 'a1', 'b1', 'a2']);
     });
+
+    test('source order keeps provider order and first-priority duplicate', () {
+      final sharedHash = 'f' * 40;
+      final input = [
+        _t('engine first', 'engineA'),
+        _t('aio first', 'stremio:AIOStreams'),
+        _t('aio second', 'stremio:AIOStreams'),
+        Torrent(
+          rowid: 0,
+          infohash: sharedHash,
+          name: 'engine duplicate',
+          sizeBytes: 0,
+          createdUnix: 0,
+          seeders: 999,
+          leechers: 0,
+          completed: 0,
+          scrapedDate: 0,
+          source: 'engineA',
+        ),
+        Torrent(
+          rowid: 0,
+          infohash: sharedHash,
+          name: 'aio duplicate',
+          sizeBytes: 0,
+          createdUnix: 0,
+          seeders: 0,
+          leechers: 0,
+          completed: 0,
+          scrapedDate: 0,
+          source: 'stremio:AIOStreams',
+        ),
+      ];
+
+      final out = SourcePriority.orderAndDedupe(input, const [
+        'stremio:aiostreams',
+        'engine:enginea',
+      ]);
+
+      expect(out.map((t) => t.name), [
+        'aio first',
+        'aio second',
+        'aio duplicate',
+        'engine first',
+      ]);
+    });
   });
 
   group('directAddonLinksFirst', () {
@@ -104,6 +149,28 @@ void main() {
         ]);
       },
     );
+
+    test('keeps AIO direct links in the addon response order', () {
+      final input = [
+        _direct('4K first', 'stremio:AIOStreams'),
+        _t('4K first torrent', 'stremio:AIOStreams'),
+        _direct('4K second', 'stremio:AIOStreams'),
+        _t('4K second torrent', 'stremio:AIOStreams'),
+        _direct('1080p third', 'stremio:AIOStreams'),
+        _t('1080p third torrent', 'stremio:AIOStreams'),
+      ];
+
+      final out = SourcePriority.directAddonLinksFirst(input);
+
+      expect(out.map((t) => t.name), [
+        '4K first',
+        '4K second',
+        '1080p third',
+        '4K first torrent',
+        '4K second torrent',
+        '1080p third torrent',
+      ]);
+    });
 
     test('does not promote non-addon direct URLs', () {
       final input = [_t('torrent', 'stremio:Comet'), _direct('direct', 'web')];

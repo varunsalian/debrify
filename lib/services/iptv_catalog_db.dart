@@ -1864,8 +1864,12 @@ class IptvCatalogDb {
   /// Hide or reveal one category. Ungrouped channels can't be hidden (they
   /// have no name to key on), so an empty [group] is a no-op rather than a
   /// row that would silently never match.
-  static void setGroupHidden(String catalogKey, String group, bool hidden) {
-    if (group.isEmpty || !isOpen) return;
+  ///
+  /// Returns false when nothing was written (empty name, database not open)
+  /// so the caller can tell the user instead of confirming a rule that was
+  /// never saved.
+  static bool setGroupHidden(String catalogKey, String group, bool hidden) {
+    if (group.isEmpty || !isOpen) return false;
     final db = _requireDb();
     if (hidden) {
       db.execute(
@@ -1879,18 +1883,22 @@ class IptvCatalogDb {
         [catalogKey, group],
       );
     }
+    return true;
   }
 
   /// Hide several categories in one transaction. The settings page exposes
   /// this as "Hide all"; a provider can have hundreds of categories, so
   /// issuing one durable write per row would visibly stall a TV box.
-  static void hideGroups(String catalogKey, Iterable<String> groups) {
-    if (!isOpen) return;
+  ///
+  /// Returns false when the database isn't open (nothing written); an empty
+  /// [groups] is vacuous success.
+  static bool hideGroups(String catalogKey, Iterable<String> groups) {
+    if (!isOpen) return false;
     final names = {
       for (final group in groups)
         if (group.isNotEmpty) group,
     };
-    if (names.isEmpty) return;
+    if (names.isEmpty) return true;
 
     final db = _requireDb();
     final insert = db.prepare(
@@ -1910,14 +1918,17 @@ class IptvCatalogDb {
     } finally {
       insert.dispose();
     }
+    return true;
   }
 
-  /// Reveal every hidden category in [catalogKey].
-  static void showAllGroups(String catalogKey) {
-    if (!isOpen) return;
+  /// Reveal every hidden category in [catalogKey]. Returns false when the
+  /// database isn't open (nothing deleted).
+  static bool showAllGroups(String catalogKey) {
+    if (!isOpen) return false;
     _requireDb().execute('DELETE FROM hidden_groups WHERE catalog_key = ?', [
       catalogKey,
     ]);
+    return true;
   }
 
   /// Drops a deleted source's hidden categories. Called when its catalogs go,

@@ -20,10 +20,8 @@ class SourceProviderRef {
 
 /// Provider-priority ordering for search results.
 ///
-/// The priority list is the user's arranged order of provider keys. An EMPTY
-/// list means "never customized" — every consumer must then keep the shipped
-/// ordering untouched (mixed seeders/relevance), so defaults behave exactly
-/// as before this feature existed.
+/// The priority list is the user's arranged order of provider keys. An empty
+/// list means no explicit reordering: the caller's incoming order is retained.
 class SourcePriority {
   SourcePriority._();
 
@@ -87,7 +85,7 @@ class SourcePriority {
       addonId.trim().toLowerCase() == 'community.watch.next';
 
   /// Normalize a [Torrent.source] value to a priority key. Addon rows carry
-  /// 'stremio:<name>'; YAML engines stamp their engine id; indexer-manager
+  /// `stremio:name`; YAML engines stamp their engine id; indexer-manager
   /// engines stamp their DISPLAY name, which [aliases] maps back to the id.
   static String keyForSource(String source, {Map<String, String>? aliases}) {
     final s = source.trim().toLowerCase();
@@ -122,6 +120,33 @@ class SourcePriority {
     return [for (final i in indexed) torrents[i]];
   }
 
+  /// Provider-priority order followed by stable identity dedupe. The first
+  /// provider in [priority] wins a shared torrent hash; within each provider,
+  /// the exact returned sequence is retained. Direct/external rows already
+  /// carry transport-specific synthetic identities, so they remain distinct
+  /// from a real torrent row for the same stream.
+  static List<Torrent> orderAndDedupe(
+    List<Torrent> torrents,
+    List<String> priority, {
+    Map<String, String>? aliases,
+  }) {
+    final ordered = order(torrents, priority, aliases: aliases);
+    return dedupe(ordered);
+  }
+
+  /// Stable identity dedupe without changing the incoming order.
+  ///
+  /// This is separate from [orderAndDedupe] so callers can remove candidates
+  /// that fail strict eligibility checks before choosing which provider's
+  /// representation owns a shared torrent hash.
+  static List<Torrent> dedupe(List<Torrent> torrents) {
+    final seen = <String>{};
+    return [
+      for (final torrent in torrents)
+        if (seen.add(torrent.infohash.toLowerCase())) torrent,
+    ];
+  }
+
   /// Ordering for bare provider keys (chips, addon strips). Same contract as
   /// [order]: empty priority = unchanged.
   static List<T> orderBy<T>(
@@ -145,7 +170,7 @@ class SourcePriority {
   }
 
   /// Indexer-manager engines stamp results with their display name instead of
-  /// their engine id; this maps 'display name' → 'engine:<engineId>'.
+  /// their engine id; this maps `display name` → `engine:engineId`.
   static Future<Map<String, String>> engineAliases() async {
     final aliases = <String, String>{};
     try {
@@ -182,9 +207,7 @@ class SourcePriority {
         if (isRecommendationOnlyAddon(a.id)) continue;
         final key = 'stremio:${a.name.trim().toLowerCase()}';
         if (seen.add(key)) {
-          refs.add(
-            SourceProviderRef(key: key, name: a.name, isEngine: false),
-          );
+          refs.add(SourceProviderRef(key: key, name: a.name, isEngine: false));
         }
       }
     } catch (_) {}

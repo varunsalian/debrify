@@ -67,6 +67,7 @@ class AndroidTvPlayerBridge {
   static Future<String?> Function(int)? _stremioSourceResolver;
   static Future<List<Map<String, dynamic>>?> Function(int)?
   _sourcePlaylistResolver;
+  static Future<void> Function(int)? _stremioSourceCommitter;
   // Series source tabs: fetches the not-yet-loaded category ('packs' |
   // 'episodes') for the currently playing season/episode and returns the full
   // updated source list + fetch flags.
@@ -513,6 +514,15 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'commitStremioSource':
+          final commitArgs = call.arguments;
+          final sourceIndex = commitArgs is Map
+              ? commitArgs['sourceIndex'] as int?
+              : null;
+          final committer = _stremioSourceCommitter;
+          if (sourceIndex == null || committer == null) return null;
+          await committer(sourceIndex);
+          return null;
         case 'requestMoreTorrentSources':
           // Series source tabs: the native player asked for the not-yet-
           // fetched category. A null/failed fetch throws so the native side
@@ -660,6 +670,7 @@ class AndroidTvPlayerBridge {
           _movieMetadataProvider = null;
           _stremioSourceResolver = null;
           _sourcePlaylistResolver = null;
+          _stremioSourceCommitter = null;
           _moreSourcesProvider = null;
           _addonSourcesProvider = null;
           _episodeFetchProvider = null;
@@ -1379,6 +1390,7 @@ class AndroidTvPlayerBridge {
     MovieMetadataProvider? onRequestMovieMetadata,
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
+    Future<void> Function(int)? onCommitStremioSource,
     Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
     onRequestMoreSources,
     Future<Map<String, dynamic>?> Function(
@@ -1412,6 +1424,7 @@ class AndroidTvPlayerBridge {
     _movieMetadataProvider = onRequestMovieMetadata;
     _stremioSourceResolver = onResolveStremioSource;
     _sourcePlaylistResolver = onResolveSourcePlaylist;
+    _stremioSourceCommitter = onCommitStremioSource;
     _moreSourcesProvider = onRequestMoreSources;
     _addonSourcesProvider = onRequestAddonSources;
     _episodeFetchProvider = onRequestEpisodeFetch;
@@ -1476,6 +1489,7 @@ class AndroidTvPlayerBridge {
 
     _torrentProgressCallback = null;
     _torrentFinishedCallback = null;
+    _stremioSourceCommitter = null;
     _torrentStreamProvider = null;
     _movieMetadataProvider = null;
     _stremioSourceResolver = null;
@@ -1560,15 +1574,13 @@ class AndroidTvPlayerBridge {
       debugPrint(
         'AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native (imdbId=$imdbId)',
       );
-      final bool? success = await _channel.invokeMethod<bool>(
-        'updateEpisodeMetadata',
-        {
-          'updates': metadataUpdates,
-          if (imdbId != null) 'imdbId': imdbId,
-          if (guideEpisodes != null && guideEpisodes.isNotEmpty)
-            'guideEpisodes': guideEpisodes,
-        },
-      );
+      final bool? success = await _channel
+          .invokeMethod<bool>('updateEpisodeMetadata', {
+            'updates': metadataUpdates,
+            if (imdbId != null) 'imdbId': imdbId,
+            if (guideEpisodes != null && guideEpisodes.isNotEmpty)
+              'guideEpisodes': guideEpisodes,
+          });
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
       return success == true;
     } on PlatformException catch (e) {

@@ -1,3 +1,5 @@
+import '../../models/sidebar_configuration.dart';
+
 /// The complete preference schema permitted in an unencrypted, shareable
 /// profile package.
 ///
@@ -17,6 +19,8 @@ abstract final class SanitizedProfilePreferences {
       case 'recording_engine_enabled':
       case 'home_hero_trailer_enabled':
       case 'home_cw_hold_to_quick_play':
+      case 'home_hide_card_titles_and_ratings':
+      case 'home_hide_catalog_addon_names':
       case 'detail_trailer_autoplay_enabled':
       case 'home_hero_trailer_audio_enabled':
       case 'detail_trailer_audio_enabled':
@@ -63,6 +67,8 @@ abstract final class SanitizedProfilePreferences {
       case 'desktop_sidebar_style':
         return value is String &&
             const <String>{'rail', 'pill'}.contains(value);
+      case 'sidebar_configuration_v1':
+        return value is String && SidebarConfiguration.tryDecode(value) != null;
       case 'phone_nav_style':
         return value is String &&
             const <String>{'classic', 'floating'}.contains(value);

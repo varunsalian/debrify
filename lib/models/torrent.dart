@@ -30,6 +30,13 @@ class Torrent {
   final String? torrentUrl;
   final bool hasRealInfoHash;
 
+  // Addon provenance for refreshing pinned direct URLs. No configured addon
+  // URL or credential is carried here; stremioAddonKey is an opaque digest.
+  final String? stremioAddonId;
+  final String? stremioAddonKey;
+  final String? stremioStreamKey;
+  final int? stremioStreamIndex;
+
   // Coverage detection fields
   final String?
   coverageType; // 'completeSeries', 'multiSeasonPack', 'seasonPack', 'singleEpisode'
@@ -56,6 +63,10 @@ class Torrent {
     this.magnetUrl,
     this.torrentUrl,
     this.hasRealInfoHash = true,
+    this.stremioAddonId,
+    this.stremioAddonKey,
+    this.stremioStreamKey,
+    this.stremioStreamIndex,
     this.coverageType,
     this.startSeason,
     this.endSeason,
@@ -100,6 +111,10 @@ class Torrent {
       magnetUrl: (json['magnet_url'] ?? json['magnet'])?.toString(),
       torrentUrl: (json['torrent_url'] ?? json['download_url'])?.toString(),
       hasRealInfoHash: json['has_real_infohash'] as bool? ?? true,
+      stremioAddonId: json['stremio_addon_id'] as String?,
+      stremioAddonKey: json['stremio_addon_key'] as String?,
+      stremioStreamKey: json['stremio_stream_key'] as String?,
+      stremioStreamIndex: json['stremio_stream_index'] as int?,
       coverageType: json['coverage_type']?.toString(),
       startSeason: json['start_season'] as int?,
       endSeason: json['end_season'] as int?,
@@ -127,6 +142,11 @@ class Torrent {
       if (magnetUrl != null) 'magnet_url': magnetUrl,
       if (torrentUrl != null) 'torrent_url': torrentUrl,
       if (!hasRealInfoHash) 'has_real_infohash': hasRealInfoHash,
+      if (stremioAddonId != null) 'stremio_addon_id': stremioAddonId,
+      if (stremioAddonKey != null) 'stremio_addon_key': stremioAddonKey,
+      if (stremioStreamKey != null) 'stremio_stream_key': stremioStreamKey,
+      if (stremioStreamIndex != null)
+        'stremio_stream_index': stremioStreamIndex,
       if (coverageType != null) 'coverage_type': coverageType,
       if (startSeason != null) 'start_season': startSeason,
       if (endSeason != null) 'end_season': endSeason,

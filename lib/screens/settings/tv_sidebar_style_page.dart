@@ -6,6 +6,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import 'sidebar_customization_page.dart';
 import '../../theme/app_theme_scope.dart';
 
 /// One selectable TV sidebar style.
@@ -22,11 +23,7 @@ const List<TvSidebarStyleChoice> kTvSidebarStyleChoices = [
     'Ghost',
     'No chrome: floating icons, white coin — the default',
   ),
-  TvSidebarStyleChoice(
-    'classic',
-    'Classic',
-    'The original liquid glass rail',
-  ),
+  TvSidebarStyleChoice('classic', 'Classic', 'The original liquid glass rail'),
   TvSidebarStyleChoice(
     'island',
     'Island',
@@ -161,15 +158,28 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 18),
+                SettingsSection(
+                  title: 'Items',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.low_priority_rounded,
+                      title: 'Order & Names',
+                      subtitle:
+                          'Rearrange destinations and rename sidebar labels',
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => pushSettingsPage(
+                        context,
+                        const SidebarCustomizationPage(),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 Text(
                   'Applies immediately. Every style opens the same way — '
                   'press LEFT at the edge of any screen.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: t.dim,
-                  ),
+                  style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
                 ),
               ],
             ),

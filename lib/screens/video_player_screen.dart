@@ -14,6 +14,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/startup_stream_policy.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
@@ -117,6 +118,10 @@ import '../utils/tv_keys.dart';
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
+
+class _ManualSourceValidationFailure implements Exception {
+  const _ManualSourceValidationFailure();
+}
 
 class _SeasonEpisodeSelection {
   final int season;
@@ -283,6 +288,9 @@ class VideoPlayerScreen extends StatefulWidget {
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
   final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  final bool startupFailoverEnabled;
+  final String? startupResolverProvider;
+  final Future<void> Function(Torrent)? onStremioSourceCommitted;
   // "Load more sources" backend for the source sheet (series pack/episode
   // searches, or the movie search for bound movie plays)
   final SeriesSourceFetcher? seriesSourceFetcher;
@@ -356,6 +364,9 @@ class VideoPlayerScreen extends StatefulWidget {
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
     this.resolveSourceToPlaylist,
+    this.startupFailoverEnabled = false,
+    this.startupResolverProvider,
+    this.onStremioSourceCommitted,
     this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
@@ -1166,6 +1177,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // media_kit state
   bool _isReady = false;
+  bool _startupGateActive = false;
+  // A source explicitly picked from the in-player sheet is validated as one
+  // isolated candidate. While this is true, renderer events belong to an
+  // untrusted replacement and must not update local completion or any tracker.
+  bool _manualSourceGateActive = false;
+  bool get _validationGateActive =>
+      _startupGateActive || _manualSourceGateActive;
+  String _startupGateMessage = 'Checking stream…';
   bool _isPlaying = false;
   // True while the activity is shrunk into a Picture-in-Picture window; the
   // build collapses all interactive/decorative chrome so only the video shows.
@@ -1779,6 +1798,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _traktScrobble(String action) {
+    if (_validationGateActive) return;
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
@@ -1821,7 +1841,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _startTraktHeartbeat() {
     _traktHeartbeatTimer?.cancel();
     _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
+      if (_validationGateActive ||
+          !_traktScrobbleEnabled ||
+          widget.contentImdbId == null) {
+        return;
+      }
       if (!_isPlaying || _duration.inMilliseconds <= 0) return;
       final imdbId = widget.contentImdbId!;
       final progress = _traktProgress();
@@ -1877,6 +1901,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Send updated progress to Trakt after a user seek (bypasses dedup guard).
   void _traktScrobbleSeek(Duration seekTarget) {
+    if (_validationGateActive) return;
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
     final imdbId = widget.contentImdbId!;
@@ -1928,7 +1953,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // suppressed at _simklScrobble's guard. Mirrors the Trakt block and the TV
     // launcher's self-healing marker. (Field assignment, NOT _simklScrobble
     // ('start'), which now routes to a pause POST.)
-    if (_simklScrobbleEnabled && _isPlaying && _duration > Duration.zero) {
+    if (!_validationGateActive &&
+        _simklScrobbleEnabled &&
+        _isPlaying &&
+        _duration > Duration.zero) {
       _simklLastScrobbleAction = 'start';
       _startSimklHeartbeat();
     }
@@ -1944,6 +1972,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       (se.season == null || se.episode == null);
 
   void _simklScrobble(String action) {
+    if (_validationGateActive) return;
     if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
@@ -1992,7 +2021,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _startSimklHeartbeat() {
     _simklHeartbeatTimer?.cancel();
     _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
+      if (_validationGateActive ||
+          !_simklScrobbleEnabled ||
+          widget.contentImdbId == null) {
+        return;
+      }
       if (!_isPlaying || _duration.inMilliseconds <= 0) return;
       final imdbId = widget.contentImdbId!;
       final progress = _traktProgress();
@@ -2044,6 +2077,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// after a stop (→ a new start). The 2-minute heartbeat carries fresh
   /// progress either way.
   void _simklScrobbleSeek(Duration seekTarget) {
+    if (_validationGateActive) return;
     if (!_simklScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
     final imdbId = widget.contentImdbId!;
@@ -2147,23 +2181,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       'positionMs=${_position.inMilliseconds} '
       'durationMs=${_duration.inMilliseconds}',
     );
-    if (_isPlaying && _duration > Duration.zero) session.play();
+    if (!_validationGateActive && _isPlaying && _duration > Duration.zero) {
+      session.play();
+    }
   }
 
-  void _updateMdblistPosition() =>
-      _mdblistSession?.updatePosition(_position, _duration);
+  void _updateMdblistPosition() {
+    if (_validationGateActive) return;
+    _mdblistSession?.updatePosition(_position, _duration);
+  }
 
   void _mdblistPlay() {
+    if (_validationGateActive) return;
     _updateMdblistPosition();
     _mdblistSession?.play();
   }
 
   void _mdblistPause() {
+    if (_validationGateActive) return;
     _updateMdblistPosition();
     _mdblistSession?.pause();
   }
 
   void _mdblistStop({bool complete = false}) {
+    if (_validationGateActive) return;
     _updateMdblistPosition();
     debugPrint(
       '[MDBListDiag] player stop complete=$complete '
@@ -2179,10 +2220,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _mdblistScrobbleSeek(Duration target) {
+    if (_validationGateActive) return;
     _mdblistSession?.seek(target, _duration);
   }
 
+  void _resumeTrackingAfterValidationGate() {
+    if (!mounted || _validationGateActive) return;
+    _updateMdblistPosition();
+    if (!_isPlaying || _duration <= Duration.zero) return;
+    _traktScrobble('start');
+    if (_traktLastScrobbleAction == 'start') _startTraktHeartbeat();
+    if (_simklScrobbleEnabled) {
+      // Simkl uses a local playing marker and pause-based checkpoints; sending
+      // its remote "start" would erase the resumable playback entry.
+      _simklLastScrobbleAction = 'start';
+      _startSimklHeartbeat();
+    }
+    _mdblistPlay();
+  }
+
   Future<void> _switchMdblistTarget() async {
+    if (_validationGateActive) return;
     final target = _mdblistTarget();
     if (target == null) {
       _mdblistSession?.exit();
@@ -2414,6 +2472,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// seconds have passed, something is already wrong. It logs, and it still
   /// takes the slot when it finally frees, so the player never ends up
   /// untracked.
+  ///
+  /// tvOS waits longer before giving up: proceeding into the overlap is a
+  /// certain SIGABRT there, and since the native Dispose handshake became
+  /// completion-gated (mpv render context freed before the channel call
+  /// returns) a held lease reliably frees — a slow release is a wait, not a
+  /// lockout.
+  static final Duration _outputLeaseTimeout = PlatformUtil.isTvOS
+      ? const Duration(seconds: 10)
+      : const Duration(seconds: 3);
+
   Future<void> _claimVideoOutput() async {
     if (_outputLease != null) return; // renderer fallback reuses the claim
     if (!VideoOutputLease.isHeld) {
@@ -2428,11 +2496,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final pending = VideoOutputLease.acquire(debugLabel: 'player');
     VideoOutputLeaseHandle? handle;
     try {
-      handle = await pending.timeout(const Duration(seconds: 3));
+      handle = await pending.timeout(_outputLeaseTimeout);
     } on TimeoutException {
       debugPrint(
         'VideoOutputLease: player proceeding without the slot — a previous '
-        'video output has not released after 3s.',
+        'video output has not released after '
+        '${_outputLeaseTimeout.inSeconds}s.',
       );
       // The wait was abandoned, not cancelled. Take the slot whenever it does
       // arrive rather than handing it back: this player IS alive and holding a
@@ -2495,9 +2564,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _installSubtitleAutoSyncForPlayer(mk.Player player) {
-    if (!_subtitleAutoSyncEnabled ||
-        kIsWeb ||
-        (!Platform.isAndroid && !Platform.isMacOS)) {
+    if (!_subtitleAutoSyncEnabled || !PlatformUtil.supportsSubtitleAutoSync) {
       debugPrint(
         'SubtitleAutoSync: not installing — enabled=$_subtitleAutoSyncEnabled '
         'web=$kIsWeb platform=${Platform.operatingSystem}',
@@ -2831,6 +2898,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Determine the initial URL and index
     String initialUrl = widget.videoUrl;
+    var initialRankedAttemptFailed = false;
     int initialIndex = 0;
 
     if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
@@ -2945,6 +3013,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     } else {}
 
+    // A stale launch index (resume record from a longer pack, negative
+    // startIndex) must not reach list indexing: _currentIndex is used
+    // unconditionally below and in later playback paths.
+    if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
+      initialIndex = initialIndex.clamp(0, _activePlaylist!.length - 1);
+    }
+
     // Get the initial URL from the determined index
     if (_activePlaylist != null &&
         _activePlaylist!.isNotEmpty &&
@@ -2957,11 +3032,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final resolvedUrl = await _resolvePlaylistEntryUrl(initialIndex);
           if (resolvedUrl.isNotEmpty) {
             initialUrl = resolvedUrl;
+          } else if (widget.videoUrl.isNotEmpty) {
+            initialUrl = widget.videoUrl;
+          } else {
+            initialRankedAttemptFailed = true;
           }
         } catch (e) {
           // Only fall back to widget.videoUrl if resolution fails
           if (widget.videoUrl.isNotEmpty) {
             initialUrl = widget.videoUrl;
+          } else {
+            initialRankedAttemptFailed = true;
           }
         }
       }
@@ -3036,8 +3117,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       launchIsLiveIptv = launchChannel?.isLive ?? true;
     }
 
-    // Only open the player if we have a valid URL
-    if (initialUrl.isNotEmpty) {
+    final canAttemptRankedStartup =
+        initialRankedAttemptFailed &&
+        (_effectiveContentType == 'movie' ||
+            _effectiveContentType == 'series') &&
+        _effectiveSources?.isNotEmpty == true;
+
+    // An empty initial URL caused by a failed lazy resolution is itself the
+    // first failed candidate. Enter the ranked ladder so remaining sources
+    // still get their configured attempts.
+    if (initialUrl.isNotEmpty || canAttemptRankedStartup) {
       // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
       final currentEntry = _activePlaylist?[_currentIndex];
       final isPikPak =
@@ -3048,12 +3137,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _activePlaylist == null && initialUrl.contains('mypikpak.com');
       final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
 
-      if ((isPikPak && _activePlaylist != null) || isPikPakUrl) {
+      if (initialUrl.isNotEmpty &&
+          ((isPikPak && _activePlaylist != null) || isPikPakUrl)) {
+        // The continuation can sleep up to 10s in _waitForVideoReady; the
+        // screen may be left (player disposed) or the player replaced by a
+        // renderer fallback in that window, so it must re-check before every
+        // touch of _player.
+        final pikpakGeneration = _playerInstanceGeneration;
+        bool pikpakStillCurrent() =>
+            mounted &&
+            !_screenDisposed &&
+            pikpakGeneration == _playerInstanceGeneration;
+        final launchSource =
+            _effectiveSources != null &&
+                _currentSourceIndex >= 0 &&
+                _currentSourceIndex < _effectiveSources!.length
+            ? _effectiveSources![_currentSourceIndex]
+            : null;
         _playPikPakVideoWithRetry(initialUrl, isDebrifyTV: isDebrifyTV).then((
-          _,
+          loaded,
         ) async {
+          if (!pikpakStillCurrent()) return;
+          if (!loaded) return;
+          // PikPak uses its own cold-storage readiness gate instead of the
+          // ranked VOD gate. Report the winner only after that gate confirms
+          // duration, otherwise a queued-but-unplayable file would be pinned.
+          unawaited(_commitValidatedStremioSource(launchSource));
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
+          if (!pikpakStillCurrent()) return;
           // Random start takes precedence over resume, then startAtPercent
           if (widget.startFromRandom) {
             final offset = _randomStartOffset(_duration);
@@ -3070,6 +3182,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           } else {
             await _maybeRestoreResume();
           }
+          if (!pikpakStillCurrent()) return;
           // Restore audio and subtitle track preferences
           await _restoreTrackPreferences();
         });
@@ -3081,45 +3194,71 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // of A/V drift.)
         final hasExternalAudio =
             widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
-        _openMedia(
-              mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
-              play: !hasExternalAudio,
-              desiredPlay: true,
-              liveStream: launchIsLiveIptv,
-            )
-            .then((_) async {
-              // Wait for the video to load and duration to be available
-              await _waitForVideoReady();
-              if (hasExternalAudio) {
-                await _setExternalAudioTrack(widget.audioUrl!);
-              }
-              // Random start takes precedence over resume, then startAtPercent
-              if (widget.startFromRandom) {
-                final offset = _randomStartOffset(_duration);
-                if (offset != null) {
-                  await _player.seek(offset);
-                } else {
-                  await _maybeRestoreResume();
-                }
-              } else if (widget.startAtPercent != null) {
-                final offset = _percentStartOffset(_duration);
-                if (offset != null) {
-                  await _player.seek(offset);
-                }
-              } else {
-                await _maybeRestoreResume();
-              }
-              _scheduleAutoHide();
-              // Restore audio and subtitle track preferences
-              await _restoreTrackPreferences();
-              // Start playback now that video + external audio are both loaded.
-              if (hasExternalAudio) {
-                await _player.play();
-              }
-            })
-            .catchError((e) {
-              debugPrint('VideoPlayer: YouTube open failed: $e');
-            });
+        try {
+          final plainOpen =
+              initialUrl.isNotEmpty && (hasExternalAudio || launchIsLiveIptv);
+          final opened = plainOpen
+              ? await (() async {
+                  await _openMedia(
+                    mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
+                    play: !hasExternalAudio,
+                    desiredPlay: true,
+                    liveStream: launchIsLiveIptv,
+                  );
+                  return true;
+                })()
+              : await _openInitialVodWithFailover(
+                  initialUrl,
+                  httpHeaders: widget.httpHeaders,
+                  initialAttemptAlreadyFailed: initialRankedAttemptFailed,
+                );
+          if (!opened) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('No playable source could be started.'),
+                ),
+              );
+              await Future<void>.delayed(const Duration(milliseconds: 900));
+              if (mounted) Navigator.of(context).maybePop();
+            }
+            return;
+          }
+          // Wait for duration-dependent resume and random-start calculations.
+          await _waitForVideoReady();
+          if (hasExternalAudio) {
+            await _setExternalAudioTrack(widget.audioUrl!);
+          }
+          // Random start takes precedence over resume, then startAtPercent.
+          if (widget.startFromRandom) {
+            final offset = _randomStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
+            } else {
+              await _maybeRestoreResume();
+            }
+          } else if (widget.startAtPercent != null) {
+            final offset = _percentStartOffset(_duration);
+            if (offset != null) await _player.seek(offset);
+          } else {
+            await _maybeRestoreResume();
+          }
+          _scheduleAutoHide();
+          await _restoreTrackPreferences();
+          if (hasExternalAudio) await _player.play();
+          // The candidate is now decoded, resume has been applied, and track
+          // restoration is complete. Only now may progress escape to local
+          // completion or remote scrobblers.
+          _setStartupGateActive(false);
+          _resumeTrackingAfterValidationGate();
+        } catch (e) {
+          _setStartupGateActive(false);
+          // A late throw (seek/track restore) can land after a successful
+          // open — playback proceeds, so re-arm tracking or the start
+          // scrobble stays swallowed until the next play/pause transition.
+          _resumeTrackingAfterValidationGate();
+          debugPrint('VideoPlayer: initial open failed: $e');
+        }
       }
     } else {
       // If no valid URL, try to load the first playlist entry
@@ -3245,31 +3384,39 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _syncWakelock(p);
       _pushPipState();
       if (p) _noteLiveChannelPlaying();
-      if (p && _duration > Duration.zero) {
+      if (!_validationGateActive && p && _duration > Duration.zero) {
         _traktScrobble('start');
         if (_traktLastScrobbleAction == 'start') {
           _startTraktHeartbeat();
         }
-      } else if (!p &&
+      } else if (!_validationGateActive &&
+          !p &&
           wasPlaying &&
           !_isTransitioning &&
           _traktLastScrobbleAction != 'stop') {
         _traktScrobble('pause');
         _stopTraktHeartbeat();
       }
-      if (_simklScrobbleEnabled && p && _duration > Duration.zero) {
+      if (!_validationGateActive &&
+          _simklScrobbleEnabled &&
+          p &&
+          _duration > Duration.zero) {
         _simklLastScrobbleAction = 'start';
         _startSimklHeartbeat();
-      } else if (!p &&
+      } else if (!_validationGateActive &&
+          !p &&
           wasPlaying &&
           !_isTransitioning &&
           _simklLastScrobbleAction != 'stop') {
         _simklScrobble('pause');
         _stopSimklHeartbeat();
       }
-      if (p && _duration > Duration.zero) {
+      if (!_validationGateActive && p && _duration > Duration.zero) {
         _mdblistPlay();
-      } else if (!p && wasPlaying && !_isTransitioning) {
+      } else if (!_validationGateActive &&
+          !p &&
+          wasPlaying &&
+          !_isTransitioning) {
         _mdblistPause();
       }
       if (p && _transitionRunning) {
@@ -4306,6 +4453,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _onPlaybackEnded() async {
+    // A manually selected replacement is not playback until its validation
+    // gate commits it. In particular, a short provider error video can emit
+    // `completed`; never let that become a watched/scrobble event.
+    if (_validationGateActive) return;
     // LIVE IPTV: an ended live stream is a dropped connection, not a
     // finished item — the origin closed on us (mpv's keep-open parks on the
     // last frame, which is the "fake pause" from the Discord report). The
@@ -5293,7 +5444,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _loadPlayerDefaults() async {
     _subtitleAutoSyncEnabled =
         await StorageService.getSubtitleAutoSyncEnabled();
-    debugPrint('SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled');
+    debugPrint(
+      'SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled',
+    );
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
@@ -7351,6 +7504,452 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return ok;
   }
 
+  /// Opens one VOD candidate with the real media-kit player and keeps that
+  /// exact player session on success. Unlike the old Dart HEAD probe this has
+  /// no validation/playback race: decoded video or advancing position commits
+  /// the candidate; an error, open throw, or bounded startup stall rejects it.
+  Future<bool> _tryOpenStartupVod(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    final completer = Completer<bool>();
+    var armed = false;
+    var videoWidth = 0;
+    var position = Duration.zero;
+    var candidateDuration = Duration.zero;
+    Timer? durationGraceTimer;
+    final isAioStreams = StartupStreamPolicy.isAioStreams(
+      addonId: source?.stremioAddonId,
+      sourceName: source?.source,
+      url: url,
+    );
+    final sourceFields = _startupSourceFields(sourceIndex, source);
+    debugPrint(
+      '[StartupFailover] event=candidate_open platform=flutter '
+      'attempt=$attempt/$maxAttempts $sourceFields aio=$isAioStreams '
+      'timeoutMs=${timeout.inMilliseconds}',
+    );
+    void finish(bool ok, String reason) {
+      if (completer.isCompleted) return;
+      debugPrint(
+        '[StartupFailover] event=candidate_result platform=flutter '
+        'attempt=$attempt/$maxAttempts $sourceFields ok=$ok reason=$reason '
+        'elapsedMs=${stopwatch.elapsedMilliseconds} width=$videoWidth '
+        'positionMs=${position.inMilliseconds} '
+        'durationMs=${candidateDuration.inMilliseconds}',
+      );
+      completer.complete(ok);
+    }
+
+    void maybeCommit() {
+      // Width alone can be parsed from container metadata before a decoder has
+      // produced anything. Requiring the media clock to advance as well keeps
+      // metadata-only and permanently-buffering candidates behind the gate.
+      if (!armed || videoWidth <= 0 || position <= Duration.zero) return;
+      if (StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+        addonId: source?.stremioAddonId,
+        sourceName: source?.source,
+        url: url,
+        duration: candidateDuration,
+      )) {
+        finish(false, 'aiostreams_error_slate');
+        return;
+      }
+      if (isAioStreams && candidateDuration <= Duration.zero) {
+        // Progressive sources can publish duration just after playback starts.
+        // Give that metadata a bounded chance to expose AIOStreams' short,
+        // decodable error slate; unknown-duration real streams still proceed.
+        durationGraceTimer ??= Timer(const Duration(seconds: 1), () {
+          final isSlate = StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+            addonId: source?.stremioAddonId,
+            sourceName: source?.source,
+            url: url,
+            duration: candidateDuration,
+          );
+          finish(
+            !isSlate,
+            isSlate ? 'aiostreams_error_slate' : 'decoded_video',
+          );
+        });
+        return;
+      }
+      finish(true, 'decoded_video');
+    }
+
+    var bufferedAmount = Duration.zero;
+    final subs = <StreamSubscription>[
+      _player.stream.error.listen((error) {
+        if (!armed) return;
+        // An explicit-renderer startup failure is owned by the renderer
+        // fallback (_rendererStartupErrorSub sees this same event): it
+        // disposes and rebuilds the player, then reopens THIS media on the
+        // automatic renderer. Failing the candidate here would race two
+        // opens on one surface — the ladder advancing on a player being
+        // disposed — and the failure is renderer-bound, not source-bound,
+        // so every other candidate would fail identically anyway. Accept
+        // the candidate and let the fallback finish its recovery.
+        if (AndroidRendererStartupFallback.isRendererFailure(error) &&
+            AndroidRendererStartupFallback.shouldArm(
+              isAndroid: Platform.isAndroid,
+              isAndroidTv: PlatformUtil.isAndroidTvCached,
+              mode: _androidVideoRendererMode,
+              alreadyValidated: _rendererValidatedForSession,
+              fallbackInProgress: _rendererFallbackInProgress,
+            )) {
+          finish(true, 'renderer_fallback_deferred');
+          return;
+        }
+        finish(false, 'player_error');
+      }),
+      _player.stream.width.listen((width) {
+        videoWidth = width ?? 0;
+        maybeCommit();
+      }),
+      _player.stream.position.listen((value) {
+        position = value;
+        maybeCommit();
+      }),
+      _player.stream.duration.listen((value) {
+        candidateDuration = value;
+        maybeCommit();
+      }),
+      _player.stream.buffer.listen((value) {
+        bufferedAmount = value;
+      }),
+    ];
+    try {
+      // Arm before open: a fast local/CDN response can render its first frame
+      // before open() completes. Initial startup has no previous-media events;
+      // subsequent attempts use open()'s media reset to establish the boundary.
+      armed = true;
+      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+    } catch (e) {
+      // Exception strings from media backends may embed signed stream URLs.
+      // The runtime type is enough to distinguish open failures safely.
+      debugPrint(
+        '[StartupFailover] event=open_exception platform=flutter '
+        '$sourceFields exception=${e.runtimeType}',
+      );
+      finish(false, 'open_exception');
+    }
+    // The base timeout is for dead sources (no error, no data). A source
+    // that is demonstrably still downloading — its buffer keeps growing —
+    // is slow, not dead (large 4K remux, cold CDN, slow debrid peering);
+    // failing it would burn a possibly single-use link and fall to a
+    // lower-ranked source. Extend in short steps while bytes keep arriving,
+    // bounded by a hard cap.
+    const extendStep = Duration(seconds: 3);
+    const maxWait = Duration(seconds: 45);
+    var lastBufferMark = Duration.zero;
+    var ok = false;
+    while (true) {
+      final remaining = timeout - stopwatch.elapsed;
+      try {
+        ok = await completer.future.timeout(
+          remaining > Duration.zero ? remaining : extendStep,
+        );
+        break;
+      } on TimeoutException {
+        if (bufferedAmount > lastBufferMark && stopwatch.elapsed < maxWait) {
+          lastBufferMark = bufferedAmount;
+          debugPrint(
+            '[StartupFailover] event=watchdog_extend platform=flutter '
+            '$sourceFields elapsedMs=${stopwatch.elapsedMilliseconds} '
+            'bufferedMs=${bufferedAmount.inMilliseconds}',
+          );
+          continue;
+        }
+        finish(false, 'timeout');
+        ok = false;
+        break;
+      }
+    }
+    durationGraceTimer?.cancel();
+    for (final sub in subs) {
+      unawaited(sub.cancel());
+    }
+    if (!ok) {
+      try {
+        await _player.stop();
+      } catch (_) {}
+    }
+    return ok;
+  }
+
+  /// Startup-only automatic failover for Stremio/Quick Play VOD. Candidates
+  /// remain behind the player loading surface until the actual player decodes
+  /// one. The successful URL is never reopened, which is essential for
+  /// single-use and first-request-IP-bound debrid links.
+  Future<bool> _openInitialVodWithFailover(
+    String initialUrl, {
+    Map<String, String>? httpHeaders,
+    bool initialAttemptAlreadyFailed = false,
+  }) async {
+    final sources = _effectiveSources;
+    final contentType = _effectiveContentType;
+    final isVod = contentType == 'movie' || contentType == 'series';
+    if (!isVod) {
+      debugPrint(
+        '[StartupFailover] event=bypass platform=flutter reason=non_vod '
+        'contentType=${contentType ?? 'unknown'}',
+      );
+      return _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
+    }
+
+    _setStartupGateActive(true);
+    if (sources == null || sources.isEmpty) {
+      debugPrint(
+        '[StartupFailover] event=begin platform=flutter contentType=$contentType '
+        'sourceCount=0 policy=single_candidate',
+      );
+      final ok = await _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
+      // A successful candidate stays gated through resume/track restoration
+      // in the caller. Failure must release the surface before route cleanup.
+      if (!ok) _setStartupGateActive(false);
+      return ok;
+    }
+
+    final rules = widget.startupFailoverEnabled
+        ? await StorageService.getQuickPlayRules(
+            isMovie: contentType == 'movie',
+          )
+        : null;
+    final tryNext = rules?.tryNextOnFailure ?? false;
+    final maxAttempts = tryNext ? rules!.maxAttempts.clamp(1, 10) : 1;
+    final firstIndex = _currentSourceIndex.clamp(0, sources.length - 1);
+    final start = StartupStreamPolicy.rankedFailoverStart(
+      selectedSourceIndex: firstIndex,
+      initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
+    );
+    var attempts = start.attempts;
+    debugPrint(
+      '[StartupFailover] event=begin platform=flutter contentType=$contentType '
+      'sourceCount=${sources.length} selectedIndex=$firstIndex '
+      'startIndex=${start.sourceIndex} initialFailed=$initialAttemptAlreadyFailed '
+      'tryNext=$tryNext maxAttempts=$maxAttempts '
+      'targetSeason=${_effectiveContentSeason ?? '-'} '
+      'targetEpisode=${_effectiveContentEpisode ?? '-'}',
+    );
+
+    final pikPakResolver =
+        widget.startupResolverProvider?.toLowerCase() == 'pikpak';
+    var pikPakTorrentAcquisitionAttempted =
+        StartupStreamPolicy.initialPikPakAcquisitionAttempted(
+          isPikPakResolver: pikPakResolver,
+          initialSourceIsTorrent:
+              sources[firstIndex].streamType == StreamType.torrent,
+          hasResolvedInitialUrl: initialUrl.isNotEmpty,
+          initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
+        );
+
+    for (
+      var sourceIndex = start.sourceIndex;
+      sourceIndex < sources.length && attempts < maxAttempts;
+      sourceIndex++
+    ) {
+      final source = sources[sourceIndex];
+      // The launch URL is already resolved and playable in-app regardless of
+      // how its source row is typed — never skip it over streamType.
+      final isResolvedLaunchUrl =
+          sourceIndex == firstIndex && initialUrl.isNotEmpty;
+      if (!isResolvedLaunchUrl && source.streamType == StreamType.externalUrl) {
+        debugPrint(
+          '[StartupFailover] event=candidate_skip platform=flutter '
+          '${_startupSourceFields(sourceIndex, source)} reason=external_url',
+        );
+        continue;
+      }
+      if (pikPakResolver &&
+          !isResolvedLaunchUrl &&
+          source.streamType == StreamType.torrent) {
+        if (pikPakTorrentAcquisitionAttempted) {
+          debugPrint(
+            '[StartupFailover] event=candidate_skip platform=flutter '
+            '${_startupSourceFields(sourceIndex, source)} '
+            'reason=pikpak_acquisition_limit',
+          );
+          continue;
+        }
+        // Count the acquisition before resolving: a cold-storage request may
+        // have been queued even when the resolver ultimately returns null.
+        pikPakTorrentAcquisitionAttempted = true;
+      }
+      attempts++;
+      final sourceFields = _startupSourceFields(sourceIndex, source);
+      _setStartupGateMessage(
+        attempts == 1 && !initialAttemptAlreadyFailed
+            ? 'Checking stream 1 of $maxAttempts…'
+            : 'Stream unavailable · Trying $attempts of $maxAttempts…',
+      );
+
+      String? url;
+      List<PlaylistEntry>? resolvedPlaylist;
+      var resolvedPlaylistIndex = 0;
+      if (isResolvedLaunchUrl) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=launch_url',
+        );
+        url = initialUrl;
+      } else if (source.streamType == StreamType.directUrl &&
+          source.directUrl?.isNotEmpty == true) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=direct_url',
+        );
+        url = source.directUrl;
+      } else if (widget.resolveSourceToPlaylist != null) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=playlist',
+        );
+        try {
+          resolvedPlaylist = await widget.resolveSourceToPlaylist!(source);
+        } catch (e) {
+          debugPrint(
+            '[StartupFailover] event=resolve_result platform=flutter '
+            '$sourceFields ok=false reason=exception exception=${e.runtimeType}',
+          );
+          resolvedPlaylist = null;
+        }
+        if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
+          if (StartupStreamPolicy.requiresExactEpisodeMatch(
+                isSeries: contentType == 'series',
+                playlistLength: resolvedPlaylist.length,
+              ) &&
+              _effectiveContentSeason != null &&
+              _effectiveContentEpisode != null) {
+            final parsed = SeriesPlaylist.fromPlaylistEntries(
+              resolvedPlaylist,
+              collectionTitle: widget.title,
+              forceSeries: true,
+            );
+            final target = parsed.findOriginalIndexBySeasonEpisode(
+              _effectiveContentSeason!,
+              _effectiveContentEpisode!,
+            );
+            final exactIndex = StartupStreamPolicy.resolvedPlaylistIndex(
+              requiresEpisodeMatch: true,
+              matchedEpisodeIndex: target,
+            );
+            if (exactIndex == null) {
+              // A pack that omits the requested episode is not a valid
+              // fallback. Opening row zero would silently play the wrong
+              // episode and then adopt that unrelated playlist.
+              resolvedPlaylist = null;
+              debugPrint(
+                '[StartupFailover] event=candidate_reject platform=flutter '
+                '$sourceFields reason=playlist_missing_episode '
+                'targetSeason=$_effectiveContentSeason '
+                'targetEpisode=$_effectiveContentEpisode',
+              );
+              continue;
+            }
+            resolvedPlaylistIndex = exactIndex;
+          }
+          url = resolvedPlaylist[resolvedPlaylistIndex].url;
+        }
+      } else if (_effectiveResolver != null) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=single_url',
+        );
+        try {
+          url = await _effectiveResolver!(source);
+        } catch (e) {
+          debugPrint(
+            '[StartupFailover] event=resolve_result platform=flutter '
+            '$sourceFields ok=false reason=exception exception=${e.runtimeType}',
+          );
+          url = null;
+        }
+      }
+
+      if (url == null || url.isEmpty) {
+        debugPrint(
+          '[StartupFailover] event=candidate_reject platform=flutter '
+          '$sourceFields reason=empty_resolution',
+        );
+        continue;
+      }
+      final ok = await _tryOpenStartupVod(
+        url,
+        httpHeaders: httpHeaders,
+        source: source,
+        sourceIndex: sourceIndex,
+        attempt: attempts,
+        maxAttempts: maxAttempts,
+      );
+      if (!mounted) return false;
+      if (!ok) continue;
+
+      _currentSourceIndex = sourceIndex;
+      _currentStreamUrl = url;
+      if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
+        _activePlaylist = resolvedPlaylist;
+        _currentIndex = resolvedPlaylistIndex;
+        _cachedSeriesPlaylist = null;
+        _playlistIdentityToken++;
+      }
+      unawaited(_commitValidatedStremioSource(source));
+      debugPrint(
+        '[StartupFailover] event=commit platform=flutter '
+        'attempt=$attempts/$maxAttempts $sourceFields '
+        'playlistItems=${resolvedPlaylist?.length ?? 0} '
+        'playlistIndex=$resolvedPlaylistIndex',
+      );
+      return true;
+    }
+    _setStartupGateActive(false);
+    debugPrint(
+      '[StartupFailover] event=exhausted platform=flutter '
+      'attempts=$attempts maxAttempts=$maxAttempts sourceCount=${sources.length}',
+    );
+    return false;
+  }
+
+  Future<void> _commitValidatedStremioSource(Torrent? source) async {
+    final commit = widget.onStremioSourceCommitted;
+    if (source == null || commit == null) return;
+    try {
+      await commit(source);
+    } catch (error) {
+      debugPrint(
+        '[StartupFailover] event=binding_commit_failed platform=flutter '
+        'exception=${error.runtimeType}',
+      );
+    }
+  }
+
+  String _startupSourceFields(int? index, Torrent? source) {
+    String safe(String? value) {
+      if (value == null || value.isEmpty) return '-';
+      final compact = value.replaceAll(RegExp(r'\s+'), ' ');
+      return compact.length <= 64 ? compact : compact.substring(0, 64);
+    }
+
+    return 'sourceIndex=${index ?? '-'} type=${source?.streamType.name ?? '-'} '
+        'addon=${safe(source?.stremioAddonId)} source=${safe(source?.source)}';
+  }
+
+  void _setStartupGateActive(bool active) {
+    if (_startupGateActive == active) return;
+    _startupGateActive = active;
+    if (mounted) setState(() {});
+  }
+
+  void _setStartupGateMessage(String message) {
+    if (_startupGateMessage == message) return;
+    _startupGateMessage = message;
+    if (mounted && _startupGateActive) setState(() {});
+  }
+
   // ─── Stremio Source Sheet ───────────────────────────────────────────
 
   void _showSourceSheetOverlay() {
@@ -7393,7 +7992,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final pendingPlaylist = _pendingSourcePlaylist;
     _pendingSourcePlaylist = null;
     if (pendingPlaylist != null && pendingPlaylist.isNotEmpty) {
-      await _switchToSourcePlaylist(index, pendingPlaylist);
+      await _switchToSourcePlaylist(
+        index,
+        pendingPlaylist,
+        validateExplicitSelection: true,
+      );
     } else {
       await _switchToStremioSource(index, url);
     }
@@ -7461,9 +8064,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     List<PlaylistEntry> newPlaylist, {
     int? targetSeason,
     int? targetEpisode,
+    bool validateExplicitSelection = false,
   }) async {
     _hideSourceSheet();
     _clearBufferingIndicator();
+    final outgoingPlaylist = _activePlaylist == null
+        ? null
+        : List<PlaylistEntry>.of(_activePlaylist!);
+    final outgoingIndex = _currentIndex;
+    final outgoingSourceIndex = _currentSourceIndex;
+    final outgoingPosition = _position;
+    final outgoingDirectUrl = _currentStreamUrl;
+    final selectedSource =
+        (_effectiveSources != null &&
+            sourceIndex >= 0 &&
+            sourceIndex < _effectiveSources!.length)
+        ? _effectiveSources![sourceIndex]
+        : null;
     // Capture the episode we're on BEFORE swapping the playlist, so we can
     // land on it in the new source instead of jumping to the pack's first
     // entry (S1E1). Read from the current playlist entry (tracks auto-advance).
@@ -7530,24 +8147,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     var landedOnSameContent =
         !explicitTarget ||
         (targetSeason == current.season && targetEpisode == current.episode);
+    var containsRequestedEpisode = true;
     if (se.season != null && se.episode != null) {
       final sp = _seriesPlaylist;
       final idx =
           sp?.findOriginalIndexBySeasonEpisode(se.season!, se.episode!) ?? -1;
       if (idx >= 0) {
         targetIndex = idx;
-      } else if (explicitTarget && newPlaylist.length == 1) {
-        // A fetched single stream often has an unparseable name ("Torrentio
-        // 1080p"); its one entry IS the target episode — no warning needed.
+      } else if (newPlaylist.length == 1) {
+        // A single resolved stream often has an unparseable name ("Torrentio
+        // 1080p", anime/absolute numbering); its one entry IS the requested
+        // episode — the fetch was episode-scoped. This must hold for manual
+        // sheet picks too (no explicit target), or a legitimate singleton
+        // would be rejected below without ever being opened. Mirrors the
+        // Kotlin cursor's `episodes.size <= 1` exemption.
         targetIndex = 0;
       } else {
         landedOnSameContent = false;
+        containsRequestedEpisode = false;
         // The exact episode isn't in this source. Don't fall back to raw entry
         // 0 — in torrent order that's often an extras/bonus clip. Land on the
         // first REAL episode (skips season 0 / specials) and warn the user.
         final firstReal = sp?.getFirstEpisodeOriginalIndex() ?? -1;
         if (firstReal >= 0) targetIndex = firstReal;
-        if (mounted) {
+        if (mounted && !validateExplicitSelection) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -7568,13 +8191,104 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Resume the checkpointed LOCAL position, not Trakt (this is a source swap
     // mid-episode, not a fresh open) — but only when the new source landed on
     // the same content; a fallback episode keeps its own Trakt resume.
-    await _loadPlaylistIndex(
-      targetIndex,
-      autoplay: true,
-      skipInitialSave: true,
-      preferLocalResume: landedOnSameContent,
-    );
+    var committed = false;
+    if (!validateExplicitSelection) {
+      committed = await _loadPlaylistIndex(
+        targetIndex,
+        autoplay: true,
+        skipInitialSave: true,
+        preferLocalResume: landedOnSameContent,
+      );
+    } else {
+      _manualSourceGateActive = true;
+      try {
+        try {
+          if (containsRequestedEpisode) {
+            committed = await _loadPlaylistIndex(
+              targetIndex,
+              autoplay: true,
+              skipInitialSave: true,
+              preferLocalResume: landedOnSameContent,
+              manualValidationSource: selectedSource,
+              manualValidationSourceIndex: sourceIndex,
+            );
+          }
+        } catch (error) {
+          debugPrint(
+            'Player: manual playlist source rejected '
+            '(${error.runtimeType})',
+          );
+          committed = false;
+        }
+        if (!mounted) return;
+        if (!committed &&
+            outgoingPlaylist != null &&
+            outgoingPlaylist.isNotEmpty) {
+          setState(() {
+            _activePlaylist = outgoingPlaylist;
+            _cachedSeriesPlaylist = null;
+            _playlistIdentityToken++;
+            _currentSourceIndex = outgoingSourceIndex;
+            _currentIndex = outgoingIndex.clamp(0, outgoingPlaylist.length - 1);
+          });
+          final restored = await _loadPlaylistIndex(
+            _currentIndex,
+            autoplay: true,
+            skipInitialSave: true,
+            preferLocalResume: true,
+          );
+          if (restored && outgoingPosition > Duration.zero) {
+            await _player.seek(outgoingPosition);
+          }
+        } else if (!committed &&
+            outgoingDirectUrl != null &&
+            outgoingDirectUrl.isNotEmpty) {
+          // A direct launch has no active playlist to restore. The candidate
+          // validator has stopped its media on failure, so explicitly rebuild
+          // the outgoing direct session instead of leaving the player stopped
+          // with the rejected playlist selected.
+          setState(() {
+            _activePlaylist = null;
+            _cachedSeriesPlaylist = null;
+            _playlistIdentityToken++;
+            _currentSourceIndex = outgoingSourceIndex;
+            _currentIndex = outgoingIndex;
+          });
+          try {
+            await _openMedia(
+              mk.Media(outgoingDirectUrl, httpHeaders: widget.httpHeaders),
+              play: true,
+            );
+            await _waitForVideoReady();
+            if (outgoingPosition > Duration.zero) {
+              await _player.seek(outgoingPosition);
+            }
+            _currentStreamUrl = outgoingDirectUrl;
+            unawaited(_restoreTrackPreferences());
+          } catch (restoreError) {
+            debugPrint(
+              'Player: outgoing direct source restore failed '
+              '(${restoreError.runtimeType})',
+            );
+          }
+        }
+      } finally {
+        _manualSourceGateActive = false;
+        _resumeTrackingAfterValidationGate();
+      }
+    }
     if (!mounted) return;
+
+    if (committed) {
+      unawaited(_commitValidatedStremioSource(selectedSource));
+    }
+    if (validateExplicitSelection && !committed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This source is unavailable. Choose another source.'),
+        ),
+      );
+    }
 
     // End transition (same pattern as _switchToStremioSource)
     _transitionStopTimer?.cancel();
@@ -7597,6 +8311,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Capture current position before switching so playback continues seamlessly
     final resumePosition = _position;
+    final previousUrl = _currentStreamUrl;
+    final previousSourceIndex = _currentSourceIndex;
+    final source =
+        (_effectiveSources != null &&
+            index >= 0 &&
+            index < _effectiveSources!.length)
+        ? _effectiveSources![index]
+        : null;
 
     _clearBufferingIndicator();
     setState(() {
@@ -7612,6 +8334,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {}
 
     if (!mounted) return;
+
+    _manualSourceGateActive = true;
 
     // For YouTube each quality is a video-only track sharing one audio stream
     // (widget.audioUrl). Mirror the initial-launch ordering: open PAUSED,
@@ -7631,14 +8355,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _resetSubtitleState();
     }
 
+    var committed = false;
     try {
-      await _openMedia(
-        mk.Media(url),
-        play: !hasExternalAudio,
-        desiredPlay: true,
-      );
-      // Wait for the new media to load before seeking
-      await _waitForVideoReady();
+      final valid = hasExternalAudio
+          ? await (() async {
+              await _openMedia(mk.Media(url), play: false, desiredPlay: true);
+              await _waitForVideoReady();
+              return _duration > Duration.zero;
+            })()
+          : await _tryOpenStartupVod(
+              url,
+              httpHeaders: widget.httpHeaders,
+              source: source,
+              sourceIndex: index,
+            );
+      if (!mounted) return;
+      if (!valid) {
+        throw const _ManualSourceValidationFailure();
+      }
       if (!mounted) return;
       if (hasExternalAudio) {
         await _setExternalAudioTrack(widget.audioUrl!);
@@ -7663,11 +8397,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // seek. Let it apply in the background; the overlay ends below on time.
         unawaited(_restoreTrackPreferences());
       }
+      _currentSourceIndex = index;
+      _currentStreamUrl = url;
+      committed = true;
+      unawaited(_commitValidatedStremioSource(source));
     } catch (e) {
-      debugPrint('Player: Stremio source switch failed: $e');
+      debugPrint('Player: manual Stremio source rejected (${e.runtimeType})');
+      // The candidate player is stopped by the validator. Restore the known
+      // working stream when possible, but never validate/fail over to another
+      // row: this was an explicit user selection.
+      if (previousUrl != null && previousUrl.isNotEmpty) {
+        try {
+          await _openMedia(
+            mk.Media(previousUrl, httpHeaders: widget.httpHeaders),
+            play: true,
+          );
+          await _waitForVideoReady();
+          if (hasExternalAudio) {
+            // YouTube-style split streams: the reopen dropped the external
+            // audio track — without this the restored video plays silent.
+            await _setExternalAudioTrack(widget.audioUrl!);
+          }
+          if (resumePosition > Duration.zero) {
+            await _player.seek(resumePosition);
+          }
+          _currentStreamUrl = previousUrl;
+          if (!hasExternalAudio) {
+            // Subtitle state was reset for the candidate; bring the user's
+            // subtitle/audio choices back on the restored stream.
+            unawaited(_restoreTrackPreferences());
+          }
+        } catch (restoreError) {
+          debugPrint(
+            'Player: previous source restore failed '
+            '(${restoreError.runtimeType})',
+          );
+        }
+      }
+      _currentSourceIndex = previousSourceIndex;
+    } finally {
+      _manualSourceGateActive = false;
+      _resumeTrackingAfterValidationGate();
     }
 
     if (!mounted) return;
+
+    if (!committed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This source is unavailable. Choose another source.'),
+        ),
+      );
+    }
 
     _transitionStopTimer?.cancel();
     _transitionPhaseTimer?.cancel();
@@ -8304,7 +9085,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// purpose because it runs for every position update; actual writes stay
   /// unawaited and are guarded one-shot above/in [_markCurrentEpisodeAsFinished].
   void _checkAndApplyLocalCompletion() {
-    if (!_usesLocalCompletionTracking ||
+    if (_validationGateActive ||
+        !_usesLocalCompletionTracking ||
         _duration <= Duration.zero ||
         _position <= Duration.zero) {
       return;
@@ -8362,13 +9144,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  Future<void> _loadPlaylistIndex(
+  Future<bool> _loadPlaylistIndex(
     int index, {
     bool autoplay = false,
     bool skipInitialSave = false,
     // Source switch on the same content: resume the checkpointed local position
     // exactly (see _maybeRestoreResume).
     bool preferLocalResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
   }) async {
     // A new item is being loaded: any scrub in flight belongs to the outgoing
     // one and must never land on this one.
@@ -8378,7 +9162,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         index < 0 ||
         index >= _activePlaylist!.length) {
       _clearTransitionOnFailure();
-      return;
+      return false;
     }
 
     // A sleep stop wins over anything already queued. Checked BEFORE any state
@@ -8391,7 +9175,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (autoplay && _isAutoAdvancing) {
         _isAutoAdvancing = false;
         _clearTransitionOnFailure();
-        return;
+        return false;
       }
       _sleepStopLatched = false;
     }
@@ -8476,7 +9260,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
       }
       _clearTransitionOnFailure();
-      return;
+      return false;
     }
 
     _currentStreamUrl = videoUrl;
@@ -8491,22 +9275,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (isPikPak) {
       // For PikPak, we need retry logic even if not autoplaying
       // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
-      if (autoplay) {
-        await _playPikPakVideoWithRetry(videoUrl);
-      } else {
-        // Still use retry but without autoplay
-        await _playPikPakVideoWithRetry(videoUrl);
+      final pikPakLoaded = await _playPikPakVideoWithRetry(
+        videoUrl,
+        // A manual source transaction owns its single failure message. The
+        // retry UI remains unchanged while cold storage is being reactivated.
+        showFailure: manualValidationSourceIndex == null,
+      );
+      if (manualValidationSourceIndex != null && !pikPakLoaded) return false;
+      if (!autoplay) {
+        // Still use retry but without autoplay; pause only after it succeeds.
         _activeMediaShouldPlay = false;
-        await _player.pause(); // Pause after loading if not autoplaying
+        if (pikPakLoaded) await _player.pause();
       }
     } else {
       // Non-PikPak videos play normally
       // Cancel any ongoing PikPak retry when switching to non-PikPak video
       _pikPakRetryId++;
-      await _openMedia(
-        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
-        play: autoplay,
-      );
+      if (manualValidationSourceIndex != null) {
+        final valid = await _tryOpenStartupVod(
+          videoUrl,
+          httpHeaders: widget.httpHeaders,
+          source: manualValidationSource,
+          sourceIndex: manualValidationSourceIndex,
+        );
+        if (!valid) return false;
+        if (!autoplay) await _player.pause();
+      } else {
+        await _openMedia(
+          mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+          play: autoplay,
+        );
+      }
     }
 
     // Wait for the video to load and duration to be available
@@ -8521,6 +9320,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _isTransitioning = false;
       });
     }
+    return true;
   }
 
   Future<String> _resolvePlaylistEntryUrl(int index) async {
@@ -8809,11 +9609,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Attempts to play a PikPak video with retry logic for cold storage
-  Future<void> _playPikPakVideoWithRetry(
+  Future<bool> _playPikPakVideoWithRetry(
     String videoUrl, {
     String? overrideProvider,
     String? overridePikPakFileId,
     bool isDebrifyTV = false,
+    bool showFailure = true,
   }) async {
     // Only apply retry logic for PikPak videos
     // Support both playlist entries and Debrify TV (requestMagicNext) flows
@@ -8843,7 +9644,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
-      return;
+      return true;
     }
 
     print('PikPak: Starting retry logic for cold storage handling');
@@ -8893,7 +9694,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (mounted) {
             setState(() {});
           }
-          return;
+          return false;
         }
 
         print('PikPak: Monitoring attempt ${attempt + 1}/${maxRetries + 1}...');
@@ -8922,7 +9723,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           print('PikPak: Video metadata loaded successfully - file is ready!');
           // Note: Retry state already cleared by _waitForVideoMetadata
           print('PikPak: Retry mechanism fully deactivated, playback ready');
-          return;
+          return true;
         }
 
         // Video didn't load even after monitoring during delay
@@ -8957,7 +9758,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               );
               await _goToNextEpisode();
-            } else {
+            } else if (showFailure) {
               // Show error for regular playlist
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -8971,7 +9772,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               );
             }
           }
-          return; // Exit function
+          return false; // Exhausted the cold-storage retries.
         }
 
         // Still have retries left - continue with retry logic
@@ -8997,7 +9798,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if widget was disposed
         if (!mounted) {
           print('PikPak: Widget disposed before retry');
-          return;
+          return false;
         }
 
         // Check if cancelled
@@ -9012,7 +9813,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (mounted) {
             setState(() {});
           }
-          return;
+          return false;
         }
 
         // Try reopening the player (might help reactivate cold storage file)
@@ -9059,7 +9860,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ),
               );
               await _goToNextEpisode();
-            } else {
+            } else if (showFailure) {
               // Show error for regular playlist
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -9073,7 +9874,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               );
             }
           }
-          return; // Exit function
+          return false; // Exhausted the cold-storage retries.
         }
 
         // Still have retries left - continue with retry logic
@@ -9098,7 +9899,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Check if widget was disposed
         if (!mounted) {
           print('PikPak: Widget disposed during error handling');
-          return;
+          return false;
         }
 
         // Check if cancelled
@@ -9113,7 +9914,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (mounted) {
             setState(() {});
           }
-          return;
+          return false;
         }
 
         // Try reopening the player for next attempt
@@ -9132,6 +9933,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       attempt++;
     }
+    return false;
   }
 
   /// Preload episode information in the background
@@ -10048,7 +10850,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _saveResume({bool debounced = false}) async {
-    if (!_isReady) {
+    if (_validationGateActive || !_isReady) {
       return;
     }
 
@@ -12196,6 +12998,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
+                if (_startupGateActive)
+                  ColoredBox(
+                    color: Colors.black,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 34,
+                            height: 34,
+                            child: CircularProgressIndicator(
+                              color: Colors.white70,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            _startupGateMessage,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 // Transition overlay above video
                 if (_rainbowActive) _buildTransitionOverlay(),
                 if (_showStremioTvNextLoading)
@@ -12396,6 +13228,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ValueListenableBuilder<bool>(
                   valueListenable: _showBufferingIndicator,
                   builder: (context, show, _) {
+                    // The startup gate has its own spinner and explanatory
+                    // status. Keeping the ordinary buffering indicator above
+                    // it produces two overlapping loaders while candidates
+                    // are being rejected and retried.
+                    if (_startupGateActive) {
+                      return const SizedBox.shrink();
+                    }
                     return IgnorePointer(
                       ignoring: true,
                       child: AnimatedOpacity(

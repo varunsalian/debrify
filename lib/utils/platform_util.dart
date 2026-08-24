@@ -55,6 +55,21 @@ class PlatformUtil {
   /// engine) — those have no Apple TV counterpart and must NOT light up here.
   static bool get isTelevision => isAndroidTvCached || isTvOS;
 
+  /// Platforms whose bundled libmpv carries the passive auto-sync analysis
+  /// filters (astats/aspectralstats/ametadata), verified per build source:
+  /// patched Android/macOS media_kit builds (verify scripts enforce), Linux's
+  /// private full-FFmpeg libmpv (build script enforces), and the tvOS full
+  /// build (filters confirmed in libavfilter.a). Windows and iPhone ship
+  /// trimmed stock libs without them. Single source of truth for the install
+  /// gate, the settings toggle, and the settings-search index — these must
+  /// never drift apart.
+  static bool get supportsSubtitleAutoSync =>
+      !kIsWeb &&
+      (Platform.isAndroid ||
+          Platform.isMacOS ||
+          Platform.isLinux ||
+          isTvOS);
+
   /// A hand-held phone or tablet — not a TV, a desktop or the web.
   ///
   /// The predicate for anything that only makes sense in the hand: forcing

@@ -86,6 +86,7 @@ void main() {
     List<StremioMeta> heroItems,
     List<SpotlightShelf> sections, {
     bool dpad = true,
+    bool showCardTitlesAndRatings = true,
     void Function(StremioMeta item)? onDwell,
     VoidCallback? onTrailerStop,
   }) => MaterialApp(
@@ -101,6 +102,7 @@ void main() {
           onDwell: onDwell,
           onTrailerStop: onTrailerStop,
           dpad: dpad,
+          showCardTitlesAndRatings: showCardTitlesAndRatings,
         ),
       ),
     ),
@@ -288,6 +290,60 @@ void main() {
       reason: 'one decimal, star-prefixed, on the caption meta line',
     );
     expect(find.textContaining('★ 0'), findsNothing);
+  });
+
+  testWidgets('card titles and ratings can be hidden without losing context', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        [_meta('tt1', 'Alpha')],
+        [
+          SpotlightShelf(
+            title: 'Top',
+            nodes: rows[0],
+            items: [
+              SpotlightCard(
+                title: 'Rated',
+                subtitle: 'S2 · E5',
+                rating: 8.06,
+                onOpen: _noop,
+              ),
+            ],
+          ),
+        ],
+        showCardTitlesAndRatings: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rated'), findsNothing);
+    expect(find.text('★ 8.1'), findsNothing);
+    expect(find.text('S2 · E5'), findsOneWidget);
+    expect(find.text('Top'), findsOneWidget);
+  });
+
+  testWidgets('non-source Continue Watching type tags stay visible', (
+    tester,
+  ) async {
+    final item = _meta('tt1', 'Alpha');
+    await tester.pumpWidget(
+      host(
+        [item],
+        [
+          SpotlightShelf(
+            title: 'Continue Watching',
+            tag: 'Movies',
+            nodes: rows[0],
+            items: [SpotlightCard(title: 'Alpha', onOpen: _noop)],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continue Watching'), findsOneWidget);
+    expect(find.text('MOVIES'), findsOneWidget);
   });
 
   testWidgets('the board is LAZY — off-screen shelves do not build at mount', (

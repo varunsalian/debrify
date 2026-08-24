@@ -41,7 +41,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrid_downloads_screen.dart': 23,
   'lib/screens/debrify_tv/dialogs/community_channels_dialog.dart': 12,
   'lib/screens/debrify_tv/dialogs/external_player_notice_dialog.dart': 0,
-  'lib/screens/debrify_tv/dialogs/import_channels_dialog.dart': 0,
+  'lib/screens/debrify_tv/dialogs/spotlight_dialog.dart': 0,
   'lib/screens/debrify_tv/widgets/tv_focusable_button.dart': 0,
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,

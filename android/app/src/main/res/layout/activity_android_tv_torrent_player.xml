@@ -18,6 +18,42 @@
         app:surface_type="surface_view"
         android:elevation="0dp" />
 
+    <!-- Keeps rejected startup candidates (including provider error slates)
+         off-screen until the native renderer commits a real first frame. -->
+    <FrameLayout
+        android:id="@+id/android_tv_startup_gate"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:visibility="gone"
+        android:elevation="9dp"
+        android:clickable="true"
+        android:focusable="false">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:indeterminate="true"
+                android:indeterminateTint="#B3FFFFFF" />
+
+            <TextView
+                android:id="@+id/android_tv_startup_gate_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="center"
+                android:textColor="#99FFFFFF"
+                android:textSize="15sp" />
+        </LinearLayout>
+    </FrameLayout>
+
     <!-- Custom SubtitleView - Must be ABOVE video but BELOW controls -->
     <androidx.media3.ui.SubtitleView
         android:id="@+id/android_tv_subtitles_custom"

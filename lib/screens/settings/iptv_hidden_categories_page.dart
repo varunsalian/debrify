@@ -118,6 +118,10 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
   /// says so rather than showing an empty list that looks like "nothing is
   /// hidden".
   List<_CatalogTab> _availableCatalogs() {
+    // snapshot() throws on a closed database (profile switches close it
+    // without popping settings routes); an unopenable store reads the same
+    // as "nothing ingested".
+    if (!IptvCatalogDb.isOpen) return const [];
     const labels = {
       'live': 'Live TV',
       'vod': 'Movies',
@@ -146,7 +150,9 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
     }
     setState(() => _loading = true);
     final tab = _tabs[_selectedTab];
-    final snap = IptvCatalogDb.snapshot(tab.key);
+    final snap = IptvCatalogDb.isOpen
+        ? IptvCatalogDb.snapshot(tab.key)
+        : null;
     if (snap == null) {
       setState(() {
         _rows = const [];
@@ -203,10 +209,21 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
   bool get _canShowAll => _hiddenCount > 0;
   bool get _canHideAll => _rows.any((r) => !r.hidden && !r.stale);
 
+  // A hide/reveal that couldn't be written (database not open) must not flip
+  // the row on screen — that would show a rule that doesn't exist.
+  void _showWriteFailure() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Couldn\'t save — try again')),
+    );
+  }
+
   void _toggle(_CategoryRow row) {
     final tab = _tabs[_selectedTab];
     final revealing = row.hidden;
-    IptvCatalogDb.setGroupHidden(tab.key, row.name, !row.hidden);
+    if (!IptvCatalogDb.setGroupHidden(tab.key, row.name, !row.hidden)) {
+      _showWriteFailure();
+      return;
+    }
     final next = <_CategoryRow>[];
     for (final r in _rows) {
       if (r.name != row.name) {
@@ -233,7 +250,10 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
 
   Future<void> _showAll() async {
     final tab = _tabs[_selectedTab];
-    IptvCatalogDb.showAllGroups(tab.key);
+    if (!IptvCatalogDb.showAllGroups(tab.key)) {
+      _showWriteFailure();
+      return;
+    }
     // Reload rather than flip every row in place: the stale entries drop out
     // entirely, and only a re-read knows which those were.
     await _load();
@@ -249,7 +269,10 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
         if (!row.hidden && !row.stale) row.name,
     ];
     if (names.isEmpty) return;
-    IptvCatalogDb.hideGroups(tab.key, names);
+    if (!IptvCatalogDb.hideGroups(tab.key, names)) {
+      _showWriteFailure();
+      return;
+    }
     setState(() {
       _rows = [
         for (final row in _rows)

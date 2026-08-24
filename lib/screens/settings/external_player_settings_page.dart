@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -2310,9 +2309,9 @@ class _ExternalPlayerSettingsPageState
                           ],
 
                           // Only platforms whose bundled native player is
-                          // built with the required passive analysis filters.
-                          if (!kIsWeb &&
-                              (Platform.isAndroid || Platform.isMacOS)) ...[
+                          // built with the required passive analysis filters
+                          // (see PlatformUtil.supportsSubtitleAutoSync).
+                          if (PlatformUtil.supportsSubtitleAutoSync) ...[
                             const SizedBox(height: 4),
                             _buildCheckboxTile(
                               context,

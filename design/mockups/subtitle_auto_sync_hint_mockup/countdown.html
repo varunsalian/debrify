@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debrify — Auto Sync Countdown</title>
+  <style>
+    @property --seconds {
+      syntax: "<integer>";
+      initial-value: 90;
+      inherits: false;
+    }
+
+    :root {
+      color-scheme: dark;
+      --cyan: #7bdcff;
+      --green: #82e0ad;
+      --text: rgba(255, 255, 255, .92);
+      --muted: rgba(255, 255, 255, .52);
+      --line: rgba(255, 255, 255, .13);
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 82% 6%, rgba(108, 74, 172, .2), transparent 32rem),
+        #090a0e;
+      color: #f8f8fb;
+      font: 500 14px/1.4 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .shell {
+      width: min(1420px, 100%);
+      margin: 0 auto;
+      padding: 27px clamp(16px, 4vw, 58px) 48px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      color: var(--cyan);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 5px 0 3px;
+      font-size: clamp(25px, 3vw, 39px);
+      line-height: 1.08;
+      letter-spacing: -.035em;
+    }
+
+    .lede { margin: 0; color: var(--muted); }
+
+    .replay {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: rgba(255,255,255,.8);
+      background: rgba(255,255,255,.05);
+      text-decoration: none;
+      transition: background .2s, transform .2s;
+    }
+    .replay:hover { background: rgba(255,255,255,.09); }
+    .replay:active { transform: scale(.97); }
+
+    .player-frame {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      min-height: 430px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #050608;
+      isolation: isolate;
+      box-shadow: 0 28px 85px rgba(0,0,0,.44);
+    }
+
+    .scene {
+      position: absolute;
+      inset: -3%;
+      background:
+        linear-gradient(180deg, rgba(1,3,5,.08), rgba(1,3,5,.02) 55%, rgba(1,2,4,.63)),
+        radial-gradient(ellipse at 69% 36%, rgba(244, 179, 112, .62) 0 2%, transparent 18%),
+        linear-gradient(118deg, transparent 0 37%, rgba(112,171,189,.13) 38% 44%, transparent 45%),
+        radial-gradient(ellipse at 65% 50%, #435b63 0 6%, #18262c 25%, transparent 52%),
+        linear-gradient(145deg, #070b0f 10%, #13252b 48%, #050609 100%);
+      animation: camera-drift 15s ease-in-out infinite alternate;
+    }
+
+    .scene::before {
+      content: "";
+      position: absolute;
+      width: 31%;
+      height: 92%;
+      left: 15%;
+      top: 17%;
+      border-radius: 46% 46% 8% 8%;
+      background: linear-gradient(100deg, #080b0e 0 48%, #263b40 75%, #091014);
+      filter: blur(2px);
+      opacity: .84;
+      transform: rotate(-4deg);
+    }
+
+    .scene::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .14;
+      mix-blend-mode: screen;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+    }
+
+    @keyframes camera-drift { to { transform: scale(1.045) translate(-.6%, -.4%); } }
+
+    .top-fade, .bottom-fade { position: absolute; z-index: 2; left: 0; right: 0; pointer-events: none; }
+    .top-fade { top: 0; height: 23%; background: linear-gradient(rgba(2,3,5,.7), transparent); }
+    .bottom-fade { bottom: 0; height: 36%; background: linear-gradient(transparent, rgba(2,3,5,.82)); }
+
+    .player-title {
+      position: absolute;
+      z-index: 3;
+      top: clamp(20px, 3vw, 38px);
+      left: clamp(22px, 4vw, 52px);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      animation: chrome-fade 12s 1.3s both;
+    }
+    .arrow { font-size: 27px; font-weight: 300; }
+    .name { font-size: clamp(16px, 1.6vw, 21px); font-weight: 700; }
+    .meta { margin-top: 2px; color: rgba(255,255,255,.58); font-size: 11px; }
+
+    .subtitle {
+      position: absolute;
+      z-index: 4;
+      left: 50%;
+      bottom: 18%;
+      max-width: 76%;
+      transform: translateX(-50%);
+      padding: 3px 9px 5px;
+      border-radius: 4px;
+      color: white;
+      background: rgba(0,0,0,.62);
+      font-size: clamp(17px, 2vw, 28px);
+      font-weight: 650;
+      text-align: center;
+      white-space: nowrap;
+      text-shadow: 0 1px 2px black;
+    }
+
+    .controls {
+      position: absolute;
+      z-index: 3;
+      left: clamp(22px, 4vw, 52px);
+      right: clamp(22px, 4vw, 52px);
+      bottom: clamp(20px, 3vw, 38px);
+      animation: chrome-fade 12s 1.3s both;
+    }
+    @keyframes chrome-fade { 0%, 8% { opacity: 1; } 18%, 100% { opacity: .16; } }
+
+    .progress { height: 3px; border-radius: 3px; background: rgba(255,255,255,.22); }
+    .progress::before { content: ""; display: block; width: 41%; height: 100%; border-radius: inherit; background: rgba(255,255,255,.84); }
+    .control-row { display: flex; align-items: center; justify-content: space-between; padding-top: 13px; color: white; font-size: 17px; }
+    .icons { display: flex; align-items: center; gap: clamp(18px, 2.5vw, 30px); }
+    .cc { font-size: 10px; font-weight: 800; border: 1.5px solid currentColor; border-radius: 3px; padding: 0 2px; }
+
+    /* The proposed production surface: independent of player controls. */
+    .sync-pill {
+      --seconds: 90;
+      position: absolute;
+      z-index: 8;
+      right: clamp(12px, 2.2vw, 30px);
+      bottom: clamp(12px, 2.2vw, 30px);
+      display: grid;
+      grid-template-areas: "stack";
+      min-width: clamp(112px, 10.5vw, 132px);
+      height: clamp(27px, 2.6vw, 32px);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: 999px;
+      color: var(--text);
+      background: rgba(12,14,18,.66);
+      box-shadow: 0 7px 24px rgba(0,0,0,.24);
+      backdrop-filter: blur(14px) saturate(120%);
+      -webkit-backdrop-filter: blur(14px) saturate(120%);
+      animation: pill-life 12s var(--ease) both;
+    }
+
+    .syncing, .complete {
+      grid-area: stack;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 10px;
+    }
+
+    .syncing { animation: syncing-life 12s var(--ease) both; }
+    .complete { color: var(--green); opacity: 0; animation: done-life 12s var(--ease) both; }
+
+    .pulse {
+      width: 5px;
+      height: 5px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 0 0 rgba(123,220,255,.32);
+      animation: soft-pulse 1.8s ease-out infinite;
+    }
+
+    .sync-label {
+      font-size: clamp(8px, .72vw, 10px);
+      font-weight: 780;
+      letter-spacing: .095em;
+      white-space: nowrap;
+    }
+
+    .divider { width: 1px; height: 11px; background: rgba(255,255,255,.14); }
+
+    .count {
+      min-width: 18px;
+      color: rgba(255,255,255,.64);
+      font-size: clamp(9px, .78vw, 11px);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      animation: count-down 12s linear both;
+    }
+    .count::after { counter-reset: seconds var(--seconds); content: counter(seconds); }
+
+    .check {
+      position: relative;
+      width: 13px;
+      height: 13px;
+      border: 1.5px solid currentColor;
+      border-radius: 50%;
+    }
+    .check::after {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: 2px;
+      width: 5px;
+      height: 3px;
+      border-left: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg);
+    }
+
+    @keyframes count-down { from { --seconds: 90; } to { --seconds: 0; } }
+    @keyframes soft-pulse { 45% { box-shadow: 0 0 0 4px rgba(123,220,255,0); } 100% { box-shadow: 0 0 0 4px rgba(123,220,255,0); } }
+    @keyframes syncing-life { 0%, 59% { opacity: 1; transform: translateY(0); } 64%, 100% { opacity: 0; transform: translateY(-5px); } }
+    @keyframes done-life { 0%, 60% { opacity: 0; transform: translateY(5px); } 65%, 84% { opacity: 1; transform: translateY(0); } 93%, 100% { opacity: 0; } }
+    @keyframes pill-life {
+      0% { opacity: 0; transform: translateY(5px) scale(.98); }
+      4%, 84% { opacity: 1; transform: translateY(0) scale(1); border-color: rgba(255,255,255,.13); }
+      65%, 84% { border-color: rgba(130,224,173,.25); }
+      94%, 100% { opacity: 0; transform: translateY(2px) scale(.99); }
+    }
+
+    /* Lets a static renderer inspect the live state via #sync-preview. */
+    .sync-pill:target { opacity: 1; transform: none; animation: none; }
+    .sync-pill:target .syncing { opacity: 1; transform: none; animation: none; }
+    .sync-pill:target .complete { display: none; }
+    .sync-pill:target .count { --seconds: 90; animation: none; }
+    .sync-pill:has(.complete:target) { opacity: 1; transform: none; border-color: rgba(130,224,173,.25); animation: none; }
+    .sync-pill:has(.complete:target) .syncing { display: none; }
+    .sync-pill .complete:target { opacity: 1; transform: none; animation: none; }
+
+    .notes {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: 14px;
+      margin-top: 17px;
+    }
+    .card { padding: 17px 19px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.035); }
+    .card h2 { margin: 0 0 5px; font-size: 14px; }
+    .card p { margin: 0; color: var(--muted); font-size: 12px; }
+    .specs { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
+    .spec { padding: 7px 9px; border-radius: 8px; color: rgba(255,255,255,.62); background: rgba(255,255,255,.04); font-size: 10px; }
+    .spec strong { color: rgba(255,255,255,.9); }
+
+    @media (max-width: 720px) {
+      .shell { padding-inline: 12px; }
+      header { align-items: stretch; flex-direction: column; }
+      .replay { align-self: flex-start; }
+      .player-frame { min-height: 0; border-radius: 13px; }
+      .subtitle { bottom: 22%; max-width: 88%; font-size: clamp(11px, 3.5vw, 17px); }
+      .sync-pill { min-width: 94px; height: 24px; right: 9px; bottom: 9px; }
+      .syncing, .complete { gap: 5px; padding-inline: 7px; }
+      .sync-label { font-size: 7px; }
+      .count { font-size: 8px; min-width: 14px; }
+      .divider { height: 9px; }
+      .notes { grid-template-columns: 1fr; }
+    }
+
+    @media (min-width: 1500px) {
+      .sync-pill { min-width: 138px; height: 34px; }
+      .sync-label { font-size: 10px; }
+      .count { font-size: 11px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .scene, .pulse, .player-title, .controls { animation: none; }
+      .sync-pill { animation: pill-life 12s linear both; }
+      .syncing, .complete { animation-timing-function: steps(1); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">HTML / CSS interaction mock</div>
+        <h1>Auto-sync, in the quiet corner.</h1>
+        <p class="lede">A 90-second countdown that yields immediately to success. The demo completes early at about 35.</p>
+      </div>
+      <a class="replay" href="countdown.html" aria-label="Replay countdown">↻ <span>Replay animation</span></a>
+    </header>
+
+    <section class="player-frame" aria-label="Video player mockup">
+      <div class="scene"></div>
+      <div class="top-fade"></div>
+      <div class="bottom-fade"></div>
+
+      <div class="player-title">
+        <span class="arrow">‹</span>
+        <div><div class="name">Silo</div><div class="meta">S02 E04 · The Harmonium</div></div>
+      </div>
+
+      <div class="subtitle">We should leave before the generator comes back.</div>
+
+      <div class="controls" aria-hidden="true">
+        <div class="progress"></div>
+        <div class="control-row">
+          <div class="icons"><span>Ⅱ</span><span>↶</span><span>◖</span></div>
+          <div class="icons"><span class="cc">CC</span><span>⚙</span><span>⌗</span></div>
+        </div>
+      </div>
+
+      <div class="sync-pill" id="sync-preview" aria-label="Auto sync countdown">
+        <div class="syncing">
+          <span class="pulse"></span>
+          <span class="sync-label">AUTO SYNC</span>
+          <span class="divider"></span>
+          <span class="count" aria-hidden="true"></span>
+        </div>
+        <div class="complete" id="done-preview">
+          <span class="check"></span>
+          <span class="sync-label">AUTO SYNC&nbsp; DONE</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="notes">
+      <article class="card">
+        <h2>Behavior</h2>
+        <p>Begin at 90 when analysis starts. Count down quietly. If confidence arrives at any point, replace the timer with “Done” immediately, hold for roughly two seconds, then remove the pill.</p>
+        <div class="specs">
+          <span class="spec"><strong>Position:</strong> bottom-right safe area</span>
+          <span class="spec"><strong>Input:</strong> none / never focusable</span>
+          <span class="spec"><strong>Failure:</strong> reaches 0, then fades</span>
+        </div>
+      </article>
+      <article class="card">
+        <h2>Responsive footprint</h2>
+        <p>24px tall on phones, 27–32px on desktop, and 34px at TV scale. It remains one line everywhere and never enters the subtitle reading zone.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

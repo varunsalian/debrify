@@ -475,6 +475,17 @@ class TvTextFieldState extends State<TvTextField> {
               child: Center(
                 child: TvKeyboardPanel(
                   controller: _kb!,
+                  // The bottom-anchored panel can cover the very field it
+                  // edits; the preview keeps what's typed in sight. Only this
+                  // overlay path passes it — the onboarding slot's field band
+                  // is already visible directly above its keyboard.
+                  previewController: widget.controller,
+                  previewObscure: widget.obscureText,
+                  previewHint:
+                      widget.hintText ??
+                      widget.labelText ??
+                      widget.decoration?.hintText ??
+                      widget.decoration?.labelText,
                   // The panel's own defaults are these same literals, so a token
                   // left null lands on exactly what shipped either way.
                   accent: widget.accent,

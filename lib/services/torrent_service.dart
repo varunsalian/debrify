@@ -156,7 +156,8 @@ class TorrentService {
   ///   If provided for an engine, uses this instead of stored settings.
   ///
   /// Returns a map with:
-  /// - 'torrents': `List<Torrent>` - deduplicated and sorted by seeders
+  /// - 'torrents': `List<Torrent>` - deduplicated and sorted by seeders by
+  ///   default, or provider-returned order when [preserveSourceOrder] is true
   /// - 'engineCounts': `Map<String, int>` - count of results per engine
   /// - 'engineErrors': `Map<String, String>` - error messages per engine
   static Future<Map<String, dynamic>> searchAllEngines(
@@ -165,6 +166,7 @@ class TorrentService {
     String? imdbIdOverride,
     Map<String, int>? maxResultsOverrides,
     SearchBatchCallback? onBatch,
+    bool preserveSourceOrder = false,
   }) async {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
@@ -259,8 +261,10 @@ class TorrentService {
 
     final allResults = await Future.wait(futures);
 
-    // Deduplicate and sort
-    final torrents = _deduplicateAndSort(allResults);
+    final torrents = mergeSearchResults(
+      allResults,
+      preserveSourceOrder: preserveSourceOrder,
+    );
     await capability?.runIfCurrent(() async {});
 
     return {
@@ -297,6 +301,7 @@ class TorrentService {
     List<int>? availableSeasons,
     Duration? timeout,
     SearchBatchCallback? onBatch,
+    bool preserveSourceOrder = false,
   }) async {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
@@ -394,8 +399,10 @@ class TorrentService {
 
     final allResults = await Future.wait(futures);
 
-    // Deduplicate and sort
-    final torrents = _deduplicateAndSort(allResults);
+    final torrents = mergeSearchResults(
+      allResults,
+      preserveSourceOrder: preserveSourceOrder,
+    );
     await capability?.runIfCurrent(() async {});
 
     return {
@@ -437,6 +444,7 @@ class TorrentService {
     Duration? stremioTimeout,
     Duration? engineTimeout,
     SearchBatchCallback? onBatch,
+    bool preserveSourceOrder = false,
   }) async {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
@@ -462,6 +470,7 @@ class TorrentService {
           availableSeasons: availableSeasons,
           timeout: engineTimeout,
           onBatch: onBatch, // per-engine batches stream straight through
+          preserveSourceOrder: preserveSourceOrder,
         ),
       );
     }
@@ -477,6 +486,7 @@ class TorrentService {
           availableSeasons: availableSeasons,
           contentType: contentType,
           timeout: stremioTimeout,
+          preserveOrder: preserveSourceOrder,
         ).then((result) {
           // The addon side reports as one batch when it completes (it never
           // throws — errors come back as an empty result).
@@ -524,33 +534,37 @@ class TorrentService {
       combinedErrors.addAll(errors);
     }
 
-    // Log pre-deduplication counts
-    debugPrint('TorrentService: Pre-dedup counts: $combinedCounts');
+    // Log counts before the final merge/presentation-order handoff.
+    debugPrint('TorrentService: Pre-merge counts: $combinedCounts');
 
-    // Count total torrents before dedup
+    // Count total torrents before the final merge/presentation handoff.
     int totalPreDedup = 0;
     for (final list in allTorrentLists) {
       totalPreDedup += list.length;
     }
-    debugPrint('TorrentService: Total torrents before dedup: $totalPreDedup');
+    debugPrint('TorrentService: Total torrents before merge: $totalPreDedup');
 
-    // Deduplicate and sort all results together
-    final torrents = _deduplicateAndSort(allTorrentLists);
+    // Source-browser callers can keep each provider's returned sequence. The
+    // UI applies the user's provider priority and stable dedupe afterwards;
+    // normal playback callers retain the historic seeder-ranked merge.
+    final torrents = mergeSearchResults(
+      allTorrentLists,
+      preserveSourceOrder: preserveSourceOrder,
+    );
     await capability?.runIfCurrent(() async {});
 
-    debugPrint(
-      'TorrentService: Total torrents after dedup: ${torrents.length}',
-    );
+    debugPrint('TorrentService: Final torrent count: ${torrents.length}');
 
-    // Recalculate counts based on actual deduplicated results
-    // This ensures filter counts match what's actually available
+    // Recalculate counts from the returned result set so source controls match
+    // what is actually available (dedupe may intentionally happen in the UI
+    // for preserveSourceOrder callers).
     final Map<String, int> actualCounts = {};
     for (final torrent in torrents) {
       final source = torrent.source;
       actualCounts[source] = (actualCounts[source] ?? 0) + 1;
     }
 
-    debugPrint('TorrentService: Post-dedup counts by source: $actualCounts');
+    debugPrint('TorrentService: Final counts by source: $actualCounts');
 
     // Log the difference
     for (final key in combinedCounts.keys) {
@@ -943,13 +957,21 @@ class TorrentService {
     );
   }
 
-  /// Deduplicate torrent results by infohash and sort by seeders descending.
-  /// Public form of the search-result merge (dedupe by infohash keeping the
-  /// higher-seeded copy, sort seeders-desc) so streaming consumers can build
-  /// PROVISIONAL result sets from accumulated [SearchBatchCallback] batches
-  /// that match the awaited search's final merge exactly.
-  static List<Torrent> mergeSearchResults(List<List<Torrent>> batches) =>
-      _deduplicateAndSort(batches);
+  /// Merge search results for both provisional and awaited result sets.
+  ///
+  /// Normally deduplicates by infohash and sorts by seeders descending. With
+  /// [preserveSourceOrder], batches are concatenated unchanged so a Sources UI
+  /// can apply provider priority and stable dedupe without losing the order
+  /// returned by each provider.
+  static List<Torrent> mergeSearchResults(
+    List<List<Torrent>> batches, {
+    bool preserveSourceOrder = false,
+  }) {
+    if (preserveSourceOrder) {
+      return [for (final batch in batches) ...batch];
+    }
+    return _deduplicateAndSort(batches);
+  }
 
   /// Total order used for dedupe tie-breaks and sort tie-breaks, so the merge
   /// is deterministic and INDEPENDENT of batch arrival order — a streaming

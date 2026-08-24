@@ -52,6 +52,7 @@ import 'services/profiles/privacy_log.dart';
 import 'services/profiles/desktop_single_instance.dart';
 import 'models/profiles/profile_policy.dart';
 import 'models/profiles/user_profile.dart';
+import 'models/sidebar_configuration.dart';
 import 'services/secret_vault.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
@@ -553,6 +554,7 @@ Future<void> _continueApplicationStartup() async {
     await StorageService.getTvHomeStyle();
     await StorageService.getTvSidebarStyle();
     await StorageService.getDesktopSidebarStyle();
+    await StorageService.getSidebarConfiguration();
     // Debrify TV reads its mirror synchronously on first build; warmed here,
     // AFTER the migration, so frame one draws what generation 3 just wrote.
     await StorageService.getDebrifyTvStyle();
@@ -1228,6 +1230,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// Same load/reload path as the TV style above.
   String _desktopSidebarStyle = StorageService.desktopSidebarStyleCached;
 
+  /// Shared order and label overrides for living-room and wide-window rails.
+  /// Visibility remains owned by [_computeVisibleNavIndices].
+  SidebarConfiguration _sidebarConfiguration =
+      StorageService.sidebarConfigurationCached;
+
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =
   /// never customized.
@@ -1482,6 +1489,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
     MainPageBridge.desktopSidebarStyleChanged = () {
+      if (mounted) unawaited(_loadPhoneNavPrefs());
+    };
+    MainPageBridge.sidebarConfigurationChanged = () {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
     MainPageBridge.navPrefsChanged = () {
@@ -1787,6 +1797,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.reloadProfilePolicy = null;
     MainPageBridge.tvSidebarStyleChanged = null;
     MainPageBridge.desktopSidebarStyleChanged = null;
+    MainPageBridge.sidebarConfigurationChanged = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
@@ -2612,6 +2623,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final picks = await StorageService.getPhoneNavBarIndices();
     final tvSidebar = await StorageService.getTvSidebarStyle();
     final desktopSidebar = await StorageService.getDesktopSidebarStyle();
+    final sidebarConfiguration = await StorageService.getSidebarConfiguration();
     if (!mounted) return;
     MainPageBridge.phoneNavStyleCached = style;
     setState(() {
@@ -2619,6 +2631,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _phoneNavBarPicks = picks;
       _tvSidebarStyle = tvSidebar;
       _desktopSidebarStyle = desktopSidebar;
+      _sidebarConfiguration = sidebarConfiguration;
       _phoneNavLoaded = true;
     });
   }
@@ -3036,30 +3049,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
   }
 
-  /// Canonical sidebar section order. The visible-nav order interleaves
-  /// sections (e.g. Downloads sits between Home and Debrify TV), so the
-  /// desktop sidebar reorders by this rank — stable within a section — to
-  /// keep each group contiguous and its header shown once.
-  static const List<String> _navSectionOrder = [
-    'Main',
-    'Browse',
-    'Library',
-    'TV',
-    'Setup',
-  ];
-
-  /// [visibleIndices] reordered so entries are grouped by section, in
-  /// [_navSectionOrder], preserving original order within each section.
-  List<int> _sidebarOrderedIndices(List<int> visibleIndices) {
-    final ordered = [...visibleIndices];
-    ordered.sort((a, b) {
-      final ra = _navSectionOrder.indexOf(_navSectionForIndex(a));
-      final rb = _navSectionOrder.indexOf(_navSectionForIndex(b));
-      if (ra != rb) return ra.compareTo(rb);
-      return visibleIndices.indexOf(a).compareTo(visibleIndices.indexOf(b));
-    });
-    return ordered;
-  }
+  /// Apply the active profile's ranking only after visibility policy has
+  /// filtered the destinations. The default configuration is byte-for-byte
+  /// today's former grouped order.
+  List<int> _sidebarOrderedIndices(List<int> visibleIndices) =>
+      _sidebarConfiguration.orderVisibleTabs(visibleIndices);
 
   /// Resolve the widget for a nav index, routed through the tab-boundary
   /// factory: FROZEN destinations (see [AppSurfaces.tabs]) are wrapped in a
@@ -3594,7 +3588,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                   for (final index in tvIndices)
                                     TvNavItem(
                                       _icons[index],
-                                      _titles[index],
+                                      _sidebarConfiguration.labelForTab(
+                                        index,
+                                        _titles[index],
+                                      ),
                                       section: _navSectionForIndex(index),
                                     ),
                                 ],
@@ -3698,12 +3695,19 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     (Platform.isAndroid || Platform.isIOS) &&
                     !PlatformUtil.isTelevision &&
                     MediaQuery.of(context).size.shortestSide < 600;
-                final nonTvIndices = _sidebarOrderedIndices(visibleIndices)
-                    .where(
-                      (i) =>
-                          (isDesktopWide && !isPhone) || i != _kSearchTabIndex,
-                    )
-                    .toList();
+                // Profile sidebar customization stops at the wide-layout
+                // boundary. Phone navigation keeps its canonical order and
+                // its separate classic-bar picks.
+                final nonTvIndices =
+                    (isDesktopWide
+                            ? _sidebarOrderedIndices(visibleIndices)
+                            : visibleIndices)
+                        .where(
+                          (i) =>
+                              (isDesktopWide && !isPhone) ||
+                              i != _kSearchTabIndex,
+                        )
+                        .toList();
                 final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
                 // Touch tablets (iPad / Android tablet in landscape) get the
                 // wider rail. True desktop keeps the slim rail.
@@ -3844,7 +3848,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               for (final index in nonTvIndices)
                                 DesktopNavEntry(
                                   _icons[index],
-                                  _titles[index],
+                                  _sidebarConfiguration.labelForTab(
+                                    index,
+                                    _titles[index],
+                                  ),
                                   _navSectionForIndex(index),
                                 ),
                             ],
@@ -3872,7 +3879,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                               for (final index in nonTvIndices)
                                 DesktopNavEntry(
                                   _icons[index],
-                                  _titles[index],
+                                  _sidebarConfiguration.labelForTab(
+                                    index,
+                                    _titles[index],
+                                  ),
                                   _navSectionForIndex(index),
                                 ),
                             ],

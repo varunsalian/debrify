@@ -257,6 +257,18 @@ class VideoPlayerLaunchArgs {
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
   final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+
+  /// Startup failover is an automatic Quick Play behavior. Explicit source
+  /// launches still validate their selected row, but must never advance.
+  final bool startupFailoverEnabled;
+
+  /// Provider used by the startup playlist resolver. PikPak needs this so the
+  /// automatic ladder cannot enqueue more than one cold-storage acquisition.
+  final String? startupResolverProvider;
+
+  /// Persist a source switch only after the player has validated and committed
+  /// the candidate. Resolution alone is deliberately side-effect free.
+  final Future<void> Function(Torrent)? onStremioSourceCommitted;
   // Series source tabs: on-demand "Load more sources" fetcher for the
   // pack/episode split. Non-null only for series plays with a searchable id.
   final SeriesSourceFetcher? seriesSourceFetcher;
@@ -348,6 +360,9 @@ class VideoPlayerLaunchArgs {
     this.stremioCurrentSourceIndex,
     this.resolveStremioSource,
     this.resolveSourceToPlaylist,
+    this.startupFailoverEnabled = false,
+    this.startupResolverProvider,
+    this.onStremioSourceCommitted,
     this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
@@ -430,6 +445,9 @@ class VideoPlayerLaunchArgs {
     stremioCurrentSourceIndex: stremioCurrentSourceIndex,
     resolveStremioSource: resolveStremioSource,
     resolveSourceToPlaylist: resolveSourceToPlaylist,
+    startupFailoverEnabled: startupFailoverEnabled,
+    startupResolverProvider: startupResolverProvider,
+    onStremioSourceCommitted: onStremioSourceCommitted,
     seriesSourceFetcher: seriesSourceFetcher,
     stremioTvChannels: stremioTvChannels,
     stremioTvCurrentChannelId: stremioTvCurrentChannelId,
@@ -499,6 +517,9 @@ class VideoPlayerLaunchArgs {
       stremioCurrentSourceIndex: stremioCurrentSourceIndex,
       resolveStremioSource: resolveStremioSource,
       resolveSourceToPlaylist: resolveSourceToPlaylist,
+      startupFailoverEnabled: startupFailoverEnabled,
+      startupResolverProvider: startupResolverProvider,
+      onStremioSourceCommitted: onStremioSourceCommitted,
       seriesSourceFetcher: seriesSourceFetcher,
       stremioTvChannels: stremioTvChannels,
       stremioTvCurrentChannelId: stremioTvCurrentChannelId,
@@ -730,6 +751,9 @@ class VideoPlayerLauncher {
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
           resolveStremioSource: args.resolveStremioSource,
           resolveSourceToPlaylist: args.resolveSourceToPlaylist,
+          startupFailoverEnabled: args.startupFailoverEnabled,
+          startupResolverProvider: args.startupResolverProvider,
+          onStremioSourceCommitted: args.onStremioSourceCommitted,
           seriesSourceFetcher: args.seriesSourceFetcher,
           stremioTvChannels: args.stremioTvChannels,
           stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
@@ -823,6 +847,9 @@ class VideoPlayerLauncher {
           stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
           resolveStremioSource: args.resolveStremioSource,
           resolveSourceToPlaylist: args.resolveSourceToPlaylist,
+          startupFailoverEnabled: args.startupFailoverEnabled,
+          startupResolverProvider: args.startupResolverProvider,
+          onStremioSourceCommitted: args.onStremioSourceCommitted,
           seriesSourceFetcher: args.seriesSourceFetcher,
           stremioTvChannels: args.stremioTvChannels,
           stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
@@ -1001,6 +1028,7 @@ class VideoPlayerLauncher {
         },
       );
       if (launched) {
+        await _commitExternalLaunchSource(args);
         unawaited(
           _seedTrackerContinueWatching(
             args,
@@ -1019,6 +1047,7 @@ class VideoPlayerLauncher {
         Platform.isAndroid) {
       final launched = await _launchWithDeoVR(context, args);
       if (launched) {
+        await _commitExternalLaunchSource(args);
         unawaited(_seedTrackerContinueWatching(args));
         handoffWhenCovered();
         if (!isTrailer) _notifyOnReturnFromExternalActivity();
@@ -1060,6 +1089,29 @@ class VideoPlayerLauncher {
         result['quickPlayNext'] == true &&
         onQuickPlayNextEpisode != null) {
       await onQuickPlayNextEpisode(result);
+    }
+  }
+
+  /// External players have no decoder callback into Debrify, so a successful
+  /// OS/app handoff is their commit boundary. Keep this separate from Android
+  /// TV, whose native player reports its validated source after first frame.
+  static Future<void> _commitExternalLaunchSource(
+    VideoPlayerLaunchArgs args,
+  ) async {
+    final sources = args.stremioSources;
+    final commit = args.onStremioSourceCommitted;
+    if (sources == null || sources.isEmpty || commit == null) return;
+    final index = (args.stremioCurrentSourceIndex ?? 0).clamp(
+      0,
+      sources.length - 1,
+    );
+    try {
+      await commit(sources[index]);
+    } catch (error) {
+      debugPrint(
+        'VideoPlayerLauncher: external source commit failed '
+        '(${error.runtimeType})',
+      );
     }
   }
 
@@ -2275,6 +2327,17 @@ class VideoPlayerLauncher {
         };
       }
 
+      final sourceCommit = args.onStremioSourceCommitted;
+      Future<void> Function(int)? sourceCommitterForTv;
+      if (sourceCommit != null) {
+        sourceCommitterForTv = (int sourceIndex) async {
+          if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
+            return;
+          }
+          await sourceCommit(currentStremioSources[sourceIndex]);
+        };
+      }
+
       // "Load more sources" for the series source tabs: run the missing
       // category's search (packs/episodes), APPEND the deduped results onto
       // the mutable sources holder — never re-order; the native side and the
@@ -2840,6 +2903,7 @@ class VideoPlayerLauncher {
             : null,
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
+        onCommitStremioSource: sourceCommitterForTv,
         onRequestMoreSources: moreSourcesProviderForTv,
         onRequestAddonSources: addonSourcesProviderForTv,
         onRequestEpisodeFetch: episodeFetchProviderForTv,
@@ -4284,6 +4348,9 @@ class _AndroidTvPlaybackPayload {
   final List<Map<String, dynamic>>? stremioSources;
   final int? stremioCurrentSourceIndex;
   final bool hasPlaylistResolver;
+  final bool startupTryNextOnFailure;
+  final int startupMaxAttempts;
+  final String? startupResolverProvider;
   final bool traktScrobble;
   final double? traktProgressPercent;
   // Simkl parallel pair. Only the scrobble flag matters Dart-side (the
@@ -4327,6 +4394,9 @@ class _AndroidTvPlaybackPayload {
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.hasPlaylistResolver = false,
+    this.startupTryNextOnFailure = false,
+    this.startupMaxAttempts = 1,
+    this.startupResolverProvider,
     this.traktScrobble = false,
     this.traktProgressPercent,
     this.simklScrobble = false,
@@ -4382,6 +4452,12 @@ class _AndroidTvPlaybackPayload {
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
       if (hasPlaylistResolver) 'hasPlaylistResolver': true,
+      if (stremioSources != null && stremioSources!.isNotEmpty) ...{
+        'startupTryNextOnFailure': startupTryNextOnFailure,
+        'startupMaxAttempts': startupMaxAttempts.clamp(1, 10),
+        if (startupResolverProvider != null)
+          'startupResolverProvider': startupResolverProvider,
+      },
       // Keyed 'traktProgressPercent' for the native side's existing resume
       // input, but carries the furthest of the Trakt/Simkl launch percents.
       if (_effectiveLaunchPercent != null)
@@ -4683,6 +4759,12 @@ class _AndroidTvPlaybackPayloadBuilder {
     final playlistEntries = _normalizePlaylist();
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
+    final startupRules =
+        args.startupFailoverEnabled && args.stremioSources?.isNotEmpty == true
+        ? await StorageService.getQuickPlayRules(
+            isMovie: contentType != _PlaybackContentType.series,
+          )
+        : null;
     final localCompletionTracking =
         !args.traktScrobble &&
         !args.simklScrobble &&
@@ -4942,6 +5024,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
       stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
       hasPlaylistResolver: args.resolveSourceToPlaylist != null,
+      startupTryNextOnFailure: startupRules?.tryNextOnFailure ?? false,
+      startupMaxAttempts: startupRules?.maxAttempts ?? 1,
+      startupResolverProvider: args.startupResolverProvider,
       traktScrobble: args.traktScrobble,
       traktProgressPercent: args.traktProgressPercent,
       simklScrobble: args.simklScrobble,
@@ -4952,6 +5037,15 @@ class _AndroidTvPlaybackPayloadBuilder {
       movieCompletionThreshold: completionThresholds[0],
       episodeCompletionThreshold: completionThresholds[1],
       initialSubtitles: args.initialSubtitles,
+    );
+
+    debugPrint(
+      '[StartupFailover] event=native_payload platform=flutter '
+      'contentType=${contentType.name} sourceCount=${args.stremioSources?.length ?? 0} '
+      'selectedIndex=${args.stremioCurrentSourceIndex ?? 0} '
+      'tryNext=${startupRules?.tryNextOnFailure ?? false} '
+      'maxAttempts=${startupRules?.maxAttempts ?? 1} '
+      'playlistResolver=${args.resolveSourceToPlaylist != null}',
     );
 
     return _AndroidTvPlaybackPayloadResult(

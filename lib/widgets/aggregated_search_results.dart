@@ -1167,6 +1167,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       case SeriesSource.localService:
         serviceColor = const Color(0xFF60A5FA);
         serviceLabel = 'Local';
+      case SeriesSource.addonDirectService:
+        serviceColor = const Color(0xFFA78BFA);
+        serviceLabel = 'Direct addon';
       default:
         serviceColor = Colors.white54;
         serviceLabel = source.debridService;

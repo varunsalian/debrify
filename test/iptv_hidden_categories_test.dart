@@ -222,9 +222,20 @@ void main() {
   });
 
   test('an empty category name is not storable as a rule', () {
-    IptvCatalogDb.setGroupHidden(key, '', true);
+    expect(IptvCatalogDb.setGroupHidden(key, '', true), isFalse);
     expect(IptvCatalogDb.hiddenGroups(key), isEmpty);
     expect(IptvCatalogDb.snapshot(key)!.count(), 6);
+  });
+
+  test('writes report success when saved and failure when the db is closed', () {
+    expect(IptvCatalogDb.setGroupHidden(key, 'Adult', true), isTrue);
+    expect(IptvCatalogDb.hideGroups(key, const ['News']), isTrue);
+    expect(IptvCatalogDb.showAllGroups(key), isTrue);
+
+    IptvCatalogDb.debugClose();
+    expect(IptvCatalogDb.setGroupHidden(key, 'Adult', true), isFalse);
+    expect(IptvCatalogDb.hideGroups(key, const ['News']), isFalse);
+    expect(IptvCatalogDb.showAllGroups(key), isFalse);
   });
 
   testWidgets('TV DPAD reveals category rows past the initial viewport', (

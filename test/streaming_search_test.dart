@@ -24,6 +24,19 @@ Torrent t(String name, {String? hash, int seeders = 0}) => Torrent(
   scrapedDate: 0,
 );
 
+Torrent addon(String name, {String? hash, int seeders = 0}) => Torrent(
+  rowid: 0,
+  infohash: hash ?? name.hashCode.toRadixString(16).padLeft(40, '0'),
+  name: name,
+  sizeBytes: 0,
+  createdUnix: 0,
+  seeders: seeders,
+  leechers: 0,
+  completed: 0,
+  scrapedDate: 0,
+  source: 'stremio:AIOStreams',
+);
+
 List<String> loadCorpus() {
   final raw =
       jsonDecode(File('test/fixtures/release_names.json').readAsStringSync())
@@ -136,5 +149,18 @@ void main() {
     final snapshot = List.of(a);
     TorrentService.mergeSearchResults([a]);
     expect(a, snapshot);
+  });
+
+  test('Sources merge keeps every provider batch in returned order', () {
+    final merged = TorrentService.mergeSearchResults([
+      [t('engine result', seeders: 10)],
+      [addon('addon first', seeders: 1), addon('addon second', seeders: 50)],
+    ], preserveSourceOrder: true);
+
+    expect(merged.map((x) => x.name), [
+      'engine result',
+      'addon first',
+      'addon second',
+    ]);
   });
 }

@@ -249,6 +249,10 @@ class SpotlightBoard extends StatefulWidget {
   /// stay a TV.
   final bool dpad;
 
+  /// Home-card presentation preference. When false, cards keep their artwork,
+  /// context metadata and playback state but omit title and rating text.
+  final bool showCardTitlesAndRatings;
+
   const SpotlightBoard({
     super.key,
     required this.hero,
@@ -264,6 +268,7 @@ class SpotlightBoard extends StatefulWidget {
     this.trailersEnabled = true,
     this.onAmbient,
     this.dpad = true,
+    this.showCardTitlesAndRatings = true,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -1984,10 +1989,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // Continue Watching's season/episode label while landscape shows both.
     final hasCardMetadata = section.items.any(
       (item) =>
-          (item.subtitle ?? '').isNotEmpty || (item.rating ?? 0) > 0,
+          (item.subtitle ?? '').isNotEmpty ||
+          (widget.showCardTitlesAndRatings && (item.rating ?? 0) > 0),
     );
-    final captions =
-        widget.dpad || section.captions || (m.compact && hasCardMetadata);
+    final hasVisibleCaptionContent =
+        widget.showCardTitlesAndRatings || hasCardMetadata;
+    final captions = hasVisibleCaptionContent &&
+        (widget.dpad || section.captions || (m.compact && hasCardMetadata));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -2050,6 +2058,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 captionBelow: m.compact && captions,
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions,
+                showTitleAndRating: widget.showCardTitlesAndRatings,
                 hoverable: !widget.dpad,
                 dpad: widget.dpad,
                 onDesktopPreviewActivityChanged:
@@ -2276,6 +2285,10 @@ class _Card extends StatefulWidget {
   /// progress bar is independent of this and always paints.
   final bool showCaption;
 
+  /// False suppresses only title/rating text. Subtitles such as episode
+  /// context remain available when a shelf has useful card metadata.
+  final bool showTitleAndRating;
+
   /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
   /// trackpad delivers pointer events (see main.dart), and a hover lift
   /// independent of DPAD focus would put two cursors on a board that had
@@ -2302,6 +2315,7 @@ class _Card extends StatefulWidget {
     this.captionBelow = false,
     this.captionBlock = 0,
     this.showCaption = true,
+    this.showTitleAndRating = true,
     this.hoverable = false,
     this.dpad = true,
     this.onDesktopPreviewActivityChanged,
@@ -2382,9 +2396,12 @@ class _CardState extends State<_Card> {
     // whatever it carries, so the caption bed math stays two-state.
     final metaLine = [
       if ((c.subtitle ?? '').isNotEmpty) c.subtitle!,
-      if ((c.rating ?? 0) > 0) '★ ${c.rating!.toStringAsFixed(1)}',
+      if (widget.showTitleAndRating && (c.rating ?? 0) > 0)
+        '★ ${c.rating!.toStringAsFixed(1)}',
     ].join(' · ');
+    final hasTitle = widget.showTitleAndRating && c.title.isNotEmpty;
     final hasSubtitle = metaLine.isNotEmpty;
+    final hasCaptionContent = hasTitle || hasSubtitle;
     final preview = c.previewBuilder;
     // Exactly one card owns the decoder: desktop follows the pointer, TV
     // follows the remote cursor. The preview is unmounted immediately when it
@@ -2396,9 +2413,10 @@ class _CardState extends State<_Card> {
     // whole poster as that poster grows. Only the glyph layer is counter-
     // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
     // vertical padding around those lines.
-    final captionBedHeight = 33 +
-        widget.caption * 1.2 *
-            (hasSubtitle ? 1 + 0.85 : 1);
+    final captionLineHeight = widget.caption * 1.2;
+    final captionBedHeight = 33.0 +
+        (hasTitle ? captionLineHeight : 0) +
+        (hasSubtitle ? captionLineHeight * 0.85 : 0);
 
     // Apple platforms map this Flutter family token to SF Pro Text. Android
     // TV keeps Debrify's Inter face, but shares the same optical treatment.
@@ -2406,49 +2424,51 @@ class _CardState extends State<_Card> {
     // it stays attached to the physical card without scaling its small glyphs
     // or letting the travelling glare wash through them.
     final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
-    final overlayCaption = widget.captionBelow || !widget.showCaption
-        ? null
-        : IgnorePointer(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                width: double.infinity,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        c.title,
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: tvCaptionFamily,
-                          fontSize: widget.caption,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.96),
-                        ),
+    final overlayCaption =
+        widget.captionBelow || !widget.showCaption || !hasCaptionContent
+            ? null
+            : IgnorePointer(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasTitle)
+                            Text(
+                              c.title,
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: tvCaptionFamily,
+                                fontSize: widget.caption,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.96),
+                              ),
+                            ),
+                          if (hasSubtitle)
+                            Text(
+                              metaLine,
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: tvCaptionFamily,
+                                fontSize: widget.caption * 0.85,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withValues(alpha: 0.72),
+                              ),
+                            ),
+                        ],
                       ),
-                      if (hasSubtitle)
-                        Text(
-                          metaLine,
-                          maxLines: 1,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: tvCaptionFamily,
-                            fontSize: widget.caption * 0.85,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withValues(alpha: 0.72),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
+              );
 
     final art = ParallaxFocus(
       focused: _f || _h,
@@ -2539,7 +2559,7 @@ class _CardState extends State<_Card> {
               // poster's full width and remain inside its rounded clip. The
               // text itself is the fixed-scale foreground above. No caption,
               // no bed — a gradient under nothing just dims the art.
-              if (!widget.captionBelow && widget.showCaption)
+              if (!widget.captionBelow && overlayCaption != null)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -2616,17 +2636,18 @@ class _CardState extends State<_Card> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          c.title,
-                          maxLines: 1,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: widget.caption,
-                            height: 1.15,
-                            color: app.core.tx.withValues(alpha: 0.72),
+                        if (hasTitle)
+                          Text(
+                            c.title,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: widget.caption,
+                              height: 1.15,
+                              color: app.core.tx.withValues(alpha: 0.72),
+                            ),
                           ),
-                        ),
                         if (hasSubtitle)
                           Text(
                             metaLine,

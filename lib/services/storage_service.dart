@@ -19,6 +19,7 @@ import 'secret_vault.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/quick_play_rules.dart';
+import '../models/sidebar_configuration.dart';
 import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
@@ -279,6 +280,10 @@ class StorageService {
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
+  static const String _homeHideCardTitlesAndRatingsKey =
+      'home_hide_card_titles_and_ratings';
+  static const String _homeHideCatalogAddonNamesKey =
+      'home_hide_catalog_addon_names';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -1658,6 +1663,48 @@ class StorageService {
     final normalized = _desktopSidebarStyles.contains(style) ? style : 'rail';
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_desktopSidebarStyleKey, normalized);
+  }
+
+  static const String _sidebarConfigurationKey = 'sidebar_configuration_v1';
+
+  /// Profile-scoped order and label overrides shared by the Android TV and
+  /// desktop/tablet sidebars. The cached mirror is warmed before runApp so a
+  /// customized profile never flashes the default order on frame one.
+  static SidebarConfiguration sidebarConfigurationCached =
+      SidebarConfiguration.defaults();
+
+  static Future<SidebarConfiguration> getSidebarConfiguration() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_sidebarConfigurationKey);
+    return sidebarConfigurationCached =
+        (raw == null ? null : SidebarConfiguration.tryDecode(raw)) ??
+        SidebarConfiguration.defaults();
+  }
+
+  static Future<bool> setSidebarConfiguration(
+    SidebarConfiguration configuration,
+  ) async {
+    final normalized = SidebarConfiguration(
+      order: configuration.order,
+      labels: configuration.labels,
+    );
+    final prefs = await ProfilePreferences.instance();
+    final saved = await prefs.setString(
+      _sidebarConfigurationKey,
+      normalized.encode(),
+    );
+    if (saved) sidebarConfigurationCached = normalized;
+    return saved;
+  }
+
+  static Future<bool> resetSidebarConfiguration() async {
+    final prefs = await ProfilePreferences.instance();
+    final removed = await prefs.remove(_sidebarConfigurationKey);
+    if (removed || !prefs.containsKey(_sidebarConfigurationKey)) {
+      sidebarConfigurationCached = SidebarConfiguration.defaults();
+      return true;
+    }
+    return false;
   }
 
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
@@ -5598,6 +5645,31 @@ class StorageService {
     await prefs.setString(_homeCardOrientationKey, orientation.name);
   }
 
+  /// Keeps Home artwork clean by suppressing the title and rating painted on
+  /// content cards. Row headings, hero identity, progress and context metadata
+  /// are separate presentation and remain visible.
+  static Future<bool> getHomeHideCardTitlesAndRatings() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeHideCardTitlesAndRatingsKey) ?? false;
+  }
+
+  static Future<void> setHomeHideCardTitlesAndRatings(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeHideCardTitlesAndRatingsKey, value);
+  }
+
+  /// Suppresses the source/add-on pill beside Home catalog row headings.
+  /// The catalog title itself remains visible so the row keeps its identity.
+  static Future<bool> getHomeHideCatalogAddonNames() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeHideCatalogAddonNamesKey) ?? false;
+  }
+
+  static Future<void> setHomeHideCatalogAddonNames(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeHideCatalogAddonNamesKey, value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -5608,6 +5680,8 @@ class StorageService {
     await prefs.remove(_homeCwHoldToQuickPlayKey);
     await prefs.remove(_homeFavoritesOpenFolderKey);
     await prefs.remove(_homeCardOrientationKey);
+    await prefs.remove(_homeHideCardTitlesAndRatingsKey);
+    await prefs.remove(_homeHideCatalogAddonNamesKey);
   }
 
   // Reddit Settings
@@ -8043,10 +8117,11 @@ class StorageService {
 
   /// Whether native players silently align addon subtitles to the audio as
   /// playback runs. Android TV reads the same profile preference natively;
-  /// MediaKit reads it in Dart and attaches its passive analysis filter only
-  /// while an addon subtitle is active. OFF by default on both engines —
-  /// experimental opt-in. The default must stay in lock-step with the native
-  /// read in AndroidTvTorrentPlayerActivity.isAutoSyncPrefEnabled.
+  /// MediaKit reads it in Dart (Android, macOS, Linux, tvOS — platforms whose
+  /// bundled libmpv carries the analysis filters) and attaches its passive
+  /// filter only while an addon subtitle is active. OFF by default on both
+  /// engines — experimental opt-in. The default must stay in lock-step with
+  /// the native read in AndroidTvTorrentPlayerActivity.isAutoSyncPrefEnabled.
   static Future<bool> getSubtitleAutoSyncEnabled() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_subtitleAutoSyncKey) ?? false;
@@ -9204,6 +9279,7 @@ class StorageService {
     launchIdentPaletteCached = 'ident';
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';
+    sidebarConfigurationCached = SidebarConfiguration.defaults();
     playerStartPortraitCached = false;
     uiSoundsCached = true;
     uiHapticsCached = true;

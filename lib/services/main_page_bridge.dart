@@ -109,6 +109,11 @@ class MainPageBridge {
   /// (`desktop_sidebar_style`): the shell re-reads the pref and swaps the
   /// fixed rail for the pill (or back) live. Set by main.dart.
   static VoidCallback? desktopSidebarStyleChanged;
+
+  /// Fired after the active profile's shared TV/desktop sidebar order or
+  /// labels change. MainPage re-reads the atomic configuration and rebuilds
+  /// both sidebar variants without disturbing routing or visibility policy.
+  static VoidCallback? sidebarConfigurationChanged;
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;
