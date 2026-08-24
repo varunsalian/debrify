@@ -9,6 +9,7 @@ import '../../services/source_priority.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tv_keys.dart';
 import '../../utils/tv_reveal.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -194,19 +195,31 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   KeyEventResult _rowKey(int index, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
-    final picked = _pickedKey != null && _pickedKey == _ordered[index].key;
+    // Moves resolve the picked row against the CURRENT order, not this
+    // handler's build-time [index]: a buffered second press (DPAD repeat on a
+    // janky TV frame) can arrive before the rebuild swaps the row's closure.
+    final pickedIndex = _pickedKey == null
+        ? -1
+        : _ordered.indexWhere((p) => p.key == _pickedKey);
+    final picked = pickedIndex >= 0;
 
-    if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
-      setState(() => _pickedKey = picked ? null : _ordered[index].key);
+    if (isActivateOrSpaceKey(key)) {
+      setState(
+        () => _pickedKey = _pickedKey == _ordered[index].key
+            ? null
+            : _ordered[index].key,
+      );
       return KeyEventResult.handled;
     }
     if (!picked) return KeyEventResult.ignored;
     if (key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown) {
-      final to = key == LogicalKeyboardKey.arrowUp ? index - 1 : index + 1;
+      final to = key == LogicalKeyboardKey.arrowUp
+          ? pickedIndex - 1
+          : pickedIndex + 1;
       if (to >= 0 && to < _ordered.length) {
-        final movedKey = _ordered[index].key;
-        _moveRow(index, to);
+        final movedKey = _ordered[pickedIndex].key;
+        _moveRow(pickedIndex, to);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final node = _rowNodes[movedKey];
           if (node != null && mounted) {
@@ -224,6 +237,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       setState(() => _pickedKey = null);
       return KeyEventResult.handled;
     }
+    // A picked row owns the DPAD entirely: RIGHT must not let traversal
+    // wander off with the pick still latched.
+    if (key == LogicalKeyboardKey.arrowRight) return KeyEventResult.handled;
     return KeyEventResult.ignored;
   }
 
@@ -407,6 +423,18 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         ),
       );
     }
+    // TV: a plain Column. A nested scrollable — even shrinkwrapped and
+    // NeverScrollable — hides its children from DIRECTIONAL focus traversal,
+    // so DPAD DOWN skipped this whole list and landed on "Restore defaults".
+    // TV never drag-reorders anyway; the rows' pick-up/drop grammar covers it.
+    if (PlatformUtil.isTelevision) {
+      return _Panel(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [for (var i = 0; i < _ordered.length; i++) _rowAt(i)],
+        ),
+      );
+    }
     return _Panel(
       child: ReorderableListView.builder(
         shrinkWrap: true,
@@ -414,27 +442,27 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         buildDefaultDragHandles: false,
         itemCount: _ordered.length,
         onReorderItem: _moveRow,
-        itemBuilder: (context, i) {
-          final p = _ordered[i];
-          return _PriorityRow(
-            key: ValueKey('quick-play-priority-${p.key}'),
-            node: _nodeFor(p.key),
-            index: i,
-            provider: p,
-            picked: _pickedKey == p.key,
-            isFirst: i == 0,
-            isLast: i == _ordered.length - 1,
-            showDivider: i < _ordered.length - 1,
-            onKey: (event) => _rowKey(i, event),
-            onTap: () =>
-                setState(() => _pickedKey = _pickedKey == p.key ? null : p.key),
-            onMoveUp: i > 0 ? () => _moveRow(i, i - 1) : null,
-            onMoveDown: i < _ordered.length - 1
-                ? () => _moveRow(i, i + 1)
-                : null,
-          );
-        },
+        itemBuilder: (context, i) => _rowAt(i),
       ),
+    );
+  }
+
+  Widget _rowAt(int i) {
+    final p = _ordered[i];
+    return _PriorityRow(
+      key: ValueKey('quick-play-priority-${p.key}'),
+      node: _nodeFor(p.key),
+      index: i,
+      provider: p,
+      picked: _pickedKey == p.key,
+      isFirst: i == 0,
+      isLast: i == _ordered.length - 1,
+      showDivider: i < _ordered.length - 1,
+      onKey: (event) => _rowKey(i, event),
+      onTap: () =>
+          setState(() => _pickedKey = _pickedKey == p.key ? null : p.key),
+      onMoveUp: i > 0 ? () => _moveRow(i, i - 1) : null,
+      onMoveDown: i < _ordered.length - 1 ? () => _moveRow(i, i + 1) : null,
     );
   }
 }
@@ -489,9 +517,19 @@ class _PriorityRowState extends State<_PriorityRow> {
       children: [
         Focus(
           focusNode: widget.node,
-          onFocusChange: (_) => setState(() {}),
+          onFocusChange: (hasFocus) {
+            // Gain only — the loss half of a loss→gain pair would reveal the
+            // row being LEFT and fight the new row's own reveal.
+            if (hasFocus && PlatformUtil.isTelevision) {
+              tvRevealMinimal(context);
+            }
+            setState(() {});
+          },
           onKeyEvent: (node, event) => widget.onKey(event),
+          // The outer Focus node is the row's ONE focus stop; the InkWell
+          // taking its own focus would make every row two DPAD presses.
           child: InkWell(
+            canRequestFocus: false,
             onTap: widget.onTap,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
@@ -553,24 +591,29 @@ class _PriorityRowState extends State<_PriorityRow> {
                         ),
                       ),
                     ),
-                  IconButton(
-                    onPressed: widget.onMoveUp,
-                    tooltip: 'Move up',
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      color: widget.onMoveUp == null ? t.line : t.dim,
+                  // Touch/desktop only: on TV these would be two extra DPAD
+                  // stops per row that fight the pick-up/drop grammar (the
+                  // row itself is the only focus target there).
+                  if (!PlatformUtil.isTelevision) ...[
+                    IconButton(
+                      onPressed: widget.onMoveUp,
+                      tooltip: 'Move up',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        color: widget.onMoveUp == null ? t.line : t.dim,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: widget.onMoveDown,
-                    tooltip: 'Move down',
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: widget.onMoveDown == null ? t.line : t.dim,
+                    IconButton(
+                      onPressed: widget.onMoveDown,
+                      tooltip: 'Move down',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: widget.onMoveDown == null ? t.line : t.dim,
+                      ),
                     ),
-                  ),
+                  ],
                   if (!PlatformUtil.isTelevision)
                     ReorderableDragStartListener(
                       index: widget.index,
