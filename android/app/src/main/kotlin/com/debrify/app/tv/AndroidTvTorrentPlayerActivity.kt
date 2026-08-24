@@ -1010,6 +1010,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var startupFailoverDispatching = false
     private var startupTryNextOnFailure = false
     private var startupMaxAttempts = 1
+    private var startupResolverProvider: String? = null
+    private var startupPikPakTorrentAcquisitionAttempted = false
     // An explicit in-player source pick is a one-candidate transaction. It
     // shares the startup decoder/slate checks, but never advances to another
     // row and never exposes candidate progress to Flutter scrobbling.
@@ -1018,6 +1020,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var manualSourceSwitchTimeout: Runnable? = null
     private var manualSourceCommitCheck: Runnable? = null
     private var manualSourceFirstFrameAtElapsedMs = 0L
+    private var manualSourceCandidateStartedElapsedMs = 0L
+    private var pikPakGateReprepare: Runnable? = null
     private var manualSourceMediaReplaced = false
     private var manualSourceCandidateUrl: String? = null
     private var manualSourceRestoreInProgress = false
@@ -1589,7 +1593,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             if (!isIptvMode && manualSourceSwitchSnapshot != null) {
                 if (player?.playerError != null) {
-                    failManualSourceCandidate("player:${error.errorCodeName}")
+                    if (manualSourceMediaReplaced && currentPlaybackItemIsPikPak()) {
+                        // PikPak cold storage errors while the file warms up.
+                        // The retry engine owns recovery (and reports its own
+                        // exhaustion); the extended watchdog stays the bound.
+                        startupLog(
+                            "event=manual_error_deferred reason=pikpak-retry " +
+                                "player:${error.errorCodeName}",
+                        )
+                        schedulePikPakGateReprepare()
+                    } else {
+                        failManualSourceCandidate("player:${error.errorCodeName}")
+                    }
                 }
                 return
             }
@@ -1597,7 +1612,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // Ignore a queued callback from media already superseded by a
                 // fallback prepare; Media3 clears playerError for that case.
                 if (player?.playerError != null) {
-                    failStartupCandidate("player:${error.errorCodeName}")
+                    if (currentPlaybackItemIsPikPak()) {
+                        // Same PikPak exemption as the manual branch: failing
+                        // here would abandon a source that recovers on its own,
+                        // and the acquisition guard would then skip every other
+                        // torrent row straight to "no playable source".
+                        startupLog(
+                            "event=candidate_error_deferred reason=pikpak-retry " +
+                                "player:${error.errorCodeName}",
+                        )
+                        schedulePikPakGateReprepare()
+                    } else {
+                        failStartupCandidate("player:${error.errorCodeName}")
+                    }
                 }
                 return
             }
@@ -4357,6 +4384,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun reportValidatedSourceCommit(sourceIndex: Int) {
+        if (sourceIndex !in stremioSources.indices) return
+        try {
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "commitStremioSource",
+                mapOf("sourceIndex" to sourceIndex),
+            )
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "AndroidTvPlayer",
+                "Failed to report committed source $sourceIndex: ${e.message}",
+            )
+        }
+    }
+
     /**
      * Request movie metadata (IMDB ID) from Flutter for the given item.
      * Used for movie collections to fetch per-item IMDB IDs from Cinemeta.
@@ -5132,6 +5174,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 pikPakRetryCount = 0
                 hidePikPakRetryOverlay()
 
+                // A validation gate deferred its error/timeout handling to
+                // this engine — exhaustion is the engine's verdict, so hand
+                // the failure back to the gate (manual pick restores the
+                // previous source; startup advances the failover cursor)
+                // instead of skipping to the next playlist item.
+                if (failManualSourceCandidate("pikpak-exhausted")) {
+                    return@waitForPikPakMetadata
+                }
+                if (startupFailoverCursor?.committed == false) {
+                    failStartupCandidate("pikpak-exhausted")
+                    return@waitForPikPakMetadata
+                }
+
                 if (!isFinishing) {
                     runOnUiThread {
                         Toast.makeText(this, "Video failed to load. Skipping to next...", Toast.LENGTH_SHORT).show()
@@ -5225,6 +5280,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun showPikPakRetryOverlay(message: String) {
         runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
+            // During startup validation the opaque gate covers this overlay —
+            // mirror the message so the user isn't stuck on "Checking stream…"
+            // for the whole cold-storage warmup.
+            if (::startupGateStatus.isInitialized &&
+                startupFailoverCursor?.committed == false
+            ) {
+                startupGateStatus.text = message
+            }
             pikPakReactivationText.text = message
             pikPakReactivationIndicator.animate().cancel()
             pikPakReactivationIndicator.visibility = View.VISIBLE
@@ -14894,6 +14957,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         val first = cursor.beginInitial(stremioSources.size) ?: return
         startupFailoverCursor = cursor
+        startupPikPakTorrentAcquisitionAttempted =
+            startupResolverProvider.equals("pikpak", ignoreCase = true) &&
+                stremioSources.getOrNull(currentStremioSourceIndex)?.streamType == "torrent"
         startupGateView.visibility = View.VISIBLE
         val item = model.items.getOrNull(currentIndex)
         startupLog(
@@ -14930,11 +14996,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSourceMediaReplaced = false
         manualSourceCandidateUrl = null
         manualSourceFirstFrameAtElapsedMs = 0L
+        manualSourceCandidateStartedElapsedMs = SystemClock.elapsedRealtime()
         manualSourceSwitchTimeout?.let { progressHandler.removeCallbacks(it) }
-        val timeout = Runnable {
-            if (manualSourceSwitchSnapshot != null &&
-                manualSourceSwitchIndex == sourceIndex
-            ) {
+        val timeout = object : Runnable {
+            override fun run() {
+                if (manualSourceSwitchSnapshot == null ||
+                    manualSourceSwitchIndex != sourceIndex
+                ) {
+                    return
+                }
+                // Only once the candidate's media is actually loaded — before
+                // that, player state (and the current item) still belong to
+                // the outgoing source and must not earn the candidate grace.
+                if (manualSourceMediaReplaced &&
+                    startupWatchdogShouldExtend(manualSourceCandidateStartedElapsedMs)
+                ) {
+                    startupLog(
+                        "event=manual_watchdog_extend sourceIndex=$sourceIndex " +
+                            "pikpak=${currentPlaybackItemIsPikPak()}",
+                    )
+                    progressHandler.postDelayed(this, STARTUP_WATCHDOG_RECHECK_MS)
+                    return
+                }
                 failManualSourceCandidate("timeout")
             }
         }
@@ -14991,6 +15074,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSourceSwitchTimeout = null
         manualSourceCommitCheck?.let { progressHandler.removeCallbacks(it) }
         manualSourceCommitCheck = null
+        pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
+        pikPakGateReprepare = null
         manualSourceCandidateUrl?.let { url ->
             payload?.items?.getOrNull(currentIndex)?.let { item ->
                 payload?.items?.set(currentIndex, item.copy(url = url))
@@ -15001,6 +15086,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSourceMediaReplaced = false
         manualSourceCandidateUrl = null
         restartProgressUpdates()
+        reportValidatedSourceCommit(sourceIndex)
         showStatusPillTransient("✓ ${source?.displayTitle ?: "Source"}")
         startupLog(
             "event=manual_candidate_commit ${startupSourceFields(sourceIndex)} " +
@@ -15018,6 +15104,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSourceSwitchTimeout = null
         manualSourceCommitCheck?.let { progressHandler.removeCallbacks(it) }
         manualSourceCommitCheck = null
+        pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
+        pikPakGateReprepare = null
         stremioResolutionToken++
         cancelSourceSwitchWait()
         setResolvingState(false)
@@ -15077,10 +15165,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startupCandidateStartedElapsedMs = SystemClock.elapsedRealtime()
         startupFailoverGeneration++
         val generation = startupFailoverGeneration
-        val timeout = Runnable {
-            if (generation == startupFailoverGeneration &&
-                startupFailoverCursor?.committed == false
-            ) {
+        val timeout = object : Runnable {
+            override fun run() {
+                if (generation != startupFailoverGeneration ||
+                    startupFailoverCursor?.committed != false
+                ) {
+                    return
+                }
+                if (startupWatchdogShouldExtend(startupCandidateStartedElapsedMs)) {
+                    startupLog(
+                        "event=watchdog_extend generation=$generation " +
+                            "elapsedMs=${startupCandidateElapsedMs()} " +
+                            "pikpak=${currentPlaybackItemIsPikPak()}",
+                    )
+                    progressHandler.postDelayed(this, STARTUP_WATCHDOG_RECHECK_MS)
+                    return
+                }
                 failStartupCandidate("timeout")
             }
         }
@@ -15155,10 +15255,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startupFailoverTimeout = null
         startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
         startupCommitCheck = null
+        pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
+        pikPakGateReprepare = null
         startupFailoverGeneration++
         startupGateView.visibility = View.GONE
         hideStatusPill()
         restartProgressUpdates()
+        reportValidatedSourceCommit(currentStremioSourceIndex)
         startupLog(
             "event=commit attempts=${cursor.attempts} ${startupSourceFields(currentStremioSourceIndex)} " +
                 "elapsedMs=${startupCandidateElapsedMs()} durationMs=$duration",
@@ -15174,6 +15277,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupFailoverTimeout = null
             startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
             startupCommitCheck = null
+            pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
+            pikPakGateReprepare = null
             startupFailoverGeneration++
             stremioResolutionToken++ // invalidate any resolver callback for the failed row
             cancelSourceSwitchWait()
@@ -15181,7 +15286,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             player?.stop()
 
             val nextIndex = cursor.nextIndex(stremioSources.size) { index ->
-                stremioSources.getOrNull(index)?.streamType != "externalUrl"
+                val candidate = stremioSources.getOrNull(index)
+                candidate?.streamType != "externalUrl" &&
+                    !(startupResolverProvider.equals("pikpak", ignoreCase = true) &&
+                        startupPikPakTorrentAcquisitionAttempted &&
+                        candidate?.streamType == "torrent")
             }
             if (nextIndex == null) {
                 startupLog(
@@ -15198,6 +15307,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 ).show()
                 finish()
                 return
+            }
+            if (startupResolverProvider.equals("pikpak", ignoreCase = true) &&
+                stremioSources.getOrNull(nextIndex)?.streamType == "torrent"
+            ) {
+                // Count before resolution: PikPak may enqueue cold storage even
+                // when Flutter ultimately cannot return a playable URL.
+                startupPikPakTorrentAcquisitionAttempted = true
             }
 
             startupLog(
@@ -15241,6 +15357,57 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun startupCandidateElapsedMs(): Long =
         if (startupCandidateStartedElapsedMs <= 0L) 0L
         else (SystemClock.elapsedRealtime() - startupCandidateStartedElapsedMs).coerceAtLeast(0L)
+
+    private fun isPikPakPlaybackItem(item: PlaybackItem?): Boolean =
+        item != null && (PROVIDER_PIKPAK.equals(item.provider, ignoreCase = true) ||
+            item.url.contains("mypikpak.com"))
+
+    private fun currentPlaybackItemIsPikPak(): Boolean =
+        isPikPakPlaybackItem(payload?.items?.getOrNull(currentIndex))
+
+    // After a player error ExoPlayer sits in IDLE and the PikPak retry
+    // engine (which only monitors readiness) can never see metadata arrive.
+    // A spaced re-prepare re-issues the HTTP request — which is also what
+    // re-triggers PikPak's cold-storage warmup server-side. Guarded at fire
+    // time so a committed/failed gate or a non-PikPak item drops it.
+    private fun schedulePikPakGateReprepare() {
+        if (pikPakGateReprepare != null) return
+        val reprepare = Runnable {
+            pikPakGateReprepare = null
+            val gateActive = startupFailoverCursor?.committed == false ||
+                manualSourceSwitchSnapshot != null
+            if (!gateActive || !currentPlaybackItemIsPikPak()) return@Runnable
+            if (player?.playerError == null) return@Runnable
+            startupLog("event=pikpak_reprepare")
+            player?.prepare()
+            player?.play()
+        }
+        pikPakGateReprepare = reprepare
+        progressHandler.postDelayed(reprepare, PIKPAK_GATE_REPREPARE_DELAY_MS)
+    }
+
+    // Whether a startup/manual validation watchdog should hold its fire
+    // instead of failing the candidate:
+    //  - PikPak cold storage routinely needs 10-30s (sometimes more) before
+    //    the file warms up; the dedicated retry engine owns recovery and
+    //    reports its own exhaustion back to the gate. Killing it at the base
+    //    timeout regresses playback that recovered on its own — and the
+    //    acquisition guard would then skip every other torrent row.
+    //  - A non-PikPak source whose buffer keeps growing is slow, not dead
+    //    (large 4K remux, cold CDN); give it a bounded grace.
+    private fun startupWatchdogShouldExtend(startedElapsedMs: Long): Boolean {
+        val elapsed =
+            if (startedElapsedMs <= 0L) 0L
+            else SystemClock.elapsedRealtime() - startedElapsedMs
+        if (currentPlaybackItemIsPikPak()) {
+            return elapsed < STARTUP_PIKPAK_MAX_WAIT_MS
+        }
+        val activePlayer = player ?: return false
+        val loadingWithData = activePlayer.playerError == null &&
+            activePlayer.playbackState == Player.STATE_BUFFERING &&
+            activePlayer.totalBufferedDuration > 0L
+        return loadingWithData && elapsed < STARTUP_SLOW_SOURCE_MAX_WAIT_MS
+    }
 
     private fun startupSourceFields(index: Int): String {
         val source = stremioSources.getOrNull(index)
@@ -16026,7 +16193,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // (exact episode missing from the new source) has no captured position
         // and must keep its own per-episode tracker resume, matching the Dart
         // player's landedOnSameContent behaviour.
-        percentSeekApplied = true
+        //
+        // EXCEPT during startup failover: the failed candidate never rendered,
+        // so there is no live position to protect (resumePositionMs is 0) —
+        // latching here would burn the launch tracker percent (watched on
+        // another device) and start the episode at 0:00. The single-URL
+        // failover route keeps that percent; this route must match.
+        if (startupFailoverCursor?.committed != false) {
+            percentSeekApplied = true
+        }
         if (manualSourceSwitchSnapshot != null) {
             manualSourceMediaReplaced = true
             manualSourceCandidateUrl = newItems.getOrNull(targetIndex)?.url
@@ -16290,6 +16465,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
             startupTryNextOnFailure = obj.optBoolean("startupTryNextOnFailure", false)
             startupMaxAttempts = obj.optInt("startupMaxAttempts", 1).coerceIn(1, 10)
+            startupResolverProvider = obj.optString("startupResolverProvider")
+                .takeIf { it.isNotEmpty() }
             startupLog(
                 "event=payload_parsed sourceCount=${stremioSources.size} " +
                     "selectedIndex=$currentStremioSourceIndex " +
@@ -16528,6 +16705,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSourceSwitchTimeout = null
         manualSourceCommitCheck?.let { progressHandler.removeCallbacks(it) }
         manualSourceCommitCheck = null
+        pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
+        pikPakGateReprepare = null
         manualSourceSwitchSnapshot = null
         manualSourceSwitchIndex = null
         manualSourceRestoreInProgress = false
@@ -17341,6 +17520,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         private const val USE_UNIFIED_MENU = true
         private const val PROGRESS_INTERVAL_MS = 5_000L
         private const val STARTUP_FAILOVER_TIMEOUT_MS = 12_000L
+        // Watchdog recheck cadence once the base timeout has elapsed but the
+        // candidate is still legitimately working (see startupWatchdogShouldExtend).
+        private const val STARTUP_WATCHDOG_RECHECK_MS = 3_000L
+        // Hard cap for a buffering-but-alive non-PikPak candidate.
+        private const val STARTUP_SLOW_SOURCE_MAX_WAIT_MS = 45_000L
+        // Hard cap while the PikPak cold-storage retry engine owns recovery
+        // (its own worst case is ~10s metadata wait + 2/4/8/16/18s backoff).
+        private const val STARTUP_PIKPAK_MAX_WAIT_MS = 120_000L
+        private const val PIKPAK_GATE_REPREPARE_DELAY_MS = 4_000L
         private const val UP_NEXT_THRESHOLD_MS = 25_000L   // show card when this much remains
         private const val UP_NEXT_MIN_DURATION_MS = 5 * 60_000L  // skip for short clips
         private const val UP_NEXT_TICK_MS = 500L

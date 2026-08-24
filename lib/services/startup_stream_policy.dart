@@ -52,4 +52,18 @@ class StartupStreamPolicy {
       attempts: initialAttemptAlreadyFailed ? 1 : 0,
     );
   }
+
+  /// PikPak may enqueue cold storage before resolution returns. Therefore an
+  /// empty/failed initial resolution still consumes the session's single
+  /// torrent-acquisition allowance.
+  static bool initialPikPakAcquisitionAttempted({
+    required bool isPikPakResolver,
+    required bool initialSourceIsTorrent,
+    required bool hasResolvedInitialUrl,
+    required bool initialAttemptAlreadyFailed,
+  }) {
+    return isPikPakResolver &&
+        initialSourceIsTorrent &&
+        (hasResolvedInitialUrl || initialAttemptAlreadyFailed);
+  }
 }

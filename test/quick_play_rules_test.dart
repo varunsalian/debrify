@@ -827,6 +827,36 @@ void main() {
       );
     });
 
+    test('failed initial PikPak resolution consumes its acquisition', () {
+      expect(
+        StartupStreamPolicy.initialPikPakAcquisitionAttempted(
+          isPikPakResolver: true,
+          initialSourceIsTorrent: true,
+          hasResolvedInitialUrl: false,
+          initialAttemptAlreadyFailed: true,
+        ),
+        isTrue,
+      );
+      expect(
+        StartupStreamPolicy.initialPikPakAcquisitionAttempted(
+          isPikPakResolver: true,
+          initialSourceIsTorrent: true,
+          hasResolvedInitialUrl: false,
+          initialAttemptAlreadyFailed: false,
+        ),
+        isFalse,
+      );
+      expect(
+        StartupStreamPolicy.initialPikPakAcquisitionAttempted(
+          isPikPakResolver: true,
+          initialSourceIsTorrent: false,
+          hasResolvedInitialUrl: false,
+          initialAttemptAlreadyFailed: true,
+        ),
+        isFalse,
+      );
+    });
+
     test('source preference selects the dual-source transport order', () {
       final torrentFirst = QuickPlayRules.debrifyDefault(isMovie: true);
       final addonFirst = torrentFirst.copyWith(

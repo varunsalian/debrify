@@ -55,11 +55,11 @@ void main() {
       'bool _tvAutoHideBlocked',
     );
 
-    expect(ended, contains('if (_manualSourceGateActive) return;'));
-    expect(resume, contains('_manualSourceGateActive'));
+    expect(ended, contains('if (_validationGateActive) return;'));
+    expect(resume, contains('_validationGateActive'));
     expect(
       flutterPlayer,
-      contains('void _resumeTrackingAfterManualSourceGate()'),
+      contains('void _resumeTrackingAfterValidationGate()'),
     );
   });
 

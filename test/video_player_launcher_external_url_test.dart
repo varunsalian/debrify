@@ -1,4 +1,5 @@
 import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/models/torrent.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -65,6 +66,35 @@ void main() {
       expect(enabled(identityAvailable: false), isFalse);
       expect(enabled(requested: false, autoEligible: true), isTrue);
       expect(enabled(requested: false, autoEligible: false), isFalse);
+    });
+
+    test('copyWith and widget preserve startup validation intent', () {
+      Future<void> commit(Torrent _) async {}
+
+      final original = VideoPlayerLaunchArgs(
+        videoUrl: 'video',
+        title: 'Title',
+        startupFailoverEnabled: true,
+        startupResolverProvider: 'pikpak',
+        onStremioSourceCommitted: commit,
+      );
+
+      final copy = original.copyWith(traktScrobble: true);
+      expect(copy.startupFailoverEnabled, isTrue);
+      expect(copy.startupResolverProvider, 'pikpak');
+      expect(copy.onStremioSourceCommitted, same(commit));
+
+      final widget = copy.toWidget();
+      expect(widget.startupFailoverEnabled, isTrue);
+      expect(widget.startupResolverProvider, 'pikpak');
+      expect(widget.onStremioSourceCommitted, same(commit));
+    });
+
+    test('explicit launches do not opt into automatic startup failover', () {
+      const args = VideoPlayerLaunchArgs(videoUrl: 'video', title: 'Title');
+
+      expect(args.startupFailoverEnabled, isFalse);
+      expect(args.toWidget().startupFailoverEnabled, isFalse);
     });
   });
 

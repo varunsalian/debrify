@@ -434,6 +434,8 @@ class TorrentPlaybackService {
       final loader = ov;
       var handedToLauncher = false;
       try {
+        final resolverProvider = provider ?? await _defaultConfiguredProvider();
+        if (!context.mounted) return;
         final args = _playerArgs(
           videoUrl: direct.directUrl!,
           title: direct.displayTitle,
@@ -442,8 +444,15 @@ class TorrentPlaybackService {
           stremioCurrentSourceIndex: torrents.indexOf(direct),
           resolveSourceToPlaylist:
               (torrents.length > 1 || seriesFetcher != null)
-              ? _lazyProviderResolver()
+              ? (resolverProvider == null
+                    ? _lazyProviderResolver()
+                    : _resolverFor(resolverProvider))
               : null,
+          startupFailoverEnabled: true,
+          startupResolverProvider: resolverProvider,
+          onStremioSourceCommitted: resolverProvider == null
+              ? _lazySourceCommitter(meta)
+              : _sourceCommitter(resolverProvider, meta),
           seriesSourceFetcher: seriesFetcher,
           meta: meta,
         );
@@ -717,6 +726,7 @@ class TorrentPlaybackService {
           sourceIndex: torrents.indexOf(winner),
           seriesFetcher: seriesFetcher,
           overlay: ov,
+          startupFailoverEnabled: true,
         );
         return;
       }
@@ -923,6 +933,7 @@ class TorrentPlaybackService {
       sourceIndex: idx < 0 ? 0 : idx,
       seriesFetcher: seriesFetcher,
       overlay: loader,
+      startupFailoverEnabled: true,
     );
   }
 
@@ -1392,6 +1403,7 @@ class TorrentPlaybackService {
               packsFetched: true,
             ),
             overlay: overlay,
+            startupFailoverEnabled: true,
           );
           return true;
         }
@@ -3374,6 +3386,7 @@ class TorrentPlaybackService {
               seriesFetcher:
                   seriesFetcherFor(meta: meta) ?? movieFetcherFor(meta: meta),
               overlay: overlay,
+              startupFailoverEnabled: true,
             );
             return true;
           }
@@ -3422,6 +3435,7 @@ class TorrentPlaybackService {
             provider: SeriesSource.localService,
             meta: meta,
             overlay: overlay,
+            startupFailoverEnabled: true,
           );
           return true;
         }
@@ -3531,6 +3545,7 @@ class TorrentPlaybackService {
               : (seriesFetcherFor(meta: meta, provider: prov) ??
                     movieFetcherFor(meta: meta, provider: prov)),
           overlay: overlay,
+          startupFailoverEnabled: true,
         );
         return true;
       }
@@ -4152,6 +4167,9 @@ class TorrentPlaybackService {
     List<Torrent>? stremioSources,
     int? stremioCurrentSourceIndex,
     Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist,
+    bool startupFailoverEnabled = false,
+    String? startupResolverProvider,
+    Future<void> Function(Torrent)? onStremioSourceCommitted,
     SeriesSourceFetcher? seriesSourceFetcher,
     PlaybackMeta? meta,
     String? rdTorrentId,
@@ -4167,6 +4185,9 @@ class TorrentPlaybackService {
     stremioSources: stremioSources,
     stremioCurrentSourceIndex: stremioCurrentSourceIndex,
     resolveSourceToPlaylist: resolveSourceToPlaylist,
+    startupFailoverEnabled: startupFailoverEnabled,
+    startupResolverProvider: startupResolverProvider,
+    onStremioSourceCommitted: onStremioSourceCommitted,
     seriesSourceFetcher: seriesSourceFetcher,
     contentImdbId: meta?.imdbId,
     contentType: meta?.contentType,
@@ -4375,6 +4396,7 @@ class TorrentPlaybackService {
     // launcher dismisses it only when the player actually takes the screen —
     // closing the detail-screen flash between "loading" and "playing".
     PipelineLoadingOverlay? overlay,
+    bool startupFailoverEnabled = false,
   }) async {
     // Once push() takes the handoff callback the LAUNCHER owns the dismissal
     // (player-visible time, or its own always-fires safety net); the finally
@@ -4417,12 +4439,6 @@ class TorrentPlaybackService {
         await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
         return;
       }
-      // Remember a catalog movie's source before handing off to the player, so the
-      // binding is saved even if the screen tears down during playback. The series
-      // counterpart is gated by the series auto-pin setting (on by default).
-      await _autoBindMovieOnPlay(meta, winner, provider);
-      await _autoBindSeriesOnPlay(meta, winner, provider);
-      if (!context.mounted) return;
       // Args built BEFORE the flag flips: a throw while constructing them
       // must still hit the finally's dismiss, since push() never ran.
       final args = _playerArgs(
@@ -4443,9 +4459,20 @@ class TorrentPlaybackService {
                 (sources.length > 1 || seriesFetcher != null))
             ? (provider == SeriesSource.localService ||
                       provider == SeriesSource.addonDirectService
-                  ? _lazySwitchAwareResolver(meta)
-                  : _switchAwareResolver(provider, meta))
+                  ? _lazyProviderResolver()
+                  : _resolverFor(provider))
             : null,
+        startupFailoverEnabled: startupFailoverEnabled,
+        startupResolverProvider:
+            provider == SeriesSource.localService ||
+                provider == SeriesSource.addonDirectService
+            ? null
+            : provider,
+        onStremioSourceCommitted:
+            provider == SeriesSource.localService ||
+                provider == SeriesSource.addonDirectService
+            ? _lazySourceCommitter(meta)
+            : _validatedLaunchCommitter(provider, meta),
         seriesSourceFetcher: seriesFetcher,
         meta: meta,
         rdTorrentId: r.rdTorrentId,
@@ -4721,39 +4748,45 @@ class TorrentPlaybackService {
     };
   }
 
-  /// [_resolverFor] wrapped so that a SUCCESSFUL in-player source switch also
-  /// updates the title's pinned source (see [_rebindOnSourceSwitch]). Both
-  /// players (Flutter + native TV) funnel every switch through this one
-  /// closure, so wrapping it here keeps the binding in sync on both.
-  static Future<List<PlaylistEntry>?> Function(Torrent) _switchAwareResolver(
+  /// Commit hook paired with the side-effect-free resolver. The players call
+  /// this only after a candidate has decoded and passed provider-slate checks.
+  static Future<void> Function(Torrent) _sourceCommitter(
     String provider,
     PlaybackMeta? meta,
   ) {
-    final inner = _resolverFor(provider);
     return (Torrent t) async {
-      final playlist = await inner(t);
-      if (playlist != null && playlist.isNotEmpty) {
-        await _rebindOnSourceSwitch(meta, t, provider);
-      }
-      return playlist;
+      await _rebindOnSourceSwitch(meta, t, provider);
     };
   }
 
-  /// [_switchAwareResolver] for launches whose provider can't resolve torrents
-  /// (a bound 'local' source): the provider is resolved silently at switch
-  /// time — default/first-configured, matching [_lazyProviderResolver] — and
-  /// the switch still syncs the pinned source. Fails gracefully (null) when
-  /// no provider is configured.
-  static Future<List<PlaylistEntry>?> Function(Torrent)
-  _lazySwitchAwareResolver(PlaybackMeta? meta) {
+  /// The first validated candidate owns the normal play-time auto-binding;
+  /// later commits are explicit in-player switches and use replacement-only
+  /// rebinding. This keeps both behaviors transactional without allowing a
+  /// manual switch to create a binding for a title that was never pinned.
+  static Future<void> Function(Torrent) _validatedLaunchCommitter(
+    String provider,
+    PlaybackMeta? meta,
+  ) {
+    var initialCommitPending = true;
     return (Torrent t) async {
-      if (t.streamType == StreamType.directUrl &&
-          (t.directUrl?.isNotEmpty ?? false)) {
-        return [PlaylistEntry(url: t.directUrl!, title: t.displayTitle)];
+      if (initialCommitPending) {
+        initialCommitPending = false;
+        await _autoBindMovieOnPlay(meta, t, provider);
+        await _autoBindSeriesOnPlay(meta, t, provider);
+        return;
       }
+      await _rebindOnSourceSwitch(meta, t, provider);
+    };
+  }
+
+  /// Commit hook for launches whose resolver chooses a provider lazily.
+  static Future<void> Function(Torrent) _lazySourceCommitter(
+    PlaybackMeta? meta,
+  ) {
+    return (Torrent t) async {
       final provider = await _defaultConfiguredProvider();
-      if (provider == null) return null;
-      return _switchAwareResolver(provider, meta)(t);
+      if (provider == null) return;
+      await _rebindOnSourceSwitch(meta, t, provider);
     };
   }
 
