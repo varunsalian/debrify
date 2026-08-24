@@ -586,9 +586,164 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
   }
 
-  /// Handle the episode long-press menu (mark watched/unwatched, rate) against
-  /// Trakt, mirroring the inline Trakt view. Watched-state changes are
-  /// reflected locally in [_episodeWatchProgress] so the tile updates at once.
+  /// Everywhere a watched-state change will be written: the connected
+  /// trackers, plus this device's own playback storage — always on unwatch
+  /// (local completion is a tick source only the app can clear), on watch only
+  /// when it is the sole store available. Shared by the action itself and the
+  /// menu row's subtitle, so what the row promises IS what the action does.
+  List<String> _watchedSyncTargets({required bool watched}) {
+    final show = _selectedShow;
+    final imdb = show == null ? '' : (show.effectiveImdbId ?? show.id);
+    final targets = <String>[
+      if (_isTraktAuthenticated) 'Trakt',
+      if (_isSimklAuthenticated) 'Simkl',
+      if (_isMdblistAuthenticated && imdb.startsWith('tt')) 'MDBList',
+    ];
+    if (!watched || targets.isEmpty) targets.add('this device');
+    return targets;
+  }
+
+  /// "Trakt, Simkl and this device"
+  static String _joinNames(List<String> names) => names.length <= 1
+      ? names.join()
+      : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
+
+  /// Set an episode's watched state everywhere at once: local playback
+  /// storage plus every connected tracker. The ticks this panel paints are an
+  /// OR-union of all of those sources (see [_loadEpisodeWatchProgress]), so a
+  /// per-provider action can never make an unwatch stick — whichever source
+  /// wasn't cleared resurrects the tick when the union is re-merged on the
+  /// next panel open (2026-08-24 report: episodes unwatched on Trakt AND
+  /// Simkl kept re-ticking on detail re-entry).
+  Future<void> _setEpisodeWatchedEverywhere(
+    TraktEpisode episode, {
+    required bool watched,
+  }) async {
+    final show = _selectedShow;
+    if (show == null) return;
+    final showImdbId = show.effectiveImdbId ?? show.id;
+    final key = '${episode.season}-${episode.number}';
+    final targets = _watchedSyncTargets(watched: watched);
+    final failed = <String>[];
+    var mdblistChanged = false;
+
+    if (!watched) {
+      // Local completion is a tick source of its own and only the app can
+      // clear it — no amount of unwatching on the trackers' side touches it.
+      await StorageService.unmarkEpisodeAsFinished(
+        seriesTitle: show.name,
+        season: episode.season,
+        episode: episode.number,
+        imdbId: show.effectiveImdbId,
+      );
+    } else if (targets.contains('this device')) {
+      // No tracker to carry the state — record it locally so the tick still
+      // works. Deliberately NOT written when a tracker is connected: a local
+      // copy is exactly the source an external unwatch can never clear.
+      await StorageService.markEpisodeAsFinished(
+        seriesTitle: show.name,
+        season: episode.season,
+        episode: episode.number,
+        imdbId: show.effectiveImdbId,
+      );
+    }
+
+    if (_isTraktAuthenticated) {
+      final ok = watched
+          ? await _traktService.markEpisodeWatched(
+              showImdbId,
+              episode.season,
+              episode.number,
+            )
+          : await _traktService.markEpisodeUnwatched(
+              showImdbId,
+              episode.season,
+              episode.number,
+            );
+      if (!ok) failed.add('Trakt');
+    }
+
+    if (_isSimklAuthenticated) {
+      final ok = watched
+          ? await _simklService.markEpisodeWatched(
+              showImdbId,
+              episode.season,
+              episode.number,
+            )
+          : await _simklService.markEpisodeUnwatched(
+              showImdbId,
+              episode.season,
+              episode.number,
+            );
+      if (ok && watched) {
+        // Finishing this episode also clears its paused session, so the show
+        // stops lingering in Continue Watching at this episode (and can
+        // surface as "up next" for the following one). Best-effort.
+        await _simklService.deletePlaybackForEpisode(
+          showImdbId,
+          episode.season,
+          episode.number,
+        );
+      }
+      if (!ok) failed.add('Simkl');
+    }
+
+    if (_isMdblistAuthenticated && showImdbId.startsWith('tt')) {
+      final ids = MdblistMediaIds(imdb: showImdbId);
+      final ok = watched
+          ? await _mdblistService.markWatched(
+              ids,
+              'episode',
+              season: episode.season,
+              episode: episode.number,
+            )
+          : await _mdblistService.markUnwatched(
+              ids,
+              'episode',
+              season: episode.season,
+              episode: episode.number,
+            );
+      if (ok) mdblistChanged = true;
+      if (!ok) failed.add('MDBList');
+    }
+
+    if (!mounted) return;
+    if (mdblistChanged) MdblistContinueWatchingService.instance.invalidate();
+    // Only move the tick if some store actually changed — when every write
+    // failed, an optimistic update would paint a state that silently reverts
+    // on the next re-merge. (Unwatch always changes at least local storage.)
+    final done = targets.where((t) => !failed.contains(t)).toList();
+    if (done.isNotEmpty) {
+      setState(() {
+        if (watched) {
+          _episodeWatchProgress[key] = 100.0;
+        } else {
+          _episodeWatchProgress.remove(key);
+        }
+        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+      });
+      final next = _nextEpisode;
+      if (next != null) _publishNextEpisode(next);
+    }
+    final label =
+        'Marked as ${watched ? 'Watched' : 'Unwatched'}'
+        '${done.isEmpty ? '' : ' on ${_joinNames(done)}'}';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          failed.isEmpty ? label : '$label — failed on ${failed.join(', ')}',
+        ),
+        backgroundColor: failed.isEmpty
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Handle the episode quick-strip / long-press menu against Trakt. The
+  /// watched-state actions route through [_setEpisodeWatchedEverywhere] — the
+  /// tick is a multi-source union, so they must never act on Trakt alone.
   Future<void> _onEpisodeMenuAction(
     TraktEpisode episode,
     TraktEpisodeMenuAction action,
@@ -596,31 +751,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null) return;
     final showImdbId = show.effectiveImdbId ?? show.id;
-    final key = '${episode.season}-${episode.number}';
     bool success = false;
     String actionLabel = '';
 
     switch (action) {
       case TraktEpisodeMenuAction.markWatched:
-        actionLabel = 'Marked as Watched';
-        success = await _traktService.markEpisodeWatched(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
-        if (success && mounted) {
-          setState(() => _episodeWatchProgress[key] = 100.0);
-        }
+        return _setEpisodeWatchedEverywhere(episode, watched: true);
       case TraktEpisodeMenuAction.markUnwatched:
-        actionLabel = 'Marked as Unwatched';
-        success = await _traktService.markEpisodeUnwatched(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
-        if (success && mounted) {
-          setState(() => _episodeWatchProgress.remove(key));
-        }
+        return _setEpisodeWatchedEverywhere(episode, watched: false);
       case TraktEpisodeMenuAction.rate:
         if (!mounted) return;
         final rating = await showTraktRatingDialog(context);
@@ -2085,7 +2223,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   /// Per-episode options menu (opened with Right / the ⋮ button): Play, Sources,
-  /// and — when a Trakt account is connected — Mark Watched/Unwatched + Rate.
+  /// a single Mark Watched/Unwatched that acts on local storage plus every
+  /// connected tracker, and per-tracker Rate rows.
   void _showEpisodeOptions(TraktEpisode episode) {
     final key = '${episode.season}-${episode.number}';
     final watched = (_episodeWatchProgress[key] ?? 0) >= 100;
@@ -2106,6 +2245,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           VoidCallback onTap, {
           Color? color,
           bool autofocus = false,
+          String? subtitle,
         }) {
           return ListTile(
             autofocus: autofocus,
@@ -2119,6 +2259,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                 color: color ?? Theme.of(sheetCtx).colorScheme.onSurface,
               ),
             ),
+            subtitle: subtitle == null
+                ? null
+                : Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Theme.of(
+                        sheetCtx,
+                      ).colorScheme.onSurface.withValues(alpha: 0.55),
+                      fontSize: 12.5,
+                      height: 1.3,
+                    ),
+                  ),
             onTap: () {
               Navigator.of(sheetCtx).pop();
               onTap();
@@ -2137,51 +2289,41 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           // Direct-source episodes ARE the source — no torrent list to open.
           if (widget.onPlayEpisode == null)
             tile(Icons.layers_rounded, 'Sources', () => _onEpisodeTap(episode)),
-          if (_isTraktAuthenticated) ...[
-            if (!watched)
-              tile(
-                Icons.check_circle_rounded,
-                'Mark as Watched',
-                () => _onEpisodeMenuAction(
-                  episode,
-                  TraktEpisodeMenuAction.markWatched,
-                ),
-              ),
-            if (watched)
-              tile(
-                Icons.visibility_off_rounded,
-                'Mark as Unwatched',
-                () => _onEpisodeMenuAction(
-                  episode,
-                  TraktEpisodeMenuAction.markUnwatched,
-                ),
-              ),
+          // ONE watched toggle, not one per tracker: the tick is an OR-union
+          // of local + every tracker, so a per-provider action leaves the
+          // others watched and the tick resurrects on the next re-merge.
+          // [_setEpisodeWatchedEverywhere] fans out to all of them (and to
+          // local playback storage), so it is offered even with no tracker
+          // connected — a locally-finished episode needs it too. The subtitle
+          // names every destination up front, so the fan-out is the row's
+          // stated contract rather than a surprise.
+          if (!watched && !_isDirectSource)
+            tile(
+              Icons.check_circle_rounded,
+              'Mark as Watched',
+              () => _setEpisodeWatchedEverywhere(episode, watched: true),
+              subtitle: _watchedSyncTargets(watched: true).length > 1
+                  ? 'On ${_joinNames(_watchedSyncTargets(watched: true))}'
+                  : null,
+            ),
+          if (watched && !_isDirectSource)
+            tile(
+              Icons.visibility_off_rounded,
+              'Mark as Unwatched',
+              () => _setEpisodeWatchedEverywhere(episode, watched: false),
+              subtitle: _watchedSyncTargets(watched: false).length > 1
+                  ? 'Clears it on '
+                        '${_joinNames(_watchedSyncTargets(watched: false))} — '
+                        'all at once, so the tick can\'t come back'
+                  : null,
+            ),
+          if (_isTraktAuthenticated)
             tile(
               Icons.star_rounded,
               'Rate on Trakt',
               () => _onEpisodeMenuAction(episode, TraktEpisodeMenuAction.rate),
             ),
-          ],
-          // Simkl's own rows — separate from Trakt's above, not merged.
-          // No live per-episode Simkl watched state is tracked, so both
-          // Mark Watched and Mark Unwatched are always offered.
-          if (_isSimklAuthenticated) ...[
-            tile(
-              Icons.check_circle_rounded,
-              'Mark as Watched (Simkl)',
-              () => _onEpisodeSimklMenuAction(
-                episode,
-                SimklEpisodeMenuAction.markWatched,
-              ),
-            ),
-            tile(
-              Icons.visibility_off_rounded,
-              'Mark as Unwatched (Simkl)',
-              () => _onEpisodeSimklMenuAction(
-                episode,
-                SimklEpisodeMenuAction.markUnwatched,
-              ),
-            ),
+          if (_isSimklAuthenticated)
             tile(
               Icons.star_rounded,
               'Rate on Simkl',
@@ -2190,26 +2332,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                 SimklEpisodeMenuAction.rate,
               ),
             ),
-          ],
           if (_isMdblistAuthenticated) ...[
-            if (!watched)
-              tile(
-                Icons.check_circle_rounded,
-                'Mark as Watched (MDBList)',
-                () => _onEpisodeMdblistMenuAction(
-                  episode,
-                  MdblistEpisodeMenuAction.markWatched,
-                ),
-              ),
-            if (watched)
-              tile(
-                Icons.visibility_off_rounded,
-                'Mark as Unwatched (MDBList)',
-                () => _onEpisodeMdblistMenuAction(
-                  episode,
-                  MdblistEpisodeMenuAction.markUnwatched,
-                ),
-              ),
             if (_episodeMdblistRatings[key] == null)
               tile(
                 Icons.star_rounded,
