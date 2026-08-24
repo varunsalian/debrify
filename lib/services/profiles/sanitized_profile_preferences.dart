@@ -75,6 +75,10 @@ abstract final class SanitizedProfilePreferences {
       case 'discover_layout':
         return value is String &&
             const <String>{'stage', 'grid'}.contains(value);
+      case 'discover_default_source':
+        return value is String && _validDiscoverDefaultSource(value);
+      case 'discover_last_source':
+        return value is String && _validDiscoverSource(value);
       case 'debrify_tv_style':
         return value is String &&
             const <String>{'grid', 'spotlight'}.contains(value);
@@ -113,6 +117,16 @@ abstract final class SanitizedProfilePreferences {
 
   static bool _boundedInt(Object? value, int minimum, int maximum) =>
       value is int && value >= minimum && value <= maximum;
+
+  static bool _validDiscoverDefaultSource(String value) =>
+      value == 'remember' || _validDiscoverSource(value);
+
+  static bool _validDiscoverSource(String value) =>
+      value == 'cw' ||
+      value == 'trakt' ||
+      value == 'simkl' ||
+      value == 'mdblist' ||
+      (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 
   static const Set<String> _detailThemes = <String>{
     'signal',

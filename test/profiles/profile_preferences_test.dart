@@ -64,9 +64,7 @@ void main() {
       await StorageService.getHomeCardOrientation(),
       HomeCardOrientation.landscape,
     );
-    await StorageService.setHomeCardOrientation(
-      HomeCardOrientation.portrait,
-    );
+    await StorageService.setHomeCardOrientation(HomeCardOrientation.portrait);
 
     ProfileRuntime.publish(
       ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
@@ -84,6 +82,79 @@ void main() {
       HomeCardOrientation.portrait,
     );
   });
+
+  test(
+    'Discover defaults remember the last source and stay profile-local',
+    () async {
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+      );
+
+      expect(
+        await StorageService.getDiscoverDefaultSource(),
+        StorageService.discoverDefaultRememberLast,
+      );
+      expect(await StorageService.getDiscoverLastSource(), 'cw');
+      await StorageService.setDiscoverDefaultSource('a:catalog-addon');
+      await StorageService.setDiscoverLastSource('simkl');
+
+      ProfileRuntime.publish(
+        ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
+      );
+      expect(
+        await StorageService.getDiscoverDefaultSource(),
+        StorageService.discoverDefaultRememberLast,
+      );
+      expect(await StorageService.getDiscoverLastSource(), 'cw');
+
+      ProfileRuntime.publish(
+        ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 3),
+      );
+      expect(
+        await StorageService.getDiscoverDefaultSource(),
+        'a:catalog-addon',
+      );
+      expect(await StorageService.getDiscoverLastSource(), 'simkl');
+    },
+  );
+
+  test(
+    'Discover preference backup validation accepts only known source shapes',
+    () {
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+          'discover_default_source',
+          'remember',
+        ),
+        isTrue,
+      );
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+          'discover_default_source',
+          'a:catalog-addon',
+        ),
+        isTrue,
+      );
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+          'discover_last_source',
+          'trakt',
+        ),
+        isTrue,
+      );
+      expect(
+        SanitizedProfilePreferences.allowsEntry('discover_last_source', 'a:'),
+        isFalse,
+      );
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+          'discover_default_source',
+          'unknown',
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('Home card orientation transfers as a reviewed preference', () {
     expect(

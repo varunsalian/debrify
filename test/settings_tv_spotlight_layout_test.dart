@@ -38,6 +38,7 @@ SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
   onOpenFilterSettings: _noop,
   onOpenProviderSettings: _noop,
   onOpenQuickPlaySettings: _noop,
+  onOpenDiscoverSettings: _noop,
   onOpenDebrifyTvSettings: _noop,
   onClearDownloads: _noop,
   onClearPlayback: _noop,

@@ -51,6 +51,7 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
   final Future<void> Function() onOpenQuickPlaySettings;
+  final Future<void> Function() onOpenDiscoverSettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onClearDownloads;
   final Future<void> Function() onClearPlayback;
@@ -146,6 +147,7 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenFilterSettings,
     required this.onOpenProviderSettings,
     required this.onOpenQuickPlaySettings,
+    required this.onOpenDiscoverSettings,
     required this.onOpenDebrifyTvSettings,
     required this.onClearDownloads,
     required this.onClearPlayback,
@@ -275,6 +277,13 @@ const List<_Category> _kCategories = [
     'Engines, filters & providers',
     'Find the right source faster.',
     'Engines, default filters, and provider routing form one pipeline.',
+  ),
+  _Category(
+    Icons.explore_rounded,
+    'Discover',
+    'Default source',
+    'Open Discover where you left it.',
+    'Remember the last source or choose one place to open every time.',
   ),
   _Category(
     Icons.fiber_dvr_rounded,
@@ -747,7 +756,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 2,
-                          color: selected == 10
+                          color: _kCategories[selected].label == 'Danger Zone'
                               ? AppThemeScope.of(context).settings.danger
                               : AppThemeScope.of(
                                   context,
@@ -1001,7 +1010,20 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 6: // Live TV & DVR
+      case 6: // Discover
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.discoverDefault,
+                onTap: widget.onOpenDiscoverSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 7: // Live TV & DVR
         return [
           SettingsSection(
             title: '',
@@ -1024,7 +1046,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 7: // Devices
+      case 8: // Devices
         return [
           SettingsSection(
             title: '',
@@ -1037,7 +1059,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 8: // Profiles — its own card (it was a tenant row under Devices).
+      case 9: // Profiles — its own card (it was a tenant row under Devices).
         return [
           SettingsSection(
             title: '',
@@ -1069,8 +1091,9 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                     title: 'Profiles unavailable',
                     // First line only: the reason's second line can be a
                     // stack frame, and the row is one-line copy.
-                    subtitle:
-                        ProfileBootstrap.legacyReasonSummary.split('\n').first,
+                    subtitle: ProfileBootstrap.legacyReasonSummary
+                        .split('\n')
+                        .first,
                   ),
                   onTap: () => showLegacyModeInfoDialog(context),
                   focusNode: _paneNodes[0],
@@ -1078,7 +1101,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 9: // Data & Backup
+      case 10: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -1135,7 +1158,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 10: // About (Updates + Support merged — matches the phone layout)
+      case 11: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -1203,7 +1226,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 11: // Danger Zone
+      case 12: // Danger Zone
         return [
           SettingsSection(
             title: '',

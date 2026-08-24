@@ -234,6 +234,15 @@ const String _discSimkl = 'simkl';
 const String _discMdblist = 'mdblist';
 const String _discAddonPrefix = 'a:';
 
+/// Whether an asynchronously loaded Discover landing source may still update
+/// the screen. Public only so the lifecycle contract has a focused regression
+/// test; production callers are confined to this file.
+bool discoverLandingLoadIsCurrent({
+  required int capturedRevision,
+  required int currentRevision,
+  required bool hasPendingHandoff,
+}) => !hasPendingHandoff && capturedRevision == currentRevision;
+
 // Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
 // Kept as the single source of truth so anything reserving vertical space for
 // the caption (the cell height, the hero's row-reserve budget) can't drift from
@@ -1294,11 +1303,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   bool get _heroTrailerRenderable =>
       _heroTrailerActive || _heroTrailerOffTvEligible;
 
-  // Discover tab: the active source key ('cw' | 'trakt' | 'a:{addonId}') + its
+  // Discover tab: the active source key (CW / tracker / `a:{addonId}`) + its
   // DPAD focus node (the "Source" dropdown is the leading filter of whichever
   // embedded See-All panel is shown). [_discAddons] is the browsable addon list
   // appended to the Source dropdown.
   String _discSource = _discCw;
+  // Incremented only for an explicit dropdown choice. Async preference/add-on
+  // hydration may apply its captured landing source only while this is still
+  // unchanged, so a late manifest response can never undo user input.
+  int _discSourceRevision = 0;
   List<StremioAddon> _discAddons = const [];
   final FocusNode _discSourceNode = FocusNode(debugLabel: 'disc_source');
 
@@ -1455,6 +1468,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           likes: (pending['likes'] as num?)?.toInt() ?? 0,
         );
         _discSource = _discMdblist;
+        unawaited(StorageService.setDiscoverLastSource(_discMdblist));
       }
     }
     // Ambient hero trailer gates (Home board TV only) — read before the board
@@ -15557,27 +15571,74 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (mounted) await _refreshBoundSources();
   }
 
-  /// Fetch the installed catalog addons (cheap manifest data — no catalog fetch).
-  /// Addons with at least one browsable catalog become Source-dropdown options;
-  /// ALL of them are cached in [_addonsById] so item-open can resolve the owning
-  /// addon (matching the board, which caches every catalog addon).
+  /// Apply fixed/remembered sources from local preferences immediately, then
+  /// hydrate add-ons separately. Add-on defaults wait only for the inventory
+  /// needed to validate them, and a source picked during that wait always wins.
   Future<void> _loadDiscoverAddons() async {
-    List<StremioAddon> addons;
+    final revision = _discSourceRevision;
+    final values = await Future.wait([
+      StorageService.getDiscoverDefaultSource(),
+      StorageService.getDiscoverLastSource(),
+    ]);
+    if (!mounted) return;
+    final defaultSource = values[0];
+    final lastSource = values[1];
+    var landing = defaultSource == StorageService.discoverDefaultRememberLast
+        ? lastSource
+        : defaultSource;
+    final fixedSource =
+        landing == _discCw ||
+        landing == _discTrakt ||
+        landing == _discSimkl ||
+        (kMdblistEnabled && landing == _discMdblist);
+
+    // Search→MDBList handoff is a stronger, explicit navigation intent. For
+    // ordinary fixed defaults, paint now instead of waiting on manifests.
+    if (fixedSource &&
+        discoverLandingLoadIsCurrent(
+          capturedRevision: revision,
+          currentRevision: _discSourceRevision,
+          hasPendingHandoff: _discMdblistList != null,
+        )) {
+      if (_discSource != landing) setState(() => _discSource = landing);
+      unawaited(StorageService.setDiscoverLastSource(landing));
+    }
+
+    List<StremioAddon> addons = const [];
     try {
       addons = await _stremio.getCatalogAddons();
-    } catch (_) {
-      return;
-    }
+    } catch (_) {}
     if (!mounted) return;
+    final browsable = [
+      for (final a in addons)
+        if (a.catalogs.any((c) => c.isBrowsable)) a,
+    ];
+    final addonAvailable =
+        landing.startsWith(_discAddonPrefix) &&
+        browsable.any((addon) => '$_discAddonPrefix${addon.id}' == landing);
+    if (!fixedSource && !addonAvailable) landing = _discCw;
     setState(() {
-      _discAddons = [
-        for (final a in addons)
-          if (a.catalogs.any((c) => c.isBrowsable)) a,
-      ];
+      _discAddons = browsable;
       for (final a in addons) {
         _addonsById.putIfAbsent(a.id, () => a);
       }
+      if (!fixedSource &&
+          discoverLandingLoadIsCurrent(
+            capturedRevision: revision,
+            currentRevision: _discSourceRevision,
+            hasPendingHandoff: _discMdblistList != null,
+          )) {
+        _discSource = landing;
+      }
     });
+    if (!fixedSource &&
+        discoverLandingLoadIsCurrent(
+          capturedRevision: revision,
+          currentRevision: _discSourceRevision,
+          hasPendingHandoff: _discMdblistList != null,
+        )) {
+      unawaited(StorageService.setDiscoverLastSource(landing));
+    }
   }
 
   /// The Discover tab: a "Source" dropdown over a single browsable grid. Each
@@ -16020,7 +16081,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // source, until a new tile is focused.
         _discFocused.value = null;
         _discShown.value = null;
-        setState(() => _discSource = s);
+        setState(() {
+          _discSourceRevision++;
+          _discSource = s;
+        });
+        unawaited(StorageService.setDiscoverLastSource(s));
         // The swap re-mounts the embedded panel (new ValueKey), which re-attaches
         // this shared node; pin the DPAD ring back on the Source dropdown so it
         // isn't lost in the dispose/reattach.

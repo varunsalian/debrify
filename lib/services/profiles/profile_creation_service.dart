@@ -31,6 +31,8 @@ class ProfileCreationService {
     'desktop_sidebar_style',
     'sidebar_configuration_v1',
     'discover_layout',
+    'discover_default_source',
+    'discover_last_source',
     'detail_page_style',
     'detail_theme',
     'parents_guide_style',

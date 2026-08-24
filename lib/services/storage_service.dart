@@ -1443,6 +1443,53 @@ class StorageService {
   }
 
   static const String _discoverLayoutKey = 'discover_layout';
+  static const String _discoverDefaultSourceKey = 'discover_default_source';
+  static const String _discoverLastSourceKey = 'discover_last_source';
+
+  /// Special value for the Discover default-source setting. When selected,
+  /// [getDiscoverLastSource] decides which source opens on the next visit.
+  static const String discoverDefaultRememberLast = 'remember';
+
+  static bool _isDiscoverSourceValue(String value) =>
+      value == 'cw' ||
+      value == 'trakt' ||
+      value == 'simkl' ||
+      value == 'mdblist' ||
+      (value.startsWith('a:') && value.length > 2 && value.length <= 514);
+
+  /// What Discover should show when opened. Unset defaults to remembering the
+  /// last source, preserving the most useful behavior for existing installs.
+  static Future<String> getDiscoverDefaultSource() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString(_discoverDefaultSourceKey);
+    return value == discoverDefaultRememberLast ||
+            (value != null && _isDiscoverSourceValue(value))
+        ? value!
+        : discoverDefaultRememberLast;
+  }
+
+  static Future<void> setDiscoverDefaultSource(String value) async {
+    final normalized =
+        value == discoverDefaultRememberLast || _isDiscoverSourceValue(value)
+        ? value
+        : discoverDefaultRememberLast;
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_discoverDefaultSourceKey, normalized);
+  }
+
+  /// The last source explicitly opened from Discover. A missing or malformed
+  /// value safely falls back to Continue Watching.
+  static Future<String> getDiscoverLastSource() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString(_discoverLastSourceKey);
+    return value != null && _isDiscoverSourceValue(value) ? value : 'cw';
+  }
+
+  static Future<void> setDiscoverLastSource(String value) async {
+    if (!_isDiscoverSourceValue(value)) return;
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_discoverLastSourceKey, value);
+  }
 
   /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
   /// shelf, the default) or 'grid' (the detail rail beside a poster wall). Its

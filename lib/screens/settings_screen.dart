@@ -56,6 +56,7 @@ import 'settings/settings_tv_layout.dart';
 import 'settings/settings_spotlight_shell.dart';
 import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
+import 'settings/discover_settings_page.dart';
 import 'settings/iptv_style_page.dart';
 import 'settings/debrify_tv_style_page.dart';
 import 'settings/text_brightness_page.dart';
@@ -798,6 +799,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
       onOpenQuickPlaySettings: _openQuickPlaySettings,
+      onOpenDiscoverSettings: _openDiscoverSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onClearDownloads: _clearDownloadData,
       onClearPlayback: _clearPlaybackData,
@@ -888,6 +890,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
       onOpenQuickPlaySettings: _openQuickPlaySettings,
+      onOpenDiscoverSettings: _openDiscoverSettings,
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenHomePageSettings: _openHomePageSettings,
@@ -1723,6 +1726,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Search',
         _openQuickPlaySettings,
         keywords: const ['instant', 'auto play', 'one tap'],
+      ),
+      nav(
+        SettingsRows.discoverDefault,
+        'Discover',
+        _openDiscoverSettings,
+        keywords: const [
+          'remember last',
+          'default source',
+          'continue watching',
+          'trakt',
+          'simkl',
+          'stremio addon',
+        ],
       ),
       // "addon" was a settings search dead end. This is NOT a settings page,
       // so it opens the Addons TAB (the house switchTab idiom) rather than
@@ -3187,6 +3203,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const QuickPlaySettingsPage());
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _openDiscoverSettings() async {
+    await pushSettingsPage(context, const DiscoverSettingsPage());
   }
 
   Future<void> _openRealDebridSettings() async {
@@ -5164,6 +5184,16 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
         'pipeline.',
   ),
   SettingsCategoryDefinition(
+    icon: Icons.explore_rounded,
+    label: 'Discover',
+    subtitle: 'Default source',
+    eyebrow: 'Discover',
+    title: 'Open where you want to browse.',
+    description:
+        'Remember the last source you used or choose one source to show every '
+        'time Discover opens.',
+  ),
+  SettingsCategoryDefinition(
     icon: Icons.live_tv_rounded,
     label: 'Live TV & DVR',
     subtitle: 'Channels, guide & recordings',
@@ -5232,6 +5262,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
   final Future<void> Function() onOpenQuickPlaySettings;
+  final Future<void> Function() onOpenDiscoverSettings;
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenHomePageSettings;
@@ -5319,6 +5350,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenFilterSettings,
     required this.onOpenProviderSettings,
     required this.onOpenQuickPlaySettings,
+    required this.onOpenDiscoverSettings,
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenHomePageSettings,
@@ -5618,6 +5650,16 @@ class _SettingsLayout extends StatelessWidget {
           title: '',
           children: [
             SettingsTile.spec(
+              SettingsRows.discoverDefault,
+              onTap: onOpenDiscoverSettings,
+            ),
+          ],
+        );
+      case 7:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
               SettingsRows.debrifyTv,
               onTap: onOpenDebrifyTvSettings,
             ),
@@ -5628,7 +5670,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 7:
+      case 8:
         return SettingsSection(
           title: '',
           children: [
@@ -5638,7 +5680,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 8:
+      case 9:
         // Profiles' own card (it used to be a tenant row under Devices). A
         // legacy-mode install keeps the card but says why it's empty rather
         // than presenting actions that would fail.
@@ -5667,7 +5709,7 @@ class _SettingsLayout extends StatelessWidget {
               ),
           ],
         );
-      case 9:
+      case 10:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -5713,7 +5755,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 10:
+      case 11:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -5768,7 +5810,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 11:
+      case 12:
         return SettingsSection(
           title: '',
           accentColor: t.danger,
@@ -5960,6 +6002,16 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsTile.spec(
                       SettingsRows.quickPlay,
                       onTap: onOpenQuickPlaySettings,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Discover',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.discoverDefault,
+                      onTap: onOpenDiscoverSettings,
                     ),
                   ],
                 ),

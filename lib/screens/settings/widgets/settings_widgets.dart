@@ -137,6 +137,11 @@ abstract final class SettingsRows {
     title: 'Quick Play',
     subtitle: 'Timeouts, series packs, and cache fallback',
   );
+  static const discoverDefault = SettingsRowContent(
+    icon: Icons.explore_rounded,
+    title: 'Default View',
+    subtitle: 'Choose what Discover shows when it opens',
+  );
   static const debrifyTv = SettingsRowContent(
     icon: Icons.live_tv_rounded,
     title: 'Debrify TV',
