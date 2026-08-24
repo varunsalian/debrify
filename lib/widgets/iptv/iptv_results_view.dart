@@ -1248,7 +1248,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       return;
     }
 
-    await _presentCatalog(playlist, ticket, result);
+    await _presentCatalog(playlist, ticket, result, cacheKey: cacheKey);
 
     // A first-ever ingest just wrote this catalog, so there is no numbering to
     // adopt and nothing to refresh — but a database that has never been
@@ -1274,6 +1274,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     int ticket,
     IptvParseResult result, {
     bool migrateFavorites = true,
+    String? cacheKey,
   }) async {
     // A parse worker that ingested into the catalog DB hands back a receipt
     // instead of rows — presentation then reads from the DB.
@@ -1353,12 +1354,40 @@ class IptvResultsViewState extends State<IptvResultsView>
     // never URL — duplicate URLs are legal and must not share a node) in the
     // grid's itemBuilder via _focusNodeFor.
 
+    // Hidden-category rules apply on this materialized fallback too — for a
+    // cacheable source it serves whenever the ingest didn't happen (database
+    // unopenable, empty receipt, memory-cache hit), and presenting the raw
+    // rows would bring every hidden category back for the session. [result]
+    // itself stays unfiltered: the favorites reconcile above and the EPG
+    // context below scan hidden rows in DB mode too.
+    var channels = result.channels;
+    var categories = result.categories;
+    if (cacheKey == null) {
+      // Virtual/local/addon sources have no catalog key, so no rules exist.
+      _hiddenCategories = const {};
+    } else {
+      categories = _withoutHidden(cacheKey, categories);
+      if (_hiddenCategories.isNotEmpty) {
+        channels = [
+          for (final channel in channels)
+            if (!_hiddenCategories.contains(channel.group)) channel,
+        ];
+      }
+    }
+
     _endLoadStatus();
     setState(() {
       _isLoading = false;
       _isLoadingMore = false;
-      _allChannels = result.channels;
-      _categories = result.categories;
+      _allChannels = channels;
+      _categories = categories;
+      // The selected category can be one the hidden set just removed — fall
+      // back to All rather than pinning the filter to a chip that no longer
+      // exists (the DB path does the same).
+      if (_selectedCategory != null &&
+          !categories.contains(_selectedCategory)) {
+        _selectedCategory = null;
+      }
       // This present is the materialized fallback — if a previous load left a
       // DB snapshot behind (e.g. the fresh fetch's receipt came back empty
       // while an older generation was still pinned), keeping it would split
@@ -1372,7 +1401,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // After the rows exist, not before: _loadProgress setStates too, and
     // running it first would paint one extra frame against an empty list.
     // The bars simply appear a frame later.
-    await _loadProgress(ticket, result.channels);
+    await _loadProgress(ticket, channels);
     if (!mounted || ticket != _loadTicket) return;
 
     // Surface non-fatal degradation (e.g. categories unavailable) so missing
@@ -1455,6 +1484,20 @@ class IptvResultsViewState extends State<IptvResultsView>
     _recomputeSourceCounts();
   }
 
+  /// [categories] with the user's hidden ones removed — and, as a side
+  /// effect, [_hiddenCategories] re-read for [catalogKey]. The ONE place the
+  /// list-filtering semantics live: the DB present/revalidate sites (via
+  /// [_deriveCategories]), the materialized fallback and the in-player picker
+  /// all route through it, so a change here can't split them.
+  List<String> _withoutHidden(String catalogKey, List<String> categories) {
+    _hiddenCategories = IptvCatalogDb.hiddenGroups(catalogKey);
+    if (_hiddenCategories.isEmpty) return categories;
+    return [
+      for (final c in categories)
+        if (!_hiddenCategories.contains(c)) c,
+    ];
+  }
+
   /// The category list the chips/dropdown show, with the user's hidden
   /// categories removed — and, as a side effect, [_hiddenCategories] brought
   /// up to date for [snap].
@@ -1467,18 +1510,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     CatalogSnapshot snap,
     List<CatalogGroup> groups,
   ) {
-    _hiddenCategories = IptvCatalogDb.hiddenGroups(snap.catalogKey);
+    final categories = _withoutHidden(snap.catalogKey, snap.categories);
     if (snap.categories.isEmpty) {
       return [
         for (final g in groups)
           if (g.name != null && g.name!.isNotEmpty) g.name!,
       ];
     }
-    if (_hiddenCategories.isEmpty) return snap.categories;
-    return [
-      for (final c in snap.categories)
-        if (!_hiddenCategories.contains(c)) c,
-    ];
+    return categories;
   }
 
   DbChannelList _makeDbList(
@@ -1865,7 +1904,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (receipt == null) {
       // The DB flag flipped off while the fetch was in flight — present the
       // materialized result through the classic path.
-      await _presentCatalog(playlist, ticket, result);
+      await _presentCatalog(playlist, ticket, result, cacheKey: cacheKey);
       return;
     }
 
@@ -2885,7 +2924,14 @@ class IptvResultsViewState extends State<IptvResultsView>
       ),
     );
     if (confirmed != true || !mounted) return;
-    IptvCatalogDb.setGroupHidden(snap.catalogKey, category, true);
+    if (!IptvCatalogDb.setGroupHidden(snap.catalogKey, category, true)) {
+      _showChip(
+        _CatalogChipState.failure,
+        'Couldn\'t hide "$category" — try again',
+        autoHide: const Duration(milliseconds: 3500),
+      );
+      return;
+    }
     await _refreshAfterHiddenChange();
     if (!mounted) return;
     _showChip(
@@ -3061,12 +3107,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       // in-player picker can't offer a category the page doesn't. groups()
       // is already filtered in SQL; the provider list is not.
       if (snap.categories.isNotEmpty) {
-        final hidden = IptvCatalogDb.hiddenGroups(snap.catalogKey);
-        if (hidden.isEmpty) return snap.categories;
-        return [
-          for (final c in snap.categories)
-            if (!hidden.contains(c)) c,
-        ];
+        return _withoutHidden(snap.catalogKey, snap.categories);
       }
       return [
         for (final group in snap.groups())
