@@ -492,11 +492,33 @@ class TorrentPlaybackService {
       // healthy link into a provider-generated "Wrong IP" slate (IPv6 HEAD,
       // IPv4 playback). These URLs must be opened first by the real player;
       // its startup gate owns failure detection and candidate failover.
-      if (!shouldPreflightDirectStream(t)) return true;
+      if (!shouldPreflightDirectStream(t)) {
+        debugPrint(
+          '[StartupFailover] event=preflight_bypass platform=flutter '
+          'reason=ip_bound_addon addon=${t.stremioAddonId ?? '-'}',
+        );
+        return true;
+      }
       final url = t.directUrl!;
-      if (deadDirectUrls.contains(url)) return false;
-      if (validationBudget <= 0) return true; // budget spent — trust it
+      if (deadDirectUrls.contains(url)) {
+        debugPrint(
+          '[StartupFailover] event=preflight_result platform=flutter '
+          'ok=false reason=known_dead',
+        );
+        return false;
+      }
+      if (validationBudget <= 0) {
+        debugPrint(
+          '[StartupFailover] event=preflight_bypass platform=flutter '
+          'reason=budget_exhausted',
+        );
+        return true; // budget spent — trust it
+      }
       validationBudget--;
+      debugPrint(
+        '[StartupFailover] event=preflight_begin platform=flutter '
+        'remainingBudget=$validationBudget minBytes=$minStreamBytes',
+      );
       // Lenient: only positive evidence of death rejects — HEAD-refusing
       // hosts and length-less 2xx responses give no signal and whole CDNs
       // fail them identically, which would kill every candidate at once.
@@ -504,6 +526,10 @@ class TorrentPlaybackService {
         url,
         minBytes: minStreamBytes,
         lenient: true,
+      );
+      debugPrint(
+        '[StartupFailover] event=preflight_result platform=flutter '
+        'ok=$alive remainingBudget=$validationBudget',
       );
       if (!alive) {
         deadDirectUrls.add(url);

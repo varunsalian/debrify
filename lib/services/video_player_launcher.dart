@@ -4969,6 +4969,15 @@ class _AndroidTvPlaybackPayloadBuilder {
       initialSubtitles: args.initialSubtitles,
     );
 
+    debugPrint(
+      '[StartupFailover] event=native_payload platform=flutter '
+      'contentType=${contentType.name} sourceCount=${args.stremioSources?.length ?? 0} '
+      'selectedIndex=${args.stremioCurrentSourceIndex ?? 0} '
+      'tryNext=${startupRules?.tryNextOnFailure ?? false} '
+      'maxAttempts=${startupRules?.maxAttempts ?? 1} '
+      'playlistResolver=${args.resolveSourceToPlaylist != null}',
+    );
+
     return _AndroidTvPlaybackPayloadResult(
       payload: payload,
       entries: launcherEntries,

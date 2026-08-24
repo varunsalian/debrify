@@ -1168,6 +1168,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // media_kit state
   bool _isReady = false;
   bool _startupGateActive = false;
+  String _startupGateMessage = 'Checking stream…';
   bool _isPlaying = false;
   // True while the activity is shrunk into a Picture-in-Picture window; the
   // build collapses all interactive/decorative chrome so only the video shows.
@@ -7424,7 +7425,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     Duration timeout = const Duration(seconds: 12),
     Map<String, String>? httpHeaders,
     Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
   }) async {
+    final stopwatch = Stopwatch()..start();
     final completer = Completer<bool>();
     var armed = false;
     var videoWidth = 0;
@@ -7436,8 +7441,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       sourceName: source?.source,
       url: url,
     );
-    void finish(bool ok) {
-      if (!completer.isCompleted) completer.complete(ok);
+    final sourceFields = _startupSourceFields(sourceIndex, source);
+    debugPrint(
+      '[StartupFailover] event=candidate_open platform=flutter '
+      'attempt=$attempt/$maxAttempts $sourceFields aio=$isAioStreams '
+      'timeoutMs=${timeout.inMilliseconds}',
+    );
+    void finish(bool ok, String reason) {
+      if (completer.isCompleted) return;
+      debugPrint(
+        '[StartupFailover] event=candidate_result platform=flutter '
+        'attempt=$attempt/$maxAttempts $sourceFields ok=$ok reason=$reason '
+        'elapsedMs=${stopwatch.elapsedMilliseconds} width=$videoWidth '
+        'positionMs=${position.inMilliseconds} '
+        'durationMs=${candidateDuration.inMilliseconds}',
+      );
+      completer.complete(ok);
     }
 
     void maybeCommit() {
@@ -7451,7 +7470,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         url: url,
         duration: candidateDuration,
       )) {
-        finish(false);
+        finish(false, 'aiostreams_error_slate');
         return;
       }
       if (isAioStreams && candidateDuration <= Duration.zero) {
@@ -7459,23 +7478,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Give that metadata a bounded chance to expose AIOStreams' short,
         // decodable error slate; unknown-duration real streams still proceed.
         durationGraceTimer ??= Timer(const Duration(seconds: 1), () {
+          final isSlate = StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+            addonId: source?.stremioAddonId,
+            sourceName: source?.source,
+            url: url,
+            duration: candidateDuration,
+          );
           finish(
-            !StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
-              addonId: source?.stremioAddonId,
-              sourceName: source?.source,
-              url: url,
-              duration: candidateDuration,
-            ),
+            !isSlate,
+            isSlate ? 'aiostreams_error_slate' : 'decoded_video',
           );
         });
         return;
       }
-      finish(true);
+      finish(true, 'decoded_video');
     }
 
     final subs = <StreamSubscription>[
       _player.stream.error.listen((_) {
-        if (armed) finish(false);
+        if (armed) finish(false, 'player_error');
       }),
       _player.stream.width.listen((width) {
         videoWidth = width ?? 0;
@@ -7497,10 +7518,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       armed = true;
       await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
     } catch (e) {
-      debugPrint('Player startup gate: candidate open failed: $e');
-      finish(false);
+      // Exception strings from media backends may embed signed stream URLs.
+      // The runtime type is enough to distinguish open failures safely.
+      debugPrint(
+        '[StartupFailover] event=open_exception platform=flutter '
+        '$sourceFields exception=${e.runtimeType}',
+      );
+      finish(false, 'open_exception');
     }
-    final ok = await completer.future.timeout(timeout, onTimeout: () => false);
+    final ok = await completer.future.timeout(
+      timeout,
+      onTimeout: () {
+        finish(false, 'timeout');
+        return false;
+      },
+    );
     durationGraceTimer?.cancel();
     for (final sub in subs) {
       unawaited(sub.cancel());
@@ -7526,11 +7558,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final contentType = _effectiveContentType;
     final isVod = contentType == 'movie' || contentType == 'series';
     if (!isVod) {
+      debugPrint(
+        '[StartupFailover] event=bypass platform=flutter reason=non_vod '
+        'contentType=${contentType ?? 'unknown'}',
+      );
       return _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
     }
 
     _setStartupGateActive(true);
     if (sources == null || sources.isEmpty) {
+      debugPrint(
+        '[StartupFailover] event=begin platform=flutter contentType=$contentType '
+        'sourceCount=0 policy=single_candidate',
+      );
       final ok = await _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
       // Deactivate on failure too: if the caller's maybePop declines (player
       // as root route) a stuck gate would black out the screen forever.
@@ -7550,6 +7590,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
     );
     var attempts = start.attempts;
+    debugPrint(
+      '[StartupFailover] event=begin platform=flutter contentType=$contentType '
+      'sourceCount=${sources.length} selectedIndex=$firstIndex '
+      'startIndex=${start.sourceIndex} initialFailed=$initialAttemptAlreadyFailed '
+      'tryNext=${rules.tryNextOnFailure} maxAttempts=$maxAttempts '
+      'targetSeason=${_effectiveContentSeason ?? '-'} '
+      'targetEpisode=${_effectiveContentEpisode ?? '-'}',
+    );
 
     for (
       var sourceIndex = start.sourceIndex;
@@ -7561,24 +7609,49 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // how its source row is typed — never skip it over streamType.
       final isResolvedLaunchUrl =
           sourceIndex == firstIndex && initialUrl.isNotEmpty;
-      if (!isResolvedLaunchUrl &&
-          source.streamType == StreamType.externalUrl) {
+      if (!isResolvedLaunchUrl && source.streamType == StreamType.externalUrl) {
+        debugPrint(
+          '[StartupFailover] event=candidate_skip platform=flutter '
+          '${_startupSourceFields(sourceIndex, source)} reason=external_url',
+        );
         continue;
       }
       attempts++;
+      final sourceFields = _startupSourceFields(sourceIndex, source);
+      _setStartupGateMessage(
+        attempts == 1 && !initialAttemptAlreadyFailed
+            ? 'Checking stream 1 of $maxAttempts…'
+            : 'Stream unavailable · Trying $attempts of $maxAttempts…',
+      );
 
       String? url;
       List<PlaylistEntry>? resolvedPlaylist;
       var resolvedPlaylistIndex = 0;
       if (isResolvedLaunchUrl) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=launch_url',
+        );
         url = initialUrl;
       } else if (source.streamType == StreamType.directUrl &&
           source.directUrl?.isNotEmpty == true) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=direct_url',
+        );
         url = source.directUrl;
       } else if (widget.resolveSourceToPlaylist != null) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=playlist',
+        );
         try {
           resolvedPlaylist = await widget.resolveSourceToPlaylist!(source);
-        } catch (_) {
+        } catch (e) {
+          debugPrint(
+            '[StartupFailover] event=resolve_result platform=flutter '
+            '$sourceFields ok=false reason=exception exception=${e.runtimeType}',
+          );
           resolvedPlaylist = null;
         }
         if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
@@ -7606,6 +7679,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // fallback. Opening row zero would silently play the wrong
               // episode and then adopt that unrelated playlist.
               resolvedPlaylist = null;
+              debugPrint(
+                '[StartupFailover] event=candidate_reject platform=flutter '
+                '$sourceFields reason=playlist_missing_episode '
+                'targetSeason=$_effectiveContentSeason '
+                'targetEpisode=$_effectiveContentEpisode',
+              );
               continue;
             }
             resolvedPlaylistIndex = exactIndex;
@@ -7613,18 +7692,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           url = resolvedPlaylist[resolvedPlaylistIndex].url;
         }
       } else if (_effectiveResolver != null) {
+        debugPrint(
+          '[StartupFailover] event=resolve platform=flutter attempt=$attempts/$maxAttempts '
+          '$sourceFields route=single_url',
+        );
         try {
           url = await _effectiveResolver!(source);
-        } catch (_) {
+        } catch (e) {
+          debugPrint(
+            '[StartupFailover] event=resolve_result platform=flutter '
+            '$sourceFields ok=false reason=exception exception=${e.runtimeType}',
+          );
           url = null;
         }
       }
 
-      if (url == null || url.isEmpty) continue;
+      if (url == null || url.isEmpty) {
+        debugPrint(
+          '[StartupFailover] event=candidate_reject platform=flutter '
+          '$sourceFields reason=empty_resolution',
+        );
+        continue;
+      }
       final ok = await _tryOpenStartupVod(
         url,
         httpHeaders: httpHeaders,
         source: source,
+        sourceIndex: sourceIndex,
+        attempt: attempts,
+        maxAttempts: maxAttempts,
       );
       if (!mounted) return false;
       if (!ok) continue;
@@ -7638,16 +7734,43 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _playlistIdentityToken++;
       }
       _setStartupGateActive(false);
+      debugPrint(
+        '[StartupFailover] event=commit platform=flutter '
+        'attempt=$attempts/$maxAttempts $sourceFields '
+        'playlistItems=${resolvedPlaylist?.length ?? 0} '
+        'playlistIndex=$resolvedPlaylistIndex',
+      );
       return true;
     }
     _setStartupGateActive(false);
+    debugPrint(
+      '[StartupFailover] event=exhausted platform=flutter '
+      'attempts=$attempts maxAttempts=$maxAttempts sourceCount=${sources.length}',
+    );
     return false;
+  }
+
+  String _startupSourceFields(int? index, Torrent? source) {
+    String safe(String? value) {
+      if (value == null || value.isEmpty) return '-';
+      final compact = value.replaceAll(RegExp(r'\s+'), ' ');
+      return compact.length <= 64 ? compact : compact.substring(0, 64);
+    }
+
+    return 'sourceIndex=${index ?? '-'} type=${source?.streamType.name ?? '-'} '
+        'addon=${safe(source?.stremioAddonId)} source=${safe(source?.source)}';
   }
 
   void _setStartupGateActive(bool active) {
     if (_startupGateActive == active) return;
     _startupGateActive = active;
     if (mounted) setState(() {});
+  }
+
+  void _setStartupGateMessage(String message) {
+    if (_startupGateMessage == message) return;
+    _startupGateMessage = message;
+    if (mounted && _startupGateActive) setState(() {});
   }
 
   // ─── Stremio Source Sheet ───────────────────────────────────────────
@@ -12496,10 +12619,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
                 if (_startupGateActive)
-                  const ColoredBox(
+                  ColoredBox(
                     color: Colors.black,
                     child: Center(
-                      child: CircularProgressIndicator(color: Colors.white),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 34,
+                            height: 34,
+                            child: CircularProgressIndicator(
+                              color: Colors.white70,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            _startupGateMessage,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 // Transition overlay above video
