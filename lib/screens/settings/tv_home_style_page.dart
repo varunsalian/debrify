@@ -78,6 +78,20 @@ String tvHomeStyleLabel(String style) {
 String effectiveOffTvHomeStyle(String raw) =>
     raw == 'spotlight' ? 'spotlight' : 'classic';
 
+/// Whether an off-TV Home should stay in the Spotlight shell while its
+/// content is being resolved.
+///
+/// A freshly mounted Home has no hero yet. Falling back to Classic solely for
+/// that loading window paints its persistent search bar before the first
+/// catalog arrives, then replaces the whole page with Spotlight. Keep the
+/// selected shell during loading; once loading finishes, a genuinely missing
+/// hero still falls back to Classic so CW/favourites-only homes remain useful.
+bool shouldUseOffTvSpotlightShell({
+  required String rawStyle,
+  required bool loading,
+  required bool hasHero,
+}) => effectiveOffTvHomeStyle(rawStyle) == 'spotlight' && (loading || hasHero);
+
 /// The choices an off-TV picker offers — see [effectiveOffTvHomeStyle].
 List<TvHomeStyleChoice> get kOffTvHomeStyleChoices => [
       for (final c in kTvHomeStyleChoices)

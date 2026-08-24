@@ -102,7 +102,8 @@ import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
-import 'settings/tv_home_style_page.dart' show effectiveOffTvHomeStyle;
+import 'settings/tv_home_style_page.dart'
+    show effectiveOffTvHomeStyle, shouldUseOffTvSpotlightShell;
 import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
 import 'stremio_tv/stremio_tv_service.dart';
@@ -5630,15 +5631,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       !widget.isTelevision &&
       effectiveOffTvHomeStyle(_tvHomeStyle) == 'spotlight';
 
-  /// Whether the off-TV Home renders the Spotlight shell branch. The hero
-  /// guard matters: CW/favourites-only content passes a "shelves have items"
-  /// test but would render a large empty hero — the hero reel only ever comes
-  /// from a catalog section.
+  /// Whether the off-TV Home renders the Spotlight shell branch. While the
+  /// selected layout is loading, retain this branch so a newly mounted Home
+  /// cannot flash Classic's persistent search bar before its hero arrives.
+  /// After loading, the hero guard still matters: CW/favourites-only content
+  /// would otherwise render a large empty hero.
   bool get _spotlightShellActive =>
-      _spotlightSelected &&
       !widget.searchMode &&
       !widget.discoverMode &&
-      _spotlightHero.isNotEmpty;
+      shouldUseOffTvSpotlightShell(
+        rawStyle: _tvHomeStyle,
+        loading: _loading,
+        hasHero: _spotlightHero.isNotEmpty,
+      );
 
   /// Search state that forces the header/sheet to be visible. Typing is
   /// covered by the focus latch (one can only type while the field is
