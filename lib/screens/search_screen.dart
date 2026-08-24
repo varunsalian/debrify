@@ -2139,15 +2139,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final cardSettings = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
+      StorageService.getHomeHideCatalogAddonNames(),
     ]);
     if (!mounted) return;
     final orientation = cardSettings[0] as HomeCardOrientation;
     final hideTitlesAndRatings = cardSettings[1] as bool;
+    final hideCatalogAddonNames = cardSettings[2] as bool;
     if (orientation != _homeCardOrientation ||
-        hideTitlesAndRatings != _hideHomeCardTitlesAndRatings) {
+        hideTitlesAndRatings != _hideHomeCardTitlesAndRatings ||
+        hideCatalogAddonNames != _hideHomeCatalogAddonNames) {
       setState(() {
         _homeCardOrientation = orientation;
         _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
+        _hideHomeCatalogAddonNames = hideCatalogAddonNames;
       });
     }
     // Off-TV the hero-trailer prefs ride this same signal — Settings is a
@@ -5596,6 +5600,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // flash portrait rows before the async pref read lands.
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   bool _hideHomeCardTitlesAndRatings = false;
+  bool _hideHomeCatalogAddonNames = false;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -5871,17 +5876,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final values = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
+      StorageService.getHomeHideCatalogAddonNames(),
     ]);
     if (!mounted) return;
     final orientation = values[0] as HomeCardOrientation;
     final hideTitlesAndRatings = values[1] as bool;
+    final hideCatalogAddonNames = values[2] as bool;
     if (orientation == _homeCardOrientation &&
-        hideTitlesAndRatings == _hideHomeCardTitlesAndRatings) {
+        hideTitlesAndRatings == _hideHomeCardTitlesAndRatings &&
+        hideCatalogAddonNames == _hideHomeCatalogAddonNames) {
       return;
     }
     setState(() {
       _homeCardOrientation = orientation;
       _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
+      _hideHomeCatalogAddonNames = hideCatalogAddonNames;
     });
   }
 
@@ -6446,7 +6455,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return SpotlightShelf(
       id: railKey,
       title: _sections[i].title,
-      tag: _sectionTag(_sections[i]),
+      tag: _catalogSourceTag(_sections[i]),
       nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
       // The same destination the classic rails' "See All" link opens —
       // including the tracker-list rows, which _openCatalogSeeAll routes to
@@ -16849,6 +16858,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return section.addon.name;
   }
 
+  /// Applies the Home presentation preference only to catalog/source
+  /// provenance. Continue Watching type tags bypass this helper and remain
+  /// visible so identically titled Movies/Series rows stay distinguishable.
+  String? _catalogSourceTag(CatalogSection section) =>
+      _hideHomeCatalogAddonNames ? null : _sectionTag(section);
+
   /// Open the full-screen Stremio-styled catalog browser for a rail. Seeds the
   /// grid with the rail's already-loaded items + paging cursor so it continues
   /// where the rail left off; item taps route back through [_openItem] so the
@@ -17184,7 +17199,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       children: [
         _railHeader(
           title: section.title,
-          tag: _sectionTag(section),
+          tag: _catalogSourceTag(section),
           onSeeAll: () => _openCatalogSeeAll(section),
         ),
         SizedBox(

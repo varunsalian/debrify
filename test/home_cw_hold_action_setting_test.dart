@@ -32,4 +32,14 @@ void main() {
     await StorageService.clearAllHomePageSettings();
     expect(await StorageService.getHomeHideCardTitlesAndRatings(), isFalse);
   });
+
+  test('Hide Home catalog add-on names defaults off and persists', () async {
+    expect(await StorageService.getHomeHideCatalogAddonNames(), isFalse);
+
+    await StorageService.setHomeHideCatalogAddonNames(true);
+    expect(await StorageService.getHomeHideCatalogAddonNames(), isTrue);
+
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getHomeHideCatalogAddonNames(), isFalse);
+  });
 }

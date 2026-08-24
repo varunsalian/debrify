@@ -40,6 +40,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   String _tvHomeStyle = 'canvas';
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   bool _hideCardTitlesAndRatings = false;
+  bool _hideCatalogAddonNames = false;
   HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 
@@ -172,6 +173,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getHomeCardOrientation();
       final hideCardTitlesAndRatings =
           await StorageService.getHomeHideCardTitlesAndRatings();
+      final hideCatalogAddonNames =
+          await StorageService.getHomeHideCatalogAddonNames();
       final heroSource = await StorageService.getHomeHeroSource();
 
       // Only the two views that the current Home screen can render are valid.
@@ -205,6 +208,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _tvHomeStyle = tvHomeStyle;
         _homeCardOrientation = spotlightCardOrientation;
         _hideCardTitlesAndRatings = hideCardTitlesAndRatings;
+        _hideCatalogAddonNames = hideCatalogAddonNames;
         _heroSource = heroSource;
         _loading = false;
       });
@@ -285,6 +289,20 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       await StorageService.setHomeHideCardTitlesAndRatings(value);
       if (!mounted) return;
       setState(() => _hideCardTitlesAndRatings = value);
+      MainPageBridge.notifyHomeSettingsChanged();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
+    }
+  }
+
+  Future<void> _setHideCatalogAddonNames(bool value) async {
+    try {
+      await StorageService.setHomeHideCatalogAddonNames(value);
+      if (!mounted) return;
+      setState(() => _hideCatalogAddonNames = value);
       MainPageBridge.notifyHomeSettingsChanged();
     } catch (e) {
       if (!mounted) return;
@@ -480,6 +498,13 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           'Remove title and rating text from cards on Home',
                       value: _hideCardTitlesAndRatings,
                       onChanged: _setHideCardTitlesAndRatings,
+                    ),
+                    SettingsToggleTile(
+                      icon: Icons.label_off_rounded,
+                      title: 'Hide Catalog Add-on Names',
+                      subtitle: 'Remove source labels beside Home row headings',
+                      value: _hideCatalogAddonNames,
+                      onChanged: _setHideCatalogAddonNames,
                     ),
                   ],
                 ),

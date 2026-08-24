@@ -282,6 +282,8 @@ class StorageService {
   static const String _homeCardOrientationKey = 'home_card_orientation';
   static const String _homeHideCardTitlesAndRatingsKey =
       'home_hide_card_titles_and_ratings';
+  static const String _homeHideCatalogAddonNamesKey =
+      'home_hide_catalog_addon_names';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -5656,6 +5658,18 @@ class StorageService {
     await prefs.setBool(_homeHideCardTitlesAndRatingsKey, value);
   }
 
+  /// Suppresses the source/add-on pill beside Home catalog row headings.
+  /// The catalog title itself remains visible so the row keeps its identity.
+  static Future<bool> getHomeHideCatalogAddonNames() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeHideCatalogAddonNamesKey) ?? false;
+  }
+
+  static Future<void> setHomeHideCatalogAddonNames(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeHideCatalogAddonNamesKey, value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -5667,6 +5681,7 @@ class StorageService {
     await prefs.remove(_homeFavoritesOpenFolderKey);
     await prefs.remove(_homeCardOrientationKey);
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);
+    await prefs.remove(_homeHideCatalogAddonNamesKey);
   }
 
   // Reddit Settings

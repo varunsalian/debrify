@@ -323,6 +323,29 @@ void main() {
     expect(find.text('Top'), findsOneWidget);
   });
 
+  testWidgets('non-source Continue Watching type tags stay visible', (
+    tester,
+  ) async {
+    final item = _meta('tt1', 'Alpha');
+    await tester.pumpWidget(
+      host(
+        [item],
+        [
+          SpotlightShelf(
+            title: 'Continue Watching',
+            tag: 'Movies',
+            nodes: rows[0],
+            items: [SpotlightCard(title: 'Alpha', onOpen: _noop)],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continue Watching'), findsOneWidget);
+    expect(find.text('MOVIES'), findsOneWidget);
+  });
+
   testWidgets('the board is LAZY — off-screen shelves do not build at mount', (
     tester,
   ) async {

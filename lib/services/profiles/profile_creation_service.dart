@@ -25,6 +25,7 @@ class ProfileCreationService {
     'tv_home_style',
     'home_card_orientation',
     'home_hide_card_titles_and_ratings',
+    'home_hide_catalog_addon_names',
     'home_cw_hold_to_quick_play',
     'tv_sidebar_style',
     'desktop_sidebar_style',
