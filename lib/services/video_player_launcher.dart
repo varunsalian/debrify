@@ -4284,6 +4284,8 @@ class _AndroidTvPlaybackPayload {
   final List<Map<String, dynamic>>? stremioSources;
   final int? stremioCurrentSourceIndex;
   final bool hasPlaylistResolver;
+  final bool startupTryNextOnFailure;
+  final int startupMaxAttempts;
   final bool traktScrobble;
   final double? traktProgressPercent;
   // Simkl parallel pair. Only the scrobble flag matters Dart-side (the
@@ -4327,6 +4329,8 @@ class _AndroidTvPlaybackPayload {
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.hasPlaylistResolver = false,
+    this.startupTryNextOnFailure = false,
+    this.startupMaxAttempts = 1,
     this.traktScrobble = false,
     this.traktProgressPercent,
     this.simklScrobble = false,
@@ -4382,6 +4386,10 @@ class _AndroidTvPlaybackPayload {
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
       if (hasPlaylistResolver) 'hasPlaylistResolver': true,
+      if (stremioSources != null && stremioSources!.isNotEmpty) ...{
+        'startupTryNextOnFailure': startupTryNextOnFailure,
+        'startupMaxAttempts': startupMaxAttempts.clamp(1, 10),
+      },
       // Keyed 'traktProgressPercent' for the native side's existing resume
       // input, but carries the furthest of the Trakt/Simkl launch percents.
       if (_effectiveLaunchPercent != null)
@@ -4683,6 +4691,11 @@ class _AndroidTvPlaybackPayloadBuilder {
     final playlistEntries = _normalizePlaylist();
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
+    final startupRules = args.stremioSources?.isNotEmpty == true
+        ? await StorageService.getQuickPlayRules(
+            isMovie: contentType != _PlaybackContentType.series,
+          )
+        : null;
     final localCompletionTracking =
         !args.traktScrobble &&
         !args.simklScrobble &&
@@ -4942,6 +4955,8 @@ class _AndroidTvPlaybackPayloadBuilder {
       stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
       stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
       hasPlaylistResolver: args.resolveSourceToPlaylist != null,
+      startupTryNextOnFailure: startupRules?.tryNextOnFailure ?? false,
+      startupMaxAttempts: startupRules?.maxAttempts ?? 1,
       traktScrobble: args.traktScrobble,
       traktProgressPercent: args.traktProgressPercent,
       simklScrobble: args.simklScrobble,

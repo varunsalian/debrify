@@ -124,6 +124,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Views
     private lateinit var playerView: PlayerView
+    private lateinit var startupGateView: View
     private lateinit var titleContainer: View
     private lateinit var titleView: TextView
     // OTT-style title views (compact mode when metadata available)
@@ -703,6 +704,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             renderTimeMs: Long,
         ) {
             iptvTuneDiagnostics.onFirstFrame()
+            commitStartupCandidate()
         }
 
         override fun onLoadCompleted(
@@ -990,6 +992,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSourceBadgeText: TextView? = null
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
     private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
+    // VOD is not exposed as successfully started until ExoPlayer renders a
+    // frame. HTTP errors, resolver failures and silent startup stalls advance
+    // this cursor through the already-ranked source list.
+    private var startupFailoverCursor: StartupFailoverCursor? = null
+    private var startupFailoverGeneration = 0
+    private var startupFailoverTimeout: Runnable? = null
+    private var startupCommitCheck: Runnable? = null
+    private var startupFirstFrameAtElapsedMs = 0L
+    private var startupFailoverDispatching = false
+    private var startupTryNextOnFailure = false
+    private var startupMaxAttempts = 1
 
     // Network & Buffering presets (Settings → Playback), riding the launch
     // payload. "standard" = the stock configuration in setupPlayer runs
@@ -1546,6 +1559,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (!isIptvMode && startupFailoverCursor?.committed == false) {
+                // Ignore a queued callback from media already superseded by a
+                // fallback prepare; Media3 clears playerError for that case.
+                if (player?.playerError != null) {
+                    failStartupCandidate("player:${error.errorCodeName}")
+                }
+                return
+            }
             iptvTuneDiagnostics.onError(error)
             // Stale-delivery gate for EVERY IPTV recovery path below: a
             // queued onPlayerError whose media item was already superseded
@@ -1770,6 +1791,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         stremioSubtitleService = StremioSubtitleService(this)
 
         // Start playback
+        beginStartupFailoverIfEligible()
         playItem(currentIndex)
     }
 
@@ -2018,6 +2040,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun bindViews() {
         playerView = findViewById(R.id.android_tv_player_view)
+        startupGateView = findViewById(R.id.android_tv_startup_gate)
         titleContainer = findViewById(R.id.android_tv_title_container)
         titleView = findViewById(R.id.android_tv_player_title)
         // OTT-style title views (compact mode)
@@ -3482,15 +3505,34 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun resolveAndPlay(index: Int, item: PlaybackItem) {
         android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - index: $index, resumeId: ${item.resumeId}, id: ${item.id}")
         setResolvingState(true)
+        val startupGeneration = if (startupFailoverCursor?.committed == false) {
+            startupFailoverGeneration
+        } else {
+            null
+        }
 
         // Request stream from Flutter with async callback
         requestStreamFromFlutter(item, index) { url, provider ->
             android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
+            if (!isCurrentStartupGeneration(
+                    captured = startupGeneration,
+                    current = startupFailoverGeneration,
+                )
+            ) {
+                android.util.Log.d(
+                    "AndroidTvPlayer",
+                    "resolveAndPlay - stale startup generation $startupGeneration " +
+                        "(current: $startupFailoverGeneration), discarding",
+                )
+                return@requestStreamFromFlutter
+            }
             setResolvingState(false)
 
             if (url.isNullOrEmpty()) {
                 android.util.Log.e("AndroidTvPlayer", "resolveAndPlay - URL is null or empty!")
-                Toast.makeText(this, "Unable to load stream", Toast.LENGTH_SHORT).show()
+                if (!failStartupResolution(currentStremioSourceIndex, "initial-resolve")) {
+                    Toast.makeText(this, "Unable to load stream", Toast.LENGTH_SHORT).show()
+                }
                 return@requestStreamFromFlutter
             }
 
@@ -14470,6 +14512,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             sendIptvProgress(completed)
             return
         }
+        // READY and isPlaying may arrive before the video renderer produces a
+        // frame. Do not persist/scrobble a candidate the startup gate has not
+        // committed.
+        if (startupFailoverCursor?.committed == false) return
         val model = payload ?: return
         val item = model.items[currentIndex]
         // Use the largest stable duration seen — ExoPlayer can briefly report a
@@ -14747,6 +14793,169 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Stremio Source Switcher
     // ═══════════════════════════════════════════════════════════════════════
 
+    private fun beginStartupFailoverIfEligible() {
+        val model = payload ?: return
+        if (isIptvMode || stremioSources.isEmpty() || model.items.isEmpty()) return
+
+        val cursor = StartupFailoverCursor(
+            startIndex = currentStremioSourceIndex,
+            maxAttempts = if (startupTryNextOnFailure) startupMaxAttempts else 1,
+        )
+        val first = cursor.beginInitial(stremioSources.size) ?: return
+        startupFailoverCursor = cursor
+        startupGateView.visibility = View.VISIBLE
+        armStartupCandidate(first)
+    }
+
+    private fun armStartupCandidate(sourceIndex: Int) {
+        startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
+        startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
+        startupCommitCheck = null
+        startupFirstFrameAtElapsedMs = 0L
+        startupFailoverGeneration++
+        val generation = startupFailoverGeneration
+        val timeout = Runnable {
+            if (generation == startupFailoverGeneration &&
+                startupFailoverCursor?.committed == false
+            ) {
+                failStartupCandidate("timeout")
+            }
+        }
+        startupFailoverTimeout = timeout
+        progressHandler.postDelayed(timeout, STARTUP_FAILOVER_TIMEOUT_MS)
+        android.util.Log.d(
+            "AndroidTvPlayer",
+            "Startup gate armed: source=$sourceIndex generation=$generation",
+        )
+    }
+
+    private fun commitStartupCandidate() {
+        val cursor = startupFailoverCursor ?: return
+        if (cursor.committed) return
+        val source = stremioSources.getOrNull(currentStremioSourceIndex)
+        val isAioStreams = isAioStreamsSource(
+            addonId = source?.addonId,
+            sourceName = source?.source,
+            displayName = source?.name,
+            url = source?.directUrl,
+        )
+        val duration = player?.duration ?: C.TIME_UNSET
+        if (isAioStreams && duration <= 0L &&
+            (startupFirstFrameAtElapsedMs == 0L ||
+                SystemClock.elapsedRealtime() - startupFirstFrameAtElapsedMs < 1_000L)
+        ) {
+            // Some progressive sources publish their timeline just after the
+            // first frame. Keep the shield up until it is known; the main
+            // watchdog remains the upper bound if it never resolves.
+            if (startupFirstFrameAtElapsedMs == 0L) {
+                startupFirstFrameAtElapsedMs = SystemClock.elapsedRealtime()
+            }
+            if (startupCommitCheck == null) {
+                val check = Runnable {
+                    startupCommitCheck = null
+                    commitStartupCandidate()
+                }
+                startupCommitCheck = check
+                progressHandler.postDelayed(check, 200L)
+            }
+            return
+        }
+        if (isAioStreamsErrorSlate(
+                addonId = source?.addonId,
+                sourceName = source?.source,
+                displayName = source?.name,
+                url = source?.directUrl,
+                durationMs = duration,
+            )
+        ) {
+            // AIOStreams/ElfHosted returns a short, perfectly decodable video
+            // for errors such as Wrong IP. A first-frame-only gate would accept
+            // that interstitial, so reject its implausible VOD duration while
+            // it is still hidden by startupGateView.
+            failStartupCandidate("aiostreams-error-slate:$duration")
+            return
+        }
+        cursor.commit()
+        startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
+        startupFailoverTimeout = null
+        startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
+        startupCommitCheck = null
+        startupFailoverGeneration++
+        startupGateView.visibility = View.GONE
+        hideStatusPill()
+        restartProgressUpdates()
+        android.util.Log.d(
+            "AndroidTvPlayer",
+            "Startup gate committed after first frame (${cursor.attempts} attempt(s))",
+        )
+    }
+
+    private fun failStartupCandidate(reason: String) {
+        val cursor = startupFailoverCursor ?: return
+        if (cursor.committed || startupFailoverDispatching) return
+        startupFailoverDispatching = true
+        try {
+            startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
+            startupFailoverTimeout = null
+            startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
+            startupCommitCheck = null
+            startupFailoverGeneration++
+            stremioResolutionToken++ // invalidate any resolver callback for the failed row
+            cancelSourceSwitchWait()
+            setResolvingState(false)
+            player?.stop()
+
+            val nextIndex = cursor.nextIndex(stremioSources.size) { index ->
+                stremioSources.getOrNull(index)?.streamType != "externalUrl"
+            }
+            if (nextIndex == null) {
+                android.util.Log.w(
+                    "AndroidTvPlayer",
+                    "Startup gate exhausted after ${cursor.attempts} attempt(s): $reason",
+                )
+                startupFailoverCursor = null
+                hideStatusPill()
+                Toast.makeText(
+                    this,
+                    "No playable source could be started",
+                    Toast.LENGTH_LONG,
+                ).show()
+                finish()
+                return
+            }
+
+            android.util.Log.w(
+                "AndroidTvPlayer",
+                "Startup candidate failed ($reason); trying source $nextIndex",
+            )
+            currentStremioSourceIndex = nextIndex
+            updateStremioQualityBadge()
+            sourceBrowser?.render()
+            armStartupCandidate(nextIndex)
+            val next = stremioSources.getOrNull(nextIndex)
+            if (next != null) {
+                onStremioSourceSelected(next)
+            } else {
+                // Unreachable today (nextIndex is always < size), but never
+                // recurse under the dispatch guard — it would swallow the call
+                // and stall behind the gate until the watchdog. Re-enter on
+                // the next loop tick instead.
+                progressHandler.post { failStartupCandidate("missing-source") }
+            }
+        } finally {
+            startupFailoverDispatching = false
+        }
+    }
+
+    private fun failStartupResolution(sourceIndex: Int, reason: String): Boolean {
+        val cursor = startupFailoverCursor
+        if (cursor?.committed != false || sourceIndex != currentStremioSourceIndex) {
+            return false
+        }
+        failStartupCandidate(reason)
+        return true
+    }
+
     private fun setupStremioSources() {
         if (stremioSources.isEmpty()) return
 
@@ -14880,6 +15089,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun onStremioSourceSelected(source: StremioSource) {
         android.util.Log.d("AndroidTvPlayer", "Stremio source selected: index=${source.index}, type=${source.streamType}, name=${source.displayTitle}, hasPlaylistResolver=$hasPlaylistResolver")
 
+        // A manual pick made before the first frame remains protected, but it
+        // becomes the new head of the ordered ladder. Internal failover calls
+        // arrive with startupFailoverDispatching set and retain their cursor.
+        if (startupFailoverCursor?.committed == false && !startupFailoverDispatching) {
+            val cursor = StartupFailoverCursor(
+                startIndex = source.index,
+                maxAttempts = if (startupTryNextOnFailure) startupMaxAttempts else 1,
+            )
+            cursor.beginInitial(stremioSources.size)
+            startupFailoverCursor = cursor
+            currentStremioSourceIndex = source.index
+            armStartupCandidate(source.index)
+        }
+
         // Cancel any pending source switch wait from previous selection
         cancelSourceSwitchWait()
 
@@ -14927,7 +15150,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         } else {
                             android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - null URL returned")
                             runOnUiThread {
-                                showStatusPillTransient("Couldn't switch — failed to resolve source")
+                                if (!failStartupResolution(source.index, "empty-resolve")) {
+                                    showStatusPillTransient("Couldn't switch — failed to resolve source")
+                                }
                             }
                         }
                     }
@@ -14936,7 +15161,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (token != stremioResolutionToken) return
                         android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - error: $errorCode - $errorMessage")
                         runOnUiThread {
-                            showStatusPillTransient("Couldn't switch — source resolution failed")
+                            if (!failStartupResolution(source.index, "resolve:$errorCode")) {
+                                showStatusPillTransient("Couldn't switch — source resolution failed")
+                            }
                         }
                     }
 
@@ -14944,14 +15171,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (token != stremioResolutionToken) return
                         android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - not implemented")
                         runOnUiThread {
-                            showStatusPillTransient("Couldn't switch source")
+                            if (!failStartupResolution(source.index, "resolve-not-implemented")) {
+                                showStatusPillTransient("Couldn't switch source")
+                            }
                         }
                     }
                 }
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "resolveStremioSource - exception: ${e.message}", e)
-            showStatusPillTransient("Couldn't switch source")
+            if (!failStartupResolution(source.index, "resolve-exception")) {
+                showStatusPillTransient("Couldn't switch source")
+            }
         }
     }
 
@@ -14973,11 +15204,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         val map = result as? Map<*, *>
                         val itemsList = map?.get("items") as? List<*>
                         if (itemsList != null && itemsList.isNotEmpty()) {
-                            runOnUiThread { switchToSourcePlaylist(source.index, itemsList) }
+                            runOnUiThread {
+                                switchToSourcePlaylist(
+                                    source.index,
+                                    itemsList,
+                                    requireExactStartupEpisode =
+                                        startupFailoverCursor?.committed == false,
+                                )
+                            }
                         } else {
                             android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - null or empty items returned")
                             runOnUiThread {
-                                showStatusPillTransient("Source unavailable — not cached or not a video")
+                                if (!failStartupResolution(source.index, "empty-playlist")) {
+                                    showStatusPillTransient("Source unavailable — not cached or not a video")
+                                }
                             }
                         }
                     }
@@ -14986,7 +15226,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (token != stremioResolutionToken) return
                         android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - error: $errorCode - $errorMessage")
                         runOnUiThread {
-                            showStatusPillTransient("Couldn't switch — failed to resolve source")
+                            if (!failStartupResolution(source.index, "playlist:$errorCode")) {
+                                showStatusPillTransient("Couldn't switch — failed to resolve source")
+                            }
                         }
                     }
 
@@ -14994,14 +15236,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (token != stremioResolutionToken) return
                         android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - not implemented")
                         runOnUiThread {
-                            showStatusPillTransient("Couldn't switch source")
+                            if (!failStartupResolution(source.index, "playlist-not-implemented")) {
+                                showStatusPillTransient("Couldn't switch source")
+                            }
                         }
                     }
                 }
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "resolveSourceToPlaylist - exception: ${e.message}", e)
-            showStatusPillTransient("Couldn't switch source")
+            if (!failStartupResolution(source.index, "playlist-exception")) {
+                showStatusPillTransient("Couldn't switch source")
+            }
         }
     }
 
@@ -15220,6 +15466,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         targetSeason: Int? = null,
         targetEpisode: Int? = null,
         suppressTargetResume: Boolean = false,
+        requireExactStartupEpisode: Boolean = false,
     ) {
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
 
@@ -15275,6 +15522,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (newItems.isEmpty()) {
             android.util.Log.e("AndroidTvPlayer", "switchToSourcePlaylist - no items parsed successfully")
             showStatusPillTransient("Source unavailable")
+            return
+        }
+
+        if (requireExactStartupEpisode &&
+            resumeSeason != null &&
+            resumeEpisode != null &&
+            !startupPlaylistSatisfiesEpisode(
+                newItems.map { it.season to it.episode },
+                resumeSeason,
+                resumeEpisode,
+            )
+        ) {
+            android.util.Log.w(
+                "AndroidTvPlayer",
+                "Startup playlist source $sourceIndex omits S${resumeSeason}E$resumeEpisode",
+            )
+            if (!failStartupResolution(sourceIndex, "playlist-missing-episode")) {
+                showStatusPillTransient("Source does not contain this episode")
+            }
             return
         }
 
@@ -15394,7 +15660,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
 
         // Report the switch outcome once playback settles
-        watchSourceSwitchOutcome(sourceIndex)
+        if (startupFailoverCursor?.committed != false) {
+            watchSourceSwitchOutcome(sourceIndex)
+        }
     }
 
     private fun rebuildNavigationMaps(model: PlaybackPayload, contentType: String) {
@@ -15484,7 +15752,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         player?.play()
 
         // Report the switch outcome once playback settles
-        watchSourceSwitchOutcome(sourceIndex)
+        if (startupFailoverCursor?.committed != false) {
+            watchSourceSwitchOutcome(sourceIndex)
+        }
 
         // Update the title content for the next controls reveal.
         val currentSource = stremioSources.getOrNull(sourceIndex)
@@ -15632,6 +15902,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Parse playlist resolver flag
             hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
+            startupTryNextOnFailure = obj.optBoolean("startupTryNextOnFailure", false)
+            startupMaxAttempts = obj.optInt("startupMaxAttempts", 1).coerceIn(1, 10)
 
             // Network & Buffering presets. Parsed unconditionally (defaults
             // "standard") so a relaunch/next-episode payload can never
@@ -15856,6 +16128,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         iptvTuneDiagnostics.onSessionEnd()
+        startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
+        startupFailoverTimeout = null
+        startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
+        startupCommitCheck = null
+        startupFailoverGeneration++
+        startupFailoverCursor = null
+        if (::startupGateView.isInitialized) startupGateView.visibility = View.GONE
         clearIptvTwinTrial()
         iptvLiveRecovery.cancel()
         iptvNetworkCallback?.let {
@@ -16661,6 +16940,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
          */
         private const val USE_UNIFIED_MENU = true
         private const val PROGRESS_INTERVAL_MS = 5_000L
+        private const val STARTUP_FAILOVER_TIMEOUT_MS = 12_000L
         private const val UP_NEXT_THRESHOLD_MS = 25_000L   // show card when this much remains
         private const val UP_NEXT_MIN_DURATION_MS = 5 * 60_000L  // skip for short clips
         private const val UP_NEXT_TICK_MS = 500L
@@ -16733,6 +17013,7 @@ private data class StremioSource(
     val sizeBytes: Long,
     val seeders: Int,
     val source: String?,
+    val addonId: String? = null,
     val quality: String,     // parsed: "4K", "1080p", "720p", "480p", "HD"
     // Coverage stamped by the Dart search engines: 'completeSeries',
     // 'multiSeasonPack', 'seasonPack', 'singleEpisode', or null (unknown).
@@ -16774,6 +17055,7 @@ private data class StremioSource(
                 sizeBytes = obj.optLong("size_bytes", 0),
                 seeders = obj.optInt("seeders", 0),
                 source = obj.optString("source").takeIf { it.isNotEmpty() },
+                addonId = obj.optString("stremio_addon_id").takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
                 coverageType = obj.optString("coverage_type").takeIf { it.isNotEmpty() },
             )
@@ -16790,6 +17072,7 @@ private data class StremioSource(
                 sizeBytes = (map["size_bytes"] as? Number)?.toLong() ?: 0,
                 seeders = (map["seeders"] as? Number)?.toInt() ?: 0,
                 source = (map["source"] as? String)?.takeIf { it.isNotEmpty() },
+                addonId = (map["stremio_addon_id"] as? String)?.takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
                 coverageType = (map["coverage_type"] as? String)?.takeIf { it.isNotEmpty() },
             )

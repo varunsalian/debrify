@@ -51,6 +51,7 @@ import 'stremio_service.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
 import 'stream_url_validator.dart';
+import 'startup_stream_policy.dart';
 import 'torbox_service.dart';
 import 'torrent_file_service.dart';
 import 'torrent_service.dart';
@@ -485,6 +486,13 @@ class TorrentPlaybackService {
     Future<bool> directLooksAlive(Torrent t) async {
       if (rules?.validateDirectLinks == false) return true;
       if (!validatableVod) return true;
+      // AIOStreams/debrid proxy URLs can be single-use or bind themselves to
+      // the address family of the first request. Probing one through Dart's
+      // HTTP stack and then opening it through media-kit/ExoPlayer can turn a
+      // healthy link into a provider-generated "Wrong IP" slate (IPv6 HEAD,
+      // IPv4 playback). These URLs must be opened first by the real player;
+      // its startup gate owns failure detection and candidate failover.
+      if (!shouldPreflightDirectStream(t)) return true;
       final url = t.directUrl!;
       if (deadDirectUrls.contains(url)) return false;
       if (validationBudget <= 0) return true; // budget spent — trust it
@@ -1719,6 +1727,21 @@ class TorrentPlaybackService {
   @visibleForTesting
   static int directValidationBudgetForRules(QuickPlayRules? _) => 5;
 
+  /// Whether a direct stream may safely be touched by Dart before the player.
+  ///
+  /// Keep this policy on source provenance as well as hostname: AIOStreams
+  /// commonly returns a provider/CDN URL whose final host no longer contains
+  /// "aiostreams", while the addon id/source still identifies the link as an
+  /// IP-bound proxy result.
+  @visibleForTesting
+  static bool shouldPreflightDirectStream(Torrent torrent) {
+    return !StartupStreamPolicy.isAioStreams(
+      addonId: torrent.stremioAddonId,
+      sourceName: torrent.source,
+      url: torrent.directUrl,
+    );
+  }
+
   /// Whether direct-addon rows should be attempted before torrent acquisition.
   /// A torrent-first source plan tries the torrent twin first and retains the
   /// direct row as the existing no-provider/dead-end rescue.
@@ -2099,6 +2122,7 @@ class TorrentPlaybackService {
         if (cached != null) return cached;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
         if (!rules.validateDirectLinks) return true;
+        if (!shouldPreflightDirectStream(source)) return true;
         // Match initial series Quick Play: lenient HEAD validation rejects
         // positive evidence of death without penalising HEAD-hostile CDNs.
         final alive = await StreamUrlValidator.isPlayableVideoUrl(
@@ -3290,7 +3314,8 @@ class TorrentPlaybackService {
               isMovie: meta.contentType == 'movie',
             );
             if (cancel.cancelled) return true;
-            if (rules.validateDirectLinks) {
+            if (rules.validateDirectLinks &&
+                shouldPreflightDirectStream(fresh)) {
               final minBytes = meta.contentType == 'series'
                   ? 10 * 1024 * 1024
                   : StreamUrlValidator.minContentBytes;

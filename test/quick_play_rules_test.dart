@@ -11,6 +11,7 @@ import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
+import 'package:debrify/services/startup_stream_policy.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
 Torrent _torrent(
@@ -20,6 +21,8 @@ Torrent _torrent(
   int seeders = 0,
   String source = 'test',
   String? infohash,
+  String? directUrl,
+  String? stremioAddonId,
 }) => Torrent(
   rowid: 0,
   infohash: infohash ?? name.hashCode.abs().toRadixString(16).padLeft(40, '0'),
@@ -32,7 +35,10 @@ Torrent _torrent(
   scrapedDate: 0,
   source: source,
   streamType: type,
-  directUrl: type == StreamType.directUrl ? 'https://example.test/$name' : null,
+  directUrl: type == StreamType.directUrl
+      ? (directUrl ?? 'https://example.test/$name')
+      : null,
+  stremioAddonId: stremioAddonId,
 );
 
 void main() {
@@ -690,6 +696,134 @@ void main() {
       expect(
         TorrentPlaybackService.directValidationBudgetForRules(tenAttempts),
         5,
+      );
+    });
+
+    test('AIOStreams direct links bypass the destructive HEAD preflight', () {
+      expect(
+        TorrentPlaybackService.shouldPreflightDirectStream(
+          _torrent(
+            'AIOStreams result',
+            type: StreamType.directUrl,
+            source: 'stremio:AIOStreams | ElfHosted',
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldPreflightDirectStream(
+          _torrent(
+            'renamed addon',
+            type: StreamType.directUrl,
+            stremioAddonId: 'com.aiostreams.viren070.user',
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldPreflightDirectStream(
+          _torrent(
+            'provider proxy',
+            type: StreamType.directUrl,
+            directUrl: 'https://aiostreams.elfhosted.com/api/v1/debrid/link',
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldPreflightDirectStream(
+          _torrent('ordinary CDN', type: StreamType.directUrl),
+        ),
+        isTrue,
+      );
+    });
+
+    test('AIOStreams playable error slates are rejected by duration', () {
+      expect(
+        StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+          addonId: 'com.aiostreams.renamed.user',
+          url: 'https://opaque-provider.example/video',
+          duration: const Duration(minutes: 2),
+        ),
+        isTrue,
+      );
+      expect(
+        StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+          sourceName: 'AIOStreams | ElfHosted',
+          duration: const Duration(minutes: 45),
+        ),
+        isFalse,
+      );
+      expect(
+        StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+          sourceName: 'ordinary provider',
+          duration: const Duration(minutes: 2),
+        ),
+        isFalse,
+      );
+    });
+
+    test('only multi-file series packs must prove the episode', () {
+      expect(
+        StartupStreamPolicy.requiresExactEpisodeMatch(
+          isSeries: true,
+          playlistLength: 12,
+        ),
+        isTrue,
+      );
+      // A single-episode torrent has nothing else to play — trust the
+      // episode-scoped search even when its filename parses to no SxxEyy.
+      expect(
+        StartupStreamPolicy.requiresExactEpisodeMatch(
+          isSeries: true,
+          playlistLength: 1,
+        ),
+        isFalse,
+      );
+      expect(
+        StartupStreamPolicy.requiresExactEpisodeMatch(
+          isSeries: false,
+          playlistLength: 12,
+        ),
+        isFalse,
+      );
+    });
+
+    test('series fallback requires the requested episode', () {
+      expect(
+        StartupStreamPolicy.resolvedPlaylistIndex(
+          requiresEpisodeMatch: true,
+          matchedEpisodeIndex: -1,
+        ),
+        isNull,
+      );
+      expect(
+        StartupStreamPolicy.resolvedPlaylistIndex(
+          requiresEpisodeMatch: true,
+          matchedEpisodeIndex: 7,
+        ),
+        7,
+      );
+      expect(
+        StartupStreamPolicy.resolvedPlaylistIndex(requiresEpisodeMatch: false),
+        0,
+      );
+    });
+
+    test('failed initial resolution advances to the next ranked source', () {
+      expect(
+        StartupStreamPolicy.rankedFailoverStart(
+          selectedSourceIndex: 2,
+          initialAttemptAlreadyFailed: true,
+        ),
+        (sourceIndex: 3, attempts: 1),
+      );
+      expect(
+        StartupStreamPolicy.rankedFailoverStart(
+          selectedSourceIndex: 2,
+          initialAttemptAlreadyFailed: false,
+        ),
+        (sourceIndex: 2, attempts: 0),
       );
     });
 

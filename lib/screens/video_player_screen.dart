@@ -14,6 +14,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/startup_stream_policy.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
@@ -1166,6 +1167,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   // media_kit state
   bool _isReady = false;
+  bool _startupGateActive = false;
   bool _isPlaying = false;
   // True while the activity is shrunk into a Picture-in-Picture window; the
   // build collapses all interactive/decorative chrome so only the video shows.
@@ -2840,6 +2842,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Determine the initial URL and index
     String initialUrl = widget.videoUrl;
+    var initialRankedAttemptFailed = false;
     int initialIndex = 0;
 
     if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
@@ -2973,11 +2976,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final resolvedUrl = await _resolvePlaylistEntryUrl(initialIndex);
           if (resolvedUrl.isNotEmpty) {
             initialUrl = resolvedUrl;
+          } else if (widget.videoUrl.isNotEmpty) {
+            initialUrl = widget.videoUrl;
+          } else {
+            initialRankedAttemptFailed = true;
           }
         } catch (e) {
           // Only fall back to widget.videoUrl if resolution fails
           if (widget.videoUrl.isNotEmpty) {
             initialUrl = widget.videoUrl;
+          } else {
+            initialRankedAttemptFailed = true;
           }
         }
       }
@@ -3052,8 +3061,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       launchIsLiveIptv = launchChannel?.isLive ?? true;
     }
 
-    // Only open the player if we have a valid URL
-    if (initialUrl.isNotEmpty) {
+    final canAttemptRankedStartup =
+        initialRankedAttemptFailed &&
+        (_effectiveContentType == 'movie' ||
+            _effectiveContentType == 'series') &&
+        _effectiveSources?.isNotEmpty == true;
+
+    // An empty initial URL caused by a failed lazy resolution is itself the
+    // first failed candidate. Enter the ranked ladder so remaining sources
+    // still get their configured attempts.
+    if (initialUrl.isNotEmpty || canAttemptRankedStartup) {
       // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
       final currentEntry = _activePlaylist?[_currentIndex];
       final isPikPak =
@@ -3064,7 +3081,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _activePlaylist == null && initialUrl.contains('mypikpak.com');
       final isDebrifyTV = isPikPakUrl && widget.requestMagicNext != null;
 
-      if ((isPikPak && _activePlaylist != null) || isPikPakUrl) {
+      if (initialUrl.isNotEmpty &&
+          ((isPikPak && _activePlaylist != null) || isPikPakUrl)) {
         // The continuation can sleep up to 10s in _waitForVideoReady; the
         // screen may be left (player disposed) or the player replaced by a
         // renderer fallback in that window, so it must re-check before every
@@ -3109,45 +3127,61 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // of A/V drift.)
         final hasExternalAudio =
             widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
-        _openMedia(
-              mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
-              play: !hasExternalAudio,
-              desiredPlay: true,
-              liveStream: launchIsLiveIptv,
-            )
-            .then((_) async {
-              // Wait for the video to load and duration to be available
-              await _waitForVideoReady();
-              if (hasExternalAudio) {
-                await _setExternalAudioTrack(widget.audioUrl!);
-              }
-              // Random start takes precedence over resume, then startAtPercent
-              if (widget.startFromRandom) {
-                final offset = _randomStartOffset(_duration);
-                if (offset != null) {
-                  await _player.seek(offset);
-                } else {
-                  await _maybeRestoreResume();
-                }
-              } else if (widget.startAtPercent != null) {
-                final offset = _percentStartOffset(_duration);
-                if (offset != null) {
-                  await _player.seek(offset);
-                }
-              } else {
-                await _maybeRestoreResume();
-              }
-              _scheduleAutoHide();
-              // Restore audio and subtitle track preferences
-              await _restoreTrackPreferences();
-              // Start playback now that video + external audio are both loaded.
-              if (hasExternalAudio) {
-                await _player.play();
-              }
-            })
-            .catchError((e) {
-              debugPrint('VideoPlayer: YouTube open failed: $e');
-            });
+        try {
+          final plainOpen =
+              initialUrl.isNotEmpty && (hasExternalAudio || launchIsLiveIptv);
+          final opened = plainOpen
+              ? await (() async {
+                  await _openMedia(
+                    mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
+                    play: !hasExternalAudio,
+                    desiredPlay: true,
+                    liveStream: launchIsLiveIptv,
+                  );
+                  return true;
+                })()
+              : await _openInitialVodWithFailover(
+                  initialUrl,
+                  httpHeaders: widget.httpHeaders,
+                  initialAttemptAlreadyFailed: initialRankedAttemptFailed,
+                );
+          if (!opened) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('No playable source could be started.'),
+                ),
+              );
+              await Future<void>.delayed(const Duration(milliseconds: 900));
+              if (mounted) Navigator.of(context).maybePop();
+            }
+            return;
+          }
+          // Wait for duration-dependent resume and random-start calculations.
+          await _waitForVideoReady();
+          if (hasExternalAudio) {
+            await _setExternalAudioTrack(widget.audioUrl!);
+          }
+          // Random start takes precedence over resume, then startAtPercent.
+          if (widget.startFromRandom) {
+            final offset = _randomStartOffset(_duration);
+            if (offset != null) {
+              await _player.seek(offset);
+            } else {
+              await _maybeRestoreResume();
+            }
+          } else if (widget.startAtPercent != null) {
+            final offset = _percentStartOffset(_duration);
+            if (offset != null) await _player.seek(offset);
+          } else {
+            await _maybeRestoreResume();
+          }
+          _scheduleAutoHide();
+          await _restoreTrackPreferences();
+          if (hasExternalAudio) await _player.play();
+        } catch (e) {
+          debugPrint('VideoPlayer: initial open failed: $e');
+        }
       }
     } else {
       // If no valid URL, try to load the first playlist entry
@@ -5321,7 +5355,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _loadPlayerDefaults() async {
     _subtitleAutoSyncEnabled =
         await StorageService.getSubtitleAutoSyncEnabled();
-    debugPrint('SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled');
+    debugPrint(
+      'SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled',
+    );
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
@@ -7377,6 +7413,241 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       unawaited(s.cancel());
     }
     return ok;
+  }
+
+  /// Opens one VOD candidate with the real media-kit player and keeps that
+  /// exact player session on success. Unlike the old Dart HEAD probe this has
+  /// no validation/playback race: decoded video or advancing position commits
+  /// the candidate; an error, open throw, or bounded startup stall rejects it.
+  Future<bool> _tryOpenStartupVod(
+    String url, {
+    Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+  }) async {
+    final completer = Completer<bool>();
+    var armed = false;
+    var videoWidth = 0;
+    var position = Duration.zero;
+    var candidateDuration = Duration.zero;
+    Timer? durationGraceTimer;
+    final isAioStreams = StartupStreamPolicy.isAioStreams(
+      addonId: source?.stremioAddonId,
+      sourceName: source?.source,
+      url: url,
+    );
+    void finish(bool ok) {
+      if (!completer.isCompleted) completer.complete(ok);
+    }
+
+    void maybeCommit() {
+      // Width alone can be parsed from container metadata before a decoder has
+      // produced anything. Requiring the media clock to advance as well keeps
+      // metadata-only and permanently-buffering candidates behind the gate.
+      if (!armed || videoWidth <= 0 || position <= Duration.zero) return;
+      if (StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+        addonId: source?.stremioAddonId,
+        sourceName: source?.source,
+        url: url,
+        duration: candidateDuration,
+      )) {
+        finish(false);
+        return;
+      }
+      if (isAioStreams && candidateDuration <= Duration.zero) {
+        // Progressive sources can publish duration just after playback starts.
+        // Give that metadata a bounded chance to expose AIOStreams' short,
+        // decodable error slate; unknown-duration real streams still proceed.
+        durationGraceTimer ??= Timer(const Duration(seconds: 1), () {
+          finish(
+            !StartupStreamPolicy.isLikelyAioStreamsErrorSlate(
+              addonId: source?.stremioAddonId,
+              sourceName: source?.source,
+              url: url,
+              duration: candidateDuration,
+            ),
+          );
+        });
+        return;
+      }
+      finish(true);
+    }
+
+    final subs = <StreamSubscription>[
+      _player.stream.error.listen((_) {
+        if (armed) finish(false);
+      }),
+      _player.stream.width.listen((width) {
+        videoWidth = width ?? 0;
+        maybeCommit();
+      }),
+      _player.stream.position.listen((value) {
+        position = value;
+        maybeCommit();
+      }),
+      _player.stream.duration.listen((value) {
+        candidateDuration = value;
+        maybeCommit();
+      }),
+    ];
+    try {
+      // Arm before open: a fast local/CDN response can render its first frame
+      // before open() completes. Initial startup has no previous-media events;
+      // subsequent attempts use open()'s media reset to establish the boundary.
+      armed = true;
+      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+    } catch (e) {
+      debugPrint('Player startup gate: candidate open failed: $e');
+      finish(false);
+    }
+    final ok = await completer.future.timeout(timeout, onTimeout: () => false);
+    durationGraceTimer?.cancel();
+    for (final sub in subs) {
+      unawaited(sub.cancel());
+    }
+    if (!ok) {
+      try {
+        await _player.stop();
+      } catch (_) {}
+    }
+    return ok;
+  }
+
+  /// Startup-only automatic failover for Stremio/Quick Play VOD. Candidates
+  /// remain behind the player loading surface until the actual player decodes
+  /// one. The successful URL is never reopened, which is essential for
+  /// single-use and first-request-IP-bound debrid links.
+  Future<bool> _openInitialVodWithFailover(
+    String initialUrl, {
+    Map<String, String>? httpHeaders,
+    bool initialAttemptAlreadyFailed = false,
+  }) async {
+    final sources = _effectiveSources;
+    final contentType = _effectiveContentType;
+    final isVod = contentType == 'movie' || contentType == 'series';
+    if (!isVod) {
+      return _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
+    }
+
+    _setStartupGateActive(true);
+    if (sources == null || sources.isEmpty) {
+      final ok = await _tryOpenStartupVod(initialUrl, httpHeaders: httpHeaders);
+      // Deactivate on failure too: if the caller's maybePop declines (player
+      // as root route) a stuck gate would black out the screen forever.
+      _setStartupGateActive(false);
+      return ok;
+    }
+
+    final rules = await StorageService.getQuickPlayRules(
+      isMovie: contentType == 'movie',
+    );
+    final maxAttempts = rules.tryNextOnFailure
+        ? rules.maxAttempts.clamp(1, 10)
+        : 1;
+    final firstIndex = _currentSourceIndex.clamp(0, sources.length - 1);
+    final start = StartupStreamPolicy.rankedFailoverStart(
+      selectedSourceIndex: firstIndex,
+      initialAttemptAlreadyFailed: initialAttemptAlreadyFailed,
+    );
+    var attempts = start.attempts;
+
+    for (
+      var sourceIndex = start.sourceIndex;
+      sourceIndex < sources.length && attempts < maxAttempts;
+      sourceIndex++
+    ) {
+      final source = sources[sourceIndex];
+      // The launch URL is already resolved and playable in-app regardless of
+      // how its source row is typed — never skip it over streamType.
+      final isResolvedLaunchUrl =
+          sourceIndex == firstIndex && initialUrl.isNotEmpty;
+      if (!isResolvedLaunchUrl &&
+          source.streamType == StreamType.externalUrl) {
+        continue;
+      }
+      attempts++;
+
+      String? url;
+      List<PlaylistEntry>? resolvedPlaylist;
+      var resolvedPlaylistIndex = 0;
+      if (isResolvedLaunchUrl) {
+        url = initialUrl;
+      } else if (source.streamType == StreamType.directUrl &&
+          source.directUrl?.isNotEmpty == true) {
+        url = source.directUrl;
+      } else if (widget.resolveSourceToPlaylist != null) {
+        try {
+          resolvedPlaylist = await widget.resolveSourceToPlaylist!(source);
+        } catch (_) {
+          resolvedPlaylist = null;
+        }
+        if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
+          if (StartupStreamPolicy.requiresExactEpisodeMatch(
+                isSeries: contentType == 'series',
+                playlistLength: resolvedPlaylist.length,
+              ) &&
+              _effectiveContentSeason != null &&
+              _effectiveContentEpisode != null) {
+            final parsed = SeriesPlaylist.fromPlaylistEntries(
+              resolvedPlaylist,
+              collectionTitle: widget.title,
+              forceSeries: true,
+            );
+            final target = parsed.findOriginalIndexBySeasonEpisode(
+              _effectiveContentSeason!,
+              _effectiveContentEpisode!,
+            );
+            final exactIndex = StartupStreamPolicy.resolvedPlaylistIndex(
+              requiresEpisodeMatch: true,
+              matchedEpisodeIndex: target,
+            );
+            if (exactIndex == null) {
+              // A pack that omits the requested episode is not a valid
+              // fallback. Opening row zero would silently play the wrong
+              // episode and then adopt that unrelated playlist.
+              resolvedPlaylist = null;
+              continue;
+            }
+            resolvedPlaylistIndex = exactIndex;
+          }
+          url = resolvedPlaylist[resolvedPlaylistIndex].url;
+        }
+      } else if (_effectiveResolver != null) {
+        try {
+          url = await _effectiveResolver!(source);
+        } catch (_) {
+          url = null;
+        }
+      }
+
+      if (url == null || url.isEmpty) continue;
+      final ok = await _tryOpenStartupVod(
+        url,
+        httpHeaders: httpHeaders,
+        source: source,
+      );
+      if (!mounted) return false;
+      if (!ok) continue;
+
+      _currentSourceIndex = sourceIndex;
+      _currentStreamUrl = url;
+      if (resolvedPlaylist != null && resolvedPlaylist.isNotEmpty) {
+        _activePlaylist = resolvedPlaylist;
+        _currentIndex = resolvedPlaylistIndex;
+        _cachedSeriesPlaylist = null;
+        _playlistIdentityToken++;
+      }
+      _setStartupGateActive(false);
+      return true;
+    }
+    _setStartupGateActive(false);
+    return false;
+  }
+
+  void _setStartupGateActive(bool active) {
+    if (_startupGateActive == active) return;
+    _startupGateActive = active;
+    if (mounted) setState(() {});
   }
 
   // ─── Stremio Source Sheet ───────────────────────────────────────────
@@ -12223,6 +12494,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 else
                   const Center(
                     child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                if (_startupGateActive)
+                  const ColoredBox(
+                    color: Colors.black,
+                    child: Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
                   ),
                 // Transition overlay above video
                 if (_rainbowActive) _buildTransitionOverlay(),
