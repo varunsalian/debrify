@@ -81,6 +81,39 @@ class Torrent {
   /// Whether this opens in external browser/app
   bool get isExternalStream => streamType == StreamType.externalUrl;
 
+  /// Best usable link to expose when a source is copied.
+  ///
+  /// Direct/external streams keep their provider URL. Torrent results prefer
+  /// the full magnet supplied by the indexer, then synthesize one from a real
+  /// infohash. A `.torrent`/provider URL is retained as the last useful
+  /// fallback for indexers that do not expose either form.
+  String? get copyLink {
+    final streamUrl = directUrl?.trim();
+    if ((isDirectStream || isExternalStream) &&
+        streamUrl != null &&
+        streamUrl.isNotEmpty) {
+      return streamUrl;
+    }
+
+    final magnet = magnetUrl?.trim();
+    if (magnet != null && magnet.toLowerCase().startsWith('magnet:')) {
+      return magnet;
+    }
+    if (hasRealInfoHash && infohash.trim().isNotEmpty) {
+      final displayName = name.trim();
+      final dn = displayName.isEmpty
+          ? ''
+          : '&dn=${Uri.encodeComponent(displayName)}';
+      return 'magnet:?xt=urn:btih:${infohash.trim()}$dn';
+    }
+
+    final providerUrl = torrentUrl?.trim();
+    if (providerUrl != null && providerUrl.isNotEmpty) return providerUrl;
+    if (magnet != null && magnet.isNotEmpty) return magnet;
+    if (streamUrl != null && streamUrl.isNotEmpty) return streamUrl;
+    return null;
+  }
+
   factory Torrent.fromJson(Map<String, dynamic> json, {String? source}) {
     final dynamic rawSource =
         json['source'] ?? json['provider'] ?? json['engine'] ?? source;

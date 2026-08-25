@@ -11025,20 +11025,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// than an addable torrent — used to bucket results into the provider groups.
   bool _kwIsDirect(Torrent t) => t.isDirectStream || t.isExternalStream;
 
-  /// Acquisition URL for a result, preferring an explicit magnet, then a
-  /// `.torrent` URL, then a synthesized magnet from the infohash. Mirrors the
-  /// old screen's `_torrentAcquisitionUrlForTorrent`.
-  String _kwMagnetFor(Torrent t) {
-    final magnet = t.magnetUrl?.trim();
-    if (magnet != null && magnet.toLowerCase().startsWith('magnet:')) {
-      return magnet;
-    }
-    final torrentUrl = t.torrentUrl?.trim();
-    if (torrentUrl != null && torrentUrl.isNotEmpty) return torrentUrl;
-    final dn = t.name.isNotEmpty ? '&dn=${Uri.encodeComponent(t.name)}' : '';
-    return 'magnet:?xt=urn:btih:${t.infohash}$dn';
-  }
-
   /// Action menu for a keyword-result direct/external stream row (parity with
   /// the old direct-stream action dialog): Play/Open, Copy URL, Download.
   void _showKwStreamMenu(Torrent t, int i) {
@@ -11073,17 +11059,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ),
             ListTile(
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
-              title: const Text('Copy URL'),
+              title: const Text('Copy link'),
               onTap: () async {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
-                final url = t.directUrl ?? '';
-                if (url.isEmpty) {
-                  _snack('No stream URL available.');
-                  return;
-                }
-                await Clipboard.setData(ClipboardData(text: url));
-                _snack('URL copied to clipboard');
+                await _copyKwLink(t);
               },
             ),
             if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
@@ -11107,18 +11087,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// Copy a keyword result's magnet/torrent link to the clipboard (parity with
-  /// the old screen's `_copyMagnetLink`).
-  void _copyKwMagnet(Torrent t) {
-    Clipboard.setData(ClipboardData(text: _kwMagnetFor(t)));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Magnet link copied to clipboard'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
+  Future<void> _copyKwLink(Torrent t) async {
+    final link = t.copyLink;
+    if (link == null) {
+      _snack('No link available for this source.');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: link));
+    if (mounted) _snack('Link copied to clipboard');
   }
 
   /// Tally result counts per source, split into Direct vs Torrent groups, and
@@ -14590,9 +14566,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                   : null,
                               isSelectionMode: _kwSelectionMode && selectable,
                               isSelected: _kwSelected.contains(t.infohash),
-                              onCopy: selectable
-                                  ? () => _copyKwMagnet(t)
-                                  : null,
+                              onCopy: _kwSelectionMode || t.copyLink == null
+                                  ? null
+                                  : () => unawaited(_copyKwLink(t)),
                               onTap: () {
                                 if (_kwSelectionMode && selectable) {
                                   _toggleKwSelection(t);

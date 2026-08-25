@@ -710,6 +710,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
+  Future<void> _copySourceLink(Torrent torrent) async {
+    final link = torrent.copyLink;
+    if (link == null) {
+      _snack('No link available for this source.');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: link));
+    if (mounted) _snack('Link copied to clipboard');
+  }
+
   Future<void> _pin(Torrent t) async {
     if (t.isExternalStream) {
       _snack("External links can't be pinned as a playback source.");
@@ -817,6 +827,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 }
               },
             ),
+            if (t.copyLink != null)
+              ListTile(
+                leading: const Icon(
+                  Icons.copy_rounded,
+                  color: Color(0xFFF59E0B),
+                ),
+                title: const Text('Copy link'),
+                onTap: () {
+                  DialogTapGuard.markKeyAction();
+                  Navigator.of(sheetCtx).pop();
+                  unawaited(_copySourceLink(t));
+                },
+              ),
           ],
         ),
       ),
@@ -879,17 +902,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ),
             ListTile(
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
-              title: const Text('Copy URL'),
+              title: const Text('Copy link'),
               onTap: () async {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
-                final url = t.directUrl ?? '';
-                if (url.isEmpty) {
-                  _snack('No stream URL available.');
-                  return;
-                }
-                await Clipboard.setData(ClipboardData(text: url));
-                _snack('URL copied to clipboard');
+                await _copySourceLink(t);
               },
             ),
             if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
@@ -1022,6 +1039,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                             },
                                             onLongPress: () =>
                                                 _showRowMenu(t, i),
+                                            onCopyMagnet: t.copyLink == null
+                                                ? null
+                                                : () => unawaited(
+                                                    _copySourceLink(t),
+                                                  ),
                                             onNavigateUp: () {
                                               _freezeStreaming();
                                               if (i > 0) {
@@ -1892,6 +1914,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           : t.isDirectStream
           ? 'Direct'
           : null,
+      onCopy: t.copyLink == null ? null : () => unawaited(_copySourceLink(t)),
       onTap: () {
         if (widget.bindMode) {
           unawaited(_pin(t));
