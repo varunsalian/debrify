@@ -115,6 +115,16 @@ abstract final class SanitizedProfilePreferences {
               'pulse',
               'ticket',
             }.contains(value);
+      case 'debrify_tv_player_style':
+        return value is String &&
+            const <String>{
+              'classic',
+              'network',
+              'cinema',
+              'guide',
+              'spotlight',
+              'prestige',
+            }.contains(value);
       case 'tv_hero_artwork_quality':
         return value is String &&
             const <String>{

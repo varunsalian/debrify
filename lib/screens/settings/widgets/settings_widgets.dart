@@ -246,6 +246,13 @@ abstract final class SettingsRows {
     title: 'Player Controls',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen style) — passed per call site. Android
+  // TV only: the Debrify TV playback screen (native TorboxTvPlayerActivity).
+  static const debrifyTvPlayer = SettingsRowContent(
+    icon: Icons.live_tv_rounded,
+    title: 'Debrify TV Player',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const playerGuideStyle = SettingsRowContent(
     icon: Icons.smart_display_rounded,

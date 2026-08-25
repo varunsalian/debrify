@@ -1476,6 +1476,42 @@ class StorageService {
     );
   }
 
+  static const String _debrifyTvPlayerStyleKey = 'debrify_tv_player_style';
+  static const Set<String> _debrifyTvPlayerStyles = {
+    'classic',
+    'network',
+    'cinema',
+    'guide',
+    'spotlight',
+    'prestige',
+  };
+
+  /// Playback-screen style for the NATIVE Debrify TV player
+  /// (TorboxTvPlayerActivity): 'network' (broadcast lower-third — the
+  /// default), 'cinema' (poster + gilded spec line), 'guide' (opaque
+  /// broadcast band), 'spotlight' (frosted glass panel), 'prestige'
+  /// (quiet serif identity), or 'classic' (the legacy ESPN-style bar +
+  /// top marquee). Android TV only. Read once per player launch — the
+  /// native side via
+  /// `ProfilePreferenceProjection.getString("debrify_tv_player_style")`
+  /// (falling back to `flutter.debrify_tv_player_style` in
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'network' on
+  /// BOTH read and write so the two readers can never disagree about the
+  /// default.
+  static Future<String> getDebrifyTvPlayerStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_debrifyTvPlayerStyleKey);
+    return _debrifyTvPlayerStyles.contains(raw) ? raw! : 'network';
+  }
+
+  static Future<void> setDebrifyTvPlayerStyle(String style) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _debrifyTvPlayerStyleKey,
+      _debrifyTvPlayerStyles.contains(style) ? style : 'network',
+    );
+  }
+
   static const String _discoverLayoutKey = 'discover_layout';
   static const String _discoverDefaultSourceKey = 'discover_default_source';
   static const String _discoverLastSourceKey = 'discover_last_source';

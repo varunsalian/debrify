@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Underline focus for the Prestige Debrify TV skin: the button box stays
+     invisible; focus draws a 3dp bar at the bottom edge. The layer offset
+     fakes bottom gravity (android:top = box height 40dp − 3dp), which works
+     on old APIs where <layer-list> gravity doesn't. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item android:top="37dp" android:left="7dp" android:right="7dp">
+                <shape>
+                    <corners android:radius="1.5dp"/>
+                    <solid android:color="#FFFFFFFF"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <shape>
+            <solid android:color="#00000000"/>
+        </shape>
+    </item>
+</selector>

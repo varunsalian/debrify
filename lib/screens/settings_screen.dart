@@ -74,6 +74,7 @@ import 'settings/parents_guide_style_page.dart';
 import 'settings/player_dock_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_player_controls_style_page.dart';
+import 'settings/debrify_tv_player_style_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_render_quality_page.dart';
 import 'settings/tv_hero_artwork_quality_page.dart';
@@ -225,6 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
   String _tvPlayerControlsStyle = 'ott';
+  String _debrifyTvPlayerStyle = 'network';
   String _playerDockStyle = 'classic';
   String _playerDockPalette = 'ultraviolet';
   String _playerDockSize = 'auto';
@@ -341,6 +343,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getDesktopSidebarStyle(),
       StorageService.getDebrifyTvStyle(),
       StorageService.getTvPlayerControlsStyle(),
+      StorageService.getDebrifyTvPlayerStyle(),
     ]);
 
     if (!mounted) return;
@@ -386,6 +389,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final desktopSidebarStyle = results[36] as String;
     final debrifyTvStyle = results[37] as String;
     final tvPlayerControlsStyle = results[38] as String;
+    final debrifyTvPlayerStyle = results[39] as String;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -521,6 +525,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _debrifyTvStyle = debrifyTvStyle;
     _playerGuideStyle = playerGuideStyle;
     _tvPlayerControlsStyle = tvPlayerControlsStyle;
+    _debrifyTvPlayerStyle = debrifyTvPlayerStyle;
     _playerDockStyle = playerDockStyle;
     _playerDockPalette = playerDockPalette;
     _playerDockSize = playerDockSize;
@@ -855,6 +860,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _tvPlayerControlsStyle,
       ),
       onOpenTvPlayerControlsStyle: _openTvPlayerControlsStylePage,
+      debrifyTvPlayerStyleLabel: debrifyTvPlayerStyleLabel(
+        _debrifyTvPlayerStyle,
+      ),
+      onOpenDebrifyTvPlayerStyle: _openDebrifyTvPlayerStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
@@ -1537,6 +1546,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'ott',
             'legacy',
             'cinema',
+            'style',
+            'look',
+            'skin',
+          ],
+        ),
+      // Android TV only: the Debrify TV playback-screen style (native
+      // TorboxTvPlayerActivity is the pref's only reader).
+      if (PlatformUtil.isAndroidTvCached)
+        nav(
+          SettingsRows.debrifyTvPlayer,
+          'Appearance',
+          _openDebrifyTvPlayerStylePage,
+          subtitle: debrifyTvPlayerStyleLabel(_debrifyTvPlayerStyle),
+          keywords: const [
+            'debrify tv',
+            'magic tv',
+            'channel',
+            'player',
+            'network',
+            'cinema',
+            'guide',
+            'spotlight',
+            'prestige',
+            'badge',
+            'quality',
             'style',
             'look',
             'skin',
@@ -4879,6 +4913,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _tvPlayerControlsStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the Debrify TV playback screen.
+  Future<void> _openDebrifyTvPlayerStylePage() async {
+    await pushSettingsPage(context, const DebrifyTvPlayerStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDebrifyTvPlayerStyle();
+    if (!mounted) return;
+    setState(() {
+      _debrifyTvPlayerStyle = style;
     });
   }
 

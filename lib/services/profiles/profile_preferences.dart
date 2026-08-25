@@ -46,6 +46,7 @@ class ProfilePreferences implements SharedPreferences {
     'recording_engine_enabled',
     'iptv_player_guide_style',
     'tv_player_controls_style',
+    'debrify_tv_player_style',
     'subtitle_auto_sync_enabled',
     'player_default_aspect_index_tv',
     'player_night_mode_index',

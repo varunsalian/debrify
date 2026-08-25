@@ -104,6 +104,10 @@ class SettingsTvLayout extends StatefulWidget {
   // only reader — doesn't exist.
   final String tvPlayerControlsStyleLabel;
   final Future<void> Function() onOpenTvPlayerControlsStyle;
+  // Debrify TV playback-screen style — same Android-TV-only gating story as
+  // the control skin row above.
+  final String debrifyTvPlayerStyleLabel;
+  final Future<void> Function() onOpenDebrifyTvPlayerStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
   final String looksLabel;
@@ -195,6 +199,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenPlayerGuideStyle,
     required this.tvPlayerControlsStyleLabel,
     required this.onOpenTvPlayerControlsStyle,
+    required this.debrifyTvPlayerStyleLabel,
+    required this.onOpenDebrifyTvPlayerStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
     required this.looksLabel,
@@ -353,7 +359,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 17;
+  static const int _kMaxCategoryRows = 18;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -995,6 +1001,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   subtitle: widget.tvPlayerControlsStyleLabel,
                   onTap: widget.onOpenTvPlayerControlsStyle,
                   focusNode: _paneNodes[16],
+                ),
+                SettingsTile.spec(
+                  SettingsRows.debrifyTvPlayer,
+                  subtitle: widget.debrifyTvPlayerStyleLabel,
+                  onTap: widget.onOpenDebrifyTvPlayerStyle,
+                  focusNode: _paneNodes[17],
                 ),
               ],
             ),
