@@ -1,4 +1,4 @@
-VERIFY=../../../scripts/verify_macos_subtitle_decoders.sh
+VERIFY=../../../dev/scripts/verify_macos_subtitle_decoders.sh
 
 all: verify
 
