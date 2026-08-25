@@ -13,7 +13,9 @@ import 'collider_ident.dart';
 import 'constellation_ident.dart';
 import 'drop_bounce_ident.dart';
 import 'ember_ident.dart';
+import 'frost_ident.dart';
 import 'horizon_ident.dart';
+import 'imprint_ident.dart';
 import 'marquee_ident.dart';
 import 'monogram_ident.dart';
 import 'neon_ident.dart';
@@ -214,6 +216,10 @@ const List<LaunchIdent> kLaunchIdents = [
   ConstellationIdent(),
   SilkIdent(),
   RackFocusIdent(),
+  // Round 6 — material first, one event each, and the type is never made of
+  // light: it is pressed into the stock, or cut out of the frost.
+  ImprintIdent(),
+  FrostIdent(),
 ];
 
 LaunchIdent launchIdentFor(String? id) {
