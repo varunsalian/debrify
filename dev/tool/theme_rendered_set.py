@@ -35,8 +35,10 @@ import os
 import re
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MANIFEST = os.path.join(REPO, "tool/theme_surface_manifest.txt")
+REPO = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+MANIFEST = os.path.join(REPO, "dev/tool/theme_surface_manifest.txt")
 
 IMPORT_RE = re.compile(r"""^import\s+['"]([^'"]+)['"]""", re.M)
 PAINTS_RE = re.compile(r"Color\(|Colors\.|Theme\.of\(|DetailThemeScope")
