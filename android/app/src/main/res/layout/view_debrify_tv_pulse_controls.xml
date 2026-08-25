@@ -68,6 +68,78 @@
                     tools:text="S02E05 · Home" />
             </LinearLayout>
 
+
+            <!-- ══ Release quality chips + rating (updateOttExtras) ══ -->
+            <LinearLayout
+                android:id="@+id/ott_quality_row"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/ott_quality_1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:paddingStart="7dp"
+                    android:paddingEnd="7dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:background="@drawable/ott_ext_chip_pulse"
+                    android:textColor="#C9CCEC"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.05"
+                    android:singleLine="true"
+                    android:visibility="gone" />
+                <TextView
+                    android:id="@+id/ott_quality_2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:paddingStart="7dp"
+                    android:paddingEnd="7dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:background="@drawable/ott_ext_chip_pulse"
+                    android:textColor="#C9CCEC"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.05"
+                    android:singleLine="true"
+                    android:visibility="gone" />
+                <TextView
+                    android:id="@+id/ott_quality_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:paddingStart="7dp"
+                    android:paddingEnd="7dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:background="@drawable/ott_ext_chip_pulse"
+                    android:textColor="#C9CCEC"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.05"
+                    android:singleLine="true"
+                    android:visibility="gone" />
+                <TextView
+                    android:id="@+id/ott_rating_chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:visibility="gone" />
+            </LinearLayout>
             <LinearLayout
                 android:id="@+id/ott_sleep_chip"
                 android:layout_width="wrap_content"

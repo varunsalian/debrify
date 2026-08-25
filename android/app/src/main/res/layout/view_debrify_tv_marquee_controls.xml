@@ -83,6 +83,20 @@
                     android:ellipsize="end"
                     android:visibility="gone"
                     tools:text="Season Two · Episode Seven" />
+
+                <TextView
+                    android:id="@+id/ott_meta_line"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:textColor="#8CFFE0BE"
+                    android:textSize="11sp"
+                    android:fontFamily="serif"
+                    android:letterSpacing="0.14"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:visibility="gone"
+                    tools:text="4K · DOLBY VISION · ATMOS — ★ 8.6" />
             </LinearLayout>
 
             <LinearLayout

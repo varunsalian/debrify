@@ -135,6 +135,24 @@
                     android:visibility="gone"
                     tools:text="S2 · E9" />
 
+                <TextView
+                    android:id="@+id/ott_rating_chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/ott_ext_rate_gold"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:textColor="#FFE9CD87"
+                    android:textSize="10.5sp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.06"
+                    android:singleLine="true"
+                    android:visibility="gone"
+                    tools:text="★ 8.7" />
+
                 <View
                     android:id="@+id/ott_identity_divider"
                     android:layout_width="1dp"

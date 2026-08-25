@@ -227,6 +227,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var ottIdentityOverline: TextView? = null
     private var ottIdentityBadge: TextView? = null
     private var ottIdentityDivider: View? = null
+
+    // Release-quality chips + rating (updateOttExtras): chips row on
+    // FROST/BROADCAST/PULSE, serif print line on MARQUEE, gold stub on
+    // TICKET. All optional per layout.
+    private val ottQualityChips = arrayOfNulls<TextView>(3)
+    private var ottRatingChip: TextView? = null
+    private var ottMetaLine: TextView? = null
+    private var dockTagsCacheKey: String? = null
+    private var dockTagsCache: List<DockFormatTags.Tag> = emptyList()
     private var ottScrubPreviewChip: View? = null
     private var ottScrubPreviewText: TextView? = null
     private var ottProgressTrackContainer: View? = null
@@ -3395,6 +3404,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         ottIdentityOverline = ott.findViewById(R.id.ott_identity_overline)
         ottIdentityBadge = ott.findViewById(R.id.ott_identity_badge)
         ottIdentityDivider = ott.findViewById(R.id.ott_identity_divider)
+        ottQualityChips[0] = ott.findViewById(R.id.ott_quality_1)
+        ottQualityChips[1] = ott.findViewById(R.id.ott_quality_2)
+        ottQualityChips[2] = ott.findViewById(R.id.ott_quality_3)
+        ottRatingChip = ott.findViewById(R.id.ott_rating_chip)
+        ottMetaLine = ott.findViewById(R.id.ott_meta_line)
         ottScrubPreviewChip = ott.findViewById(R.id.ott_scrub_preview_chip)
         ottScrubPreviewText = ott.findViewById(R.id.ott_scrub_preview_text)
         ottProgressTrackContainer = ott.findViewById(R.id.cinema_progress_track_container)
@@ -4663,6 +4677,137 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             badge?.visibility = View.GONE
             ottIdentityDivider?.visibility = View.GONE
         }
+        updateOttExtras(item)
+    }
+
+    /**
+     * Quality chips + rating for the premium dock skins. Quality is parsed
+     * from the item's ORIGINAL payload title (the release name — metadata
+     * pushes overwrite item.title with the fetched episode name, so
+     * [PlaybackItem.sourceTitle] carries the parseable one), falling back to
+     * the stream URL's filename. Rating is [PlaybackItem.rating] — already
+     * pushed with the TVMaze metadata — so no extra network. Runs AFTER the
+     * per-skin identity arms; on TICKET it also owns the overline so the
+     * quality can ride it ("FOUNDATION · 4K · DOLBY VISION").
+     */
+    private fun updateOttExtras(item: PlaybackItem?) {
+        val hasAnyView = ottQualityChips.any { it != null } ||
+            ottRatingChip != null || ottMetaLine != null
+        if (!hasAnyView) return
+
+        val tags = if (item != null) dockTagsFor(item) else emptyList()
+        val rating = item?.rating?.takeIf { it > 0 }
+        val ratingText = rating?.let { String.format(java.util.Locale.US, "%.1f", it) }
+
+        ottQualityChips.forEachIndexed { i, chip ->
+            if (chip == null) return@forEachIndexed
+            val tag = tags.getOrNull(i)
+            if (tag != null) {
+                chip.text = tag.short
+                chip.visibility = View.VISIBLE
+            } else {
+                chip.visibility = View.GONE
+            }
+        }
+
+        ottRatingChip?.let { rc ->
+            if (ratingText == null) {
+                rc.visibility = View.GONE
+            } else {
+                val starColor = when (controlsSkin) {
+                    TvControlsSkin.PULSE -> 0xFF818CF8.toInt()
+                    TvControlsSkin.FROST -> 0xFFF5C518.toInt()
+                    else -> null
+                }
+                if (starColor != null) {
+                    rc.text = SpannableString("★ $ratingText").apply {
+                        setSpan(
+                            ForegroundColorSpan(starColor),
+                            0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                } else {
+                    rc.text = "★ $ratingText"
+                }
+                rc.visibility = View.VISIBLE
+            }
+        }
+
+        // MARQUEE: one serif print line — "4K · DOLBY VISION · ATMOS — ★ 8.6".
+        // Uppercased HERE, not via android:textAllCaps — the AllCaps
+        // transform re-renders the text as a plain string and drops the
+        // rating's gold span.
+        ottMetaLine?.let { ml ->
+            val quality = tags.joinToString(" · ") {
+                it.long.uppercase(java.util.Locale.US)
+            }
+            val text = when {
+                quality.isEmpty() && ratingText == null -> null
+                quality.isEmpty() -> "★ $ratingText"
+                ratingText == null -> quality
+                else -> "$quality — ★ $ratingText"
+            }
+            if (text == null) {
+                ml.visibility = View.GONE
+            } else {
+                ml.text = if (ratingText != null) {
+                    SpannableString(text).apply {
+                        setSpan(
+                            ForegroundColorSpan(0xFFEAC981.toInt()),
+                            text.length - ratingText.length - 2, text.length,
+                            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                } else {
+                    text
+                }
+                ml.visibility = View.VISIBLE
+            }
+        }
+
+        // TICKET: the quality rides the gold overline after the show name —
+        // resolution short + HDR long only, per the mock. Movies (no show)
+        // get the quality alone, so the overline earns its keep either way.
+        if (controlsSkin == TvControlsSkin.TICKET) {
+            val overline = ottIdentityOverline
+            if (overline != null) {
+                val parts = mutableListOf<String>()
+                ottShowName?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+                tags.firstOrNull()?.let { parts.add(it.short) }
+                tags.getOrNull(1)?.let { parts.add(it.long) }
+                if (parts.isEmpty()) {
+                    overline.visibility = View.GONE
+                } else {
+                    overline.text = parts.joinToString(" · ")
+                    overline.visibility = View.VISIBLE
+                }
+            }
+        }
+    }
+
+    /** Tags for the current item, cached — the regexes only rerun when the
+     *  underlying release name changes (zap / source switch). */
+    private fun dockTagsFor(item: PlaybackItem): List<DockFormatTags.Tag> {
+        val name = item.sourceTitle?.takeIf { it.isNotBlank() } ?: item.title
+        val fromName = if (name == dockTagsCacheKey) {
+            dockTagsCache
+        } else {
+            DockFormatTags.detect(name).also {
+                dockTagsCacheKey = name
+                dockTagsCache = it
+            }
+        }
+        if (fromName.isNotEmpty()) return fromName
+        // Fallback: the stream URL usually ends in the real filename
+        // (debrid links keep it) even when the payload title was cleaned.
+        val urlName = item.url.substringAfterLast('/').substringBefore('?')
+        if (urlName.isBlank() || urlName == name) return fromName
+        val decoded = try {
+            java.net.URLDecoder.decode(urlName, "UTF-8")
+        } catch (_: Exception) {
+            urlName
+        }
+        return DockFormatTags.detect(decoded)
     }
 
     /** "Seven" for 7 — MARQUEE's spelled-out season/episode line. Numbers a
@@ -16652,6 +16797,49 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
 
+        // Carry the FETCHED episode metadata (TVMaze titles/artwork/ratings)
+        // from the outgoing items onto the new source's matching episodes.
+        // The new payload's titles are the new pack's raw filenames, and the
+        // metadata re-request below round-trips through Flutter — without
+        // this hand-off the dock identity regresses to the release name for
+        // that window (or for good, if the re-request fails). An old title
+        // counts as fetched only when a metadata push actually replaced it
+        // (title differs from the preserved sourceTitle).
+        val oldBySeasonEpisode = model.items
+            .filter { it.season != null && it.episode != null }
+            .associateBy { it.season to it.episode }
+        for (i in newItems.indices) {
+            val ni = newItems[i]
+            if (ni.season == null || ni.episode == null) continue
+            val old = oldBySeasonEpisode[ni.season to ni.episode] ?: continue
+            val oldFetchedTitle = old.title.takeIf {
+                it.isNotBlank() && old.sourceTitle != null && it != old.sourceTitle
+            }
+            newItems[i] = ni.copy(
+                title = oldFetchedTitle ?: ni.title,
+                artwork = ni.artwork ?: old.artwork,
+                description = ni.description ?: old.description,
+                rating = ni.rating ?: old.rating,
+            )
+        }
+
+        // Movies / single-file payloads have no S/E to match on: when the
+        // switch stays on the SAME content, the identity must not change
+        // just because the file name did — keep the outgoing title (the
+        // clean movie name on catalog launches) plus artwork/rating. The
+        // quality chips still re-parse from the NEW source via sourceTitle.
+        if (newItems.size == 1 && newItems[0].season == null &&
+            sameContent && currentItem != null
+        ) {
+            val ni = newItems[0]
+            newItems[0] = ni.copy(
+                title = currentItem.title.ifBlank { ni.title },
+                artwork = ni.artwork ?: currentItem.artwork,
+                description = ni.description ?: currentItem.description,
+                rating = ni.rating ?: currentItem.rating,
+            )
+        }
+
         // Find which item in the new source's playlist matches what the user was
         // watching, so we resume the same content rather than restarting at file 0.
         //  - Single item: unambiguous — it's the content (movie, or one episode).
@@ -16732,6 +16920,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Rebuild playlist UI (without re-adding RecyclerView listeners)
         rebuildPlaylistContent()
+
+        // Re-run the TVMaze pipeline for the new payload: launch was the only
+        // requester, so a switched-in source would otherwise keep raw pack
+        // filenames wherever the carry-over above had no match (episodes the
+        // old source lacked, or a first switch before any push arrived).
+        // No-ops for non-series content; rebuildNavigationMaps already set
+        // model.contentType above.
+        requestMetadataFromFlutter()
 
         // Update the title content for the next controls reveal.
         val currentSource = stremioSources.getOrNull(sourceIndex)
@@ -17800,6 +17996,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 sizeBytes = null,
                 rating = channel.nowPlayingRating ?: previousItem?.rating,
                 provider = previousItem?.provider,
+                // Keep the release name parseable for the quality chips even
+                // if a later metadata copy() overwrites title.
+                sourceTitle = title,
             )
             model.items.clear()
             model.items.add(switchedItem)
@@ -18356,6 +18555,11 @@ private data class PlaybackItem(
     // Explicit local completion. Unlike tracker 100%, this must not yield to
     // an old partial position as an assumed active rewatch.
     val watched: Boolean = false,
+    // The title as it arrived in the launch payload — on torrent launches the
+    // release filename. Metadata pushes overwrite [title] with the fetched
+    // episode name, so quality parsing (updateOttExtras) reads THIS, which
+    // item.copy preserves across those updates.
+    val sourceTitle: String? = null,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -18410,6 +18614,7 @@ private data class PlaybackItem(
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
                 watched = obj.optBoolean("watched", false),
+                sourceTitle = obj.optString("title").takeIf { it.isNotEmpty() },
             )
         }
     }
