@@ -311,8 +311,14 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         final showInfo = await TVMazeService.lookupByImdbId(effectiveImdbId);
         if (showInfo != null && showInfo['id'] != null) {
           showId = showInfo['id'] as int;
-          // Store for future use
+          // Store for future use — the official name too, so the player
+          // dock's subtitle upgrades from the filename-parsed series name
+          // even when this lookup (not fetchEpisodeInfo) is the enricher.
           widget.seriesPlaylist.tvmazeShowId = showId;
+          final officialName = showInfo['name'];
+          if (officialName is String && officialName.trim().isNotEmpty) {
+            widget.seriesPlaylist.tvmazeShowName = officialName.trim();
+          }
         }
       } catch (e) {
         debugPrint('Error looking up show by IMDB ID: $e');
@@ -625,8 +631,16 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         );
       }
 
-      // Clear stale tvmazeShowId so _getOverrideShowId() reads the new mapping
+      // Clear stale tvmazeShowId so _getOverrideShowId() reads the new mapping.
+      // The show NAME follows the remap immediately — leaving the old show's
+      // name in place would caption the dock with the wrong series for the
+      // rest of the session.
       widget.seriesPlaylist.tvmazeShowId = null;
+      final remappedName = selectedShow['name'];
+      widget.seriesPlaylist.tvmazeShowName =
+          remappedName is String && remappedName.trim().isNotEmpty
+          ? remappedName.trim()
+          : null;
 
       // Reload episode info with the new show ID
       setState(() {

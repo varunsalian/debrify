@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT progress track: white @ 22%, r4 — tv_controls.dart:746-760. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#38FFFFFF" />
+    <corners android:radius="4dp" />
+</shape>

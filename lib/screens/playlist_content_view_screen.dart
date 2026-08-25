@@ -2295,8 +2295,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Reload episode info with the new show ID
       if (_seriesPlaylist != null && _seriesPlaylist!.isSeries && mounted) {
-        // Clear stale tvmazeShowId so fetchEpisodeInfo reads the new mapping
+        // Clear stale tvmazeShowId so fetchEpisodeInfo reads the new mapping.
+        // The name goes with it: fetchEpisodeInfo rewrites it on success, but
+        // a failed lookup must not leave the OLD show's name captioning the
+        // player dock.
         _seriesPlaylist!.tvmazeShowId = null;
+        _seriesPlaylist!.tvmazeShowName = null;
         _seriesPlaylist!.showPosterUrl = null;
 
         setState(() {

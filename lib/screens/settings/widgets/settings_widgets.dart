@@ -239,6 +239,13 @@ abstract final class SettingsRows {
     title: 'Player Controls',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen skin) — passed per call site. Android
+  // TV only: the native player's control skin (OTT dock vs Legacy).
+  static const tvPlayerControls = SettingsRowContent(
+    icon: Icons.tune_rounded,
+    title: 'Player Controls',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const playerGuideStyle = SettingsRowContent(
     icon: Icons.smart_display_rounded,

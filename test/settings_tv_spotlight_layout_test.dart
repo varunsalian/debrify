@@ -76,6 +76,8 @@ SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
   onOpenDebrifyTvStyle: _noop,
   playerGuideStyleLabel: 'Classic',
   onOpenPlayerGuideStyle: _noop,
+  tvPlayerControlsStyleLabel: 'OTT',
+  onOpenTvPlayerControlsStyle: _noop,
   detailPageStyleLabel: 'Showcase',
   onOpenDetailPageStyle: _noop,
   looksLabel: 'Spotlight',

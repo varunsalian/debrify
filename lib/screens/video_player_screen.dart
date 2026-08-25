@@ -4569,7 +4569,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Get the current episode title for display
-  String _getCurrentEpisodeTitle() {
+  String _getCurrentEpisodeTitle() => _getCurrentEpisodeTitleInfo().title;
+
+  /// The dock title plus whether it's a fetched, human name (TVMaze episode
+  /// title, catalog content title, channel name) as opposed to a release
+  /// filename. TvControls skips its release-noise cleaner for fetched names —
+  /// the token list would truncate a real title containing e.g. "Proper".
+  ({String title, bool fetched}) _getCurrentEpisodeTitleInfo() {
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist != null &&
         seriesPlaylist.isSeries &&
@@ -4585,7 +4591,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Return episode title if available, otherwise use the playlist entry title
           if (currentEpisode.episodeInfo?.title != null &&
               currentEpisode.episodeInfo!.title!.isNotEmpty) {
-            return currentEpisode.episodeInfo!.title!;
+            final episodeTitle = currentEpisode.episodeInfo!.title!;
+            // "Show — Episode" when TVMaze supplied the official show name;
+            // the subtitle then drops the name to avoid saying it twice.
+            final show = seriesPlaylist.tvmazeShowName;
+            return (
+              title: show == null || show.isEmpty
+                  ? episodeTitle
+                  : '$show — $episodeTitle',
+              fetched: true,
+            );
           } else if (currentEpisode.seriesInfo.season != null &&
               currentEpisode.seriesInfo.episode != null) {
             // Catalog singleton without TVMaze data yet: the clean catalog
@@ -4595,9 +4610,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 contentTitle != null &&
                 contentTitle.isNotEmpty &&
                 _effectiveStremioTvChannels == null) {
-              return contentTitle;
+              return (title: contentTitle, fetched: true);
             }
-            return 'Episode ${currentEpisode.seriesInfo.episode}';
+            final episodeTitle = 'Episode ${currentEpisode.seriesInfo.episode}';
+            final show = seriesPlaylist.tvmazeShowName;
+            return (
+              title: show == null || show.isEmpty
+                  ? episodeTitle
+                  : '$show — $episodeTitle',
+              fetched: true,
+            );
           }
         } catch (e) {
           // Silently fail
@@ -4607,7 +4629,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Stremio TV: use dynamic title when a channel switch has occurred
     if (_hasStremioTvGuide && _dynamicTitle.isNotEmpty) {
-      return _dynamicTitle;
+      return (title: _dynamicTitle, fetched: true);
     }
 
     // Catalog single stream (Quick Play / Sources tap): prefer the clean
@@ -4621,20 +4643,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _effectiveIptvChannels == null &&
         _effectiveStremioTvChannels == null &&
         (_activePlaylist == null || _activePlaylist!.length <= 1)) {
-      return contentTitle;
+      return (title: contentTitle, fetched: true);
     }
 
     // Fallback to the current playlist entry title
     if (_activePlaylist != null &&
         _currentIndex >= 0 &&
         _currentIndex < _activePlaylist!.length) {
-      return _activePlaylist![_currentIndex].title;
+      return (title: _activePlaylist![_currentIndex].title, fetched: false);
     }
 
     // If Debrify TV (no playlist) is active, use dynamic title when available
+    // (a Debrify TV title can be a torrent name — keep the cleaner on it).
     if ((_activePlaylist == null || _activePlaylist!.isEmpty) &&
         widget.requestMagicNext != null) {
-      return _dynamicTitle.isNotEmpty ? _dynamicTitle : widget.title;
+      return _dynamicTitle.isNotEmpty
+          ? (title: _dynamicTitle, fetched: false)
+          : (title: widget.title, fetched: false);
     }
 
     // IPTV: use current channel name
@@ -4642,11 +4667,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (iptvChannels != null &&
         _currentIptvIndex >= 0 &&
         _currentIptvIndex < iptvChannels.length) {
-      return iptvChannels[_currentIptvIndex].numberedName;
+      return (
+        title: iptvChannels[_currentIptvIndex].numberedName,
+        fetched: true,
+      );
     }
 
     // Final fallback
-    return widget.title;
+    return (title: widget.title, fetched: false);
   }
 
   /// Get the current episode subtitle for display
@@ -4678,6 +4706,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 _effectiveStremioTvChannels == null;
             final seasonEpisode =
                 'Season ${currentEpisode.seriesInfo.season}, Episode ${currentEpisode.seriesInfo.episode}';
+            // When TVMaze supplied the show name, the TITLE line already
+            // reads "Show — Episode", so repeating the name here would say
+            // it twice. Without it, fall back to the filename-parsed series
+            // name — release strings only as a last resort, same rule as the
+            // native player's OTT identity row.
+            final showName = seriesPlaylist.tvmazeShowName;
+            if (showName != null && showName.isNotEmpty) {
+              return seasonEpisode;
+            }
             if (isCatalogSingleton) {
               final hasEpisodeTitle =
                   currentEpisode.episodeInfo?.title?.isNotEmpty == true;
@@ -8117,6 +8154,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         : null;
     final carriedImdbId = outgoingSeries?.imdbId ?? _currentSeriesImdbId;
     final carriedTvmazeShowId = outgoingSeries?.tvmazeShowId;
+    final carriedTvmazeShowName = outgoingSeries?.tvmazeShowName;
     final carriedPosterUrl = outgoingSeries?.showPosterUrl;
     setState(() {
       _activePlaylist = newPlaylist;
@@ -8127,6 +8165,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (rebuilt != null) {
       rebuilt.imdbId ??= carriedImdbId;
       rebuilt.tvmazeShowId ??= carriedTvmazeShowId;
+      rebuilt.tvmazeShowName ??= carriedTvmazeShowName;
       rebuilt.showPosterUrl ??= carriedPosterUrl;
       if (carriedGuide != null &&
           carriedGuide.isNotEmpty &&
@@ -11232,70 +11271,82 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _mdblistScrobbleSeek(target);
           _scheduleAutoHide();
         },
-        child: TvControls(
-          title: widget.showVideoTitle && !widget.showChannelName
-              ? _getCurrentEpisodeTitle()
-              : '',
-          subtitle: widget.showVideoTitle && !widget.showChannelName
-              ? _getCurrentEpisodeSubtitle()
-              : null,
-          infoPanel:
-              _buildIptvInfoPanel(flush: true) ??
-              _buildDebrifyTvInfoPanel(flush: true),
-          clock: _playbackUiClock,
-          isPlaying: _isPlaying,
-          isLive: isLive,
-          isTransitioning: _isTransitioning,
-          scopeNode: _tvBarScope,
-          playPauseFocusNode: _tvPlayPauseFocus,
-          progressFocusNode: _tvProgressFocus,
-          // Dead controls are never focusable: a live stream or an unknown
-          // duration has nothing to scrub, so traversal skips the row entirely
-          // rather than parking the remote on it.
-          progressFocusable: !_tvNoTimeline,
-          // OK is claimed by the dock's own buttons, so those presses never
-          // reach _handleTvKey and never restarted the countdown.
-          onInteract: _scheduleAutoHide,
-          scrubPreview: _tvScrubTarget,
-          onPlayPause: _togglePlay,
-          onShowTracks: () => _showTracksSheet(context),
-          onSpeed: _onSpeedButton,
-          onAspect: _onAspectButton,
-          onSleepTimer: _showSleepTimerSheet,
-          sleepTimerLabel: _sleepTimerButtonLabel,
-          speed: _playbackSpeed,
-          aspectMode: _aspectMode,
-          hideOptions: widget.hideOptions,
-          onNext: _hasIptvNext
-              ? () => _switchToIptvChannel(_currentIptvIndex + 1)
-              : _canZapIptvChannel
-              ? () => _zapIptvChannel(1)
-              : (_hasAnyNext ? _goToNextEpisode : null),
-          onPrevious: _hasIptvPrevious
-              ? () => _switchToIptvChannel(_currentIptvIndex - 1)
-              : _canZapIptvChannel
-              ? () => _zapIptvChannel(-1)
-              : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
-          onNextChannel: widget.requestNextChannel != null
-              ? _goToNextChannel
-              : null,
-          onShowPlaylist:
-              (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
-                  _canFetchEpisodes
-              ? () => _showPlaylistSheet(context)
-              : null,
-          onShowSources: hasSources ? _showSourceSheetOverlay : null,
-          onShowGuide: hasGuide
-              ? (_channelEntries.isNotEmpty && widget.requestChannelById != null
-                    ? _showChannelGuideOverlay
-                    : _showStremioTvGuideOverlay)
-              : null,
-          onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
-              ? _showIptvChannelSheetOverlay
-              : null,
-          hasRecord: _canRecord,
-          isRecording: _recordingActiveNow,
-          onRecord: _canRecord ? _toggleRecording : null,
+        // `_` on purpose: `context` inside must keep resolving to the State's
+        // context, exactly as before this wrapper existed — sheet callbacks
+        // like _showTracksSheet await before using it, and the Builder's own
+        // element dies whenever the controls subtree is dropped (PiP,
+        // not-ready), which the State's context survives.
+        child: Builder(
+          builder: (_) {
+            final showIdentity =
+                widget.showVideoTitle && !widget.showChannelName;
+            final titleInfo = showIdentity
+                ? _getCurrentEpisodeTitleInfo()
+                : null;
+            return TvControls(
+              title: titleInfo?.title ?? '',
+              titleIsClean: titleInfo?.fetched ?? false,
+              subtitle: showIdentity ? _getCurrentEpisodeSubtitle() : null,
+              infoPanel:
+                  _buildIptvInfoPanel(flush: true) ??
+                  _buildDebrifyTvInfoPanel(flush: true),
+              clock: _playbackUiClock,
+              isPlaying: _isPlaying,
+              isLive: isLive,
+              isTransitioning: _isTransitioning,
+              scopeNode: _tvBarScope,
+              playPauseFocusNode: _tvPlayPauseFocus,
+              progressFocusNode: _tvProgressFocus,
+              // Dead controls are never focusable: a live stream or an unknown
+              // duration has nothing to scrub, so traversal skips the row entirely
+              // rather than parking the remote on it.
+              progressFocusable: !_tvNoTimeline,
+              // OK is claimed by the dock's own buttons, so those presses never
+              // reach _handleTvKey and never restarted the countdown.
+              onInteract: _scheduleAutoHide,
+              scrubPreview: _tvScrubTarget,
+              onPlayPause: _togglePlay,
+              onShowTracks: () => _showTracksSheet(context),
+              onSpeed: _onSpeedButton,
+              onAspect: _onAspectButton,
+              onSleepTimer: _showSleepTimerSheet,
+              sleepTimerLabel: _sleepTimerButtonLabel,
+              speed: _playbackSpeed,
+              aspectMode: _aspectMode,
+              hideOptions: widget.hideOptions,
+              onNext: _hasIptvNext
+                  ? () => _switchToIptvChannel(_currentIptvIndex + 1)
+                  : _canZapIptvChannel
+                  ? () => _zapIptvChannel(1)
+                  : (_hasAnyNext ? _goToNextEpisode : null),
+              onPrevious: _hasIptvPrevious
+                  ? () => _switchToIptvChannel(_currentIptvIndex - 1)
+                  : _canZapIptvChannel
+                  ? () => _zapIptvChannel(-1)
+                  : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
+              onNextChannel: widget.requestNextChannel != null
+                  ? _goToNextChannel
+                  : null,
+              onShowPlaylist:
+                  (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
+                      _canFetchEpisodes
+                  ? () => _showPlaylistSheet(context)
+                  : null,
+              onShowSources: hasSources ? _showSourceSheetOverlay : null,
+              onShowGuide: hasGuide
+                  ? (_channelEntries.isNotEmpty &&
+                            widget.requestChannelById != null
+                        ? _showChannelGuideOverlay
+                        : _showStremioTvGuideOverlay)
+                  : null,
+              onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
+                  ? _showIptvChannelSheetOverlay
+                  : null,
+              hasRecord: _canRecord,
+              isRecording: _recordingActiveNow,
+              onRecord: _canRecord ? _toggleRecording : null,
+            );
+          },
         ),
       ),
     );

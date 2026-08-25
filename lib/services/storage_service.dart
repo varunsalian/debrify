@@ -1442,6 +1442,31 @@ class StorageService {
     );
   }
 
+  static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
+  static const Set<String> _tvPlayerControlsStyles = {'classic', 'ott'};
+
+  /// Control skin for the NATIVE Android TV player: 'ott' (the Apple TV
+  /// dock ported to Kotlin — the default) or 'classic' (the legacy Cinema
+  /// Mode controls). Android TV only; tvOS runs the Flutter player and has
+  /// nothing to choose. Read once per player launch — the native side via
+  /// `ProfilePreferenceProjection.getString("tv_player_controls_style")`
+  /// (falling back to `flutter.tv_player_controls_style` in
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'ott' on BOTH
+  /// read and write so the two readers can never disagree about the default.
+  static Future<String> getTvPlayerControlsStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_tvPlayerControlsStyleKey);
+    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'ott';
+  }
+
+  static Future<void> setTvPlayerControlsStyle(String style) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _tvPlayerControlsStyleKey,
+      _tvPlayerControlsStyles.contains(style) ? style : 'ott',
+    );
+  }
+
   static const String _discoverLayoutKey = 'discover_layout';
   static const String _discoverDefaultSourceKey = 'discover_default_source';
   static const String _discoverLastSourceKey = 'discover_last_source';
@@ -1546,6 +1571,8 @@ class StorageService {
     'constellation',
     'silk',
     'rackfocus',
+    'imprint',
+    'frost',
   };
 
   /// Exposed so a test can assert this set and `kLaunchIdents` agree in BOTH

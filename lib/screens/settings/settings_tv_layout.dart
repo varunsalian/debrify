@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../utils/platform_util.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import 'settings_spotlight_shell.dart';
@@ -97,6 +98,12 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDebrifyTvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  // Native player control skin (OTT dock vs Legacy). The ROW is gated on
+  // PlatformUtil.isAndroidTvCached in the pane builder: this layout renders
+  // on Apple TV too (form-factor TV), where the native player — the pref's
+  // only reader — doesn't exist.
+  final String tvPlayerControlsStyleLabel;
+  final Future<void> Function() onOpenTvPlayerControlsStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
   final String looksLabel;
@@ -186,6 +193,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDebrifyTvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.tvPlayerControlsStyleLabel,
+    required this.onOpenTvPlayerControlsStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
     required this.looksLabel,
@@ -332,9 +341,9 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 16 — Looks from the theme work, Profile Picker, and Hero Artwork
-  /// Quality from the
-  /// player-dock merge, less Details Theme (App Theme covers it) and Theme Lab
+  /// exactly 17 — Looks from the theme work, Profile Picker, Hero Artwork
+  /// Quality from the player-dock merge, and Player Controls from the native
+  /// OTT-skin work, less Details Theme (App Theme covers it) and Theme Lab
   /// (a tool, not a setting); About has up to 6 with the conditional donation
   /// row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
@@ -344,7 +353,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 16;
+  static const int _kMaxCategoryRows = 17;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -968,6 +977,28 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
               ),
             ],
           ),
+          // Android TV only, and LAST on purpose: this layout also renders on
+          // Apple TV (AndroidNativeDownloader.isTelevision answers the
+          // form-factor question), where the native player — the pref's only
+          // reader — doesn't exist. A conditional row in the middle would
+          // strand DPAD traversal on tvOS (Up/Down is index ± 1 and stops at
+          // a dead node), so the gated section sits at the end where the walk
+          // clamps naturally.
+          if (PlatformUtil.isAndroidTvCached) ...[
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Player',
+              blurb: 'The on-screen controls during playback on this TV.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.tvPlayerControls,
+                  subtitle: widget.tvPlayerControlsStyleLabel,
+                  onTap: widget.onOpenTvPlayerControlsStyle,
+                  focusNode: _paneNodes[16],
+                ),
+              ],
+            ),
+          ],
         ];
       case 4: // Playback
         return [

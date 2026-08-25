@@ -3501,12 +3501,14 @@ class VideoPlayerLauncher {
               sessionId: sessionId,
               imdbId: discoveredImdbId,
               guideEpisodes: updates.guideEpisodes,
+              showName: seriesPlaylist.tvmazeShowName,
             );
             await AndroidTvPlayerBridge.updateEpisodeMetadata(
               updates.metadataUpdates,
               sessionId: sessionId,
               imdbId: discoveredImdbId,
               guideEpisodes: updates.guideEpisodes,
+              showName: seriesPlaylist.tvmazeShowName,
             );
             return true;
           });

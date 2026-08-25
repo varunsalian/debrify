@@ -107,6 +107,7 @@ class AndroidTvPlayerBridge {
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
+  static String? _pendingShowName;
   // Full-show episode guide (TVMaze) pending alongside the metadata updates.
   static List<Map<String, dynamic>>? _pendingGuideEpisodes;
   // Store pending IMDB ID discovered from TVMaze (for Stremio subtitles)
@@ -1003,11 +1004,13 @@ class AndroidTvPlayerBridge {
               pending ?? [],
               imdbId: pendingImdb,
               guideEpisodes: pendingGuide,
+              showName: _pendingShowName,
             );
             // Clear pending updates after sending
             _pendingMetadataUpdates = null;
             _pendingImdbId = null;
             _pendingGuideEpisodes = null;
+            _pendingShowName = null;
           } else {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
@@ -1437,6 +1440,7 @@ class AndroidTvPlayerBridge {
     _pendingMetadataUpdates = null;
     _pendingImdbId = null;
     _pendingGuideEpisodes = null;
+    _pendingShowName = null;
 
     try {
       // Get custom font info for Android TV player
@@ -1512,6 +1516,7 @@ class AndroidTvPlayerBridge {
     String? sessionId,
     String? imdbId,
     List<Map<String, dynamic>>? guideEpisodes,
+    String? showName,
   }) {
     // Discard updates if session ID doesn't match current session
     if (sessionId != null && sessionId != _currentSessionId) {
@@ -1526,6 +1531,7 @@ class AndroidTvPlayerBridge {
     _pendingMetadataUpdates = updates;
     _pendingImdbId = imdbId;
     _pendingGuideEpisodes = guideEpisodes;
+    _pendingShowName = showName;
   }
 
   /// Set the current session ID for metadata tracking
@@ -1552,6 +1558,7 @@ class AndroidTvPlayerBridge {
     String? sessionId,
     String? imdbId,
     List<Map<String, dynamic>>? guideEpisodes,
+    String? showName,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -1580,6 +1587,9 @@ class AndroidTvPlayerBridge {
             if (imdbId != null) 'imdbId': imdbId,
             if (guideEpisodes != null && guideEpisodes.isNotEmpty)
               'guideEpisodes': guideEpisodes,
+            // TVMaze's official show title, for the native OTT dock's
+            // "Show — Episode" identity line.
+            if (showName != null && showName.isNotEmpty) 'showName': showName,
           });
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
       return success == true;

@@ -104,6 +104,9 @@ abstract final class SanitizedProfilePreferences {
             const <String>{'ident', 'theme'}.contains(value);
       case 'iptv_player_guide_style':
         return value is String && _iptvPlayerGuideStyles.contains(value);
+      case 'tv_player_controls_style':
+        return value is String &&
+            const <String>{'classic', 'ott'}.contains(value);
       case 'tv_hero_artwork_quality':
         return value is String &&
             const <String>{
@@ -230,6 +233,8 @@ abstract final class SanitizedProfilePreferences {
     'constellation',
     'silk',
     'rackfocus',
+    'imprint',
+    'frost',
   };
 
   static const Set<String> _iptvPlayerGuideStyles = <String>{

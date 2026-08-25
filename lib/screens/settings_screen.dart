@@ -73,6 +73,7 @@ import '../theme/app_theme_controller.dart';
 import 'settings/parents_guide_style_page.dart';
 import 'settings/player_dock_page.dart';
 import 'settings/player_guide_style_page.dart';
+import 'settings/tv_player_controls_style_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_render_quality_page.dart';
 import 'settings/tv_hero_artwork_quality_page.dart';
@@ -223,6 +224,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _iptvStyle = 'command';
   String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
+  String _tvPlayerControlsStyle = 'ott';
   String _playerDockStyle = 'classic';
   String _playerDockPalette = 'ultraviolet';
   String _playerDockSize = 'auto';
@@ -338,6 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPlayerDockSize(),
       StorageService.getDesktopSidebarStyle(),
       StorageService.getDebrifyTvStyle(),
+      StorageService.getTvPlayerControlsStyle(),
     ]);
 
     if (!mounted) return;
@@ -382,6 +385,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final playerDockSize = results[35] as String;
     final desktopSidebarStyle = results[36] as String;
     final debrifyTvStyle = results[37] as String;
+    final tvPlayerControlsStyle = results[38] as String;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -516,6 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _iptvStyle = iptvStyle;
     _debrifyTvStyle = debrifyTvStyle;
     _playerGuideStyle = playerGuideStyle;
+    _tvPlayerControlsStyle = tvPlayerControlsStyle;
     _playerDockStyle = playerDockStyle;
     _playerDockPalette = playerDockPalette;
     _playerDockSize = playerDockSize;
@@ -846,6 +851,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      tvPlayerControlsStyleLabel: tvPlayerControlsStyleLabel(
+        _tvPlayerControlsStyle,
+      ),
+      onOpenTvPlayerControlsStyle: _openTvPlayerControlsStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
@@ -1507,6 +1516,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv & dvr',
         ],
       ),
+      // Android TV only: the skin picker for the NATIVE player's controls.
+      // tvOS runs the Flutter player (one look) and phones/desktops have the
+      // dock row below instead. PlatformUtil, not _isAndroidTv — the latter
+      // answers the form-factor question and is true on Apple TV.
+      if (PlatformUtil.isAndroidTvCached)
+        nav(
+          SettingsRows.tvPlayerControls,
+          'Appearance',
+          _openTvPlayerControlsStylePage,
+          subtitle: tvPlayerControlsStyleLabel(_tvPlayerControlsStyle),
+          keywords: const [
+            'player',
+            'controls',
+            'dock',
+            'buttons',
+            'seekbar',
+            'scrubber',
+            'transport',
+            'ott',
+            'legacy',
+            'cinema',
+            'style',
+            'look',
+            'skin',
+          ],
+        ),
       if (!PlatformUtil.isTelevision)
         nav(
           SettingsRows.playerDock,
@@ -4836,6 +4871,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvHomeStyle], for the native TV control skin.
+  Future<void> _openTvPlayerControlsStylePage() async {
+    await pushSettingsPage(context, const TvPlayerControlsStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getTvPlayerControlsStyle();
+    if (!mounted) return;
+    setState(() {
+      _tvPlayerControlsStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the player control dock.
   Future<void> _openPlayerDockPage() async {
     await pushSettingsPage(context, const PlayerDockPage());
@@ -4959,12 +5005,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvHomeStyle = await StorageService.getTvHomeStyle();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    final tvPlayerControlsStyle =
+        await StorageService.getTvPlayerControlsStyle();
     final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = tvHomeStyle;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
+      _tvPlayerControlsStyle = tvPlayerControlsStyle;
       _debrifyTvStyle = debrifyTvStyle;
     });
   }

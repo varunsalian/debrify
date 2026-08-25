@@ -48,6 +48,7 @@ class ProfileCreationService {
     'player_default_audio_language',
     'subtitle_auto_sync_enabled',
     'iptv_player_guide_style',
+    'tv_player_controls_style',
     'recording_engine_enabled',
     'tv_hero_artwork_quality',
   };

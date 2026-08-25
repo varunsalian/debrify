@@ -4,10 +4,16 @@ import android.animation.ValueAnimator
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.PaintDrawable
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.RectShape
+import android.view.LayoutInflater
 import android.media.MediaCodecList
 import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
@@ -200,6 +206,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var cinemaProgressBackground: View? = null
     private var cinemaProgressThumb: View? = null
     private var cinemaSpeedIndicator: TextView? = null
+
+    // OTT skin views (null while CLASSIC is installed). ottSkinInstalled is
+    // the single truth every OTT branch tests — it can only become true after
+    // the controller-layout swap succeeded, so a failed inflate degrades to
+    // the classic skin instead of a half-styled one.
+    private var ottSkinInstalled = false
+    private var ottCaptionLabel: TextView? = null
+    private var ottCaptionOwner: View? = null
+    private var ottIdentityTitle: TextView? = null
+    private var ottIdentitySubtitle: TextView? = null
+    private var ottScrubPreviewChip: View? = null
+    private var ottScrubPreviewText: TextView? = null
+    private var ottProgressTrackContainer: View? = null
+
+    /** In-dock Sources button; replaces the top-right stremio_source_badge
+     *  under the OTT skin (the badge stays permanently hidden there). */
+    private var ottSourcesButton: AppCompatButton? = null
+
+    /** TVMaze's official show title, pushed with the metadata updates. */
+    @Volatile
+    private var ottShowName: String? = null
     private var cinemaProgressTrackWidth: Int = 0
     private var cinemaSeekMode: Boolean = false  // True when actively seeking via progress bar
     private var cinemaProgressAnimator: ValueAnimator? = null
@@ -1862,7 +1889,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val updatesJson = intent?.getStringExtra("metadataUpdates")
                 val imdbId = intent?.getStringExtra("imdbId")
                 val guideJson = intent?.getStringExtra("guideEpisodes")
-                handleMetadataUpdate(updatesJson, imdbId, guideJson)
+                val showName = intent?.getStringExtra("showName")
+                handleMetadataUpdate(updatesJson, imdbId, guideJson, showName)
             }
         }
 
@@ -1878,9 +1906,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         requestMetadataFromFlutter()
     }
 
-    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?, guideJson: String? = null) {
+    private fun handleMetadataUpdate(
+        updatesJson: String?,
+        imdbId: String?,
+        guideJson: String? = null,
+        showName: String? = null,
+    ) {
         android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
         android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")
+
+        // TVMaze's official show title — the OTT dock's identity line reads
+        // it; the payload title (often a release filename) never renders.
+        if (!showName.isNullOrBlank()) {
+            ottShowName = showName.trim()
+            if (ottSkinInstalled) runOnUiThread { updateOttIdentity() }
+        }
 
         val model = payload
         if (model == null) {
@@ -3296,7 +3336,118 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Swaps the legacy Cinema controller layout for the OTT dock.
+     *
+     * Media3 inflates `controller_layout_id` INTO its PlayerControlView with
+     * attachToRoot, so the legacy root is an ordinary child we can replace at
+     * the same index. Both layouts share every id the activity binds, and the
+     * activity (not Media3) drives `debrify_controls_root` visibility, so all
+     * downstream code works against whichever root is installed. Must run
+     * before ANY controller-id findViewById — setupControls calls it first.
+     */
+    private fun installOttControlsSkin() {
+        val legacy = playerView.findViewById<View>(R.id.debrify_controls_root) ?: return
+        val parent = legacy.parent as? ViewGroup ?: return
+        val index = parent.indexOfChild(legacy)
+        val ott = try {
+            LayoutInflater.from(this)
+                .inflate(R.layout.view_debrify_tv_ott_controls, parent, false)
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "OTT skin inflate failed; keeping classic", e)
+            return
+        }
+        parent.removeViewAt(index)
+        parent.addView(ott, index)
+        ottSkinInstalled = true
+
+        // The Flutter scrim has FOUR stops; XML gradients cap at three, so the
+        // placeholder background is replaced with the exact ramp here.
+        ott.findViewById<View>(R.id.ott_content)?.background = PaintDrawable().apply {
+            shape = RectShape()
+            shaderFactory = object : ShapeDrawable.ShaderFactory() {
+                override fun resize(width: Int, height: Int): Shader = LinearGradient(
+                    0f, 0f, 0f, height.toFloat(),
+                    intArrayOf(0x00000000, 0x66000000, 0xD9000000.toInt(), 0xF2000000.toInt()),
+                    floatArrayOf(0f, 0.28f, 0.62f, 1f),
+                    Shader.TileMode.CLAMP,
+                )
+            }
+        }
+
+        ottCaptionLabel = ott.findViewById(R.id.ott_caption_label)
+        ottIdentityTitle = ott.findViewById(R.id.ott_identity_title)
+        ottIdentitySubtitle = ott.findViewById(R.id.ott_identity_subtitle)
+        ottScrubPreviewChip = ott.findViewById(R.id.ott_scrub_preview_chip)
+        ottScrubPreviewText = ott.findViewById(R.id.ott_scrub_preview_text)
+        ottProgressTrackContainer = ott.findViewById(R.id.cinema_progress_track_container)
+
+        // Idle bar is 3dp; enter/exit cinema seek animates it to 6dp and back.
+        setOttTrackHeight(focused = false)
+
+        ott.findViewById<View>(R.id.ott_seek_back_button)?.setOnClickListener {
+            seekBy(-10_000L)
+            scheduleHideControlsMenu()
+        }
+        ott.findViewById<View>(R.id.ott_seek_forward_button)?.setOnClickListener {
+            seekBy(10_000L)
+            scheduleHideControlsMenu()
+        }
+
+        ottSourcesButton = ott.findViewById(R.id.ott_sources_button)
+        // Same behaviour as the top-right badge this button replaces.
+        ottSourcesButton?.setOnClickListener {
+            hideControlsMenu()
+            unifiedMenu?.hide()
+            sourceBrowser?.show()
+        }
+    }
+
+    private fun setOttTrackHeight(focused: Boolean) {
+        val track = ottProgressTrackContainer ?: return
+        val heightPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            if (focused) 6f else 3f,
+            resources.displayMetrics,
+        ).toInt()
+        val params = track.layoutParams
+        if (params.height != heightPx) {
+            params.height = heightPx
+            track.layoutParams = params
+        }
+    }
+
+    /** The shared caption under the OTT transport row: the focused button's
+     *  (transparent) text. Cleared only by its owner so the fade-out of an
+     *  outgoing button never eats the incoming button's label. */
+    private fun updateOttCaption(view: View) {
+        val label = ottCaptionLabel ?: return
+        val text = (view as? TextView)?.text?.takeIf { it.isNotEmpty() }
+            ?: view.contentDescription
+            ?: return
+        ottCaptionOwner = view
+        label.text = text
+        label.animate().cancel()
+        label.animate().alpha(1f).setDuration(120).start()
+    }
+
+    private fun clearOttCaption(view: View) {
+        if (ottCaptionOwner !== view) return
+        ottCaptionOwner = null
+        ottCaptionLabel?.animate()?.cancel()
+        ottCaptionLabel?.animate()?.alpha(0f)?.setDuration(120)?.start()
+    }
+
+    /** Re-push the caption after a runtime label write (Play->Pause, "1.5x")
+     *  so a focused button's caption can't go stale. */
+    private fun refreshOttCaptionFor(view: View?) {
+        if (!ottSkinInstalled || view == null || !view.isFocused) return
+        updateOttCaption(view)
+    }
+
     private fun setupControls() {
+        if (!isIptvMode && controlsSkin == TvControlsSkin.OTT && !ottSkinInstalled) {
+            installOttControlsSkin()
+        }
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root)
         pauseButton = playerView.findViewById(R.id.debrify_pause_button)
         nightModeButton = playerView.findViewById(R.id.debrify_night_mode_button)
@@ -3341,7 +3492,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startSeekbarProgressUpdates()
 
         // Apple TV-style focus animation with scale effect
-        val applyAppleTvAnimation = { view: View? ->
+        val classicAppleTvAnimation = { view: View? ->
             view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
                 if (hasFocus) {
                     // Scale up with premium smooth animation when focused
@@ -3368,6 +3519,36 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // OTT dock focus: the white pill/border/glow/icon-invert live in the
+        // button's StateListDrawable + ColorStateList; code adds only the
+        // Flutter dock's 1.08 @ 120ms scale and the shared caption.
+        val ottFocusTreatment = { view: View? ->
+            view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                if (hasFocus) {
+                    v.animate()
+                        .scaleX(1.08f)
+                        .scaleY(1.08f)
+                        .setDuration(120)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator())
+                        .start()
+                    updateOttCaption(v)
+                    if (controlsMenuVisible) {
+                        scheduleHideControlsMenu()
+                    }
+                } else {
+                    v.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .setDuration(120)
+                        .setInterpolator(android.view.animation.AccelerateInterpolator())
+                        .start()
+                    clearOttCaption(v)
+                }
+            }
+        }
+        val applyAppleTvAnimation =
+            if (ottSkinInstalled) ottFocusTreatment else classicAppleTvAnimation
 
         // Apply Apple TV animations to all control buttons
         applyAppleTvAnimation(pauseButton)
@@ -3490,6 +3671,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         randomButton?.onFocusChangeListener = extendTimerOnFocus
+
+        if (ottSkinInstalled) {
+            // Every assignment above just overwrote the focus animation with
+            // extendTimerOnFocus (a view holds ONE focus listener; last set
+            // wins — which is also why the classic scale never fires today).
+            // The OTT treatment includes the timer-extend behaviour, so
+            // re-applying it LAST gives the dock its scale + caption.
+            applyAppleTvAnimation(pauseButton)
+            applyAppleTvAnimation(nightModeButton)
+            applyAppleTvAnimation(audioButton)
+            applyAppleTvAnimation(subtitleButton)
+            applyAppleTvAnimation(aspectButton)
+            applyAppleTvAnimation(speedButton)
+            applyAppleTvAnimation(playlistButton)
+            applyAppleTvAnimation(nextButton)
+            applyAppleTvAnimation(prevButton)
+            applyAppleTvAnimation(randomButton)
+            applyAppleTvAnimation(iptvJumpButton)
+            applyAppleTvAnimation(iptvRecordButton)
+            applyAppleTvAnimation(ottSourcesButton)
+            applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_back_button))
+            applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_forward_button))
+        }
     }
 
     // [suppressTrakt]: a source switch resumes the captured live position and
@@ -4315,6 +4519,38 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         channelBadge.visibility = View.GONE
+        if (ottSkinInstalled) updateOttIdentity()
+    }
+
+    /** The OTT dock's in-dock identity row, mirroring the legacy OTT title
+     *  mode: for series the FETCHED episode title (updateTitle keeps
+     *  item.title current from the TVMaze/metadata updates, with the same
+     *  "Episode N" fallback) with the S/E badge beneath — the raw payload
+     *  title is never shown, because on torrent launches it's the release
+     *  filename the legacy header deliberately hid. */
+    private fun updateOttIdentity() {
+        val title = ottIdentityTitle ?: return
+        val model = payload
+        val item = model?.items?.getOrNull(currentIndex)
+        val isSeries = model?.contentType?.lowercase(java.util.Locale.US) == "series"
+        if (isSeries && item != null && item.season != null && item.episode != null) {
+            val episodeTitle = item.title.ifBlank { "Episode ${item.episode}" }
+            // "Show — Episode" when TVMaze supplied the official show name;
+            // never the payload title, which can be a release filename.
+            val show = ottShowName
+            title.text = if (show.isNullOrBlank()) {
+                episodeTitle
+            } else {
+                "$show — $episodeTitle"
+            }
+            val seasonStr = item.season.toString().padStart(2, '0')
+            val episodeStr = item.episode.toString().padStart(2, '0')
+            ottIdentitySubtitle?.text = "S$seasonStr · E$episodeStr"
+            ottIdentitySubtitle?.visibility = View.VISIBLE
+        } else {
+            title.text = titleView.text
+            ottIdentitySubtitle?.visibility = View.GONE
+        }
     }
 
     private fun setResolvingState(resolving: Boolean) {
@@ -5919,17 +6155,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val hasSeriesMetadata = model?.contentType?.lowercase(java.util.Locale.US) == "series" &&
                                currentItem?.season != null && currentItem.episode != null
 
-        if (hasSeriesMetadata) {
-            titleView.visibility = View.GONE
-            titleOttContainer.visibility = View.VISIBLE
+        if (ottSkinInstalled) {
+            // The OTT dock carries its own identity row, mirroring the Flutter
+            // dock — the top-of-screen title stays hidden entirely.
+            titleContainer.visibility = View.GONE
+            updateOttIdentity()
         } else {
-            titleView.visibility = View.VISIBLE
-            titleOttContainer.visibility = View.GONE
-        }
+            if (hasSeriesMetadata) {
+                titleView.visibility = View.GONE
+                titleOttContainer.visibility = View.VISIBLE
+            } else {
+                titleView.visibility = View.VISIBLE
+                titleOttContainer.visibility = View.GONE
+            }
 
-        if (titleView.text?.isNotEmpty() == true || hasSeriesMetadata) {
-            titleContainer.visibility = View.VISIBLE
-            titleContainer.alpha = 1f
+            if (titleView.text?.isNotEmpty() == true || hasSeriesMetadata) {
+                titleContainer.visibility = View.VISIBLE
+                titleContainer.alpha = 1f
+            }
         }
 
         // Show Stremio source quality badge
@@ -6047,14 +6290,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         button.text = if (playing) "Pause" else "Play"
         val iconRes = if (playing) R.drawable.ic_pause else R.drawable.ic_play
         button.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0)
+        refreshOttCaptionFor(button)
     }
 
     private fun updateAspectButtonLabel() {
         aspectButton?.text = resizeModeLabels[resizeModeIndex]
+        refreshOttCaptionFor(aspectButton)
     }
 
     private fun updateNightModeButtonLabel() {
         nightModeButton?.text = nightModeLabels[nightModeIndex]
+        refreshOttCaptionFor(nightModeButton)
     }
 
     // Premium Seekbar Progress Updates
@@ -6086,7 +6332,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Update Cinema Mode split time displays
             debrifyTimeCurrent?.text = formatTime(currentPosition)
-            debrifyTimeTotal?.text = formatTime(duration)
+            debrifyTimeTotal?.text = if (ottSkinInstalled) {
+                "-" + formatTime((duration - currentPosition).coerceAtLeast(0))
+            } else {
+                formatTime(duration)
+            }
 
             // Update legacy combined display (for compatibility)
             debrifyTimeDisplay?.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
@@ -6199,7 +6449,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         if (videoDuration <= 0) {
             // Don't trap focus — let DPAD navigation skip to Sources badge
-            if (stremioSources.isNotEmpty()) {
+            if (ottSkinInstalled) {
+                // The badge is permanently hidden under OTT (its requestFocus
+                // would no-op and strand focus); the dock's Sources button is
+                // already in normal traversal, so just fall back to Play.
+                pauseButton?.requestFocus()
+            } else if (stremioSources.isNotEmpty()) {
                 stremioSourceBadge?.requestFocus()
             } else {
                 pauseButton?.requestFocus()
@@ -6244,8 +6499,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .start()
         }
 
-        // Highlight current time with Netflix red
-        debrifyTimeCurrent?.setTextColor(Color.parseColor("#E50914"))
+        if (ottSkinInstalled) {
+            // OTT keeps the dock's own palette (white70 times) and swells the
+            // bar 3->6dp instead of recoloring; the preview chip appears with
+            // the first step via updateCinemaProgressUI.
+            setOttTrackHeight(focused = true)
+        } else {
+            // Highlight current time with Netflix red
+            debrifyTimeCurrent?.setTextColor(Color.parseColor("#E50914"))
+        }
 
         // Cache track width
         cinemaProgressBackground?.let { bg ->
@@ -6279,8 +6541,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .start()
         }
 
-        // Fade current time color back to white
-        debrifyTimeCurrent?.setTextColor(Color.WHITE)
+        if (ottSkinInstalled) {
+            setOttTrackHeight(focused = false)
+            ottScrubPreviewChip?.visibility = View.GONE
+        } else {
+            // Fade current time color back to white
+            debrifyTimeCurrent?.setTextColor(Color.WHITE)
+        }
 
         // Resume playback
         player?.play()
@@ -6301,7 +6568,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun updateCinemaProgressUI() {
         // Update time display
         debrifyTimeCurrent?.text = formatTime(seekbarPosition)
-        debrifyTimeTotal?.text = formatTime(videoDuration)
+        debrifyTimeTotal?.text = if (ottSkinInstalled) {
+            // The OTT bar mirrors the Flutter dock: remaining, not total.
+            "-" + formatTime((videoDuration - seekbarPosition).coerceAtLeast(0))
+        } else {
+            formatTime(videoDuration)
+        }
+
+        if (ottSkinInstalled && cinemaSeekMode) {
+            // Cinema-scrub preview chip: "H:MM:SS   ·   ±delta" against the
+            // real (paused) playhead, U+2212 for the minus like the Flutter
+            // chip — tv_controls.dart:718-741. Focusing the bar enters
+            // cinemaSeekMode before any step, so the chip waits for a real
+            // delta; once up, a scrub back through ±0:00 keeps it.
+            val origin = player?.currentPosition ?: seekbarPosition
+            val delta = seekbarPosition - origin
+            if (delta != 0L || ottScrubPreviewChip?.visibility == View.VISIBLE) {
+                val sign = if (delta < 0) "−" else "+"
+                ottScrubPreviewText?.text =
+                    "${formatTime(seekbarPosition)}   ·   $sign${formatTime(kotlin.math.abs(delta))}"
+                ottScrubPreviewChip?.visibility = View.VISIBLE
+            }
+        }
 
         val targetProgress = if (videoDuration > 0) {
             seekbarPosition.toFloat() / videoDuration.toFloat()
@@ -10834,6 +11122,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
     private val guideTokens: GuideTokens? by lazy { GuideTokens.of(guideStyle) }
 
+    // ── Control skin (see TvControlsSkin.kt) ───────────────────────────────
+    // Same read-once contract as guideStyle. Live IPTV sessions force CLASSIC
+    // until the OTT skin's live arrangement ships, which is why the gate is
+    // taken at setupControls time (isIptvMode is already set on that path)
+    // rather than baked into this lazy.
+    private val controlsSkin: TvControlsSkin by lazy {
+        TvControlsSkin.fromPref(
+            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                this,
+                TvControlsSkin.PREF_KEY,
+                "ott",
+            ),
+        )
+    }
+
     /** Typefaces for the styled looks, loaded from the Flutter asset bundle.
      *  Failures are memoized too (containsKey, not getOrPut) so a missing
      *  asset is never retried per repaint — it just falls back to default. */
@@ -13145,9 +13448,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 withContext(Dispatchers.Default) { SubtitleAligner.alignTiered(segments, cues) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // activity teardown — let the scope die quietly
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // Pure math should never throw; if it somehow does, the player
-                // must not die for a subtitle convenience feature.
+                // must not die for a subtitle convenience feature. Throwable,
+                // not Exception: the 2026-08-25 MiBox crash was an
+                // OutOfMemoryError (an Error) from a garbage-sized grid, and
+                // it sailed straight past an Exception-only guard.
                 android.util.Log.e("AutoSync", "aligner failed", e)
                 AlignResult.NoMatch(0)
             } finally {
@@ -16354,6 +16660,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun showStremioSourceBadge() {
+        if (ottSkinInstalled) {
+            // The dock button is the sources affordance under OTT; the
+            // top-right badge stays hidden. Availability can change per item
+            // (Stremio-TV zaps replace the source list), so sync every show.
+            ottSourcesButton?.visibility =
+                if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
+            return
+        }
         if (stremioSources.isEmpty()) return
         stremioSourceBadge?.animate()?.cancel()
         stremioSourceBadge?.visibility = View.VISIBLE
@@ -17214,6 +17528,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val contentSeason = (map["contentSeason"] as? Number)?.toInt()
         val contentEpisode = (map["contentEpisode"] as? Number)?.toInt()
 
+        // This is the one same-activity path that can change SHOW, and the
+        // zap closures never re-run the TVMaze pipeline — a kept name would
+        // caption the new show's episodes with the old show for the rest of
+        // the session. Episode-only is honest until a fresh push arrives.
+        ottShowName = null
+
         payload?.let { model ->
             val previousItem = model.items.getOrNull(currentIndex)
             val switchedItem = PlaybackItem(
@@ -17260,7 +17580,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateStremioSourcesFromPlaybackMap(map)
         updateStremioTvGuideHeader()
         updateStremioQualityBadge()
-        if (stremioSources.isNotEmpty()) {
+        if (ottSkinInstalled) {
+            ottSourcesButton?.visibility =
+                if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
+        } else if (stremioSources.isNotEmpty()) {
             stremioSourceBadge?.visibility = View.VISIBLE
         } else {
             stremioSourceBadge?.visibility = View.GONE

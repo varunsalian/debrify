@@ -161,6 +161,53 @@
     </style>
 
     <!-- ═══════════════════════════════════════════════════════════════════════
+         OTT DOCK - the Apple TV transport dock (tv_controls.dart) in Views.
+         Buttons stay AppCompatButtons because the activity binds these ids as
+         Buttons and keeps writing their `text` ("1.2x", "Fill", Play/Pause);
+         the text is rendered transparent — the shared caption label under the
+         row surfaces the focused button's text instead. The icon is a compound
+         drawable centred by fixed box + start padding, so runtime text writes
+         never shift it.
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Secondary circle: 36dp visual circle in a 42dp box. The compound
+         drawables keep their 24dp intrinsic size (shared ic_* set), so the
+         start padding centres 24dp in the box: (42-24)/2 = 9dp. -->
+    <style name="OttControlButton" parent="Widget.AppCompat.Button">
+        <item name="android:background">@drawable/ott_button_secondary_bg</item>
+        <item name="android:textColor">@android:color/transparent</item>
+        <item name="android:textSize">2sp</item>
+        <item name="android:layout_width">42dp</item>
+        <item name="android:layout_height">42dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">9dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:drawablePadding">0dp</item>
+        <item name="android:drawableTint">@color/ott_button_icon_tint</item>
+        <item name="android:layout_marginEnd">10dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <!-- Primary play/pause: 44dp visual circle in a 50dp box, 24dp icon. -->
+    <style name="OttPlayButton" parent="OttControlButton">
+        <item name="android:background">@drawable/ott_button_primary_bg</item>
+        <item name="android:layout_width">50dp</item>
+        <item name="android:layout_height">50dp</item>
+        <item name="android:paddingStart">13dp</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
          STREAMING MODE - Modern Apple TV+ / Netflix Style Controls
          ═══════════════════════════════════════════════════════════════════════ -->
 
