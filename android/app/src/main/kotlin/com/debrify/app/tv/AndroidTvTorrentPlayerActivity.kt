@@ -142,6 +142,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var ottRating: TextView
     private lateinit var channelBadge: TextView
     private lateinit var subtitleOverlay: SubtitleView
+    private lateinit var subtitleControlsLift: SubtitleControlsLiftController
     private lateinit var playlistOverlay: View
     private lateinit var playlistView: RecyclerView
     private lateinit var seasonTabsContainer: android.widget.LinearLayout
@@ -2153,6 +2154,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         ottRating = findViewById(R.id.android_tv_ott_rating)
         channelBadge = findViewById(R.id.android_tv_channel_badge)
         subtitleOverlay = findViewById(R.id.android_tv_subtitles_custom)
+        subtitleControlsLift = SubtitleControlsLiftController(subtitleOverlay, dp(24))
         playlistOverlay = findViewById(R.id.android_tv_playlist_overlay)
         playlistView = findViewById(R.id.android_tv_playlist)
         seasonTabsContainer = findViewById(R.id.season_tabs_container)
@@ -6142,9 +6144,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             hideIptvZapBanner()
         }
 
-        // Hide subtitles when controls menu is shown
-        subtitleOverlay.visibility = View.GONE
-
         // The title and controls are one presentation state: metadata updates
         // may change the text, but only this method is allowed to reveal it.
         titleContainer.animate().cancel()
@@ -6207,6 +6206,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         updatePauseButtonLabel()
+        updateSubtitleControlsLift()
     }
 
     private fun hideControlsMenu() {
@@ -6230,6 +6230,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         cancelScheduledHideControlsMenu()
         controlsMenuVisible = false
+        subtitleControlsLift.restore()
 
         // Hide title and revert to simple mode when controls hide
         titleContainer.animate()
@@ -6256,11 +6257,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     overlay.visibility = View.GONE
                     overlay.alpha = 0f
                     overlay.translationY = 0f
-                    // Show subtitles when controls menu is hidden
-                    subtitleOverlay.visibility = View.VISIBLE
                 }
             }
             .start()
+    }
+
+    /** Re-measure after layout because each controls skin occupies a different height. */
+    private fun updateSubtitleControlsLift() {
+        if (!controlsMenuVisible) return
+        val dock = controlsOverlay ?: return
+        val extraPanelHeight = iptvZapBanner
+            ?.takeIf { iptvZapBannerDocked && it.visibility == View.VISIBLE }
+            ?.height ?: 0
+        subtitleControlsLift.liftAbove(dock.height + extraPanelHeight)
+        dock.post {
+            if (!controlsMenuVisible) return@post
+            val laidOutExtra = iptvZapBanner
+                ?.takeIf { iptvZapBannerDocked && it.visibility == View.VISIBLE }
+                ?.height ?: 0
+            subtitleControlsLift.liftAbove(dock.height + laidOutExtra)
+        }
     }
 
     private fun hideTitleImmediately() {
@@ -11097,6 +11113,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  whose keys move focus around the dock instead of zapping. */
     private var iptvZapBannerDocked = false
     private var iptvDockLayoutListenerAttached = false
+    private var iptvZapBannerLayoutListenerAttached = false
 
     /** The channel the visible banner is describing. A paging window installed
      *  after the banner appeared changes this channel's position and the
@@ -11936,6 +11953,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // the guide updates the guide's own header instead.
         if (iptvGuideVisible) return
         val banner = ensureIptvZapBanner()
+        if (!iptvZapBannerLayoutListenerAttached) {
+            iptvZapBannerLayoutListenerAttached = true
+            banner.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                if (iptvZapBannerDocked && controlsMenuVisible) {
+                    updateSubtitleControlsLift()
+                }
+            }
+        }
         // Already on this surface: repaint in place. Re-running the entrance
         // would flash the panel on every keypress that re-arms the dock.
         val alreadyUp = banner.visibility == View.VISIBLE &&
@@ -12033,7 +12058,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (docked && dock != null && !iptvDockLayoutListenerAttached) {
             iptvDockLayoutListenerAttached = true
             dock.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                if (iptvZapBannerDocked) applyIptvZapBannerMode(true)
+                if (iptvZapBannerDocked) {
+                    applyIptvZapBannerMode(true)
+                    updateSubtitleControlsLift()
+                }
             }
         }
     }
@@ -14769,7 +14797,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             SubtitleSettings.getFontSizeSp(this)
         )
         subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
-        subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
+        subtitleControlsLift.setBasePaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
         // Only carry an offset onto the renderer when a subtitle is actually on
         // screen. Dialing the slider with subtitles off stores an offset under a
         // null owner (so the slider stays live), but it must NOT be pushed to the
@@ -17010,6 +17038,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
         iptvTuneDiagnostics.onSessionEnd()
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
         startupFailoverTimeout = null

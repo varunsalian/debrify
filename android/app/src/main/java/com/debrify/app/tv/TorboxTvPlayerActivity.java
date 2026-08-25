@@ -236,6 +236,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View channelSlideView;
     private View channelRgbBars;
     private SubtitleView subtitleOverlay;
+    private SubtitleControlsLiftController subtitleControlsLift;
     // Unified Channel Guide
     private View unifiedGuideOverlay;
     private View unifiedGuidePanel;
@@ -593,6 +594,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         channelRgbBars = findViewById(R.id.channel_rgb_bars);
         // Use our custom SubtitleView that's positioned independently
         subtitleOverlay = findViewById(R.id.player_subtitles_custom);
+        subtitleControlsLift = new SubtitleControlsLiftController(subtitleOverlay, dpToPx(24));
         // Unified Channel Guide views
         unifiedGuideOverlay = findViewById(R.id.unified_guide_overlay);
         unifiedGuidePanel = findViewById(R.id.unified_guide_panel);
@@ -1180,11 +1182,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         cancelScheduledHideControlsMenu();
 
-        // Hide subtitles when controls menu is shown
-        if (subtitleOverlay != null) {
-            subtitleOverlay.setVisibility(View.GONE);
-        }
-
         // Cancel any ongoing animations to prevent race conditions
         controlsOverlay.animate().cancel();
 
@@ -1236,6 +1233,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Start updating the progress bar
         startProgressBarUpdates();
+        updateSubtitleControlsLift();
     }
 
     private void hideControlsMenu() {
@@ -1259,6 +1257,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         cancelScheduledHideControlsMenu();
         controlsMenuVisible = false;
+        if (subtitleControlsLift != null) {
+            subtitleControlsLift.restore(true);
+        }
 
         // Stop updating the progress bar
         stopProgressBarUpdates();
@@ -1276,13 +1277,21 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         setControlsMenuChildrenVisible(false);
                         // Redundant safety call (already called above)
                         hideBroadcastLowerThird();
-                        // Show subtitles when controls menu is hidden
-                        if (subtitleOverlay != null) {
-                            subtitleOverlay.setVisibility(View.VISIBLE);
-                        }
                     }
                 })
                 .start();
+    }
+
+    private void updateSubtitleControlsLift() {
+        if (!controlsMenuVisible || controlsOverlay == null || subtitleControlsLift == null) {
+            return;
+        }
+        subtitleControlsLift.liftAbove(controlsOverlay.getHeight(), true);
+        controlsOverlay.post(() -> {
+            if (controlsMenuVisible && controlsOverlay != null && subtitleControlsLift != null) {
+                subtitleControlsLift.liftAbove(controlsOverlay.getHeight(), true);
+            }
+        });
     }
 
     private void scheduleHideControlsMenu() {
@@ -4718,7 +4727,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     TypedValue.COMPLEX_UNIT_SP,
                     SubtitleSettings.getFontSizeSp(this));
             subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this));
-            subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
+            subtitleControlsLift.setBasePaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
         }
         // While side-rendering, the offset is applied at cue lookup instead, so
         // the renderer must hold 0 — otherwise it keeps the external subtitle's
@@ -5517,6 +5526,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     protected void onDestroy() {
+        if (subtitleControlsLift != null) {
+            subtitleControlsLift.cancel();
+        }
         // The sleep timer belongs to this playback session — a pending one must
         // not outlive the player and fire against a dead surface.
         cancelSleepTimer(false);
