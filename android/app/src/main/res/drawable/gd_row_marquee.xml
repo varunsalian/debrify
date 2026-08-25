@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Index rows are a fixed 44dp tall; the underline layers are inset from
+     the top accordingly. Focus = the 2dp gold rule; rest = hairline. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item android:top="42dp">
+                <shape><solid android:color="#FFEAC981" /></shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item android:top="43dp">
+                <shape><solid android:color="#17F6F1E6" /></shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

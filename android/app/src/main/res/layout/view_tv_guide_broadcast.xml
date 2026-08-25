@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BROADCAST guide: "The Rundown" — control-room sheet in mono columns with
+     a PVW monitor above showing the focused episode's still. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="400dp"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="@drawable/gd_bcast_scrim"
+        android:paddingStart="48dp"
+        android:paddingEnd="48dp"
+        android:paddingTop="40dp"
+        android:paddingBottom="14dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/gd_ident"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RUNDOWN"
+                android:textColor="#FF000000"
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:background="@drawable/gd_bcast_ident" />
+
+            <TextView
+                android:id="@+id/gd_show_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="380dp"
+                android:layout_marginStart="12dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#FFFFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.06" />
+
+            <HorizontalScrollView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="16dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/season_tabs_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+            </HorizontalScrollView>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="5dp">
+            <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                android:text="EP" android:textColor="#59FFFFFF" android:textSize="9sp"
+                android:fontFamily="monospace" android:letterSpacing="0.12" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="TITLE" android:textColor="#59FFFFFF" android:textSize="9sp"
+                android:fontFamily="monospace" android:letterSpacing="0.12" />
+            <TextView android:layout_width="76dp" android:layout_height="wrap_content"
+                android:text="RUNTIME" android:textColor="#59FFFFFF" android:textSize="9sp"
+                android:fontFamily="monospace" android:letterSpacing="0.12" />
+            <TextView android:layout_width="52dp" android:layout_height="wrap_content"
+                android:text="RTG" android:textColor="#59FFFFFF" android:textSize="9sp"
+                android:fontFamily="monospace" android:letterSpacing="0.12" />
+            <TextView android:layout_width="104dp" android:layout_height="wrap_content"
+                android:text="STATUS" android:textColor="#59FFFFFF" android:textSize="9sp"
+                android:fontFamily="monospace" android:letterSpacing="0.12" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#26FFFFFF" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/android_tv_playlist"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:focusable="true"
+            android:focusableInTouchMode="true" />
+
+        <TextView
+            android:id="@+id/gd_caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="#4DFFFFFF"
+            android:textSize="9sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="48dp"
+        android:orientation="vertical"
+        android:background="@drawable/gd_mon_frame"
+        android:padding="2dp"
+        android:elevation="8dp">
+
+        <ImageView
+            android:id="@+id/gd_mon_art"
+            android:layout_width="224dp"
+            android:layout_height="126dp"
+            android:scaleType="centerCrop"
+            android:background="#FF000000" />
+
+        <TextView
+            android:id="@+id/gd_mon_label"
+            android:layout_width="224dp"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="#FFF5C518"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:background="#FF0A0A0C"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp" />
+    </LinearLayout>
+</FrameLayout>

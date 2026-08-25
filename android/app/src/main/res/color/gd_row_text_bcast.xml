@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rundown row text: flips to black on the yellow focus bar
+     (children set duplicateParentState so the row's focus reaches them). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#FF000000" />
+    <item android:color="#DEFFFFFF" />
+</selector>

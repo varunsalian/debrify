@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Angle 270 (top->bottom): transparent up top, near-black rundown floor. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="#00040609"
+        android:centerColor="#E0040609"
+        android:endColor="#FA040609" />
+</shape>
