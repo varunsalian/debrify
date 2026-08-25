@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/widgets/movie_watched_badge.dart';
@@ -56,6 +58,30 @@ void main() {
       expect(snapshot, isNotNull);
       expect(snapshot!.movies, isEmpty);
       expect(snapshot.series, isEmpty);
+    },
+  );
+
+  test(
+    'in-flight refresh hands a watched mutation to the deferred refresh',
+    () {
+      final source = File(
+        'lib/services/watched_status_service.dart',
+      ).readAsStringSync();
+      final completion = source.substring(
+        source.indexOf('void _startRefresh()'),
+      );
+
+      expect(
+        completion,
+        contains('else if (_mdblistDirty && _mdblistDirtyAt != null)'),
+      );
+      expect(completion, contains('_consumeMdblistDirty();'));
+      expect(
+        completion,
+        contains(
+          'API failures leave dirtyAt null and deliberately do not auto-loop.',
+        ),
+      );
     },
   );
 }

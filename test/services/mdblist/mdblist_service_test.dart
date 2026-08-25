@@ -64,6 +64,155 @@ void main() {
     });
   });
 
+  group('MDBList global watched badges', () {
+    test(
+      'uses batched show state to identify completed series from watched rows',
+      () async {
+        final stateBatchSizes = <int>[];
+        final episodes = List.generate(101, (index) {
+          return {
+            'watched_at': '2026-08-25T00:00:00Z',
+            'episode': {
+              'season': 1,
+              'number': index + 1,
+              'show': {
+                'ids': {'imdb': 'ttshow$index', 'mdblist': 'mdb$index'},
+              },
+            },
+          };
+        });
+        final service = serviceWith((request) async {
+          if (request.url.path == '/sync/watched') {
+            return switch (request.url.queryParameters['mediatype']) {
+              'movie' => http.Response(
+                jsonEncode({
+                  'movies': [
+                    {
+                      'watched_at': '2026-08-25T00:00:00Z',
+                      'movie': {
+                        'ids': {'imdb': 'ttmovie'},
+                      },
+                    },
+                  ],
+                  'pagination': {'next_cursor': null},
+                }),
+                200,
+              ),
+              'show' => http.Response(
+                jsonEncode({
+                  'shows': const [],
+                  'pagination': {'next_cursor': null},
+                }),
+                200,
+              ),
+              'episode' => http.Response(
+                jsonEncode({
+                  'episodes': episodes,
+                  'pagination': {'next_cursor': null},
+                }),
+                200,
+              ),
+              _ => http.Response('{}', 400),
+            };
+          }
+          if (request.url.path == '/sync/state/show/mdblist') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            final ids = (body['ids'] as List).cast<String>();
+            stateBatchSizes.add(ids.length);
+            return http.Response(
+              jsonEncode({
+                'items': [
+                  for (final id in ids)
+                    {
+                      'id': id,
+                      // A watched-history row is not sufficient: only the
+                      // server's completed state earns a series badge.
+                      'completed': id != 'mdb0',
+                    },
+                ],
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        });
+
+        final snapshot = await service.fetchCompletedTitleIds();
+
+        expect(snapshot, isNotNull);
+        expect(snapshot!.movies, {'ttmovie'});
+        expect(snapshot.series, hasLength(100));
+        expect(snapshot.series, isNot(contains('ttshow0')));
+        expect(snapshot.series, containsAll(['ttshow1', 'ttshow100']));
+        expect(stateBatchSizes, [100, 1]);
+      },
+    );
+
+    test(
+      'does not replace completion state after a failed state batch',
+      () async {
+        final service = serviceWith((request) async {
+          if (request.url.path == '/sync/watched') {
+            final mediaType = request.url.queryParameters['mediatype'];
+            return http.Response(
+              jsonEncode({
+                'movies': const [],
+                'shows': const [],
+                'episodes': mediaType == 'episode'
+                    ? [
+                        {
+                          'episode': {
+                            'show': {
+                              'ids': {'imdb': 'ttshow', 'mdblist': 'mdb-show'},
+                            },
+                          },
+                        },
+                      ]
+                    : const [],
+                'pagination': {'next_cursor': null},
+              }),
+              200,
+            );
+          }
+          if (request.url.path == '/sync/state/show/mdblist') {
+            return http.Response('{}', 503);
+          }
+          return http.Response('{}', 404);
+        });
+
+        expect(await service.fetchCompletedTitleIds(), isNull);
+      },
+    );
+
+    test(
+      'watched revision ignores pauses and changes on completed writes',
+      () async {
+        final service = serviceWith(
+          (_) async => http.Response(jsonEncode({'ok': true}), 200),
+        );
+        const target = MdblistScrobbleTarget.episode(
+          MdblistMediaIds(imdb: 'ttshow'),
+          season: 1,
+          episode: 1,
+        );
+
+        await service.scrobblePause(target, 50);
+        expect(service.watchedRevision.value, 0);
+
+        await service.scrobbleStop(target, 100);
+        expect(service.watchedRevision.value, 1);
+
+        await service.markUnwatched(
+          const MdblistMediaIds(imdb: 'ttshow'),
+          'episode',
+          season: 1,
+          episode: 1,
+        );
+        expect(service.watchedRevision.value, 2);
+      },
+    );
+  });
+
   group('MDBList list transport', () {
     test('typed list search preserves rate-limit failures', () async {
       final source = MdblistListSource.forTesting(

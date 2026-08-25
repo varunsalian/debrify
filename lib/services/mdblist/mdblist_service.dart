@@ -85,6 +85,12 @@ class MdblistService {
   /// this to refresh after an asynchronous player-exit scrobble finishes.
   final ValueNotifier<int> playbackRevision = ValueNotifier<int>(0);
 
+  /// Changes after MDBList accepts a mutation that can alter a title's
+  /// effective watched/completed state. Global poster badges listen to this
+  /// instead of [playbackRevision], because pause checkpoints must not trigger
+  /// quota-sensitive watched-history refreshes.
+  final ValueNotifier<int> watchedRevision = ValueNotifier<int>(0);
+
   /// Changes when the active MDBList credential identity changes.
   final ValueNotifier<int> authRevision = ValueNotifier<int>(0);
 
@@ -912,6 +918,7 @@ class MdblistService {
       }
       playbackRevision.value++;
       libraryRevision.value++;
+      if (action == 'stop') watchedRevision.value++;
     }
     return result;
   }
@@ -1051,7 +1058,12 @@ class MdblistService {
         (path == '/sync/watched' || path == '/sync/watched/remove')) {
       EpisodeTrackerSnapshotRevision.invalidateTitle('mdblist', ids.imdb);
     }
-    if (success) libraryRevision.value++;
+    if (success) {
+      libraryRevision.value++;
+      if (path == '/sync/watched' || path == '/sync/watched/remove') {
+        watchedRevision.value++;
+      }
+    }
     return success;
   }
 
@@ -1629,8 +1641,9 @@ class MdblistService {
     final results = await Future.wait([
       fetchSyncSnapshot('watched', mediaType: 'movie'),
       fetchSyncSnapshot('watched', mediaType: 'show'),
+      fetchSyncSnapshot('watched', mediaType: 'episode'),
     ]);
-    if (!results[0].isSuccess || !results[1].isSuccess) return null;
+    if (results.any((result) => !result.isSuccess)) return null;
     String? imdbOf(Map<String, dynamic> row) {
       final container = row['movie'] ?? row['show'];
       final ids = container is Map ? container['ids'] : row['ids'];
@@ -1645,11 +1658,54 @@ class MdblistService {
       final id = imdbOf(row);
       if (id != null && id.isNotEmpty) movies.add(id);
     }
-    final series = <String>{};
+    // `/sync/watched` does not include the computed `completed` field; that
+    // belongs to `/sync/state/show/{provider}`. More importantly, a show
+    // completed episode-by-episode may exist only in the episode snapshot, not
+    // as a whole-show watched row. Use parent show IDs from both snapshots as
+    // candidates, then batch their authoritative state 100 at a time.
+    final imdbByMdblistId = <String, String>{};
+    void addShowCandidate(Map<String, dynamic> row) {
+      final episode = row['episode'];
+      final nestedShow = episode is Map ? episode['show'] : null;
+      final show = nestedShow is Map ? nestedShow : row['show'];
+      final ids = show is Map ? show['ids'] : row['ids'];
+      final mdblistId = ids is Map ? ids['mdblist']?.toString().trim() : null;
+      final imdb = ids is Map
+          ? ids['imdb']?.toString().trim().toLowerCase()
+          : null;
+      if (mdblistId != null &&
+          mdblistId.isNotEmpty &&
+          imdb != null &&
+          imdb.isNotEmpty) {
+        imdbByMdblistId[mdblistId] = imdb;
+      }
+    }
+
     for (final row in results[1].data!) {
-      final complete = row['completed'] == true || row['watched'] == true;
-      final id = imdbOf(row);
-      if (complete && id != null && id.isNotEmpty) series.add(id);
+      addShowCandidate(row);
+    }
+    for (final row in results[2].data!) {
+      addShowCandidate(row);
+    }
+
+    final series = <String>{};
+    final mdblistIds = imdbByMdblistId.keys.toList(growable: false);
+    for (var offset = 0; offset < mdblistIds.length; offset += 100) {
+      final end = (offset + 100).clamp(0, mdblistIds.length);
+      final batch = mdblistIds.sublist(offset, end);
+      final states = await fetchTitleStates(
+        mediaType: 'show',
+        provider: 'mdblist',
+        ids: batch,
+      );
+      // Never publish a partial/empty replacement after a failed batch. The
+      // caller preserves its previous authoritative snapshot when null.
+      if (!states.isSuccess) return null;
+      for (final entry in states.data!.entries) {
+        if (entry.value.completed != true) continue;
+        final imdb = imdbByMdblistId[entry.key.toString()];
+        if (imdb != null) series.add(imdb);
+      }
     }
     return (movies: movies, series: series);
   }
