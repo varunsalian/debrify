@@ -30,7 +30,7 @@ fi
 readonly UPSTREAM_REPO="https://github.com/media-kit/libmpv-android-video-build.git"
 readonly UPSTREAM_COMMIT="1ecf5100ec0f75e1d0630f48851b85769c92eed2"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PATCH="$ROOT/dev/scripts/patches/libmpv-android-subtitle-decoders.patch"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/debrify-libmpv-android.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -66,7 +66,7 @@ if [[ "$(find "$STAGE" -maxdepth 1 -type f -name 'default-*.jar' | wc -l | tr -d
   exit 1
 fi
 
-"$ROOT/scripts/verify_android_subtitle_decoders.sh" "$STAGE"
+"$ROOT/dev/scripts/verify_android_subtitle_decoders.sh" "$STAGE"
 
 case "$OUTPUT" in
   "$ROOT"/packages/media_kit_libs_android_video_patched/android/libs) ;;
@@ -76,7 +76,7 @@ mkdir -p "$OUTPUT"
 find "$OUTPUT" -maxdepth 1 -type f -name 'default-*.jar' -delete
 find "$OUTPUT" -maxdepth 1 -type f -name '.debrify-subtitle-build' -delete
 cp "$STAGE"/default-*.jar "$OUTPUT"/
-"$ROOT/scripts/verify_android_subtitle_decoders.sh" "$OUTPUT"
+"$ROOT/dev/scripts/verify_android_subtitle_decoders.sh" "$OUTPUT"
 printf '%s\n' "$UPSTREAM_COMMIT" > "$OUTPUT/.debrify-subtitle-build"
 
 echo "==> Installed subtitle/auto-sync MediaKit Android libraries at $OUTPUT"

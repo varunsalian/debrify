@@ -27,7 +27,7 @@ readonly UPSTREAM_REPO="https://github.com/media-kit/libmpv-darwin-build.git"
 readonly UPSTREAM_COMMIT="b4e3ce98826cd4a28f6121b29f56ea203346e6e3"
 readonly TARGET="mk-out-archive-xcframeworks-macos-universal-video-default"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PATCH="$ROOT/dev/scripts/patches/libmpv-darwin-subtitle-decoders.patch"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/debrify-libmpv-macos.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -66,5 +66,5 @@ rm -rf "$OUTPUT"
 mkdir -p "$(dirname "$OUTPUT")"
 mv "$STAGE" "$OUTPUT"
 
-"$ROOT/scripts/verify_macos_subtitle_decoders.sh" "$OUTPUT"
+"$ROOT/dev/scripts/verify_macos_subtitle_decoders.sh" "$OUTPUT"
 echo "==> Installed subtitle/auto-sync MediaKit frameworks at $OUTPUT"
