@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TICKET gold fill -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="0" android:startColor="#FFD9B96C" android:endColor="#FFF0D99A" />
+    <corners android:radius="0dp" />
+</shape>

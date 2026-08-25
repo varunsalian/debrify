@@ -207,6 +207,102 @@
         <item name="android:paddingStart">13dp</item>
     </style>
 
+    <!-- ═══ Dock-family skins share OttControlButton's transparent-text
+         mechanics; each skin only swaps background/tint/box geometry.
+         FROST reuses the Ott* styles verbatim (same white-focus grammar). ═══ -->
+
+    <!-- MARQUEE: bare glyph, no circle, underline focus, airy spacing. -->
+    <style name="MarqueeControlButton" parent="OttControlButton">
+        <item name="android:background">@drawable/marquee_button_bg</item>
+        <item name="android:drawableTint">@color/marquee_button_icon_tint</item>
+        <item name="android:layout_marginEnd">16dp</item>
+    </style>
+
+    <style name="MarqueePlayButton" parent="MarqueeControlButton">
+        <item name="android:background">@drawable/marquee_play_bg</item>
+        <item name="android:layout_width">50dp</item>
+        <item name="android:layout_height">50dp</item>
+        <item name="android:paddingStart">13dp</item>
+    </style>
+
+    <!-- BROADCAST: labeled pill — the ONE dock style whose text is visible,
+         so the activity's label writes ("1.2x", "Fill") render on-button and
+         no shared caption is needed. -->
+    <style name="BroadcastPillButton" parent="Widget.AppCompat.Button">
+        <item name="android:background">@drawable/broadcast_pill_bg</item>
+        <item name="android:textColor">@color/broadcast_button_content</item>
+        <item name="android:textSize">12.5sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:minWidth">44dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:drawableTint">@color/broadcast_button_content</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <!-- BROADCAST transport: icon-only pill (text transparent like Ott). -->
+    <style name="BroadcastIconButton" parent="BroadcastPillButton">
+        <item name="android:textColor">@android:color/transparent</item>
+        <item name="android:textSize">2sp</item>
+        <item name="android:layout_width">44dp</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:drawablePadding">0dp</item>
+    </style>
+
+    <style name="BroadcastPlayButton" parent="BroadcastIconButton">
+        <item name="android:background">@drawable/broadcast_play_bg</item>
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:paddingStart">14dp</item>
+    </style>
+
+    <!-- PULSE: accent-ring focus, icons stay light. -->
+    <style name="PulseControlButton" parent="OttControlButton">
+        <item name="android:background">@drawable/pulse_button_bg</item>
+        <item name="android:drawableTint">@color/pulse_button_icon_tint</item>
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:paddingStart">10dp</item>
+    </style>
+
+    <style name="PulsePlayButton" parent="PulseControlButton">
+        <item name="android:background">@drawable/pulse_play_bg</item>
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">52dp</item>
+        <item name="android:paddingStart">14dp</item>
+    </style>
+
+    <!-- TICKET: squared cream buttons with a gold underline focus. -->
+    <style name="TicketControlButton" parent="OttControlButton">
+        <item name="android:background">@drawable/ticket_button_bg</item>
+        <item name="android:drawableTint">@color/ticket_button_icon_tint</item>
+        <item name="android:layout_marginEnd">8dp</item>
+    </style>
+
+    <style name="TicketPlayButton" parent="TicketControlButton">
+        <item name="android:background">@drawable/ticket_play_bg</item>
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:paddingStart">12dp</item>
+    </style>
+
     <!-- ═══════════════════════════════════════════════════════════════════════
          STREAMING MODE - Modern Apple TV+ / Netflix Style Controls
          ═══════════════════════════════════════════════════════════════════════ -->

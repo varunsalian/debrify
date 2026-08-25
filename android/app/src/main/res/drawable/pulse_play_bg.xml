@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PULSE play/pause button: focused = accent ring + glow halo over a deep navy fill,
+     icon stays light (no white pill in this skin). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item>
+                <shape android:shape="oval">
+                    <stroke android:width="3dp" android:color="#59818CF8" />
+                    <solid android:color="#00000000" />
+                </shape>
+            </item>
+            <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
+                <shape android:shape="oval">
+                    <solid android:color="#FF12142C" />
+                    <stroke android:width="1.5dp" android:color="#FF818CF8" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
+                <shape android:shape="oval">
+                    <solid android:color="#33818CF8" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

@@ -21,6 +21,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -217,6 +221,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var ottCaptionOwner: View? = null
     private var ottIdentityTitle: TextView? = null
     private var ottIdentitySubtitle: TextView? = null
+
+    // Optional per-skin identity views (null where a layout doesn't have them):
+    // MARQUEE/TICKET show-name overline, TICKET gold S·E badge + its rule.
+    private var ottIdentityOverline: TextView? = null
+    private var ottIdentityBadge: TextView? = null
+    private var ottIdentityDivider: View? = null
     private var ottScrubPreviewChip: View? = null
     private var ottScrubPreviewText: TextView? = null
     private var ottProgressTrackContainer: View? = null
@@ -3338,52 +3348,58 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    /** Swaps the legacy Cinema controller layout for the OTT dock.
+    /** Swaps the legacy Cinema controller layout for the selected dock skin.
      *
      * Media3 inflates `controller_layout_id` INTO its PlayerControlView with
      * attachToRoot, so the legacy root is an ordinary child we can replace at
-     * the same index. Both layouts share every id the activity binds, and the
-     * activity (not Media3) drives `debrify_controls_root` visibility, so all
-     * downstream code works against whichever root is installed. Must run
-     * before ANY controller-id findViewById — setupControls calls it first.
+     * the same index. Every dock layout shares every id the activity binds,
+     * and the activity (not Media3) drives `debrify_controls_root` visibility,
+     * so all downstream code works against whichever root is installed. Must
+     * run before ANY controller-id findViewById — setupControls calls it first.
      */
     private fun installOttControlsSkin() {
+        val spec = dockSkinSpec ?: return
         val legacy = playerView.findViewById<View>(R.id.debrify_controls_root) ?: return
         val parent = legacy.parent as? ViewGroup ?: return
         val index = parent.indexOfChild(legacy)
         val ott = try {
-            LayoutInflater.from(this)
-                .inflate(R.layout.view_debrify_tv_ott_controls, parent, false)
+            LayoutInflater.from(this).inflate(spec.layoutRes, parent, false)
         } catch (e: Exception) {
-            android.util.Log.e("AndroidTvPlayer", "OTT skin inflate failed; keeping classic", e)
+            android.util.Log.e("AndroidTvPlayer", "Dock skin inflate failed; keeping classic", e)
             return
         }
         parent.removeViewAt(index)
         parent.addView(ott, index)
         ottSkinInstalled = true
 
-        // The Flutter scrim has FOUR stops; XML gradients cap at three, so the
-        // placeholder background is replaced with the exact ramp here.
-        ott.findViewById<View>(R.id.ott_content)?.background = PaintDrawable().apply {
-            shape = RectShape()
-            shaderFactory = object : ShapeDrawable.ShaderFactory() {
-                override fun resize(width: Int, height: Int): Shader = LinearGradient(
-                    0f, 0f, 0f, height.toFloat(),
-                    intArrayOf(0x00000000, 0x66000000, 0xD9000000.toInt(), 0xF2000000.toInt()),
-                    floatArrayOf(0f, 0.28f, 0.62f, 1f),
-                    Shader.TileMode.CLAMP,
-                )
+        // The Flutter OTT scrim has FOUR stops; XML gradients cap at three, so
+        // that one skin's placeholder background is replaced with the exact
+        // ramp here. Every other skin's XML background is already final.
+        if (spec.applyShaderScrim) {
+            ott.findViewById<View>(R.id.ott_content)?.background = PaintDrawable().apply {
+                shape = RectShape()
+                shaderFactory = object : ShapeDrawable.ShaderFactory() {
+                    override fun resize(width: Int, height: Int): Shader = LinearGradient(
+                        0f, 0f, 0f, height.toFloat(),
+                        intArrayOf(0x00000000, 0x66000000, 0xD9000000.toInt(), 0xF2000000.toInt()),
+                        floatArrayOf(0f, 0.28f, 0.62f, 1f),
+                        Shader.TileMode.CLAMP,
+                    )
+                }
             }
         }
 
         ottCaptionLabel = ott.findViewById(R.id.ott_caption_label)
         ottIdentityTitle = ott.findViewById(R.id.ott_identity_title)
         ottIdentitySubtitle = ott.findViewById(R.id.ott_identity_subtitle)
+        ottIdentityOverline = ott.findViewById(R.id.ott_identity_overline)
+        ottIdentityBadge = ott.findViewById(R.id.ott_identity_badge)
+        ottIdentityDivider = ott.findViewById(R.id.ott_identity_divider)
         ottScrubPreviewChip = ott.findViewById(R.id.ott_scrub_preview_chip)
         ottScrubPreviewText = ott.findViewById(R.id.ott_scrub_preview_text)
         ottProgressTrackContainer = ott.findViewById(R.id.cinema_progress_track_container)
 
-        // Idle bar is 3dp; enter/exit cinema seek animates it to 6dp and back.
+        // Idle bar height per spec; enter/exit cinema seek toggles it.
         setOttTrackHeight(focused = false)
 
         ott.findViewById<View>(R.id.ott_seek_back_button)?.setOnClickListener {
@@ -3406,9 +3422,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setOttTrackHeight(focused: Boolean) {
         val track = ottProgressTrackContainer ?: return
+        val spec = dockSkinSpec ?: return
         val heightPx = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
-            if (focused) 6f else 3f,
+            if (focused) spec.trackFocusDp else spec.trackIdleDp,
             resources.displayMetrics,
         ).toInt()
         val params = track.layoutParams
@@ -3447,7 +3464,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
-        if (!isIptvMode && controlsSkin == TvControlsSkin.OTT && !ottSkinInstalled) {
+        if (!isIptvMode && dockSkinSpec != null && !ottSkinInstalled) {
             installOttControlsSkin()
         }
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root)
@@ -3522,15 +3539,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // OTT dock focus: the white pill/border/glow/icon-invert live in the
-        // button's StateListDrawable + ColorStateList; code adds only the
-        // Flutter dock's 1.08 @ 120ms scale and the shared caption.
+        // Dock focus: the fills/rings/underlines/icon tints live in each
+        // skin's StateListDrawable + ColorStateList; code adds only the
+        // spec's scale/lift gesture (@ 120ms) and the shared caption.
+        val dockFocusSpec = dockSkinSpec
+        val dockFocusLiftPx = if (dockFocusSpec != null) {
+            TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                dockFocusSpec.focusLiftDp,
+                resources.displayMetrics,
+            )
+        } else 0f
         val ottFocusTreatment = { view: View? ->
             view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                val scale = dockFocusSpec?.focusScale ?: 1.08f
                 if (hasFocus) {
                     v.animate()
-                        .scaleX(1.08f)
-                        .scaleY(1.08f)
+                        .scaleX(scale)
+                        .scaleY(scale)
+                        .translationY(-dockFocusLiftPx)
                         .setDuration(120)
                         .setInterpolator(android.view.animation.DecelerateInterpolator())
                         .start()
@@ -3542,6 +3569,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     v.animate()
                         .scaleX(1.0f)
                         .scaleY(1.0f)
+                        .translationY(0f)
                         .setDuration(120)
                         .setInterpolator(android.view.animation.AccelerateInterpolator())
                         .start()
@@ -4535,23 +4563,124 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val model = payload
         val item = model?.items?.getOrNull(currentIndex)
         val isSeries = model?.contentType?.lowercase(java.util.Locale.US) == "series"
+        val overline = ottIdentityOverline
+        val badge = ottIdentityBadge
         if (isSeries && item != null && item.season != null && item.episode != null) {
             val episodeTitle = item.title.ifBlank { "Episode ${item.episode}" }
-            // "Show — Episode" when TVMaze supplied the official show name;
-            // never the payload title, which can be a release filename.
+            // The FETCHED show/episode names only (TVMaze via the metadata
+            // pushes); never the payload title, which on torrent launches is
+            // the release filename the legacy header deliberately hid. Each
+            // skin arranges the same facts its own way.
             val show = ottShowName
-            title.text = if (show.isNullOrBlank()) {
-                episodeTitle
-            } else {
-                "$show — $episodeTitle"
-            }
             val seasonStr = item.season.toString().padStart(2, '0')
             val episodeStr = item.episode.toString().padStart(2, '0')
-            ottIdentitySubtitle?.text = "S$seasonStr · E$episodeStr"
-            ottIdentitySubtitle?.visibility = View.VISIBLE
+            when (controlsSkin) {
+                TvControlsSkin.FROST -> {
+                    // Eyebrow above a big episode title (subtitle view is the
+                    // eyebrow in this layout, uppercased by XML).
+                    title.text = episodeTitle
+                    ottIdentitySubtitle?.text = if (show.isNullOrBlank()) {
+                        "Season ${item.season} · Episode ${item.episode}"
+                    } else {
+                        "$show · Season ${item.season}"
+                    }
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.MARQUEE -> {
+                    // Italic show over a serif title, season/episode spelled
+                    // out in words underneath.
+                    title.text = episodeTitle
+                    if (show.isNullOrBlank()) {
+                        overline?.visibility = View.GONE
+                    } else {
+                        overline?.text = show
+                        overline?.visibility = View.VISIBLE
+                    }
+                    ottIdentitySubtitle?.text =
+                        "Season ${spellNumber(item.season)} · Episode ${spellNumber(item.episode)}"
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.BROADCAST -> {
+                    // Channel-ident: show name leads in condensed caps.
+                    if (show.isNullOrBlank()) {
+                        title.text = episodeTitle
+                        ottIdentitySubtitle?.text = "S$seasonStr · E$episodeStr"
+                    } else {
+                        title.text = show
+                        ottIdentitySubtitle?.text = "E${item.episode} — $episodeTitle"
+                    }
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.PULSE -> {
+                    // Episode leads; the show name is accent-tinted inside
+                    // the subtitle.
+                    title.text = episodeTitle
+                    val tail = "Season ${item.season}, Episode ${item.episode}"
+                    ottIdentitySubtitle?.text = if (show.isNullOrBlank()) {
+                        SpannableString(tail)
+                    } else {
+                        SpannableString("$show · $tail").apply {
+                            setSpan(
+                                ForegroundColorSpan(0xFF9BA5FB.toInt()),
+                                0, show.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                            setSpan(
+                                StyleSpan(Typeface.BOLD),
+                                0, show.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
+                    }
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.TICKET -> {
+                    // Gold S·E chip · rule · show overline / episode title.
+                    title.text = episodeTitle
+                    badge?.text = "S${item.season} · E${item.episode}"
+                    badge?.visibility = View.VISIBLE
+                    ottIdentityDivider?.visibility = View.VISIBLE
+                    if (show.isNullOrBlank()) {
+                        overline?.visibility = View.GONE
+                    } else {
+                        overline?.text = show
+                        overline?.visibility = View.VISIBLE
+                    }
+                }
+                else -> {
+                    // OTT: "Show — Episode" with the S·E badge beneath.
+                    title.text = if (show.isNullOrBlank()) {
+                        episodeTitle
+                    } else {
+                        "$show — $episodeTitle"
+                    }
+                    ottIdentitySubtitle?.text = "S$seasonStr · E$episodeStr"
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+            }
         } else {
             title.text = titleView.text
             ottIdentitySubtitle?.visibility = View.GONE
+            overline?.visibility = View.GONE
+            badge?.visibility = View.GONE
+            ottIdentityDivider?.visibility = View.GONE
+        }
+    }
+
+    /** "Seven" for 7 — MARQUEE's spelled-out season/episode line. Numbers a
+     *  playbill wouldn't spell (50+) fall back to digits. */
+    private fun spellNumber(n: Int?): String {
+        if (n == null) return ""
+        val ones = arrayOf(
+            "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven",
+            "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen",
+            "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen",
+        )
+        return when {
+            n < 0 || n >= 50 -> n.toString()
+            n < 20 -> ones[n]
+            else -> {
+                val tens = if (n < 30) "Twenty" else if (n < 40) "Thirty" else "Forty"
+                if (n % 10 == 0) tens else "$tens-${ones[n % 10]}"
+            }
         }
     }
 
@@ -6304,7 +6433,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val button = pauseButton ?: return
         val playing = player?.isPlaying == true
         button.text = if (playing) "Pause" else "Play"
-        val iconRes = if (playing) R.drawable.ic_pause else R.drawable.ic_play
+        // Each dock skin swaps within its own icon family; classic keeps the
+        // legacy pair.
+        val spec = dockSkinSpec.takeIf { ottSkinInstalled }
+        val iconRes = if (playing) {
+            spec?.pauseIconRes ?: R.drawable.ic_pause
+        } else {
+            spec?.playIconRes ?: R.drawable.ic_play
+        }
         button.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0)
         refreshOttCaptionFor(button)
     }
@@ -11154,6 +11290,81 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
     }
 
+    /** Everything that differs between dock skins WITHOUT deserving its own
+     *  code branch: which layout inflates, bar geometry, the focus gesture,
+     *  which icon family play/pause swaps within. Behavior that can't be a
+     *  number (identity arrangement, the PULSE spannable) branches on
+     *  [controlsSkin] directly. */
+    private data class DockSkinSpec(
+        val layoutRes: Int,
+        val trackIdleDp: Float,
+        val trackFocusDp: Float,
+        val focusScale: Float,
+        val focusLiftDp: Float,
+        // Only the OTT scrim needs 4 stops (its Flutter source of truth);
+        // every other skin's XML background is final as inflated.
+        val applyShaderScrim: Boolean,
+        val playIconRes: Int,
+        val pauseIconRes: Int,
+    )
+
+    /** null exactly when [controlsSkin] is CLASSIC — the "is a dock skin
+     *  selected" test, evaluated before the IPTV launch gate. */
+    private val dockSkinSpec: DockSkinSpec? by lazy {
+        when (controlsSkin) {
+            TvControlsSkin.CLASSIC -> null
+            TvControlsSkin.OTT -> DockSkinSpec(
+                R.layout.view_debrify_tv_ott_controls,
+                trackIdleDp = 3f, trackFocusDp = 6f,
+                focusScale = 1.08f, focusLiftDp = 0f,
+                applyShaderScrim = true,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.FROST -> DockSkinSpec(
+                R.layout.view_debrify_tv_frost_controls,
+                trackIdleDp = 3f, trackFocusDp = 6f,
+                focusScale = 1.08f, focusLiftDp = 0f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.MARQUEE -> DockSkinSpec(
+                R.layout.view_debrify_tv_marquee_controls,
+                trackIdleDp = 2f, trackFocusDp = 4f,
+                // Bare glyphs don't scale; they lift onto their underline.
+                focusScale = 1.0f, focusLiftDp = 2f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_wire_play,
+                pauseIconRes = R.drawable.ic_wire_pause,
+            )
+            TvControlsSkin.BROADCAST -> DockSkinSpec(
+                R.layout.view_debrify_tv_broadcast_controls,
+                trackIdleDp = 5f, trackFocusDp = 7f,
+                focusScale = 1.06f, focusLiftDp = 0f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.PULSE -> DockSkinSpec(
+                R.layout.view_debrify_tv_pulse_controls,
+                trackIdleDp = 5f, trackFocusDp = 8f,
+                focusScale = 1.08f, focusLiftDp = 0f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.TICKET -> DockSkinSpec(
+                R.layout.view_debrify_tv_ticket_controls,
+                trackIdleDp = 4f, trackFocusDp = 6f,
+                focusScale = 1.0f, focusLiftDp = 1.5f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+        }
+    }
+
     /** Typefaces for the styled looks, loaded from the Flutter asset bundle.
      *  Failures are memoized too (containsKey, not getOrPut) so a missing
      *  asset is never retried per repaint — it just falls back to default. */
@@ -14850,6 +15061,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.size
         val speed = playbackSpeeds[playbackSpeedIndex]
         player?.setPlaybackSpeed(speed)
+        // Dock skins carry the speed on the button itself — visibly on
+        // BROADCAST's labeled pill, and as the shared focus caption on the
+        // rest (which would otherwise go stale). Classic keeps its Toast-only
+        // presentation untouched.
+        if (ottSkinInstalled) {
+            speedButton?.text = playbackSpeedLabels[playbackSpeedIndex]
+            refreshOttCaptionFor(speedButton)
+        }
         Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
     }
 

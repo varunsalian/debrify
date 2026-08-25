@@ -1443,12 +1443,21 @@ class StorageService {
   }
 
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
-  static const Set<String> _tvPlayerControlsStyles = {'classic', 'ott'};
+  static const Set<String> _tvPlayerControlsStyles = {
+    'classic',
+    'ott',
+    'frost',
+    'marquee',
+    'broadcast',
+    'pulse',
+    'ticket',
+  };
 
   /// Control skin for the NATIVE Android TV player: 'ott' (the Apple TV
-  /// dock ported to Kotlin — the default) or 'classic' (the legacy Cinema
-  /// Mode controls). Android TV only; tvOS runs the Flutter player and has
-  /// nothing to choose. Read once per player launch — the native side via
+  /// dock ported to Kotlin — the default), 'classic' (the legacy Cinema
+  /// Mode controls), or one of the premium dock skins ('frost', 'marquee',
+  /// 'broadcast', 'pulse', 'ticket'). Android TV only; tvOS runs the
+  /// Flutter player and has nothing to choose. Read once per player launch — the native side via
   /// `ProfilePreferenceProjection.getString("tv_player_controls_style")`
   /// (falling back to `flutter.tv_player_controls_style` in
   /// FlutterSharedPreferences). Unknown or unset coerces to 'ott' on BOTH

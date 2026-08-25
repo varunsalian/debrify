@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     OTT DOCK — the Apple TV transport dock (tv_controls.dart) as a controller
-     skin for the native player. Swapped in for view_torrent_tv_controls at
-     runtime when tv_player_controls_style == 'ott'; ids match the legacy
-     controller wherever semantics match so the activity's bindings work
-     unchanged, and legacy-only views the code still writes to exist here as
-     zero-size stubs (buffered bar, fast-seek indicator, combined time).
+     FROST DOCK — a floating translucent panel inset from the screen edges;
+     the film stays visible around it. Same id contract as the OTT layout
+     (see that file's header); identity is an uppercase eyebrow ABOVE a big
+     episode title, so the subtitle view is placed first and styled as the
+     eyebrow — updateOttIdentity's FROST arm writes it accordingly.
      ═══════════════════════════════════════════════════════════════════════════ -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -13,6 +12,9 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_gravity="bottom"
+    android:paddingStart="40dp"
+    android:paddingEnd="40dp"
+    android:paddingBottom="24dp"
     android:clipToPadding="false"
     android:clipChildren="false"
     android:visibility="gone">
@@ -26,11 +28,11 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:background="@drawable/ott_controls_scrim"
-        android:paddingStart="56dp"
-        android:paddingTop="36dp"
-        android:paddingEnd="56dp"
-        android:paddingBottom="12dp"
+        android:background="@drawable/frost_panel_bg"
+        android:paddingStart="26dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="26dp"
+        android:paddingBottom="14dp"
         android:clipToPadding="false"
         android:clipChildren="false">
 
@@ -48,27 +50,30 @@
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/ott_identity_title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="17sp"
-                    android:fontFamily="sans-serif-medium"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    tools:text="The Expanse" />
-
-                <TextView
                     android:id="@+id/ott_identity_subtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
-                    android:textColor="#B3FFFFFF"
-                    android:textSize="11.5sp"
+                    android:textColor="#C7E8F2F5"
+                    android:textSize="10.5sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textAllCaps="true"
+                    android:letterSpacing="0.28"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:visibility="gone"
-                    tools:text="S02E05 · Home" />
+                    tools:text="Severance · Season 2" />
+
+                <TextView
+                    android:id="@+id/ott_identity_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    tools:text="Chikhai Bardo" />
             </LinearLayout>
 
             <LinearLayout
@@ -155,7 +160,7 @@
                         android:id="@+id/cinema_progress_background"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@drawable/ott_progress_track" />
+                        android:background="@drawable/frost_progress_track" />
 
                     <!-- Stub: the OTT bar has no buffered segment, but the
                          activity keeps writing this view's width. -->
@@ -169,14 +174,14 @@
                         android:id="@+id/debrify_progress_line"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
-                        android:background="@drawable/ott_progress_fill" />
+                        android:background="@drawable/frost_progress_fill" />
 
                     <View
                         android:id="@+id/cinema_progress_thumb"
                         android:layout_width="12dp"
                         android:layout_height="12dp"
                         android:layout_gravity="center_vertical"
-                        android:background="@drawable/ott_progress_thumb"
+                        android:background="@drawable/frost_progress_thumb"
                         android:elevation="4dp"
                         android:visibility="invisible" />
                 </FrameLayout>
@@ -358,7 +363,7 @@
             android:layout_width="match_parent"
             android:layout_height="18dp"
             android:layout_marginTop="2dp"
-            android:textColor="#B3FFFFFF"
+            android:textColor="#CCDCF2F6"
             android:textSize="11.5sp"
             android:letterSpacing="0.03"
             android:singleLine="true"

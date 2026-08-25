@@ -21,6 +21,31 @@ const List<TvPlayerControlsStyleChoice> kTvPlayerControlsStyleChoices = [
     'The Apple TV dock — circular controls, focus captions, cinema scrub',
   ),
   TvPlayerControlsStyleChoice(
+    'frost',
+    'Frost',
+    'A translucent panel floating inset from the screen edges',
+  ),
+  TvPlayerControlsStyleChoice(
+    'marquee',
+    'Marquee',
+    'Editorial serif — bare glyphs, hairline progress, underline focus',
+  ),
+  TvPlayerControlsStyleChoice(
+    'broadcast',
+    'Broadcast',
+    'Labeled pill buttons with the show name leading, channel-ident style',
+  ),
+  TvPlayerControlsStyleChoice(
+    'pulse',
+    'Pulse',
+    'Accent-glow progress and focus rings in the app indigo',
+  ),
+  TvPlayerControlsStyleChoice(
+    'ticket',
+    'Ticket',
+    'Everything on one slim band — the movie keeps most of the screen',
+  ),
+  TvPlayerControlsStyleChoice(
     'classic',
     'Legacy',
     "Cinema Mode — the previous controls",

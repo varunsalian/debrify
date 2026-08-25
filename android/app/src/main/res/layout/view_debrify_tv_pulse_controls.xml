@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════════════
-     OTT DOCK — the Apple TV transport dock (tv_controls.dart) as a controller
-     skin for the native player. Swapped in for view_torrent_tv_controls at
-     runtime when tv_player_controls_style == 'ott'; ids match the legacy
-     controller wherever semantics match so the activity's bindings work
-     unchanged, and legacy-only views the code still writes to exist here as
-     zero-size stubs (buffered bar, fast-seek indicator, combined time).
+     PULSE DOCK — the accent-glow skin: indigo bar/focus rings, episode title
+     leading with the show name accent-tinted in the subtitle (the activity
+     writes a spannable). Same id contract as the OTT layout.
      ═══════════════════════════════════════════════════════════════════════════ -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -26,7 +23,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:background="@drawable/ott_controls_scrim"
+        android:background="@drawable/pulse_controls_scrim"
         android:paddingStart="56dp"
         android:paddingTop="36dp"
         android:paddingEnd="56dp"
@@ -52,7 +49,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#FFFFFFFF"
-                    android:textSize="17sp"
+                    android:textSize="20sp"
                     android:fontFamily="sans-serif-medium"
                     android:singleLine="true"
                     android:ellipsize="end"
@@ -62,9 +59,9 @@
                     android:id="@+id/ott_identity_subtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
-                    android:textColor="#B3FFFFFF"
-                    android:textSize="11.5sp"
+                    android:layout_marginTop="2dp"
+                    android:textColor="#FF9A9DB8"
+                    android:textSize="12.5sp"
                     android:singleLine="true"
                     android:ellipsize="end"
                     android:visibility="gone"
@@ -127,7 +124,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="10dp"
-                    android:background="@drawable/ott_preview_chip_bg"
+                    android:background="@drawable/pulse_preview_chip_bg"
                     android:paddingStart="14dp"
                     android:paddingEnd="14dp"
                     android:paddingTop="6dp"
@@ -155,7 +152,7 @@
                         android:id="@+id/cinema_progress_background"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@drawable/ott_progress_track" />
+                        android:background="@drawable/pulse_progress_track" />
 
                     <!-- Stub: the OTT bar has no buffered segment, but the
                          activity keeps writing this view's width. -->
@@ -169,14 +166,14 @@
                         android:id="@+id/debrify_progress_line"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
-                        android:background="@drawable/ott_progress_fill" />
+                        android:background="@drawable/pulse_progress_fill" />
 
                     <View
                         android:id="@+id/cinema_progress_thumb"
                         android:layout_width="12dp"
                         android:layout_height="12dp"
                         android:layout_gravity="center_vertical"
-                        android:background="@drawable/ott_progress_thumb"
+                        android:background="@drawable/pulse_progress_thumb"
                         android:elevation="4dp"
                         android:visibility="invisible" />
                 </FrameLayout>
@@ -234,32 +231,32 @@
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_prev_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_prev"
                 android:visibility="gone"
                 android:text="Previous" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/ott_seek_back_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_back10"
                 android:text="Back 10s" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_pause_button"
-                style="@style/OttPlayButton"
+                style="@style/PulsePlayButton"
                 android:drawableStart="@drawable/ic_dock_play"
                 android:text="Play" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/ott_seek_forward_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_fwd10"
                 android:text="Forward 10s" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_next_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_next"
                 android:text="Next" />
 
@@ -284,19 +281,19 @@
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_audio_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_audio"
                 android:text="Audio" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_subtitle_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_subs"
                 android:text="Subtitles" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_playlist_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_eps"
                 android:text="Episodes" />
 
@@ -304,39 +301,39 @@
                  shown by showStremioSourceBadge when sources exist. -->
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/ott_sources_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_sources"
                 android:text="Sources"
                 android:visibility="gone" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_random_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_shuffle"
                 android:text="Shuffle" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_speed_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_speed"
                 android:text="1.0x" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_aspect_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_aspect"
                 android:text="Fill" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/debrify_night_mode_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:layout_marginEnd="0dp"
                 android:drawableStart="@drawable/ic_dock_night"
                 android:text="Night" />
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/iptv_jump_channel_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_jump"
                 android:text="Jump"
                 android:contentDescription="Jump to channel"
@@ -344,7 +341,7 @@
 
             <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/iptv_record_button"
-                style="@style/OttControlButton"
+                style="@style/PulseControlButton"
                 android:drawableStart="@drawable/ic_dock_record"
                 android:text="Record"
                 android:contentDescription="Record channel"
@@ -358,9 +355,9 @@
             android:layout_width="match_parent"
             android:layout_height="18dp"
             android:layout_marginTop="2dp"
-            android:textColor="#B3FFFFFF"
+            android:textColor="#FFA6AAD1"
             android:textSize="11.5sp"
-            android:letterSpacing="0.03"
+            android:letterSpacing="0.04"
             android:singleLine="true"
             android:alpha="0"
             tools:text="Play" />

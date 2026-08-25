@@ -15,13 +15,22 @@ void main() {
     );
   });
 
-  test('sanitizer accepts both skins and rejects anything else', () {
+  test('sanitizer accepts every skin and rejects anything else', () {
     bool accepts(Object? value) => SanitizedProfilePreferences.allowsEntry(
       'tv_player_controls_style',
       value,
     );
-    expect(accepts('ott'), isTrue);
-    expect(accepts('classic'), isTrue);
+    for (final skin in [
+      'ott',
+      'classic',
+      'frost',
+      'marquee',
+      'broadcast',
+      'pulse',
+      'ticket',
+    ]) {
+      expect(accepts(skin), isTrue, reason: skin);
+    }
     expect(accepts('cinema'), isFalse);
     expect(accepts(''), isFalse);
     expect(accepts(1), isFalse);

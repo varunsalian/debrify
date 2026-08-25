@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TICKET DOCK — everything on one opaque band: the progress line rides the
+     band's top edge full-bleed, identity (gold S·E chip · rule · show/episode)
+     sits left, transport right, times + caption on a slim bottom row. The
+     shortest dock; the film keeps ~88% of the screen. Same id contract as the
+     OTT layout (see that file's header); adds ott_identity_badge and
+     ott_identity_overline, written by updateOttIdentity's TICKET arm.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/debrify_controls_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:clipToPadding="false"
+    android:clipChildren="false"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:id="@+id/ott_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:clipToPadding="false"
+        android:clipChildren="false">
+
+        <!-- Cinema-scrub preview chip floats above the band. -->
+        <LinearLayout
+            android:id="@+id/ott_scrub_preview_chip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="40dp"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/ticket_preview_chip_bg"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/ott_scrub_preview_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFBF3DD"
+                android:textSize="15sp"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                tools:text="1:12:04   ·   +0:30" />
+        </LinearLayout>
+
+        <!-- ══ The opaque band; the progress bar is its top edge ══ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/ticket_band_bg"
+            android:clipChildren="false">
+
+            <FrameLayout
+                android:id="@+id/cinema_progress_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@+id/debrify_pause_button"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <FrameLayout
+                    android:id="@+id/cinema_progress_track_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:clipChildren="false">
+
+                    <View
+                        android:id="@+id/cinema_progress_background"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/ticket_progress_track" />
+
+                    <!-- Stub: no buffered segment in this skin. -->
+                    <View
+                        android:id="@+id/cinema_progress_buffered"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:visibility="invisible" />
+
+                    <View
+                        android:id="@+id/debrify_progress_line"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/ticket_progress_fill" />
+
+                    <View
+                        android:id="@+id/cinema_progress_thumb"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="@drawable/ticket_progress_thumb"
+                        android:elevation="4dp"
+                        android:visibility="invisible" />
+                </FrameLayout>
+            </FrameLayout>
+
+            <!-- ══ Identity left · transport right ══ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="40dp"
+                android:paddingEnd="40dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="4dp"
+                android:clipToPadding="false"
+                android:clipChildren="false">
+
+                <TextView
+                    android:id="@+id/ott_identity_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/ticket_se_chip_bg"
+                    android:paddingStart="9dp"
+                    android:paddingEnd="9dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:textColor="#FF0D0F18"
+                    android:textSize="11sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.08"
+                    android:singleLine="true"
+                    android:visibility="gone"
+                    tools:text="S2 · E9" />
+
+                <View
+                    android:id="@+id/ott_identity_divider"
+                    android:layout_width="1dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="14dp"
+                    android:layout_marginEnd="14dp"
+                    android:background="#47EBD7AA"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/ott_identity_overline"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFC9B27C"
+                        android:textSize="10.5sp"
+                        android:textAllCaps="true"
+                        android:letterSpacing="0.2"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:visibility="gone"
+                        tools:text="Foundation" />
+
+                    <TextView
+                        android:id="@+id/ott_identity_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:textColor="#FFF5EFDD"
+                        android:textSize="17sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        tools:text="Long Ago, Not Far Away" />
+
+                    <!-- Stub: TICKET splits identity across badge/overline;
+                         legacy subtitle writes land here invisibly. -->
+                    <TextView
+                        android:id="@+id/ott_identity_subtitle"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Sleep chip (phase-6 wiring, hidden until then). -->
+                <LinearLayout
+                    android:id="@+id/ott_sleep_chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/ott_sleep_chip_bg"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:layout_width="13dp"
+                        android:layout_height="13dp"
+                        android:src="@drawable/ic_dock_sleep"
+                        android:tint="#E8EFE6CC"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:id="@+id/ott_sleep_chip_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="5dp"
+                        android:textColor="#E8EFE6CC"
+                        android:textSize="12sp"
+                        tools:text="Sleep in 30m" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/debrify_controls_buttons"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:clipToPadding="false"
+                    android:clipChildren="false">
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_prev_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_prev"
+                        android:visibility="gone"
+                        android:text="Previous" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/ott_seek_back_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_back10"
+                        android:text="Back 10s" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_pause_button"
+                        style="@style/TicketPlayButton"
+                        android:drawableStart="@drawable/ic_dock_play"
+                        android:text="Play" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/ott_seek_forward_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_fwd10"
+                        android:text="Forward 10s" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_next_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_next"
+                        android:text="Next" />
+
+                    <!-- Stubs: the live dock-reorder machinery expects these ids. -->
+                    <View
+                        android:id="@+id/debrify_controls_left_divider"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
+
+                    <View
+                        android:id="@+id/debrify_controls_right_divider"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone" />
+
+                    <View
+                        android:id="@+id/ott_transport_spacer"
+                        android:layout_width="10dp"
+                        android:layout_height="1dp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_audio_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_audio"
+                        android:text="Audio" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_subtitle_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_subs"
+                        android:text="Subtitles" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_playlist_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_eps"
+                        android:text="Episodes" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/ott_sources_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_sources"
+                        android:text="Sources"
+                        android:visibility="gone" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_random_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_shuffle"
+                        android:text="Shuffle" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_speed_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_speed"
+                        android:text="1.0x" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_aspect_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_aspect"
+                        android:text="Fill" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/debrify_night_mode_button"
+                        style="@style/TicketControlButton"
+                        android:layout_marginEnd="0dp"
+                        android:drawableStart="@drawable/ic_dock_night"
+                        android:text="Night" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/iptv_jump_channel_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_jump"
+                        android:text="Jump"
+                        android:contentDescription="Jump to channel"
+                        android:visibility="gone" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/iptv_record_button"
+                        style="@style/TicketControlButton"
+                        android:drawableStart="@drawable/ic_dock_record"
+                        android:text="Record"
+                        android:contentDescription="Record channel"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ══ Times left · caption right ══ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="40dp"
+                android:paddingEnd="40dp"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:id="@+id/debrify_time_current"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFA79E86"
+                    android:textSize="10.5sp"
+                    android:fontFeatureSettings="tnum"
+                    tools:text="1:24:10" />
+
+                <TextView
+                    android:id="@+id/debrify_time_total"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:textColor="#FFA79E86"
+                    android:textSize="10.5sp"
+                    android:fontFeatureSettings="tnum"
+                    tools:text="-34:26" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/ott_caption_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="16dp"
+                    android:textColor="#FFE4D6AC"
+                    android:textSize="10.5sp"
+                    android:letterSpacing="0.06"
+                    android:singleLine="true"
+                    android:alpha="0"
+                    tools:text="Subtitles" />
+            </LinearLayout>
+
+            <!-- Stub: legacy fast-seek indicator the activity toggles. -->
+            <TextView
+                android:id="@+id/cinema_speed_indicator"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                tools:text="→ 2.0x" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Hidden legacy time display for compatibility -->
+    <TextView
+        android:id="@+id/debrify_time_display"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:text="00:00 / 00:00" />
+</FrameLayout>

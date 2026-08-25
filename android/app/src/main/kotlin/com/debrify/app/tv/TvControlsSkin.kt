@@ -6,28 +6,41 @@ package com.debrify.app.tv
  * `ProfilePreferenceProjection` — changing it applies to the next playback
  * session.
  *
- * CLASSIC is today's Cinema Mode controller layout, byte-for-byte: the OTT
- * skin exists as a SECOND controller layout (`view_debrify_tv_ott_controls`)
- * swapped in before any view binding, and every behavioral difference lives
- * behind an `if (skin == OTT)` branch with the classic body untouched — the
- * same discipline [GuideStyle] documents.
+ * CLASSIC is today's Cinema Mode controller layout, byte-for-byte: every
+ * other skin is a SECOND controller layout swapped in before any view
+ * binding, and every behavioral difference lives behind an
+ * `if (dockSkinInstalled)` / `when (installedSkin)` branch with the classic
+ * body untouched — the same discipline [GuideStyle] documents.
  *
- * OTT mirrors the Flutter player's Apple TV transport dock
- * (lib/screens/video_player/widgets/tv_controls.dart): circular buttons with
- * a shared focus caption, identity row in the dock, 3→6dp progress bar and a
- * cinema-scrub preview chip.
+ * The dock family (everything except CLASSIC) shares the OTT skin's seam:
+ * one layout per skin reusing every legacy id plus zero-size stubs, one
+ * icon family per visual language (`ic_dock_*` solid-rounded, `ic_wire_*`
+ * hairline for MARQUEE), behavior driven by [AndroidTvTorrentPlayerActivity]'s
+ * per-skin spec:
+ *
+ *  - OTT       — the Apple TV transport dock (tv_controls.dart) port.
+ *  - FROST     — floating translucent panel inset from the screen edges.
+ *  - MARQUEE   — editorial serif, bare glyphs, underline focus.
+ *  - BROADCAST — labeled pill buttons, flipped show-first identity.
+ *  - PULSE     — accent-glow bar and focus rings in the app indigo.
+ *  - TICKET    — single opaque band with the progress line on its top edge.
  *
  * Unknown raw values resolve to OTT — the Dart setter coerces on write too,
  * so the two readers can never disagree about the default.
  */
 enum class TvControlsSkin {
-    CLASSIC, OTT;
+    CLASSIC, OTT, FROST, MARQUEE, BROADCAST, PULSE, TICKET;
 
     companion object {
         const val PREF_KEY = "tv_player_controls_style"
 
         fun fromPref(raw: String?): TvControlsSkin = when (raw) {
             "classic" -> CLASSIC
+            "frost" -> FROST
+            "marquee" -> MARQUEE
+            "broadcast" -> BROADCAST
+            "pulse" -> PULSE
+            "ticket" -> TICKET
             else -> OTT
         }
     }
