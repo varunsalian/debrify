@@ -15,6 +15,16 @@ void main() {
         'Extreme Bottom',
       ]);
       expect(SubtitleElevation.options.last.bottomPadding, 8);
+      expect(SubtitleElevation.defaultIndex, 5);
+      expect(
+        const SubtitleSettingsData(
+          sizeIndex: 0,
+          styleIndex: 0,
+          colorIndex: 0,
+          bgIndex: 0,
+        ).elevation.label,
+        'Extreme Bottom',
+      );
     },
   );
 
