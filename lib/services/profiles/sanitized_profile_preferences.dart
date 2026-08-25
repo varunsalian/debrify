@@ -49,7 +49,7 @@ abstract final class SanitizedProfilePreferences {
       case 'subtitle_outline_color_index':
         return _boundedInt(value, 0, 9);
       case 'subtitle_elevation_index':
-        return _boundedInt(value, 0, 4);
+        return _boundedInt(value, 0, 5);
       case 'app_theme':
         return value is String && _appThemes.contains(value);
       case 'detail_theme':

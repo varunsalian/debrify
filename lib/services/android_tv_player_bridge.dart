@@ -156,7 +156,7 @@ class AndroidTvPlayerBridge {
         update['subtitle_outline_color_index'] = outline.clamp(0, 9);
       }
       if (elevation is int) {
-        update['subtitle_elevation_index'] = elevation.clamp(0, 4);
+        update['subtitle_elevation_index'] = elevation.clamp(0, 5);
       }
       if (bold is bool) update['subtitle_bold'] = bold;
       if (fontId is String && fontId.isNotEmpty) {

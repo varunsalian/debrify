@@ -104,7 +104,9 @@ object SubtitleSettings {
         ElevationOption("Low", 0.04f),
         ElevationOption("Medium", 0.08f),
         ElevationOption("High", 0.15f),
-        ElevationOption("Higher", 0.25f)
+        ElevationOption("Higher", 0.25f),
+        // Keep index parity with Flutter without changing existing saved values.
+        ElevationOption("Extreme Bottom", 0.0f)
     )
 
     private fun getPrefs(context: Context): SharedPreferences {
