@@ -632,6 +632,56 @@ class VideoPlayerLauncher {
         (requested || autoEligible);
   }
 
+  /// Whether a launch needs to explain why the user's external-player default
+  /// cannot be honored. Authenticated WebDAV playback is the current caller:
+  /// its Basic auth header can be consumed by Debrify's player but is not part
+  /// of the URL handed to another app.
+  static bool shouldExplainExternalPlayerFallback(
+    VideoPlayerLaunchArgs args,
+    String defaultPlayerMode,
+  ) {
+    final wantsExternal =
+        defaultPlayerMode == 'external' ||
+        (defaultPlayerMode == 'deovr' && Platform.isAndroid);
+    final carriesAuthorization =
+        args.httpHeaders?.keys.any(
+          (key) => key.toLowerCase() == 'authorization',
+        ) ??
+        false;
+    return wantsExternal && args.disableExternalPlayer && carriesAuthorization;
+  }
+
+  @visibleForTesting
+  static Future<bool> showAuthenticatedWebDavPlayerNotice(
+    BuildContext context,
+  ) async {
+    if (!context.mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('External player unavailable'),
+            content: const Text(
+              'This WebDAV server requires authentication. Debrify cannot pass '
+              'the required authorization headers to another app, so this video '
+              'will open in the Debrify player.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                autofocus: true,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Use Debrify player'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   /// [onPlayerHandoff] (optional) fires exactly once, at the moment a player
   /// surface actually takes over the screen: synchronously before the in-app
   /// player route is pushed, or — for external activities (Android TV native
@@ -691,6 +741,14 @@ class VideoPlayerLauncher {
   }) async {
     // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
     var args = originalArgs;
+    final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
+    if (!context.mounted) return;
+    if (shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
+      final useDebrifyPlayer = await showAuthenticatedWebDavPlayerNotice(
+        context,
+      );
+      if (!context.mounted || !useDebrifyPlayer) return;
+    }
     if (!args.traktScrobble &&
         !args.suppressTraktAutoSync &&
         args.contentImdbId != null &&
@@ -1008,9 +1066,6 @@ class VideoPlayerLauncher {
         );
       }
     }
-
-    // Check default player mode
-    final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
 
     // Every external-activity launch below arms the playback-return signal
     // (content only): control comes straight back to Flutter without a route
