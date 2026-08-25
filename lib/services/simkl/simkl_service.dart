@@ -147,8 +147,15 @@ class SimklService {
   Future<Map<String, dynamic>?> fetchLibrarySnapshotOrNull() =>
       _cachedLibAllAll();
 
-  /// Completed movies and series in one minimal bulk response. This omits
-  /// `extended=full`: poster badges need only IDs and title status.
+  /// Completed movies and fully caught-up series in one account-wide response.
+  ///
+  /// Simkl deliberately keeps an ongoing show in `watching` even when every
+  /// aired episode is watched, so the `completed` bucket alone is insufficient
+  /// for a series badge. The regular response includes watched/total/not-aired
+  /// counters without the multi-megabyte `extended=full` episode history; use
+  /// those counters to match Trakt/local's "every aired regular episode"
+  /// semantics. Season 0 specials are not requested and therefore do not block
+  /// completion.
   Future<({Set<String> movies, Set<String> series})?>
   fetchCompletedTitleIds() async {
     final token = await StorageService.getSimklAccessToken();
@@ -159,24 +166,80 @@ class SimklService {
       return (movies: <String>{}, series: <String>{});
     }
     final data = await _getOrNull(
-      _apiUri('/sync/all-items/all/completed'),
+      _apiUri('/sync/all-items/all/all'),
       headers: _apiHeaders(accessToken: token),
       label: 'fetchCompletedTitleIds',
     );
     if (data is! Map<String, dynamic>) return null;
-    Set<String> idsFor(String bucket) {
-      final result = <String>{};
-      for (final raw in data[bucket] as List<dynamic>? ?? const []) {
-        if (raw is! Map<String, dynamic>) continue;
-        final content = (raw['movie'] ?? raw['show']) as Map<String, dynamic>?;
-        final ids = content?['ids'] as Map<String, dynamic>?;
-        final imdb = (ids?['imdb'] as String?)?.trim().toLowerCase();
-        if (imdb != null && imdb.isNotEmpty) result.add(imdb);
-      }
-      return result;
+    return debugParseCompletedTitleIds(data);
+  }
+
+  /// Kept visible for response-shape and completion-semantics regression tests.
+  @visibleForTesting
+  static ({Set<String> movies, Set<String> series}) debugParseCompletedTitleIds(
+    Map<String, dynamic> data,
+  ) {
+    final movies = <String>{};
+    final series = <String>{};
+
+    String? imdbOf(Map<String, dynamic> raw) {
+      final content = (raw['movie'] ?? raw['show']) as Map<String, dynamic>?;
+      final ids = content?['ids'] as Map<String, dynamic>?;
+      final imdb = (ids?['imdb'] as String?)?.trim().toLowerCase();
+      return imdb == null || imdb.isEmpty ? null : imdb;
     }
 
-    return (movies: idsFor('movies'), series: idsFor('shows'));
+    void parseMovies(dynamic bucket) {
+      if (bucket is! List) return;
+      for (final raw in bucket) {
+        if (raw is! Map<String, dynamic> || raw['status'] != 'completed') {
+          continue;
+        }
+        final imdb = imdbOf(raw);
+        if (imdb != null) movies.add(imdb);
+      }
+    }
+
+    void parseSeries(dynamic bucket) {
+      if (bucket is! List) return;
+      for (final raw in bucket) {
+        if (raw is! Map<String, dynamic>) continue;
+        final imdb = imdbOf(raw);
+        if (imdb == null) continue;
+        final watched = _asNum(raw['watched_episodes_count'])?.toInt();
+        final total = _asNum(raw['total_episodes_count'])?.toInt();
+        final notAired = _asNum(raw['not_aired_episodes_count'])?.toInt() ?? 0;
+        final aired = total == null ? null : total - notAired;
+        final caughtUp =
+            watched != null && aired != null && aired > 0 && watched >= aired;
+        // `completed` remains a safe fallback for older/minimal response
+        // shapes that omit counters entirely.
+        if (caughtUp ||
+            (watched == null &&
+                total == null &&
+                raw['status'] == 'completed')) {
+          series.add(imdb);
+        }
+      }
+    }
+
+    parseMovies(data['movies']);
+    parseSeries(data['shows']);
+    // Simkl wraps anime movies and episodic anime together. Preserve the same
+    // mapping used by SimklItemTransformer so their poster cards get the
+    // correct movie/series badge semantics too.
+    final anime = data['anime'];
+    if (anime is List) {
+      parseMovies([
+        for (final raw in anime)
+          if (raw is Map<String, dynamic> && raw['anime_type'] == 'movie') raw,
+      ]);
+      parseSeries([
+        for (final raw in anime)
+          if (raw is Map<String, dynamic> && raw['anime_type'] != 'movie') raw,
+      ]);
+    }
+    return (movies: movies, series: series);
   }
 
   /// The user's relationship to a single title: which watchlist status (if
@@ -715,6 +778,8 @@ class SimklService {
     if (!_wasMatched(result, 'shows')) return false;
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
+    // A final regular episode can move the show into the caught-up badge set.
+    StorageService.movieFinishedRevision.value++;
     return true;
   }
 
@@ -737,6 +802,7 @@ class SimklService {
     if (!_wasMatched(result, 'shows')) return false;
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
+    StorageService.movieFinishedRevision.value++;
     return true;
   }
 
@@ -898,6 +964,10 @@ class SimklService {
       if (s != null && e != null) {
         EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
       }
+      if (path == '/scrobble/stop' && progress >= 80) {
+        _invalidateLibraryCache();
+        StorageService.movieFinishedRevision.value++;
+      }
     } else if (path == '/scrobble/stop' &&
         failureStatus == 409 &&
         s != null &&
@@ -986,7 +1056,9 @@ class SimklService {
         olderThan: const Duration(minutes: 5),
       );
       _invalidatePlaybackCache();
+      _invalidateLibraryCache();
       EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+      StorageService.movieFinishedRevision.value++;
     } catch (error) {
       debugPrint('Simkl: stop-conflict recovery error (${error.runtimeType})');
     }
@@ -1156,17 +1228,18 @@ class SimklService {
   }
 
   /// Parse a Simkl `SxxExx` episode code (e.g. `next_to_watch`'s `"S02E06"`)
-  /// into season/episode. Returns null for anything that isn't `SxxExx` — a null
-  /// value, or an anime-style absolute code (`"E148"`, no season) the app's IMDb
-  /// S/E model can't place. Shared by the Continue Watching up-next builder and
-  /// the series-resume fallback so they never disagree on the parse rule.
+  /// into season/episode. Returns null for anything that isn't a regular-season
+  /// `SxxExx` — including Season 0 specials and anime-style absolute codes
+  /// (`"E148"`, no season), which the app's IMDb S/E model can't place. Shared
+  /// by the Continue Watching up-next builder and the series-resume fallback so
+  /// they never disagree on the parse rule.
   static ({int season, int episode})? parseSimklEpisodeCode(dynamic value) {
     if (value is! String) return null;
     final m = RegExp(r'^[Ss](\d+)[Ee](\d+)$').firstMatch(value.trim());
     if (m == null) return null;
     final s = int.tryParse(m.group(1)!);
     final e = int.tryParse(m.group(2)!);
-    if (s == null || e == null) return null;
+    if (s == null || s <= 0 || e == null || e <= 0) return null;
     return (season: s, episode: e);
   }
 
