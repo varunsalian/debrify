@@ -1953,6 +1953,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
   /// [showId] can be IMDB ID or Trakt slug (used for /shows/{id}/progress/watched).
   Future<void> _fetchEpisodeWatchProgress(String showId, int generation) async {
     try {
+      // Disconnected: skip quietly — the fetches would be empty no-ops but
+      // each logs "failed (null)", masquerading as an API failure.
+      if (!await _traktService.isAuthenticated()) return;
       final watched = await _traktService.fetchWatchedShowEpisodes(showId);
       if (!mounted || generation != _episodeModeGeneration) return;
 

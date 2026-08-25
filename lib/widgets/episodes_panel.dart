@@ -399,28 +399,37 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     };
     if (!mounted || generation != _episodeModeGeneration) return;
 
-    // Overlay Trakt state when connected (these are no-ops / empty when not).
-    try {
-      final watched = await _traktService.fetchWatchedShowEpisodes(imdbId);
+    // Overlay Trakt state when connected — gated on auth like the Simkl block
+    // below (fresh storage read, not a raced field). The fetches were already
+    // empty no-ops without a token, but they logged "failed (null)" on every
+    // refresh — indistinguishable from a real API failure, which sent a whole
+    // debugging session chasing a phantom credential after a disconnect.
+    if (await _traktService.isAuthenticated()) {
       if (!mounted || generation != _episodeModeGeneration) return;
-      final playback = await _traktService.fetchEpisodePlaybackProgress(imdbId);
-      if (!mounted || generation != _episodeModeGeneration) return;
+      try {
+        final watched = await _traktService.fetchWatchedShowEpisodes(imdbId);
+        if (!mounted || generation != _episodeModeGeneration) return;
+        final playback = await _traktService.fetchEpisodePlaybackProgress(
+          imdbId,
+        );
+        if (!mounted || generation != _episodeModeGeneration) return;
 
-      // Fully-watched episodes win outright.
-      for (final key in watched) {
-        merged[key] = 100.0;
-      }
-      // Partial playback overlays, but never downgrades a completed episode and
-      // only when it's meaningful and higher than what we already have.
-      for (final entry in playback.entries) {
-        final existing = merged[entry.key] ?? 0;
-        if (existing >= 100.0) continue;
-        if (entry.value > 5.0 && entry.value > existing) {
-          merged[entry.key] = entry.value;
+        // Fully-watched episodes win outright.
+        for (final key in watched) {
+          merged[key] = 100.0;
         }
+        // Partial playback overlays, but never downgrades a completed episode
+        // and only when it's meaningful and higher than what we already have.
+        for (final entry in playback.entries) {
+          final existing = merged[entry.key] ?? 0;
+          if (existing >= 100.0) continue;
+          if (entry.value > 5.0 && entry.value > existing) {
+            merged[entry.key] = entry.value;
+          }
+        }
+      } catch (e) {
+        debugPrint('EpisodesPanel: Trakt episode progress fetch failed: $e');
       }
-    } catch (e) {
-      debugPrint('EpisodesPanel: Trakt episode progress fetch failed: $e');
     }
 
     // Overlay Simkl state — a third source, same merge rules as Trakt's
