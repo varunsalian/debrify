@@ -13088,6 +13088,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       '${EpisodeTrackerSnapshotRevision.identity('trakt', playId)}.'
       '${EpisodeTrackerSnapshotRevision.identity('simkl', playId)}.'
       '${EpisodeTrackerSnapshotRevision.identity('mdblist', playId)}.'
+      // 'local' is bumped by in-page local-only mark watched/unwatched — the
+      // one resume input with no tracker revision of its own.
+      '${EpisodeTrackerSnapshotRevision.identity('local', playId)}.'
       '${_isTraktAuthenticated ? 1 : 0}${_isSimklAuthenticated ? 1 : 0}'
       '${_isMdblistAuthenticated ? 1 : 0}${isTraktSource ? 1 : 0}';
 
@@ -13305,11 +13308,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final done =
           w.finished || ((w.pct ?? 0) >= 80 && (isTracker || simklNextAhead));
       if (done) {
+        // 4s-boxed like every other network hop here: the guide fetch's body
+        // read is otherwise unbounded, and the PLAY path has no outer box —
+        // a stalled read would hang the press. Timeout → null → the defined
+        // "keep the winner / adjacent next_to_watch" fallback.
         final next = await NextEpisodeService.findNextEpisode(
           playId,
           season,
           episode,
-        );
+        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
         // next_to_watch backup ONLY when it's the winner's direct successor:
         // it tracks the account's watched FRONTIER, so during a rewatch it
         // can be seasons ahead — trusting it blindly would teleport the

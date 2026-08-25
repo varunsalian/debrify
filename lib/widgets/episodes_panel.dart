@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
+import '../services/episode_tracker_snapshot_revision.dart';
 import '../services/debrify_image_cache.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
@@ -657,6 +658,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         episode: episode.number,
         imdbId: show.effectiveImdbId,
       );
+      // Local completion is a resume input too — bump the local revision so
+      // the host's cached reconciled answer can't survive the mark.
+      EpisodeTrackerSnapshotRevision.invalidateTitle(
+        'local',
+        show.effectiveImdbId,
+      );
     } else if (targets.contains('this device')) {
       // No tracker to carry the state — record it locally so the tick still
       // works. Deliberately NOT written when a tracker is connected: a local
@@ -666,6 +673,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         season: episode.season,
         episode: episode.number,
         imdbId: show.effectiveImdbId,
+      );
+      EpisodeTrackerSnapshotRevision.invalidateTitle(
+        'local',
+        show.effectiveImdbId,
       );
     }
 

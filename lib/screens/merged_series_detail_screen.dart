@@ -567,6 +567,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   void _refreshAfterPlayback() {
+    // Disarm the engine-outranks latch for the post-playback re-read ONLY.
+    // Playback just changed everything the latch's engine target was built
+    // from, and with post-settle non-mutation emissions suppressed, an armed
+    // latch would freeze the pill for the page's life (loader discarded at
+    // its guard, engine re-merge dropped as non-mutation) while Play moved
+    // on. Mid-page the latch keeps its job: a slow stale loader still can't
+    // overwrite fresher engine data.
+    _hasMergedEpisodeTarget = false;
     _loadResumeInfo();
     // Watched state (and thus the resume label / badges) may have changed while
     // away — re-read the Trakt status too.
@@ -760,7 +768,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // S1E7) and killed the busy spinner. The loader's reconciled answer
     // settles the pill exactly ONCE, arbitrating against this stash. A
     // failed/absent loader closes the window, so emissions never strand.
-    if (_resumeLoaderInFlight && !_resumeLoaded) {
+    // Mutations are deliberate single user actions, not strobe — they write
+    // through even mid-loader (stashing dropped their tag and let a stale
+    // settle discard them); the applied target arms the loader guard, so a
+    // later-settling loader cannot overwrite the user's mark.
+    if (_resumeLoaderInFlight && !_resumeLoaded && !mutation) {
       _pendingEngineTarget = next;
       return;
     }
