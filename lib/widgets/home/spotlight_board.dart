@@ -440,6 +440,10 @@ class _M {
 }
 
 class SpotlightBoardState extends State<SpotlightBoard> {
+  /// Start fetching the next shelf batch before touch scrolling reaches the
+  /// hard end. TV has its own DPAD-at-last-shelf trigger in [_down].
+  static const double _touchLoadMoreThreshold = 600;
+
   /// The hero as a FRACTION of the board: the art reaches the bottom edge of
   /// the screen, and the first shelf sits ON it.
   ///
@@ -497,7 +501,12 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// re-arm on the way back. Also called on metrics corrections (see
   /// [_board]) because a clamped offset never notifies the controller.
   void _onBoardScrolled() {
-    if (_heroBandH <= 0 || !_scroll.hasClients) return;
+    if (!_scroll.hasClients) return;
+    if (!widget.dpad &&
+        _scroll.position.extentAfter <= _touchLoadMoreThreshold) {
+      unawaited(_loadMoreShelvesForTouch());
+    }
+    if (_heroBandH <= 0) return;
     final away = _scroll.offset > _heroBandH * 0.35;
     if (away == _scrolledAway) return;
     _scrolledAway = away;
@@ -968,6 +977,23 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       setState(() => _row = currentRow + 1);
       _focusRow(_row, const Offset(0, 1));
     });
+  }
+
+  /// Touch has no focused last shelf to retain while a batch loads. It still
+  /// uses the same in-flight guard as DPAD, but deliberately leaves focus
+  /// alone when the host appends the new shelves.
+  Future<void> _loadMoreShelvesForTouch() async {
+    final load = widget.onLoadMoreShelves;
+    if (widget.dpad || load == null || _loadingMoreShelves) return;
+
+    setState(() => _loadingMoreShelves = true);
+    try {
+      await load();
+    } catch (_) {
+      // A later scroll can retry a recoverable catalog failure.
+    } finally {
+      if (mounted) setState(() => _loadingMoreShelves = false);
+    }
   }
 
   void _down() {

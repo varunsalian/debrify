@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,6 +71,7 @@ void main() {
     List<SpotlightShelf> sections, {
     required bool dpad,
     void Function(StremioMeta, StremioAddon)? onHeroOpen,
+    Future<bool> Function()? onLoadMoreShelves,
   }) =>
       MaterialApp(
         home: AppThemeScope(
@@ -80,6 +83,7 @@ void main() {
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: onHeroOpen ?? (_, __) {},
+              onLoadMoreShelves: onLoadMoreShelves,
               dpad: dpad,
             ),
           ),
@@ -164,6 +168,51 @@ void main() {
       final box = cardBox(tester, 'Alpha');
       expect(box.width, closeTo(1440 * (260 / 1920), 0.5));
     });
+  });
+
+  testWidgets('touch scroll near the bottom requests another shelf batch', (
+    tester,
+  ) async {
+    surface(tester, const Size(390, 844));
+    final a = _meta('tt1', 'Alpha');
+    final gate = Completer<void>();
+    var loads = 0;
+    final sections = [
+      for (var i = 0; i < 8; i++) _section('Shelf $i', [a]),
+    ];
+
+    await tester.pumpWidget(
+      host(
+        [a],
+        sections,
+        dpad: false,
+        onLoadMoreShelves: () async {
+          loads++;
+          await gate.future;
+          return false;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+      find.byType(SpotlightBoard),
+      const Offset(0, -2400),
+      2400,
+    );
+    await tester.pump();
+
+    expect(loads, 1);
+    await tester.fling(
+      find.byType(SpotlightBoard),
+      const Offset(0, -400),
+      800,
+    );
+    await tester.pump();
+    expect(loads, 1, reason: 'a pending touch load must guard re-entry');
+
+    gate.complete();
+    await tester.pumpAndSettle();
   });
 
   group('compact presentation', () {
