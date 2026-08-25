@@ -5,8 +5,8 @@ A count gate ("no worse than 9 failures") passes when a new regression replaces
 a repaired old failure. This records every failing test's `suite::name` so a
 swap is as loud as an addition.
 
-    python3 tool/test_baseline.py            # compare against the baseline
-    python3 tool/test_baseline.py --record   # rewrite the baseline
+    python3 dev/tool/test_baseline.py            # compare against the baseline
+    python3 dev/tool/test_baseline.py --record   # rewrite the baseline
 
 Exit 0 when the failure set is identical or a strict subset (things got
 better); exit 1 and print the delta otherwise.
@@ -16,7 +16,7 @@ import pathlib
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 BASELINE = ROOT / "test" / "known_failures.txt"
 
 

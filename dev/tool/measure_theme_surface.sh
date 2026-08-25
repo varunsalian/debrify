@@ -1,6 +1,6 @@
 #!/bin/bash
 # Theming-surface measurement. No args: measures every surface in
-# tool/theme_surface_manifest.txt. With args: <label> <files...> ad hoc.
+# dev/tool/theme_surface_manifest.txt. With args: <label> <files...> ad hoc.
 #
 # `sites` = Color(0x + Colors.* + withValues. RELATIVE SIZING ONLY — it
 # double-counts Colors.white.withValues(...) and misses withOpacity and
@@ -16,8 +16,8 @@ measure() {
     "$(cat $files | grep -oE 'Color\(0x|Colors\.[a-zA-Z]+|withValues' | wc -l | tr -d ' ')"
 }
 if [ $# -gt 0 ]; then measure "$@"; exit; fi
-cd "$(dirname "$0")/.." || exit 1
+cd "$(dirname "$0")/../.." || exit 1
 while IFS= read -r line; do
   case "$line" in ''|\#*) continue;; esac
   measure "${line%% =*}" ${line#*= }
-done < tool/theme_surface_manifest.txt
+done < dev/tool/theme_surface_manifest.txt

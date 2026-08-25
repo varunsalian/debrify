@@ -4,16 +4,16 @@
 # ~/Downloads/ios so AltServer can pick it up (menu bar -> Sideload .ipa -> iPad).
 #
 # Usage:
-#   scripts/build_ipa.sh              # clean-ish build, sign, package
-#   scripts/build_ipa.sh --no-build   # re-package the existing Runner.app
-#   scripts/build_ipa.sh --out DIR    # write the .ipa somewhere else
+#   dev/scripts/build_ipa.sh              # clean-ish build, sign, package
+#   dev/scripts/build_ipa.sh --no-build   # re-package the existing Runner.app
+#   dev/scripts/build_ipa.sh --out DIR    # write the .ipa somewhere else
 #
 # Requires the Xcode iOS platform component. If xcodebuild complains that
 # "iOS <ver> is not installed", run once:  xcodebuild -downloadPlatform iOS
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 REPO="$PWD"
 BUILD_DIR="$REPO/build/ios/iphoneos"
 APP="$BUILD_DIR/Runner.app"

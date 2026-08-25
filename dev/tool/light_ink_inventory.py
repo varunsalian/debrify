@@ -27,7 +27,9 @@ import re
 import subprocess
 import sys
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 
 # Roles where a light literal is INK — the thing that goes light-on-light.
 INK_ROLE = re.compile(
