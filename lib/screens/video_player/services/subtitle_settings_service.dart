@@ -145,9 +145,11 @@ class SubtitleElevation {
     SubtitleElevation('Medium', 120),
     SubtitleElevation('High', 180),
     SubtitleElevation('Higher', 260),
+    // Appended so existing persisted elevation indexes keep their meaning.
+    SubtitleElevation('Extreme Bottom', 8),
   ];
 
-  static const int defaultIndex = 0; // Bottom
+  static const int defaultIndex = 5; // Extreme Bottom
 }
 
 /// Subtitle background options
@@ -441,7 +443,7 @@ class SubtitleSettingsData {
     required this.colorIndex,
     required this.bgIndex,
     this.outlineColorIndex = 0,
-    this.elevationIndex = 0,
+    this.elevationIndex = SubtitleElevation.defaultIndex,
     this.bold = false,
     this.fontIndex = 0,
     this.fontFamily,

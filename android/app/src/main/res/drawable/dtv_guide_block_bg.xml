@@ -1,0 +1,5 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Angle MUST be a multiple of 45 — GradientDrawable enforces it at
+         inflate time (runtime crash), not at build time. -->
+    <gradient android:angle="225" android:startColor="#E23D4C" android:endColor="#8F1F2B"/>
+</shape>

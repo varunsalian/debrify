@@ -43,6 +43,14 @@ class _MovieWatchedBadgeState extends State<MovieWatchedBadge> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Navigator changes TickerMode when Home is covered/revealed. This is the
+    // demand edge that consumes a deferred MDBList watched-state invalidation.
+    if (TickerMode.valuesOf(context).enabled) _status.ensureStarted();
+  }
+
+  @override
   void dispose() {
     _status.removeListener(_refresh);
     super.dispose();
@@ -54,6 +62,7 @@ class _MovieWatchedBadgeState extends State<MovieWatchedBadge> {
 
   @override
   Widget build(BuildContext context) {
+    if (TickerMode.valuesOf(context).enabled) _status.ensureStarted();
     if (!_status.isWatched(widget.imdbId, widget.contentType)) {
       return const SizedBox.shrink();
     }

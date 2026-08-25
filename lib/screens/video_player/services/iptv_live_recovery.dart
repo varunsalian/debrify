@@ -1,6 +1,6 @@
 import 'dart:async';
 
-/// Phase 2 of the IPTV playback-resilience plan (design/plans/
+/// Phase 2 of the IPTV playback-resilience plan (dev/design/plans/
 /// IPTV_FLAWLESS_PLAYBACK_PLAN.md): the ONE recovery state machine for live
 /// IPTV playback in the Dart player — the mirror of the native player's
 /// `IptvLiveRecovery.kt`, same episode semantics.

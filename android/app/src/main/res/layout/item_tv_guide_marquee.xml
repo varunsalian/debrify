@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Playbill index row: pure typography, fixed 44dp tall (the focus underline
+     drawable gd_row_marquee is inset for exactly this height). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/android_tv_playlist_item_container"
+    android:layout_width="match_parent"
+    android:layout_height="44dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="2dp"
+    android:paddingEnd="2dp"
+    android:background="@drawable/gd_row_marquee"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <TextView
+        android:id="@+id/now_playing_indicator"
+        android:layout_width="14dp"
+        android:layout_height="wrap_content"
+        android:text="▸"
+        android:textColor="#FFEAC981"
+        android:textSize="12sp"
+        android:fontFamily="serif"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/gd_item_num"
+        android:layout_width="28dp"
+        android:layout_height="wrap_content"
+        android:textColor="#99EAC981"
+        android:textSize="11sp"
+        android:fontFamily="serif" />
+
+    <TextView
+        android:id="@+id/android_tv_playlist_item_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="#A6F6F1E6"
+        android:textSize="14.5sp"
+        android:fontFamily="serif" />
+
+    <TextView
+        android:id="@+id/android_tv_playlist_item_duration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:textColor="#59F6F1E6"
+        android:textSize="11sp"
+        android:fontFamily="serif"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:layout_width="1dp"
+        android:layout_height="1dp">
+        <ImageView android:id="@+id/android_tv_playlist_item_poster"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <TextView android:id="@+id/android_tv_playlist_item_fallback"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <View android:id="@+id/android_tv_playlist_item_watched_overlay"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <TextView android:id="@+id/android_tv_playlist_item_watched_icon"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <ProgressBar android:id="@+id/android_tv_playlist_item_poster_progress"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <TextView android:id="@+id/android_tv_playlist_item_badge"
+            android:layout_width="1dp" android:layout_height="1dp" />
+        <FrameLayout android:id="@+id/android_tv_playlist_item_rating_badge"
+            android:layout_width="1dp" android:layout_height="1dp">
+            <TextView android:id="@+id/android_tv_playlist_item_rating_text"
+                android:layout_width="1dp" android:layout_height="1dp" />
+        </FrameLayout>
+        <TextView android:id="@+id/android_tv_playlist_item_description"
+            android:layout_width="1dp" android:layout_height="1dp" />
+        <TextView android:id="@+id/android_tv_playlist_item_playing"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <TextView android:id="@+id/android_tv_playlist_item_watched"
+            android:layout_width="1dp" android:layout_height="1dp" android:visibility="gone" />
+        <FrameLayout android:id="@+id/android_tv_playlist_item_progress_container"
+            android:layout_width="1dp" android:layout_height="1dp">
+            <TextView android:id="@+id/android_tv_playlist_item_progress_text"
+                android:layout_width="1dp" android:layout_height="1dp" />
+        </FrameLayout>
+    </FrameLayout>
+</LinearLayout>

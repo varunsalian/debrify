@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PULSE fill — accent gradient -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="0" android:startColor="#FF6E7BF0" android:endColor="#FF9BA5FB" />
+    <corners android:radius="4dp" />
+</shape>

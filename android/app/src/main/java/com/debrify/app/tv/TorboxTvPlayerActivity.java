@@ -211,6 +211,29 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private TextView channelNameView;
     private Runnable broadcastLowerThirdFadeOutRunnable;
     private View controlsOverlay;
+    // ═══ Debrify TV playback-screen style (debrify_tv_player_style) ═══
+    // CLASSIC keeps the legacy layout byte-for-byte; premium styles swap the
+    // media3 controller child before any controller-id findViewById and
+    // render identity in the dock (the top broadcast bar never shows).
+    private DebrifyTvPlayerStyle playerStyle = DebrifyTvPlayerStyle.NETWORK;
+    private boolean premiumLayoutInstalled = false;
+    private TextView dtvTitle;
+    private TextView dtvSub;
+    private TextView dtvYear;
+    private TextView dtvSpecLine;
+    private TextView dtvCaption;
+    private TextView dtvChannelNumberView;
+    private TextView dtvChannelNameView;
+    private TextView dtvChannelBug;
+    private TextView dtvPoolCount;
+    private TextView dtvSourceLine;
+    private final TextView[] dtvBadges = new TextView[4];
+    private ImageView dtvPoster;
+    private View dtvProgressGroup;
+    private View dtvPoolGroup;
+    private String dtvLoadedPosterUrl;
+    private String dtvLaunchChannelId;
+    private int dtvIdentitySeq = 0;
     private TextView debrifyTimeDisplay;
     private View debrifyProgressLine;
     private View buttonsRow;
@@ -236,6 +259,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View channelSlideView;
     private View channelRgbBars;
     private SubtitleView subtitleOverlay;
+    private SubtitleControlsLiftController subtitleControlsLift;
     // Unified Channel Guide
     private View unifiedGuideOverlay;
     private View unifiedGuidePanel;
@@ -593,6 +617,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         channelRgbBars = findViewById(R.id.channel_rgb_bars);
         // Use our custom SubtitleView that's positioned independently
         subtitleOverlay = findViewById(R.id.player_subtitles_custom);
+        subtitleControlsLift = new SubtitleControlsLiftController(subtitleOverlay, dpToPx(24));
         // Unified Channel Guide views
         unifiedGuideOverlay = findViewById(R.id.unified_guide_overlay);
         unifiedGuidePanel = findViewById(R.id.unified_guide_panel);
@@ -698,6 +723,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             currentChannelName = initialChannelName;
         }
         currentChannelId = safeString(intent.getStringExtra("currentChannelId"));
+        playerStyle = DebrifyTvPlayerStyle.fromPref(
+                com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                        this, "debrify_tv_player_style", "cinema"));
         int providedChannelNumber = intent.getIntExtra("currentChannelNumber", -1);
         if (providedChannelNumber > 0) {
             currentChannelNumber = providedChannelNumber;
@@ -922,7 +950,58 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isPremiumStyle() {
+        return playerStyle != DebrifyTvPlayerStyle.CLASSIC;
+    }
+
+    /**
+     * Swap the legacy controller child for the selected premium layout.
+     * MUST run before any controller-id findViewById: media3 inflates
+     * `controller_layout_id` into its PlayerControlView with attachToRoot,
+     * so `debrify_controls_root` is an ordinary child we can replace at the
+     * same index. Every premium layout reuses the legacy id contract
+     * (buttons, times, progress line, zero-size stubs) so the existing
+     * bindings and visibility machinery work unchanged.
+     */
+    private void installPremiumControllerLayout() {
+        if (premiumLayoutInstalled || playerView == null) {
+            return;
+        }
+        View legacyRoot = playerView.findViewById(R.id.debrify_controls_root);
+        if (legacyRoot == null || !(legacyRoot.getParent() instanceof ViewGroup)) {
+            return;
+        }
+        ViewGroup parent = (ViewGroup) legacyRoot.getParent();
+        int index = parent.indexOfChild(legacyRoot);
+        int layoutRes;
+        switch (playerStyle) {
+            case CINEMA:
+                layoutRes = R.layout.view_debrify_tv_cinema_controls;
+                break;
+            case GUIDE:
+                layoutRes = R.layout.view_debrify_tv_guide_controls;
+                break;
+            case SPOTLIGHT:
+                layoutRes = R.layout.view_debrify_tv_spotlight_controls;
+                break;
+            case PRESTIGE:
+                layoutRes = R.layout.view_debrify_tv_prestige_controls;
+                break;
+            case NETWORK:
+            default:
+                layoutRes = R.layout.view_debrify_tv_network_controls;
+                break;
+        }
+        View premium = getLayoutInflater().inflate(layoutRes, parent, false);
+        parent.removeViewAt(index);
+        parent.addView(premium, index);
+        premiumLayoutInstalled = true;
+    }
+
     private void setupControllerUi() {
+        if (isPremiumStyle()) {
+            installPremiumControllerLayout();
+        }
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root);
         debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display);
         debrifyTimeCurrent = playerView.findViewById(R.id.debrify_time_current);
@@ -1069,8 +1148,97 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             timeBar.setVisibility(View.GONE);
         }
 
+        if (isPremiumStyle()) {
+            bindPremiumViews();
+        }
+
         // Keep controller enabled but disable auto-show - we'll manage visibility manually
         playerView.setControllerAutoShow(false);
+    }
+
+    /**
+     * Bind the premium-only views (all optional per skin — null-safe) and
+     * apply the premium focus treatment. Runs AFTER every legacy listener
+     * assignment in {@link #setupControllerUi()} on purpose: a view holds one
+     * focus listener (last set wins), so the caption-writing listener must be
+     * the final assignment.
+     */
+    private void bindPremiumViews() {
+        dtvTitle = playerView.findViewById(R.id.dtv_identity_title);
+        dtvSub = playerView.findViewById(R.id.dtv_identity_sub);
+        dtvYear = playerView.findViewById(R.id.dtv_year);
+        dtvSpecLine = playerView.findViewById(R.id.dtv_spec_line);
+        dtvCaption = playerView.findViewById(R.id.dtv_caption);
+        dtvChannelNumberView = playerView.findViewById(R.id.dtv_channel_number);
+        dtvChannelNameView = playerView.findViewById(R.id.dtv_channel_name);
+        dtvChannelBug = playerView.findViewById(R.id.dtv_channel_bug);
+        dtvPoolCount = playerView.findViewById(R.id.dtv_pool_count);
+        dtvPoolGroup = playerView.findViewById(R.id.dtv_pool_group);
+        dtvSourceLine = playerView.findViewById(R.id.dtv_source_line);
+        dtvPoster = playerView.findViewById(R.id.dtv_poster);
+        dtvProgressGroup = playerView.findViewById(R.id.dtv_progress_group);
+        dtvBadges[0] = playerView.findViewById(R.id.dtv_badge_1);
+        dtvBadges[1] = playerView.findViewById(R.id.dtv_badge_2);
+        dtvBadges[2] = playerView.findViewById(R.id.dtv_badge_3);
+        dtvBadges[3] = playerView.findViewById(R.id.dtv_badge_4);
+
+        // Runtimes stay a surprise: the progress strip honors hideSeekbar.
+        if (dtvProgressGroup != null && hideSeekbar) {
+            dtvProgressGroup.setVisibility(View.GONE);
+        }
+
+        // GUIDE pool cell — magnetQueue is the launch channel's shuffled
+        // pool; an honest count, never a promise of what plays next.
+        dtvLaunchChannelId = currentChannelId;
+        refreshPremiumPoolCell();
+
+        if (dtvSourceLine != null) {
+            dtvSourceLine.setText(premiumSourceLabel());
+        }
+
+        updatePremiumChannelViews();
+
+        View.OnFocusChangeListener premiumFocus = (v, hasFocus) -> {
+            if (!hasFocus) {
+                return;
+            }
+            if (controlsMenuVisible) {
+                scheduleHideControlsMenu();
+            }
+            if (dtvCaption != null) {
+                CharSequence cd = v.getContentDescription();
+                dtvCaption.setText(cd != null ? cd : "");
+            }
+        };
+        View nextButton = playerView.findViewById(R.id.debrify_next_button);
+        View[] premiumButtons = {
+                pauseButton, nextButton, channelNextButton, guideButton,
+                audioButton, subtitleButton, speedButton, aspectButton,
+                nightModeButton,
+        };
+        for (View b : premiumButtons) {
+            if (b != null) {
+                b.setOnFocusChangeListener(premiumFocus);
+            }
+        }
+    }
+
+    private String premiumSourceLabel() {
+        String p = provider != null ? provider : "";
+        switch (p) {
+            case "real_debrid":
+                return "via Real-Debrid";
+            case "pikpak":
+                return "via PikPak";
+            case "premiumize":
+                return "via Premiumize";
+            case "alldebrid":
+                return "via AllDebrid";
+            case PROVIDER_TORBOX:
+                return "via Torbox";
+            default:
+                return "";
+        }
     }
 
     private void updatePauseButtonLabel() {
@@ -1078,7 +1246,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         boolean playing = player != null && player.isPlaying();
-        int iconRes = playing ? R.drawable.ic_pause : R.drawable.ic_play;
+        int iconRes;
+        if (isPremiumStyle()) {
+            // Premium skins carry the hand-drawn icon families: wire
+            // (hairline) for the serif skins, dock (solid-rounded) elsewhere.
+            boolean wire = playerStyle == DebrifyTvPlayerStyle.CINEMA
+                    || playerStyle == DebrifyTvPlayerStyle.PRESTIGE;
+            iconRes = playing
+                    ? (wire ? R.drawable.ic_wire_pause : R.drawable.ic_dock_pause)
+                    : (wire ? R.drawable.ic_wire_play : R.drawable.ic_dock_play);
+        } else {
+            iconRes = playing ? R.drawable.ic_pause : R.drawable.ic_play;
+        }
         String labelText = playing ? "PAUSE" : "PLAY";
 
         // TV broadcast style: button is a LinearLayout with ImageView and TextView children
@@ -1180,11 +1359,6 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         cancelScheduledHideControlsMenu();
 
-        // Hide subtitles when controls menu is shown
-        if (subtitleOverlay != null) {
-            subtitleOverlay.setVisibility(View.GONE);
-        }
-
         // Cancel any ongoing animations to prevent race conditions
         controlsOverlay.animate().cancel();
 
@@ -1236,6 +1410,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Start updating the progress bar
         startProgressBarUpdates();
+        updateSubtitleControlsLift();
     }
 
     private void hideControlsMenu() {
@@ -1259,6 +1434,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         cancelScheduledHideControlsMenu();
         controlsMenuVisible = false;
+        if (subtitleControlsLift != null) {
+            subtitleControlsLift.restore(true);
+        }
 
         // Stop updating the progress bar
         stopProgressBarUpdates();
@@ -1276,13 +1454,21 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                         setControlsMenuChildrenVisible(false);
                         // Redundant safety call (already called above)
                         hideBroadcastLowerThird();
-                        // Show subtitles when controls menu is hidden
-                        if (subtitleOverlay != null) {
-                            subtitleOverlay.setVisibility(View.VISIBLE);
-                        }
                     }
                 })
                 .start();
+    }
+
+    private void updateSubtitleControlsLift() {
+        if (!controlsMenuVisible || controlsOverlay == null || subtitleControlsLift == null) {
+            return;
+        }
+        subtitleControlsLift.liftAbove(controlsOverlay.getHeight(), true);
+        controlsOverlay.post(() -> {
+            if (controlsMenuVisible && controlsOverlay != null && subtitleControlsLift != null) {
+                subtitleControlsLift.liftAbove(controlsOverlay.getHeight(), true);
+            }
+        });
     }
 
     private void scheduleHideControlsMenu() {
@@ -2244,6 +2430,311 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Don't show the old centered title anymore, only use the new badge
         // showTitleTemporarily(title);
         updateTitleBadge(title);
+        if (isPremiumStyle()) {
+            bindPremiumIdentityFallback(title);
+            fetchPremiumIdentity(title);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PREMIUM IDENTITY (Debrify TV playback-screen styles)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Immediate best-effort identity while the Flutter lookup runs: the
+     * release name with its extension stripped, no subtitle, no badges. The
+     * async result overwrites this; on failure this is what stays up — still
+     * better than the raw marquee.
+     */
+    private void bindPremiumIdentityFallback(@Nullable String title) {
+        String display = title != null ? title.trim() : "";
+        display = display.replaceAll(
+                "(?i)\\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|ts|m2ts|vob|3gp|ogv|divx)$",
+                "").trim();
+        if (dtvTitle != null) {
+            dtvTitle.setText(display);
+        }
+        if (dtvSub != null) {
+            dtvSub.setVisibility(View.GONE);
+        }
+        if (dtvYear != null) {
+            dtvYear.setVisibility(View.GONE);
+        }
+        if (dtvSpecLine != null) {
+            dtvSpecLine.setVisibility(View.GONE);
+        }
+        for (TextView chip : dtvBadges) {
+            if (chip != null) {
+                chip.setVisibility(View.GONE);
+            }
+        }
+        if (dtvPoster != null) {
+            dtvPoster.setImageDrawable(null);
+            dtvLoadedPosterUrl = null;
+        }
+    }
+
+    /**
+     * Ask Flutter for the clean identity (Cinemeta/TVMaze — the same lookups
+     * the subtitle path uses) plus FormatTagDetector badges parsed from the
+     * release name. Stale responses are dropped via {@link #dtvIdentitySeq}
+     * so a zap during a slow lookup can't paint the previous title.
+     */
+    private void fetchPremiumIdentity(@Nullable String title) {
+        if (title == null || title.isEmpty()) {
+            return;
+        }
+        MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
+        if (channel == null) {
+            return;
+        }
+        final int seq = ++dtvIdentitySeq;
+        Map<String, Object> args = new HashMap<>();
+        args.put("filename", title);
+        channel.invokeMethod("lookupDebrifyTvIdentity", args, new MethodChannel.Result() {
+            @Override
+            public void success(@Nullable Object result) {
+                if (seq != dtvIdentitySeq || !(result instanceof Map)) {
+                    return;
+                }
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) result;
+                runOnUiThread(() -> {
+                    if (seq == dtvIdentitySeq) {
+                        bindPremiumIdentity(data);
+                    }
+                });
+            }
+
+            @Override
+            public void error(String errorCode, @Nullable String errorMessage,
+                              @Nullable Object errorDetails) {
+                // Fallback binding already on screen.
+            }
+
+            @Override
+            public void notImplemented() {
+                // Older Flutter side — fallback binding already on screen.
+            }
+        });
+    }
+
+    private void bindPremiumIdentity(Map<String, Object> data) {
+        String kind = safeString(data.get("kind"));
+        String cleanTitle = safeString(data.get("title"));
+        String episodeTitle = safeString(data.get("episodeTitle"));
+        Object seasonO = data.get("season");
+        Object episodeO = data.get("episode");
+        Object yearO = data.get("year");
+        String poster = safeString(data.get("poster"));
+
+        if (cleanTitle != null && !cleanTitle.isEmpty() && dtvTitle != null) {
+            dtvTitle.setText(cleanTitle);
+        }
+
+        boolean isSeries = "series".equals(kind)
+                && seasonO instanceof Number && episodeO instanceof Number;
+        String sub = null;
+        if (isSeries) {
+            sub = "S" + ((Number) seasonO).intValue()
+                    + " E" + ((Number) episodeO).intValue();
+            if (episodeTitle != null && !episodeTitle.isEmpty()) {
+                sub += " — " + episodeTitle;
+            }
+        }
+
+        boolean yearShown = false;
+        if (dtvYear != null) {
+            if ("movie".equals(kind) && yearO instanceof Number) {
+                dtvYear.setText(String.valueOf(((Number) yearO).intValue()));
+                dtvYear.setVisibility(View.VISIBLE);
+                yearShown = true;
+            } else {
+                dtvYear.setVisibility(View.GONE);
+            }
+        }
+        if (sub == null && !yearShown && "movie".equals(kind)
+                && yearO instanceof Number) {
+            sub = String.valueOf(((Number) yearO).intValue());
+        }
+
+        if (dtvSub != null) {
+            if (sub != null && !sub.isEmpty()) {
+                dtvSub.setText(sub);
+                dtvSub.setVisibility(View.VISIBLE);
+            } else {
+                dtvSub.setVisibility(View.GONE);
+            }
+        }
+
+        java.util.List<String> badges = new java.util.ArrayList<>();
+        Object badgesO = data.get("badges");
+        if (badgesO instanceof java.util.List) {
+            for (Object b : (java.util.List<?>) badgesO) {
+                if (b instanceof String && !((String) b).isEmpty()) {
+                    badges.add((String) b);
+                }
+            }
+        }
+        if (dtvSpecLine != null) {
+            if (!badges.isEmpty()) {
+                StringBuilder spec = new StringBuilder();
+                for (String b : badges) {
+                    if (spec.length() > 0) {
+                        spec.append("  ·  ");
+                    }
+                    spec.append(b);
+                }
+                dtvSpecLine.setText(spec.toString());
+                dtvSpecLine.setVisibility(View.VISIBLE);
+            } else {
+                dtvSpecLine.setVisibility(View.GONE);
+            }
+        }
+        for (int i = 0; i < dtvBadges.length; i++) {
+            TextView chip = dtvBadges[i];
+            if (chip == null) {
+                continue;
+            }
+            if (i < badges.size()) {
+                chip.setText(badges.get(i).toUpperCase(java.util.Locale.US));
+                chip.setVisibility(View.VISIBLE);
+            } else {
+                chip.setVisibility(View.GONE);
+            }
+        }
+
+        if (dtvPoster != null && poster != null && !poster.isEmpty()) {
+            loadPremiumPoster(poster);
+        }
+    }
+
+    /**
+     * GUIDE pool cell: the count comes from the launch intent's magnetQueue,
+     * which is never refreshed on an in-activity channel zap — so the cell
+     * only shows while the LAUNCH channel is still tuned and hides the
+     * moment the channel changes (an unknown pool must not wear the old
+     * channel's number).
+     */
+    private void refreshPremiumPoolCell() {
+        if (dtvPoolGroup == null) {
+            return;
+        }
+        boolean launchChannelTuned = dtvLaunchChannelId != null
+                && dtvLaunchChannelId.equals(currentChannelId);
+        int pool = magnetQueue != null ? magnetQueue.size() : 0;
+        if (launchChannelTuned && pool > 1 && dtvPoolCount != null) {
+            dtvPoolCount.setText(pool + " titles");
+            dtvPoolGroup.setVisibility(View.VISIBLE);
+        } else {
+            dtvPoolGroup.setVisibility(View.GONE);
+        }
+    }
+
+    /** Per-skin channel plate/pill/kicker text. Null-safe on every view. */
+    private void updatePremiumChannelViews() {
+        if (!isPremiumStyle()) {
+            return;
+        }
+        String name = currentChannelName != null ? currentChannelName.trim() : "";
+        String num2 = currentChannelNumber > 0
+                ? String.format(java.util.Locale.US, "%02d", currentChannelNumber)
+                : "";
+        switch (playerStyle) {
+            case CINEMA: {
+                if (dtvChannelNameView != null) {
+                    StringBuilder pill = new StringBuilder();
+                    if (!num2.isEmpty()) {
+                        pill.append("CH ").append(num2);
+                    }
+                    if (!name.isEmpty()) {
+                        if (pill.length() > 0) {
+                            pill.append(" · ");
+                        }
+                        pill.append(name.toUpperCase(java.util.Locale.US));
+                    }
+                    dtvChannelNameView.setText(pill.toString());
+                    dtvChannelNameView.setVisibility(
+                            pill.length() > 0 ? View.VISIBLE : View.GONE);
+                }
+                break;
+            }
+            case SPOTLIGHT: {
+                if (dtvChannelNumberView != null) {
+                    dtvChannelNumberView.setText(
+                            num2.isEmpty() ? "" : "CH " + num2);
+                    dtvChannelNumberView.setVisibility(
+                            num2.isEmpty() ? View.GONE : View.VISIBLE);
+                }
+                if (dtvChannelNameView != null) {
+                    dtvChannelNameView.setText(name);
+                }
+                break;
+            }
+            case PRESTIGE: {
+                if (dtvChannelNameView != null) {
+                    dtvChannelNameView.setText(
+                            name.isEmpty() ? "Now Playing" : name + " · Now Playing");
+                }
+                if (dtvChannelBug != null) {
+                    dtvChannelBug.setText(
+                            num2.isEmpty() ? "DEBRIFY" : "DEBRIFY · CH " + num2);
+                }
+                break;
+            }
+            case NETWORK:
+            case GUIDE:
+            default: {
+                if (dtvChannelNumberView != null) {
+                    dtvChannelNumberView.setText(num2);
+                }
+                if (dtvChannelNameView != null) {
+                    dtvChannelNameView.setText(name);
+                }
+                break;
+            }
+        }
+        refreshPremiumPoolCell();
+    }
+
+    /**
+     * Tiny poster loader for the CINEMA skin (Cinemeta URL). One in-flight
+     * bitmap, dedup on URL; failures leave the placeholder frame.
+     */
+    private void loadPremiumPoster(String url) {
+        if (dtvPoster == null || url.equals(dtvLoadedPosterUrl)) {
+            return;
+        }
+        // Same stale-guard as the identity text: a zap during a slow download
+        // must not paint the previous title's poster next to the new title.
+        final int seq = dtvIdentitySeq;
+        new Thread(() -> {
+            android.graphics.Bitmap bitmap = null;
+            java.net.HttpURLConnection connection = null;
+            try {
+                connection = (java.net.HttpURLConnection)
+                        new java.net.URL(url).openConnection();
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                bitmap = android.graphics.BitmapFactory
+                        .decodeStream(connection.getInputStream());
+            } catch (Exception ignored) {
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+            final android.graphics.Bitmap loaded = bitmap;
+            if (loaded != null) {
+                runOnUiThread(() -> {
+                    if (dtvPoster != null && seq == dtvIdentitySeq
+                            && !isFinishing() && !isDestroyed()) {
+                        dtvPoster.setImageBitmap(loaded);
+                        dtvLoadedPosterUrl = url;
+                    }
+                });
+            }
+        }, "DtvPosterLoader").start();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -4718,7 +5209,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     TypedValue.COMPLEX_UNIT_SP,
                     SubtitleSettings.getFontSizeSp(this));
             subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this));
-            subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
+            subtitleControlsLift.setBasePaddingFraction(SubtitleSettings.getElevationPaddingFraction(this));
         }
         // While side-rendering, the offset is applied at cue lookup instead, so
         // the renderer must hold 0 — otherwise it keeps the external subtitle's
@@ -5517,6 +6008,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     protected void onDestroy() {
+        if (subtitleControlsLift != null) {
+            subtitleControlsLift.cancel();
+        }
         // The sleep timer belongs to this playback session — a pending one must
         // not outlive the player and fire against a dead surface.
         cancelSleepTimer(false);
@@ -5664,6 +6158,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             channelNameView.setText("");
         }
 
+        // Premium styles mirror the channel identity into the dock views.
+        updatePremiumChannelViews();
+
         // Update content only - visibility controlled by menu
         // If menu is visible, ensure broadcast lower-third is shown
         if (controlsMenuVisible) {
@@ -5738,6 +6235,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void showBroadcastLowerThirdWithAnimation() {
+        // Premium styles render identity in the dock — the legacy top bar
+        // never shows for them.
+        if (isPremiumStyle()) {
+            return;
+        }
         if (broadcastLowerThird == null) {
             return;
         }

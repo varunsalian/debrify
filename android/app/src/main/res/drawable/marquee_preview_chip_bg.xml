@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MARQUEE scrub preview chip -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#C7120A04" />
+    <stroke android:width="1dp" android:color="#2EFFF0DE" />
+    <corners android:radius="14dp" />
+</shape>

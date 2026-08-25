@@ -77,8 +77,9 @@ class SourceRow extends StatefulWidget {
   final bool isSelectionMode;
   final bool isSelected;
 
-  /// Copy-magnet affordance (keyword rows): a muted copy icon before the
-  /// chevron. Touch-only — not DPAD-focusable, matching TorrentResultRow.
+  /// Copy-link affordance. It occupies the existing trailing-action slot
+  /// instead of being added beside the chevron, so enabling it does not take
+  /// width away from the card text. Touch-only — not DPAD-focusable.
   final VoidCallback? onCopy;
 
   /// Title line cap. Defaults to the layout's own rule (2 for the compact
@@ -237,20 +238,32 @@ class _SourceRowState extends State<SourceRow> {
               _playPill(),
             ],
             if (widget.onCopy != null && !widget.isSelectionMode)
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                iconSize: 18,
-                splashRadius: 18,
-                tooltip: 'Copy magnet',
-                onPressed: widget.onCopy,
-                icon: Icon(Icons.copy_rounded, color: _dim2),
+              SizedBox.square(
+                dimension: 28,
+                child: ExcludeFocus(
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 28,
+                      height: 28,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 18,
+                    splashRadius: 18,
+                    tooltip: 'Copy link',
+                    onPressed: widget.onCopy,
+                    icon: Icon(Icons.copy_rounded, color: _dim2),
+                  ),
+                ),
+              )
+            else ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: _isFocused ? _accent : _dim2,
               ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: _isFocused ? _accent : _dim2,
-            ),
+            ],
           ],
         ),
       ),

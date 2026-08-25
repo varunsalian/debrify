@@ -8,7 +8,7 @@ wait for approval. **Be fast and decisive: this must finish in a few minutes, we
 hard cap.** Do NOT read code, do NOT spawn sub-agents, do NOT size effort — the nightly job only
 *captures* new reports; deep analysis + `effort:*` sizing happen later via the manual `/estimate`.
 
-Tracker: `varunsalian/debrify-tracker`. `gh` is authed locally; secrets are in `discord/.dev.vars`.
+Tracker: `varunsalian/debrify-tracker`. `gh` is authed locally; secrets are in `dev/tool/discord/.dev.vars`.
 
 ## 1. Gather everything up front (just 2 tool calls — keep turns low)
 a. `cd discord && python3 discord_fetch.py --days 1.1 --json > /tmp/nightly_sweep.json` — then read it.

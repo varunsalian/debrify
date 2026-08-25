@@ -48,11 +48,11 @@ app.*.map.json
 .release/
 
 # Discord bot secrets & deps — code is tracked, secrets/deps are not
-discord/.dev.vars
-discord/.deploy.env
-discord/node_modules/
-discord/.wrangler/
-discord/nightly_logs/
+dev/tool/discord/.dev.vars
+dev/tool/discord/.deploy.env
+dev/tool/discord/node_modules/
+dev/tool/discord/.wrangler/
+dev/tool/discord/nightly_logs/
 
 # tvOS libmpv binaries: ~2.7 GB of prebuilt xcframeworks fetched from
 # karelrooted/libmpv. The PACKAGE SOURCE next to them (podspec, Swift stub,

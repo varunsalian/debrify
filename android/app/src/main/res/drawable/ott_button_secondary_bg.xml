@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT dock secondary button (36dp visual circle inside a 42dp box).
+     Focused: solid white circle with a translucent outer ring standing in
+     for the Flutter dock's 16dp glow (#47FFFFFF). Idle: white @ 12%.
+     The 3dp inset keeps the circle the same size in both states so only
+     the ring appears/disappears. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item>
+                <shape android:shape="oval">
+                    <stroke android:width="3dp" android:color="#47FFFFFF" />
+                    <solid android:color="#00000000" />
+                </shape>
+            </item>
+            <item
+                android:left="3dp"
+                android:top="3dp"
+                android:right="3dp"
+                android:bottom="3dp">
+                <shape android:shape="oval">
+                    <solid android:color="#FFFFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item
+                android:left="3dp"
+                android:top="3dp"
+                android:right="3dp"
+                android:bottom="3dp">
+                <shape android:shape="oval">
+                    <solid android:color="#1FFFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

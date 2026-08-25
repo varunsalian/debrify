@@ -24,6 +24,10 @@ class DetailPrimaryButton extends StatefulWidget {
   final bool autofocus;
   final Color glow;
 
+  /// Resume state still resolving — show a spinner instead of [label] so the
+  /// pill never flashes a wrong status. Stays tappable (plays from the top).
+  final bool busy;
+
   const DetailPrimaryButton({
     super.key,
     required this.label,
@@ -31,6 +35,7 @@ class DetailPrimaryButton extends StatefulWidget {
     required this.glow,
     this.focusNode,
     this.autofocus = false,
+    this.busy = false,
   });
 
   @override
@@ -88,21 +93,43 @@ class _DetailPrimaryButtonState extends State<DetailPrimaryButton> {
                   horizontal: 19,
                   vertical: 10,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.play_arrow_rounded, color: t.btnText, size: 19),
-                    const SizedBox(width: 7),
-                    Text(
-                      widget.label,
-                      style: TextStyle(
-                        color: t.btnText,
-                        fontSize: 13.5,
-                        fontWeight: t.btnWeight,
+                child: widget.busy
+                    // Resolving resume state: spinner only, sized to the
+                    // icon+gap footprint so the pill barely shifts when the
+                    // real label lands.
+                    ? SizedBox(
+                        width: 44,
+                        height: 19,
+                        child: Center(
+                          child: SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: t.btnText,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.play_arrow_rounded,
+                            color: t.btnText,
+                            size: 19,
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            widget.label,
+                            style: TextStyle(
+                              color: t.btnText,
+                              fontSize: 13.5,
+                              fontWeight: t.btnWeight,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
@@ -658,6 +685,7 @@ class DetailActionRow extends StatelessWidget {
       if (model.showPrimary)
         DetailPrimaryButton(
           label: model.primaryLabel,
+          busy: model.primaryBusy,
           onTap: model.onPrimary,
           glow: model.accent,
           focusNode: model.focus.primaryEntry,

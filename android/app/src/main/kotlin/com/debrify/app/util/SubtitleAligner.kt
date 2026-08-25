@@ -132,6 +132,13 @@ object SubtitleAligner {
         /** Feature history hard cap (frames are cheap; this is ~64 min). */
         const val MAX_GRID = 120_000
 
+        /** Media positions live in hours, not days: ~100 h covers any real
+         *  file or live window, and everything beyond is a clock-domain leak. */
+        const val MAX_SANE_ANCHOR_MS = 360_000_000L
+
+        /** Segments roll over at ~10 min; 1 h means the tap misbehaved. */
+        const val MAX_SANE_SEGMENT_MS = 3_600_000.0
+
         /**
          * Minimum anchored audio before an attempt is made at all. Below this
          * the peak statistics are meaningless and every answer is a guess.
@@ -245,7 +252,18 @@ object SubtitleAligner {
         minPsr: Double = Tuning.MIN_PSR,
         scales: DoubleArray = Tuning.SCALES,
     ): AlignResult {
-        val usable = segments.filter { it.anchorMs != Long.MIN_VALUE && it.durationMs >= 2_000.0 }
+        // Sanity bounds, not just the UNANCHORED sentinel: an anchor from the
+        // wrong clock domain (Media3's TIME_UNSET is MIN_VALUE + 1 and passes
+        // a plain sentinel check; live windows and corrupt discontinuities
+        // have produced day-scale values) would otherwise size the grid below
+        // — the 2026-08-25 MiBox OOM was a ~235-day span turned into a 5 GB
+        // array. Anything outside a generous media-position range is garbage.
+        val usable = segments.filter {
+            it.anchorMs in -60_000L..Tuning.MAX_SANE_ANCHOR_MS &&
+                it.durationMs.isFinite() &&
+                it.durationMs >= 2_000.0 &&
+                it.durationMs <= Tuning.MAX_SANE_SEGMENT_MS
+        }
         val analyzedSec = (usable.sumOf { it.durationMs } / 1000.0).roundToInt()
         val speechCues = filterCues(cues)
         if (usable.isEmpty() ||
@@ -275,6 +293,12 @@ object SubtitleAligner {
             t1 = hi
         }
         val n = ((t1 - t0) / Tuning.GRID_MS).toInt() + 1
+        if (n <= 0 || n > Tuning.MAX_GRID + 1) {
+            // The span cap above should make this unreachable; it is the last
+            // line of defence between a bad timestamp and an allocation that
+            // kills the player. Refusing is always safer than trusting.
+            return AlignResult.NotEnoughAudio(analyzedSec, speechCues.size)
+        }
         val audio = DoubleArray(n)
         val mask = DoubleArray(n)
         // Reversed again so rasterization runs oldest→newest capture: on a

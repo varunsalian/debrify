@@ -2627,6 +2627,10 @@ class MainActivity : FlutterActivity() {
                 if (guideEpisodes.isNotEmpty()) {
                     putExtra("guideEpisodes", listToJson(guideEpisodes).toString())
                 }
+                // TVMaze's official show title for the OTT dock's identity row
+                (args["showName"] as? String)?.takeIf { it.isNotBlank() }?.let {
+                    putExtra("showName", it)
+                }
             }
             sendBroadcast(intent)
             android.util.Log.d("TVMazeUpdate", "MainActivity: Broadcast SENT with ${updates.size} updates, imdbId=$imdbId")

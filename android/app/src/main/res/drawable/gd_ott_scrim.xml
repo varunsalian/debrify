@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Guide shelf scrim. NOTE: gradient angles must be multiples of 45 —
+     GradientDrawable enforces this at INFLATE time only. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="#00000000"
+        android:centerColor="#99000000"
+        android:endColor="#F0000000" />
+</shape>

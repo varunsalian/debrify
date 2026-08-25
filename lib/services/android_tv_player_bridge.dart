@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 // For debugPrint
 import 'package:flutter/material.dart' show debugPrint;
 
+import '../utils/format_tag_detector.dart';
 import '../utils/movie_parser.dart';
+import '../utils/series_parser.dart';
 import 'analytics_service.dart';
+import 'episode_info_service.dart';
 import 'iptv_epg_service.dart';
 import 'storage_service.dart';
 import 'movie_metadata_service.dart';
@@ -107,6 +110,7 @@ class AndroidTvPlayerBridge {
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
+  static String? _pendingShowName;
   // Full-show episode guide (TVMaze) pending alongside the metadata updates.
   static List<Map<String, dynamic>>? _pendingGuideEpisodes;
   // Store pending IMDB ID discovered from TVMaze (for Stremio subtitles)
@@ -155,7 +159,7 @@ class AndroidTvPlayerBridge {
         update['subtitle_outline_color_index'] = outline.clamp(0, 9);
       }
       if (elevation is int) {
-        update['subtitle_elevation_index'] = elevation.clamp(0, 4);
+        update['subtitle_elevation_index'] = elevation.clamp(0, 5);
       }
       if (bold is bool) update['subtitle_bold'] = bold;
       if (fontId is String && fontId.isNotEmpty) {
@@ -1003,11 +1007,13 @@ class AndroidTvPlayerBridge {
               pending ?? [],
               imdbId: pendingImdb,
               guideEpisodes: pendingGuide,
+              showName: _pendingShowName,
             );
             // Clear pending updates after sending
             _pendingMetadataUpdates = null;
             _pendingImdbId = null;
             _pendingGuideEpisodes = null;
+            _pendingShowName = null;
           } else {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
@@ -1138,6 +1144,83 @@ class AndroidTvPlayerBridge {
           } catch (e) {
             debugPrint('MovieMetadata: lookupMovieImdb error: $e');
             return null;
+          }
+        case 'lookupDebrifyTvIdentity':
+          // Rich identity for the Debrify TV premium player styles
+          // (TorboxTvPlayerActivity): clean title/episode from the same
+          // lookups the subtitle path already uses, plus format badges
+          // parsed from the release name (FormatTagDetector). Best-effort —
+          // every failure degrades to the parsed title so the native side
+          // never has to render the raw release name.
+          {
+            final args = call.arguments;
+            if (args is! Map) return null;
+            final filename = args['filename'] as String?;
+            if (filename == null || filename.isEmpty) return null;
+            try {
+              final badges = FormatTagDetector.detect(
+                filename,
+              ).map((t) => t.label).take(4).toList();
+              final series = SeriesParser.parseFilename(filename);
+              if (series.isSeries &&
+                  series.title != null &&
+                  series.title!.isNotEmpty &&
+                  series.season != null &&
+                  series.episode != null) {
+                String showName = series.title!;
+                String? episodeTitle = series.episodeTitle;
+                try {
+                  // Official show name beats the filename-parsed one.
+                  final showInfo = await EpisodeInfoService.getSeriesInfo(
+                    showName,
+                  );
+                  final officialName = showInfo?['name'] as String?;
+                  if (officialName != null && officialName.isNotEmpty) {
+                    showName = officialName;
+                  }
+                  final info = await EpisodeInfoService.getEpisodeInfo(
+                    series.title!,
+                    series.season!,
+                    series.episode!,
+                  );
+                  final fetchedName = info?['name'] as String?;
+                  if (fetchedName != null && fetchedName.isNotEmpty) {
+                    episodeTitle = fetchedName;
+                  }
+                } catch (_) {}
+                return {
+                  'kind': 'series',
+                  'title': showName,
+                  'season': series.season,
+                  'episode': series.episode,
+                  if (episodeTitle != null && episodeTitle.isNotEmpty)
+                    'episodeTitle': episodeTitle,
+                  'badges': badges,
+                };
+              }
+              final parsed = MovieParser.parseFilename(filename);
+              if (parsed.title != null && parsed.title!.isNotEmpty) {
+                MovieMetadata? meta;
+                try {
+                  meta = await MovieMetadataService.lookupMovie(
+                    parsed.title!,
+                    parsed.year,
+                  );
+                } catch (_) {}
+                final year = meta?.year ?? parsed.year;
+                return {
+                  'kind': 'movie',
+                  'title': meta?.title ?? parsed.title,
+                  if (year != null) 'year': year,
+                  if (meta?.poster != null) 'poster': meta!.poster,
+                  'badges': badges,
+                };
+              }
+              return {'kind': 'unknown', 'badges': badges};
+            } catch (e) {
+              debugPrint('DebrifyTvIdentity: lookup error: $e');
+              return null;
+            }
           }
         case 'requestQuickPlayNextEpisode':
           final args = call.arguments;
@@ -1437,6 +1520,7 @@ class AndroidTvPlayerBridge {
     _pendingMetadataUpdates = null;
     _pendingImdbId = null;
     _pendingGuideEpisodes = null;
+    _pendingShowName = null;
 
     try {
       // Get custom font info for Android TV player
@@ -1512,6 +1596,7 @@ class AndroidTvPlayerBridge {
     String? sessionId,
     String? imdbId,
     List<Map<String, dynamic>>? guideEpisodes,
+    String? showName,
   }) {
     // Discard updates if session ID doesn't match current session
     if (sessionId != null && sessionId != _currentSessionId) {
@@ -1526,6 +1611,7 @@ class AndroidTvPlayerBridge {
     _pendingMetadataUpdates = updates;
     _pendingImdbId = imdbId;
     _pendingGuideEpisodes = guideEpisodes;
+    _pendingShowName = showName;
   }
 
   /// Set the current session ID for metadata tracking
@@ -1552,6 +1638,7 @@ class AndroidTvPlayerBridge {
     String? sessionId,
     String? imdbId,
     List<Map<String, dynamic>>? guideEpisodes,
+    String? showName,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -1580,6 +1667,9 @@ class AndroidTvPlayerBridge {
             if (imdbId != null) 'imdbId': imdbId,
             if (guideEpisodes != null && guideEpisodes.isNotEmpty)
               'guideEpisodes': guideEpisodes,
+            // TVMaze's official show title, for the native OTT dock's
+            // "Show — Episode" identity line.
+            if (showName != null && showName.isNotEmpty) 'showName': showName,
           });
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
       return success == true;

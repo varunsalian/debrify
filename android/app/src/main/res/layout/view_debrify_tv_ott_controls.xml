@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     OTT DOCK — the Apple TV transport dock (tv_controls.dart) as a controller
+     skin for the native player. Swapped in for view_torrent_tv_controls at
+     runtime when tv_player_controls_style == 'ott'; ids match the legacy
+     controller wherever semantics match so the activity's bindings work
+     unchanged, and legacy-only views the code still writes to exist here as
+     zero-size stubs (buffered bar, fast-seek indicator, combined time).
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/debrify_controls_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:clipToPadding="false"
+    android:clipChildren="false"
+    android:visibility="gone">
+
+    <!-- The scrim paints the padded content box itself, exactly like the
+         Flutter container; the 36dp top padding is what gives it room to
+         fade. Replaced with the 4-stop ShaderFactory at install time. -->
+    <LinearLayout
+        android:id="@+id/ott_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="@drawable/ott_controls_scrim"
+        android:paddingStart="56dp"
+        android:paddingTop="36dp"
+        android:paddingEnd="56dp"
+        android:paddingBottom="12dp"
+        android:clipToPadding="false"
+        android:clipChildren="false">
+
+        <!-- ══ Identity row: title/subtitle left, sleep chip right ══ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="bottom">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ott_identity_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="17sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    tools:text="The Expanse" />
+
+                <TextView
+                    android:id="@+id/ott_identity_subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:textColor="#B3FFFFFF"
+                    android:textSize="11.5sp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:visibility="gone"
+                    tools:text="S02E05 · Home" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/ott_sleep_chip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/ott_sleep_chip_bg"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
+                    android:src="@drawable/ic_dock_sleep"
+                    android:tint="#B3FFFFFF"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/ott_sleep_chip_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:textColor="#B3FFFFFF"
+                    android:textSize="12sp"
+                    tools:text="Sleep in 30m" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ══ Progress region (VOD only; the host hides it for live) ══ -->
+        <FrameLayout
+            android:id="@+id/cinema_progress_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@+id/debrify_pause_button"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:clipChildren="false">
+
+                <!-- Cinema-scrub preview chip; shown only while scrubbing. -->
+                <LinearLayout
+                    android:id="@+id/ott_scrub_preview_chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/ott_preview_chip_bg"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/ott_scrub_preview_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:fontFeatureSettings="tnum"
+                        tools:text="1:12:04   ·   +0:30" />
+                </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/cinema_progress_track_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:clipChildren="false">
+
+                    <View
+                        android:id="@+id/cinema_progress_background"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/ott_progress_track" />
+
+                    <!-- Stub: the OTT bar has no buffered segment, but the
+                         activity keeps writing this view's width. -->
+                    <View
+                        android:id="@+id/cinema_progress_buffered"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:visibility="invisible" />
+
+                    <View
+                        android:id="@+id/debrify_progress_line"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/ott_progress_fill" />
+
+                    <View
+                        android:id="@+id/cinema_progress_thumb"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="@drawable/ott_progress_thumb"
+                        android:elevation="4dp"
+                        android:visibility="invisible" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/debrify_time_current"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="11.5sp"
+                        android:fontFeatureSettings="tnum"
+                        tools:text="14:19" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/debrify_time_total"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="11.5sp"
+                        android:fontFeatureSettings="tnum"
+                        tools:text="-21:40" />
+                </LinearLayout>
+
+                <!-- Stub: legacy fast-seek indicator the activity toggles. -->
+                <TextView
+                    android:id="@+id/cinema_speed_indicator"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone"
+                    tools:text="→ 2.0x" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- ══ Transport row: transport left, options right ══ -->
+        <LinearLayout
+            android:id="@+id/debrify_controls_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:clipToPadding="false"
+            android:clipChildren="false">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_prev_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_prev"
+                android:visibility="gone"
+                android:text="Previous" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/ott_seek_back_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_back10"
+                android:text="Back 10s" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_pause_button"
+                style="@style/OttPlayButton"
+                android:drawableStart="@drawable/ic_dock_play"
+                android:text="Play" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/ott_seek_forward_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_fwd10"
+                android:text="Forward 10s" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_next_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_next"
+                android:text="Next" />
+
+            <!-- Stubs: the live dock-reorder machinery expects these ids. -->
+            <View
+                android:id="@+id/debrify_controls_left_divider"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/debrify_controls_right_divider"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <View
+                android:id="@+id/ott_transport_spacer"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_audio_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_audio"
+                android:text="Audio" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_subtitle_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_subs"
+                android:text="Subtitles" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_playlist_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_eps"
+                android:text="Episodes" />
+
+            <!-- Replaces the top-right stremio_source_badge under this skin;
+                 shown by showStremioSourceBadge when sources exist. -->
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/ott_sources_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_sources"
+                android:text="Sources"
+                android:visibility="gone" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_random_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_shuffle"
+                android:text="Shuffle" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_speed_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_speed"
+                android:text="1.0x" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_aspect_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_aspect"
+                android:text="Fill" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/debrify_night_mode_button"
+                style="@style/OttControlButton"
+                android:layout_marginEnd="0dp"
+                android:drawableStart="@drawable/ic_dock_night"
+                android:text="Night" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/iptv_jump_channel_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_jump"
+                android:text="Jump"
+                android:contentDescription="Jump to channel"
+                android:visibility="gone" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/iptv_record_button"
+                style="@style/OttControlButton"
+                android:drawableStart="@drawable/ic_dock_record"
+                android:text="Record"
+                android:contentDescription="Record channel"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Shared caption slot: the focused button's label, left-aligned.
+             Fixed height so the dock never reflows as it fades in/out. -->
+        <TextView
+            android:id="@+id/ott_caption_label"
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:layout_marginTop="2dp"
+            android:textColor="#B3FFFFFF"
+            android:textSize="11.5sp"
+            android:letterSpacing="0.03"
+            android:singleLine="true"
+            android:alpha="0"
+            tools:text="Play" />
+    </LinearLayout>
+
+    <!-- Hidden legacy time display for compatibility -->
+    <TextView
+        android:id="@+id/debrify_time_display"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:text="00:00 / 00:00" />
+</FrameLayout>

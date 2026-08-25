@@ -29,7 +29,7 @@ enum SeparationModel {
 /// A single `model` field cannot express "space on cards, rule in settings",
 /// and that distinction is not cosmetic: it is what keeps `space` legal at all
 /// (see the caps below). The families map to the widgets that actually own
-/// the decoration, inventoried in `design/plans/PREMIUM_LOOKS_PLAN.md` §12.
+/// the decoration, inventoried in `dev/design/plans/PREMIUM_LOOKS_PLAN.md` §12.
 enum SurfaceFamily {
   /// `CatalogItemTile`, `PlaylistGridCard`, `PlaylistLandscapeCard`.
   card,

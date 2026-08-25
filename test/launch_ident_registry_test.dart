@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/launch/launch_ident.dart';
 
@@ -73,6 +74,24 @@ void main() {
       'constellation',
       'silk',
       'rackfocus',
+      'imprint',
+      'frost',
     ]);
+  });
+
+  test('every ident survives profile sanitizing', () {
+    // The fourth list. A missing id here is silently dropped from a profile
+    // export — restore then falls back to the default — and the strict path
+    // rejects the whole package as "contains private data". Nothing else in
+    // this file would catch it.
+    for (final ident in kLaunchIdents) {
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+            'launch_animation', ident.id),
+        isTrue,
+        reason: '"${ident.id}" (${ident.label}) is missing from '
+            'SanitizedProfilePreferences._launchAnimations',
+      );
+    }
   });
 }

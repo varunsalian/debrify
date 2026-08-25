@@ -1,5 +1,6 @@
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/models/torrent.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -145,6 +146,123 @@ void main() {
         VideoPlayerLauncher.externalPlaybackUrlFor(launchArgs),
         'https://example.com/video-only.mp4',
       );
+    });
+  });
+
+  group('external-player fallback notice', () {
+    const authenticatedWebDav = VideoPlayerLaunchArgs(
+      videoUrl: 'https://dav.example/video.mkv',
+      title: 'Video',
+      httpHeaders: {'Authorization': 'Basic redacted'},
+      disableExternalPlayer: true,
+    );
+
+    test(
+      'is shown for authenticated playback when external is the default',
+      () {
+        expect(
+          VideoPlayerLauncher.shouldExplainExternalPlayerFallback(
+            authenticatedWebDav,
+            'external',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('is not shown when Debrify player is the default', () {
+      expect(
+        VideoPlayerLauncher.shouldExplainExternalPlayerFallback(
+          authenticatedWebDav,
+          'debrify',
+        ),
+        isFalse,
+      );
+    });
+
+    test('is not shown for an unrelated external-player override', () {
+      const localRecording = VideoPlayerLaunchArgs(
+        videoUrl: 'file:///recording.ts',
+        title: 'Recording',
+        disableExternalPlayer: true,
+      );
+      expect(
+        VideoPlayerLauncher.shouldExplainExternalPlayerFallback(
+          localRecording,
+          'external',
+        ),
+        isFalse,
+      );
+    });
+
+    testWidgets('continues only when Use Debrify player is chosen', (
+      tester,
+    ) async {
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (builderContext) {
+              context = builderContext;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+
+      final result = VideoPlayerLauncher.showAuthenticatedWebDavPlayerNotice(
+        context,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('External player unavailable'), findsOneWidget);
+
+      await tester.tap(find.text('Use Debrify player'));
+      await tester.pumpAndSettle();
+      expect(await result, isTrue);
+    });
+
+    testWidgets('Cancel aborts the fallback', (tester) async {
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (builderContext) {
+              context = builderContext;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+
+      final result = VideoPlayerLauncher.showAuthenticatedWebDavPlayerNotice(
+        context,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(await result, isFalse);
+    });
+
+    testWidgets('system Back aborts the fallback', (tester) async {
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (builderContext) {
+              context = builderContext;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+
+      final result = VideoPlayerLauncher.showAuthenticatedWebDavPlayerNotice(
+        context,
+      );
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(await result, isFalse);
     });
   });
 }

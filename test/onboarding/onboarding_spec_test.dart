@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Keeps the approved 1920x1080 mock and its logical-pixel implementation
 /// tied together without pretending browser and Flutter text rasterize alike.
 void main() {
-  final mock = File('design/mockups/onboarding_mockup/index.html');
+  final mock = File('dev/design/mockups/onboarding_mockup/index.html');
   final stage = File('lib/widgets/onboarding/onboarding_stage.dart');
   final keyStep = File('lib/widgets/onboarding/steps/key_step.dart');
   final models = File('lib/widgets/onboarding/onboarding_models.dart');

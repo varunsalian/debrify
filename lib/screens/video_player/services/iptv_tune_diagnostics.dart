@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// Phase 0 of the IPTV playback-resilience plan (design/plans/
+/// Phase 0 of the IPTV playback-resilience plan (dev/design/plans/
 /// IPTV_FLAWLESS_PLAYBACK_PLAN.md): the Dart player's per-tune diagnostics
 /// recorder — the mirror of the native TV player's `IptvTuneDiagnostics.kt`,
 /// same log grammar so one grep reads both players.

@@ -6,7 +6,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.HttpDataSource
 
 /**
- * Phase 0 of the IPTV playback-resilience plan (design/plans/
+ * Phase 0 of the IPTV playback-resilience plan (dev/design/plans/
  * IPTV_FLAWLESS_PLAYBACK_PLAN.md): a per-tune diagnostics recorder.
  *
  * Every IPTV tune (launch, zap, Stremio candidate, HLS-forced retry) gets a

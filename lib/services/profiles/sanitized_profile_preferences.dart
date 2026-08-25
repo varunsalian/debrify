@@ -49,7 +49,7 @@ abstract final class SanitizedProfilePreferences {
       case 'subtitle_outline_color_index':
         return _boundedInt(value, 0, 9);
       case 'subtitle_elevation_index':
-        return _boundedInt(value, 0, 4);
+        return _boundedInt(value, 0, 5);
       case 'app_theme':
         return value is String && _appThemes.contains(value);
       case 'detail_theme':
@@ -75,6 +75,10 @@ abstract final class SanitizedProfilePreferences {
       case 'discover_layout':
         return value is String &&
             const <String>{'stage', 'grid'}.contains(value);
+      case 'discover_default_source':
+        return value is String && _validDiscoverDefaultSource(value);
+      case 'discover_last_source':
+        return value is String && _validDiscoverSource(value);
       case 'debrify_tv_style':
         return value is String &&
             const <String>{'grid', 'spotlight'}.contains(value);
@@ -100,6 +104,27 @@ abstract final class SanitizedProfilePreferences {
             const <String>{'ident', 'theme'}.contains(value);
       case 'iptv_player_guide_style':
         return value is String && _iptvPlayerGuideStyles.contains(value);
+      case 'tv_player_controls_style':
+        return value is String &&
+            const <String>{
+              'classic',
+              'ott',
+              'frost',
+              'marquee',
+              'broadcast',
+              'pulse',
+              'ticket',
+            }.contains(value);
+      case 'debrify_tv_player_style':
+        return value is String &&
+            const <String>{
+              'classic',
+              'network',
+              'cinema',
+              'guide',
+              'spotlight',
+              'prestige',
+            }.contains(value);
       case 'tv_hero_artwork_quality':
         return value is String &&
             const <String>{
@@ -113,6 +138,16 @@ abstract final class SanitizedProfilePreferences {
 
   static bool _boundedInt(Object? value, int minimum, int maximum) =>
       value is int && value >= minimum && value <= maximum;
+
+  static bool _validDiscoverDefaultSource(String value) =>
+      value == 'remember' || _validDiscoverSource(value);
+
+  static bool _validDiscoverSource(String value) =>
+      value == 'cw' ||
+      value == 'trakt' ||
+      value == 'simkl' ||
+      value == 'mdblist' ||
+      (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 
   static const Set<String> _detailThemes = <String>{
     'signal',
@@ -216,6 +251,8 @@ abstract final class SanitizedProfilePreferences {
     'constellation',
     'silk',
     'rackfocus',
+    'imprint',
+    'frost',
   };
 
   static const Set<String> _iptvPlayerGuideStyles = <String>{

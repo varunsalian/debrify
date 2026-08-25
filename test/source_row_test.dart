@@ -68,6 +68,37 @@ void main() {
     expect(title.overflow, TextOverflow.ellipsis);
   });
 
+  testWidgets(
+    'copy action reuses the chevron slot without changing text style',
+    (tester) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      var copies = 0;
+      var cardTaps = 0;
+      await pump(
+        tester,
+        SourceRow(
+          title: 'A source title',
+          subtitle: 'metadata',
+          focusNode: node,
+          onTap: () => cardTaps++,
+          onCopy: () => copies++,
+        ),
+      );
+
+      expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+      expect(
+        tester.widget<Text>(find.text('A source title')).style?.fontSize,
+        13,
+      );
+
+      await tester.tap(find.byTooltip('Copy link'));
+      expect(copies, 1);
+      expect(cardTaps, 0);
+    },
+  );
+
   testWidgets('tap fires onTap (touch)', (tester) async {
     final node = FocusNode();
     addTearDown(node.dispose);

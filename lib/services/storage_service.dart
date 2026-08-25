@@ -1442,7 +1442,125 @@ class StorageService {
     );
   }
 
+  static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
+  static const Set<String> _tvPlayerControlsStyles = {
+    'classic',
+    'ott',
+    'frost',
+    'marquee',
+    'broadcast',
+    'pulse',
+    'ticket',
+  };
+
+  /// Control skin for the NATIVE Android TV player: 'marquee' (editorial
+  /// serif — the default), 'ott' (the Apple TV dock ported to Kotlin),
+  /// 'classic' (the legacy Cinema Mode controls), or one of the other
+  /// premium dock skins ('frost', 'broadcast', 'pulse', 'ticket'). Android TV only; tvOS runs the
+  /// Flutter player and has nothing to choose. Read once per player launch — the native side via
+  /// `ProfilePreferenceProjection.getString("tv_player_controls_style")`
+  /// (falling back to `flutter.tv_player_controls_style` in
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'marquee' on
+  /// BOTH read and write so the two readers can never disagree about the
+  /// default.
+  static Future<String> getTvPlayerControlsStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_tvPlayerControlsStyleKey);
+    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'marquee';
+  }
+
+  static Future<void> setTvPlayerControlsStyle(String style) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _tvPlayerControlsStyleKey,
+      _tvPlayerControlsStyles.contains(style) ? style : 'marquee',
+    );
+  }
+
+  static const String _debrifyTvPlayerStyleKey = 'debrify_tv_player_style';
+  static const Set<String> _debrifyTvPlayerStyles = {
+    'classic',
+    'network',
+    'cinema',
+    'guide',
+    'spotlight',
+    'prestige',
+  };
+
+  /// Playback-screen style for the NATIVE Debrify TV player
+  /// (TorboxTvPlayerActivity): 'cinema' (poster + gilded spec line — the
+  /// default), 'network' (broadcast lower-third), 'guide' (opaque
+  /// broadcast band), 'spotlight' (frosted glass panel), 'prestige'
+  /// (quiet serif identity), or 'classic' (the legacy ESPN-style bar +
+  /// top marquee). Android TV only. Read once per player launch — the
+  /// native side via
+  /// `ProfilePreferenceProjection.getString("debrify_tv_player_style")`
+  /// (falling back to `flutter.debrify_tv_player_style` in
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'cinema' on
+  /// BOTH read and write so the two readers can never disagree about the
+  /// default.
+  static Future<String> getDebrifyTvPlayerStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_debrifyTvPlayerStyleKey);
+    return _debrifyTvPlayerStyles.contains(raw) ? raw! : 'cinema';
+  }
+
+  static Future<void> setDebrifyTvPlayerStyle(String style) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _debrifyTvPlayerStyleKey,
+      _debrifyTvPlayerStyles.contains(style) ? style : 'cinema',
+    );
+  }
+
   static const String _discoverLayoutKey = 'discover_layout';
+  static const String _discoverDefaultSourceKey = 'discover_default_source';
+  static const String _discoverLastSourceKey = 'discover_last_source';
+
+  /// Special value for the Discover default-source setting. When selected,
+  /// [getDiscoverLastSource] decides which source opens on the next visit.
+  static const String discoverDefaultRememberLast = 'remember';
+
+  static bool _isDiscoverSourceValue(String value) =>
+      value == 'cw' ||
+      value == 'trakt' ||
+      value == 'simkl' ||
+      value == 'mdblist' ||
+      (value.startsWith('a:') && value.length > 2 && value.length <= 514);
+
+  /// What Discover should show when opened. Unset defaults to remembering the
+  /// last source, preserving the most useful behavior for existing installs.
+  static Future<String> getDiscoverDefaultSource() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString(_discoverDefaultSourceKey);
+    return value == discoverDefaultRememberLast ||
+            (value != null && _isDiscoverSourceValue(value))
+        ? value!
+        : discoverDefaultRememberLast;
+  }
+
+  static Future<void> setDiscoverDefaultSource(String value) async {
+    final normalized =
+        value == discoverDefaultRememberLast || _isDiscoverSourceValue(value)
+        ? value
+        : discoverDefaultRememberLast;
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_discoverDefaultSourceKey, normalized);
+  }
+
+  /// The last source explicitly opened from Discover. A missing or malformed
+  /// value safely falls back to Continue Watching.
+  static Future<String> getDiscoverLastSource() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString(_discoverLastSourceKey);
+    return value != null && _isDiscoverSourceValue(value) ? value : 'cw';
+  }
+
+  static Future<void> setDiscoverLastSource(String value) async {
+    if (!_isDiscoverSourceValue(value)) return;
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_discoverLastSourceKey, value);
+  }
 
   /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
   /// shelf, the default) or 'grid' (the detail rail beside a poster wall). Its
@@ -1499,6 +1617,8 @@ class StorageService {
     'constellation',
     'silk',
     'rackfocus',
+    'imprint',
+    'frost',
   };
 
   /// Exposed so a test can assert this set and `kLaunchIdents` agree in BOTH

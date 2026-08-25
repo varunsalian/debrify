@@ -6,7 +6,7 @@ import '../models/profiles/user_profile.dart';
 import 'profiles/profile_avatar_view.dart';
 
 /// The "classic" phone navigation — Concept 2 ("Your Five") from
-/// design/mockups/phone_nav_mockup/: a persistent Material-style bottom bar of
+/// dev/design/mockups/phone_nav_mockup/: a persistent Material-style bottom bar of
 /// [Home] [three user-chosen slots] [More], with everything else one sheet
 /// away. Chosen in Settings → Navigation; the floating glass button remains
 /// the alternative style.

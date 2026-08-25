@@ -78,7 +78,7 @@ jobs:
         java-version: '17'
 
     - name: Build PGS-capable MediaKit Android libraries
-      run: scripts/build_android_media_kit_libraries.sh packages/media_kit_libs_android_video_patched/android/libs
+      run: dev/scripts/build_android_media_kit_libraries.sh packages/media_kit_libs_android_video_patched/android/libs
 
     - name: Restore Java 21 for Debrify Android build
       uses: actions/setup-java@v4
@@ -102,7 +102,7 @@ jobs:
       run: flutter build apk --release
 
     - name: Verify packaged Android subtitle decoders
-      run: scripts/verify_android_subtitle_decoders.sh build/app/outputs/flutter-apk/app-release.apk
+      run: dev/scripts/verify_android_subtitle_decoders.sh build/app/outputs/flutter-apk/app-release.apk
 
     - name: Rename APK (release)
       if: github.event_name == 'release'
@@ -154,13 +154,13 @@ jobs:
       run: flutter pub get
 
     - name: Build PGS-capable MediaKit frameworks
-      run: scripts/build_macos_media_kit_frameworks.sh packages/media_kit_libs_macos_video_patched/macos/Frameworks
+      run: dev/scripts/build_macos_media_kit_frameworks.sh packages/media_kit_libs_macos_video_patched/macos/Frameworks
 
     - name: Build macOS app
       run: flutter build macos --release
 
     - name: Verify packaged subtitle decoders
-      run: scripts/verify_macos_subtitle_decoders.sh build/macos/Build/Products/Release/debrify.app/Contents/Frameworks
+      run: dev/scripts/verify_macos_subtitle_decoders.sh build/macos/Build/Products/Release/debrify.app/Contents/Frameworks
 
     - name: Install create-dmg
       run: HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
@@ -532,7 +532,7 @@ jobs:
               libfontconfig1-dev libfreetype6-dev libharfbuzz-dev \
               libfribidi-dev python3-jinja2 python3-docutils
             python3 -m pip install --no-cache-dir meson==1.7.0
-            scripts/build_linux_libmpv.sh build/private-libmpv
+            dev/scripts/build_linux_libmpv.sh build/private-libmpv
           '
 
     - name: Setup Flutter
@@ -556,7 +556,7 @@ jobs:
     # media_kit ships no Linux libmpv. Install our statically consolidated mpv
     # in a plugin-private directory; never expose it through LD_LIBRARY_PATH.
     - name: Install private libmpv into the app bundle
-      run: scripts/bundle_linux_mpv.sh build/linux/x64/release/bundle build/private-libmpv
+      run: dev/scripts/bundle_linux_mpv.sh build/linux/x64/release/bundle build/private-libmpv
 
     - name: Create AppImage
       run: |
@@ -649,7 +649,7 @@ jobs:
               libfontconfig1-dev libfreetype6-dev libharfbuzz-dev \
               libfribidi-dev python3-jinja2 python3-docutils
             python3 -m pip install --no-cache-dir meson==1.7.0
-            scripts/build_linux_libmpv.sh build/private-libmpv
+            dev/scripts/build_linux_libmpv.sh build/private-libmpv
           '
 
     - name: Setup Flutter (manual for arm64)
@@ -675,7 +675,7 @@ jobs:
 
     # See the x64 job — same reason, same script, arm64 bundle path.
     - name: Install private libmpv into the app bundle
-      run: scripts/bundle_linux_mpv.sh build/linux/arm64/release/bundle build/private-libmpv
+      run: dev/scripts/bundle_linux_mpv.sh build/linux/arm64/release/bundle build/private-libmpv
 
     - name: Create AppImage
       run: |

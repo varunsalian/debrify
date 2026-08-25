@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MARQUEE guide: "The Playbill" — serif index left, focused episode set
+     like a title page on the right. No thumbnails in the index. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F2060608">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:paddingStart="56dp"
+        android:paddingEnd="56dp"
+        android:paddingTop="40dp"
+        android:paddingBottom="32dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="38"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/gd_brand"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="EPISODES"
+                android:textColor="#D9EAC981"
+                android:textSize="10sp"
+                android:letterSpacing="0.3" />
+
+            <TextView
+                android:id="@+id/gd_show_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#FFF6F1E6"
+                android:textSize="26sp"
+                android:fontFamily="serif"
+                android:textStyle="italic" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:scrollbars="none">
+                <LinearLayout
+                    android:id="@+id/season_tabs_container"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+            </HorizontalScrollView>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/android_tv_playlist"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="10dp"
+                android:clipToPadding="false"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="28dp"
+            android:layout_marginEnd="36dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="#38EAC981" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="62"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/gd_detail_num"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#42EAC981"
+                android:textSize="44sp"
+                android:fontFamily="serif"
+                android:textStyle="italic" />
+
+            <TextView
+                android:id="@+id/gd_detail_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:textColor="#FFF6F1E6"
+                android:textSize="24sp"
+                android:fontFamily="serif"
+                android:textStyle="italic" />
+
+            <TextView
+                android:id="@+id/gd_detail_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#D9EAC981"
+                android:textSize="11sp"
+                android:letterSpacing="0.18" />
+
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:padding="3dp"
+                android:background="@drawable/gd_marquee_frame">
+                <ImageView
+                    android:id="@+id/gd_detail_art"
+                    android:layout_width="260dp"
+                    android:layout_height="146dp"
+                    android:scaleType="centerCrop"
+                    android:background="#FF101014" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/gd_detail_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:maxLines="3"
+                android:ellipsize="end"
+                android:lineSpacingExtra="4dp"
+                android:textColor="#9EF6F1E6"
+                android:textSize="14sp"
+                android:fontFamily="serif" />
+
+            <TextView
+                android:id="@+id/gd_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="OK — PLAY"
+                android:textColor="#4DF6F1E6"
+                android:textSize="9sp"
+                android:letterSpacing="0.15" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

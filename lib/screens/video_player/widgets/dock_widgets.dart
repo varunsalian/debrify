@@ -2,7 +2,7 @@
 /// `classic` keeps `NetflixControlButton` untouched, which is what makes the
 /// legacy path provably unchanged.
 ///
-/// See `design/plans/PLAYER_DOCK_STYLES_PLAN.md` §3.
+/// See `dev/design/plans/PLAYER_DOCK_STYLES_PLAN.md` §3.
 library;
 
 import 'package:flutter/material.dart';

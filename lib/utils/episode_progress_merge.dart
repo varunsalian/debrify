@@ -121,7 +121,13 @@ EpisodeResumeTarget episodeResumeTarget({
 /// Resolve the visual "up next" episode from the already-merged progress map.
 ///
 /// A partially watched episode is the strongest signal because it represents
-/// an active session from any connected tracker. Otherwise an unfinished
+/// an active session from any connected tracker — but only AT OR AHEAD of the
+/// tracker's own next-unwatched frontier when one exists. Everything behind
+/// the frontier is already watched per the tracker, so a partial back there
+/// is a stale orphaned playback row (a scrobble stop that never landed), not
+/// an active session — trusting it is the "Resume · S1E7 on a show you're
+/// deep into S2" bug. Without a tracker frontier (local-only users) any
+/// partial still wins, preserving rewatch behavior. Otherwise an unfinished
 /// tracker suggestion is retained, falling forward when that suggestion has
 /// since become watched. This keeps the badge consistent with the same merged
 /// state that draws watched ticks and progress bars.
@@ -138,27 +144,37 @@ EpisodeCoordinate? mergedEpisodeUpNext({
       progress['${episode.season}_${episode.episode}'] ??
       0.0;
 
-  EpisodeCoordinate? partial;
-  for (final episode in ordered) {
-    final value = progressFor(episode);
-    if (value > 0.0 && value < 100.0) partial = episode;
+  final frontierIndex = trackerNext == null
+      ? -1
+      : ordered.indexWhere(
+          (episode) =>
+              episode.season == trackerNext.season &&
+              episode.episode == trackerNext.episode,
+        );
+
+  EpisodeCoordinate? partial; // last partial at/after the frontier
+  EpisodeCoordinate? partialAnywhere; // legacy pick, used sans frontier
+  for (var index = 0; index < ordered.length; index++) {
+    final value = progressFor(ordered[index]);
+    if (value > 0.0 && value < 100.0) {
+      partialAnywhere = ordered[index];
+      if (frontierIndex < 0 || index >= frontierIndex) {
+        partial = ordered[index];
+      }
+    }
   }
   if (partial != null) return partial;
 
-  if (trackerNext != null) {
-    final trackerIndex = ordered.indexWhere(
-      (episode) =>
-          episode.season == trackerNext.season &&
-          episode.episode == trackerNext.episode,
-    );
-    if (trackerIndex >= 0) {
-      if (progressFor(ordered[trackerIndex]) < 100.0) {
-        return ordered[trackerIndex];
-      }
-      for (var index = trackerIndex + 1; index < ordered.length; index++) {
-        if (progressFor(ordered[index]) < 100.0) return ordered[index];
-      }
+  if (frontierIndex >= 0) {
+    if (progressFor(ordered[frontierIndex]) < 100.0) {
+      return ordered[frontierIndex];
     }
+    for (var index = frontierIndex + 1; index < ordered.length; index++) {
+      if (progressFor(ordered[index]) < 100.0) return ordered[index];
+    }
+  } else if (partialAnywhere != null) {
+    // No usable frontier: the legacy any-partial rule (rewatches, local-only).
+    return partialAnywhere;
   }
 
   for (final episode in ordered) {

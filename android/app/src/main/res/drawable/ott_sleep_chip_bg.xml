@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sleep-timer chip: white @ 14%, r12 — tv_controls.dart:301-324. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#24FFFFFF" />
+    <corners android:radius="12dp" />
+</shape>

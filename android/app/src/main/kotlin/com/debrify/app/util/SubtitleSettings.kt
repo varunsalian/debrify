@@ -31,7 +31,7 @@ object SubtitleSettings {
     const val DEFAULT_COLOR_INDEX = 0     // White
     const val DEFAULT_BG_INDEX = 0        // None
     const val DEFAULT_OUTLINE_COLOR_INDEX = 0  // Auto
-    const val DEFAULT_ELEVATION_INDEX = 0      // Bottom
+    const val DEFAULT_ELEVATION_INDEX = 5      // Extreme Bottom
     const val DEFAULT_BOLD = false             // normal weight
     const val SYNC_OFFSET_MIN_MS = -3_600_000L
     const val SYNC_OFFSET_MAX_MS =  3_600_000L
@@ -104,7 +104,9 @@ object SubtitleSettings {
         ElevationOption("Low", 0.04f),
         ElevationOption("Medium", 0.08f),
         ElevationOption("High", 0.15f),
-        ElevationOption("Higher", 0.25f)
+        ElevationOption("Higher", 0.25f),
+        // Keep index parity with Flutter without changing existing saved values.
+        ElevationOption("Extreme Bottom", 0.0f)
     )
 
     private fun getPrefs(context: Context): SharedPreferences {

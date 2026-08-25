@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/debrify_controls_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="430dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="40dp"
+        android:layout_marginBottom="32dp"
+        android:orientation="vertical"
+        android:background="@drawable/dtv_spotlight_panel_bg"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="14dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/dtv_channel_number"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/dtv_spotlight_ch_bg"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:textColor="#FFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif-black" />
+
+            <TextView
+                android:id="@+id/dtv_channel_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="9dp"
+                android:textColor="#8CFFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif-bold"
+                android:letterSpacing="0.18"
+                android:textAllCaps="true"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DEBRIFY TV"
+                android:textColor="#4DFFFFFF"
+                android:textSize="8sp"
+                android:fontFamily="sans-serif-black"
+                android:letterSpacing="0.2" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/dtv_identity_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="9dp"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:fontFamily="sans-serif-black"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false" />
+
+        <TextView
+            android:id="@+id/dtv_identity_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#9EFFFFFF"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+    <LinearLayout
+        android:id="@+id/dtv_badges_row"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/dtv_badge_1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:background="@drawable/dtv_spotlight_chip_bg"
+            android:textColor="#E0FFFFFF"
+            android:textSize="9sp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.05"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/dtv_badge_2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:background="@drawable/dtv_spotlight_chip_bg"
+            android:textColor="#E0FFFFFF"
+            android:textSize="9sp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.05"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/dtv_badge_3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:background="@drawable/dtv_spotlight_chip_bg"
+            android:textColor="#E0FFFFFF"
+            android:textSize="9sp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.05"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/dtv_badge_4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:background="@drawable/dtv_spotlight_chip_bg"
+            android:textColor="#E0FFFFFF"
+            android:textSize="9sp"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.05"
+            android:visibility="gone" />
+    </LinearLayout>
+        </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dtv_progress_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="11dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/debrify_time_current"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="3dp"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:background="@drawable/dtv_progress_track_bg">
+
+            <View
+                android:id="@+id/debrify_progress_line"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="@drawable/dtv_progress_fill" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/debrify_time_total"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textColor="#99FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif" />
+    </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+    <LinearLayout
+        android:id="@+id/debrify_controls_buttons"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+    <LinearLayout
+        android:id="@+id/debrify_pause_button"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Play / Pause"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="19dp"
+            android:layout_height="19dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_pause"
+            android:id="@+id/debrify_pause_icon"
+            android:tint="@color/dtv_spotlight_icon_tint" />
+        <TextView
+            android:id="@+id/debrify_pause_label"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_next_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Next Title"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_next"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_channel_next_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Channel Up"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_jump"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_guide_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Guide"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_eps"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_audio_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Audio"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_audio"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_subtitle_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Subtitles"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_subs"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_speed_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Speed"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_speed"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_aspect_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Aspect Ratio"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_aspect"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/debrify_night_mode_button"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginEnd="7dp"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:focusable="true"
+        android:clickable="true"
+        android:contentDescription="Night Mode"
+        android:background="@drawable/dtv_spotlight_button_bg"
+        >
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:duplicateParentState="true"
+            android:src="@drawable/ic_dock_night"
+            
+            android:tint="@color/dtv_spotlight_icon_tint" />
+    </LinearLayout>
+    </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/dtv_caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:textColor="#8CFFFFFF"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/debrify_time_display"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+</FrameLayout>

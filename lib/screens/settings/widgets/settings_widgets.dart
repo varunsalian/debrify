@@ -137,6 +137,11 @@ abstract final class SettingsRows {
     title: 'Quick Play',
     subtitle: 'Timeouts, series packs, and cache fallback',
   );
+  static const discoverDefault = SettingsRowContent(
+    icon: Icons.explore_rounded,
+    title: 'Default View',
+    subtitle: 'Choose what Discover shows when it opens',
+  );
   static const debrifyTv = SettingsRowContent(
     icon: Icons.live_tv_rounded,
     title: 'Debrify TV',
@@ -232,6 +237,20 @@ abstract final class SettingsRows {
   static const playerDock = SettingsRowContent(
     icon: Icons.tune_rounded,
     title: 'Player Controls',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen skin) — passed per call site. Android
+  // TV only: the native player's control skin (OTT dock vs Legacy).
+  static const tvPlayerControls = SettingsRowContent(
+    icon: Icons.tune_rounded,
+    title: 'Player Controls',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen style) — passed per call site. Android
+  // TV only: the Debrify TV playback screen (native TorboxTvPlayerActivity).
+  static const debrifyTvPlayer = SettingsRowContent(
+    icon: Icons.live_tv_rounded,
+    title: 'Debrify TV Player',
     subtitle: '',
   );
   // Subtitle is dynamic (the chosen style) — passed per call site.

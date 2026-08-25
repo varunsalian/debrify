@@ -225,7 +225,10 @@ Future<void> handleMdblistMenuAction(
   if (success &&
       (action == MdblistItemMenuAction.markWatched ||
           action == MdblistItemMenuAction.markUnwatched)) {
-    WatchedStatusService.instance.refresh();
+    // This action is already on an active UI surface, so consume the dirty
+    // watched-state marker now. Playback scrobbles remain deferred until Home
+    // is revealed.
+    WatchedStatusService.instance.ensureStarted();
   }
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(

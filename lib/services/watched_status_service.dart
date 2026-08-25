@@ -17,6 +17,7 @@ class WatchedStatusService extends ChangeNotifier {
   WatchedStatusService._() {
     StorageService.movieFinishedRevision.addListener(refresh);
     StorageService.localCompletionRevision.addListener(_refreshLocal);
+    MdblistService.instance.watchedRevision.addListener(_markMdblistDirty);
   }
 
   static final WatchedStatusService instance = WatchedStatusService._();
@@ -34,6 +35,9 @@ class WatchedStatusService extends ChangeNotifier {
   bool _refreshing = false;
   bool _refreshPending = false;
   int _localGeneration = 0;
+  bool _mdblistDirty = false;
+  DateTime? _mdblistDirtyAt;
+  Timer? _mdblistRefreshTimer;
 
   bool isWatched(String imdbId, String contentType) {
     final id = imdbId.trim().toLowerCase();
@@ -52,8 +56,50 @@ class WatchedStatusService extends ChangeNotifier {
 
   /// Starts loading without returning work for the UI to await.
   void ensureStarted() {
-    if (_started) return;
-    _started = true;
+    if (!_started) {
+      _started = true;
+      refresh();
+      return;
+    }
+    // MDBList scrobble completion happens while Home is normally covered by
+    // the player route. Defer the quota-sensitive account snapshot until an
+    // active poster asks again instead of fetching every tracker immediately
+    // after every episode.
+    if (_mdblistDirty && !_refreshing) {
+      _consumeMdblistDirty();
+    }
+  }
+
+  void _markMdblistDirty() {
+    _mdblistDirty = true;
+    _mdblistDirtyAt = DateTime.now();
+    _mdblistRefreshTimer?.cancel();
+    _mdblistRefreshTimer = null;
+  }
+
+  void _consumeMdblistDirty() {
+    if (!_mdblistDirty) return;
+    // MDBList updates aggregate show completion shortly after accepting an
+    // episode stop. Waiting here avoids consuming quota on a snapshot that is
+    // guaranteed to be stale and then having no later invalidation to retry.
+    const settleTime = Duration(seconds: 3);
+    final dirtyAt = _mdblistDirtyAt;
+    final elapsed = dirtyAt == null
+        ? settleTime
+        : DateTime.now().difference(dirtyAt);
+    final remaining = settleTime - elapsed;
+    if (remaining > Duration.zero) {
+      _mdblistRefreshTimer ??= Timer(remaining, () {
+        _mdblistRefreshTimer = null;
+        if (!_mdblistDirty) return;
+        _mdblistDirty = false;
+        _mdblistDirtyAt = null;
+        refresh();
+      });
+      return;
+    }
+    _mdblistDirty = false;
+    _mdblistDirtyAt = null;
     refresh();
   }
 
@@ -102,6 +148,12 @@ class WatchedStatusService extends ChangeNotifier {
         if (_refreshPending) {
           _refreshPending = false;
           _startRefresh();
+        } else if (_mdblistDirty && _mdblistDirtyAt != null) {
+          // A watched mutation can land while this pass is in flight. Badge
+          // rebuilds happen before `_refreshing` is cleared, so hand the dirty
+          // state off here rather than waiting for an unrelated future build.
+          // API failures leave dirtyAt null and deliberately do not auto-loop.
+          _consumeMdblistDirty();
         }
       }),
     );
@@ -109,6 +161,7 @@ class WatchedStatusService extends ChangeNotifier {
 
   Future<void> _refresh(int generation) async {
     final localGeneration = ++_localGeneration;
+    final mdblistRevision = MdblistService.instance.watchedRevision.value;
     // Start network work immediately, but publish the cheap local snapshot as
     // soon as it resolves rather than waiting for either tracker.
     final traktFuture = _fetchTrakt();
@@ -157,6 +210,16 @@ class WatchedStatusService extends ChangeNotifier {
     if (mdblist != null) {
       _mdblistMovies = mdblist.movies;
       _mdblistSeries = mdblist.series;
+      if (MdblistService.instance.watchedRevision.value == mdblistRevision) {
+        _mdblistDirty = false;
+        _mdblistDirtyAt = null;
+        _mdblistRefreshTimer?.cancel();
+        _mdblistRefreshTimer = null;
+      }
+    } else {
+      // A transient/rate-limit failure must retain the old truth and retry the
+      // next time Home becomes active.
+      _mdblistDirty = true;
     }
     notifyListeners();
   }

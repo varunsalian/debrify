@@ -53,6 +53,7 @@ class TvControls extends StatefulWidget {
     this.onRecord,
     this.infoPanel,
     this.onInteract,
+    this.titleIsClean = false,
   });
 
   /// Fired whenever the user actually works the dock — pressing OK on a
@@ -63,6 +64,14 @@ class TvControls extends StatefulWidget {
   final VoidCallback? onInteract;
 
   final String title;
+
+  /// True when [title] is a fetched, human name (TVMaze episode title,
+  /// catalog content title, channel name) rather than a release filename.
+  /// The release-noise cleaner then stays away from it: its token list
+  /// ("proper", "extended", "imax", …) would truncate a real episode title
+  /// that happens to contain one.
+  final bool titleIsClean;
+
   final String? subtitle;
   final ValueListenable<PlaybackUiClockValue> clock;
   final bool isPlaying;
@@ -212,7 +221,9 @@ class _TvControlsState extends State<TvControls> {
               stops: [0.0, 0.28, 0.62, 1.0],
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(56, 52, 56, 18),
+          // 36/12 vertical (was 52/18): the dock read ~15% too tall on real
+          // sets; the scrim still gets enough headroom to fade.
+          padding: const EdgeInsets.fromLTRB(56, 36, 56, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,7 +231,7 @@ class _TvControlsState extends State<TvControls> {
               if (widget.infoPanel != null) widget.infoPanel!,
               _identityRow(),
               if (showProgress) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 ValueListenableBuilder<PlaybackUiClockValue>(
                   valueListenable: widget.clock,
                   builder: (context, value, _) => _TvProgressRow(
@@ -234,12 +245,12 @@ class _TvControlsState extends State<TvControls> {
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _transportRow(),
               // Fixed height so the row never jumps as the label appears.
               // Reserved height so the row never shifts as the label fades in.
               SizedBox(
-                height: 14,
+                height: 13,
                 child: AnimatedOpacity(
                   opacity: _focusedLabel == null ? 0 : 1,
                   duration: const Duration(milliseconds: 120),
@@ -248,6 +259,9 @@ class _TvControlsState extends State<TvControls> {
                     style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 11.5,
+                      // Default line height (~1.17) overflows the 13lp slot
+                      // and clips descenders; 1.1 matches the subtitle.
+                      height: 1.1,
                       letterSpacing: 0.3,
                     ),
                   ),
@@ -272,7 +286,9 @@ class _TvControlsState extends State<TvControls> {
             children: [
               if (widget.title.isNotEmpty)
                 Text(
-                  _cleanTitle(widget.title),
+                  widget.titleIsClean
+                      ? widget.title
+                      : _cleanTitle(widget.title),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

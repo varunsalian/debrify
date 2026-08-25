@@ -4,7 +4,7 @@ import android.os.Handler
 import android.os.SystemClock
 
 /**
- * Phases 1/3/5 of the IPTV playback-resilience plan (design/plans/
+ * Phases 1/3/5 of the IPTV playback-resilience plan (dev/design/plans/
  * IPTV_FLAWLESS_PLAYBACK_PLAN.md): the ONE recovery state machine for live
  * IPTV playback in the native TV player.
  *

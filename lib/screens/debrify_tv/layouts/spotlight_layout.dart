@@ -20,7 +20,7 @@ import 'spotlight_stage.dart';
 /// television is tested before anything else — a 1920×1080 TV is 960×540
 /// logical, and a width-only check would send it to a touch arm.
 ///
-/// The mock at `design/mockups/debrify_tv_spotlight_mockup/` is the spec;
+/// The mock at `dev/design/mockups/debrify_tv_spotlight_mockup/` is the spec;
 /// every number is logical (÷2 of its 1920×1080 canvas).
 class SpotlightLayout extends StatelessWidget {
   final DebrifyTvView view;

@@ -1,0 +1,849 @@
+<title>Debrify — Round 6: Quiet Craft</title>
+<style>
+  :root {
+    --ink: #E7ECF5;
+    --dim: #8A93A6;
+    --line: rgba(255,255,255,.08);
+    --bg: #07080C;
+    --card: #0B0D13;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { max-width: 1180px; margin: 0 auto; padding: 56px 24px 8px; }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 28px;
+    font-weight: 300;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+  }
+  header p { margin: 0 0 10px; max-width: 66ch; color: var(--dim); }
+  .grid {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+    display: grid;
+    gap: 40px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .shape { display: flex; gap: 8px; margin-top: 18px; }
+  .shape button {
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--dim);
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .shape button:focus-visible { outline: 2px solid #6E86B8; outline-offset: 2px; }
+  .shape button.on { color: var(--ink); border-color: rgba(255,255,255,.34); }
+  .stage { position: relative; aspect-ratio: 16 / 9; background: #000; }
+  /* Phone shape: the splash is portrait on a handset, so review it portrait. */
+  body.phone .stage {
+    aspect-ratio: 9 / 19.5;
+    max-width: 380px;
+    margin: 28px auto;
+    border-radius: 26px;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .replay {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    padding: 7px 14px;
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 999px;
+    background: rgba(0,0,0,.42);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .25s;
+  }
+  .stage:hover .replay { opacity: 1; }
+  .meta { padding: 18px 22px 22px; }
+  .meta h2 { margin: 0 0 4px; font-size: 17px; font-weight: 500; letter-spacing: .04em; }
+  .meta .sub { margin: 0 0 6px; color: var(--dim); }
+  .meta .owns { margin: 0 0 10px; color: #7B8497; font-size: 13px; }
+  .meta .beats { margin: 0; color: #6E7689; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .tag {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    vertical-align: 2px;
+  }
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+    color: var(--dim);
+    font-size: 13px;
+  }
+  footer code { color: var(--ink); }
+  body.solo header, body.solo footer, body.solo .meta { display: none; }
+  body.solo .grid { max-width: none; padding: 0; }
+  body.solo .card { border: 0; border-radius: 0; }
+  body.solo .stage { aspect-ratio: auto; height: 100vh; }
+</style>
+
+<header>
+  <h1>Round 6 — Quiet Craft</h1>
+  <p>
+    Four idents built against everything that makes a splash look generated:
+    no particles, no aurora, no lens flare, no cyan-to-magenta, no shake, no
+    five-beat crescendo. Each one is a real material with a real process
+    happening to it, and each has exactly <em>one</em> event. The type is
+    never made of light — it is pressed, developed, cleared or cast.
+  </p>
+  <p>
+    All four share one composed lockup — mark inline, left of the word, on a
+    single baseline — so the difference between them is entirely material.
+    Every reveal settles to a completely motionless frame: the splash is held
+    while Home prepaints behind it, so the last frame has to be still.
+  </p>
+  <div class="shape" role="group" aria-label="Screen shape">
+    <button type="button" data-shape="tv" class="on">TV 16:9</button>
+    <button type="button" data-shape="phone">Phone 9:19.5</button>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<footer>
+  <p>
+    Review hooks: <code>#still</code> draws every card at its final frame,
+    <code>#still&amp;p=0.45</code> freezes mid-reveal, <code>#id=imprint</code>
+    (or <code>develop</code>, <code>frost</code>, <code>cast</code>) opens one
+    full-screen, <code>#shape=phone</code> starts portrait. Click a stage to
+    replay.
+  </p>
+</footer>
+
+<script>
+// ---------------------------------------------------------------- helpers
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+// Normalized progress through a beat, 0 before it, 1 after.
+const seg = (p, a, b) => clamp((p - a) / (b - a), 0, 1);
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeInOut = t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const lerp = (a, b, t) => a + (b - a) * t;
+const mix = (c1, c2, t) => `rgb(${Math.round(lerp(c1[0], c2[0], t))},${
+  Math.round(lerp(c1[1], c2[1], t))},${Math.round(lerp(c1[2], c2[2], t))})`;
+// Deterministic, so every static texture is identical on every launch and
+// every frame — a per-frame random would never settle.
+const rng = seed => {
+  let s = seed >>> 0;
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+};
+
+const WORD = 'DEBRIFY';
+const SANS = '-apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif';
+
+// The house mark: a play triangle with rounded corners (identPlayPath).
+// Spans .73s wide by .80s tall about (cx, cy).
+function markPath(ctx, cx, cy, s) {
+  const pts = [
+    [cx - .30 * s, cy - .40 * s],
+    [cx - .30 * s, cy + .40 * s],
+    [cx + .43 * s, cy],
+  ];
+  const r = .14 * s;
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = pts[i], b = pts[(i + 1) % 3], c = pts[(i + 2) % 3];
+    const v1 = [a[0] - b[0], a[1] - b[1]], v2 = [c[0] - b[0], c[1] - b[1]];
+    const l1 = Math.hypot(v1[0], v1[1]) || 1, l2 = Math.hypot(v2[0], v2[1]) || 1;
+    const t1 = [b[0] + v1[0] * r / l1, b[1] + v1[1] * r / l1];
+    const t2 = [b[0] + v2[0] * r / l2, b[1] + v2[1] * r / l2];
+    if (i === 0) ctx.moveTo(t1[0], t1[1]); else ctx.lineTo(t1[0], t1[1]);
+    ctx.quadraticCurveTo(b[0], b[1], t2[0], t2[1]);
+  }
+  ctx.closePath();
+}
+
+// Measure a tracked lockup ONCE, so an ident that draws the same word several
+// times per frame (relief walls, latent + crisp copies, shadow blur stack)
+// pays for measurement once. [maxW] shrinks the whole thing rather than
+// letting it run off a narrow screen — a phone splash is ~390pt wide.
+function lay(ctx, text, size, track, weight, maxW, family) {
+  const fam = family || SANS;
+  const face = s => `${weight} ${s}px ${fam}`;
+  ctx.font = face(size);
+  let w = [...text].map(ch => ctx.measureText(ch).width);
+  const sum = () => w.reduce((a, b) => a + b, 0) + track * (text.length - 1);
+  let total = sum();
+  if (maxW && total > maxW) {
+    const k = maxW / total;
+    size *= k;
+    track *= k;
+    ctx.font = face(size);
+    w = [...text].map(ch => ctx.measureText(ch).width);
+    total = sum();
+  }
+  const x = [];               // left edge of each glyph, from the word's left
+  let cur = 0;
+  for (let i = 0; i < text.length; i++) { x.push(cur); cur += w[i] + track; }
+  return { text, font: face(size), size, track, w, x, total };
+}
+
+// The composed lockup every ident shares: mark, gap, tracked caps, one
+// baseline. Returns absolute positions, so each ident only decides how to
+// paint the shapes — never where they go.
+function lockup(ctx, cx, baseline, size, trackRatio, weight, maxW, family) {
+  const ms = size * .74;                       // mark box
+  const gap = size * .42;
+  const L = lay(ctx, WORD, size, size * trackRatio, weight,
+                maxW - ms * .73 - gap, family);
+  const total = ms * .73 + gap + L.total;
+  const left = cx - total / 2;
+  return {
+    L, size: L.size, ms, total, baseline,
+    markX: left + ms * .365,
+    markY: baseline - L.size * .35,
+    wordLeft: left + ms * .73 + gap,
+    gx: i => left + ms * .73 + gap + L.x[i],
+  };
+}
+
+// Paint the lockup's glyphs with per-glyph hooks. [dx]/[dy] shift the whole
+// thing (relief walls, shadow copies) without re-measuring anything.
+function glyphs(ctx, k, dx, dy, color, alphaAt) {
+  ctx.font = k.L.font;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = color;
+  for (let i = 0; i < k.L.text.length; i++) {
+    const a = alphaAt ? alphaAt(i) : 1;
+    if (a <= .004) continue;
+    ctx.globalAlpha = a;
+    ctx.fillText(k.L.text[i], k.gx(i) + dx, k.baseline + dy);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// A gradient baked ONCE into the unit rect (-.5,-.5)..(.5,.5) / unit circle
+// and stretched with translate+scale — one shader serves every frame at every
+// size. The Anamorphic idiom from launch_ident.dart, and the reason
+// soft-edged shapes are affordable on a TV.
+function unitGrad(cache, key, ctx, kind, stops) {
+  if (cache[key]) return cache[key];
+  const g = kind === 'x' ? ctx.createLinearGradient(-.5, 0, .5, 0)
+          : kind === 'y' ? ctx.createLinearGradient(0, -.5, 0, .5)
+          : ctx.createRadialGradient(0, 0, 0, 0, 0, .5);
+  for (const [o, c] of stops) g.addColorStop(o, c);
+  return (cache[key] = g);
+}
+
+function stretch(ctx, grad, cx, cy, w, h, alpha, rot) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  if (rot) ctx.rotate(rot);
+  ctx.scale(w, h);
+  ctx.fillStyle = grad;
+  ctx.fillRect(-.5, -.5, 1, 1);
+  ctx.restore();
+}
+
+// Tooth. Every one of these idents is a surface, and a surface with no tooth
+// is a gradient. Static, so it lives in the backdrop and rasters once — in
+// Flutter this is a custom Decoration, the way Blueprint's graph paper is.
+function tooth(ctx, W, H, seed, count, light, dark, maxA, s) {
+  const r = rng(seed);
+  for (let i = 0; i < count; i++) {
+    const x = r() * W, y = r() * H, v = r();
+    ctx.globalAlpha = maxA * (.25 + .75 * r());
+    ctx.fillStyle = v > .5 ? light : dark;
+    ctx.fillRect(x, y, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ------------------------------------------------------------- IDENT ONE
+// Imprint — the wordmark is not drawn. It is pressed into the stock, and a
+// single hard light rakes across the sheet and finds it.
+const imprint = {
+  id: 'imprint',
+  label: 'Imprint',
+  subtitle: 'A blind deboss on uncoated board, found by one raking light',
+  owns: 'Material: uncoated soft-touch board · Light: one warm rake · Type: heavy tight grotesk',
+  duration: 2200,
+  beats: '.02–.82 the light crosses the sheet · relief exists only where it has been · .50–.90 the pressed faces take a whisper of warm ink · light rests right of centre',
+  base: '#0C0C0E',
+  backdrop(ctx, W, H) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#131315');
+    g.addColorStop(.60, '#0D0D0F');
+    g.addColorStop(1, '#09090B');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // Uncoated stock: a fine, irregular tooth. This is most of what separates
+    // "board" from "dark rectangle".
+    tooth(ctx, W, H, 20260806, Math.round(W * H * .011), '#FFFFFF', '#000000',
+          .05, 1.35);
+    const v = ctx.createRadialGradient(W * .5, H * .5, 0, W * .5, H * .5,
+                                       Math.hypot(W, H) * .60);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,.46)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, H);
+  },
+  paint(ctx, W, H, p, g) {
+    const tall = H > W * 1.1;
+    const cy = H * (tall ? .50 : .52);
+    const size = Math.min(H * .105, W * .120);
+    const k = lockup(ctx, W * .5, cy, size, .10, 800, W * .76);
+    const S = k.size;
+
+    // The light: one long pool, raked a few degrees off horizontal so it
+    // reads as a source above and to the side rather than a spotlight.
+    // easeInOut, not easeOut — an easeOut rake is over inside the first third
+    // and the reveal it exists to perform is gone before you register it.
+    // Zero derivative at both ends, so the settled frame is dead still.
+    const travel = easeInOut(seg(p, .02, .82));
+    const lx = lerp(-W * .22, W * .40, travel);
+    const pool = unitGrad(g, 'pool', ctx, 'c', [
+      [0, 'rgba(255,246,230,.21)'],
+      [.40, 'rgba(255,243,224,.075)'],
+      [1, 'rgba(255,240,220,0)'],
+    ]);
+    stretch(ctx, pool, lx, cy - H * .07, W * 1.24, H * 1.42, 1, -.14);
+
+    // Relief. A blind deboss is a valley: the wall on the LIGHT side turns
+    // away from it and goes to shadow, and the far wall is the one that
+    // catches it. Reversed, this reads as a 2003 bevel-and-emboss.
+    // Two passes per wall — a hard inner edge and a wider, weaker one — so
+    // the valley has a falloff instead of a single hard offset.
+    const d = Math.max(1, S * .034);
+    const ink = seg(p, .50, .90);
+    const inkCol = mix([13, 13, 15], [38, 35, 31], ink);
+    const walls = [[1, .95, .70], [.52, .55, .40]];   // scale, shadowA, litA
+
+    const strength = x => {
+      const near = Math.exp(-Math.pow((x - lx) / (W * .36), 2));
+      return Math.max(near, x < lx ? .60 : 0);   // the press stays pressed
+    };
+
+    ctx.font = k.L.font;
+    ctx.textBaseline = 'alphabetic';
+    for (let i = 0; i < k.L.text.length; i++) {
+      const x = k.gx(i);
+      const s = strength(x + k.L.w[i] * .5);
+      if (s <= .012) continue;
+      const dir = x < lx ? -1 : 1;
+      for (const [sc, sa, la] of walls) {
+        ctx.globalAlpha = s * sa;
+        ctx.fillStyle = '#000000';
+        ctx.fillText(k.L.text[i], x - dir * d * sc, cy - d * .92 * sc);
+        ctx.globalAlpha = s * la;
+        ctx.fillStyle = '#DADEE6';
+        ctx.fillText(k.L.text[i], x + dir * d * sc, cy + d * .92 * sc);
+      }
+      // The pressed face itself, in board colour — the letter exists only as
+      // its edges — warming a little once the light has gone by, as if the
+      // press left the faintest ink in the valley.
+      ctx.globalAlpha = s;
+      ctx.fillStyle = inkCol;
+      ctx.fillText(k.L.text[i], x, cy);
+    }
+    ctx.globalAlpha = 1;
+
+    // The mark, pressed by the same die.
+    const ms = strength(k.markX);
+    if (ms > .012) {
+      const dir = k.markX < lx ? -1 : 1;
+      for (const [sc, sa, la] of walls) {
+        ctx.globalAlpha = ms * sa;
+        ctx.fillStyle = '#000000';
+        markPath(ctx, k.markX - dir * d * sc, k.markY - d * .92 * sc, k.ms);
+        ctx.fill();
+        ctx.globalAlpha = ms * la;
+        ctx.fillStyle = '#DADEE6';
+        markPath(ctx, k.markX + dir * d * sc, k.markY + d * .92 * sc, k.ms);
+        ctx.fill();
+      }
+      ctx.globalAlpha = ms;
+      ctx.fillStyle = inkCol;
+      markPath(ctx, k.markX, k.markY, k.ms);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  },
+};
+
+// ------------------------------------------------------------- IDENT TWO
+// Develop — a fibre print in the tray under a safelight. The image is
+// already there; it just comes up. Owns: the only ident with a light ground,
+// the only one whose event is chemical rather than optical.
+const develop = {
+  id: 'develop',
+  label: 'Develop',
+  subtitle: 'A fibre print coming up in the tray under a safelight',
+  owns: 'Material: warm fibre paper · Light: dim amber safelight · Type: neutral caps, printed',
+  duration: 2600,
+  beats: '.10–.62 density comes up unevenly, densest areas first · edges harden out of the latent blur · .66–.86 the print reaches full black and stops',
+  base: '#0A0807',
+  backdrop(ctx, W, H) {
+    // Bench under a safelight: warm, low, and never bright enough to glare.
+    ctx.fillStyle = '#0A0807';
+    ctx.fillRect(0, 0, W, H);
+    const sl = ctx.createRadialGradient(W * .5, H * .18, 0, W * .5, H * .18,
+                                        Math.hypot(W, H) * .72);
+    sl.addColorStop(0, 'rgba(196,96,44,.11)');
+    sl.addColorStop(1, 'rgba(140,50,20,0)');
+    ctx.fillStyle = sl;
+    ctx.fillRect(0, 0, W, H);
+
+    // The sheet, lying slightly off-square in the tray — a print squared to
+    // the frame reads as a business card, and that one detail is most of the
+    // difference. Held well under white, too: a full-brightness paper on a
+    // TV at night is a flashbang.
+    const r = develop.sheet(W, H);
+    ctx.save();
+    ctx.translate(r.cx, r.cy);
+    ctx.rotate(r.rot);
+    ctx.translate(-r.cx, -r.cy);
+    for (let i = 5; i >= 1; i--) {
+      ctx.globalAlpha = .10;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(r.x - i * .8, r.y + i * 2.4, r.w + i * 1.6, r.h + i * 1.1);
+    }
+    ctx.globalAlpha = 1;
+    const pg = ctx.createLinearGradient(r.x, r.y, r.x + r.w * .3, r.y + r.h);
+    pg.addColorStop(0, '#BFB6A4');
+    pg.addColorStop(.5, '#B1A794');
+    pg.addColorStop(1, '#9A9080');
+    ctx.fillStyle = pg;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+    // Fibre tooth, scattered over the SHEET's rect — scattering over the
+    // whole canvas and clipping throws most of the specks away and the
+    // paper comes out looking like flat card.
+    const t = rng(19551104);
+    for (let i = 0, n = Math.round(r.w * r.h * .05); i < n; i++) {
+      const x = r.x + t() * r.w, y = r.y + t() * r.h, v = t();
+      ctx.globalAlpha = .10 * (.2 + t());
+      ctx.fillStyle = v > .5 ? '#FFFFFF' : '#5E564A';
+      ctx.fillRect(x, y, 1.3, 1.3);
+    }
+    // Uneven development: broad, soft blotches of density across the sheet.
+    // Real fibre paper is never one flat tone.
+    for (let i = 0; i < 30; i++) {
+      const x = r.x + t() * r.w, y = r.y + t() * r.h;
+      const rad = r.w * (.10 + t() * .26);
+      const bg = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      const dark = t() > .5;
+      bg.addColorStop(0, dark ? 'rgba(70,62,52,.055)' : 'rgba(226,216,196,.05)');
+      bg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = bg;
+      ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+    // The safelight has to land ON the paper too, or the sheet reads as a
+    // neutral card someone dropped into an amber room.
+    ctx.fillStyle = 'rgba(178,86,36,.13)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    // Wet sheen along the top edge — it is lying in developer.
+    const sh = ctx.createLinearGradient(0, r.y, 0, r.y + r.h * .34);
+    sh.addColorStop(0, 'rgba(255,224,186,.20)');
+    sh.addColorStop(1, 'rgba(255,224,186,0)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(r.x, r.y, r.w, r.h * .34);
+    ctx.restore();
+    ctx.restore();
+  },
+  sheet(W, H) {
+    const tall = H > W * 1.1;
+    const w = W * (tall ? .80 : .52);
+    const h = tall ? w * 1.26 : H * .60;
+    const x = (W - w) / 2, y = (H - h) / 2;
+    return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, rot: -0.026 };
+  },
+  paint(ctx, W, H, p) {
+    const r = develop.sheet(W, H);
+    const size = Math.min(r.h * .19, r.w * .125);
+    const k = lockup(ctx, W * .5, r.y + r.h * .57, size, .11, 700, r.w * .78);
+    const S = k.size;
+    // Everything printed lives on the sheet, so it tilts with it.
+    ctx.save();
+    ctx.translate(r.cx, r.cy);
+    ctx.rotate(r.rot);
+    ctx.translate(-r.cx, -r.cy);
+
+    // A print does not come up left to right. It comes up all over, at
+    // different rates, densest areas first — so the order is a fixed
+    // permutation, not a sweep. Fixed, because the settled frame must be
+    // byte-identical every launch.
+    const ORDER = [3, 0, 5, 1, 6, 2, 4];
+    const at = i => {
+      const s = .10 + ORDER[i] * .045;
+      return seg(p, s, s + .40);
+    };
+    // The last beat is the one event: the print reaches full black.
+    const full = easeOut(seg(p, .66, .88));
+
+    const dark = [26, 22, 18], mid = [122, 112, 98];
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < k.L.text.length; i++) {
+      const e = easeOut(at(i));
+      if (e <= .01) continue;
+      // Latent: soft and spread before the edges harden. A wide stroke
+      // standing in for blur — no saveLayer, no MaskFilter on the TV path.
+      const soft = e * (1 - e) * 4;
+      if (soft > .02) {
+        ctx.globalAlpha = soft * .42;
+        ctx.strokeStyle = mix(mid, dark, e);
+        ctx.lineWidth = S * .20 * (1 - e);
+        ctx.font = k.L.font;
+        ctx.textBaseline = 'alphabetic';
+        ctx.strokeText(k.L.text[i], k.gx(i), k.baseline);
+      }
+      ctx.globalAlpha = Math.pow(e, 1.5);
+      ctx.fillStyle = mix(mid, dark, Math.min(1, e * .8 + full * .5));
+      ctx.font = k.L.font;
+      ctx.fillText(k.L.text[i], k.gx(i), k.baseline);
+    }
+    ctx.globalAlpha = 1;
+
+    // The mark is the densest thing on the sheet, so it comes up first.
+    const me = easeOut(seg(p, .06, .46));
+    if (me > .01) {
+      const soft = me * (1 - me) * 4;
+      if (soft > .02) {
+        ctx.globalAlpha = soft * .42;
+        ctx.strokeStyle = mix(mid, dark, me);
+        ctx.lineWidth = S * .20 * (1 - me);
+        markPath(ctx, k.markX, k.markY, k.ms);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = Math.pow(me, 1.5);
+      ctx.fillStyle = mix(mid, dark, Math.min(1, me * .8 + full * .5));
+      markPath(ctx, k.markX, k.markY, k.ms);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  },
+};
+
+// ----------------------------------------------------------- IDENT THREE
+// Frost — the pane is frozen over. Warmth spreads from the mark and clears
+// the glass in the shape of the lockup. Owns: cold, a bright textured ground
+// with DARK type, and a reveal that removes material instead of adding light.
+const frost = {
+  id: 'frost',
+  label: 'Frost',
+  subtitle: 'A frozen pane clearing in the shape of the lockup',
+  owns: 'Material: frost on cold glass · Light: flat, from behind the pane · Type: dark glass, cleared',
+  duration: 2400,
+  beats: '.04–.62 warmth spreads from the mark outward · each letter clears as it is reached · .30–.88 meltwater edges catch the light · nothing refreezes',
+  base: '#070C11',
+  backdrop(ctx, W, H) {
+    ctx.fillStyle = '#0A1017';
+    ctx.fillRect(0, 0, W, H);
+    // Frost, everywhere and fairly even — only a little heavier at the edges
+    // where the pane is coldest. It has to stay BRIGHT across the middle:
+    // the letters are dark windows cut in it, and a frost field that thins
+    // toward the centre would leave them with nothing to read against.
+    const r = rng(760213);
+    const cx = W * .5, cy = H * .5, R = Math.hypot(W, H) * .5;
+    const n = Math.round(W * H * .052);
+    for (let i = 0; i < n; i++) {
+      const x = r() * W, y = r() * H;
+      const t = Math.hypot(x - cx, y - cy) / R;          // 0 centre, 1 corner
+      if (r() > .62 + t * .38) continue;
+      ctx.globalAlpha = (.07 + r() * .34) * (.72 + t * .38);
+      ctx.fillStyle = r() > .38 ? '#C6D6E4' : '#87A0B6';
+      const s = 1 + r() * 1.8;
+      ctx.fillRect(x, y, s, s);
+    }
+    // Larger crystals, so the texture has structure and not just noise.
+    for (let i = 0; i < 520; i++) {
+      const x = r() * W, y = r() * H;
+      const t = Math.hypot(x - cx, y - cy) / R;
+      ctx.globalAlpha = (.05 + r() * .10) * (.6 + t * .6);
+      ctx.fillStyle = '#D6E6F2';
+      const s = 2 + r() * 5.5;
+      ctx.beginPath();
+      ctx.ellipse(x, y, s, s * (.28 + r() * .5), r() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // A mist wash over the whole pane. Specks alone leave the field's AVERAGE
+    // barely above the glass behind them, and the cut letters — which are
+    // that same glass — then read as outlines instead of as windows.
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(162,186,206,.15)';
+    ctx.fillRect(0, 0, W, H);
+  },
+  paint(ctx, W, H, p, g) {
+    const tall = H > W * 1.1;
+    const cy = H * (tall ? .50 : .52);
+    const size = Math.min(H * .105, W * .120);
+    const k = lockup(ctx, W * .5, cy, size, .22, 500, W * .78);
+    const S = k.size;
+
+    // Warmth spreads from the mark and only THINS the pane around the
+    // lockup — the frost never fully clears except inside the letterforms.
+    // Clearing a whole oval was the first version and it killed the ident:
+    // cleared glass and a cleared letter are the same dark, so the type
+    // disappeared into its own halo.
+    const grow = easeInOut(seg(p, .04, .70));
+    const thin = unitGrad(g, 'thin', ctx, 'c', [
+      [0, 'rgba(10,16,23,.34)'],
+      [.55, 'rgba(10,16,23,.20)'],
+      [1, 'rgba(10,16,23,0)'],
+    ]);
+    stretch(ctx, thin, k.markX + k.total * .42, cy - S * .30,
+            k.total * lerp(.6, 2.2, grow), S * lerp(1.6, 4.4, grow), 1);
+
+    // Each letter clears when the warmth reaches it. Distance from the mark,
+    // normalised against the lockup's own reach — never the screen diagonal,
+    // which collapses the whole cadence into a few frames.
+    const reach = k.total * 1.02;
+    const at = x => {
+      const t = clamp((x - k.markX) / reach, 0, 1);
+      return easeOut(seg(p, .06 + t * .46, .06 + t * .46 + .30));
+    };
+
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < k.L.text.length; i++) {
+      const x = k.gx(i);
+      const e = at(x + k.L.w[i] * .5);
+      if (e <= .01) continue;
+      ctx.font = k.L.font;
+      ctx.textBaseline = 'alphabetic';
+      // Thicker frost banked around the cleared letterform.
+      ctx.globalAlpha = e * .30;
+      ctx.strokeStyle = '#9FB6C8';
+      ctx.lineWidth = S * .085;
+      ctx.strokeText(k.L.text[i], x, cy);
+      // Clear glass: what you see through the pane, which is the dark night.
+      ctx.globalAlpha = e;
+      ctx.fillStyle = '#03060A';
+      ctx.fillText(k.L.text[i], x, cy);
+      // Meltwater on the edge of the cut, catching the light.
+      ctx.globalAlpha = e * .55;
+      ctx.strokeStyle = '#D8E8F3';
+      ctx.lineWidth = Math.max(1, S * .013);
+      ctx.strokeText(k.L.text[i], x, cy);
+    }
+    ctx.globalAlpha = 1;
+
+    // The mark clears first — it is where the warmth is coming from.
+    const me = easeOut(seg(p, .02, .30));
+    if (me > .01) {
+      ctx.globalAlpha = me * .30;
+      ctx.strokeStyle = '#9FB6C8';
+      ctx.lineWidth = S * .085;
+      markPath(ctx, k.markX, k.markY, k.ms);
+      ctx.stroke();
+      ctx.globalAlpha = me;
+      ctx.fillStyle = '#03060A';
+      markPath(ctx, k.markX, k.markY, k.ms);
+      ctx.fill();
+      ctx.globalAlpha = me * .55;
+      ctx.strokeStyle = '#D8E8F3';
+      ctx.lineWidth = Math.max(1, S * .013);
+      markPath(ctx, k.markX, k.markY, k.ms);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  },
+};
+
+// ------------------------------------------------------------ IDENT FOUR
+// Cast — the lockup stands off a plaster wall. A low light rises; its
+// shadow swings in from enormous and soft and settles short and hard.
+// Owns: an object and its shadow, plaster, and the only ident whose drama is
+// geometry rather than surface.
+const cast = {
+  id: 'cast',
+  label: 'Cast',
+  subtitle: 'A low light rises; the shadow shortens and hardens',
+  owns: 'Material: plaster wall, an object standing off it · Light: one source, rising · Type: bone caps, standing proud',
+  duration: 2200,
+  beats: '.02–.86 the source rises · shadow swings from enormous and soft to short and hard · .20–.78 the face comes up out of the wall · settles',
+  base: '#100D0B',
+  backdrop(ctx, W, H) {
+    const g = ctx.createLinearGradient(W * .18, 0, W * .9, H);
+    g.addColorStop(0, '#1B1613');
+    g.addColorStop(.55, '#13100D');
+    g.addColorStop(1, '#0C0A09');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // Plaster: a coarser, softer tooth than board.
+    tooth(ctx, W, H, 90210, Math.round(W * H * .008), '#FFFFFF', '#000000',
+          .045, 2);
+    const v = ctx.createRadialGradient(W * .42, H * .40, 0, W * .5, H * .5,
+                                       Math.hypot(W, H) * .62);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,.5)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, H);
+  },
+  paint(ctx, W, H, p) {
+    const tall = H > W * 1.1;
+    const cy = H * (tall ? .50 : .53);
+    const size = Math.min(H * .100, W * .115);
+    const k = lockup(ctx, W * .5, cy, size, .12, 700, W * .74);
+    const S = k.size;
+
+    // The source rises. easeInOut so the long shadow is held long enough to
+    // be read as a shadow, and both ends have zero velocity.
+    const rise = easeInOut(seg(p, .02, .86));
+
+    // Cast shadow: sheared right and stretched down when the source is low,
+    // collapsing to a short offset as it climbs. Anchored at the CAP LINE,
+    // not the baseline — anchored at the baseline the projection runs upward
+    // out of the letters, which reads as a light lying on the floor.
+    const skew = lerp(1.35, .16, rise);
+    const sy = lerp(3.20, 1.10, rise);
+    const sAlpha = lerp(.40, .74, rise);
+    const capTop = k.baseline - S * .72;
+
+    // Penumbra: instead of offsetting copies (offsets get multiplied by the
+    // shear and comb into a zigzag), each copy is the same shadow drawn with
+    // a slightly different projection. The spread then grows with distance
+    // from the contact point and stays tight at the letters' feet, which is
+    // exactly how a real penumbra behaves.
+    const spread = lerp(.30, .022, rise);
+    const STACK = 8;
+    for (let s = 0; s < STACK; s++) {
+      const f = (s / (STACK - 1)) * 2 - 1;         // -1..1
+      const kf = 1 + f * spread;
+      ctx.save();
+      ctx.translate(0, capTop);
+      ctx.transform(1, 0, skew * kf, sy * kf, 0, 0);
+      ctx.translate(0, -capTop);
+      ctx.globalAlpha = sAlpha / STACK;
+      glyphs(ctx, k, 0, 0, '#000000');
+      markPath(ctx, k.markX, k.markY, k.ms);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    // Contact shadow: the hairline of dark tight under the object, which is
+    // what makes it read as standing off the wall rather than painted on it.
+    // UNDER the face — painted over it, an offset copy of the same glyphs
+    // covers almost the whole letter and turns bone type black.
+    const face = easeOut(seg(p, .20, .78));
+    const cd = Math.max(1, S * .030);
+    ctx.globalAlpha = face * .62;
+    glyphs(ctx, k, cd, cd * .8, '#080605');
+    ctx.fillStyle = '#080605';
+    markPath(ctx, k.markX + cd, k.markY + cd * .8, k.ms);
+    ctx.fill();
+
+    // The object itself: bone, standing off the wall, coming up out of the
+    // dark as the light finds its face. It never glows — it just stops being
+    // in shadow.
+    const col = mix([44, 38, 33], [220, 211, 197], face);
+    ctx.globalAlpha = 1;
+    glyphs(ctx, k, 0, 0, col);
+    ctx.fillStyle = col;
+    markPath(ctx, k.markX, k.markY, k.ms);
+    ctx.fill();
+  },
+};
+
+// -------------------------------------------------------------- harness
+const IDENTS = [imprint, develop, frost, cast];
+const params = new URLSearchParams(location.hash.slice(1));
+const still = params.has('still');
+const stillAt = params.has('p') ? clamp(parseFloat(params.get('p')), 0, 1) : 1;
+const solo = params.get('id');
+if (solo) document.body.classList.add('solo');
+if (params.get('shape') === 'phone') document.body.classList.add('phone');
+
+document.querySelector('.shape').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.body.classList.toggle('phone', btn.dataset.shape === 'phone');
+  for (const b of document.querySelectorAll('.shape button')) {
+    b.classList.toggle('on', b === btn);
+  }
+});
+
+const grid = document.getElementById('grid');
+for (const ident of (solo ? IDENTS.filter(i => i.id === solo) : IDENTS)) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="stage"><canvas></canvas><button class="replay">Replay</button></div>
+    <div class="meta">
+      <h2>${ident.label}<span class="tag">${(ident.duration / 1000).toFixed(1)}s</span></h2>
+      <p class="sub">${ident.subtitle}</p>
+      <p class="owns">${ident.owns}</p>
+      <p class="beats">${ident.beats}</p>
+    </div>`;
+  grid.appendChild(card);
+  mount(card.querySelector('canvas'), ident, card.querySelector('.stage'));
+}
+
+function mount(canvas, ident, stage) {
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, start = null;
+  const HOLD = 1400; // dwell on the settled frame before looping
+  const cache = {};
+
+  function size() {
+    const r = canvas.getBoundingClientRect();
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    W = Math.round(r.width);
+    H = Math.round(r.height);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function render(p) {
+    ctx.clearRect(0, 0, W, H);
+    ident.backdrop(ctx, W, H);          // static: rasters once in the real thing
+    ident.paint(ctx, W, H, p, cache);   // only what moves
+  }
+
+  function frame(t) {
+    if (start === null) start = t;
+    const e = t - start;
+    const p = clamp(e / ident.duration, 0, 1);
+    render(p);
+    if (e > ident.duration + HOLD) start = t;
+    requestAnimationFrame(frame);
+  }
+
+  const ro = new ResizeObserver(() => { size(); if (still) render(stillAt); });
+  ro.observe(canvas);
+  size();
+  if (still) { render(stillAt); return; }
+  stage.addEventListener('click', () => { start = null; });
+  requestAnimationFrame(frame);
+}
+</script>

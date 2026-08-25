@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BROADCAST cool slate scrim: 3-stop bottom-up ramp; unlike OTT this IS the final scrim
+     (no programmatic ShaderFactory replacement). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="90" android:startColor="#F204070B" android:centerColor="#A804070B" android:endColor="#0004070B" />
+</shape>

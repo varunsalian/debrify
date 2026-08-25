@@ -241,6 +241,11 @@ class SeriesPlaylist {
   /// TVMaze show ID discovered during fetchEpisodeInfo (for SeriesBrowser reuse)
   int? tvmazeShowId;
 
+  /// The show's OFFICIAL name from TVMaze, discovered alongside
+  /// [tvmazeShowId]. [seriesTitle] is parsed out of release filenames and can
+  /// be mangled; displays prefer this when it exists.
+  String? tvmazeShowName;
+
   /// Show poster URL discovered during fetchEpisodeInfo
   String? showPosterUrl;
 
@@ -870,6 +875,10 @@ class SeriesPlaylist {
     if (showInfo != null && overrideShowId != null) {
       // Store show ID for SeriesBrowser reuse (avoids redundant title searches)
       tvmazeShowId = overrideShowId;
+      final officialName = showInfo['name'];
+      if (officialName is String && officialName.trim().isNotEmpty) {
+        tvmazeShowName = officialName.trim();
+      }
       try {
         allTVMazeEpisodes = await _getEpisodesByShowId(overrideShowId);
         // Retain the show's FULL episode list: the player's episode guide

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT dock button icon: near-black on the focused white pill, 92% white
+     otherwise — mirrors tv_controls.dart (#FF0B0B0F / #EBFFFFFF). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#FF0B0B0F" />
+    <item android:color="#EBFFFFFF" />
+</selector>

@@ -31,6 +31,8 @@ class ProfileCreationService {
     'desktop_sidebar_style',
     'sidebar_configuration_v1',
     'discover_layout',
+    'discover_default_source',
+    'discover_last_source',
     'detail_page_style',
     'detail_theme',
     'parents_guide_style',
@@ -46,6 +48,8 @@ class ProfileCreationService {
     'player_default_audio_language',
     'subtitle_auto_sync_enabled',
     'iptv_player_guide_style',
+    'tv_player_controls_style',
+    'debrify_tv_player_style',
     'recording_engine_enabled',
     'tv_hero_artwork_quality',
   };

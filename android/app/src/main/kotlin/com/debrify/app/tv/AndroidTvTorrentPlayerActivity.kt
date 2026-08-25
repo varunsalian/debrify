@@ -4,10 +4,16 @@ import android.animation.ValueAnimator
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.PaintDrawable
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.RectShape
+import android.view.LayoutInflater
 import android.media.MediaCodecList
 import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
@@ -15,6 +21,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -136,6 +146,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var ottRating: TextView
     private lateinit var channelBadge: TextView
     private lateinit var subtitleOverlay: SubtitleView
+    private lateinit var subtitleControlsLift: SubtitleControlsLiftController
     private lateinit var playlistOverlay: View
     private lateinit var playlistView: RecyclerView
     private lateinit var seasonTabsContainer: android.widget.LinearLayout
@@ -200,6 +211,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var cinemaProgressBackground: View? = null
     private var cinemaProgressThumb: View? = null
     private var cinemaSpeedIndicator: TextView? = null
+
+    // OTT skin views (null while CLASSIC is installed). ottSkinInstalled is
+    // the single truth every OTT branch tests — it can only become true after
+    // the controller-layout swap succeeded, so a failed inflate degrades to
+    // the classic skin instead of a half-styled one.
+    private var ottSkinInstalled = false
+    private var ottCaptionLabel: TextView? = null
+    private var ottCaptionOwner: View? = null
+    private var ottIdentityTitle: TextView? = null
+    private var ottIdentitySubtitle: TextView? = null
+
+    // Optional per-skin identity views (null where a layout doesn't have them):
+    // MARQUEE/TICKET show-name overline, TICKET gold S·E badge + its rule.
+    private var ottIdentityOverline: TextView? = null
+    private var ottIdentityBadge: TextView? = null
+    private var ottIdentityDivider: View? = null
+
+    // Release-quality chips + rating (updateOttExtras): chips row on
+    // FROST/BROADCAST/PULSE, serif print line on MARQUEE, gold stub on
+    // TICKET. All optional per layout.
+    private val ottQualityChips = arrayOfNulls<TextView>(3)
+    private var ottRatingChip: TextView? = null
+    private var ottMetaLine: TextView? = null
+    private var dockTagsCacheKey: String? = null
+    private var dockTagsCache: List<DockFormatTags.Tag> = emptyList()
+    private var ottScrubPreviewChip: View? = null
+    private var ottScrubPreviewText: TextView? = null
+    private var ottProgressTrackContainer: View? = null
+
+    /** In-dock Sources button; replaces the top-right stremio_source_badge
+     *  under the OTT skin (the badge stays permanently hidden there). */
+    private var ottSourcesButton: AppCompatButton? = null
+
+    /** TVMaze's official show title, pushed with the metadata updates. */
+    @Volatile
+    private var ottShowName: String? = null
     private var cinemaProgressTrackWidth: Int = 0
     private var cinemaSeekMode: Boolean = false  // True when actively seeking via progress bar
     private var cinemaProgressAnimator: ValueAnimator? = null
@@ -1862,7 +1909,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val updatesJson = intent?.getStringExtra("metadataUpdates")
                 val imdbId = intent?.getStringExtra("imdbId")
                 val guideJson = intent?.getStringExtra("guideEpisodes")
-                handleMetadataUpdate(updatesJson, imdbId, guideJson)
+                val showName = intent?.getStringExtra("showName")
+                handleMetadataUpdate(updatesJson, imdbId, guideJson, showName)
             }
         }
 
@@ -1878,9 +1926,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         requestMetadataFromFlutter()
     }
 
-    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?, guideJson: String? = null) {
+    private fun handleMetadataUpdate(
+        updatesJson: String?,
+        imdbId: String?,
+        guideJson: String? = null,
+        showName: String? = null,
+    ) {
         android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
         android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")
+
+        // TVMaze's official show title — the OTT dock's identity line reads
+        // it; the payload title (often a release filename) never renders.
+        if (!showName.isNullOrBlank()) {
+            ottShowName = showName.trim()
+            if (ottSkinInstalled) runOnUiThread { updateOttIdentity() }
+        }
 
         val model = payload
         if (model == null) {
@@ -2113,9 +2173,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         ottRating = findViewById(R.id.android_tv_ott_rating)
         channelBadge = findViewById(R.id.android_tv_channel_badge)
         subtitleOverlay = findViewById(R.id.android_tv_subtitles_custom)
+        subtitleControlsLift = SubtitleControlsLiftController(subtitleOverlay, dp(24))
+        // Guide skin: swap the overlay children BEFORE the playlist binds so
+        // they resolve inside the skin's layout (no-op on CLASSIC).
+        installGuideOverlaySkin()
         playlistOverlay = findViewById(R.id.android_tv_playlist_overlay)
         playlistView = findViewById(R.id.android_tv_playlist)
         seasonTabsContainer = findViewById(R.id.season_tabs_container)
+        bindGuideSkinViews()
         nextOverlay = findViewById(R.id.android_tv_next_overlay)
         nextText = findViewById(R.id.android_tv_next_text)
         nextSubtext = findViewById(R.id.android_tv_next_subtext)
@@ -2702,6 +2767,383 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    // ── Guide skin ─────────────────────────────────────────────────────────
+    // The series/collection Episodes overlay, restyled per dock skin: the
+    // legacy overlay children are swapped for a per-skin layout that keeps
+    // the id contract (android_tv_playlist + season_tabs_container), and the
+    // adapters get a per-skin row layout + binder. CLASSIC never installs.
+    //   OTT       — "The Shelf": bottom row of landscape stills.
+    //   MARQUEE   — "The Playbill": serif index left, title page right.
+    //   FROST     — "The Panel": translucent side sheet, video keeps playing.
+    //   BROADCAST — "The Rundown": mono columns + PVW monitor, yellow bar focus.
+    //   PULSE     — "The Grid": progress-ring cells, season rail on the left.
+    //   TICKET    — "The Strip": slim bottom band, popover previews on focus.
+    private var guideSkinInstalled = false
+    private val guideGridSpan = 5
+    private var gdShowTitle: TextView? = null
+    private var gdCaption: TextView? = null
+    private var gdDetailNum: TextView? = null
+    private var gdDetailTitle: TextView? = null
+    private var gdDetailMeta: TextView? = null
+    private var gdDetailDesc: TextView? = null
+    private var gdDetailArt: android.widget.ImageView? = null
+    private var gdMonArt: android.widget.ImageView? = null
+    private var gdMonLabel: TextView? = null
+    private var gdPop: View? = null
+    private var gdPopArt: android.widget.ImageView? = null
+    private var gdPopTitle: TextView? = null
+    private var gdPopDesc: TextView? = null
+
+    private val guideOverlayLayoutRes: Int?
+        get() = when (controlsSkin) {
+            TvControlsSkin.CLASSIC -> null
+            TvControlsSkin.OTT -> R.layout.view_tv_guide_ott
+            TvControlsSkin.FROST -> R.layout.view_tv_guide_frost
+            TvControlsSkin.MARQUEE -> R.layout.view_tv_guide_marquee
+            TvControlsSkin.BROADCAST -> R.layout.view_tv_guide_broadcast
+            TvControlsSkin.PULSE -> R.layout.view_tv_guide_pulse
+            TvControlsSkin.TICKET -> R.layout.view_tv_guide_ticket
+        }
+
+    private val guideItemLayoutRes: Int
+        get() = if (!guideSkinInstalled) {
+            R.layout.item_android_tv_playlist_entry_horizontal
+        } else when (controlsSkin) {
+            TvControlsSkin.OTT -> R.layout.item_tv_guide_ott
+            TvControlsSkin.FROST -> R.layout.item_tv_guide_frost
+            TvControlsSkin.MARQUEE -> R.layout.item_tv_guide_marquee
+            TvControlsSkin.BROADCAST -> R.layout.item_tv_guide_broadcast
+            TvControlsSkin.PULSE -> R.layout.item_tv_guide_pulse
+            TvControlsSkin.TICKET -> R.layout.item_tv_guide_ticket
+            TvControlsSkin.CLASSIC -> R.layout.item_android_tv_playlist_entry_horizontal
+        }
+
+    /** Swap the legacy overlay children for the skin's guide layout. Runs in
+     *  bindViews BEFORE any playlist findViewById so every legacy binding
+     *  resolves inside the new layout. */
+    private fun installGuideOverlaySkin() {
+        if (guideSkinInstalled) return
+        val layoutRes = guideOverlayLayoutRes ?: return
+        val overlay = findViewById<ViewGroup?>(R.id.android_tv_playlist_overlay) ?: return
+        overlay.removeAllViews()
+        layoutInflater.inflate(layoutRes, overlay, true)
+        guideSkinInstalled = true
+    }
+
+    /** Null-safe binds for the skin-only views (each layout has a subset). */
+    private fun bindGuideSkinViews() {
+        if (!guideSkinInstalled) return
+        gdShowTitle = findViewById(R.id.gd_show_title)
+        gdCaption = findViewById(R.id.gd_caption)
+        gdDetailNum = findViewById(R.id.gd_detail_num)
+        gdDetailTitle = findViewById(R.id.gd_detail_title)
+        gdDetailMeta = findViewById(R.id.gd_detail_meta)
+        gdDetailDesc = findViewById(R.id.gd_detail_desc)
+        gdDetailArt = findViewById(R.id.gd_detail_art)
+        gdMonArt = findViewById(R.id.gd_mon_art)
+        gdMonLabel = findViewById(R.id.gd_mon_label)
+        gdPop = findViewById(R.id.gd_pop)
+        gdPopArt = findViewById(R.id.gd_pop_art)
+        gdPopTitle = findViewById(R.id.gd_pop_title)
+        gdPopDesc = findViewById(R.id.gd_pop_desc)
+    }
+
+    /** Vertical list for the reading skins, 5-up grid for PULSE; OTT/TICKET
+     *  keep the legacy horizontal manager. */
+    private fun applyGuideLayoutManager() {
+        if (!guideSkinInstalled) return
+        when (controlsSkin) {
+            TvControlsSkin.MARQUEE, TvControlsSkin.FROST, TvControlsSkin.BROADCAST -> {
+                playlistView.layoutManager =
+                    LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
+            }
+            TvControlsSkin.PULSE -> {
+                val glm = androidx.recyclerview.widget.GridLayoutManager(this, guideGridSpan)
+                glm.spanSizeLookup =
+                    object : androidx.recyclerview.widget.GridLayoutManager.SpanSizeLookup() {
+                        override fun getSpanSize(position: Int): Int {
+                            // Series season headers (view type 0) span the full
+                            // row. Collection adapters have a single view type
+                            // (also 0), so gate on the mode — every movie cell
+                            // is a normal 1-span cell.
+                            if (playlistMode != PlaylistMode.SERIES) return 1
+                            val adapter = playlistView.adapter ?: return 1
+                            return if (adapter.getItemViewType(position) == 0) guideGridSpan else 1
+                        }
+                    }
+                playlistView.layoutManager = glm
+            }
+            else -> Unit
+        }
+    }
+
+    /** The legacy key listener assumes a horizontal row (LEFT/RIGHT move,
+     *  UP/DOWN escape to tabs). Vertical and grid skins swap the axes —
+     *  deliberate last-set-wins over the listener set just above. */
+    private fun applyGuideKeyOverride() {
+        if (!guideSkinInstalled) return
+        val vertical = controlsSkin == TvControlsSkin.MARQUEE ||
+            controlsSkin == TvControlsSkin.FROST ||
+            controlsSkin == TvControlsSkin.BROADCAST
+        val grid = controlsSkin == TvControlsSkin.PULSE
+        if (!vertical && !grid) return // OTT/TICKET: the horizontal listener is right
+        playlistView.setOnKeyListener { _, keyCode, event ->
+            if (!playlistVisible) return@setOnKeyListener false
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            // Mirror movePlaylistFocus: during rapid input focus is in flight
+            // and focusedChild is null — the tracked target is the truth, or
+            // the edge decisions below (escape to tabs/rail) misfire.
+            val pos = if (navigationTargetPosition >= 0) {
+                navigationTargetPosition
+            } else {
+                playlistView.focusedChild
+                    ?.let { playlistView.getChildAdapterPosition(it) }
+                    ?: RecyclerView.NO_POSITION
+            }
+            if (vertical) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { movePlaylistFocus(1); true }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        val first = findNextFocusablePosition(0, 1)
+                        if (pos != RecyclerView.NO_POSITION && pos <= first) {
+                            false // top row: let focus escape to the season tabs
+                        } else {
+                            movePlaylistFocus(-1); true
+                        }
+                    }
+                    // Trap the cross axis so focus can't fall out of the overlay.
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> true
+                    else -> false
+                }
+            } else {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> { movePlaylistFocus(1); true }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        // Column via the span lookup, not pos % span — a
+                        // full-span season header would shift every row.
+                        val col = (playlistView.layoutManager
+                            as? androidx.recyclerview.widget.GridLayoutManager)
+                            ?.spanSizeLookup
+                            ?.takeIf { pos != RecyclerView.NO_POSITION }
+                            ?.getSpanIndex(pos, guideGridSpan)
+                        if (col == 0) {
+                            false // first column: escape to the season rail
+                        } else {
+                            movePlaylistFocus(-1); true
+                        }
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { movePlaylistFocus(guideGridSpan); true }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (pos >= guideGridSpan) movePlaylistFocus(-guideGridSpan)
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
+    }
+
+    /** Restyle a season/collection tab into the skin's language (called after
+     *  the legacy styling; classic tabs untouched). */
+    private fun applyGuideTabStyle(tab: TextView) {
+        if (!guideSkinInstalled) return
+        val csl = { res: Int -> androidx.core.content.ContextCompat.getColorStateList(this, res) }
+        when (controlsSkin) {
+            TvControlsSkin.OTT -> {
+                tab.background = null
+                tab.setTextColor(csl(R.color.gd_tab_text_light))
+                tab.textSize = 13f
+            }
+            TvControlsSkin.MARQUEE -> {
+                tab.background = null
+                tab.setTextColor(csl(R.color.gd_tab_text_marquee))
+                tab.typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.BOLD)
+                tab.textSize = 11.5f
+                tab.letterSpacing = 0.14f
+            }
+            TvControlsSkin.FROST -> {
+                tab.setBackgroundResource(R.drawable.gd_tab_frost)
+                tab.setTextColor(csl(R.color.gd_tab_text_bcast))
+                tab.textSize = 11f
+                tab.setPadding(dp(11), dp(4), dp(11), dp(4))
+            }
+            TvControlsSkin.BROADCAST -> {
+                tab.setBackgroundResource(R.drawable.gd_tab_bcast)
+                tab.setTextColor(csl(R.color.gd_tab_text_bcast))
+                tab.typeface = android.graphics.Typeface.create(
+                    android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+                tab.textSize = 10.5f
+                tab.setPadding(dp(8), dp(3), dp(8), dp(3))
+            }
+            TvControlsSkin.PULSE -> {
+                tab.setBackgroundResource(R.drawable.gd_tab_pulse)
+                tab.setTextColor(csl(R.color.gd_tab_text_pulse))
+                tab.textSize = 11.5f
+                tab.setPadding(dp(10), dp(5), dp(10), dp(5))
+                (tab.layoutParams as? android.widget.LinearLayout.LayoutParams)?.let {
+                    it.marginEnd = 0
+                    it.bottomMargin = dp(6) // vertical rail
+                    it.width = android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+                }
+                tab.gravity = android.view.Gravity.CENTER
+            }
+            TvControlsSkin.TICKET -> {
+                tab.setBackgroundResource(R.drawable.gd_tab_ticket)
+                tab.setTextColor(csl(R.color.gd_tab_text_ticket))
+                tab.typeface = android.graphics.Typeface.MONOSPACE
+                tab.textSize = 9f
+                tab.setPadding(dp(6), dp(1), dp(6), dp(1))
+            }
+            TvControlsSkin.CLASSIC -> Unit
+        }
+    }
+
+    /** Per-skin row styling appended after the shared bind. itemIndex is -1
+     *  for absent guide rows (fetch-on-click). */
+    private fun guideSkinBind(itemView: View, item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
+        val progress = item.displayProgressPercent()
+        val watched = progress >= 95
+        when (controlsSkin) {
+            TvControlsSkin.MARQUEE, TvControlsSkin.TICKET -> {
+                if (controlsSkin == TvControlsSkin.MARQUEE) {
+                    itemView.findViewById<TextView?>(R.id.gd_item_num)?.text =
+                        item.episode?.toString() ?: if (itemIndex >= 0) (itemIndex + 1).toString() else "·"
+                }
+                itemView.findViewById<TextView?>(R.id.android_tv_playlist_item_title)?.let { t ->
+                    t.paintFlags = if (watched && !isActive) {
+                        t.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+                    } else {
+                        t.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+                    }
+                }
+            }
+            TvControlsSkin.BROADCAST -> {
+                val season = item.season
+                val episode = item.episode
+                itemView.findViewById<TextView?>(R.id.gd_item_num)?.text = when {
+                    season != null && episode != null -> "%d%02d".format(season, episode)
+                    episode != null -> "%03d".format(episode)
+                    itemIndex >= 0 -> "%03d".format(itemIndex + 1)
+                    else -> "———"
+                }
+                itemView.findViewById<TextView?>(R.id.gd_item_status)?.let { status ->
+                    val (text, color) = when {
+                        itemIndex < 0 && !isActive && item.url.isEmpty() ->
+                            "FETCH" to 0xFFF5C518.toInt()
+                        isActive -> "● ON AIR" to 0xFFEF4444.toInt()
+                        watched -> "CLEARED" to 0x66FFFFFF.toInt()
+                        progress in 6..94 -> "$progress% IN" to 0x8CFFFFFF.toInt()
+                        else -> "READY" to 0x8CFFFFFF.toInt()
+                    }
+                    status.text = text
+                    // Stateful color: the yellow focus bar needs dark text —
+                    // a plain int here would defeat the row's focus flip.
+                    status.setTextColor(
+                        android.content.res.ColorStateList(
+                            arrayOf(
+                                intArrayOf(android.R.attr.state_focused),
+                                intArrayOf(),
+                            ),
+                            intArrayOf(0xDE000000.toInt(), color),
+                        )
+                    )
+                }
+            }
+            TvControlsSkin.PULSE -> {
+                itemView.findViewById<android.widget.ProgressBar?>(R.id.gd_ring)?.progress =
+                    if (watched) 100 else progress
+                itemView.findViewById<TextView?>(R.id.gd_ring_num)?.text =
+                    item.episode?.toString()
+                        ?: if (itemIndex >= 0) (itemIndex + 1).toString() else "?"
+            }
+            else -> Unit
+        }
+    }
+
+    /** The focused row feeds the skin's detail surface (Marquee title page,
+     *  OTT caption, Broadcast PVW monitor, Pulse caption line, Ticket popover). */
+    private fun updateGuideDetail(item: PlaybackItem) {
+        if (!guideSkinInstalled) return
+        val desc = item.description?.trim()
+            ?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
+        val mins = (item.durationMs / 60000).toInt().takeIf { it > 0 }
+        val se = if (item.season != null && item.episode != null) {
+            "S%02dE%02d".format(item.season, item.episode)
+        } else null
+        when (controlsSkin) {
+            TvControlsSkin.OTT -> gdCaption?.text = desc ?: ""
+            TvControlsSkin.MARQUEE -> {
+                gdDetailNum?.text = item.episode?.let { "%02d".format(it) } ?: ""
+                gdDetailTitle?.text = item.title
+                val parts = mutableListOf<String>()
+                if (item.season != null && item.episode != null) {
+                    parts.add("SEASON ${item.season} · EPISODE ${item.episode}")
+                }
+                item.rating?.takeIf { it > 0 }?.let { parts.add("★ %.1f".format(it)) }
+                mins?.let { parts.add("$it MIN") }
+                gdDetailMeta?.text = parts.joinToString("   ·   ")
+                gdDetailDesc?.text = desc ?: ""
+                loadGuideArt(gdDetailArt, item.artwork)
+            }
+            TvControlsSkin.BROADCAST -> {
+                gdMonLabel?.text = "PVW · " + (se ?: item.title.uppercase(Locale.US))
+                loadGuideArt(gdMonArt, item.artwork)
+            }
+            TvControlsSkin.PULSE -> {
+                val lead = item.episode?.let { "E$it · " } ?: ""
+                gdDetailDesc?.text = lead + item.title + (desc?.let { " — $it" } ?: "")
+            }
+            TvControlsSkin.TICKET -> {
+                gdPop?.visibility = View.VISIBLE
+                gdPopTitle?.text = (se?.let { "$it · " } ?: "") + item.title.uppercase(Locale.US)
+                val meta = mutableListOf<String>()
+                mins?.let { meta.add("${it}m") }
+                item.rating?.takeIf { it > 0 }?.let { meta.add("★ %.1f".format(it)) }
+                gdPopDesc?.text = desc ?: meta.joinToString(" · ")
+                loadGuideArt(gdPopArt, item.artwork)
+            }
+            else -> Unit
+        }
+    }
+
+    private fun loadGuideArt(target: android.widget.ImageView?, artwork: String?) {
+        val v = target ?: return
+        val art = artwork?.takeUnless { it.equals("null", ignoreCase = true) || it.isBlank() }
+        if (art == null) {
+            com.bumptech.glide.Glide.with(this).clear(v)
+            v.setImageDrawable(null)
+            return
+        }
+        com.bumptech.glide.Glide.with(this).load(art).centerCrop().into(v)
+    }
+
+    /** Show-open chrome: show title, counts, and the current item seeding the
+     *  detail surface so the pane is never empty. */
+    private fun seedGuideSkinChrome() {
+        if (!guideSkinInstalled) return
+        val model = payload
+        val current = model?.items?.getOrNull(currentIndex)
+        val show = ottShowName?.takeIf { it.isNotBlank() }
+            ?: current?.title
+            ?: ""
+        gdShowTitle?.text = when (controlsSkin) {
+            TvControlsSkin.BROADCAST, TvControlsSkin.TICKET -> show.uppercase(Locale.US)
+            else -> show
+        }
+        val items = model?.items.orEmpty()
+        if (items.size > 1) {
+            val watchedCount = items.count { it.displayProgressPercent() >= 95 }
+            when (controlsSkin) {
+                TvControlsSkin.FROST, TvControlsSkin.PULSE ->
+                    gdCaption?.text = "${items.size} episodes · $watchedCount watched"
+                TvControlsSkin.BROADCAST ->
+                    gdCaption?.text = "${items.size} LISTED · OK ROLLS THE FOCUSED ITEM"
+                else -> Unit
+            }
+        }
+        current?.let { updateGuideDetail(it) }
+    }
+
     private fun setupPlaylist() {
         // Configure RecyclerView for optimal focus handling
         playlistView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false).apply {
@@ -2709,6 +3151,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             isItemPrefetchEnabled = true
             initialPrefetchItemCount = 4
         }
+        // Guide skin: vertical/grid managers replace the horizontal one (no-op
+        // on CLASSIC and the horizontal skins).
+        applyGuideLayoutManager()
 
         // Disable item animator to prevent focus issues during view animations
         playlistView.itemAnimator = null
@@ -2824,6 +3269,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 hidePlaylist()
                 requestEpisodeFetch(season, episode)
             },
+            itemLayoutRes = guideItemLayoutRes,
+            skinBinder = if (guideSkinInstalled) ::guideSkinBind else null,
+            onItemFocused = if (guideSkinInstalled) { item, _ -> updateGuideDetail(item) } else null,
         ) { index ->
             hidePlaylist()
             playItem(index)
@@ -2838,7 +3286,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun setupCollectionPlaylist(items: List<PlaybackItem>) {
         val groups = computeMovieGroups(items)
-        val adapter = MoviePlaylistAdapter(items, groups) { index ->
+        val adapter = MoviePlaylistAdapter(
+            items,
+            groups,
+            itemLayoutRes = guideItemLayoutRes,
+            skinBinder = if (guideSkinInstalled) ::guideSkinBind else null,
+            onItemFocused = if (guideSkinInstalled) { item, _ -> updateGuideDetail(item) } else null,
+        ) { index ->
             hidePlaylist()
             playItem(index)
         }
@@ -2910,6 +3364,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
+        applyGuideTabStyle(tab)
         return tab
     }
 
@@ -3011,6 +3466,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // and we want to allow intentional UP/DOWN navigation to season tabs
             }
         }
+
+        // Guide skin: vertical/grid skins re-map the DPAD axes (no-op on
+        // CLASSIC and the horizontal skins).
+        applyGuideKeyOverride()
     }
 
     /**
@@ -3278,6 +3737,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             selectMovieTab(groupIndex, adapter)
         }
 
+        applyGuideTabStyle(tab)
         return tab
     }
 
@@ -3296,7 +3756,130 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Swaps the legacy Cinema controller layout for the selected dock skin.
+     *
+     * Media3 inflates `controller_layout_id` INTO its PlayerControlView with
+     * attachToRoot, so the legacy root is an ordinary child we can replace at
+     * the same index. Every dock layout shares every id the activity binds,
+     * and the activity (not Media3) drives `debrify_controls_root` visibility,
+     * so all downstream code works against whichever root is installed. Must
+     * run before ANY controller-id findViewById — setupControls calls it first.
+     */
+    private fun installOttControlsSkin() {
+        val spec = dockSkinSpec ?: return
+        val legacy = playerView.findViewById<View>(R.id.debrify_controls_root) ?: return
+        val parent = legacy.parent as? ViewGroup ?: return
+        val index = parent.indexOfChild(legacy)
+        val ott = try {
+            LayoutInflater.from(this).inflate(spec.layoutRes, parent, false)
+        } catch (e: Exception) {
+            android.util.Log.e("AndroidTvPlayer", "Dock skin inflate failed; keeping classic", e)
+            return
+        }
+        parent.removeViewAt(index)
+        parent.addView(ott, index)
+        ottSkinInstalled = true
+
+        // The Flutter OTT scrim has FOUR stops; XML gradients cap at three, so
+        // that one skin's placeholder background is replaced with the exact
+        // ramp here. Every other skin's XML background is already final.
+        if (spec.applyShaderScrim) {
+            ott.findViewById<View>(R.id.ott_content)?.background = PaintDrawable().apply {
+                shape = RectShape()
+                shaderFactory = object : ShapeDrawable.ShaderFactory() {
+                    override fun resize(width: Int, height: Int): Shader = LinearGradient(
+                        0f, 0f, 0f, height.toFloat(),
+                        intArrayOf(0x00000000, 0x66000000, 0xD9000000.toInt(), 0xF2000000.toInt()),
+                        floatArrayOf(0f, 0.28f, 0.62f, 1f),
+                        Shader.TileMode.CLAMP,
+                    )
+                }
+            }
+        }
+
+        ottCaptionLabel = ott.findViewById(R.id.ott_caption_label)
+        ottIdentityTitle = ott.findViewById(R.id.ott_identity_title)
+        ottIdentitySubtitle = ott.findViewById(R.id.ott_identity_subtitle)
+        ottIdentityOverline = ott.findViewById(R.id.ott_identity_overline)
+        ottIdentityBadge = ott.findViewById(R.id.ott_identity_badge)
+        ottIdentityDivider = ott.findViewById(R.id.ott_identity_divider)
+        ottQualityChips[0] = ott.findViewById(R.id.ott_quality_1)
+        ottQualityChips[1] = ott.findViewById(R.id.ott_quality_2)
+        ottQualityChips[2] = ott.findViewById(R.id.ott_quality_3)
+        ottRatingChip = ott.findViewById(R.id.ott_rating_chip)
+        ottMetaLine = ott.findViewById(R.id.ott_meta_line)
+        ottScrubPreviewChip = ott.findViewById(R.id.ott_scrub_preview_chip)
+        ottScrubPreviewText = ott.findViewById(R.id.ott_scrub_preview_text)
+        ottProgressTrackContainer = ott.findViewById(R.id.cinema_progress_track_container)
+
+        // Idle bar height per spec; enter/exit cinema seek toggles it.
+        setOttTrackHeight(focused = false)
+
+        ott.findViewById<View>(R.id.ott_seek_back_button)?.setOnClickListener {
+            seekBy(-10_000L)
+            scheduleHideControlsMenu()
+        }
+        ott.findViewById<View>(R.id.ott_seek_forward_button)?.setOnClickListener {
+            seekBy(10_000L)
+            scheduleHideControlsMenu()
+        }
+
+        ottSourcesButton = ott.findViewById(R.id.ott_sources_button)
+        // Same behaviour as the top-right badge this button replaces.
+        ottSourcesButton?.setOnClickListener {
+            hideControlsMenu()
+            unifiedMenu?.hide()
+            sourceBrowser?.show()
+        }
+    }
+
+    private fun setOttTrackHeight(focused: Boolean) {
+        val track = ottProgressTrackContainer ?: return
+        val spec = dockSkinSpec ?: return
+        val heightPx = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            if (focused) spec.trackFocusDp else spec.trackIdleDp,
+            resources.displayMetrics,
+        ).toInt()
+        val params = track.layoutParams
+        if (params.height != heightPx) {
+            params.height = heightPx
+            track.layoutParams = params
+        }
+    }
+
+    /** The shared caption under the OTT transport row: the focused button's
+     *  (transparent) text. Cleared only by its owner so the fade-out of an
+     *  outgoing button never eats the incoming button's label. */
+    private fun updateOttCaption(view: View) {
+        val label = ottCaptionLabel ?: return
+        val text = (view as? TextView)?.text?.takeIf { it.isNotEmpty() }
+            ?: view.contentDescription
+            ?: return
+        ottCaptionOwner = view
+        label.text = text
+        label.animate().cancel()
+        label.animate().alpha(1f).setDuration(120).start()
+    }
+
+    private fun clearOttCaption(view: View) {
+        if (ottCaptionOwner !== view) return
+        ottCaptionOwner = null
+        ottCaptionLabel?.animate()?.cancel()
+        ottCaptionLabel?.animate()?.alpha(0f)?.setDuration(120)?.start()
+    }
+
+    /** Re-push the caption after a runtime label write (Play->Pause, "1.5x")
+     *  so a focused button's caption can't go stale. */
+    private fun refreshOttCaptionFor(view: View?) {
+        if (!ottSkinInstalled || view == null || !view.isFocused) return
+        updateOttCaption(view)
+    }
+
     private fun setupControls() {
+        if (!isIptvMode && dockSkinSpec != null && !ottSkinInstalled) {
+            installOttControlsSkin()
+        }
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root)
         pauseButton = playerView.findViewById(R.id.debrify_pause_button)
         nightModeButton = playerView.findViewById(R.id.debrify_night_mode_button)
@@ -3341,7 +3924,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startSeekbarProgressUpdates()
 
         // Apple TV-style focus animation with scale effect
-        val applyAppleTvAnimation = { view: View? ->
+        val classicAppleTvAnimation = { view: View? ->
             view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
                 if (hasFocus) {
                     // Scale up with premium smooth animation when focused
@@ -3368,6 +3951,47 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Dock focus: the fills/rings/underlines/icon tints live in each
+        // skin's StateListDrawable + ColorStateList; code adds only the
+        // spec's scale/lift gesture (@ 120ms) and the shared caption.
+        val dockFocusSpec = dockSkinSpec
+        val dockFocusLiftPx = if (dockFocusSpec != null) {
+            TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                dockFocusSpec.focusLiftDp,
+                resources.displayMetrics,
+            )
+        } else 0f
+        val ottFocusTreatment = { view: View? ->
+            view?.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+                val scale = dockFocusSpec?.focusScale ?: 1.08f
+                if (hasFocus) {
+                    v.animate()
+                        .scaleX(scale)
+                        .scaleY(scale)
+                        .translationY(-dockFocusLiftPx)
+                        .setDuration(120)
+                        .setInterpolator(android.view.animation.DecelerateInterpolator())
+                        .start()
+                    updateOttCaption(v)
+                    if (controlsMenuVisible) {
+                        scheduleHideControlsMenu()
+                    }
+                } else {
+                    v.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .translationY(0f)
+                        .setDuration(120)
+                        .setInterpolator(android.view.animation.AccelerateInterpolator())
+                        .start()
+                    clearOttCaption(v)
+                }
+            }
+        }
+        val applyAppleTvAnimation =
+            if (ottSkinInstalled) ottFocusTreatment else classicAppleTvAnimation
 
         // Apply Apple TV animations to all control buttons
         applyAppleTvAnimation(pauseButton)
@@ -3490,6 +4114,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         randomButton?.onFocusChangeListener = extendTimerOnFocus
+
+        if (ottSkinInstalled) {
+            // Every assignment above just overwrote the focus animation with
+            // extendTimerOnFocus (a view holds ONE focus listener; last set
+            // wins — which is also why the classic scale never fires today).
+            // The OTT treatment includes the timer-extend behaviour, so
+            // re-applying it LAST gives the dock its scale + caption.
+            applyAppleTvAnimation(pauseButton)
+            applyAppleTvAnimation(nightModeButton)
+            applyAppleTvAnimation(audioButton)
+            applyAppleTvAnimation(subtitleButton)
+            applyAppleTvAnimation(aspectButton)
+            applyAppleTvAnimation(speedButton)
+            applyAppleTvAnimation(playlistButton)
+            applyAppleTvAnimation(nextButton)
+            applyAppleTvAnimation(prevButton)
+            applyAppleTvAnimation(randomButton)
+            applyAppleTvAnimation(iptvJumpButton)
+            applyAppleTvAnimation(iptvRecordButton)
+            applyAppleTvAnimation(ottSourcesButton)
+            applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_back_button))
+            applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_forward_button))
+        }
     }
 
     // [suppressTrakt]: a source switch resumes the captured live position and
@@ -4315,6 +4962,270 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         channelBadge.visibility = View.GONE
+        if (ottSkinInstalled) updateOttIdentity()
+    }
+
+    /** The OTT dock's in-dock identity row, mirroring the legacy OTT title
+     *  mode: for series the FETCHED episode title (updateTitle keeps
+     *  item.title current from the TVMaze/metadata updates, with the same
+     *  "Episode N" fallback) with the S/E badge beneath — the raw payload
+     *  title is never shown, because on torrent launches it's the release
+     *  filename the legacy header deliberately hid. */
+    private fun updateOttIdentity() {
+        val title = ottIdentityTitle ?: return
+        val model = payload
+        val item = model?.items?.getOrNull(currentIndex)
+        val isSeries = model?.contentType?.lowercase(java.util.Locale.US) == "series"
+        val overline = ottIdentityOverline
+        val badge = ottIdentityBadge
+        if (isSeries && item != null && item.season != null && item.episode != null) {
+            val episodeTitle = item.title.ifBlank { "Episode ${item.episode}" }
+            // The FETCHED show/episode names only (TVMaze via the metadata
+            // pushes); never the payload title, which on torrent launches is
+            // the release filename the legacy header deliberately hid. Each
+            // skin arranges the same facts its own way.
+            val show = ottShowName
+            val seasonStr = item.season.toString().padStart(2, '0')
+            val episodeStr = item.episode.toString().padStart(2, '0')
+            when (controlsSkin) {
+                TvControlsSkin.FROST -> {
+                    // Eyebrow above a big episode title (subtitle view is the
+                    // eyebrow in this layout, uppercased by XML).
+                    title.text = episodeTitle
+                    ottIdentitySubtitle?.text = if (show.isNullOrBlank()) {
+                        "Season ${item.season} · Episode ${item.episode}"
+                    } else {
+                        "$show · Season ${item.season}"
+                    }
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.MARQUEE -> {
+                    // Italic show over a serif title, season/episode spelled
+                    // out in words underneath.
+                    title.text = episodeTitle
+                    if (show.isNullOrBlank()) {
+                        overline?.visibility = View.GONE
+                    } else {
+                        overline?.text = show
+                        overline?.visibility = View.VISIBLE
+                    }
+                    ottIdentitySubtitle?.text =
+                        "Season ${spellNumber(item.season)} · Episode ${spellNumber(item.episode)}"
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.BROADCAST -> {
+                    // Channel-ident: show name leads in condensed caps.
+                    if (show.isNullOrBlank()) {
+                        title.text = episodeTitle
+                        ottIdentitySubtitle?.text = "S$seasonStr · E$episodeStr"
+                    } else {
+                        title.text = show
+                        ottIdentitySubtitle?.text = "E${item.episode} — $episodeTitle"
+                    }
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.PULSE -> {
+                    // Episode leads; the show name is accent-tinted inside
+                    // the subtitle.
+                    title.text = episodeTitle
+                    val tail = "Season ${item.season}, Episode ${item.episode}"
+                    ottIdentitySubtitle?.text = if (show.isNullOrBlank()) {
+                        SpannableString(tail)
+                    } else {
+                        SpannableString("$show · $tail").apply {
+                            setSpan(
+                                ForegroundColorSpan(0xFF9BA5FB.toInt()),
+                                0, show.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                            setSpan(
+                                StyleSpan(Typeface.BOLD),
+                                0, show.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            )
+                        }
+                    }
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+                TvControlsSkin.TICKET -> {
+                    // Gold S·E chip · rule · show overline / episode title.
+                    title.text = episodeTitle
+                    badge?.text = "S${item.season} · E${item.episode}"
+                    badge?.visibility = View.VISIBLE
+                    ottIdentityDivider?.visibility = View.VISIBLE
+                    if (show.isNullOrBlank()) {
+                        overline?.visibility = View.GONE
+                    } else {
+                        overline?.text = show
+                        overline?.visibility = View.VISIBLE
+                    }
+                }
+                else -> {
+                    // OTT: "Show — Episode" with the S·E badge beneath.
+                    title.text = if (show.isNullOrBlank()) {
+                        episodeTitle
+                    } else {
+                        "$show — $episodeTitle"
+                    }
+                    ottIdentitySubtitle?.text = "S$seasonStr · E$episodeStr"
+                    ottIdentitySubtitle?.visibility = View.VISIBLE
+                }
+            }
+        } else {
+            title.text = titleView.text
+            ottIdentitySubtitle?.visibility = View.GONE
+            overline?.visibility = View.GONE
+            badge?.visibility = View.GONE
+            ottIdentityDivider?.visibility = View.GONE
+        }
+        updateOttExtras(item)
+    }
+
+    /**
+     * Quality chips + rating for the premium dock skins. Quality is parsed
+     * from the item's ORIGINAL payload title (the release name — metadata
+     * pushes overwrite item.title with the fetched episode name, so
+     * [PlaybackItem.sourceTitle] carries the parseable one), falling back to
+     * the stream URL's filename. Rating is [PlaybackItem.rating] — already
+     * pushed with the TVMaze metadata — so no extra network. Runs AFTER the
+     * per-skin identity arms; on TICKET it also owns the overline so the
+     * quality can ride it ("FOUNDATION · 4K · DOLBY VISION").
+     */
+    private fun updateOttExtras(item: PlaybackItem?) {
+        val hasAnyView = ottQualityChips.any { it != null } ||
+            ottRatingChip != null || ottMetaLine != null
+        if (!hasAnyView) return
+
+        val tags = if (item != null) dockTagsFor(item) else emptyList()
+        val rating = item?.rating?.takeIf { it > 0 }
+        val ratingText = rating?.let { String.format(java.util.Locale.US, "%.1f", it) }
+
+        ottQualityChips.forEachIndexed { i, chip ->
+            if (chip == null) return@forEachIndexed
+            val tag = tags.getOrNull(i)
+            if (tag != null) {
+                chip.text = tag.short
+                chip.visibility = View.VISIBLE
+            } else {
+                chip.visibility = View.GONE
+            }
+        }
+
+        ottRatingChip?.let { rc ->
+            if (ratingText == null) {
+                rc.visibility = View.GONE
+            } else {
+                val starColor = when (controlsSkin) {
+                    TvControlsSkin.PULSE -> 0xFF818CF8.toInt()
+                    TvControlsSkin.FROST -> 0xFFF5C518.toInt()
+                    else -> null
+                }
+                if (starColor != null) {
+                    rc.text = SpannableString("★ $ratingText").apply {
+                        setSpan(
+                            ForegroundColorSpan(starColor),
+                            0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                } else {
+                    rc.text = "★ $ratingText"
+                }
+                rc.visibility = View.VISIBLE
+            }
+        }
+
+        // MARQUEE: one serif print line — "4K · DOLBY VISION · ATMOS — ★ 8.6".
+        // Uppercased HERE, not via android:textAllCaps — the AllCaps
+        // transform re-renders the text as a plain string and drops the
+        // rating's gold span.
+        ottMetaLine?.let { ml ->
+            val quality = tags.joinToString(" · ") {
+                it.long.uppercase(java.util.Locale.US)
+            }
+            val text = when {
+                quality.isEmpty() && ratingText == null -> null
+                quality.isEmpty() -> "★ $ratingText"
+                ratingText == null -> quality
+                else -> "$quality — ★ $ratingText"
+            }
+            if (text == null) {
+                ml.visibility = View.GONE
+            } else {
+                ml.text = if (ratingText != null) {
+                    SpannableString(text).apply {
+                        setSpan(
+                            ForegroundColorSpan(0xFFEAC981.toInt()),
+                            text.length - ratingText.length - 2, text.length,
+                            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                } else {
+                    text
+                }
+                ml.visibility = View.VISIBLE
+            }
+        }
+
+        // TICKET: the quality rides the gold overline after the show name —
+        // resolution short + HDR long only, per the mock. Movies (no show)
+        // get the quality alone, so the overline earns its keep either way.
+        if (controlsSkin == TvControlsSkin.TICKET) {
+            val overline = ottIdentityOverline
+            if (overline != null) {
+                val parts = mutableListOf<String>()
+                ottShowName?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+                tags.firstOrNull()?.let { parts.add(it.short) }
+                tags.getOrNull(1)?.let { parts.add(it.long) }
+                if (parts.isEmpty()) {
+                    overline.visibility = View.GONE
+                } else {
+                    overline.text = parts.joinToString(" · ")
+                    overline.visibility = View.VISIBLE
+                }
+            }
+        }
+    }
+
+    /** Tags for the current item, cached — the regexes only rerun when the
+     *  underlying release name changes (zap / source switch). */
+    private fun dockTagsFor(item: PlaybackItem): List<DockFormatTags.Tag> {
+        val name = item.sourceTitle?.takeIf { it.isNotBlank() } ?: item.title
+        val fromName = if (name == dockTagsCacheKey) {
+            dockTagsCache
+        } else {
+            DockFormatTags.detect(name).also {
+                dockTagsCacheKey = name
+                dockTagsCache = it
+            }
+        }
+        if (fromName.isNotEmpty()) return fromName
+        // Fallback: the stream URL usually ends in the real filename
+        // (debrid links keep it) even when the payload title was cleaned.
+        val urlName = item.url.substringAfterLast('/').substringBefore('?')
+        if (urlName.isBlank() || urlName == name) return fromName
+        val decoded = try {
+            java.net.URLDecoder.decode(urlName, "UTF-8")
+        } catch (_: Exception) {
+            urlName
+        }
+        return DockFormatTags.detect(decoded)
+    }
+
+    /** "Seven" for 7 — MARQUEE's spelled-out season/episode line. Numbers a
+     *  playbill wouldn't spell (50+) fall back to digits. */
+    private fun spellNumber(n: Int?): String {
+        if (n == null) return ""
+        val ones = arrayOf(
+            "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven",
+            "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen",
+            "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen",
+        )
+        return when {
+            n < 0 || n >= 50 -> n.toString()
+            n < 20 -> ones[n]
+            else -> {
+                val tens = if (n < 30) "Twenty" else if (n < 40) "Thirty" else "Forty"
+                if (n % 10 == 0) tens else "$tens-${ones[n % 10]}"
+            }
+        }
     }
 
     private fun setResolvingState(resolving: Boolean) {
@@ -5906,9 +6817,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             hideIptvZapBanner()
         }
 
-        // Hide subtitles when controls menu is shown
-        subtitleOverlay.visibility = View.GONE
-
         // The title and controls are one presentation state: metadata updates
         // may change the text, but only this method is allowed to reveal it.
         titleContainer.animate().cancel()
@@ -5919,17 +6827,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val hasSeriesMetadata = model?.contentType?.lowercase(java.util.Locale.US) == "series" &&
                                currentItem?.season != null && currentItem.episode != null
 
-        if (hasSeriesMetadata) {
-            titleView.visibility = View.GONE
-            titleOttContainer.visibility = View.VISIBLE
+        if (ottSkinInstalled) {
+            // The OTT dock carries its own identity row, mirroring the Flutter
+            // dock — the top-of-screen title stays hidden entirely.
+            titleContainer.visibility = View.GONE
+            updateOttIdentity()
         } else {
-            titleView.visibility = View.VISIBLE
-            titleOttContainer.visibility = View.GONE
-        }
+            if (hasSeriesMetadata) {
+                titleView.visibility = View.GONE
+                titleOttContainer.visibility = View.VISIBLE
+            } else {
+                titleView.visibility = View.VISIBLE
+                titleOttContainer.visibility = View.GONE
+            }
 
-        if (titleView.text?.isNotEmpty() == true || hasSeriesMetadata) {
-            titleContainer.visibility = View.VISIBLE
-            titleContainer.alpha = 1f
+            if (titleView.text?.isNotEmpty() == true || hasSeriesMetadata) {
+                titleContainer.visibility = View.VISIBLE
+                titleContainer.alpha = 1f
+            }
         }
 
         // Show Stremio source quality badge
@@ -5964,6 +6879,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
         updatePauseButtonLabel()
+        updateSubtitleControlsLift()
     }
 
     private fun hideControlsMenu() {
@@ -5987,6 +6903,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         cancelScheduledHideControlsMenu()
         controlsMenuVisible = false
+        subtitleControlsLift.restore()
 
         // Hide title and revert to simple mode when controls hide
         titleContainer.animate()
@@ -6013,11 +6930,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     overlay.visibility = View.GONE
                     overlay.alpha = 0f
                     overlay.translationY = 0f
-                    // Show subtitles when controls menu is hidden
-                    subtitleOverlay.visibility = View.VISIBLE
                 }
             }
             .start()
+    }
+
+    /** Re-measure after layout because each controls skin occupies a different height. */
+    private fun updateSubtitleControlsLift() {
+        if (!controlsMenuVisible) return
+        val dock = controlsOverlay ?: return
+        val extraPanelHeight = iptvZapBanner
+            ?.takeIf { iptvZapBannerDocked && it.visibility == View.VISIBLE }
+            ?.height ?: 0
+        subtitleControlsLift.liftAbove(dock.height + extraPanelHeight)
+        dock.post {
+            if (!controlsMenuVisible) return@post
+            val laidOutExtra = iptvZapBanner
+                ?.takeIf { iptvZapBannerDocked && it.visibility == View.VISIBLE }
+                ?.height ?: 0
+            subtitleControlsLift.liftAbove(dock.height + laidOutExtra)
+        }
     }
 
     private fun hideTitleImmediately() {
@@ -6045,16 +6977,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val button = pauseButton ?: return
         val playing = player?.isPlaying == true
         button.text = if (playing) "Pause" else "Play"
-        val iconRes = if (playing) R.drawable.ic_pause else R.drawable.ic_play
+        // Each dock skin swaps within its own icon family; classic keeps the
+        // legacy pair.
+        val spec = dockSkinSpec.takeIf { ottSkinInstalled }
+        val iconRes = if (playing) {
+            spec?.pauseIconRes ?: R.drawable.ic_pause
+        } else {
+            spec?.playIconRes ?: R.drawable.ic_play
+        }
         button.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0)
+        refreshOttCaptionFor(button)
     }
 
     private fun updateAspectButtonLabel() {
         aspectButton?.text = resizeModeLabels[resizeModeIndex]
+        refreshOttCaptionFor(aspectButton)
     }
 
     private fun updateNightModeButtonLabel() {
         nightModeButton?.text = nightModeLabels[nightModeIndex]
+        refreshOttCaptionFor(nightModeButton)
     }
 
     // Premium Seekbar Progress Updates
@@ -6086,7 +7028,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Update Cinema Mode split time displays
             debrifyTimeCurrent?.text = formatTime(currentPosition)
-            debrifyTimeTotal?.text = formatTime(duration)
+            debrifyTimeTotal?.text = if (ottSkinInstalled) {
+                "-" + formatTime((duration - currentPosition).coerceAtLeast(0))
+            } else {
+                formatTime(duration)
+            }
 
             // Update legacy combined display (for compatibility)
             debrifyTimeDisplay?.text = "${formatTime(currentPosition)} / ${formatTime(duration)}"
@@ -6199,7 +7145,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         if (videoDuration <= 0) {
             // Don't trap focus — let DPAD navigation skip to Sources badge
-            if (stremioSources.isNotEmpty()) {
+            if (ottSkinInstalled) {
+                // The badge is permanently hidden under OTT (its requestFocus
+                // would no-op and strand focus); the dock's Sources button is
+                // already in normal traversal, so just fall back to Play.
+                pauseButton?.requestFocus()
+            } else if (stremioSources.isNotEmpty()) {
                 stremioSourceBadge?.requestFocus()
             } else {
                 pauseButton?.requestFocus()
@@ -6244,8 +7195,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .start()
         }
 
-        // Highlight current time with Netflix red
-        debrifyTimeCurrent?.setTextColor(Color.parseColor("#E50914"))
+        if (ottSkinInstalled) {
+            // OTT keeps the dock's own palette (white70 times) and swells the
+            // bar 3->6dp instead of recoloring; the preview chip appears with
+            // the first step via updateCinemaProgressUI.
+            setOttTrackHeight(focused = true)
+        } else {
+            // Highlight current time with Netflix red
+            debrifyTimeCurrent?.setTextColor(Color.parseColor("#E50914"))
+        }
 
         // Cache track width
         cinemaProgressBackground?.let { bg ->
@@ -6279,8 +7237,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .start()
         }
 
-        // Fade current time color back to white
-        debrifyTimeCurrent?.setTextColor(Color.WHITE)
+        if (ottSkinInstalled) {
+            setOttTrackHeight(focused = false)
+            ottScrubPreviewChip?.visibility = View.GONE
+        } else {
+            // Fade current time color back to white
+            debrifyTimeCurrent?.setTextColor(Color.WHITE)
+        }
 
         // Resume playback
         player?.play()
@@ -6301,7 +7264,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun updateCinemaProgressUI() {
         // Update time display
         debrifyTimeCurrent?.text = formatTime(seekbarPosition)
-        debrifyTimeTotal?.text = formatTime(videoDuration)
+        debrifyTimeTotal?.text = if (ottSkinInstalled) {
+            // The OTT bar mirrors the Flutter dock: remaining, not total.
+            "-" + formatTime((videoDuration - seekbarPosition).coerceAtLeast(0))
+        } else {
+            formatTime(videoDuration)
+        }
+
+        if (ottSkinInstalled && cinemaSeekMode) {
+            // Cinema-scrub preview chip: "H:MM:SS   ·   ±delta" against the
+            // real (paused) playhead, U+2212 for the minus like the Flutter
+            // chip — tv_controls.dart:718-741. Focusing the bar enters
+            // cinemaSeekMode before any step, so the chip waits for a real
+            // delta; once up, a scrub back through ±0:00 keeps it.
+            val origin = player?.currentPosition ?: seekbarPosition
+            val delta = seekbarPosition - origin
+            if (delta != 0L || ottScrubPreviewChip?.visibility == View.VISIBLE) {
+                val sign = if (delta < 0) "−" else "+"
+                ottScrubPreviewText?.text =
+                    "${formatTime(seekbarPosition)}   ·   $sign${formatTime(kotlin.math.abs(delta))}"
+                ottScrubPreviewChip?.visibility = View.VISIBLE
+            }
+        }
 
         val targetProgress = if (videoDuration > 0) {
             seekbarPosition.toFloat() / videoDuration.toFloat()
@@ -6783,6 +7767,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         playlistVisible = true
         playlistOverlay.visibility = View.VISIBLE
+        seedGuideSkinChrome()
 
         when (playlistMode) {
             PlaylistMode.SERIES -> alignSeriesTabsForCurrentEpisode()
@@ -6999,6 +7984,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun hidePlaylist() {
         playlistVisible = false
         playlistOverlay.visibility = View.GONE
+        gdPop?.visibility = View.GONE
     }
 
     // Next overlay
@@ -10809,6 +11795,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  whose keys move focus around the dock instead of zapping. */
     private var iptvZapBannerDocked = false
     private var iptvDockLayoutListenerAttached = false
+    private var iptvZapBannerLayoutListenerAttached = false
 
     /** The channel the visible banner is describing. A paging window installed
      *  after the banner appeared changes this channel's position and the
@@ -10833,6 +11820,96 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
     }
     private val guideTokens: GuideTokens? by lazy { GuideTokens.of(guideStyle) }
+
+    // ── Control skin (see TvControlsSkin.kt) ───────────────────────────────
+    // Same read-once contract as guideStyle. Live IPTV sessions force CLASSIC
+    // until the OTT skin's live arrangement ships, which is why the gate is
+    // taken at setupControls time (isIptvMode is already set on that path)
+    // rather than baked into this lazy.
+    private val controlsSkin: TvControlsSkin by lazy {
+        TvControlsSkin.fromPref(
+            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                this,
+                TvControlsSkin.PREF_KEY,
+                "marquee",
+            ),
+        )
+    }
+
+    /** Everything that differs between dock skins WITHOUT deserving its own
+     *  code branch: which layout inflates, bar geometry, the focus gesture,
+     *  which icon family play/pause swaps within. Behavior that can't be a
+     *  number (identity arrangement, the PULSE spannable) branches on
+     *  [controlsSkin] directly. */
+    private data class DockSkinSpec(
+        val layoutRes: Int,
+        val trackIdleDp: Float,
+        val trackFocusDp: Float,
+        val focusScale: Float,
+        val focusLiftDp: Float,
+        // Only the OTT scrim needs 4 stops (its Flutter source of truth);
+        // every other skin's XML background is final as inflated.
+        val applyShaderScrim: Boolean,
+        val playIconRes: Int,
+        val pauseIconRes: Int,
+    )
+
+    /** null exactly when [controlsSkin] is CLASSIC — the "is a dock skin
+     *  selected" test, evaluated before the IPTV launch gate. */
+    private val dockSkinSpec: DockSkinSpec? by lazy {
+        when (controlsSkin) {
+            TvControlsSkin.CLASSIC -> null
+            TvControlsSkin.OTT -> DockSkinSpec(
+                R.layout.view_debrify_tv_ott_controls,
+                trackIdleDp = 3f, trackFocusDp = 6f,
+                focusScale = 1.08f, focusLiftDp = 0f,
+                applyShaderScrim = true,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.FROST -> DockSkinSpec(
+                R.layout.view_debrify_tv_frost_controls,
+                trackIdleDp = 3f, trackFocusDp = 6f,
+                focusScale = 1.08f, focusLiftDp = 0f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.MARQUEE -> DockSkinSpec(
+                R.layout.view_debrify_tv_marquee_controls,
+                trackIdleDp = 2f, trackFocusDp = 4f,
+                // Bare glyphs don't scale; they lift onto their underline.
+                focusScale = 1.0f, focusLiftDp = 2f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_wire_play,
+                pauseIconRes = R.drawable.ic_wire_pause,
+            )
+            TvControlsSkin.BROADCAST -> DockSkinSpec(
+                R.layout.view_debrify_tv_broadcast_controls,
+                trackIdleDp = 5f, trackFocusDp = 7f,
+                focusScale = 1.06f, focusLiftDp = 0f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.PULSE -> DockSkinSpec(
+                R.layout.view_debrify_tv_pulse_controls,
+                trackIdleDp = 5f, trackFocusDp = 8f,
+                focusScale = 1.08f, focusLiftDp = 0f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+            TvControlsSkin.TICKET -> DockSkinSpec(
+                R.layout.view_debrify_tv_ticket_controls,
+                trackIdleDp = 4f, trackFocusDp = 6f,
+                focusScale = 1.0f, focusLiftDp = 1.5f,
+                applyShaderScrim = false,
+                playIconRes = R.drawable.ic_dock_play,
+                pauseIconRes = R.drawable.ic_dock_pause,
+            )
+        }
+    }
 
     /** Typefaces for the styled looks, loaded from the Flutter asset bundle.
      *  Failures are memoized too (containsKey, not getOrPut) so a missing
@@ -11633,6 +12710,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // the guide updates the guide's own header instead.
         if (iptvGuideVisible) return
         val banner = ensureIptvZapBanner()
+        if (!iptvZapBannerLayoutListenerAttached) {
+            iptvZapBannerLayoutListenerAttached = true
+            banner.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                if (iptvZapBannerDocked && controlsMenuVisible) {
+                    updateSubtitleControlsLift()
+                }
+            }
+        }
         // Already on this surface: repaint in place. Re-running the entrance
         // would flash the panel on every keypress that re-arms the dock.
         val alreadyUp = banner.visibility == View.VISIBLE &&
@@ -11730,7 +12815,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (docked && dock != null && !iptvDockLayoutListenerAttached) {
             iptvDockLayoutListenerAttached = true
             dock.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                if (iptvZapBannerDocked) applyIptvZapBannerMode(true)
+                if (iptvZapBannerDocked) {
+                    applyIptvZapBannerMode(true)
+                    updateSubtitleControlsLift()
+                }
             }
         }
     }
@@ -13145,9 +14233,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 withContext(Dispatchers.Default) { SubtitleAligner.alignTiered(segments, cues) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // activity teardown — let the scope die quietly
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // Pure math should never throw; if it somehow does, the player
-                // must not die for a subtitle convenience feature.
+                // must not die for a subtitle convenience feature. Throwable,
+                // not Exception: the 2026-08-25 MiBox crash was an
+                // OutOfMemoryError (an Error) from a garbage-sized grid, and
+                // it sailed straight past an Exception-only guard.
                 android.util.Log.e("AutoSync", "aligner failed", e)
                 AlignResult.NoMatch(0)
             } finally {
@@ -14214,7 +15305,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     // ── Auto-sync countdown pill ─────────────────────────────────────────────
-    // The quiet bottom-right status pill (design/mockups/
+    // The quiet bottom-right status pill (dev/design/mockups/
     // subtitle_auto_sync_hint_mockup/countdown_devices.html, same component as
     // the Dart player's AutoSyncPill): a draining 90-second ring + tracked
     // uppercase label + tabular seconds while listening; colored glyph + label
@@ -14463,7 +15554,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             SubtitleSettings.getFontSizeSp(this)
         )
         subtitleOverlay.setStyle(SubtitleSettings.buildCaptionStyle(this))
-        subtitleOverlay.setBottomPaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
+        subtitleControlsLift.setBasePaddingFraction(SubtitleSettings.getElevationPaddingFraction(this))
         // Only carry an offset onto the renderer when a subtitle is actually on
         // screen. Dialing the slider with subtitles off stores an offset under a
         // null owner (so the slider stays live), but it must NOT be pushed to the
@@ -14516,6 +15607,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.size
         val speed = playbackSpeeds[playbackSpeedIndex]
         player?.setPlaybackSpeed(speed)
+        // Dock skins carry the speed on the button itself — visibly on
+        // BROADCAST's labeled pill, and as the shared focus caption on the
+        // rest (which would otherwise go stale). Classic keeps its Toast-only
+        // presentation untouched.
+        if (ottSkinInstalled) {
+            speedButton?.text = playbackSpeedLabels[playbackSpeedIndex]
+            refreshOttCaptionFor(speedButton)
+        }
         Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
     }
 
@@ -16099,6 +17198,49 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist - parsed ${newItems.size} items, contentType=$contentType")
 
+        // Carry the FETCHED episode metadata (TVMaze titles/artwork/ratings)
+        // from the outgoing items onto the new source's matching episodes.
+        // The new payload's titles are the new pack's raw filenames, and the
+        // metadata re-request below round-trips through Flutter — without
+        // this hand-off the dock identity regresses to the release name for
+        // that window (or for good, if the re-request fails). An old title
+        // counts as fetched only when a metadata push actually replaced it
+        // (title differs from the preserved sourceTitle).
+        val oldBySeasonEpisode = model.items
+            .filter { it.season != null && it.episode != null }
+            .associateBy { it.season to it.episode }
+        for (i in newItems.indices) {
+            val ni = newItems[i]
+            if (ni.season == null || ni.episode == null) continue
+            val old = oldBySeasonEpisode[ni.season to ni.episode] ?: continue
+            val oldFetchedTitle = old.title.takeIf {
+                it.isNotBlank() && old.sourceTitle != null && it != old.sourceTitle
+            }
+            newItems[i] = ni.copy(
+                title = oldFetchedTitle ?: ni.title,
+                artwork = ni.artwork ?: old.artwork,
+                description = ni.description ?: old.description,
+                rating = ni.rating ?: old.rating,
+            )
+        }
+
+        // Movies / single-file payloads have no S/E to match on: when the
+        // switch stays on the SAME content, the identity must not change
+        // just because the file name did — keep the outgoing title (the
+        // clean movie name on catalog launches) plus artwork/rating. The
+        // quality chips still re-parse from the NEW source via sourceTitle.
+        if (newItems.size == 1 && newItems[0].season == null &&
+            sameContent && currentItem != null
+        ) {
+            val ni = newItems[0]
+            newItems[0] = ni.copy(
+                title = currentItem.title.ifBlank { ni.title },
+                artwork = ni.artwork ?: currentItem.artwork,
+                description = ni.description ?: currentItem.description,
+                rating = ni.rating ?: currentItem.rating,
+            )
+        }
+
         // Find which item in the new source's playlist matches what the user was
         // watching, so we resume the same content rather than restarting at file 0.
         //  - Single item: unambiguous — it's the content (movie, or one episode).
@@ -16179,6 +17321,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Rebuild playlist UI (without re-adding RecyclerView listeners)
         rebuildPlaylistContent()
+
+        // Re-run the TVMaze pipeline for the new payload: launch was the only
+        // requester, so a switched-in source would otherwise keep raw pack
+        // filenames wherever the carry-over above had no match (episodes the
+        // old source lacked, or a first switch before any push arrived).
+        // No-ops for non-series content; rebuildNavigationMaps already set
+        // model.contentType above.
+        requestMetadataFromFlutter()
 
         // Update the title content for the next controls reveal.
         val currentSource = stremioSources.getOrNull(sourceIndex)
@@ -16354,6 +17504,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun showStremioSourceBadge() {
+        if (ottSkinInstalled) {
+            // The dock button is the sources affordance under OTT; the
+            // top-right badge stays hidden. Availability can change per item
+            // (Stremio-TV zaps replace the source list), so sync every show.
+            ottSourcesButton?.visibility =
+                if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
+            return
+        }
         if (stremioSources.isEmpty()) return
         stremioSourceBadge?.animate()?.cancel()
         stremioSourceBadge?.visibility = View.VISIBLE
@@ -16696,6 +17854,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
         iptvTuneDiagnostics.onSessionEnd()
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
         startupFailoverTimeout = null
@@ -17214,6 +18373,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val contentSeason = (map["contentSeason"] as? Number)?.toInt()
         val contentEpisode = (map["contentEpisode"] as? Number)?.toInt()
 
+        // This is the one same-activity path that can change SHOW, and the
+        // zap closures never re-run the TVMaze pipeline — a kept name would
+        // caption the new show's episodes with the old show for the rest of
+        // the session. Episode-only is honest until a fresh push arrives.
+        ottShowName = null
+
         payload?.let { model ->
             val previousItem = model.items.getOrNull(currentIndex)
             val switchedItem = PlaybackItem(
@@ -17232,6 +18397,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 sizeBytes = null,
                 rating = channel.nowPlayingRating ?: previousItem?.rating,
                 provider = previousItem?.provider,
+                // Keep the release name parseable for the quality chips even
+                // if a later metadata copy() overwrites title.
+                sourceTitle = title,
             )
             model.items.clear()
             model.items.add(switchedItem)
@@ -17260,7 +18428,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateStremioSourcesFromPlaybackMap(map)
         updateStremioTvGuideHeader()
         updateStremioQualityBadge()
-        if (stremioSources.isNotEmpty()) {
+        if (ottSkinInstalled) {
+            ottSourcesButton?.visibility =
+                if (stremioSources.isEmpty()) View.GONE else View.VISIBLE
+        } else if (stremioSources.isNotEmpty()) {
             stremioSourceBadge?.visibility = View.VISIBLE
         } else {
             stremioSourceBadge?.visibility = View.GONE
@@ -17785,6 +18956,11 @@ private data class PlaybackItem(
     // Explicit local completion. Unlike tracker 100%, this must not yield to
     // an old partial position as an assumed active rewatch.
     val watched: Boolean = false,
+    // The title as it arrived in the launch payload — on torrent launches the
+    // release filename. Metadata pushes overwrite [title] with the fetched
+    // episode name, so quality parsing (updateOttExtras) reads THIS, which
+    // item.copy preserves across those updates.
+    val sourceTitle: String? = null,
 ) {
     fun seasonEpisodeLabel(): String {
         return if (season != null && episode != null) {
@@ -17839,6 +19015,7 @@ private data class PlaybackItem(
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
                 watched = obj.optBoolean("watched", false),
+                sourceTitle = obj.optString("title").takeIf { it.isNotEmpty() },
             )
         }
     }
@@ -17881,6 +19058,12 @@ private class PlaylistAdapter(
     private val items: List<PlaybackItem>,
     private val guide: List<GuideEpisode> = emptyList(),
     private val onFetchEpisode: ((Int, Int) -> Unit)? = null,
+    // Guide-skin seam (all default to legacy => classic byte-identical):
+    // premium skins swap the row layout and append their own styling +
+    // focus reporting after the shared bind.
+    private val itemLayoutRes: Int = R.layout.item_android_tv_playlist_entry_horizontal,
+    private val skinBinder: ((View, PlaybackItem, Int, Boolean) -> Unit)? = null,
+    private val onItemFocused: ((PlaybackItem, Int) -> Unit)? = null,
     private val onItemClick: (Int) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), PlaylistOverlayAdapter {
     private var activeItemIndex = -1
@@ -17971,8 +19154,8 @@ private class PlaylistAdapter(
                 SeasonHeaderViewHolder(view)
             }
             VIEW_TYPE_EPISODE -> {
-                val view = inflater.inflate(R.layout.item_android_tv_playlist_entry_horizontal, parent, false)
-                EpisodeViewHolder(view, onItemClick)
+                val view = inflater.inflate(itemLayoutRes, parent, false)
+                EpisodeViewHolder(view, onItemClick, skinBinder, onItemFocused)
             }
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
@@ -18093,8 +19276,11 @@ private class PlaylistAdapter(
     // Cinema Cards v2 - Episode ViewHolder
     class EpisodeViewHolder(
         itemView: View,
-        private val onItemClick: (Int) -> Unit
+        private val onItemClick: (Int) -> Unit,
+        private val skinBinder: ((View, PlaybackItem, Int, Boolean) -> Unit)? = null,
+        private val onItemFocused: ((PlaybackItem, Int) -> Unit)? = null,
     ) : RecyclerView.ViewHolder(itemView) {
+        private var lastBoundIndex: Int = -1
         // Container & focus elements
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
         private val focusBorder: View? = itemView.findViewById(R.id.focus_border)
@@ -18255,6 +19441,18 @@ private class PlaylistAdapter(
                     focusBorder?.visibility = View.GONE
                 }
             }
+
+            // Guide-skin hook (null on classic): per-skin styling on top of the
+            // shared bind, and a focus listener that reports into the detail
+            // pane instead of the classic scale animation (deliberate
+            // last-set-wins on container.onFocusChangeListener).
+            lastBoundIndex = itemIndex
+            skinBinder?.invoke(itemView, item, itemIndex, isActive)
+            if (onItemFocused != null) {
+                container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) onItemFocused.invoke(item, lastBoundIndex)
+                }
+            }
         }
 
         /** Absent guide episode: dimmed, and the click fetches instead of playing. */
@@ -18302,6 +19500,8 @@ private class PlaylistAdapter(
                 metaSeparator?.visibility = View.GONE
                 posterProgress.visibility = View.GONE
             }
+
+            skinBinder?.invoke(itemView, item, lastBoundIndex, isActive)
         }
 
         private fun startDotPulse() {
@@ -18407,6 +19607,10 @@ private class PlaylistAdapter(
 private class MoviePlaylistAdapter(
     private val items: List<PlaybackItem>,
     private val groups: MovieGroups,
+    // Guide-skin seam — see PlaylistAdapter; defaults keep classic identical.
+    private val itemLayoutRes: Int = R.layout.item_android_tv_playlist_entry_horizontal,
+    private val skinBinder: ((View, PlaybackItem, Int, Boolean) -> Unit)? = null,
+    private val onItemFocused: ((PlaybackItem, Int) -> Unit)? = null,
     private val onItemClick: (Int) -> Unit,
 ) : RecyclerView.Adapter<MoviePlaylistAdapter.MovieViewHolder>(), PlaylistOverlayAdapter {
 
@@ -18438,8 +19642,8 @@ private class MoviePlaylistAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MovieViewHolder {
         val inflater = android.view.LayoutInflater.from(parent.context)
-        val view = inflater.inflate(R.layout.item_android_tv_playlist_entry_horizontal, parent, false)
-        return MovieViewHolder(view, onItemClick)
+        val view = inflater.inflate(itemLayoutRes, parent, false)
+        return MovieViewHolder(view, onItemClick, skinBinder, onItemFocused)
     }
 
     override fun onBindViewHolder(holder: MovieViewHolder, position: Int) {
@@ -18500,7 +19704,10 @@ private class MoviePlaylistAdapter(
     class MovieViewHolder(
         itemView: View,
         private val onItemClick: (Int) -> Unit,
+        private val skinBinder: ((View, PlaybackItem, Int, Boolean) -> Unit)? = null,
+        private val onItemFocused: ((PlaybackItem, Int) -> Unit)? = null,
     ) : RecyclerView.ViewHolder(itemView) {
+        private var lastBoundIndex: Int = -1
 
         private val container: View = itemView.findViewById(R.id.android_tv_playlist_item_container)
         private val selectionOverlay: View? = itemView.findViewById(R.id.selection_overlay)
@@ -18584,6 +19791,17 @@ private class MoviePlaylistAdapter(
                     selectionOverlay?.visibility = View.GONE
                 }
             }
+
+            // Guide-skin hook (null on classic) — same seam as EpisodeViewHolder:
+            // skins own their focus visuals via XML selectors, so the reporting
+            // listener replaces the classic scale animation (last-set-wins).
+            lastBoundIndex = itemIndex
+            skinBinder?.invoke(itemView, item, itemIndex, isActive)
+            if (onItemFocused != null) {
+                container.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) onItemFocused.invoke(item, lastBoundIndex)
+                }
+            }
         }
 
         fun updateProgress(item: PlaybackItem, isActive: Boolean) {
@@ -18610,6 +19828,8 @@ private class MoviePlaylistAdapter(
                 progressContainer.visibility = View.GONE
                 posterProgress.visibility = View.GONE
             }
+
+            skinBinder?.invoke(itemView, item, lastBoundIndex, isActive)
         }
 
         private fun loadPosterImage(item: PlaybackItem, itemIndex: Int, groupName: String) {

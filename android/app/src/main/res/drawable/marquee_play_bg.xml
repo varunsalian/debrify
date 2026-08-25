@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MARQUEE play/pause button: focused = faint fill + a 3dp underline glow bar at the
+     bottom of the 50dp button box (layer offsets, not gravity, for old APIs). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#14FFF0DE" />
+                    <corners android:radius="6dp" />
+                </shape>
+            </item>
+            <item android:top="47dp" android:left="10dp" android:right="10dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="#F3DFC4" />
+                    <corners android:radius="1.5dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+</selector>

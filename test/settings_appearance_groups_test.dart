@@ -57,12 +57,20 @@ void main() {
   test('every group carries a header and an explanation', () {
     // The whole point of the reorganisation: four kinds of decision that used
     // to interleave now say which kind they are.
-    for (final title in ['Presets', 'Theme', 'Screen layouts', 'Display']) {
+    for (final title in [
+      'Presets',
+      'Theme',
+      'Screen layouts',
+      'Display',
+      // Android-TV-only, and deliberately LAST: the gated section sits at the
+      // end so its dead node can't strand DPAD traversal on Apple TV.
+      'Player',
+    ]) {
       expect(appearance, contains("title: '$title'"), reason: title);
     }
     expect(
       RegExp(r'blurb:').allMatches(appearance).length,
-      4,
+      5,
       reason: 'a header without a blurb is the ambiguity we just removed',
     );
   });

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Determinate ring for the episode-number badge: dark puck to mask the
+     thumb behind it, faint full track, indigo sweep driven by level. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#FF16161E" />
+        </shape>
+    </item>
+    <item>
+        <shape
+            android:shape="ring"
+            android:innerRadiusRatio="2.6"
+            android:thicknessRatio="11"
+            android:useLevel="false">
+            <solid android:color="#1FFFFFFF" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <shape
+            android:shape="ring"
+            android:innerRadiusRatio="2.6"
+            android:thicknessRatio="11"
+            android:useLevel="true">
+            <solid android:color="#FF818CF8" />
+        </shape>
+    </item>
+</layer-list>

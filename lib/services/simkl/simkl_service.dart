@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -537,6 +538,9 @@ class SimklService {
     required String token,
     required String label,
     Map<String, String>? query,
+    // Failure hook: hands the caller the HTTP status + response body a plain
+    // null return would swallow (the scrobble path branches on a 409).
+    void Function(int status, String body)? onFailureStatus,
   }) async {
     try {
       final uri = _apiUri(path, query);
@@ -549,6 +553,7 @@ class SimklService {
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200 && response.statusCode != 201) {
         debugPrint('Simkl: $label failed (${response.statusCode})');
+        onFailureStatus?.call(response.statusCode, response.body);
         return null;
       }
       if (response.body.isEmpty) return <String, dynamic>{};
@@ -874,11 +879,17 @@ class SimklService {
             },
             'progress': progress,
           };
+    int? failureStatus;
+    var failureBody = '';
     final result = await _postOrNull(
       path,
       body,
       token: token,
       label: 'scrobble $path',
+      onFailureStatus: (status, respBody) {
+        failureStatus = status;
+        failureBody = respBody;
+      },
     );
     // Any scrobble write changes the account's paused sessions — drop the
     // read cache so a later resume/progress read reflects it.
@@ -887,8 +898,98 @@ class SimklService {
       if (s != null && e != null) {
         EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
       }
+    } else if (path == '/scrobble/stop' &&
+        failureStatus == 409 &&
+        s != null &&
+        e != null &&
+        progress >= 80) {
+      // A finalizing stop Simkl refused with 409 — either a duplicate (the
+      // episode was already scrobbled inside the dedup window) or its ~20s
+      // write lock. Recover out-of-band; see _recoverStopConflict.
+      final snippet = failureBody.length > 160
+          ? failureBody.substring(0, 160)
+          : failureBody;
+      debugPrint('Simkl: stop 409 for S${s}E$e ($snippet) — recovering');
+      unawaited(
+        _recoverStopConflict(
+          imdbId,
+          s,
+          e,
+          progress,
+          token,
+          EpisodeTrackerSnapshotRevision.identity('simkl', imdbId),
+        ),
+      );
     }
     return result != null;
+  }
+
+  /// Out-of-band recovery for a 409'd finalizing stop (progress ≥ 80).
+  ///
+  /// Two possible causes, both handled: Simkl's ~20s write lock (the stop
+  /// never registered — wait it out and retry ONCE, which marks watched and
+  /// clears the session server-side), or a genuine duplicate (the retry 409s
+  /// again — the watched mark already exists). Either way, finish by clearing
+  /// this episode's paused sessions OLDER than a few minutes: without that,
+  /// orphaned heartbeat checkpoints linger forever and resurface as stale
+  /// resume points on every device (the "Resume · S1E7 on a show you're deep
+  /// into S2" bug). The age filter protects a session a second device is
+  /// writing RIGHT NOW, and this session's own fresh checkpoints.
+  Future<void> _recoverStopConflict(
+    String imdbId,
+    int season,
+    int episode,
+    double progress,
+    String originalToken,
+    int originRevision,
+  ) async {
+    try {
+      await Future.delayed(const Duration(seconds: 25));
+      // These writes belong to the account that 409'd — if the profile or
+      // Simkl account changed during the wait, never replay them against a
+      // different one.
+      final token = await StorageService.getSimklAccessToken();
+      if (token == null || token.isEmpty || token != originalToken) return;
+      // Same account, NEWER intent: any Simkl write for this title since the
+      // 409 (mark unwatched, a replay's scrobble, another device syncing in)
+      // bumps the title revision — replaying the stale ≥80% stop over it
+      // would re-mark the episode watched against the user's newer action.
+      // (A replay that hasn't scrobbled yet is invisible to any in-process
+      // guard — accepted residual.)
+      if (EpisodeTrackerSnapshotRevision.identity('simkl', imdbId) !=
+          originRevision) {
+        return;
+      }
+      int? retryStatus;
+      final retry = await _postOrNull(
+        '/scrobble/stop',
+        {
+          'show': {
+            'ids': {'imdb': imdbId},
+          },
+          'episode': {'season': season, 'number': episode},
+          'progress': progress,
+        },
+        token: token,
+        label: 'scrobble stop retry',
+        onFailureStatus: (status, _) => retryStatus = status,
+      );
+      // Clean up only once the watched mark is CERTAIN: the retry landed, or
+      // Simkl confirmed a duplicate again (409). A timeout/5xx leaves the
+      // write-lock case unresolved — deleting then could strand the episode
+      // unwatched with its only checkpoint gone.
+      if (retry == null && retryStatus != 409) return;
+      await deletePlaybackForEpisode(
+        imdbId,
+        season,
+        episode,
+        olderThan: const Duration(minutes: 5),
+      );
+      _invalidatePlaybackCache();
+      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    } catch (error) {
+      debugPrint('Simkl: stop-conflict recovery error (${error.runtimeType})');
+    }
   }
 
   // ============================================================================
@@ -998,7 +1099,13 @@ class SimklService {
   /// well-formed paused session (or on failure). Only well-formed sessions are
   /// selection candidates, so a malformed newest session never shadows a valid
   /// older one, and the whole path is throw-free.
-  Future<({int season, int episode, double? progress})?>
+  ///
+  /// [pausedAt] is the winning session's timestamp (null when Simkl sent none):
+  /// the resume reconciler ranks candidates by RECENCY across trackers and
+  /// local history, so a stale orphaned session (a scrobble stop that failed —
+  /// e.g. Simkl's 409 duplicate refusal — leaves its pause checkpoints behind
+  /// forever) can no longer outrank a fresher position from another source.
+  Future<({int season, int episode, double? progress, DateTime? pausedAt})?>
   fetchShowPlaybackSelection(String showImdbId) async {
     final sessions = await _fetchEpisodePlaybackSessions();
     if (sessions == null) return null;
@@ -1017,7 +1124,13 @@ class SimklService {
         haveBest = true;
       }
     }
-    return best;
+    if (best == null) return null;
+    return (
+      season: best.season,
+      episode: best.episode,
+      progress: best.progress,
+      pausedAt: bestAt,
+    );
   }
 
   /// The next unwatched episode of a show, from Simkl's server-computed
@@ -1190,8 +1303,13 @@ class SimklService {
   Future<bool> deletePlaybackForEpisode(
     String imdbId,
     int season,
-    int episode,
-  ) async {
+    int episode, {
+    // When set, only sessions whose paused_at is at least this old are
+    // deleted (a session without a parseable timestamp counts as old). Used
+    // by the stop-409 orphan cleanup so a session a second device is writing
+    // RIGHT NOW — or this session's own fresh checkpoint — survives.
+    Duration? olderThan,
+  }) async {
     final token = await StorageService.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final episodes = await _fetchEpisodePlaybackSessions();
@@ -1205,6 +1323,11 @@ class SimklService {
       if (ep is! Map) continue;
       if (_asNum(ep['season'])?.toInt() != season) continue;
       if (_asNum(ep['number'])?.toInt() != episode) continue;
+      if (olderThan != null) {
+        final rawAt = raw['paused_at'];
+        final at = rawAt is String ? DateTime.tryParse(rawAt) : null;
+        if (at != null && DateTime.now().difference(at) < olderThan) continue;
+      }
       final id = _asNum(raw['id'])?.toInt();
       if (id != null) ids.add(id);
     }
