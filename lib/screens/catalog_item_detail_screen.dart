@@ -163,6 +163,12 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   int? _resumeSeason;
   int? _resumeEpisode;
 
+  /// A resume lookup is in flight and unanswered. The primary button shows a
+  /// spinner instead of a label so it never flashes "Start Watching" before
+  /// flipping to "Resume · S1E7". Errors clear it (static label fallback).
+  bool _resumePending = false;
+  bool get _primaryBusy => _resumePending && !_resumeLoaded;
+
   /// Live Simkl status (drives the "Rewatch" relabel). Null until
   /// [simklStatusLoader] resolves — the button keeps "Play" until then.
   SimklTitleStatus? _simklStatus;
@@ -272,6 +278,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
+    // Plain assignment on purpose: the first call runs before the first
+    // build (setState illegal there); later re-reads have _resumeLoaded
+    // already true, making the flag inert.
+    if (!_resumeLoaded) _resumePending = true;
     try {
       final info = await loader();
       if (!mounted) return;
@@ -283,6 +293,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       });
     } catch (_) {
       // Non-critical — leave the static label.
+    } finally {
+      if (_resumePending) {
+        if (mounted) {
+          setState(() => _resumePending = false);
+        } else {
+          _resumePending = false;
+        }
+      }
     }
   }
 
@@ -1622,6 +1640,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         watchlistFocus: _watchlistFocus,
         tv: widget.isTelevision,
         playLabel: _primaryLabel,
+        playBusy: _primaryBusy,
         // TV only: the top row is the highest focusable widget, so a D-pad
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
@@ -2320,6 +2339,9 @@ class _ActionRow extends StatelessWidget {
   /// The primary button's label — progress-aware ("Start Watching" /
   /// "Resume · S3E4"), computed by the host.
   final String playLabel;
+
+  /// Resume state still resolving — Play shows a spinner instead of a label.
+  final bool playBusy;
   final VoidCallback onPlay;
   final VoidCallback onBrowse;
   final bool inMyWatchlist;
@@ -2339,6 +2361,7 @@ class _ActionRow extends StatelessWidget {
     required this.watchlistFocus,
     required this.tv,
     required this.playLabel,
+    this.playBusy = false,
     required this.onPlay,
     required this.onBrowse,
     required this.inMyWatchlist,
@@ -2417,6 +2440,7 @@ class _ActionRow extends StatelessWidget {
       focusNode: playFocus,
       icon: Icons.play_arrow_rounded,
       label: playLabel,
+      busy: playBusy,
       filled: true,
       compact: compact,
       tv: tv,
@@ -3000,12 +3024,17 @@ class _PrimaryButton extends StatefulWidget {
   /// header rather than dead-ending focus traversal.
   final VoidCallback? onArrowUp;
 
+  /// Resume state still resolving — spinner instead of icon+label so the
+  /// button never flashes a wrong status. Stays tappable.
+  final bool busy;
+
   const _PrimaryButton({
     required this.focusNode,
     required this.icon,
     required this.label,
     required this.filled,
     required this.onTap,
+    this.busy = false,
     this.compact = false,
     this.tv = false,
     this.tinted = false,
@@ -3104,28 +3133,46 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
                   : null,
             ),
             alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(widget.icon, color: fg, size: widget.compact ? 20 : 24),
-                SizedBox(width: widget.compact ? 7 : 10),
-                Flexible(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: fg,
-                      fontSize: widget.compact ? 14 : 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
+            child: widget.busy
+                ? SizedBox(
+                    width: widget.compact ? 52 : 64,
+                    child: Center(
+                      child: SizedBox(
+                        width: widget.compact ? 16 : 18,
+                        height: widget.compact ? 16 : 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: fg,
+                        ),
+                      ),
                     ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.icon,
+                        color: fg,
+                        size: widget.compact ? 20 : 24,
+                      ),
+                      SizedBox(width: widget.compact ? 7 : 10),
+                      Flexible(
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: fg,
+                            fontSize: widget.compact ? 14 : 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

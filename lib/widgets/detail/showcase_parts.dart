@@ -653,6 +653,7 @@ class ShowcaseIdentity extends StatelessWidget {
                 _Primary(
                   node: primaryNode,
                   label: m.primaryLabel,
+                  busy: m.primaryBusy,
                   onTap: m.onPrimary,
                   onFocused: onFocused,
                 ),
@@ -708,6 +709,7 @@ class ShowcaseIdentity extends StatelessWidget {
                 _Primary(
                   node: primaryNode,
                   label: m.primaryLabel,
+                  busy: m.primaryBusy,
                   onTap: m.onPrimary,
                   onFocused: onFocused,
                 ),
@@ -1077,11 +1079,16 @@ class _Primary extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onFocused;
 
+  /// Resume state still resolving — spinner instead of the label so the pill
+  /// never flashes a wrong status.
+  final bool busy;
+
   const _Primary({
     required this.node,
     required this.label,
     required this.onTap,
     required this.onFocused,
+    this.busy = false,
   });
 
   @override
@@ -1126,25 +1133,39 @@ class _PrimaryState extends State<_Primary> {
               color: solid ? _ink : _ink.withValues(alpha: 0.22),
               borderRadius: BorderRadius.circular(compact ? 22 : 15 * m.k),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.play_arrow_rounded,
-                  size: compact ? 20 : 14 * m.k,
-                  color: solid ? Colors.black : _ink,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  widget.label,
-                  style: TextStyle(
-                    fontSize: compact ? 15 : 10.5 * m.k,
-                    fontWeight: FontWeight.w600,
-                    color: solid ? Colors.black : _ink,
+            child: widget.busy
+                ? SizedBox(
+                    width: compact ? 44 : 32 * m.k,
+                    child: Center(
+                      child: SizedBox(
+                        width: compact ? 16 : 11 * m.k,
+                        height: compact ? 16 : 11 * m.k,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: solid ? Colors.black : _ink,
+                        ),
+                      ),
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.play_arrow_rounded,
+                        size: compact ? 20 : 14 * m.k,
+                        color: solid ? Colors.black : _ink,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        widget.label,
+                        style: TextStyle(
+                          fontSize: compact ? 15 : 10.5 * m.k,
+                          fontWeight: FontWeight.w600,
+                          color: solid ? Colors.black : _ink,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           );
         },
       ),

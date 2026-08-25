@@ -102,6 +102,11 @@ class DetailModel {
   /// default keeps independently constructed models immediately usable.
   final bool openingDataReady;
 
+  /// Resume state still resolving: the primary button shows a spinner instead
+  /// of [primaryLabel] so it never flashes a wrong status ("Start Watching" →
+  /// "Resume · S1E7").
+  final bool primaryBusy;
+
   /// Primary button caption — "Resume · S5E9", "Start Watching", "Rewatch", …
   final String primaryLabel;
 
@@ -201,6 +206,7 @@ class DetailModel {
     required this.recommendations,
     this.openingDataReady = true,
     required this.primaryLabel,
+    this.primaryBusy = false,
     required this.sourceCount,
     this.boundSources = const [],
     required this.hasTrailer,
