@@ -225,8 +225,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _iptvStyle = 'command';
   String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
-  String _tvPlayerControlsStyle = 'ott';
-  String _debrifyTvPlayerStyle = 'network';
+  String _tvPlayerControlsStyle = 'marquee';
+  String _debrifyTvPlayerStyle = 'cinema';
   String _playerDockStyle = 'classic';
   String _playerDockPalette = 'ultraviolet';
   String _playerDockSize = 'auto';

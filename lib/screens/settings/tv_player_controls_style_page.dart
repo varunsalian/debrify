@@ -16,6 +16,11 @@ class TvPlayerControlsStyleChoice {
 
 const List<TvPlayerControlsStyleChoice> kTvPlayerControlsStyleChoices = [
   TvPlayerControlsStyleChoice(
+    'marquee',
+    'Marquee',
+    'Editorial serif — bare glyphs, hairline progress, underline focus',
+  ),
+  TvPlayerControlsStyleChoice(
     'ott',
     'OTT',
     'The Apple TV dock — circular controls, focus captions, cinema scrub',
@@ -24,11 +29,6 @@ const List<TvPlayerControlsStyleChoice> kTvPlayerControlsStyleChoices = [
     'frost',
     'Frost',
     'A translucent panel floating inset from the screen edges',
-  ),
-  TvPlayerControlsStyleChoice(
-    'marquee',
-    'Marquee',
-    'Editorial serif — bare glyphs, hairline progress, underline focus',
   ),
   TvPlayerControlsStyleChoice(
     'broadcast',
@@ -57,7 +57,7 @@ String tvPlayerControlsStyleLabel(String style) {
   for (final c in kTvPlayerControlsStyleChoices) {
     if (c.value == style) return c.label;
   }
-  return 'OTT';
+  return 'Marquee';
 }
 
 /// Native TV player control-skin picker (`tv_player_controls_style`).
@@ -76,7 +76,7 @@ class TvPlayerControlsStylePage extends StatefulWidget {
 
 class _TvPlayerControlsStylePageState extends State<TvPlayerControlsStylePage> {
   bool _loading = true;
-  String _style = 'ott';
+  String _style = 'marquee';
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).

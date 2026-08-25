@@ -725,7 +725,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         currentChannelId = safeString(intent.getStringExtra("currentChannelId"));
         playerStyle = DebrifyTvPlayerStyle.fromPref(
                 com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                        this, "debrify_tv_player_style", "network"));
+                        this, "debrify_tv_player_style", "cinema"));
         int providedChannelNumber = intent.getIntExtra("currentChannelNumber", -1);
         if (providedChannelNumber > 0) {
             currentChannelNumber = providedChannelNumber;

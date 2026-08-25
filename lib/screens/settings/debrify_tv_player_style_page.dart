@@ -16,14 +16,14 @@ class DebrifyTvPlayerStyleChoice {
 
 const List<DebrifyTvPlayerStyleChoice> kDebrifyTvPlayerStyleChoices = [
   DebrifyTvPlayerStyleChoice(
-    'network',
-    'Network',
-    'Broadcast lower-third — channel plate, clean title, quality chips',
-  ),
-  DebrifyTvPlayerStyleChoice(
     'cinema',
     'Cinema',
     'Poster card and serif title with a gilded spec line',
+  ),
+  DebrifyTvPlayerStyleChoice(
+    'network',
+    'Network',
+    'Broadcast lower-third — channel plate, clean title, quality chips',
   ),
   DebrifyTvPlayerStyleChoice(
     'guide',
@@ -52,7 +52,7 @@ String debrifyTvPlayerStyleLabel(String style) {
   for (final c in kDebrifyTvPlayerStyleChoices) {
     if (c.value == style) return c.label;
   }
-  return 'Network';
+  return 'Cinema';
 }
 
 /// Debrify TV playback-screen style picker (`debrify_tv_player_style`).
@@ -70,7 +70,7 @@ class DebrifyTvPlayerStylePage extends StatefulWidget {
 
 class _DebrifyTvPlayerStylePageState extends State<DebrifyTvPlayerStylePage> {
   bool _loading = true;
-  String _style = 'network';
+  String _style = 'cinema';
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).

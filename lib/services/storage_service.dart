@@ -1453,26 +1453,27 @@ class StorageService {
     'ticket',
   };
 
-  /// Control skin for the NATIVE Android TV player: 'ott' (the Apple TV
-  /// dock ported to Kotlin — the default), 'classic' (the legacy Cinema
-  /// Mode controls), or one of the premium dock skins ('frost', 'marquee',
-  /// 'broadcast', 'pulse', 'ticket'). Android TV only; tvOS runs the
+  /// Control skin for the NATIVE Android TV player: 'marquee' (editorial
+  /// serif — the default), 'ott' (the Apple TV dock ported to Kotlin),
+  /// 'classic' (the legacy Cinema Mode controls), or one of the other
+  /// premium dock skins ('frost', 'broadcast', 'pulse', 'ticket'). Android TV only; tvOS runs the
   /// Flutter player and has nothing to choose. Read once per player launch — the native side via
   /// `ProfilePreferenceProjection.getString("tv_player_controls_style")`
   /// (falling back to `flutter.tv_player_controls_style` in
-  /// FlutterSharedPreferences). Unknown or unset coerces to 'ott' on BOTH
-  /// read and write so the two readers can never disagree about the default.
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'marquee' on
+  /// BOTH read and write so the two readers can never disagree about the
+  /// default.
   static Future<String> getTvPlayerControlsStyle() async {
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_tvPlayerControlsStyleKey);
-    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'ott';
+    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'marquee';
   }
 
   static Future<void> setTvPlayerControlsStyle(String style) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _tvPlayerControlsStyleKey,
-      _tvPlayerControlsStyles.contains(style) ? style : 'ott',
+      _tvPlayerControlsStyles.contains(style) ? style : 'marquee',
     );
   }
 
@@ -1487,28 +1488,28 @@ class StorageService {
   };
 
   /// Playback-screen style for the NATIVE Debrify TV player
-  /// (TorboxTvPlayerActivity): 'network' (broadcast lower-third — the
-  /// default), 'cinema' (poster + gilded spec line), 'guide' (opaque
+  /// (TorboxTvPlayerActivity): 'cinema' (poster + gilded spec line — the
+  /// default), 'network' (broadcast lower-third), 'guide' (opaque
   /// broadcast band), 'spotlight' (frosted glass panel), 'prestige'
   /// (quiet serif identity), or 'classic' (the legacy ESPN-style bar +
   /// top marquee). Android TV only. Read once per player launch — the
   /// native side via
   /// `ProfilePreferenceProjection.getString("debrify_tv_player_style")`
   /// (falling back to `flutter.debrify_tv_player_style` in
-  /// FlutterSharedPreferences). Unknown or unset coerces to 'network' on
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'cinema' on
   /// BOTH read and write so the two readers can never disagree about the
   /// default.
   static Future<String> getDebrifyTvPlayerStyle() async {
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_debrifyTvPlayerStyleKey);
-    return _debrifyTvPlayerStyles.contains(raw) ? raw! : 'network';
+    return _debrifyTvPlayerStyles.contains(raw) ? raw! : 'cinema';
   }
 
   static Future<void> setDebrifyTvPlayerStyle(String style) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _debrifyTvPlayerStyleKey,
-      _debrifyTvPlayerStyles.contains(style) ? style : 'network',
+      _debrifyTvPlayerStyles.contains(style) ? style : 'cinema',
     );
   }
 

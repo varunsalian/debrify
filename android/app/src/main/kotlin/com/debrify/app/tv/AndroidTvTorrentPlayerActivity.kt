@@ -11285,7 +11285,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             com.debrify.app.profiles.ProfilePreferenceProjection.getString(
                 this,
                 TvControlsSkin.PREF_KEY,
-                "ott",
+                "marquee",
             ),
         )
     }

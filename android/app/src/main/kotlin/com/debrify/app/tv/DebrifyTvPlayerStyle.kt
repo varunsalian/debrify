@@ -7,7 +7,7 @@ package com.debrify.app.tv
  * Mirrors the Flutter pref `debrify_tv_player_style` (see
  * `StorageService.getDebrifyTvPlayerStyle`); read once per player launch via
  * `ProfilePreferenceProjection.getString`. Unknown or unset coerces to
- * [NETWORK] on both sides so the two readers can never disagree about the
+ * [CINEMA] on both sides so the two readers can never disagree about the
  * default.
  *
  * Contract (same discipline as [TvControlsSkin]):
@@ -30,11 +30,11 @@ enum class DebrifyTvPlayerStyle {
         @JvmStatic
         fun fromPref(value: String?): DebrifyTvPlayerStyle = when (value) {
             "classic" -> CLASSIC
-            "cinema" -> CINEMA
+            "network" -> NETWORK
             "guide" -> GUIDE
             "spotlight" -> SPOTLIGHT
             "prestige" -> PRESTIGE
-            else -> NETWORK
+            else -> CINEMA
         }
     }
 }
