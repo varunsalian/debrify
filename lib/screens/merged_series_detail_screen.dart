@@ -387,6 +387,18 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   bool _resumePending = false;
   bool get _primaryBusy => _resumePending && !_resumeLoaded;
 
+  /// Engine emission received BEFORE the loader settled the pill — held back
+  /// so the label can't strobe through intermediate merge states; consumed
+  /// (or discarded) by [_loadResumeInfo]'s settle arbitration.
+  EpisodeResumeTarget? _pendingEngineTarget;
+
+  /// The loader is genuinely running right now. Engine emissions stash ONLY
+  /// during this window — inferring it from _resumeLoaded left two holes: a
+  /// FAILED loader stranded later emissions in the stash forever, and a
+  /// not-started settle discarded a later started target (order-dependent
+  /// "merged progress beats Start Watching").
+  bool _resumeLoaderInFlight = false;
+
   /// The user's live Trakt relationship to this title (watchlist / collection /
   /// watched / rating). Null until [traktStatusLoader] resolves — the menu then
   /// falls back to the add-only [traktMenuOptions]. Re-read after a quick action
@@ -673,18 +685,44 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
-    // Plain assignment on purpose: the first call runs during initState
-    // (before the first build), where setState is illegal — and any later
-    // re-read happens with _resumeLoaded already true, so the flag is inert.
-    if (!_resumeLoaded) _resumePending = true;
+    // setState, not a plain assignment: this runs post-frame (initState
+    // schedules it via addPostFrameCallback), and the spinner must actually
+    // be scheduled to paint — a bare write only showed it when a sibling
+    // loader happened to rebuild.
+    if (!_resumeLoaded && mounted) {
+      setState(() => _resumePending = true);
+    }
+    _resumeLoaderInFlight = true;
     try {
-      final info = await loader();
+      // Time-boxed: the reconciler boxes its tracker fetches but the guide
+      // advance can hang on an unbounded body read — and with engine
+      // emissions now stashed pre-settle, a hung loader would spin the pill
+      // forever. A timeout throws into the catch/finally path, which applies
+      // the stashed engine target.
+      final info = await loader().timeout(const Duration(seconds: 12));
       if (!mounted) return;
       // Once the mounted episode engine has resolved all tracker/local
       // progress, its coordinate is newer and richer than the host loader's
       // cached Continue Watching snapshot. Do not let a slower stale loader
-      // overwrite (for example) E7 back to a completed E6.
+      // overwrite (for example) E7 back to a completed E6. (Pre-settle the
+      // engine only stashes, so this guard fires solely on post-settle
+      // re-reads — e.g. didPopNext after playback.)
       if (!_isMovie && _hasMergedEpisodeTarget) return;
+      // Settle arbitration, deterministic where the old code was
+      // last-writer-wins. The reconciled loader wins whenever it found a
+      // resume: it reads the same trackers + local the engine merges, PLUS
+      // recency and the watched frontier — and it is what Play executes, so
+      // preferring it keeps the pill and the button provably in lock-step
+      // (the engine is frontier-aware but recency-blind: it would call a
+      // fresh rewatch "S5" while Play resumes the rewatched episode). The
+      // stashed engine target only settles the pill when the loader came
+      // back empty-handed — merged in-page progress beats "Start Watching".
+      final stash = _pendingEngineTarget;
+      _pendingEngineTarget = null;
+      if (!_isMovie && !info.started && stash != null && stash.started) {
+        _applyEngineTarget(stash);
+        return;
+      }
       setState(() {
         _resumeLoaded = true;
         _resumeStarted = info.started;
@@ -694,6 +732,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     } catch (_) {
       // Non-critical — leave the static label.
     } finally {
+      _resumeLoaderInFlight = false;
       if (_resumePending) {
         if (mounted) {
           setState(() => _resumePending = false);
@@ -701,17 +740,57 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           _resumePending = false;
         }
       }
+      // Loader failed (or bailed) without settling: the stashed engine
+      // target is better than a pill stuck on the static label. Emissions
+      // arriving after this point direct-write (legacy) — the in-flight
+      // window is closed, so nothing can strand in the stash.
+      if (mounted && !_resumeLoaded) {
+        final fallback = _pendingEngineTarget;
+        _pendingEngineTarget = null;
+        if (fallback != null) _applyEngineTarget(fallback);
+      }
     }
   }
 
-  void _onNextEpisodeChanged(EpisodeResumeTarget next) {
+  void _onNextEpisodeChanged(EpisodeResumeTarget next, {bool mutation = false}) {
     if (!mounted || _isMovie) return;
+    // While the loader is IN FLIGHT: stash, never write. The episodes engine
+    // re-emits as each tracker fetch lands, and letting every emission write
+    // the pill strobed it through wrong states ("Start Watching" → S2E8 →
+    // S1E7) and killed the busy spinner. The loader's reconciled answer
+    // settles the pill exactly ONCE, arbitrating against this stash. A
+    // failed/absent loader closes the window, so emissions never strand.
+    if (_resumeLoaderInFlight && !_resumeLoaded) {
+      _pendingEngineTarget = next;
+      return;
+    }
+    // Settled STARTED: the loader is authoritative (it is literally what
+    // Play executes) — only explicit in-page MUTATIONS (mark watched/
+    // unwatched) move the pill; a slower engine initial-merge landing after
+    // settle must not late-flip it (the loader-vs-engine finish order is a
+    // network race). A settle that found NO resume is different: a later
+    // started engine target upgrades it — "merged progress beats Start
+    // Watching" must not depend on which fetch finished first.
+    if (_resumeLoaded &&
+        _resumeStarted &&
+        !mutation &&
+        widget.resumeInfoLoader != null) {
+      return;
+    }
     if (_resumeLoaded &&
         _resumeStarted == next.started &&
         _resumeSeason == next.season &&
         _resumeEpisode == next.episode) {
       return;
     }
+    _applyEngineTarget(next);
+  }
+
+  /// Write an engine target into the pill state (the legacy
+  /// [_onNextEpisodeChanged] body): merged playback progress outranks the
+  /// host's snapshot, so a started target also arms the loader-overwrite
+  /// guard.
+  void _applyEngineTarget(EpisodeResumeTarget next) {
     setState(() {
       // A coordinate alone is not resume evidence: an untouched show also
       // resolves to its first episode. Only merged playback progress outranks

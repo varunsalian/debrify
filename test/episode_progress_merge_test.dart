@@ -130,6 +130,80 @@ void main() {
 
       expect(result, const (season: 1, episode: 2));
     });
+
+    // The stale-orphan discipline (the "Resume · S1E7 on a show you're deep
+    // into S2" bug): a partial BEHIND the tracker's next-unwatched frontier
+    // is an orphaned playback row, not an active session.
+    const longSeries = [
+      (season: 1, episode: 7),
+      (season: 1, episode: 8),
+      (season: 2, episode: 7),
+      (season: 2, episode: 8),
+      (season: 2, episode: 9),
+    ];
+
+    test('a stale partial behind the tracker frontier never wins', () {
+      final result = mergedEpisodeUpNext(
+        episodes: longSeries,
+        // S1E7 carries an orphaned 40% row; everything up to S2E7 watched.
+        progress: const {
+          '1-7': 40,
+          '1-8': 100,
+          '2-7': 100,
+        },
+        trackerNext: const (season: 2, episode: 8),
+      );
+
+      expect(result, const (season: 2, episode: 8));
+    });
+
+    test('a partial ahead of the frontier beats the frontier episode', () {
+      final result = mergedEpisodeUpNext(
+        episodes: longSeries,
+        // S2E9 sampled ahead — the active session outranks unwatched S2E8.
+        progress: const {'1-7': 40, '2-9': 20},
+        trackerNext: const (season: 2, episode: 8),
+      );
+
+      expect(result, const (season: 2, episode: 9));
+    });
+
+    test('everything at and past the frontier watched resolves to null', () {
+      final result = mergedEpisodeUpNext(
+        episodes: const [
+          (season: 1, episode: 1),
+          (season: 1, episode: 2),
+        ],
+        progress: const {'1-1': 100, '1-2': 100},
+        trackerNext: const (season: 1, episode: 2),
+      );
+
+      expect(result, isNull);
+    });
+
+    test('without a tracker frontier any partial keeps rewatch behavior', () {
+      final result = mergedEpisodeUpNext(
+        episodes: longSeries,
+        progress: const {'1-7': 40},
+        trackerNext: null,
+      );
+
+      expect(result, const (season: 1, episode: 7));
+    });
+
+    test(
+      'frontier missing from the guide falls back to the legacy partial',
+      () {
+        final result = mergedEpisodeUpNext(
+          episodes: longSeries,
+          progress: const {'1-7': 40},
+          // A special/absolute-numbered next the guide doesn't contain.
+          trackerNext: const (season: 99, episode: 1),
+        );
+
+        expect(result, const (season: 1, episode: 7));
+      },
+    );
   });
 
   group('episodeResumeTarget', () {

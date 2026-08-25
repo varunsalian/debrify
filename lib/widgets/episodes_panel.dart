@@ -217,7 +217,12 @@ class EpisodesPanel extends StatefulWidget {
 
   /// Publishes the merged next-to-watch coordinate and whether it represents
   /// real playback (rather than the default first episode) to the detail hero.
-  final ValueChanged<EpisodeResumeTarget>? onNextEpisodeChanged;
+  /// [mutation] marks emissions caused by an explicit in-page user action
+  /// (mark watched/unwatched) — the detail pill applies those after its
+  /// loader has settled, while plain re-merge emissions (slower tracker
+  /// fetches landing) must not late-flip a settled pill.
+  final void Function(EpisodeResumeTarget next, {bool mutation})?
+  onNextEpisodeChanged;
 
   /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
   /// when set, the panel renders ONLY what this returns — no chrome of its own —
@@ -294,6 +299,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// The next episode to watch for the current show. Trakt supplies the initial
   /// hint; merged local/Trakt/Simkl/MDBList progress reconciles the final badge.
   ({int season, int episode})? _nextEpisode;
+
+  /// The TRACKER's own next-unwatched coordinate, untouched by merges. The
+  /// merge's output must never feed back in as the frontier: picking a
+  /// partial ahead and completing it would ratchet the fed-back "frontier"
+  /// past the tracker's true next, suppressing a genuine session there.
+  ({int season, int episode})? _trackerNextRaw;
 
   /// Whether a Trakt account is connected. This screen is reachable from
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
@@ -498,7 +509,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
 
     if (mounted && generation == _episodeModeGeneration) {
-      final next = _mergedUpNext(merged, _nextEpisode);
+      final next = _mergedUpNext(merged, _trackerNextRaw);
       setState(() {
         _episodeWatchProgress = merged;
         _nextEpisode = next;
@@ -520,9 +531,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     trackerNext: trackerNext,
   );
 
-  void _publishNextEpisode(EpisodeCoordinate next) {
+  void _publishNextEpisode(EpisodeCoordinate next, {bool mutation = false}) {
     widget.onNextEpisodeChanged?.call(
       episodeResumeTarget(next: next, progress: _episodeWatchProgress),
+      mutation: mutation,
     );
   }
 
@@ -729,10 +741,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         } else {
           _episodeWatchProgress.remove(key);
         }
-        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
       });
       final next = _nextEpisode;
-      if (next != null) _publishNextEpisode(next);
+      if (next != null) _publishNextEpisode(next, mutation: true);
     }
     final label =
         'Marked as ${watched ? 'Watched' : 'Unwatched'}'
@@ -889,10 +901,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           MdblistContinueWatchingService.instance.invalidate();
           setState(() {
             _episodeWatchProgress[key] = 100;
-            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
           });
           final next = _nextEpisode;
-          if (next != null) _publishNextEpisode(next);
+          if (next != null) _publishNextEpisode(next, mutation: true);
         }
       case MdblistEpisodeMenuAction.markUnwatched:
         success = await _mdblistService.markUnwatched(
@@ -906,10 +918,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           MdblistContinueWatchingService.instance.invalidate();
           setState(() {
             _episodeWatchProgress.remove(key);
-            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
           });
           final next = _nextEpisode;
-          if (next != null) _publishNextEpisode(next);
+          if (next != null) _publishNextEpisode(next, mutation: true);
         }
       case MdblistEpisodeMenuAction.rate:
         if (!mounted) return;
@@ -1114,6 +1126,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _episodeMdblistRatings = {};
       _selectedSeasonNumber = initialSeason ?? 1;
       _nextEpisode = null;
+      _trackerNextRaw = null;
     });
 
     // Load watch progress (non-blocking; generation-guarded). The "up next"
@@ -1203,6 +1216,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // displayed tile). Only adopt it as the landing target when its season is
       // actually present, so we never scroll to the wrong episode in season 1.
       _nextEpisode = nextEpisode;
+      _trackerNextRaw = nextEpisode;
       if (effectiveSeason == null &&
           effectiveEpisode == null &&
           nextEpisode != null &&
@@ -1279,7 +1293,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       setState(() {
         _episodeSeasons = seasons;
-        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _nextEpisode);
+        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
         _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;

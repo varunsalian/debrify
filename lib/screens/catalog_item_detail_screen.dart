@@ -278,12 +278,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
-    // Plain assignment on purpose: the first call runs before the first
-    // build (setState illegal there); later re-reads have _resumeLoaded
-    // already true, making the flag inert.
-    if (!_resumeLoaded) _resumePending = true;
+    // setState, not a plain assignment — this runs from the post-init loader
+    // fan (setState-safe), and the spinner must actually be scheduled to
+    // paint rather than riding a sibling loader's rebuild.
+    if (!_resumeLoaded && mounted) {
+      setState(() => _resumePending = true);
+    }
     try {
-      final info = await loader();
+      // Time-boxed: the guide advance inside the reconciler can hang on an
+      // unbounded body read; a timeout throws into catch/finally, falling
+      // back to the static label instead of spinning forever.
+      final info = await loader().timeout(const Duration(seconds: 12));
       if (!mounted) return;
       setState(() {
         _resumeLoaded = true;
