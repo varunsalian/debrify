@@ -288,6 +288,115 @@ class TraktService {
     return items;
   }
 
+  /// Fetch every page from an endpoint whose response is a JSON list.
+  ///
+  /// Unlike the older list helper above, this is failure-aware and validates
+  /// Trakt's pagination metadata. Continue-watching callers must not publish a
+  /// plausible-looking first page as the complete account state: that leaves
+  /// old cards on screen and silently drops checkpoints from later pages.
+  Future<List<dynamic>?> _fetchAllPagesOrNull({
+    required String basePath,
+    required String logLabel,
+    int limit = 250,
+  }) async {
+    final items = <dynamic>[];
+    final seenPagePayloads = <String>{};
+    var page = 1;
+    const maxPages = 100;
+
+    while (page <= maxPages) {
+      final separator = _withQuerySeparator(basePath);
+      final path = '$basePath${separator}page=$page&limit=$limit';
+      final response = await _authenticatedGet(path);
+      if (response == null || response.statusCode != 200) {
+        debugPrint(
+          'Trakt: $logLabel failed page=$page (${response?.statusCode})',
+        );
+        return null;
+      }
+
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is! List<dynamic>) {
+          debugPrint('Trakt: $logLabel invalid payload page=$page');
+          return null;
+        }
+        if (decoded.isEmpty) break;
+
+        // Some Trakt endpoints currently omit pagination headers or ignore the
+        // page parameter even though their contract says they are paginated.
+        // Stop before adding a repeated page so those responses remain useful
+        // without duplicating the same collection indefinitely.
+        if (!seenPagePayloads.add(response.body)) {
+          debugPrint(
+            'Trakt: $logLabel repeated page payload at page=$page; '
+            'using ${items.length} unique rows',
+          );
+          break;
+        }
+        items.addAll(decoded);
+
+        final rawPageCount = response.headers['x-pagination-page-count'];
+        final pageCount = _parsePaginationHeader(rawPageCount);
+        if (pageCount != null && pageCount > 0) {
+          if (pageCount < page) {
+            debugPrint(
+              'Trakt: $logLabel pagination changed during fetch '
+              '(page=$page count=$pageCount)',
+            );
+            return null;
+          }
+          if (page >= pageCount) break;
+        } else {
+          // Fall back to the other pagination headers when page-count is
+          // absent, zero for a non-empty response, or malformed. Trakt has
+          // shipped endpoints with exactly those combinations.
+          final itemCount = _parsePaginationHeader(
+            response.headers['x-pagination-item-count'],
+          );
+          if (itemCount != null &&
+              itemCount >= 0 &&
+              items.length >= itemCount) {
+            break;
+          }
+          final appliedLimit = _parsePaginationHeader(
+            response.headers['x-pagination-limit'],
+          );
+          if (appliedLimit != null &&
+              appliedLimit > 0 &&
+              decoded.length < appliedLimit) {
+            break;
+          }
+
+          if (rawPageCount != null) {
+            debugPrint(
+              'Trakt: $logLabel unusable page-count "$rawPageCount"; '
+              'probing the next page',
+            );
+          }
+        }
+        page++;
+      } catch (error) {
+        debugPrint('Trakt: $logLabel parse error (${error.runtimeType})');
+        return null;
+      }
+    }
+
+    if (page > maxPages) {
+      debugPrint('Trakt: $logLabel exceeded $maxPages pages');
+      return null;
+    }
+
+    return items;
+  }
+
+  static int? _parsePaginationHeader(String? raw) {
+    if (raw == null) return null;
+    // `package:http` can comma-join duplicate response headers. The first
+    // value is the one applied to this response.
+    return int.tryParse(raw.split(',').first.trim());
+  }
+
   /// Check if the user is authenticated (has a non-expired access token).
   Future<bool> isAuthenticated() async {
     final token = await StorageService.getTraktAccessToken();
@@ -1217,23 +1326,167 @@ class TraktService {
   /// Fetch playback items (paused mid-watch) with full metadata.
   /// Returns raw items from /sync/playback for transformation.
   /// Each item has shape: { "progress": N, "movie": { ... } } or { "progress": N, "show": { ... } }
-  Future<List<dynamic>> fetchPlaybackItems(String contentType) async {
-    final response = await _authenticatedGet(
-      '/sync/playback/$contentType?extended=full',
+  Future<List<dynamic>> fetchPlaybackItems(String contentType) async =>
+      await fetchPlaybackItemsOrNull(contentType) ?? <dynamic>[];
+
+  /// Failure-aware, pagination-complete playback read.
+  Future<List<dynamic>?> fetchPlaybackItemsOrNull(String contentType) {
+    return _fetchAllPagesOrNull(
+      basePath: '/sync/playback/$contentType?extended=full',
+      logLabel: 'fetchPlaybackItems $contentType',
     );
-    if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchPlaybackItems failed (${response?.statusCode})');
-      return [];
+  }
+
+  /// Fetch Trakt's own Continue Watching show set.
+  ///
+  /// `up_next_nitro` is the intent-aware endpoint used to separate Continue
+  /// Watching from Start Watching. It already applies the account's hidden /
+  /// dropped progress rules and returns the exact next episode, avoiding the
+  /// old approximation based on only 30 recent history entries plus one
+  /// progress request per candidate show.
+  Future<List<Map<String, dynamic>>?> fetchContinueWatchingShowsOrNull() async {
+    final raw = await _fetchAllPagesOrNull(
+      basePath:
+          '/sync/progress/up_next_nitro?intent=continue'
+          '&sort_by=last_watched_at&sort_how=desc',
+      logLabel: 'fetchContinueWatchingShows',
+    );
+    if (raw == null) return null;
+    return debugNormalizeContinueWatchingShows(raw);
+  }
+
+  /// Build the complete episode-shaped Continue Watching feed.
+  ///
+  /// The intent-aware endpoint owns membership, order, and the next episode.
+  /// Paused playback is optional enrichment for that exact episode; it must
+  /// never add a show or replace Trakt's authoritative episode coordinate.
+  /// Returns null when the authoritative read fails so UI callers can retain
+  /// their last successful snapshot instead of publishing an approximation.
+  Future<List<dynamic>?> fetchContinueWatchingEpisodeItemsOrNull() async {
+    final reads = await Future.wait<Object?>([
+      fetchContinueWatchingShowsOrNull(),
+      fetchPlaybackItemsOrNull('episodes'),
+    ]);
+    final authoritative = reads[0] as List<Map<String, dynamic>>?;
+    if (authoritative == null) return null;
+
+    // Playback progress is useful but not authoritative. A playback outage
+    // should not hide a valid Up Next row; the play path performs its own fresh
+    // checkpoint lookup before launch.
+    final playback = reads[1] as List<dynamic>? ?? const <dynamic>[];
+    return debugMergeContinueWatchingShows(playback, authoritative);
+  }
+
+  @visibleForTesting
+  static List<dynamic> debugMergeContinueWatchingShows(
+    List<dynamic> playback,
+    List<Map<String, dynamic>> authoritative,
+  ) {
+    final playbackByShow = <String, List<Map<String, dynamic>>>{};
+    for (final raw in playback) {
+      if (raw is! Map<String, dynamic>) continue;
+      final show = raw['show'] as Map<String, dynamic>?;
+      final key = _traktShowIdentity(show);
+      if (key == null) continue;
+      playbackByShow.putIfAbsent(key, () => []).add(raw);
     }
 
-    try {
-      return jsonDecode(response.body) as List<dynamic>;
-    } catch (error) {
-      debugPrint(
-        'Trakt: fetchPlaybackItems parse error (${error.runtimeType})',
-      );
-      return [];
+    final result = <dynamic>[];
+    for (final raw in authoritative) {
+      final show = raw['show'] as Map<String, dynamic>?;
+      final key = _traktShowIdentity(show);
+      final checkpoints = key == null
+          ? const <Map<String, dynamic>>[]
+          : playbackByShow[key] ?? const <Map<String, dynamic>>[];
+      final merged = Map<String, dynamic>.from(raw);
+
+      // Keep every deletion id for the existing deliberate remove behaviour,
+      // but don't let unrelated paused episodes influence the displayed or
+      // launched episode.
+      final playbackIds = <int>[
+        for (final checkpoint in checkpoints)
+          if (checkpoint['id'] is int) checkpoint['id'] as int,
+      ];
+      if (playbackIds.isNotEmpty) merged['_playback_ids'] = playbackIds;
+
+      final authoritativeEpisode = raw['episode'] as Map<String, dynamic>?;
+      final season = authoritativeEpisode?['season'] as int?;
+      final episode = authoritativeEpisode?['number'] as int?;
+      Map<String, dynamic>? matchingCheckpoint;
+      if (season != null && episode != null) {
+        for (final checkpoint in checkpoints) {
+          final candidate = checkpoint['episode'] as Map<String, dynamic>?;
+          if (candidate?['season'] == season &&
+              candidate?['number'] == episode) {
+            matchingCheckpoint = checkpoint;
+            break;
+          }
+        }
+      }
+
+      if (matchingCheckpoint != null) {
+        final progress = matchingCheckpoint['progress'];
+        if (progress is num) merged['progress'] = progress;
+
+        // Extended playback can contain richer episode metadata. Preserve it
+        // while making the authoritative season/number win on any conflict.
+        final checkpointEpisode =
+            matchingCheckpoint['episode'] as Map<String, dynamic>?;
+        if (checkpointEpisode != null && authoritativeEpisode != null) {
+          merged['episode'] = <String, dynamic>{
+            ...checkpointEpisode,
+            ...authoritativeEpisode,
+          };
+        }
+      }
+      result.add(merged);
     }
+    return result;
+  }
+
+  static String? _traktShowIdentity(Map<String, dynamic>? show) {
+    final ids = show?['ids'] as Map<String, dynamic>?;
+    final traktId = ids?['trakt'];
+    if (traktId != null) return 'trakt:$traktId';
+    final imdbId = (ids?['imdb'] as String?)?.trim().toLowerCase();
+    return imdbId == null || imdbId.isEmpty ? null : 'imdb:$imdbId';
+  }
+
+  /// Convert Trakt's `{show, progress: {next_episode, last_watched_at}}`
+  /// response into the playback-like shape shared by the existing transformer.
+  @visibleForTesting
+  static List<Map<String, dynamic>>? debugNormalizeContinueWatchingShows(
+    Object? decoded,
+  ) {
+    if (decoded is! List<dynamic>) return null;
+    final result = <Map<String, dynamic>>[];
+    for (final raw in decoded) {
+      if (raw is! Map<String, dynamic>) return null;
+      final show = raw['show'];
+      final progress = raw['progress'];
+      if (show is! Map<String, dynamic> || progress is! Map<String, dynamic>) {
+        return null;
+      }
+      final nextEpisode = progress['next_episode'];
+      // A completed show can briefly remain in a changing paginated result;
+      // no next episode means it is not actionable Continue Watching content.
+      if (nextEpisode == null) continue;
+      if (nextEpisode is! Map<String, dynamic>) return null;
+
+      final normalized = <String, dynamic>{
+        'show': show,
+        'type': 'episode',
+        'episode': nextEpisode,
+      };
+      final lastWatchedAt = progress['last_watched_at'];
+      if (lastWatchedAt is String && lastWatchedAt.isNotEmpty) {
+        // The presentation model already uses paused_at as its generic
+        // last-activity timestamp when merging movies and shows.
+        normalized['paused_at'] = lastWatchedAt;
+      }
+      result.add(normalized);
+    }
+    return result;
   }
 
   /// Fetch upcoming episodes from the user's Trakt calendar for the given window.
@@ -1273,100 +1526,6 @@ class TraktService {
     }
   }
 
-  /// Fetch recently watched shows that have a next episode available.
-  /// Uses /users/me/history/episodes to find recently active shows,
-  /// then checks each for a next_episode via /shows/{id}/progress/watched.
-  /// Returns show items in playback-like format for merging with playback results.
-  Future<List<Map<String, dynamic>>> fetchRecentShowsWithNextEpisode({
-    Set<String> excludeImdbIds = const {},
-    int historyLimit = 30,
-  }) async {
-    // Fetch recent episode history
-    final response = await _authenticatedGet(
-      '/users/me/history/episodes?limit=$historyLimit&extended=full',
-    );
-    if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchRecentHistory failed (${response?.statusCode})');
-      return [];
-    }
-
-    List<dynamic> history;
-    try {
-      history = jsonDecode(response.body) as List<dynamic>;
-    } catch (error) {
-      debugPrint(
-        'Trakt: fetchRecentHistory parse error (${error.runtimeType})',
-      );
-      return [];
-    }
-
-    // Deduplicate to unique shows, keeping the first (most recent) occurrence
-    final seenShows = <String, Map<String, dynamic>>{};
-    for (final item in history) {
-      if (item is! Map<String, dynamic>) continue;
-      final show = item['show'] as Map<String, dynamic>?;
-      if (show == null) continue;
-      final ids = show['ids'] as Map<String, dynamic>?;
-      final imdbId = ids?['imdb'] as String?;
-      final traktId = ids?['trakt']?.toString();
-      final showKey = imdbId ?? traktId;
-      if (showKey == null) continue;
-      if (excludeImdbIds.contains(imdbId)) continue;
-      if (seenShows.containsKey(showKey)) continue;
-      seenShows[showKey] = show;
-    }
-
-    if (seenShows.isEmpty) return [];
-
-    debugPrint(
-      'Trakt: Checking ${seenShows.length} recent shows for next episode',
-    );
-
-    // Check each show for a next episode (in parallel, with one retry on network failure)
-    final results = await Future.wait(
-      seenShows.entries.map((entry) async {
-        final show = entry.value;
-        final traktId = show['ids']?['trakt']?.toString() ?? entry.key;
-        try {
-          // First attempt: check if the API is reachable
-          final response = await _authenticatedGet(
-            '/shows/$traktId/progress/watched',
-          );
-          var nextEp = _parseNextEpisode(response);
-
-          // Retry once on network/HTTP failure (null response or non-200),
-          // but NOT when the show legitimately has no next episode (200 + null next_episode)
-          if (nextEp == null &&
-              (response == null || response.statusCode != 200)) {
-            await Future.delayed(const Duration(milliseconds: 500));
-            final retryResponse = await _authenticatedGet(
-              '/shows/$traktId/progress/watched',
-            );
-            nextEp = _parseNextEpisode(retryResponse);
-          }
-
-          return nextEp != null
-              ? {
-                  'show': show,
-                  'type': 'episode',
-                  'episode': {
-                    'season': nextEp.season,
-                    'number': nextEp.episode,
-                  },
-                }
-              : null;
-        } catch (error) {
-          debugPrint('Trakt: fetchNextEpisode error (${error.runtimeType})');
-          return null;
-        }
-      }),
-    );
-
-    final filtered = results.whereType<Map<String, dynamic>>().toList();
-    debugPrint('Trakt: ${filtered.length} recent shows have next episodes');
-    return filtered;
-  }
-
   // ============================================================================
   // Watch Progress Methods
   // ============================================================================
@@ -1374,16 +1533,9 @@ class TraktService {
   /// Fetch playback progress for movies paused mid-watch.
   /// Returns a map of IMDB ID → progress percentage (0-100).
   Future<Map<String, double>> fetchPlaybackProgress() async {
-    final response = await _authenticatedGet('/sync/playback/movies');
-    if (response == null || response.statusCode != 200) {
-      debugPrint(
-        'Trakt: fetchPlaybackProgress failed (${response?.statusCode})',
-      );
-      return {};
-    }
-
     try {
-      final list = jsonDecode(response.body) as List<dynamic>;
+      final list = await fetchPlaybackItemsOrNull('movies');
+      if (list == null) return {};
       final result = <String, double>{};
       for (final item in list) {
         if (item is! Map<String, dynamic>) continue;

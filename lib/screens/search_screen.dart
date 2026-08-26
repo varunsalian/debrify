@@ -433,7 +433,8 @@ class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
   }
 }
 
-class _SearchScreenState extends State<SearchScreen> with RouteAware {
+class _SearchScreenState extends State<SearchScreen>
+    with RouteAware, WidgetsBindingObserver {
   // Which nav tab this instance backs, for the TV content-focus handler: the
   // dedicated Search tab (17) or the Home-New board (15).
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
@@ -783,7 +784,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// [_refreshAfterPlayback].
   ///
   /// This is what keeps the post-playback refresh from becoming a tax on plain
-  /// browsing: a Trakt row reload is ~2+N API calls and Simkl another, and
+  /// browsing: Trakt and Simkl each still require multiple paged calls, and
   /// [_refreshAfterPlayback] runs on EVERY detail-page close — so without this
   /// latch, opening a title and pressing Back would hit both tracker APIs. Only
   /// a session that actually played something can have moved a tracker's
@@ -793,8 +794,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   // TRAKT Continue Watching rows ("Trakt Movies" / "Trakt Shows"), fetched live
   // from the Trakt account (no local store). Shown after the local rows when
-  // connected + non-empty. Network-loaded once on init / integration change and
-  // cached in memory (the shows fetch is heavy: ~2 + N calls).
+  // connected + non-empty. Network-loaded on init / integration change,
+  // post-playback, and throttled app resume, then cached in memory.
   List<StremioMeta> _traktMovies = [];
   List<StremioMeta> _traktSeries = [];
   // Trakt movies + shows merged in last-watched (paused_at) order — the source
@@ -886,6 +887,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   bool _playlistLaunching = false;
 
   int _traktCwToken = 0;
+
+  /// Last Trakt CW network attempt. The row is refreshed when the app returns
+  /// from the background (where the user may have changed Trakt in another app
+  /// or browser), but lifecycle noise within this window is coalesced.
+  DateTime? _lastTraktCwRefreshAttemptAt;
+  static const Duration _traktCwResumeRefreshInterval = Duration(seconds: 30);
 
   /// Whether a Trakt Continue Watching fetch is currently in flight for a
   /// connected account. While true — and there are no real Trakt rows to show
@@ -1415,6 +1422,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
     AnalyticsService.screenView(
@@ -1901,6 +1909,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _mdblistRevisionRefreshToken++;
     _spotlightHeroNode.dispose();
     // Preserve a COMPLETED keyword search so returning to this tab restores
@@ -4086,13 +4095,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // ── Trakt Continue Watching ───────────────────────────────────────────────
 
   /// Fetch the Trakt "Continue Watching" rows (in-progress movies + up-next
-  /// episodes) from the connected account. Network-heavy (the shows path is
-  /// ~2 + N calls), so this runs once on init / integration change and caches
-  /// in memory — never on every rebuild. Token-guarded against overlap; hides
-  /// the rows when Trakt isn't connected.
+  /// episodes) from the connected account. Uses Trakt's intent-aware Up Next
+  /// feed plus paged playback checkpoints. Runs on init / integration change,
+  /// post-playback, and a throttled app resume — never on every rebuild.
+  /// Token-guarded against overlap; hides the rows when Trakt isn't connected.
   /// [refreshBound] runs a bound-source refresh at the end; pass false when the
   /// caller already refreshes bound sources itself (avoids a double pass).
   Future<void> _loadTraktContinueWatching({bool refreshBound = true}) async {
+    _lastTraktCwRefreshAttemptAt = DateTime.now();
     final token = ++_traktCwToken;
     // Mark the fetch in flight so the skeleton slot reserves while it runs (only
     // reserves when there are no real rows yet — see [_traktReserving]). Plain
@@ -4121,8 +4131,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return;
       }
       final cw = TraktContinueWatchingService.instance;
-      movies = await cw.fetchMovies();
-      shows = await cw.fetchShows();
+      final reads = await Future.wait<Object?>([
+        cw.fetchMoviesOrNull(),
+        cw.fetchShowsOrNull(),
+      ]);
+      final movieRead = reads[0] as List<TraktContinueWatchingItem>?;
+      final showRead = reads[1] as List<TraktContinueWatchingItem>?;
+      if (movieRead == null || showRead == null) {
+        throw StateError('Trakt Continue Watching read failed');
+      }
+      movies = movieRead;
+      shows = showRead;
     } catch (e) {
       // Leave any existing rows in place on a transient Trakt/network error,
       // but stop reserving the skeleton slot so it doesn't shimmer forever.
@@ -4168,10 +4187,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     ingest(movies, movieMetas);
     ingest(shows, showMetas);
     // Merge into one last-watched-ordered list for the See-All grid: sort by
-    // Trakt's paused_at (newest first), items without a paused_at (recent-shows
-    // augmentation) sort last. Ties (incl. two null paused_ats) fall back to the
-    // original movies-then-shows order so the sort is deterministic (Dart's
-    // List.sort isn't stable).
+    // Trakt's paused_at / last_watched_at (newest first). Items without either
+    // sort last. Ties use the original movies-then-shows order so the sort is
+    // deterministic (Dart's List.sort isn't stable).
     final allMetas = [...movieMetas, ...showMetas];
     final origIndex = <StremioMeta, int>{
       for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
@@ -12823,7 +12841,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
         final rTtId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
         final rTracker = (r.sourcePrio ?? 3) <= 2;
-        if (r.started && (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
+        if (r.started &&
+            (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
           await launch(
             AdvancedSearchSelection(
               imdbId: rTtId.isNotEmpty
@@ -13073,7 +13092,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         double? simklProgress,
         AdvancedSearchSelection? selection,
         int? sourcePrio,
-      }) r,
+      })
+      r,
     })
   >
   _seriesResumeCache = {};
@@ -13189,9 +13209,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         trakt.sel.episode != null) {
       candidates.add((
         prio: 0,
-        // Trakt's own paused_at (null for recent-shows "next" augmentation
-        // items — a computed next is a weak signal and correctly competes
-        // as timestampless).
+        // Trakt's own activity timestamp.
         tsMs: trakt.tsMs,
         s: trakt.sel.season!,
         e: trakt.sel.episode!,
@@ -13372,9 +13390,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (item.type != 'series') return null;
     final id = item.effectiveImdbId ?? item.id;
     if (id.isEmpty) return null;
-    // Mirror resolveSelection's lookup but keep the ITEM, so its paused_at
-    // survives (recent-shows augmentation items carry none — a computed
-    // "next" is a weak signal and correctly stays timestampless).
+    // Mirror resolveSelection's lookup but keep the ITEM, so its Trakt activity
+    // timestamp survives.
     final items = await TraktContinueWatchingService.instance.fetchItems(
       TraktContinueWatchingService.showsContentType,
     );
@@ -13398,13 +13415,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// and updatedAt so it can compete on recency.
   Future<({int season, int episode, double? pct, int? tsMs, bool finished})?>
   _localSeriesResumeFor(StremioMeta item, String playId) async {
-    Map<String, dynamic>? entry = await StorageService
-        .getLastPlayedEpisodeByImdbId(playId);
+    Map<String, dynamic>? entry =
+        await StorageService.getLastPlayedEpisodeByImdbId(playId);
     var finished = entry?['finished'] == true;
     if (entry?['season'] is! int || entry?['episode'] is! int) {
-      entry = await StorageService.getLastPlayedEpisode(
-        seriesTitle: item.name,
-      );
+      entry = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
       finished = entry?['finished'] == true;
     }
     final season = entry?['season'];
@@ -13462,7 +13477,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (id.isEmpty) return null;
     // Use the SAME resolution _onCatalogPlay's general series branch uses
     // (resolveSelection → fetchItems + selectionForItem). This includes Trakt's
-    // recent-shows "next episode" augmentation, so the label matches Play even
+    // Up Next augmentation, so the label matches Play even
     // when the title is only reachable via that augmentation and regardless of
     // whether _traktByImdb has populated yet (fixes the open-before-CW-load race
     // where the cached Play branch and the live label branch disagreed).
@@ -13546,7 +13561,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // so the label and playback can never disagree (see
     // _reconcileSeriesResume for the full rules).
     if (item.type == 'series') {
-      final r = await _reconcileSeriesResume(item, isTraktSource: isTraktSource);
+      final r = await _reconcileSeriesResume(
+        item,
+        isTraktSource: isTraktSource,
+      );
       if (!mounted) return (started: false, season: null, episode: null);
       return (started: r.started, season: r.season, episode: r.episode);
     }
@@ -17324,6 +17342,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     unawaited(_refreshAfterPlayback());
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed ||
+        !mounted ||
+        widget.searchMode ||
+        !_isTraktAuthenticated ||
+        _playedSinceRefresh ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
+    final lastAttempt = _lastTraktCwRefreshAttemptAt;
+    if (lastAttempt != null &&
+        DateTime.now().difference(lastAttempt) <
+            _traktCwResumeRefreshInterval) {
+      return;
+    }
+    unawaited(_loadTraktContinueWatching());
+  }
+
   /// Refresh state that a See-All screen may have changed (Continue Watching
   /// progress/removal, bound sources) when it pops back to the board — plus the
   /// tracker rows when the user played something from the grid.
@@ -17391,10 +17428,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Popular, Anticipated — from the in-screen "List" dropdown; those are
   /// fetched on demand inside [TraktSeeAllScreen].
   ///
-  /// The Continue Watching grid keeps its snapshot (no per-return reload): a
-  /// Trakt refresh is ~2+N API calls, so the board's rows refresh once when the
-  /// screen pops — `trackers: true` because that's true whether or not anything
-  /// was played here. One pass reloads local CW + both trackers and then runs
+  /// The Continue Watching grid keeps its snapshot (no per-return reload).
+  /// The board's rows refresh once when the screen pops — `trackers: true`
+  /// because that's true whether or not anything was played here. One pass
+  /// reloads local CW + both trackers and then runs
   /// the single bound-source refresh against the now-fresh lists (it swallows
   /// its own errors, so the bound refresh still happens if a fetch fails).
   void _openTraktSeeAll([String initialCategory = 'all']) {
