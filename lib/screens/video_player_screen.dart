@@ -13052,30 +13052,74 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 if (_startupGateActive)
                   ColoredBox(
                     color: Colors.black,
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 34,
-                            height: 34,
-                            child: CircularProgressIndicator(
-                              color: Colors.white70,
-                              strokeWidth: 2.5,
+                    child: SafeArea(
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            top: PlatformUtil.isTelevision ? 32 : 16,
+                            right: PlatformUtil.isTelevision ? 48 : 20,
+                          ),
+                          child: Container(
+                            constraints: BoxConstraints(
+                              maxWidth: math.min(
+                                PlatformUtil.isTelevision ? 440.0 : 320.0,
+                                math.max(
+                                  120.0,
+                                  MediaQuery.sizeOf(context).width -
+                                      (PlatformUtil.isTelevision ? 96.0 : 40.0),
+                                ),
+                              ),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xE61A1C20),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.14),
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x66000000),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white60,
+                                    strokeWidth: 1.8,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: Text(
+                                    _startupGateMessage,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: true,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.1,
+                                      decoration: TextDecoration.none,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          Text(
-                            _startupGateMessage,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white60,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -13329,7 +13373,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     onPanEnd: _onPanEnd,
                   ),
                 // Controls overlay (shown only when ready)
-                if (isReady && !inPip)
+                if (isReady && !inPip && !_startupGateActive)
                   ValueListenableBuilder<bool>(
                     valueListenable: _controlsVisible,
                     builder: (context, visible, _) {

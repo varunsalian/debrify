@@ -6863,8 +6863,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
-        // Show Stremio source quality badge
-        showStremioSourceBadge()
+        // The source badge shares the top-right safe area with startup
+        // validation. Keep the progress pill unobscured until the candidate is
+        // committed; if controls remain open, commitStartupCandidate restores
+        // the badge as soon as the gate drops.
+        if (::startupGateView.isInitialized &&
+            startupGateView.visibility == View.VISIBLE
+        ) {
+            hideStremioSourceBadgeImmediately()
+        } else {
+            showStremioSourceBadge()
+        }
 
         overlay.animate().cancel()
 
@@ -16076,6 +16085,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupResolverProvider.equals("pikpak", ignoreCase = true) &&
                 stremioSources.getOrNull(currentStremioSourceIndex)?.streamType == "torrent"
         startupGateView.visibility = View.VISIBLE
+        hideStremioSourceBadgeImmediately()
         val item = model.items.getOrNull(currentIndex)
         startupLog(
             "event=begin sourceCount=${stremioSources.size} selectedIndex=$currentStremioSourceIndex " +
@@ -16374,6 +16384,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pikPakGateReprepare = null
         startupFailoverGeneration++
         startupGateView.visibility = View.GONE
+        if (controlsMenuVisible) showStremioSourceBadge()
         hideStatusPill()
         restartProgressUpdates()
         reportValidatedSourceCommit(currentStremioSourceIndex)
@@ -17553,6 +17564,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 stremioSourceBadge?.translationX = 0f
             }
             ?.start()
+    }
+
+    /** Startup validation owns the same corner as this badge. Unlike the
+     *  ordinary controls fade, gate activation must clear it synchronously so
+     *  no frame can cover the only source-checking feedback. */
+    private fun hideStremioSourceBadgeImmediately() {
+        stremioSourceBadge?.animate()?.cancel()
+        stremioSourceBadge?.visibility = View.GONE
+        stremioSourceBadge?.alpha = 0f
+        stremioSourceBadge?.translationX = 0f
     }
 
     private fun parsePayload(raw: String): PlaybackPayload? {
