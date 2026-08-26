@@ -170,6 +170,55 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
   }
 }
 
+/// The focused-cell "Long press for options" affordance, shared by every
+/// layout's episode cells. Black glass with white ink so it stays legible over
+/// artwork and panel fills alike, on every theme.
+class DetailHoldHintPill extends StatelessWidget {
+  const DetailHoldHintPill({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.7),
+        borderRadius: t.brSm,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.more_vert_rounded,
+            size: 12,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+          const SizedBox(width: 3),
+          // Flexible + ellipsis so a host that bounds the pill (the episode
+          // row at large text scales) shrinks the label instead of the pill
+          // overflowing its Row.
+          Flexible(
+            child: Text(
+              'Long press for options',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Episode still with the watched veil, progress bar and UP NEXT badge.
 ///
 /// The watched state is expressed ONCE — the dimming veil plus a single tick.
@@ -190,6 +239,11 @@ class DetailEpisodeThumb extends StatelessWidget {
 
   final bool showTick;
 
+  /// Focused-only TV affordance: the options menu is behind a held OK, which
+  /// nothing on the card advertises. Only the wide cards turn this on — the
+  /// list rows already carry a trailing ⋮ and their thumbs are too small.
+  final bool showHoldHint;
+
   const DetailEpisodeThumb({
     super.key,
     required this.episode,
@@ -198,6 +252,7 @@ class DetailEpisodeThumb extends StatelessWidget {
     required this.isNext,
     this.radius = 7,
     this.showTick = true,
+    this.showHoldHint = false,
   });
 
   @override
@@ -280,6 +335,13 @@ class DetailEpisodeThumb extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          if (showHoldHint)
+            const Positioned(
+              // Above the 3px progress strip along the bottom edge.
+              bottom: 6,
+              right: 5,
+              child: DetailHoldHintPill(),
             ),
           if (partial)
             Positioned(
@@ -377,6 +439,9 @@ class DetailEpisodeCard extends StatelessWidget {
                   // drawn at. Handing over `t.brImg` itself would scale an
                   // already-scaled number twice.
                   radius: 8,
+                  // isTelevision, not isAndroidTvCached: tvOS binds the same
+                  // held OK and needs the same affordance.
+                  showHoldHint: focused && PlatformUtil.isTelevision,
                 ),
               ),
             ),
@@ -521,11 +586,20 @@ class DetailEpisodeRow extends StatelessWidget {
                   ),
                 ),
               const SizedBox(width: 8),
-              Icon(
-                Icons.more_vert_rounded,
-                size: 18,
-                color: focused ? t.tx2 : t.tx3,
-              ),
+              // The ⋮ trades up to the labeled pill while the DPAD cursor is
+              // on the row — the thumb is too small to host it, and only the
+              // focused row can act on the hint anyway.
+              if (focused && PlatformUtil.isTelevision)
+                // Flexible: at large text scales in a narrow side pane the
+                // full label can outgrow the row — shrink and ellipsize
+                // rather than overflow.
+                const Flexible(child: DetailHoldHintPill())
+              else
+                Icon(
+                  Icons.more_vert_rounded,
+                  size: 18,
+                  color: focused ? t.tx2 : t.tx3,
+                ),
             ],
           ),
         ),

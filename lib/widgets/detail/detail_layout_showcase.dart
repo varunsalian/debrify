@@ -1344,6 +1344,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       // visible way into the options that hold-OK provides on
                       // TV — the kebab. TV passes null and renders untouched.
                       onOptions: widget.dpad ? null : () => view.options(ep),
+                      showHoldHint: widget.dpad && PlatformUtil.isTelevision,
                     ),
             );
           },
