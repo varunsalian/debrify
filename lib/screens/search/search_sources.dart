@@ -16,12 +16,21 @@ class _SourcesScreen extends StatefulWidget {
   /// still supplies the pin target (imdbId / movie-vs-series).
   final String? keywordSeed;
 
+  /// The user reached this list by pressing PLAY (see the "Play button opens"
+  /// modes), so picking a row is a play instruction that has already been
+  /// given — tapping one starts playback instead of running the post-torrent
+  /// action, which would otherwise ask "Play / Download / Playlist?" for a
+  /// choice the user made two taps ago. False for the Sources button and the
+  /// episode long-press, where no play intent was expressed.
+  final bool forcePlayOnTap;
+
   const _SourcesScreen({
     required this.selection,
     required this.meta,
     required this.isTelevision,
     this.bindMode = false,
     this.keywordSeed,
+    this.forcePlayOnTap = false,
   });
 
   @override
@@ -691,6 +700,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       TorrentPlaybackService.activateTorrent(
         context,
         t,
+        forcePlay: widget.forcePlayOnTap,
         meta: widget.meta,
         // The rendered list — [_visible] equals [_torrents] with the redesign
         // off, but is the source-filtered/sorted list when on, so the index and

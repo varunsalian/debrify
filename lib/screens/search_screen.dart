@@ -14124,7 +14124,7 @@ class _SearchScreenState extends State<SearchScreen>
         // The selection already carries the exact season/episode the button was
         // going to play, so the manual list opens on that episode — no next-up
         // resolution here, and no way for the list to disagree with the button.
-        openSourcePicker: () => _browseSelection(sel),
+        openSourcePicker: () => _browseSelection(sel, forcePlayOnTap: true),
       );
     } finally {
       MainPageBridge.removeExternalPlayerLaunchListener(onExternal);
@@ -14148,7 +14148,12 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Manual sources list in-tab — the screen searches itself (own loading) and
   /// each tap plays with the full source list + content metadata.
-  void _browseSelection(AdvancedSearchSelection sel) {
+  void _browseSelection(
+    AdvancedSearchSelection sel, {
+    // Set only by the Play-button hand-off: the press already said "play", so
+    // the row the user picks must not re-ask via the post-torrent action.
+    bool forcePlayOnTap = false,
+  }) {
     // Every route into the manual list lands here — the Play-button hand-off,
     // the movie Sources button, and the episode long-press — so this is where
     // the episode the list will search is finally fixed.
@@ -14167,6 +14172,7 @@ class _SearchScreenState extends State<SearchScreen>
               selection: sel,
               meta: _metaFor(sel),
               isTelevision: widget.isTelevision,
+              forcePlayOnTap: forcePlayOnTap,
             ),
           ),
         )
