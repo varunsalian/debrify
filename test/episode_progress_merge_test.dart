@@ -225,4 +225,41 @@ void main() {
       expect(result, const (season: 1, episode: 2, started: true));
     });
   });
+
+  group('shouldAdvanceEpisodeResume', () {
+    test('advances a near-complete local episode when Trakt is ahead', () {
+      final result = shouldAdvanceEpisodeResume(
+        candidate: (season: 2, episode: 3),
+        finished: false,
+        progress: 97.06,
+        isTracker: false,
+        trackerFrontiers: const [(season: 2, episode: 4)],
+      );
+
+      expect(result, isTrue);
+    });
+
+    test('keeps a near-complete local pause without a later frontier', () {
+      final result = shouldAdvanceEpisodeResume(
+        candidate: (season: 2, episode: 3),
+        finished: false,
+        progress: 97.06,
+        isTracker: false,
+        trackerFrontiers: const [(season: 2, episode: 3)],
+      );
+
+      expect(result, isFalse);
+    });
+
+    test('advances tracker sessions at the completion threshold', () {
+      final result = shouldAdvanceEpisodeResume(
+        candidate: (season: 2, episode: 3),
+        finished: false,
+        progress: 80,
+        isTracker: true,
+      );
+
+      expect(result, isTrue);
+    });
+  });
 }

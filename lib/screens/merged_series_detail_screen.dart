@@ -507,6 +507,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   void _playPrimary() {
+    debugPrint(
+      '[SeriesResume] detail-primary-pressed title="${_item.name}" '
+      'label="$_primaryLabel" loaded=$_resumeLoaded started=$_resumeStarted '
+      'labelTarget=S${_resumeSeason}E$_resumeEpisode '
+      'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
+      'mergedEngineTarget=$_hasMergedEpisodeTarget',
+    );
     unawaited(_guardPlay(widget.onResume));
   }
 
@@ -693,6 +700,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
+    debugPrint(
+      '[SeriesResume] detail-loader-start title="${_item.name}" '
+      'id=${_item.effectiveImdbId ?? _item.id} '
+      'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
+      'loaded=$_resumeLoaded mergedTarget=$_hasMergedEpisodeTarget',
+    );
     // setState, not a plain assignment: this runs post-frame (initState
     // schedules it via addPostFrameCallback), and the spinner must actually
     // be scheduled to paint — a bare write only showed it when a sibling
@@ -709,13 +722,25 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // the stashed engine target.
       final info = await loader().timeout(const Duration(seconds: 12));
       if (!mounted) return;
+      debugPrint(
+        '[SeriesResume] detail-loader-answer title="${_item.name}" '
+        'started=${info.started} season=${info.season} episode=${info.episode} '
+        'engineAlreadyMerged=$_hasMergedEpisodeTarget '
+        'stashedEngine=${_pendingEngineTarget == null ? 'none' : 'S${_pendingEngineTarget!.season}E${_pendingEngineTarget!.episode}/started=${_pendingEngineTarget!.started}'}',
+      );
       // Once the mounted episode engine has resolved all tracker/local
       // progress, its coordinate is newer and richer than the host loader's
       // cached Continue Watching snapshot. Do not let a slower stale loader
       // overwrite (for example) E7 back to a completed E6. (Pre-settle the
       // engine only stashes, so this guard fires solely on post-settle
       // re-reads — e.g. didPopNext after playback.)
-      if (!_isMovie && _hasMergedEpisodeTarget) return;
+      if (!_isMovie && _hasMergedEpisodeTarget) {
+        debugPrint(
+          '[SeriesResume] detail-loader-discarded title="${_item.name}" '
+          'reason=engine-already-authoritative',
+        );
+        return;
+      }
       // Settle arbitration, deterministic where the old code was
       // last-writer-wins. The reconciled loader wins whenever it found a
       // resume: it reads the same trackers + local the engine merges, PLUS
@@ -728,17 +753,31 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       final stash = _pendingEngineTarget;
       _pendingEngineTarget = null;
       if (!_isMovie && !info.started && stash != null && stash.started) {
+        debugPrint(
+          '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
+          'winner=engine target=S${stash.season}E${stash.episode} '
+          'reason=loader-unstarted',
+        );
         _applyEngineTarget(stash);
         return;
       }
+      debugPrint(
+        '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
+        'winner=loader target=S${info.season}E${info.episode} '
+        'engineCandidate=${stash == null ? 'none' : 'S${stash.season}E${stash.episode}/started=${stash.started}'}',
+      );
       setState(() {
         _resumeLoaded = true;
         _resumeStarted = info.started;
         _resumeSeason = info.season;
         _resumeEpisode = info.episode;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
       // Non-critical — leave the static label.
+      debugPrint(
+        '[SeriesResume] detail-loader-failed title="${_item.name}" '
+        'error=$error\n$stackTrace',
+      );
     } finally {
       _resumeLoaderInFlight = false;
       if (_resumePending) {
@@ -760,8 +799,18 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
-  void _onNextEpisodeChanged(EpisodeResumeTarget next, {bool mutation = false}) {
+  void _onNextEpisodeChanged(
+    EpisodeResumeTarget next, {
+    bool mutation = false,
+  }) {
     if (!mounted || _isMovie) return;
+    debugPrint(
+      '[SeriesResume] detail-engine-emission title="${_item.name}" '
+      'target=S${next.season}E${next.episode} started=${next.started} '
+      'mutation=$mutation loaderInFlight=$_resumeLoaderInFlight '
+      'labelLoaded=$_resumeLoaded current=S${_resumeSeason}E$_resumeEpisode '
+      'currentStarted=$_resumeStarted',
+    );
     // While the loader is IN FLIGHT: stash, never write. The episodes engine
     // re-emits as each tracker fetch lands, and letting every emission write
     // the pill strobed it through wrong states ("Start Watching" → S2E8 →
@@ -774,6 +823,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // later-settling loader cannot overwrite the user's mark.
     if (_resumeLoaderInFlight && !_resumeLoaded && !mutation) {
       _pendingEngineTarget = next;
+      debugPrint(
+        '[SeriesResume] detail-engine-stashed title="${_item.name}" '
+        'target=S${next.season}E${next.episode}',
+      );
       return;
     }
     // Settled STARTED: the loader is authoritative (it is literally what
@@ -787,6 +840,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         _resumeStarted &&
         !mutation &&
         widget.resumeInfoLoader != null) {
+      debugPrint(
+        '[SeriesResume] detail-engine-discarded title="${_item.name}" '
+        'target=S${next.season}E${next.episode} '
+        'reason=started-loader-authoritative',
+      );
       return;
     }
     if (_resumeLoaded &&
@@ -803,6 +861,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// host's snapshot, so a started target also arms the loader-overwrite
   /// guard.
   void _applyEngineTarget(EpisodeResumeTarget next) {
+    debugPrint(
+      '[SeriesResume] detail-engine-applied title="${_item.name}" '
+      'target=S${next.season}E${next.episode} started=${next.started}',
+    );
     setState(() {
       // A coordinate alone is not resume evidence: an untouched show also
       // resolves to its first episode. Only merged playback progress outranks

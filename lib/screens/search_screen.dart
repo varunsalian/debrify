@@ -59,6 +59,7 @@ import '../services/video_player_launcher.dart';
 import '../utils/concurrency.dart';
 import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
+import '../utils/episode_progress_merge.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
@@ -12786,6 +12787,12 @@ class _SearchScreenState extends State<SearchScreen>
     // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
   }) async {
+    debugPrint(
+      '[SeriesResume] play-pressed title="${item.name}" '
+      'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
+      'traktSource=$isTraktSource mdblistSource=$isMdblistSource '
+      'preferTrackerResume=$preferTraktResume',
+    );
     var cancelled = false;
     final resolving = preferTraktResume
         ? TorrentPlaybackService.showResolvingOverlay(
@@ -12803,6 +12810,16 @@ class _SearchScreenState extends State<SearchScreen>
           )
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
+      debugPrint(
+        '[SeriesResume] play-launch title="${selection.title}" '
+        'id=${selection.imdbId} season=${selection.season} '
+        'episode=${selection.episode} trakt=${selection.traktSource} '
+        'traktPct=${selection.traktProgressPercent} '
+        'simkl=${selection.simklSource} '
+        'simklPct=${selection.simklProgressPercent} '
+        'mdblist=${selection.mdblistSource} '
+        'mdblistPct=${selection.mdblistProgressPercent}',
+      );
       resolving?.dismiss();
       if (cancelled) return;
       await _playSelection(selection);
@@ -13156,8 +13173,21 @@ class _SearchScreenState extends State<SearchScreen>
     final rev = _seriesResumeRev(playId, isTraktSource);
     final hit = _seriesResumeCache[playId];
     if (hit != null && nowMs - hit.atMs < 45000 && hit.rev == rev) {
+      debugPrint(
+        '[SeriesResume] reconcile-cache-hit title="${item.name}" '
+        'id=$playId ageMs=${nowMs - hit.atMs} rev=$rev '
+        'result=S${hit.r.season}E${hit.r.episode} '
+        'started=${hit.r.started} source=${_resumeSourceName(hit.r.sourcePrio)}',
+      );
       return hit.r;
     }
+    debugPrint(
+      '[SeriesResume] reconcile-start title="${item.name}" id=$playId '
+      'rawId=${item.id} effectiveId=${item.effectiveImdbId} '
+      'traktAuth=$_isTraktAuthenticated simklAuth=$_isSimklAuthenticated '
+      'mdblistAuth=$_isMdblistAuthenticated traktSource=$isTraktSource '
+      'rev=$rev cache=${hit == null ? 'miss' : 'stale-or-revised'}',
+    );
     _seriesResumeCache.removeWhere((_, v) => nowMs - v.atMs >= 45000);
 
     // Kick everything off together; a degraded tracker API must never stall
@@ -13191,6 +13221,15 @@ class _SearchScreenState extends State<SearchScreen>
     final mdb = await mdbF;
     final local = await localF;
     final simklNext = await nextF;
+
+    debugPrint(
+      '[SeriesResume] reconcile-inputs title="${item.name}" id=$playId '
+      'trakt=${_formatTraktResume(trakt)} '
+      'simkl=${_formatSimklResume(simkl)} '
+      'mdblist=${_formatMdblistResume(mdb)} '
+      'local=${_formatLocalResume(local)} '
+      'simklNext=${simklNext == null ? 'none' : 'S${simklNext.season}E${simklNext.episode}'}',
+    );
 
     final candidates =
         <
@@ -13317,36 +13356,63 @@ class _SearchScreenState extends State<SearchScreen>
       // Advance rules. Tracker sessions at ≥80% are the orphan pattern the
       // trackers themselves treat as watched — advance. A LOCAL position at
       // ≥80% only advances when the player marked it finished OR a tracker's
-      // watched frontier confirms the episode is behind it (simklNext ahead)
-      // — a local-only pause in the last stretch stays resumable in place.
-      final simklNextAhead =
-          simklNext != null &&
-          (simklNext.season > season ||
-              (simklNext.season == season && simklNext.episode > episode));
-      final done =
-          w.finished || ((w.pct ?? 0) >= 80 && (isTracker || simklNextAhead));
+      // resume/up-next frontier confirms the episode is behind it. A local-only
+      // pause in the last stretch stays resumable in place.
+      final trackerFrontiers = <EpisodeCoordinate>[
+        for (final candidate in candidates)
+          if (candidate.prio <= 2) (season: candidate.s, episode: candidate.e),
+        if (simklNext != null)
+          (season: simklNext.season, episode: simklNext.episode),
+      ];
+      final trackerFrontierAhead = trackerFrontiers.any(
+        (frontier) =>
+            frontier.season > season ||
+            (frontier.season == season && frontier.episode > episode),
+      );
+      final done = shouldAdvanceEpisodeResume(
+        candidate: (season: season, episode: episode),
+        finished: w.finished,
+        progress: w.pct,
+        isTracker: isTracker,
+        trackerFrontiers: trackerFrontiers,
+      );
+      debugPrint(
+        '[SeriesResume] reconcile-winner title="${item.name}" id=$playId '
+        'source=${_resumeSourceName(w.prio)} base=S${w.s}E${w.e} '
+        'pct=${w.pct} timestamp=${_formatResumeTimestamp(w.tsMs)} '
+        'finished=${w.finished} trackerFrontierAhead=$trackerFrontierAhead '
+        'willAdvance=$done',
+      );
       if (done) {
         // 4s-boxed like every other network hop here: the guide fetch's body
         // read is otherwise unbounded, and the PLAY path has no outer box —
         // a stalled read would hang the press. Timeout → null → the defined
-        // "keep the winner / adjacent next_to_watch" fallback.
+        // "keep the winner / adjacent tracker frontier" fallback.
         final next = await NextEpisodeService.findNextEpisode(
           playId,
           season,
           episode,
         ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-        // next_to_watch backup ONLY when it's the winner's direct successor:
-        // it tracks the account's watched FRONTIER, so during a rewatch it
-        // can be seasons ahead — trusting it blindly would teleport the
-        // rewatch the moment the guide fetch flakes.
-        final adjacentNext =
-            simklNext != null &&
-                ((simklNext.season == season &&
-                        simklNext.episode == episode + 1) ||
-                    (simklNext.season == season + 1 && simklNext.episode == 1))
-            ? simklNext
-            : null;
-        final target = next ?? adjacentNext;
+        // A tracker-frontier backup is safe ONLY when it is the winner's direct
+        // successor. A frontier can be seasons ahead during a rewatch; trusting
+        // that blindly when the guide flakes would teleport the rewatch.
+        EpisodeCoordinate? adjacentTrackerFrontier;
+        for (final frontier in trackerFrontiers) {
+          final isDirectSuccessor =
+              (frontier.season == season && frontier.episode == episode + 1) ||
+              (frontier.season == season + 1 && frontier.episode == 1);
+          if (isDirectSuccessor) {
+            adjacentTrackerFrontier = frontier;
+            break;
+          }
+        }
+        final target = next ?? adjacentTrackerFrontier;
+        debugPrint(
+          '[SeriesResume] reconcile-advance title="${item.name}" id=$playId '
+          'guideNext=${next == null ? 'none' : 'S${next.season}E${next.episode}'} '
+          'adjacentTracker=${adjacentTrackerFrontier == null ? 'none' : 'S${adjacentTrackerFrontier.season}E${adjacentTrackerFrontier.episode}'} '
+          'chosen=${target == null ? 'keep-S${w.s}E${w.e}' : 'S${target.season}E${target.episode}'}',
+        );
         if (target != null) {
           season = target.season;
           episode = target.episode;
@@ -13367,8 +13433,62 @@ class _SearchScreenState extends State<SearchScreen>
         sourcePrio: sourcePrio,
       );
     }
+    debugPrint(
+      '[SeriesResume] reconcile-result title="${item.name}" id=$playId '
+      'started=${result.started} target=S${result.season}E${result.episode} '
+      'source=${_resumeSourceName(result.sourcePrio)} '
+      'hasOriginalSelection=${result.selection != null} '
+      'simklPct=${result.simklProgress}',
+    );
     _seriesResumeCache[playId] = (atMs: nowMs, rev: rev, r: result);
     return result;
+  }
+
+  String _resumeSourceName(int? priority) => switch (priority) {
+    0 => 'trakt',
+    1 => 'simkl',
+    2 => 'mdblist',
+    3 => 'local',
+    _ => 'fallback',
+  };
+
+  String _formatResumeTimestamp(int? timestampMs) {
+    if (timestampMs == null) return 'none';
+    return DateTime.fromMillisecondsSinceEpoch(timestampMs).toIso8601String();
+  }
+
+  String _formatTraktResume(({AdvancedSearchSelection sel, int? tsMs})? value) {
+    if (value == null) return 'none';
+    return 'S${value.sel.season}E${value.sel.episode}'
+        '/pct=${value.sel.traktProgressPercent}'
+        '/at=${_formatResumeTimestamp(value.tsMs)}';
+  }
+
+  String _formatSimklResume(
+    ({int season, int episode, double? progress, DateTime? pausedAt})? value,
+  ) {
+    if (value == null) return 'none';
+    return 'S${value.season}E${value.episode}'
+        '/pct=${value.progress}'
+        '/at=${value.pausedAt?.toIso8601String() ?? 'none'}';
+  }
+
+  String _formatMdblistResume(MdblistContinueWatchingItem? value) {
+    if (value == null) return 'none';
+    return 'S${value.selection.season}E${value.selection.episode}'
+        '/pct=${value.selection.mdblistProgressPercent}'
+        '/paused=${value.paused}'
+        '/at=${value.updatedAt?.toIso8601String() ?? 'none'}';
+  }
+
+  String _formatLocalResume(
+    ({int season, int episode, double? pct, int? tsMs, bool finished})? value,
+  ) {
+    if (value == null) return 'none';
+    return 'S${value.season}E${value.episode}'
+        '/pct=${value.pct}'
+        '/finished=${value.finished}'
+        '/at=${_formatResumeTimestamp(value.tsMs)}';
   }
 
   /// Trakt candidate for the reconciler — the full ready-to-play selection
@@ -13381,10 +13501,22 @@ class _SearchScreenState extends State<SearchScreen>
   ) async {
     final cached = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
     if (cached != null) {
+      debugPrint(
+        '[SeriesResume] trakt-home-card-hit title="${item.name}" '
+        'lookupId=${item.effectiveImdbId ?? item.id} cardId=${cached.id} '
+        'card=S${cached.season}E${cached.episode} '
+        'cardPct=${cached.progress} '
+        'cardPausedAt=${_formatResumeTimestamp(cached.pausedAtMs)}',
+      );
       final sel = await TraktContinueWatchingService.instance.selectionForItem(
         cached,
       );
       if (sel == null) return null;
+      debugPrint(
+        '[SeriesResume] trakt-home-card-selection title="${item.name}" '
+        'resolved=S${sel.season}E${sel.episode} '
+        'resolvedPct=${sel.traktProgressPercent}',
+      );
       return (sel: sel, tsMs: cached.pausedAtMs);
     }
     if (item.type != 'series') return null;
@@ -13395,6 +13527,10 @@ class _SearchScreenState extends State<SearchScreen>
     final items = await TraktContinueWatchingService.instance.fetchItems(
       TraktContinueWatchingService.showsContentType,
     );
+    debugPrint(
+      '[SeriesResume] trakt-live-lookup title="${item.name}" id=$id '
+      'homeCacheMiss=true fetchedItems=${items.length}',
+    );
     TraktContinueWatchingItem? selected;
     for (final it in items) {
       if (it.id == id) {
@@ -13403,6 +13539,12 @@ class _SearchScreenState extends State<SearchScreen>
       }
     }
     if (selected == null) return null;
+    debugPrint(
+      '[SeriesResume] trakt-live-match title="${item.name}" id=$id '
+      'card=S${selected.season}E${selected.episode} '
+      'cardPct=${selected.progress} '
+      'cardPausedAt=${_formatResumeTimestamp(selected.pausedAtMs)}',
+    );
     final sel = await TraktContinueWatchingService.instance.selectionForItem(
       selected,
     );
@@ -13545,6 +13687,11 @@ class _SearchScreenState extends State<SearchScreen>
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
+    debugPrint(
+      '[SeriesResume] label-resolve-start title="${item.name}" '
+      'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
+      'traktSource=$isTraktSource mdblistSource=$isMdblistSource',
+    );
     if (isMdblistSource) {
       final owned = await _mdblistResumeItemFor(item);
       if (!mounted) return (started: false, season: null, episode: null);
@@ -13566,6 +13713,11 @@ class _SearchScreenState extends State<SearchScreen>
         isTraktSource: isTraktSource,
       );
       if (!mounted) return (started: false, season: null, episode: null);
+      debugPrint(
+        '[SeriesResume] label-resolve-result title="${item.name}" '
+        'started=${r.started} target=S${r.season}E${r.episode} '
+        'source=${_resumeSourceName(r.sourcePrio)}',
+      );
       return (started: r.started, season: r.season, episode: r.episode);
     }
 
