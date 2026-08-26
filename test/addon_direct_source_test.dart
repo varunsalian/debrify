@@ -72,6 +72,44 @@ void main() {
     expect(addon.sourceBindingKey, isNot(other.sourceBindingKey));
   });
 
+  test('binding identity survives a response-position change', () {
+    // The addon reorders results between searches (cache state, seeders), so
+    // the same file comes back at a new index. Including that index in the
+    // identity made every replay append a duplicate pin instead of promoting
+    // the existing one.
+    SeriesSource at(int index) => SeriesSource(
+      torrentHash: '',
+      torrentName: 'Show S01E02 1080p',
+      debridService: SeriesSource.addonDirectService,
+      debridTorrentId: '',
+      boundAt: 1,
+      addonId: 'test.addon',
+      addonKey: 'opaque-addon-key',
+      streamKey: 'quality-profile',
+      streamIndex: index,
+    );
+
+    expect(at(2).bindingKey, at(9).bindingKey);
+    expect(
+      at(2).matchesAddonDirect(
+        candidateAddonKey: 'opaque-addon-key',
+        candidateStreamKey: 'quality-profile',
+      ),
+      isTrue,
+    );
+    // A different profile is still a different source.
+    expect(
+      at(2).matchesAddonDirect(
+        candidateAddonKey: 'opaque-addon-key',
+        candidateStreamKey: 'other-profile',
+      ),
+      isFalse,
+    );
+    // The index is still STORED — resolution needs it to pick between streams
+    // sharing a profile (see selectPinnedDirectStream).
+    expect(at(9).streamIndex, 9);
+  });
+
   test('stream profile survives URL, episode, hash, and size changes', () {
     final first = StremioStream.fromJson({
       'name': 'Provider 1080p',

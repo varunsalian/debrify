@@ -4432,9 +4432,13 @@ class TorrentPlaybackService {
   /// — so subsequent plays go straight through the bound path. A replayed
   /// binding is refreshed and promoted to primary; a new single-episode
   /// binding is capped so a pack-less show binged over time can't grow the
-  /// list without bound (older singles are evicted; packs and manually-pinned
-  /// sources are never touched). Refreshable addon-direct sources participate
-  /// without persisting their signed/temporary URL. Local sources stay opt-in.
+  /// list without bound (older singles are evicted; packs are never touched).
+  /// Refreshable addon-direct sources participate without persisting their
+  /// signed/temporary URL, and count toward that cap like any other single —
+  /// exempting them left the list unbounded. A manually pinned SINGLE is
+  /// therefore evictable once 20 accumulate for one series; there is no stored
+  /// manual/auto flag to tell them apart, and an unbounded list is the worse
+  /// failure. Local sources stay opt-in.
   ///
   /// Gated on [StorageService.getSeriesAutoPinOnPlay] — which is NOT the
   /// "Prefer season packs" toggle. The two shared a preference key until it was
@@ -4481,17 +4485,19 @@ class TorrentPlaybackService {
         list.removeAt(existingIdx);
       } else {
         // A NEW single-episode binding: bound how many auto-accumulate so a
-        // pack-less show doesn't grow the list forever. Packs and any
-        // non-single (e.g. manually pinned) sources are never evicted.
-        if (!source.isAddonDirect &&
-            _singleEpisodeOf(source.torrentName) != null) {
+        // pack-less show doesn't grow the list forever. Packs and anything else
+        // that isn't a single episode are never evicted.
+        //
+        // Addon-direct singles count here too. Exempting them left the list
+        // unbounded, and an unstable identity (see SeriesSource.bindingKey)
+        // appended a fresh one on every play. The identity is fixed now; this
+        // cap is the backstop for whatever destabilises it next. The cost is
+        // that a manually pinned single is evictable once 20 accumulate —
+        // there is no stored manual/auto flag to separate them.
+        if (_singleEpisodeOf(source.torrentName) != null) {
           final singles =
               list
-                  .where(
-                    (s) =>
-                        !s.isAddonDirect &&
-                        _singleEpisodeOf(s.torrentName) != null,
-                  )
+                  .where((s) => _singleEpisodeOf(s.torrentName) != null)
                   .toList()
                 ..sort((a, b) => a.boundAt.compareTo(b.boundAt));
           final overflow = singles.length + 1 - _maxAutoBoundSingles;

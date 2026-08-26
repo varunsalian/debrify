@@ -76,20 +76,29 @@ class SeriesSource {
       return 'local:$path';
     }
     if (isAddonDirect) {
-      return 'direct:${addonKey!.trim()}:${streamKey?.trim() ?? ''}:${streamIndex ?? 0}';
+      // [streamIndex] is deliberately NOT part of the identity. It is the
+      // stream's position in the addon's response, which moves between searches
+      // as cache state and seeders change — so including it made a replay of the
+      // SAME file compute a new key, miss the dedupe in _autoBindSeriesOnPlay /
+      // _rebindOnSourceSwitch, and append a duplicate pin on every play. It is
+      // still stored, because re-resolution needs it; it just cannot be identity.
+      // [streamKey] is the real identity: a URL-free stream profile (see
+      // StremioStream.streamKey), so it survives signed/expiring links.
+      return 'direct:${addonKey!.trim()}:${streamKey?.trim() ?? ''}';
     }
     return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
   }
 
+  /// Kept in lock-step with [bindingKey] — it too ignores the response
+  /// position, or the two could disagree about whether a stream is already
+  /// pinned. Takes no stream index for that reason.
   bool matchesAddonDirect({
     required String? candidateAddonKey,
     required String? candidateStreamKey,
-    required int? candidateStreamIndex,
   }) =>
       isAddonDirect &&
       addonKey == candidateAddonKey &&
-      streamKey == candidateStreamKey &&
-      (streamIndex ?? 0) == (candidateStreamIndex ?? 0);
+      streamKey == candidateStreamKey;
 
   bool get isLocalMovieFile =>
       isLocal && (localKind == null || localKind == localKindMovieFile);
