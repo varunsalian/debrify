@@ -23,6 +23,62 @@ import 'theme/detail_theme.dart';
 /// the hold has to be recognised from the keys (`TvHoldOk`).
 enum DetailOptionsGesture { rightArrow, holdOk }
 
+/// Whether an episode cell currently holds the cursor, for the page-level
+/// hold-OK hint.
+///
+/// The hint is one pill in the corner of the SCREEN, not chrome on the card,
+/// so the cells cannot each render their own — they report into this and the
+/// page shell renders once.
+///
+/// Ownership is tracked by cell identity rather than a bare flag: walking the
+/// rail fires the new cell's gain and the old cell's loss in either order, and
+/// a flag would let the stale loss switch the hint off under the cell that
+/// just took the cursor.
+class DetailHoldHintController extends ValueNotifier<bool> {
+  DetailHoldHintController() : super(false);
+
+  Object? _owner;
+
+  void report(Object cell, bool focused) {
+    if (focused) {
+      _owner = cell;
+      value = true;
+    } else if (identical(_owner, cell)) {
+      _owner = null;
+      value = false;
+    }
+  }
+
+  /// A cell leaving the tree without losing focus first — a season change
+  /// rebuilding the rail under the cursor.
+  void release(Object cell) => report(cell, false);
+}
+
+/// Hands the page's [DetailHoldHintController] down to the episode cells.
+///
+/// Absent is a valid state: layouts that never show the hint (Classic) simply
+/// don't provide one, and the cells no-op.
+class DetailHoldHintScope extends InheritedWidget {
+  final DetailHoldHintController controller;
+
+  const DetailHoldHintScope({
+    super.key,
+    required this.controller,
+    required super.child,
+  });
+
+  /// Deliberately NOT a dependency: the controller instance is stable for the
+  /// page's life, and cells listen to it directly rather than rebuilding with
+  /// the scope.
+  static DetailHoldHintController? maybeOf(BuildContext context) => context
+      .getInheritedWidgetOfExactType<DetailHoldHintScope>()
+      ?.controller;
+
+  @override
+  bool updateShouldNotify(DetailHoldHintScope old) =>
+      controller != old.controller;
+}
+
 /// Focus, activation and options handling shared by every episode cell.
 ///
 /// Presentational cells wrap themselves in one of these; none of them
@@ -87,9 +143,21 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
   /// is never reported upward.
   bool _hovered = false;
 
+  /// The page's corner hint, if this layout shows one.
+  DetailHoldHintController? _hint;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _hint = DetailHoldHintScope.maybeOf(context);
+  }
+
   @override
   void dispose() {
     _hold.reset();
+    // A rail rebuilt under the cursor (season change) disposes the focused
+    // cell without a loss callback — the hint would stay up over nothing.
+    _hint?.release(this);
     super.dispose();
   }
 
@@ -100,6 +168,7 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
       onFocusChange: (f) {
         setState(() => _focused = f);
         if (!f) _hold.reset();
+        _hint?.report(this, f);
         widget.onFocusChange?.call(f);
         if (f && widget.ensureVisible) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -170,47 +239,93 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
   }
 }
 
-/// The focused-cell "Long press for options" affordance, shared by every
-/// layout's episode cells. Black glass with white ink so it stays legible over
-/// artwork and panel fills alike, on every theme.
-class DetailHoldHintPill extends StatelessWidget {
-  const DetailHoldHintPill({super.key});
+/// The page-level "Hold OK for options" hint, parked in the bottom-right of
+/// the SCREEN while an episode cell holds the cursor.
+///
+/// Wrap the page body in this — it supplies the [DetailHoldHintScope] the
+/// cells report into and paints the pill above the body, so no layout has to
+/// carry the affordance in its own cells.
+class DetailHoldHint extends StatefulWidget {
+  final Widget child;
+
+  const DetailHoldHint({super.key, required this.child});
+
+  @override
+  State<DetailHoldHint> createState() => _DetailHoldHintState();
+}
+
+class _DetailHoldHintState extends State<DetailHoldHint> {
+  final DetailHoldHintController _controller = DetailHoldHintController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final t = DetailThemeScope.of(context);
+    // Off TV the options menu already has a pointer gesture and a visible
+    // kebab, so the hint is TV-only — and never provides the scope there, so
+    // the cells skip the bookkeeping entirely.
+    if (!PlatformUtil.isTelevision) return widget.child;
+    return DetailHoldHintScope(
+      controller: _controller,
+      child: Stack(
+        children: [
+          widget.child,
+          Positioned(
+            // Clear of TV overscan, and of the caption band under the
+            // bottom-most rail.
+            right: 34,
+            bottom: 26,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _controller,
+              builder: (context, showing, child) => IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: showing ? 1 : 0,
+                  duration: const Duration(milliseconds: 160),
+                  child: child,
+                ),
+              ),
+              child: const _DetailHoldHintPill(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Black glass with white ink, so it reads over artwork and over a light
+/// theme's ground alike — it floats above the page, not inside it.
+class _DetailHoldHintPill extends StatelessWidget {
+  const _DetailHoldHintPill();
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7),
-        borderRadius: t.brSm,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.more_vert_rounded,
-            size: 12,
-            color: Colors.white.withValues(alpha: 0.9),
+            Icons.more_horiz_rounded,
+            size: 15,
+            color: Colors.white.withValues(alpha: 0.92),
           ),
-          const SizedBox(width: 3),
-          // Flexible + ellipsis so a host that bounds the pill (the episode
-          // row at large text scales) shrinks the label instead of the pill
-          // overflowing its Row.
-          Flexible(
-            child: Text(
-              'Long press for options',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
-              ),
+          const SizedBox(width: 6),
+          Text(
+            'Long press for more actions',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.92),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -239,11 +354,6 @@ class DetailEpisodeThumb extends StatelessWidget {
 
   final bool showTick;
 
-  /// Focused-only TV affordance: the options menu is behind a held OK, which
-  /// nothing on the card advertises. Only the wide cards turn this on — the
-  /// list rows already carry a trailing ⋮ and their thumbs are too small.
-  final bool showHoldHint;
-
   const DetailEpisodeThumb({
     super.key,
     required this.episode,
@@ -252,7 +362,6 @@ class DetailEpisodeThumb extends StatelessWidget {
     required this.isNext,
     this.radius = 7,
     this.showTick = true,
-    this.showHoldHint = false,
   });
 
   @override
@@ -335,13 +444,6 @@ class DetailEpisodeThumb extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-          if (showHoldHint)
-            const Positioned(
-              // Above the 3px progress strip along the bottom edge.
-              bottom: 6,
-              right: 5,
-              child: DetailHoldHintPill(),
             ),
           if (partial)
             Positioned(
@@ -439,9 +541,6 @@ class DetailEpisodeCard extends StatelessWidget {
                   // drawn at. Handing over `t.brImg` itself would scale an
                   // already-scaled number twice.
                   radius: 8,
-                  // isTelevision, not isAndroidTvCached: tvOS binds the same
-                  // held OK and needs the same affordance.
-                  showHoldHint: focused && PlatformUtil.isTelevision,
                 ),
               ),
             ),
@@ -586,20 +685,11 @@ class DetailEpisodeRow extends StatelessWidget {
                   ),
                 ),
               const SizedBox(width: 8),
-              // The ⋮ trades up to the labeled pill while the DPAD cursor is
-              // on the row — the thumb is too small to host it, and only the
-              // focused row can act on the hint anyway.
-              if (focused && PlatformUtil.isTelevision)
-                // Flexible: at large text scales in a narrow side pane the
-                // full label can outgrow the row — shrink and ellipsize
-                // rather than overflow.
-                const Flexible(child: DetailHoldHintPill())
-              else
-                Icon(
-                  Icons.more_vert_rounded,
-                  size: 18,
-                  color: focused ? t.tx2 : t.tx3,
-                ),
+              Icon(
+                Icons.more_vert_rounded,
+                size: 18,
+                color: focused ? t.tx2 : t.tx3,
+              ),
             ],
           ),
         ),

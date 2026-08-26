@@ -1517,11 +1517,6 @@ class ShowcaseEpisodeCell extends StatelessWidget {
   /// stand-in for hold-OK. TV passes null and renders exactly as before.
   final VoidCallback? onOptions;
 
-  /// TV's counterpart to the kebab: the focused cell advertises the held OK
-  /// in the same corner the kebab would occupy. Never set together with
-  /// [onOptions].
-  final bool showHoldHint;
-
   const ShowcaseEpisodeCell({
     super.key,
     required this.episode,
@@ -1533,7 +1528,6 @@ class ShowcaseEpisodeCell extends StatelessWidget {
     this.stillWidth,
     this.stillHeight,
     this.onOptions,
-    this.showHoldHint = false,
   });
 
   @override
@@ -1623,12 +1617,6 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                         right: 5,
                         bottom: 5,
                         child: _KebabButton(onTap: onOptions!),
-                      ),
-                    if (showHoldHint && focused)
-                      const Positioned(
-                        right: 5,
-                        bottom: 5,
-                        child: _Badge(label: '⋮ Long press for options'),
                       ),
                   ],
                 ),

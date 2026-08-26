@@ -19,6 +19,7 @@ import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
+import '../widgets/detail/detail_episode_cells.dart';
 import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
 import '../widgets/detail/detail_layout_marquee.dart';
@@ -1662,9 +1663,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Grid and grain are whole-page textures, so they are applied once here
     // rather than by each layout — and Classic, which is never wrapped, cannot
     // pick them up by accident.
+    // DetailHoldHint is the page-level affordance for the episode cells' held
+    // OK — one pill in the screen's corner rather than chrome on every card.
+    // It sits here, around every alternate layout at once, so no layout has to
+    // opt in; it renders nothing off TV and nothing until a cell takes focus.
     Widget themed(Widget body) => DetailThemeScope(
       theme: _theme,
-      child: DetailAtmosphere(child: body),
+      child: DetailAtmosphere(child: DetailHoldHint(child: body)),
     );
 
     switch (_style) {
