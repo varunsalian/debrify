@@ -539,6 +539,7 @@ class StorageService {
   static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
   static const String _quickPlayMovieRulesKey = 'quick_play_movie_rules_v2';
   static const String _quickPlaySeriesRulesKey = 'quick_play_series_rules_v2';
+  static const String _playButtonModeKey = 'play_button_mode';
 
   // Series auto-pin: on a series play with no pinned source, search packs
   // first (complete series → season pack), and pin whatever source plays so
@@ -7638,6 +7639,32 @@ class StorageService {
 
   // Quick Play Cache Fallback Settings methods
 
+  /// What the Play button does — NOT what it looks like. The button keeps its
+  /// label, icon and position in every mode; only the behavior behind the press
+  /// changes:
+  ///
+  ///  * `quick`  — the shipped contract: reuse a pinned source, else search and
+  ///               auto-play the best match.
+  ///  * `smart`  — reuse a pinned source; when none is usable, hand the user the
+  ///               source list instead of auto-picking.
+  ///  * `always` — skip pinned sources entirely and always hand over the list.
+  ///
+  /// Absent key means `quick`, so existing installs are untouched. Only the
+  /// user's own Play press honors this ([TorrentPlaybackService.playFromSelection]
+  /// applies it solely when a picker opener is supplied) — binge auto-advance and
+  /// post-failure recovery keep auto-selecting, since re-prompting mid-chain is
+  /// exactly what those paths exist to avoid.
+  static Future<String> getPlayButtonMode() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_playButtonModeKey);
+    return (raw == 'smart' || raw == 'always') ? raw! : 'quick';
+  }
+
+  static Future<void> setPlayButtonMode(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_playButtonModeKey, value);
+  }
+
   /// Loads the per-content Quick Play profile. When no v2 profile exists,
   /// legacy filter/retry/series-pack preferences are folded into one without
   /// changing what the next play will do. Non-default legacy values are
@@ -7733,6 +7760,11 @@ class StorageService {
     );
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayHonorsFiltersKey, true);
+    // The page's reset button reads as "reset this page", and this function
+    // already resets a non-per-tab key above, so the Play button mode goes back
+    // to the shipped Quick Play too. Leaving it would restore defaults while
+    // Play kept behaving differently.
+    await prefs.remove(_playButtonModeKey);
   }
 
   /// Get whether to try multiple torrents if first is not cached

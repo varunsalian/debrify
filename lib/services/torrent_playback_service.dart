@@ -1161,6 +1161,12 @@ class TorrentPlaybackService {
     // sources. Recovery re-enters below the binding gate so the same failed
     // source cannot launch again in a loop.
     bool skipBoundSources = false,
+    // Hands the user the manual source list for THIS selection instead of
+    // auto-picking. Supplying it is what opts a call site into the user's
+    // "Play button opens" preference (see [StorageService.getPlayButtonMode]):
+    // only a real Play press passes an opener, so binge auto-advance and
+    // post-failure recovery keep their existing no-prompt contract for free.
+    VoidCallback? openSourcePicker,
   }) async {
     final label = meta.title ?? '';
     if (imdbId.isEmpty) {
@@ -1175,12 +1181,33 @@ class TorrentPlaybackService {
       onCancel: () => cancelled = true,
     );
     late final QuickPlayRules rules;
+    // 'quick' (the default) leaves every path below exactly as it shipped. Read
+    // under the overlay, next to the rules, so the default path's time-to-overlay
+    // is unchanged.
+    var playMode = 'quick';
     try {
       rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+      if (openSourcePicker != null) {
+        playMode = await StorageService.getPlayButtonMode();
+      }
       if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
     } catch (_) {
       resolving.dismiss();
       rethrow;
+    }
+    // "Always ask" wants the list regardless of what is pinned, so it enters
+    // below the binding gate the same way failure-recovery does.
+    final skipBound = skipBoundSources || playMode == 'always';
+    // True when this press has been handed to the manual source list and the
+    // caller must stop. Reads the callback through a local so neither hand-off
+    // site needs a `!`, which would be a latent trap if [playMode] ever gained
+    // another writer.
+    final opener = openSourcePicker;
+    bool handedToPicker() {
+      if (playMode == 'quick' || opener == null) return false;
+      resolving.dismiss();
+      if (context.mounted && !cancelled) opener();
+      return true;
     }
     var activeRules = rules;
     if (!context.mounted || cancelled) {
@@ -1206,6 +1233,16 @@ class TorrentPlaybackService {
         );
         return;
       }
+      // Kitsu/tmdb-only catalogs are a real slice of the library, so the picker
+      // modes have to apply here too — otherwise "Always show sources" silently
+      // does nothing for anime. The manual list handles a non-`tt` id fine: it
+      // passes the id straight to searchByImdbWithStremio, whose addon half
+      // accepts it (the engine half just returns nothing). Handing over BEFORE
+      // the addon auto-play costs no pinned-source reuse — this branch already
+      // returns above the binding gate, so non-`tt` ids never had any. The
+      // torrents-only guard stays ahead of this: an empty picker would be a
+      // worse answer than the explicit message.
+      if (handedToPicker()) return;
       resolving.dismiss();
       await _playAddonStream(
         context,
@@ -1224,7 +1261,7 @@ class TorrentPlaybackService {
     // Bound-source reuse: if the user pinned a source for this title, play it
     // directly and skip the torrent search entirely. A series binding is only
     // usable when a concrete season+episode is requested (to land in the pack).
-    if (!skipBoundSources) {
+    if (!skipBound) {
       late final List<SeriesSource> bound;
       try {
         bound = await SeriesSourceService.getSources(imdbId);
@@ -1257,6 +1294,15 @@ class TorrentPlaybackService {
         // Bound source unplayable → fall through to a normal search below.
       }
     }
+
+    // Everything above this line is the pinned-source contract; everything below
+    // it auto-picks. Both non-default modes stop here and hand the user the list
+    // instead — reaching this point already means "no pinned source played",
+    // whether because none was pinned, the pin didn't cover this episode, or the
+    // pin was dead. That makes the branch correct by construction: it needs no
+    // separate notion of pin eligibility, which a title-level count could not
+    // have answered for a series pinned only as single episodes.
+    if (handedToPicker()) return;
 
     // Addon-leading, exact-episode routes search addons before asking the user
     // to choose a debrid provider. Direct addon links need no provider at all;

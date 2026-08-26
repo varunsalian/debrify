@@ -2321,6 +2321,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Quick Play
       leaf(
         'Quick Play',
+        'Play button opens',
+        'Play instantly, or pick the source yourself',
+        // The users who want this arrive searching for the behavior they hate,
+        // not for its name — "auto play", "quick play off", "choose source".
+        const [
+          'auto play',
+          'autoplay',
+          'quick play',
+          'turn off quick play',
+          'choose source',
+          'pick source',
+          'source list',
+          'always ask',
+          'smart',
+        ],
+      ),
+      leaf(
+        'Quick Play',
         'Addon Priority',
         'Order engines and addons are tried',
         const ['priority', 'order', 'addons', 'engines', 'reorder', 'sources'],

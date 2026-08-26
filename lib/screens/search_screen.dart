@@ -14063,6 +14063,11 @@ class _SearchScreenState extends State<SearchScreen>
         season: sel.season,
         episode: sel.episode,
         meta: _metaFor(sel),
+        // This is the user's own Play press, so it honors "Play button opens".
+        // The selection already carries the exact season/episode the button was
+        // going to play, so the manual list opens on that episode — no next-up
+        // resolution here, and no way for the list to disagree with the button.
+        openSourcePicker: () => _browseSelection(sel),
       );
     } finally {
       MainPageBridge.removeExternalPlayerLaunchListener(onExternal);

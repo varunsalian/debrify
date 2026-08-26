@@ -30,6 +30,11 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   bool _loading = true;
   bool _series = false;
   bool _pikPak = false;
+
+  /// 'quick' | 'smart' | 'always' — see [StorageService.getPlayButtonMode].
+  /// Global on purpose: unlike the rules below it, this is not a per-content
+  /// tab setting, so it sits above the Movies/Series tabs.
+  String _playMode = 'quick';
   late QuickPlayRules _movie;
   late QuickPlayRules _show;
 
@@ -43,6 +48,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   /// TV pick-up/drop reorder: the key of the row currently "grabbed".
   String? _pickedKey;
 
+  final _playModeNode = FocusNode(debugLabel: 'quick-play-play-button-mode');
   final _movieTab = FocusNode(debugLabel: 'quick-play-movies-tab');
   final _seriesTab = FocusNode(debugLabel: 'quick-play-series-tab');
   final _torrentToggle = FocusNode(debugLabel: 'quick-play-prefer-torrents');
@@ -69,6 +75,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   @override
   void dispose() {
     for (final node in [
+      _playModeNode,
       _movieTab,
       _seriesTab,
       _torrentToggle,
@@ -85,11 +92,13 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     final movie = await StorageService.getQuickPlayRules(isMovie: true);
     final show = await StorageService.getQuickPlayRules(isMovie: false);
     final provider = await StorageService.getDefaultTorrentProvider();
+    final playMode = await StorageService.getPlayButtonMode();
     if (!mounted) return;
     setState(() {
       _movie = movie;
       _show = show;
       _pikPak = provider == 'pikpak';
+      _playMode = playMode;
       _loading = false;
     });
     if (PlatformUtil.isTelevision) {
@@ -256,6 +265,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _show = QuickPlayRules.debrifyDefault(isMovie: false);
       _orderedMovie = _applyStoredOrder(const []);
       _orderedSeries = _applyStoredOrder(const []);
+      // restoreQuickPlayDefaults() clears the stored mode; mirror it here or the
+      // dropdown keeps showing the old value until the page is reopened.
+      _playMode = 'quick';
       _pickedKey = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -293,6 +305,14 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                       'Choose what Debrify plays automatically. Movies and series have separate rules.',
                 ),
                 const SizedBox(height: 22),
+                _heading(
+                  'Play button opens',
+                  'Applies to movies and series. The Play button itself never '
+                      'changes — only what happens when you press it.',
+                ),
+                const SizedBox(height: 10),
+                _playModeSelect(),
+                const SizedBox(height: 24),
                 _tabs(),
                 const SizedBox(height: 20),
                 _switches(),
@@ -343,6 +363,43 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         Text(subtitle, style: TextStyle(color: dim)),
       ],
     );
+  }
+
+  /// The only setting on this page that is NOT per-content, so it lives above
+  /// the Movies/Series tabs rather than inside them.
+  ///
+  /// Copy carries unusual weight here: the Play button looks identical in all
+  /// three modes, so this is the one place the difference is ever explained.
+  Widget _playModeSelect() => _Panel(
+    child: SettingsSelectDropdown(
+      focusNode: _playModeNode,
+      value: _playMode,
+      options: const [
+        SettingsSelectOption(
+          'quick',
+          'Quick Play',
+          'Debrify picks the source and starts playing.',
+        ),
+        SettingsSelectOption(
+          'smart',
+          'Smart',
+          'Uses a pinned source when there is one. Otherwise it shows the '
+              'source list instead of choosing for you.',
+        ),
+        SettingsSelectOption(
+          'always',
+          'Always show sources',
+          'Skips pinned sources and always shows the list, so you pick every '
+              'time.',
+        ),
+      ],
+      onChanged: _setPlayMode,
+    ),
+  );
+
+  Future<void> _setPlayMode(String value) async {
+    setState(() => _playMode = value);
+    await StorageService.setPlayButtonMode(value);
   }
 
   Widget _tabs() => ConstrainedBox(
