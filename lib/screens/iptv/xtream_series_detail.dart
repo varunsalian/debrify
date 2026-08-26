@@ -283,7 +283,10 @@ Future<void> openXtreamSeries(
         addon: addon,
         isTelevision: isTelevision,
         showQuickPlay: true,
-        onResume: resumeAndPlay,
+        // Ignores the promised target on purpose: [resumeAndPlay] and the
+        // loader below both read the same `resumeState()`, so the label and the
+        // action cannot drift the way the catalog path could.
+        onResume: (_) => resumeAndPlay(),
         resumeInfoLoader: () async {
           final state = await resumeState();
           return (

@@ -19,6 +19,7 @@ import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
+import '../widgets/detail/detail_episode_cells.dart';
 import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
 import '../widgets/detail/detail_layout_marquee.dart';
@@ -73,7 +74,17 @@ class MergedDetailScreen extends StatefulWidget {
 
   /// Primary play action. Series: resume-and-play (last-played → S01E01).
   /// Movie: play the movie. Mirrors the detail screen's "Play".
-  final Future<void> Function() onResume;
+  ///
+  /// Receives the episode the BUTTON is currently promising, when this screen
+  /// has resolved one. The host must honor it over its own re-derivation: this
+  /// screen's episode engine advances off watched state, while the host's
+  /// reconciler only reads resume positions, so the two legitimately disagree
+  /// (a show whose progress lives in a tracker's watched list rather than its
+  /// continue-watching list resolves here to S1E2 and there to the S1E1
+  /// empty-candidates fallback). Null means this screen has nothing better than
+  /// what the host can work out for itself.
+  final Future<void> Function(({bool started, int season, int episode})? promised)
+  onResume;
 
   /// Resolves whether the title has prior progress and, for a series, the
   /// season/episode [onResume] would land on — so the button can read
@@ -507,7 +518,43 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   void _playPrimary() {
-    unawaited(_guardPlay(widget.onResume));
+    // Promise ONLY an engine-derived target ([_hasMergedEpisodeTarget]), and
+    // only a started one.
+    //
+    // The engine is the sole reason the label can disagree with the host: it
+    // advances off watched state, which the host's reconciler never reads. A
+    // label that came from the loader instead already equals what the host
+    // would work out for itself, so promising it buys nothing — and costs
+    // freshness, because these coordinates are only re-read at page open and on
+    // return from playback. Promising a loader echo would let a page left open
+    // while an episode was finished elsewhere override a fresher reconcile with
+    // the episode the user already watched.
+    //
+    // This also covers the post-playback window for free:
+    // [_refreshAfterPlayback] clears the flag before re-reading, so a press
+    // during the refresh promises nothing and the host decides — without having
+    // to block the button, which stays pressable throughout. An untouched show
+    // resolves to S01E01 with no evidence behind it, hence the started gate.
+    final season = _resumeSeason;
+    final episode = _resumeEpisode;
+    final promised =
+        (!_isMovie &&
+            _resumeStarted &&
+            _hasMergedEpisodeTarget &&
+            season != null &&
+            episode != null)
+        ? (started: true, season: season, episode: episode)
+        : null;
+    debugPrint(
+      '[SeriesResume] detail-primary-pressed title="${_item.name}" '
+      'label="$_primaryLabel" loaded=$_resumeLoaded started=$_resumeStarted '
+      'labelTarget=S${_resumeSeason}E$_resumeEpisode '
+      'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
+      'mergedEngineTarget=$_hasMergedEpisodeTarget '
+      'loaderInFlight=$_resumeLoaderInFlight '
+      'promised=${promised == null ? 'none' : 'S${promised.season}E${promised.episode}'}',
+    );
+    unawaited(_guardPlay(() => widget.onResume(promised)));
   }
 
   void _quickPlayEpisode(AdvancedSearchSelection selection) {
@@ -693,6 +740,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
+    debugPrint(
+      '[SeriesResume] detail-loader-start title="${_item.name}" '
+      'id=${_item.effectiveImdbId ?? _item.id} '
+      'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
+      'loaded=$_resumeLoaded mergedTarget=$_hasMergedEpisodeTarget',
+    );
     // setState, not a plain assignment: this runs post-frame (initState
     // schedules it via addPostFrameCallback), and the spinner must actually
     // be scheduled to paint — a bare write only showed it when a sibling
@@ -709,13 +762,25 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // the stashed engine target.
       final info = await loader().timeout(const Duration(seconds: 12));
       if (!mounted) return;
+      debugPrint(
+        '[SeriesResume] detail-loader-answer title="${_item.name}" '
+        'started=${info.started} season=${info.season} episode=${info.episode} '
+        'engineAlreadyMerged=$_hasMergedEpisodeTarget '
+        'stashedEngine=${_pendingEngineTarget == null ? 'none' : 'S${_pendingEngineTarget!.season}E${_pendingEngineTarget!.episode}/started=${_pendingEngineTarget!.started}'}',
+      );
       // Once the mounted episode engine has resolved all tracker/local
       // progress, its coordinate is newer and richer than the host loader's
       // cached Continue Watching snapshot. Do not let a slower stale loader
       // overwrite (for example) E7 back to a completed E6. (Pre-settle the
       // engine only stashes, so this guard fires solely on post-settle
       // re-reads — e.g. didPopNext after playback.)
-      if (!_isMovie && _hasMergedEpisodeTarget) return;
+      if (!_isMovie && _hasMergedEpisodeTarget) {
+        debugPrint(
+          '[SeriesResume] detail-loader-discarded title="${_item.name}" '
+          'reason=engine-already-authoritative',
+        );
+        return;
+      }
       // Settle arbitration, deterministic where the old code was
       // last-writer-wins. The reconciled loader wins whenever it found a
       // resume: it reads the same trackers + local the engine merges, PLUS
@@ -728,17 +793,31 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       final stash = _pendingEngineTarget;
       _pendingEngineTarget = null;
       if (!_isMovie && !info.started && stash != null && stash.started) {
+        debugPrint(
+          '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
+          'winner=engine target=S${stash.season}E${stash.episode} '
+          'reason=loader-unstarted',
+        );
         _applyEngineTarget(stash);
         return;
       }
+      debugPrint(
+        '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
+        'winner=loader target=S${info.season}E${info.episode} '
+        'engineCandidate=${stash == null ? 'none' : 'S${stash.season}E${stash.episode}/started=${stash.started}'}',
+      );
       setState(() {
         _resumeLoaded = true;
         _resumeStarted = info.started;
         _resumeSeason = info.season;
         _resumeEpisode = info.episode;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
       // Non-critical — leave the static label.
+      debugPrint(
+        '[SeriesResume] detail-loader-failed title="${_item.name}" '
+        'error=$error\n$stackTrace',
+      );
     } finally {
       _resumeLoaderInFlight = false;
       if (_resumePending) {
@@ -760,8 +839,18 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
-  void _onNextEpisodeChanged(EpisodeResumeTarget next, {bool mutation = false}) {
+  void _onNextEpisodeChanged(
+    EpisodeResumeTarget next, {
+    bool mutation = false,
+  }) {
     if (!mounted || _isMovie) return;
+    debugPrint(
+      '[SeriesResume] detail-engine-emission title="${_item.name}" '
+      'target=S${next.season}E${next.episode} started=${next.started} '
+      'mutation=$mutation loaderInFlight=$_resumeLoaderInFlight '
+      'labelLoaded=$_resumeLoaded current=S${_resumeSeason}E$_resumeEpisode '
+      'currentStarted=$_resumeStarted',
+    );
     // While the loader is IN FLIGHT: stash, never write. The episodes engine
     // re-emits as each tracker fetch lands, and letting every emission write
     // the pill strobed it through wrong states ("Start Watching" → S2E8 →
@@ -774,6 +863,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // later-settling loader cannot overwrite the user's mark.
     if (_resumeLoaderInFlight && !_resumeLoaded && !mutation) {
       _pendingEngineTarget = next;
+      debugPrint(
+        '[SeriesResume] detail-engine-stashed title="${_item.name}" '
+        'target=S${next.season}E${next.episode}',
+      );
       return;
     }
     // Settled STARTED: the loader is authoritative (it is literally what
@@ -787,6 +880,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         _resumeStarted &&
         !mutation &&
         widget.resumeInfoLoader != null) {
+      debugPrint(
+        '[SeriesResume] detail-engine-discarded title="${_item.name}" '
+        'target=S${next.season}E${next.episode} '
+        'reason=started-loader-authoritative',
+      );
       return;
     }
     if (_resumeLoaded &&
@@ -803,6 +901,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// host's snapshot, so a started target also arms the loader-overwrite
   /// guard.
   void _applyEngineTarget(EpisodeResumeTarget next) {
+    debugPrint(
+      '[SeriesResume] detail-engine-applied title="${_item.name}" '
+      'target=S${next.season}E${next.episode} started=${next.started}',
+    );
     setState(() {
       // A coordinate alone is not resume evidence: an untouched show also
       // resolves to its first episode. Only merged playback progress outranks
@@ -1600,9 +1702,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Grid and grain are whole-page textures, so they are applied once here
     // rather than by each layout — and Classic, which is never wrapped, cannot
     // pick them up by accident.
+    // DetailHoldHint is the page-level affordance for the episode cells' held
+    // OK — one pill in the screen's corner rather than chrome on every card.
+    // It sits here, around every alternate layout at once, so no layout has to
+    // opt in; it renders nothing off TV and nothing until a cell takes focus.
     Widget themed(Widget body) => DetailThemeScope(
       theme: _theme,
-      child: DetailAtmosphere(child: body),
+      child: DetailAtmosphere(child: DetailHoldHint(child: body)),
     );
 
     switch (_style) {

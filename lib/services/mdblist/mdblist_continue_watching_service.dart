@@ -76,7 +76,14 @@ class MdblistContinueWatchingService {
     final results = await Future.wait([
       service.fetchPlaybackSessions(),
       service.fetchUpNext(),
-      service.fetchSyncSnapshot('watched', mediaType: 'episode'),
+      // force propagates so an explicit refresh can't be pinned to the
+      // service-level snapshot cache (mutations invalidate it anyway; this
+      // covers external changes the coordinator hasn't reported yet).
+      service.fetchSyncSnapshot(
+        'watched',
+        mediaType: 'episode',
+        forceRefresh: force,
+      ),
     ]);
     final playback = results[0] as MdblistResult<List<MdblistPlaybackSession>>;
     final upNext = results[1] as MdblistResult<List<Map<String, dynamic>>>;

@@ -439,35 +439,18 @@ class TraktResultsViewState extends State<TraktResultsView> {
           _selectedContentType.apiValue,
         );
       } else if (_selectedListType == TraktListType.progress) {
-        // Continue Watching — fetch from /sync/playback (partial progress items)
-        // Trakt uses 'movies' and 'episodes' (not 'shows') for playback
+        // Continue Watching — Nitro owns show membership/episode selection;
+        // movies remain the account's paused playback entries.
         final playbackType = _selectedContentType == TraktContentType.shows
             ? 'episodes'
             : 'movies';
-        rawItems = await _traktService.fetchPlaybackItems(playbackType);
-        if (!mounted) return;
-
-        // For shows: also find recently watched shows with a next episode available
-        // (covers shows where last episode was fully watched but more episodes exist)
-        if (_selectedContentType == TraktContentType.shows) {
-          // Collect IMDB IDs already in playback to avoid duplicates
-          final playbackImdbIds = <String>{};
-          for (final raw in rawItems) {
-            if (raw is! Map<String, dynamic>) continue;
-            final show = raw['show'] as Map<String, dynamic>?;
-            final ids = show?['ids'] as Map<String, dynamic>?;
-            final imdbId = ids?['imdb'] as String?;
-            if (imdbId != null) playbackImdbIds.add(imdbId);
-          }
-
-          final recentWithNext = await _traktService
-              .fetchRecentShowsWithNextEpisode(excludeImdbIds: playbackImdbIds);
-          if (!mounted) return;
-
-          if (recentWithNext.isNotEmpty) {
-            rawItems = List<dynamic>.from(rawItems)..addAll(recentWithNext);
-          }
+        final progressItems = _selectedContentType == TraktContentType.shows
+            ? await _traktService.fetchContinueWatchingEpisodeItemsOrNull()
+            : await _traktService.fetchPlaybackItemsOrNull(playbackType);
+        if (progressItems == null) {
+          throw StateError('Trakt Continue Watching read failed');
         }
+        rawItems = progressItems;
       } else {
         rawItems = await _traktService.fetchList(
           _selectedListType.apiValue,
@@ -483,14 +466,22 @@ class TraktResultsViewState extends State<TraktResultsView> {
         for (final raw in rawItems) {
           if (raw is! Map<String, dynamic>) continue;
           final pbId = raw['id'] as int?;
+          final mergedPbIds = raw['_playback_ids'];
           final contentKey = _selectedContentType == TraktContentType.shows
               ? 'show'
               : 'movie';
           final content = raw[contentKey] as Map<String, dynamic>?;
           final ids = content?['ids'] as Map<String, dynamic>?;
           final imdbId = ids?['imdb'] as String?;
-          if (imdbId != null && pbId != null) {
-            pbIds.putIfAbsent(imdbId, () => []).add(pbId);
+          if (imdbId != null) {
+            final idsForItem = pbIds.putIfAbsent(imdbId, () => []);
+            if (pbId != null) idsForItem.add(pbId);
+            if (mergedPbIds is List<dynamic>) {
+              for (final id in mergedPbIds) {
+                if (id is int && !idsForItem.contains(id)) idsForItem.add(id);
+              }
+            }
+            if (idsForItem.isEmpty) pbIds.remove(imdbId);
           }
         }
         _playbackIds = pbIds;
@@ -664,8 +655,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
   /// matching the catalog grid. Sources/Episodes and Play defer to the
   /// existing Trakt handlers via the detail screen's buttons.
   Future<void> _openItemDetail(StremioMeta item) async {
-    final hasBoundSource =
-        _boundSources.containsKey(item.effectiveImdbId ?? item.id);
+    final hasBoundSource = _boundSources.containsKey(
+      item.effectiveImdbId ?? item.id,
+    );
 
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -716,11 +708,12 @@ class TraktResultsViewState extends State<TraktResultsView> {
     final id = item.effectiveImdbId ?? item.id;
     final isSeries = item.type == 'series';
     final isMovie = item.type == 'movie';
-    final pct = (_selectedContentType == TraktContentType.movies &&
-            _progressLoaded)
+    final pct =
+        (_selectedContentType == TraktContentType.movies && _progressLoaded)
         ? _watchProgress[id]
         : null;
-    final isWatched = (pct ?? 0) >= 100 ||
+    final isWatched =
+        (pct ?? 0) >= 100 ||
         (pct == null &&
             (lt == TraktListType.progress || lt == TraktListType.history));
 
@@ -1402,17 +1395,12 @@ class TraktResultsViewState extends State<TraktResultsView> {
               padding: EdgeInsets.all(16),
               child: Text(
                 'Select Provider',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
-              title: const Text(
-                'Real-Debrid',
-              ),
+              title: const Text('Real-Debrid'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushRd();
@@ -1420,9 +1408,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
             ),
             ListTile(
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
-              title: const Text(
-                'TorBox',
-              ),
+              title: const Text('TorBox'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 pushTorbox();
@@ -1585,11 +1571,11 @@ class TraktResultsViewState extends State<TraktResultsView> {
     final pikpakEnabled = await StorageService.getPikPakEnabled();
     final rdEnabled = rdKey != null && rdKey.isNotEmpty;
     final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
-    final premiumizeEnabled = premiumizeIntegration &&
+    final premiumizeEnabled =
+        premiumizeIntegration &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
-    final allDebridEnabled =
-        allDebridKey != null && allDebridKey.isNotEmpty;
+    final allDebridEnabled = allDebridKey != null && allDebridKey.isNotEmpty;
 
     if (!mounted) return;
 
@@ -1635,24 +1621,24 @@ class TraktResultsViewState extends State<TraktResultsView> {
           : null,
       onPremiumize: premiumizeEnabled
           ? () => _pushCloudSelectSource(
-                show: item,
-                imdbId: imdbId,
-                provider: 'premiumize',
-              )
+              show: item,
+              imdbId: imdbId,
+              provider: 'premiumize',
+            )
           : null,
       onAllDebrid: allDebridEnabled
           ? () => _pushCloudSelectSource(
-                show: item,
-                imdbId: imdbId,
-                provider: 'alldebrid',
-              )
+              show: item,
+              imdbId: imdbId,
+              provider: 'alldebrid',
+            )
           : null,
       onPikPak: pikpakEnabled
           ? () => _pushCloudSelectSource(
-                show: item,
-                imdbId: imdbId,
-                provider: 'pikpak',
-              )
+              show: item,
+              imdbId: imdbId,
+              provider: 'pikpak',
+            )
           : null,
     );
   }
@@ -2249,9 +2235,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                         value: t,
                         child: Text(
                           t.label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                          ),
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                     )
@@ -2276,9 +2260,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                         value: t,
                         child: Text(
                           t.label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                          ),
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                     )
@@ -2310,12 +2292,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                     final name = list['name'] as String? ?? 'Unknown';
                     return DropdownMenuItem(
                       value: slug,
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 13,
-                        ),
-                      ),
+                      child: Text(name, style: const TextStyle(fontSize: 13)),
                     );
                   }).toList(),
                   onChanged: (slug) {
@@ -2356,9 +2333,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                       value: key,
                       child: Text(
                         owner.isNotEmpty ? '$name ($owner)' : name,
-                        style: const TextStyle(
-                          fontSize: 13,
-                        ),
+                        style: const TextStyle(fontSize: 13),
                         overflow: TextOverflow.ellipsis,
                       ),
                     );
@@ -2549,8 +2524,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
     }
 
     final w = MediaQuery.of(context).size.width;
-    final crossAxisCount =
-        catalogGridColumnsFor(w, isTelevision: widget.isTelevision);
+    final crossAxisCount = catalogGridColumnsFor(
+      w,
+      isTelevision: widget.isTelevision,
+    );
     final hPadding = w >= 900 ? 40.0 : 20.0;
     final showProgress =
         _selectedContentType == TraktContentType.movies && _progressLoaded;
@@ -2572,8 +2549,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
         itemCount: _filteredItems.length,
         itemBuilder: (context, index) {
           final item = _filteredItems[index];
-          final pct =
-              showProgress ? _watchProgress[item.effectiveImdbId ?? item.id] : null;
+          final pct = showProgress
+              ? _watchProgress[item.effectiveImdbId ?? item.id]
+              : null;
           return CatalogItemTile(
             item: item,
             isTelevision: widget.isTelevision,
@@ -2585,9 +2563,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
             ),
             progress: (pct != null && pct > 0) ? pct / 100.0 : null,
             onOpen: () => _openItemDetail(item),
-            onLongPress: widget.showQuickPlay
-                ? () => _onQuickPlay(item)
-                : null,
+            onLongPress: widget.showQuickPlay ? () => _onQuickPlay(item) : null,
           );
         },
       ),
@@ -2677,9 +2653,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
                           value: s.number,
                           child: Text(
                             s.displayLabel,
-                            style: const TextStyle(
-                              fontSize: 13,
-                            ),
+                            style: const TextStyle(fontSize: 13),
                           ),
                         ),
                       )
@@ -2798,15 +2772,15 @@ class TraktResultsViewState extends State<TraktResultsView> {
               focusNode: index < _episodeFocusNodes.length
                   ? _episodeFocusNodes[index]
                   : null,
-              watchProgress: _episodeWatchProgress[
-                  '${episode.season}-${episode.number}'],
-              isNext: _nextEpisode != null &&
+              watchProgress:
+                  _episodeWatchProgress['${episode.season}-${episode.number}'],
+              isNext:
+                  _nextEpisode != null &&
                   _nextEpisode!.season == episode.season &&
                   _nextEpisode!.episode == episode.number,
               onPlay: () => _onEpisodeQuickPlay(episode),
               onSources: () => _onEpisodeTap(episode),
-              onMenuAction: (action) =>
-                  _onEpisodeMenuAction(episode, action),
+              onMenuAction: (action) => _onEpisodeMenuAction(episode, action),
             ),
           );
         },

@@ -311,19 +311,42 @@ class HomeListRowsService {
       };
       slots.addAll(mdblistSlots.values);
       mdblistPool.add(() async {
-        final groups = await Future.wait([
-          _mdblistMine(),
-          _mdblistLiked(),
-          _mdblistTop(),
-        ]);
-        final choicesById = <String, MdblistListChoice>{
-          for (final choice in groups[0])
-            HomeExtraRowIds.mdblistMine(choice): choice,
-          for (final choice in groups[1])
-            HomeExtraRowIds.mdblistLiked(choice): choice,
-          for (final choice in groups[2])
-            HomeExtraRowIds.mdblistTop(choice): choice,
-        };
+        // Only refresh directories represented by enabled rows. Previously a
+        // single saved MDBList row fetched My, Liked, and Top on every Home
+        // load even though two responses could not possibly resolve its id.
+        final requestedGroups = <Future<Map<String, MdblistListChoice>>>[
+          if (mdblistIds.any(
+            (id) => id.startsWith(HomeExtraRowIds.mdblistMinePrefix),
+          ))
+            _mdblistMine().then(
+              (choices) => {
+                for (final choice in choices)
+                  HomeExtraRowIds.mdblistMine(choice): choice,
+              },
+            ),
+          if (mdblistIds.any(
+            (id) => id.startsWith(HomeExtraRowIds.mdblistLikedPrefix),
+          ))
+            _mdblistLiked().then(
+              (choices) => {
+                for (final choice in choices)
+                  HomeExtraRowIds.mdblistLiked(choice): choice,
+              },
+            ),
+          if (mdblistIds.any(
+            (id) => id.startsWith(HomeExtraRowIds.mdblistTopPrefix),
+          ))
+            _mdblistTop().then(
+              (choices) => {
+                for (final choice in choices)
+                  HomeExtraRowIds.mdblistTop(choice): choice,
+              },
+            ),
+        ];
+        final choicesById = <String, MdblistListChoice>{};
+        for (final group in await Future.wait(requestedGroups)) {
+          choicesById.addAll(group);
+        }
         var order = 0;
         for (final entry in choicesById.entries) {
           final slot = mdblistSlots[entry.key];

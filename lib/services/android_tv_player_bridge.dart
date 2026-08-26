@@ -36,6 +36,55 @@ typedef TorrentStreamProvider =
 typedef MovieMetadataProvider =
     Future<String?> Function(int index, String filename);
 
+/// Serializes source-binding writes for one native-player launch without
+/// letting a stuck platform preference write poison later playback sessions.
+class _StremioSourcePersistenceSession {
+  _StremioSourcePersistenceSession(this.id);
+
+  static const timeout = Duration(seconds: 5);
+
+  final int id;
+  Future<void> _tail = Future<void>.value();
+  bool _accepting = true;
+
+  Future<void> enqueue(Future<void> Function() operation) {
+    if (!_accepting) return Future<void>.value();
+    final queued = _tail.then((_) async {
+      try {
+        await operation().timeout(timeout);
+      } on TimeoutException {
+        debugPrint(
+          'AndroidTvPlayerBridge: source persistence timed out '
+          '(session=$id)',
+        );
+      } catch (error, stack) {
+        debugPrint(
+          'AndroidTvPlayerBridge: source persistence failed '
+          '(session=$id): $error\n$stack',
+        );
+      }
+    });
+    _tail = queued;
+    return queued;
+  }
+
+  Future<void> closeAndDrain() async {
+    _accepting = false;
+    try {
+      await _tail.timeout(timeout);
+    } on TimeoutException {
+      debugPrint(
+        'AndroidTvPlayerBridge: source persistence drain timed out '
+        '(session=$id)',
+      );
+    }
+  }
+
+  void retire() {
+    _accepting = false;
+  }
+}
+
 /// Bridge helper for launching native Android TV playback using ExoPlayer.
 ///
 /// Supports both Torbox and Real-Debrid providers.
@@ -71,6 +120,9 @@ class AndroidTvPlayerBridge {
   static Future<List<Map<String, dynamic>>?> Function(int)?
   _sourcePlaylistResolver;
   static Future<void> Function(int)? _stremioSourceCommitter;
+  static PlaybackFinishedCallback? _startupSourcesExhaustedCallback;
+  static int _nextSourcePersistenceSessionId = 0;
+  static _StremioSourcePersistenceSession? _sourcePersistenceSession;
   // Series source tabs: fetches the not-yet-loaded category ('packs' |
   // 'episodes') for the currently playing season/episode and returns the full
   // updated source list + fetch flags.
@@ -523,9 +575,19 @@ class AndroidTvPlayerBridge {
           final sourceIndex = commitArgs is Map
               ? commitArgs['sourceIndex'] as int?
               : null;
+          final sourceSessionId = commitArgs is Map
+              ? commitArgs['sourcePersistenceSessionId'] as int?
+              : null;
           final committer = _stremioSourceCommitter;
-          if (sourceIndex == null || committer == null) return null;
-          await committer(sourceIndex);
+          final persistenceSession = _sourcePersistenceSession;
+          if (sourceIndex == null ||
+              committer == null ||
+              persistenceSession == null ||
+              (sourceSessionId != null &&
+                  sourceSessionId != persistenceSession.id)) {
+            return null;
+          }
+          await persistenceSession.enqueue(() => committer(sourceIndex));
           return null;
         case 'requestMoreTorrentSources':
           // Series source tabs: the native player asked for the not-yet-
@@ -665,9 +727,27 @@ class AndroidTvPlayerBridge {
             );
           }
         case 'torrentPlaybackFinished':
+          final finishedArgs = call.arguments;
+          final finishedSessionId = finishedArgs is Map
+              ? finishedArgs['sourcePersistenceSessionId'] as int?
+              : null;
+          final persistenceSession = _sourcePersistenceSession;
+          if (finishedSessionId != null &&
+              (persistenceSession == null ||
+                  finishedSessionId != persistenceSession.id)) {
+            debugPrint(
+              'AndroidTvPlayerBridge: ignoring stale playback finish '
+              '(session=$finishedSessionId, current=${persistenceSession?.id})',
+            );
+            return null;
+          }
           _lastPlaybackHeartbeat =
               null; // reset so the next watch isn't throttled
           final finishedTorrent = _torrentFinishedCallback;
+          final startupExhausted =
+              finishedArgs is Map &&
+              finishedArgs['startupSourcesExhausted'] == true;
+          final recoverFromStartupExhaustion = _startupSourcesExhaustedCallback;
           _torrentProgressCallback = null;
           _torrentFinishedCallback = null;
           _torrentStreamProvider = null;
@@ -675,6 +755,7 @@ class AndroidTvPlayerBridge {
           _stremioSourceResolver = null;
           _sourcePlaylistResolver = null;
           _stremioSourceCommitter = null;
+          _startupSourcesExhaustedCallback = null;
           _moreSourcesProvider = null;
           _addonSourcesProvider = null;
           _episodeFetchProvider = null;
@@ -682,6 +763,12 @@ class AndroidTvPlayerBridge {
           _stremioTvChannelSwitchProvider = null;
           _stremioTvNextProvider = null;
           _iptvBrowseProvider = null;
+          if (identical(_sourcePersistenceSession, persistenceSession)) {
+            _sourcePersistenceSession = null;
+          }
+          if (persistenceSession != null) {
+            await persistenceSession.closeAndDrain();
+          }
           if (finishedTorrent != null) {
             try {
               await finishedTorrent();
@@ -691,8 +778,19 @@ class AndroidTvPlayerBridge {
               );
             }
           }
-          // Clear any unconsumed quick play next result to prevent stale state
+          // Clear the old session before recovery can launch a replacement
+          // player and begin receiving its own next-episode requests.
           _quickPlayNextEpisodeResult = null;
+          if (startupExhausted && recoverFromStartupExhaustion != null) {
+            try {
+              await recoverFromStartupExhaustion();
+            } catch (e, stack) {
+              debugPrint(
+                'AndroidTvPlayerBridge: startup recovery callback threw: '
+                '$e\n$stack',
+              );
+            }
+          }
           return null;
         case 'requestIptvStreamUrls':
           // Native IPTV player hit a Stremio-addon channel (its `url` is a
@@ -1474,6 +1572,7 @@ class AndroidTvPlayerBridge {
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
     Future<void> Function(int)? onCommitStremioSource,
+    PlaybackFinishedCallback? onStartupSourcesExhausted,
     Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
     onRequestMoreSources,
     Future<Map<String, dynamic>?> Function(
@@ -1500,6 +1599,11 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
+    await _sourcePersistenceSession?.closeAndDrain();
+    final persistenceSession = _StremioSourcePersistenceSession(
+      ++_nextSourcePersistenceSessionId,
+    );
+    _sourcePersistenceSession = persistenceSession;
     _ensureInitialized();
     _torrentProgressCallback = onProgress;
     _torrentFinishedCallback = onFinished;
@@ -1508,6 +1612,7 @@ class AndroidTvPlayerBridge {
     _stremioSourceResolver = onResolveStremioSource;
     _sourcePlaylistResolver = onResolveSourcePlaylist;
     _stremioSourceCommitter = onCommitStremioSource;
+    _startupSourcesExhaustedCallback = onStartupSourcesExhausted;
     _moreSourcesProvider = onRequestMoreSources;
     _addonSourcesProvider = onRequestAddonSources;
     _episodeFetchProvider = onRequestEpisodeFetch;
@@ -1528,6 +1633,7 @@ class AndroidTvPlayerBridge {
 
       // Add font info to payload
       final payloadWithFont = Map<String, dynamic>.from(payload);
+      payloadWithFont['sourcePersistenceSessionId'] = persistenceSession.id;
       if (fontInfo['customFontPath'] != null) {
         payloadWithFont['customFontPath'] = fontInfo['customFontPath'];
         payloadWithFont['customFontName'] = fontInfo['customFontName'];
@@ -1571,20 +1677,25 @@ class AndroidTvPlayerBridge {
       debugPrint('AndroidTvPlayerBridge: unexpected torrent launch error: $e');
     }
 
-    _torrentProgressCallback = null;
-    _torrentFinishedCallback = null;
-    _stremioSourceCommitter = null;
-    _torrentStreamProvider = null;
-    _movieMetadataProvider = null;
-    _stremioSourceResolver = null;
-    _sourcePlaylistResolver = null;
-    _moreSourcesProvider = null;
-    _addonSourcesProvider = null;
-    _episodeFetchProvider = null;
-    _stremioTvGuideDataProvider = null;
-    _stremioTvChannelSwitchProvider = null;
-    _stremioTvNextProvider = null;
-    _iptvBrowseProvider = null;
+    persistenceSession.retire();
+    if (identical(_sourcePersistenceSession, persistenceSession)) {
+      _sourcePersistenceSession = null;
+      _torrentProgressCallback = null;
+      _torrentFinishedCallback = null;
+      _stremioSourceCommitter = null;
+      _startupSourcesExhaustedCallback = null;
+      _torrentStreamProvider = null;
+      _movieMetadataProvider = null;
+      _stremioSourceResolver = null;
+      _sourcePlaylistResolver = null;
+      _moreSourcesProvider = null;
+      _addonSourcesProvider = null;
+      _episodeFetchProvider = null;
+      _stremioTvGuideDataProvider = null;
+      _stremioTvChannelSwitchProvider = null;
+      _stremioTvNextProvider = null;
+      _iptvBrowseProvider = null;
+    }
     return false;
   }
 

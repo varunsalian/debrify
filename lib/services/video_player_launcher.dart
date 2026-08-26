@@ -269,6 +269,11 @@ class VideoPlayerLaunchArgs {
   /// Persist a source switch only after the player has validated and committed
   /// the candidate. Resolution alone is deliberately side-effect free.
   final Future<void> Function(Torrent)? onStremioSourceCommitted;
+
+  /// Invoked after the startup ladder is exhausted and the player surface has
+  /// closed. Bound-source launches use this to continue through the remaining
+  /// eligible pins, then perform a fresh search without replaying failed pins.
+  final Future<void> Function()? onStartupSourcesExhausted;
   // Series source tabs: on-demand "Load more sources" fetcher for the
   // pack/episode split. Non-null only for series plays with a searchable id.
   final SeriesSourceFetcher? seriesSourceFetcher;
@@ -363,6 +368,7 @@ class VideoPlayerLaunchArgs {
     this.startupFailoverEnabled = false,
     this.startupResolverProvider,
     this.onStremioSourceCommitted,
+    this.onStartupSourcesExhausted,
     this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
@@ -448,6 +454,7 @@ class VideoPlayerLaunchArgs {
     startupFailoverEnabled: startupFailoverEnabled,
     startupResolverProvider: startupResolverProvider,
     onStremioSourceCommitted: onStremioSourceCommitted,
+    onStartupSourcesExhausted: onStartupSourcesExhausted,
     seriesSourceFetcher: seriesSourceFetcher,
     stremioTvChannels: stremioTvChannels,
     stremioTvCurrentChannelId: stremioTvCurrentChannelId,
@@ -520,6 +527,7 @@ class VideoPlayerLaunchArgs {
       startupFailoverEnabled: startupFailoverEnabled,
       startupResolverProvider: startupResolverProvider,
       onStremioSourceCommitted: onStremioSourceCommitted,
+      onStartupSourcesExhausted: onStartupSourcesExhausted,
       seriesSourceFetcher: seriesSourceFetcher,
       stremioTvChannels: stremioTvChannels,
       stremioTvCurrentChannelId: stremioTvCurrentChannelId,
@@ -812,6 +820,7 @@ class VideoPlayerLauncher {
           startupFailoverEnabled: args.startupFailoverEnabled,
           startupResolverProvider: args.startupResolverProvider,
           onStremioSourceCommitted: args.onStremioSourceCommitted,
+          onStartupSourcesExhausted: args.onStartupSourcesExhausted,
           seriesSourceFetcher: args.seriesSourceFetcher,
           stremioTvChannels: args.stremioTvChannels,
           stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
@@ -908,6 +917,7 @@ class VideoPlayerLauncher {
           startupFailoverEnabled: args.startupFailoverEnabled,
           startupResolverProvider: args.startupResolverProvider,
           onStremioSourceCommitted: args.onStremioSourceCommitted,
+          onStartupSourcesExhausted: args.onStartupSourcesExhausted,
           seriesSourceFetcher: args.seriesSourceFetcher,
           stremioTvChannels: args.stremioTvChannels,
           stremioTvCurrentChannelId: args.stremioTvCurrentChannelId,
@@ -1138,6 +1148,19 @@ class VideoPlayerLauncher {
     final result = await Navigator.of(context).push<Map<String, dynamic>?>(
       FrozenLegacyPageRoute(builder: (_) => args.toWidget()),
     );
+
+    if (result?['startupSourcesExhausted'] == true &&
+        args.onStartupSourcesExhausted != null) {
+      try {
+        await args.onStartupSourcesExhausted!();
+      } catch (error) {
+        debugPrint(
+          'VideoPlayerLauncher: startup recovery failed '
+          '(${error.runtimeType})',
+        );
+      }
+      return;
+    }
 
     // Handle Quick Play next episode request from player
     if (result != null &&
@@ -2959,6 +2982,7 @@ class VideoPlayerLauncher {
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
         onCommitStremioSource: sourceCommitterForTv,
+        onStartupSourcesExhausted: args.onStartupSourcesExhausted,
         onRequestMoreSources: moreSourcesProviderForTv,
         onRequestAddonSources: addonSourcesProviderForTv,
         onRequestEpisodeFetch: episodeFetchProviderForTv,
@@ -4408,6 +4432,7 @@ class _AndroidTvPlaybackPayload {
   final bool startupTryNextOnFailure;
   final int startupMaxAttempts;
   final String? startupResolverProvider;
+  final bool startupRecoveryAvailable;
   final bool traktScrobble;
   final double? traktProgressPercent;
   // Simkl parallel pair. Only the scrobble flag matters Dart-side (the
@@ -4454,6 +4479,7 @@ class _AndroidTvPlaybackPayload {
     this.startupTryNextOnFailure = false,
     this.startupMaxAttempts = 1,
     this.startupResolverProvider,
+    this.startupRecoveryAvailable = false,
     this.traktScrobble = false,
     this.traktProgressPercent,
     this.simklScrobble = false,
@@ -4514,6 +4540,7 @@ class _AndroidTvPlaybackPayload {
         'startupMaxAttempts': startupMaxAttempts.clamp(1, 10),
         if (startupResolverProvider != null)
           'startupResolverProvider': startupResolverProvider,
+        if (startupRecoveryAvailable) 'startupRecoveryAvailable': true,
       },
       // Keyed 'traktProgressPercent' for the native side's existing resume
       // input, but carries the furthest of the Trakt/Simkl launch percents.
@@ -5084,6 +5111,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       startupTryNextOnFailure: startupRules?.tryNextOnFailure ?? false,
       startupMaxAttempts: startupRules?.maxAttempts ?? 1,
       startupResolverProvider: args.startupResolverProvider,
+      startupRecoveryAvailable: args.onStartupSourcesExhausted != null,
       traktScrobble: args.traktScrobble,
       traktProgressPercent: args.traktProgressPercent,
       simklScrobble: args.simklScrobble,

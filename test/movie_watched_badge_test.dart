@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/simkl/simkl_item_transformer.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/widgets/movie_watched_badge.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +61,66 @@ void main() {
       expect(snapshot.series, isEmpty);
     },
   );
+
+  test('Simkl caught-up series ignores unaired episodes and Season 0 next', () {
+    final animeMovie = <String, dynamic>{
+      'status': 'completed',
+      'anime_type': 'movie',
+      'show': {
+        'title': 'Anime Film',
+        'ids': {'imdb': 'tt-anime-movie'},
+      },
+    };
+    final snapshot = SimklService.debugParseCompletedTitleIds({
+      'movies': [
+        {
+          'status': 'completed',
+          'movie': {
+            'ids': {'imdb': 'TT-MOVIE'},
+          },
+        },
+      ],
+      'shows': [
+        {
+          // Ongoing shows remain in Watching on Simkl even when the member has
+          // watched every currently aired regular episode.
+          'status': 'watching',
+          'next_to_watch': 'S00E01',
+          'watched_episodes_count': 34,
+          'total_episodes_count': 35,
+          'not_aired_episodes_count': 1,
+          'show': {
+            'ids': {'imdb': 'TT15677150'},
+          },
+        },
+        {
+          'status': 'watching',
+          'watched_episodes_count': 33,
+          'total_episodes_count': 35,
+          'not_aired_episodes_count': 1,
+          'show': {
+            'ids': {'imdb': 'TT-INCOMPLETE'},
+          },
+        },
+      ],
+      'anime': [animeMovie],
+    });
+
+    expect(snapshot.movies, {'tt-movie', 'tt-anime-movie'});
+    expect(snapshot.series, {'tt15677150'});
+    expect(
+      SimklItemTransformer.transformItem(
+        animeMovie,
+        inferredType: 'series',
+      )?.type,
+      'movie',
+    );
+    expect(SimklService.parseSimklEpisodeCode('S00E01'), isNull);
+    expect(SimklService.parseSimklEpisodeCode('S03E12'), (
+      season: 3,
+      episode: 12,
+    ));
+  });
 
   test(
     'in-flight refresh hands a watched mutation to the deferred refresh',

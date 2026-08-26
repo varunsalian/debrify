@@ -1,4 +1,5 @@
 import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/screens/settings/iptv_settings_page.dart';
 import 'package:debrify/screens/settings/iptv_settings_two_pane.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -73,6 +74,49 @@ void main() {
     defaulted.clear();
     startupToggles = [];
     cwToggles = [];
+  });
+
+  testWidgets('shared-source confirmation is fully DPAD operable', (
+    tester,
+  ) async {
+    bool? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () async {
+                result = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => const IptvSharedSourceDeleteDialog(
+                    playlistName: 'Trex',
+                    borrowerCount: 1,
+                  ),
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, contains('cancel'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(result, isFalse);
+
+    result = null;
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, contains('ok'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonA);
+    await tester.pumpAndSettle();
+    expect(result, isTrue);
   });
 
   testWidgets('opens on the default source, not on Add', (tester) async {

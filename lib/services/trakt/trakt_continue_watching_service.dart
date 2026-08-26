@@ -15,9 +15,9 @@ class TraktContinueWatchingItem {
   final List<int> playbackIds;
 
   /// When Trakt last recorded playback for this item (epoch ms), parsed from the
-  /// playback endpoint's `paused_at`. Null for items sourced from the
-  /// recent-shows augmentation (which have no paused_at). Used to order a merged
-  /// movies+shows list by "last watched".
+  /// playback endpoint's `paused_at`. Authoritative Up Next rows map
+  /// `last_watched_at` into the same field. Used to order a merged movies+shows
+  /// list by "last watched".
   final int? pausedAtMs;
 
   const TraktContinueWatchingItem({
@@ -54,35 +54,38 @@ class TraktContinueWatchingService {
     return fetchItems(moviesContentType);
   }
 
+  Future<List<TraktContinueWatchingItem>?> fetchMoviesOrNull() {
+    return fetchItemsOrNull(moviesContentType);
+  }
+
   Future<List<TraktContinueWatchingItem>> fetchShows() {
     return fetchItems(showsContentType);
   }
 
+  Future<List<TraktContinueWatchingItem>?> fetchShowsOrNull() {
+    return fetchItemsOrNull(showsContentType);
+  }
+
   Future<List<TraktContinueWatchingItem>> fetchItems(
+    String traktContentType,
+  ) async =>
+      await fetchItemsOrNull(traktContentType) ??
+      const <TraktContinueWatchingItem>[];
+
+  /// Failure-aware fetch used by UI snapshots. A successful empty response is
+  /// `[]`; null means the network/authenticated endpoint could not be read.
+  Future<List<TraktContinueWatchingItem>?> fetchItemsOrNull(
     String traktContentType,
   ) async {
     try {
       final isAuth = await _traktService.isAuthenticated();
       if (!isAuth) return [];
 
-      var rawItems = await _traktService.fetchPlaybackItems(traktContentType);
+      final rawItems = traktContentType == showsContentType
+          ? await _traktService.fetchContinueWatchingEpisodeItemsOrNull()
+          : await _traktService.fetchPlaybackItemsOrNull(traktContentType);
 
-      if (traktContentType == showsContentType) {
-        final playbackImdbIds = <String>{};
-        for (final raw in rawItems) {
-          if (raw is! Map<String, dynamic>) continue;
-          final show = raw['show'] as Map<String, dynamic>?;
-          final ids = show?['ids'] as Map<String, dynamic>?;
-          final imdbId = ids?['imdb'] as String?;
-          if (imdbId != null) playbackImdbIds.add(imdbId);
-        }
-
-        final recentWithNext = await _traktService
-            .fetchRecentShowsWithNextEpisode(excludeImdbIds: playbackImdbIds);
-        if (recentWithNext.isNotEmpty) {
-          rawItems = List<dynamic>.from(rawItems)..addAll(recentWithNext);
-        }
-      }
+      if (rawItems == null) return null;
 
       if (rawItems.isEmpty) return [];
 
@@ -91,7 +94,7 @@ class TraktContinueWatchingService {
           : _buildShowItems(rawItems);
     } catch (e) {
       debugPrint('TraktContinueWatchingService: fetchItems failed: $e');
-      return [];
+      return null;
     }
   }
 
@@ -152,8 +155,7 @@ class TraktContinueWatchingService {
 
   /// Remove [item] from Trakt Continue Watching: delete every playback entry,
   /// then remove the title from watch history so shows don't reappear via the
-  /// recent-shows "next episode" augmentation. Returns true if anything was
-  /// removed.
+  /// authoritative Up Next feed. Returns true if anything was removed.
   Future<bool> removeItem(TraktContinueWatchingItem item) async {
     var anySuccess = false;
     for (final pbId in item.playbackIds) {
@@ -227,6 +229,7 @@ class TraktContinueWatchingService {
       if (raw is! Map<String, dynamic>) continue;
       final progress = raw['progress'] as num?;
       final playbackId = raw['id'] as int?;
+      final mergedPlaybackIds = raw['_playback_ids'];
       final show = raw['show'] as Map<String, dynamic>?;
       final ids = show?['ids'] as Map<String, dynamic>?;
       final imdbId = ids?['imdb'] as String?;
@@ -238,6 +241,12 @@ class TraktContinueWatchingService {
       }
       if (playbackId != null) {
         playbackIdsById.putIfAbsent(imdbId, () => []).add(playbackId);
+      }
+      if (mergedPlaybackIds is List<dynamic>) {
+        final ids = playbackIdsById.putIfAbsent(imdbId, () => []);
+        for (final id in mergedPlaybackIds) {
+          if (id is int && !ids.contains(id)) ids.add(id);
+        }
       }
       final pausedAt = _parsePausedAt(raw['paused_at']);
       if (pausedAt != null) pausedAtById.putIfAbsent(imdbId, () => pausedAt);

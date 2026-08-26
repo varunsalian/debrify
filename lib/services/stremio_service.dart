@@ -105,6 +105,8 @@ class StremioAddonRefreshResult {
 /// - Conversion of Stremio streams to Torrent objects
 class StremioService {
   static const String _addonsKey = 'stremio_addons_v1';
+  static const String _metadataProviderKey = 'stremio_metadata_provider_v1';
+  static const String automaticMetadataProvider = 'automatic';
   static const Duration _requestTimeout = Duration(seconds: 15);
 
   /// User-initiated retries can wait longer than the automatic search without
@@ -124,9 +126,10 @@ class StremioService {
   // Session-lived; recommendations are stable enough not to need a TTL.
   final Map<String, List<StremioMeta>> _recommendationsCache = {};
 
-  // Enriched catalog-quality metadata, keyed by '<type>:<imdbId>'. Lets
-  // sparse items (e.g. "Watch Next" recommendations) borrow a full
-  // Cinemeta meta so their detail screen matches a normal catalog open.
+  // Enriched catalog-quality metadata, keyed by provider policy + type + IMDb
+  // id. Lets sparse items (e.g. "Watch Next" recommendations) borrow a full
+  // preferred-provider meta so their detail screen matches a normal catalog
+  // open without leaking a result across provider changes.
   final Map<String, StremioMeta> _metaDetailsCache = {};
 
   // Series meta videos (episode lists), keyed by '<addonId>:<contentId>'.
@@ -229,14 +232,15 @@ class StremioService {
     }
 
     if (ProfileCollectionResourceFacade.active) {
-      Future<List<Map<String, dynamic>>> read() => ProfileCollectionResourceFacade.read(
-        types: const <ConnectionResourceType>{
-          ConnectionResourceType.stremioAddon,
-        },
-        feature: ProfileFeature.addonUse,
-        forSettings: forSettings,
-        forRemoteTransfer: forRemoteTransfer,
-      );
+      Future<List<Map<String, dynamic>>> read() =>
+          ProfileCollectionResourceFacade.read(
+            types: const <ConnectionResourceType>{
+              ConnectionResourceType.stremioAddon,
+            },
+            feature: ProfileFeature.addonUse,
+            forSettings: forSettings,
+            forRemoteTransfer: forRemoteTransfer,
+          );
       final rows = authorization == null
           ? await read()
           : await authorization.runIfCurrent(read);
@@ -453,6 +457,58 @@ class StremioService {
   Future<List<StremioAddon>> getEnabledAddons() async {
     final addons = await getAddons();
     return addons.where((a) => a.enabled).toList();
+  }
+
+  /// The user's metadata-provider choice. Null means the recommended default:
+  /// Cinemeta when it is enabled, otherwise Automatic.
+  Future<String?> getMetadataProviderPreference() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_metadataProviderKey);
+  }
+
+  Future<void> setMetadataProviderPreference(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_metadataProviderKey, value);
+    _metaDetailsCache.clear();
+  }
+
+  static bool isCinemetaAddon(StremioAddon addon) {
+    if (const <String>{
+      'cinemeta',
+      'com.stremio.cinemeta',
+      'com.linvo.cinemeta',
+    }.contains(addon.id)) {
+      return true;
+    }
+    return Uri.tryParse(addon.manifestUrl)?.host.toLowerCase() ==
+        'v3-cinemeta.strem.io';
+  }
+
+  /// Secret-free, configuration-specific value stored by the metadata picker.
+  static String metadataProviderValue(StremioAddon addon) =>
+      addon.portableConfigurationKey;
+
+  /// Applies the details-metadata policy without affecting stream or episode
+  /// addon selection. An explicit provider is strict: if it cannot resolve a
+  /// title, callers retain the tracker metadata rather than silently switching
+  /// languages. Automatic preserves the legacy enabled-addon order.
+  @visibleForTesting
+  static List<StremioAddon> metadataCandidatesForPreference(
+    List<StremioAddon> candidates,
+    String? preference,
+  ) {
+    if (preference == automaticMetadataProvider) {
+      return List<StremioAddon>.of(candidates);
+    }
+    if (preference != null) {
+      for (final addon in candidates) {
+        if (metadataProviderValue(addon) == preference) return [addon];
+      }
+    }
+    for (final addon in candidates) {
+      if (isCinemetaAddon(addon)) return [addon];
+    }
+    return List<StremioAddon>.of(candidates);
   }
 
   /// Get addons that support streaming
@@ -1143,11 +1199,16 @@ class StremioService {
       preserveOrder: preserveOrder,
     );
 
-    return _withAddonStatuses({
-      'torrents': torrents,
-      'addonCounts': addonCounts,
-      'addonErrors': addonErrors,
-    }, applicableAddons, addonCounts, addonErrors);
+    return _withAddonStatuses(
+      {
+        'torrents': torrents,
+        'addonCounts': addonCounts,
+        'addonErrors': addonErrors,
+      },
+      applicableAddons,
+      addonCounts,
+      addonErrors,
+    );
   }
 
   /// Whether [addon] would be queried for [type]/[contentId] — the stream
@@ -1857,22 +1918,31 @@ class StremioService {
     if (!imdbId.startsWith('tt') || (type != 'movie' && type != 'series')) {
       return null;
     }
-    final cacheKey = '$type:$imdbId';
-    final cached = _metaDetailsCache[cacheKey];
-    if (cached != null) return cached;
-
     try {
       final addons = await getEnabledAddons();
-      final candidates = addons
+      final metadataAddons = addons
+          .where((a) => a.resources.contains('meta') && a.baseUrl.isNotEmpty)
+          .toList();
+      final preference = await getMetadataProviderPreference();
+      final preferred = metadataCandidatesForPreference(
+        metadataAddons,
+        preference,
+      );
+      final candidates = preferred
           .where(
             (a) =>
-                a.resources.contains('meta') &&
-                a.baseUrl.isNotEmpty &&
                 (a.types.isEmpty || a.types.contains(type)) &&
                 a.supportsContentId(imdbId),
           )
           .toList();
       if (candidates.isEmpty) return null;
+
+      // Provider policy belongs in the cache identity: changing the picker must
+      // never serve a result fetched earlier from a different-language addon.
+      final providerCacheKey = preference ?? 'recommended';
+      final cacheKey = '$providerCacheKey:$type:$imdbId';
+      final cached = _metaDetailsCache[cacheKey];
+      if (cached != null) return cached;
 
       // Probe candidates with bounded concurrency; tolerate individual
       // failures. A short timeout keeps one slow/dead meta addon from holding

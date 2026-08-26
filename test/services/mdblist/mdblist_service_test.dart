@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
@@ -69,6 +70,7 @@ void main() {
       'uses batched show state to identify completed series from watched rows',
       () async {
         final stateBatchSizes = <int>[];
+        var watchedCalls = 0;
         final episodes = List.generate(101, (index) {
           return {
             'watched_at': '2026-08-25T00:00:00Z',
@@ -83,37 +85,24 @@ void main() {
         });
         final service = serviceWith((request) async {
           if (request.url.path == '/sync/watched') {
-            return switch (request.url.queryParameters['mediatype']) {
-              'movie' => http.Response(
-                jsonEncode({
-                  'movies': [
-                    {
-                      'watched_at': '2026-08-25T00:00:00Z',
-                      'movie': {
-                        'ids': {'imdb': 'ttmovie'},
-                      },
+            watchedCalls++;
+            expect(request.url.queryParameters.containsKey('mediatype'), false);
+            return http.Response(
+              jsonEncode({
+                'movies': [
+                  {
+                    'watched_at': '2026-08-25T00:00:00Z',
+                    'movie': {
+                      'ids': {'imdb': 'ttmovie'},
                     },
-                  ],
-                  'pagination': {'next_cursor': null},
-                }),
-                200,
-              ),
-              'show' => http.Response(
-                jsonEncode({
-                  'shows': const [],
-                  'pagination': {'next_cursor': null},
-                }),
-                200,
-              ),
-              'episode' => http.Response(
-                jsonEncode({
-                  'episodes': episodes,
-                  'pagination': {'next_cursor': null},
-                }),
-                200,
-              ),
-              _ => http.Response('{}', 400),
-            };
+                  },
+                ],
+                'shows': const [],
+                'episodes': episodes,
+                'pagination': {'next_cursor': null},
+              }),
+              200,
+            );
           }
           if (request.url.path == '/sync/state/show/mdblist') {
             final body = jsonDecode(request.body) as Map<String, dynamic>;
@@ -144,6 +133,7 @@ void main() {
         expect(snapshot.series, hasLength(100));
         expect(snapshot.series, isNot(contains('ttshow0')));
         expect(snapshot.series, containsAll(['ttshow1', 'ttshow100']));
+        expect(watchedCalls, 1);
         expect(stateBatchSizes, [100, 1]);
       },
     );
@@ -153,22 +143,19 @@ void main() {
       () async {
         final service = serviceWith((request) async {
           if (request.url.path == '/sync/watched') {
-            final mediaType = request.url.queryParameters['mediatype'];
             return http.Response(
               jsonEncode({
                 'movies': const [],
                 'shows': const [],
-                'episodes': mediaType == 'episode'
-                    ? [
-                        {
-                          'episode': {
-                            'show': {
-                              'ids': {'imdb': 'ttshow', 'mdblist': 'mdb-show'},
-                            },
-                          },
-                        },
-                      ]
-                    : const [],
+                'episodes': [
+                  {
+                    'episode': {
+                      'show': {
+                        'ids': {'imdb': 'ttshow', 'mdblist': 'mdb-show'},
+                      },
+                    },
+                  },
+                ],
                 'pagination': {'next_cursor': null},
               }),
               200,
@@ -417,6 +404,244 @@ void main() {
   });
 
   group('MDBList tracker reads', () {
+    test(
+      'coalesces in-flight snapshots and serves a cached complete walk',
+      () async {
+        var calls = 0;
+        var gate = Completer<void>();
+        final service = serviceWith((request) async {
+          calls++;
+          await gate.future;
+          return http.Response(
+            jsonEncode({
+              'movies': const [],
+              'pagination': {'next_cursor': null},
+            }),
+            200,
+          );
+        });
+
+        final first = service.fetchSyncSnapshot('watched');
+        final second = service.fetchSyncSnapshot('watched');
+        expect(identical(first, second), isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(calls, 1);
+        gate.complete();
+        await Future.wait([first, second]);
+
+        // A cleanly-finished walk is served from cache within the TTL.
+        gate = Completer<void>()..complete();
+        await service.fetchSyncSnapshot('watched');
+        expect(calls, 1);
+
+        // forceRefresh (user-driven refresh) bypasses the cache read.
+        await service.fetchSyncSnapshot('watched', forceRefresh: true);
+        expect(calls, 2);
+
+        // A reported bucket change drops the cache for the next plain read.
+        service.invalidateSyncBuckets({'watched'});
+        await service.fetchSyncSnapshot('watched');
+        expect(calls, 3);
+      },
+    );
+
+    test('a partial walk is never cached', () async {
+      var calls = 0;
+      final service = serviceWith((request) async {
+        calls++;
+        final cursor = request.url.queryParameters['cursor'];
+        if (cursor == null) {
+          return http.Response(
+            jsonEncode({
+              'movies': [
+                {
+                  'movie': {
+                    'ids': {'imdb': 'tt1'},
+                  },
+                },
+              ],
+              'pagination': {'next_cursor': 'page2'},
+            }),
+            200,
+          );
+        }
+        return http.Response('', 503);
+      });
+
+      final first = await service.fetchSyncSnapshot('watched');
+      expect(first.kind, MdblistResultKind.partial);
+      final callsAfterFirst = calls;
+
+      // A truncated walk must go back to the network on the next read.
+      final second = await service.fetchSyncSnapshot('watched');
+      expect(second.kind, MdblistResultKind.partial);
+      expect(calls, greaterThan(callsAfterFirst));
+    });
+
+    test('scrobble stop invalidates the cached watched snapshot', () async {
+      var walkCalls = 0;
+      final service = serviceWith((request) async {
+        if (request.url.path == '/scrobble/stop') {
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }
+        walkCalls++;
+        return http.Response(
+          jsonEncode({
+            'movies': const [],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      await service.fetchSyncSnapshot('watched');
+      await service.fetchSyncSnapshot('watched');
+      expect(walkCalls, 1);
+
+      const target = MdblistScrobbleTarget.movie(MdblistMediaIds(imdb: 'tt1'));
+      expect((await service.scrobbleStop(target, 100)).isSuccess, isTrue);
+
+      // Revision listeners refetching after the stop must see fresh data.
+      await service.fetchSyncSnapshot('watched');
+      expect(walkCalls, 2);
+    });
+
+    test('a bucket invalidation mid-walk fences the stale publish', () async {
+      var calls = 0;
+      var gate = Completer<void>();
+      final service = serviceWith((request) async {
+        calls++;
+        await gate.future;
+        return http.Response(
+          jsonEncode({
+            'movies': const [],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      final inFlight = service.fetchSyncSnapshot('watched');
+      await Future<void>.delayed(Duration.zero);
+      // A mutation lands while the walk is running: its result is stale.
+      service.invalidateSyncBuckets({'watched'});
+      gate.complete();
+      expect((await inFlight).isSuccess, isTrue);
+
+      // The pre-invalidation walk must not have been published to the cache.
+      gate = Completer<void>()..complete();
+      await service.fetchSyncSnapshot('watched');
+      expect(calls, 2);
+    });
+
+    test('forceRefresh does not join an in-flight plain walk', () async {
+      var calls = 0;
+      final gates = <Completer<void>>[];
+      final service = serviceWith((request) async {
+        calls++;
+        final gate = Completer<void>();
+        gates.add(gate);
+        await gate.future;
+        return http.Response(
+          jsonEncode({
+            'movies': const [],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      final plain = service.fetchSyncSnapshot('watched');
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, 1);
+
+      // The plain walk may predate a mutation; force must start its own.
+      final forced = service.fetchSyncSnapshot('watched', forceRefresh: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, 2);
+      for (final gate in gates) {
+        gate.complete();
+      }
+      await Future.wait([plain, forced]);
+    });
+
+    test('a superseded plain walk cannot overwrite the forced result', () async {
+      var calls = 0;
+      final gates = <Completer<void>>[];
+      final service = serviceWith((request) async {
+        final index = calls++;
+        final gate = Completer<void>();
+        gates.add(gate);
+        await gate.future;
+        return http.Response(
+          jsonEncode({
+            'movies': [
+              {
+                'movie': {
+                  'ids': {'imdb': index == 0 ? 'tt-stale' : 'tt-fresh'},
+                },
+              },
+            ],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      final plain = service.fetchSyncSnapshot('watched');
+      await Future<void>.delayed(Duration.zero);
+      final forced = service.fetchSyncSnapshot('watched', forceRefresh: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(gates.length, 2);
+
+      // The forced walk finishes first; the stale plain walk lands after it
+      // and must NOT re-publish its older rows over the forced result.
+      gates[1].complete();
+      await forced;
+      gates[0].complete();
+      await plain;
+
+      final cachedRead = await service.fetchSyncSnapshot('watched');
+      expect(calls, 2, reason: 'third read must be a cache hit');
+      expect(cachedRead.data!.single['movie']['ids']['imdb'], 'tt-fresh');
+    });
+
+    test(
+      'coalesces concurrent IMDb resolution and caches within one account',
+      () async {
+        var calls = 0;
+        var gate = Completer<void>();
+        final service = serviceWith((request) async {
+          calls++;
+          await gate.future;
+          return http.Response(
+            jsonEncode({
+              'ids': {'imdb': 'tt-show'},
+            }),
+            200,
+          );
+        });
+
+        final first = service.resolveImdb('TT-SHOW', 'series');
+        final second = service.resolveImdb('tt-show', 'series');
+        expect(identical(first, second), isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(calls, 1);
+        gate.complete();
+        await Future.wait([first, second]);
+
+        // Title metadata is account-independent fact; repeats are cache hits.
+        gate = Completer<void>()..complete();
+        await service.resolveImdb('tt-show', 'series');
+        expect(calls, 1);
+
+        // Account/profile scope changes drop every response cache.
+        service.resetProfileScope();
+        await service.resolveImdb('tt-show', 'series');
+        expect(calls, 2);
+      },
+    );
+
     test('walks every cursor page of a sync snapshot', () async {
       final cursors = <String?>[];
       final service = serviceWith((request) async {

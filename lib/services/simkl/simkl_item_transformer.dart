@@ -57,13 +57,16 @@ class SimklItemTransformer {
     // otherwise always resolve to 'series' for every show-wrapped item,
     // anime movies included. Falls back to whether the item looks episodic
     // (has a season/episode count), then finally [inferredType].
-    final animeType = content['anime_type'] as String?;
+    // Sync/list responses put anime_type beside the `show` wrapper; some flat
+    // public responses may carry it on the content object itself.
+    final animeTypeValue = raw['anime_type'] ?? content['anime_type'];
+    final animeType = animeTypeValue is String ? animeTypeValue : null;
     final looksEpisodic =
-        content['total_episodes_count'] != null ||
-        content['episodes'] != null;
+        content['total_episodes_count'] != null || content['episodes'] != null;
     final internalType = animeType == 'movie'
         ? 'movie'
-        : (shapeType ?? (looksEpisodic ? 'series' : (inferredType ?? 'series')));
+        : (shapeType ??
+              (looksEpisodic ? 'series' : (inferredType ?? 'series')));
 
     String? poster = _imageUrl(content['poster'] as String?, 'posters', '_m');
     String? fanart = _imageUrl(content['fanart'] as String?, 'fanart', '_w');
@@ -103,7 +106,8 @@ class SimklItemTransformer {
       name: content['title'] as String? ?? 'Unknown',
       poster: poster,
       background: fanart,
-      description: content['overview'] as String? ?? content['description'] as String?,
+      description:
+          content['overview'] as String? ?? content['description'] as String?,
       year: year,
       imdbRating: rating,
       genres: genres,

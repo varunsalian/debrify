@@ -59,6 +59,7 @@ import '../services/video_player_launcher.dart';
 import '../utils/concurrency.dart';
 import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
+import '../utils/episode_progress_merge.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
@@ -433,7 +434,8 @@ class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
   }
 }
 
-class _SearchScreenState extends State<SearchScreen> with RouteAware {
+class _SearchScreenState extends State<SearchScreen>
+    with RouteAware, WidgetsBindingObserver {
   // Which nav tab this instance backs, for the TV content-focus handler: the
   // dedicated Search tab (17) or the Home-New board (15).
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
@@ -783,7 +785,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// [_refreshAfterPlayback].
   ///
   /// This is what keeps the post-playback refresh from becoming a tax on plain
-  /// browsing: a Trakt row reload is ~2+N API calls and Simkl another, and
+  /// browsing: Trakt and Simkl each still require multiple paged calls, and
   /// [_refreshAfterPlayback] runs on EVERY detail-page close — so without this
   /// latch, opening a title and pressing Back would hit both tracker APIs. Only
   /// a session that actually played something can have moved a tracker's
@@ -793,8 +795,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   // TRAKT Continue Watching rows ("Trakt Movies" / "Trakt Shows"), fetched live
   // from the Trakt account (no local store). Shown after the local rows when
-  // connected + non-empty. Network-loaded once on init / integration change and
-  // cached in memory (the shows fetch is heavy: ~2 + N calls).
+  // connected + non-empty. Network-loaded on init / integration change,
+  // post-playback, and throttled app resume, then cached in memory.
   List<StremioMeta> _traktMovies = [];
   List<StremioMeta> _traktSeries = [];
   // Trakt movies + shows merged in last-watched (paused_at) order — the source
@@ -832,6 +834,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   final List<FocusNode> _mdblistSeriesNodes = [];
   int _mdblistCwToken = 0;
   int _mdblistRevisionRefreshToken = 0;
+  // True while a revision-driven delayed CW reload is queued/running, so
+  // [_refreshAfterPlayback] can skip its own MDBList reload instead of doing a
+  // second full fetch ~1s before the authoritative one lands.
+  bool _mdblistRevisionRefreshPending = false;
+  // When the last FORCED CW load finished. Covers the slow-device case where
+  // the delayed reload completes (clearing the pending flag) while
+  // [_refreshAfterPlayback] is still awaiting its local loads — without this
+  // it would immediately repeat the full fetch it just skipped for.
+  DateTime? _mdblistCwForcedLoadAt;
+
+  bool get _mdblistCwForceFresh {
+    final at = _mdblistCwForcedLoadAt;
+    return at != null &&
+        DateTime.now().difference(at) < const Duration(seconds: 3);
+  }
 
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
@@ -886,6 +903,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   bool _playlistLaunching = false;
 
   int _traktCwToken = 0;
+
+  /// Last Trakt CW network attempt. The row is refreshed when the app returns
+  /// from the background (where the user may have changed Trakt in another app
+  /// or browser), but lifecycle noise within this window is coalesced.
+  DateTime? _lastTraktCwRefreshAttemptAt;
+  static const Duration _traktCwResumeRefreshInterval = Duration(seconds: 30);
 
   /// Whether a Trakt Continue Watching fetch is currently in flight for a
   /// connected account. While true — and there are no real Trakt rows to show
@@ -1415,6 +1438,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
     AnalyticsService.screenView(
@@ -1901,6 +1925,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _mdblistRevisionRefreshToken++;
     _spotlightHeroNode.dispose();
     // Preserve a COMPLETED keyword search so returning to this tab restores
@@ -4086,13 +4111,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // ── Trakt Continue Watching ───────────────────────────────────────────────
 
   /// Fetch the Trakt "Continue Watching" rows (in-progress movies + up-next
-  /// episodes) from the connected account. Network-heavy (the shows path is
-  /// ~2 + N calls), so this runs once on init / integration change and caches
-  /// in memory — never on every rebuild. Token-guarded against overlap; hides
-  /// the rows when Trakt isn't connected.
+  /// episodes) from the connected account. Uses Trakt's intent-aware Up Next
+  /// feed plus paged playback checkpoints. Runs on init / integration change,
+  /// post-playback, and a throttled app resume — never on every rebuild.
+  /// Token-guarded against overlap; hides the rows when Trakt isn't connected.
   /// [refreshBound] runs a bound-source refresh at the end; pass false when the
   /// caller already refreshes bound sources itself (avoids a double pass).
   Future<void> _loadTraktContinueWatching({bool refreshBound = true}) async {
+    _lastTraktCwRefreshAttemptAt = DateTime.now();
     final token = ++_traktCwToken;
     // Mark the fetch in flight so the skeleton slot reserves while it runs (only
     // reserves when there are no real rows yet — see [_traktReserving]). Plain
@@ -4121,8 +4147,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return;
       }
       final cw = TraktContinueWatchingService.instance;
-      movies = await cw.fetchMovies();
-      shows = await cw.fetchShows();
+      final reads = await Future.wait<Object?>([
+        cw.fetchMoviesOrNull(),
+        cw.fetchShowsOrNull(),
+      ]);
+      final movieRead = reads[0] as List<TraktContinueWatchingItem>?;
+      final showRead = reads[1] as List<TraktContinueWatchingItem>?;
+      if (movieRead == null || showRead == null) {
+        throw StateError('Trakt Continue Watching read failed');
+      }
+      movies = movieRead;
+      shows = showRead;
     } catch (e) {
       // Leave any existing rows in place on a transient Trakt/network error,
       // but stop reserving the skeleton slot so it doesn't shimmer forever.
@@ -4168,10 +4203,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     ingest(movies, movieMetas);
     ingest(shows, showMetas);
     // Merge into one last-watched-ordered list for the See-All grid: sort by
-    // Trakt's paused_at (newest first), items without a paused_at (recent-shows
-    // augmentation) sort last. Ties (incl. two null paused_ats) fall back to the
-    // original movies-then-shows order so the sort is deterministic (Dart's
-    // List.sort isn't stable).
+    // Trakt's paused_at / last_watched_at (newest first). Items without either
+    // sort last. Ties use the original movies-then-shows order so the sort is
+    // deterministic (Dart's List.sort isn't stable).
     final allMetas = [...movieMetas, ...showMetas];
     final origIndex = <StremioMeta, int>{
       for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
@@ -4918,6 +4952,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..clear()
         ..addAll(byImdb);
     });
+    if (force) _mdblistCwForcedLoadAt = DateTime.now();
     _maybeAutoFocusBoard();
     if (!hadRows) _maybeAnnounceMdblistRows();
     if (refreshBound) unawaited(_refreshBoundSources());
@@ -4927,23 +4962,33 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (widget.searchMode || widget.discoverMode) return;
     MdblistContinueWatchingService.instance.invalidate();
     final token = ++_mdblistRevisionRefreshToken;
+    _mdblistRevisionRefreshPending = true;
     unawaited(_refreshMdblistAfterMutation(token));
   }
 
   Future<void> _refreshMdblistAfterMutation(int token) async {
-    // The stop response can arrive during the final frames of the player pop.
-    // Wait until Home is visible, then allow MDBList's watched snapshot a short
-    // propagation window before replacing the row with authoritative data.
-    for (var attempt = 0; attempt < 20; attempt++) {
+    try {
+      // The stop response can arrive during the final frames of the player pop.
+      // Wait until Home is visible, then allow MDBList's watched snapshot a
+      // short propagation window before replacing the row with authoritative
+      // data.
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (!mounted || token != _mdblistRevisionRefreshToken) return;
+        if (ModalRoute.of(context)?.isCurrent ?? true) break;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
       if (!mounted || token != _mdblistRevisionRefreshToken) return;
-      if (ModalRoute.of(context)?.isCurrent ?? true) break;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      await Future<void>.delayed(const Duration(milliseconds: 750));
+      if (!mounted || token != _mdblistRevisionRefreshToken) return;
+      await _loadMdblistContinueWatching(refreshBound: false, force: true);
+    } finally {
+      // Only the newest queued refresh owns the pending flag; a superseded one
+      // must not clear it while its successor is still due to run.
+      if (token == _mdblistRevisionRefreshToken) {
+        _mdblistRevisionRefreshPending = false;
+      }
     }
-    if (!mounted || token != _mdblistRevisionRefreshToken) return;
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
-    await Future<void>.delayed(const Duration(milliseconds: 750));
-    if (!mounted || token != _mdblistRevisionRefreshToken) return;
-    await _loadMdblistContinueWatching(refreshBound: false, force: true);
   }
 
   void _openMdblistCwItem(StremioMeta item) {
@@ -11816,12 +11861,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   isTraktSource: isTraktSource,
                   isMdblistSource: isMdblistSource,
                 ),
-                onResume: () => _onCatalogPlay(
+                onResume: (promised) => _onCatalogPlay(
                   item,
                   addon,
                   isTraktSource: isTraktSource,
                   isMdblistSource: isMdblistSource,
                   skipEpisodeFallback: true,
+                  // The merged page resolves its own episode target (it can see
+                  // watched state the reconciler can't) — Play must land on the
+                  // episode its label is showing.
+                  promisedTarget: promised,
                   // Play the Trakt paused episode when the Trakt-first label
                   // shows one, so the button and the action agree.
                   preferTraktResume: true,
@@ -12767,7 +12816,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // label from [_resolveResumeInfo]. Off elsewhere (Home/row quick-play keep
     // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
+    // The episode the pressed button was promising, when the caller had already
+    // resolved one (merged detail). It wins over [_reconcileSeriesResume]: that
+    // reconciler only reads resume/CW positions, while the merged page's episode
+    // engine also advances off watched state. A show whose progress lives in a
+    // tracker's WATCHED list but not its continue-watching list reconciles to the
+    // empty-candidates fallback (S01E01) while the label correctly reads S1E2 —
+    // and Play would then start the pilot under a "Resume · S1E2" button.
+    ({bool started, int season, int episode})? promisedTarget,
   }) async {
+    debugPrint(
+      '[SeriesResume] play-pressed title="${item.name}" '
+      'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
+      'traktSource=$isTraktSource mdblistSource=$isMdblistSource '
+      'preferTrackerResume=$preferTraktResume',
+    );
     var cancelled = false;
     final resolving = preferTraktResume
         ? TorrentPlaybackService.showResolvingOverlay(
@@ -12785,6 +12848,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           )
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
+      debugPrint(
+        '[SeriesResume] play-launch title="${selection.title}" '
+        'id=${selection.imdbId} season=${selection.season} '
+        'episode=${selection.episode} trakt=${selection.traktSource} '
+        'traktPct=${selection.traktProgressPercent} '
+        'simkl=${selection.simklSource} '
+        'simklPct=${selection.simklProgressPercent} '
+        'mdblist=${selection.mdblistSource} '
+        'mdblistPct=${selection.mdblistProgressPercent}',
+      );
       resolving?.dismiss();
       if (cancelled) return;
       await _playSelection(selection);
@@ -12800,8 +12873,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         final owned = await _mdblistResumeItemFor(item);
         if (!mounted || cancelled) return;
         if (owned != null) {
-          await launch(owned.selection);
-          return;
+          // This fast path skips the reconciler entirely, so it needs its own
+          // promise check — otherwise an in-page watched mutation moves the
+          // label while MDBList still reports the previous continue-watching
+          // coordinate, and Resume replays the episode the label moved past.
+          final p = promisedTarget;
+          final stale =
+              p != null &&
+              (owned.selection.season != p.season ||
+                  owned.selection.episode != p.episode);
+          if (!stale) {
+            await launch(owned.selection);
+            return;
+          }
+          debugPrint(
+            '[SeriesResume] play-mdblist-fastpath-skipped title="${item.name}" '
+            'owned=S${owned.selection.season}E${owned.selection.episode} '
+            'promised=S${p.season}E${p.episode}',
+          );
+          // Fall through to the reconciled/promised path below.
         }
       }
 
@@ -12815,15 +12905,38 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTraktSource: isTraktSource,
         );
         if (!mounted || cancelled) return;
+        // The caller's button already promised an episode the reconciler can't
+        // see. Honor it: the label is the promise the user acted on, and a
+        // silent disagreement here replays an episode they already watched.
+        final promised = promisedTarget;
+        final overridden =
+            promised != null &&
+            (promised.season != r.season || promised.episode != r.episode);
+        if (overridden) {
+          debugPrint(
+            '[SeriesResume] play-promise-override title="${item.name}" '
+            'reconciled=S${r.season}E${r.episode}/started=${r.started} '
+            'promised=S${promised.season}E${promised.episode}',
+          );
+        }
         // Winner's original selection (Trakt or MDBList) — launches with its
-        // own progress percent intact.
-        if (r.selection != null) {
+        // own progress percent intact. Unusable once overridden: it points at
+        // the older coordinate, so it would re-open the episode we just moved
+        // past, carrying that episode's resume percent with it.
+        if (!overridden && r.selection != null) {
           await launch(r.selection!);
           return;
         }
         final rTtId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
         final rTracker = (r.sourcePrio ?? 3) <= 2;
-        if (r.started && (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
+        // A promise IS started-evidence — it is what made the button read
+        // "Resume". Without this, the empty-candidates fallback (started=false)
+        // drops through to the S01E01 tail below. Keyed on the promise itself
+        // rather than on [overridden]: when the promised coordinate happens to
+        // MATCH the reconciler's fallback, there is no override, yet the button
+        // still said "Resume" and must not fall through.
+        final started = r.started || (promised?.started ?? false);
+        if (started && (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
           await launch(
             AdvancedSearchSelection(
               imdbId: rTtId.isNotEmpty
@@ -12832,17 +12945,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               isSeries: true,
               title: item.name,
               year: item.year,
-              season: r.season,
-              episode: r.episode,
+              season: overridden ? promised.season : r.season,
+              episode: overridden ? promised.episode : r.episode,
               contentType: item.type,
               posterUrl: item.poster,
               // Source flags from the WINNING provider (advanced or not) so
               // player scrobbling attribution follows the tracker that owned
               // the resume — not from how the page happened to be opened.
               traktSource: isTraktSource || r.sourcePrio == 0,
-              simklProgressPercent: r.simklProgress,
+              // Belongs to the reconciled coordinate — carrying it onto a
+              // different episode would seek the new one to a stale position.
+              simklProgressPercent: overridden ? null : r.simklProgress,
               simklSource: r.sourcePrio == 1,
-              mdblistSource: r.sourcePrio == 2,
+              // `isMdblistSource ||` mirrors the traktSource term above: when
+              // the MDBList fast path is skipped as stale, the reconciler's
+              // winner is usually the local candidate, and without this the
+              // play would silently stop attributing to MDBList.
+              mdblistSource: isMdblistSource || r.sourcePrio == 2,
             ),
           );
           return;
@@ -13073,7 +13192,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         double? simklProgress,
         AdvancedSearchSelection? selection,
         int? sourcePrio,
-      }) r,
+      })
+      r,
     })
   >
   _seriesResumeCache = {};
@@ -13136,8 +13256,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final rev = _seriesResumeRev(playId, isTraktSource);
     final hit = _seriesResumeCache[playId];
     if (hit != null && nowMs - hit.atMs < 45000 && hit.rev == rev) {
+      debugPrint(
+        '[SeriesResume] reconcile-cache-hit title="${item.name}" '
+        'id=$playId ageMs=${nowMs - hit.atMs} rev=$rev '
+        'result=S${hit.r.season}E${hit.r.episode} '
+        'started=${hit.r.started} source=${_resumeSourceName(hit.r.sourcePrio)}',
+      );
       return hit.r;
     }
+    debugPrint(
+      '[SeriesResume] reconcile-start title="${item.name}" id=$playId '
+      'rawId=${item.id} effectiveId=${item.effectiveImdbId} '
+      'traktAuth=$_isTraktAuthenticated simklAuth=$_isSimklAuthenticated '
+      'mdblistAuth=$_isMdblistAuthenticated traktSource=$isTraktSource '
+      'rev=$rev cache=${hit == null ? 'miss' : 'stale-or-revised'}',
+    );
     _seriesResumeCache.removeWhere((_, v) => nowMs - v.atMs >= 45000);
 
     // Kick everything off together; a degraded tracker API must never stall
@@ -13172,6 +13305,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final local = await localF;
     final simklNext = await nextF;
 
+    debugPrint(
+      '[SeriesResume] reconcile-inputs title="${item.name}" id=$playId '
+      'trakt=${_formatTraktResume(trakt)} '
+      'simkl=${_formatSimklResume(simkl)} '
+      'mdblist=${_formatMdblistResume(mdb)} '
+      'local=${_formatLocalResume(local)} '
+      'simklNext=${simklNext == null ? 'none' : 'S${simklNext.season}E${simklNext.episode}'}',
+    );
+
     final candidates =
         <
           ({
@@ -13189,9 +13331,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         trakt.sel.episode != null) {
       candidates.add((
         prio: 0,
-        // Trakt's own paused_at (null for recent-shows "next" augmentation
-        // items — a computed next is a weak signal and correctly competes
-        // as timestampless).
+        // Trakt's own activity timestamp.
         tsMs: trakt.tsMs,
         s: trakt.sel.season!,
         e: trakt.sel.episode!,
@@ -13299,36 +13439,63 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Advance rules. Tracker sessions at ≥80% are the orphan pattern the
       // trackers themselves treat as watched — advance. A LOCAL position at
       // ≥80% only advances when the player marked it finished OR a tracker's
-      // watched frontier confirms the episode is behind it (simklNext ahead)
-      // — a local-only pause in the last stretch stays resumable in place.
-      final simklNextAhead =
-          simklNext != null &&
-          (simklNext.season > season ||
-              (simklNext.season == season && simklNext.episode > episode));
-      final done =
-          w.finished || ((w.pct ?? 0) >= 80 && (isTracker || simklNextAhead));
+      // resume/up-next frontier confirms the episode is behind it. A local-only
+      // pause in the last stretch stays resumable in place.
+      final trackerFrontiers = <EpisodeCoordinate>[
+        for (final candidate in candidates)
+          if (candidate.prio <= 2) (season: candidate.s, episode: candidate.e),
+        if (simklNext != null)
+          (season: simklNext.season, episode: simklNext.episode),
+      ];
+      final trackerFrontierAhead = trackerFrontiers.any(
+        (frontier) =>
+            frontier.season > season ||
+            (frontier.season == season && frontier.episode > episode),
+      );
+      final done = shouldAdvanceEpisodeResume(
+        candidate: (season: season, episode: episode),
+        finished: w.finished,
+        progress: w.pct,
+        isTracker: isTracker,
+        trackerFrontiers: trackerFrontiers,
+      );
+      debugPrint(
+        '[SeriesResume] reconcile-winner title="${item.name}" id=$playId '
+        'source=${_resumeSourceName(w.prio)} base=S${w.s}E${w.e} '
+        'pct=${w.pct} timestamp=${_formatResumeTimestamp(w.tsMs)} '
+        'finished=${w.finished} trackerFrontierAhead=$trackerFrontierAhead '
+        'willAdvance=$done',
+      );
       if (done) {
         // 4s-boxed like every other network hop here: the guide fetch's body
         // read is otherwise unbounded, and the PLAY path has no outer box —
         // a stalled read would hang the press. Timeout → null → the defined
-        // "keep the winner / adjacent next_to_watch" fallback.
+        // "keep the winner / adjacent tracker frontier" fallback.
         final next = await NextEpisodeService.findNextEpisode(
           playId,
           season,
           episode,
         ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-        // next_to_watch backup ONLY when it's the winner's direct successor:
-        // it tracks the account's watched FRONTIER, so during a rewatch it
-        // can be seasons ahead — trusting it blindly would teleport the
-        // rewatch the moment the guide fetch flakes.
-        final adjacentNext =
-            simklNext != null &&
-                ((simklNext.season == season &&
-                        simklNext.episode == episode + 1) ||
-                    (simklNext.season == season + 1 && simklNext.episode == 1))
-            ? simklNext
-            : null;
-        final target = next ?? adjacentNext;
+        // A tracker-frontier backup is safe ONLY when it is the winner's direct
+        // successor. A frontier can be seasons ahead during a rewatch; trusting
+        // that blindly when the guide flakes would teleport the rewatch.
+        EpisodeCoordinate? adjacentTrackerFrontier;
+        for (final frontier in trackerFrontiers) {
+          final isDirectSuccessor =
+              (frontier.season == season && frontier.episode == episode + 1) ||
+              (frontier.season == season + 1 && frontier.episode == 1);
+          if (isDirectSuccessor) {
+            adjacentTrackerFrontier = frontier;
+            break;
+          }
+        }
+        final target = next ?? adjacentTrackerFrontier;
+        debugPrint(
+          '[SeriesResume] reconcile-advance title="${item.name}" id=$playId '
+          'guideNext=${next == null ? 'none' : 'S${next.season}E${next.episode}'} '
+          'adjacentTracker=${adjacentTrackerFrontier == null ? 'none' : 'S${adjacentTrackerFrontier.season}E${adjacentTrackerFrontier.episode}'} '
+          'chosen=${target == null ? 'keep-S${w.s}E${w.e}' : 'S${target.season}E${target.episode}'}',
+        );
         if (target != null) {
           season = target.season;
           episode = target.episode;
@@ -13349,8 +13516,62 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         sourcePrio: sourcePrio,
       );
     }
+    debugPrint(
+      '[SeriesResume] reconcile-result title="${item.name}" id=$playId '
+      'started=${result.started} target=S${result.season}E${result.episode} '
+      'source=${_resumeSourceName(result.sourcePrio)} '
+      'hasOriginalSelection=${result.selection != null} '
+      'simklPct=${result.simklProgress}',
+    );
     _seriesResumeCache[playId] = (atMs: nowMs, rev: rev, r: result);
     return result;
+  }
+
+  String _resumeSourceName(int? priority) => switch (priority) {
+    0 => 'trakt',
+    1 => 'simkl',
+    2 => 'mdblist',
+    3 => 'local',
+    _ => 'fallback',
+  };
+
+  String _formatResumeTimestamp(int? timestampMs) {
+    if (timestampMs == null) return 'none';
+    return DateTime.fromMillisecondsSinceEpoch(timestampMs).toIso8601String();
+  }
+
+  String _formatTraktResume(({AdvancedSearchSelection sel, int? tsMs})? value) {
+    if (value == null) return 'none';
+    return 'S${value.sel.season}E${value.sel.episode}'
+        '/pct=${value.sel.traktProgressPercent}'
+        '/at=${_formatResumeTimestamp(value.tsMs)}';
+  }
+
+  String _formatSimklResume(
+    ({int season, int episode, double? progress, DateTime? pausedAt})? value,
+  ) {
+    if (value == null) return 'none';
+    return 'S${value.season}E${value.episode}'
+        '/pct=${value.progress}'
+        '/at=${value.pausedAt?.toIso8601String() ?? 'none'}';
+  }
+
+  String _formatMdblistResume(MdblistContinueWatchingItem? value) {
+    if (value == null) return 'none';
+    return 'S${value.selection.season}E${value.selection.episode}'
+        '/pct=${value.selection.mdblistProgressPercent}'
+        '/paused=${value.paused}'
+        '/at=${value.updatedAt?.toIso8601String() ?? 'none'}';
+  }
+
+  String _formatLocalResume(
+    ({int season, int episode, double? pct, int? tsMs, bool finished})? value,
+  ) {
+    if (value == null) return 'none';
+    return 'S${value.season}E${value.episode}'
+        '/pct=${value.pct}'
+        '/finished=${value.finished}'
+        '/at=${_formatResumeTimestamp(value.tsMs)}';
   }
 
   /// Trakt candidate for the reconciler — the full ready-to-play selection
@@ -13363,20 +13584,35 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   ) async {
     final cached = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
     if (cached != null) {
+      debugPrint(
+        '[SeriesResume] trakt-home-card-hit title="${item.name}" '
+        'lookupId=${item.effectiveImdbId ?? item.id} cardId=${cached.id} '
+        'card=S${cached.season}E${cached.episode} '
+        'cardPct=${cached.progress} '
+        'cardPausedAt=${_formatResumeTimestamp(cached.pausedAtMs)}',
+      );
       final sel = await TraktContinueWatchingService.instance.selectionForItem(
         cached,
       );
       if (sel == null) return null;
+      debugPrint(
+        '[SeriesResume] trakt-home-card-selection title="${item.name}" '
+        'resolved=S${sel.season}E${sel.episode} '
+        'resolvedPct=${sel.traktProgressPercent}',
+      );
       return (sel: sel, tsMs: cached.pausedAtMs);
     }
     if (item.type != 'series') return null;
     final id = item.effectiveImdbId ?? item.id;
     if (id.isEmpty) return null;
-    // Mirror resolveSelection's lookup but keep the ITEM, so its paused_at
-    // survives (recent-shows augmentation items carry none — a computed
-    // "next" is a weak signal and correctly stays timestampless).
+    // Mirror resolveSelection's lookup but keep the ITEM, so its Trakt activity
+    // timestamp survives.
     final items = await TraktContinueWatchingService.instance.fetchItems(
       TraktContinueWatchingService.showsContentType,
+    );
+    debugPrint(
+      '[SeriesResume] trakt-live-lookup title="${item.name}" id=$id '
+      'homeCacheMiss=true fetchedItems=${items.length}',
     );
     TraktContinueWatchingItem? selected;
     for (final it in items) {
@@ -13386,6 +13622,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
     }
     if (selected == null) return null;
+    debugPrint(
+      '[SeriesResume] trakt-live-match title="${item.name}" id=$id '
+      'card=S${selected.season}E${selected.episode} '
+      'cardPct=${selected.progress} '
+      'cardPausedAt=${_formatResumeTimestamp(selected.pausedAtMs)}',
+    );
     final sel = await TraktContinueWatchingService.instance.selectionForItem(
       selected,
     );
@@ -13398,13 +13640,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// and updatedAt so it can compete on recency.
   Future<({int season, int episode, double? pct, int? tsMs, bool finished})?>
   _localSeriesResumeFor(StremioMeta item, String playId) async {
-    Map<String, dynamic>? entry = await StorageService
-        .getLastPlayedEpisodeByImdbId(playId);
+    Map<String, dynamic>? entry =
+        await StorageService.getLastPlayedEpisodeByImdbId(playId);
     var finished = entry?['finished'] == true;
     if (entry?['season'] is! int || entry?['episode'] is! int) {
-      entry = await StorageService.getLastPlayedEpisode(
-        seriesTitle: item.name,
-      );
+      entry = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
       finished = entry?['finished'] == true;
     }
     final season = entry?['season'];
@@ -13462,7 +13702,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (id.isEmpty) return null;
     // Use the SAME resolution _onCatalogPlay's general series branch uses
     // (resolveSelection → fetchItems + selectionForItem). This includes Trakt's
-    // recent-shows "next episode" augmentation, so the label matches Play even
+    // Up Next augmentation, so the label matches Play even
     // when the title is only reachable via that augmentation and regardless of
     // whether _traktByImdb has populated yet (fixes the open-before-CW-load race
     // where the cached Play branch and the live label branch disagreed).
@@ -13530,6 +13770,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
+    debugPrint(
+      '[SeriesResume] label-resolve-start title="${item.name}" '
+      'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
+      'traktSource=$isTraktSource mdblistSource=$isMdblistSource',
+    );
     if (isMdblistSource) {
       final owned = await _mdblistResumeItemFor(item);
       if (!mounted) return (started: false, season: null, episode: null);
@@ -13546,8 +13791,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // so the label and playback can never disagree (see
     // _reconcileSeriesResume for the full rules).
     if (item.type == 'series') {
-      final r = await _reconcileSeriesResume(item, isTraktSource: isTraktSource);
+      final r = await _reconcileSeriesResume(
+        item,
+        isTraktSource: isTraktSource,
+      );
       if (!mounted) return (started: false, season: null, episode: null);
+      debugPrint(
+        '[SeriesResume] label-resolve-result title="${item.name}" '
+        'started=${r.started} target=S${r.season}E${r.episode} '
+        'source=${_resumeSourceName(r.sourcePrio)}',
+      );
       return (started: r.started, season: r.season, episode: r.episode);
     }
 
@@ -13867,6 +14120,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         season: sel.season,
         episode: sel.episode,
         meta: _metaFor(sel),
+        // This is the user's own Play press, so it honors "Play button opens".
+        // The selection already carries the exact season/episode the button was
+        // going to play, so the manual list opens on that episode — no next-up
+        // resolution here, and no way for the list to disagree with the button.
+        openSourcePicker: () => _browseSelection(sel, forcePlayOnTap: true),
       );
     } finally {
       MainPageBridge.removeExternalPlayerLaunchListener(onExternal);
@@ -13890,7 +14148,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Manual sources list in-tab — the screen searches itself (own loading) and
   /// each tap plays with the full source list + content metadata.
-  void _browseSelection(AdvancedSearchSelection sel) {
+  void _browseSelection(
+    AdvancedSearchSelection sel, {
+    // Set only by the Play-button hand-off: the press already said "play", so
+    // the row the user picks must not re-ask via the post-torrent action.
+    bool forcePlayOnTap = false,
+  }) {
+    // Every route into the manual list lands here — the Play-button hand-off,
+    // the movie Sources button, and the episode long-press — so this is where
+    // the episode the list will search is finally fixed.
+    debugPrint(
+      '[SeriesResume] picker-open title="${sel.title}" id=${sel.imdbId} '
+      'target=S${sel.season}E${sel.episode} label="${sel.formattedLabel}"',
+    );
     if (sel.imdbId.isEmpty) {
       _snack('No IMDb match to find sources for "${sel.title}".');
       return;
@@ -13902,6 +14172,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               selection: sel,
               meta: _metaFor(sel),
               isTelevision: widget.isTelevision,
+              forcePlayOnTap: forcePlayOnTap,
             ),
           ),
         )
@@ -17302,7 +17573,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         await Future.wait([
           _loadTraktContinueWatching(refreshBound: false),
           _loadSimklContinueWatching(refreshBound: false),
-          _loadMdblistContinueWatching(refreshBound: false, force: true),
+          // A scrobble revision already queued (pending) or just completed
+          // (force-fresh) the authoritative MDBList reload; loading here too
+          // would only repeat it or fetch pre-propagation data it replaces.
+          // When no scrobble fired (e.g. external playback), load as before.
+          if (!_mdblistRevisionRefreshPending && !_mdblistCwForceFresh)
+            _loadMdblistContinueWatching(refreshBound: false, force: true),
         ]);
         if (!mounted) return;
       }
@@ -17322,6 +17598,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!mounted) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
     unawaited(_refreshAfterPlayback());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed ||
+        !mounted ||
+        widget.searchMode ||
+        !_isTraktAuthenticated ||
+        _playedSinceRefresh ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
+    final lastAttempt = _lastTraktCwRefreshAttemptAt;
+    if (lastAttempt != null &&
+        DateTime.now().difference(lastAttempt) <
+            _traktCwResumeRefreshInterval) {
+      return;
+    }
+    unawaited(_loadTraktContinueWatching());
   }
 
   /// Refresh state that a See-All screen may have changed (Continue Watching
@@ -17391,10 +17686,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Popular, Anticipated — from the in-screen "List" dropdown; those are
   /// fetched on demand inside [TraktSeeAllScreen].
   ///
-  /// The Continue Watching grid keeps its snapshot (no per-return reload): a
-  /// Trakt refresh is ~2+N API calls, so the board's rows refresh once when the
-  /// screen pops — `trackers: true` because that's true whether or not anything
-  /// was played here. One pass reloads local CW + both trackers and then runs
+  /// The Continue Watching grid keeps its snapshot (no per-return reload).
+  /// The board's rows refresh once when the screen pops — `trackers: true`
+  /// because that's true whether or not anything was played here. One pass
+  /// reloads local CW + both trackers and then runs
   /// the single bound-source refresh against the now-fresh lists (it swallows
   /// its own errors, so the bound refresh still happens if a fetch fails).
   void _openTraktSeeAll([String initialCategory = 'all']) {

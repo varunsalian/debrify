@@ -557,12 +557,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (!mounted || token != _mdblistRefreshToken) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
 
-    await refreshWatchProgress();
-    if (!mounted || token != _mdblistRefreshToken) return;
-
     // MDBList's /scrobble/stop response can precede /sync/watched becoming
-    // readable. A sequential retry also prevents an older concurrent refresh
-    // from being the final state painted by this panel.
+    // readable, so an immediate refetch can paint pre-mutation data — wait out
+    // the propagation window and do ONE authoritative refresh. (This used to
+    // refresh immediately AND again after the delay; the first pass only ever
+    // showed data the second pass replaced, at double the tracker requests.)
     await Future<void>.delayed(const Duration(milliseconds: 750));
     if (!mounted || token != _mdblistRefreshToken) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;

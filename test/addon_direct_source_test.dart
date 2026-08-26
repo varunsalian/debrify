@@ -35,6 +35,19 @@ Torrent direct({
   stremioStreamIndex: index,
 );
 
+Torrent torrentSource({required String name, required String hash}) => Torrent(
+  rowid: 0,
+  infohash: hash,
+  name: name,
+  sizeBytes: 0,
+  createdUnix: 0,
+  seeders: 1,
+  leechers: 0,
+  completed: 0,
+  scrapedDate: 0,
+  source: 'stremio:test',
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -57,6 +70,44 @@ void main() {
     expect(addon.sourceBindingKey, hasLength(64));
     expect(addon.sourceBindingKey, isNot(contains('secret-token')));
     expect(addon.sourceBindingKey, isNot(other.sourceBindingKey));
+  });
+
+  test('binding identity survives a response-position change', () {
+    // The addon reorders results between searches (cache state, seeders), so
+    // the same file comes back at a new index. Including that index in the
+    // identity made every replay append a duplicate pin instead of promoting
+    // the existing one.
+    SeriesSource at(int index) => SeriesSource(
+      torrentHash: '',
+      torrentName: 'Show S01E02 1080p',
+      debridService: SeriesSource.addonDirectService,
+      debridTorrentId: '',
+      boundAt: 1,
+      addonId: 'test.addon',
+      addonKey: 'opaque-addon-key',
+      streamKey: 'quality-profile',
+      streamIndex: index,
+    );
+
+    expect(at(2).bindingKey, at(9).bindingKey);
+    expect(
+      at(2).matchesAddonDirect(
+        candidateAddonKey: 'opaque-addon-key',
+        candidateStreamKey: 'quality-profile',
+      ),
+      isTrue,
+    );
+    // A different profile is still a different source.
+    expect(
+      at(2).matchesAddonDirect(
+        candidateAddonKey: 'opaque-addon-key',
+        candidateStreamKey: 'other-profile',
+      ),
+      isFalse,
+    );
+    // The index is still STORED — resolution needs it to pick between streams
+    // sharing a profile (see selectPinnedDirectStream).
+    expect(at(9).streamIndex, 9);
   });
 
   test('stream profile survives URL, episode, hash, and size changes', () {
@@ -166,6 +217,136 @@ void main() {
       stored.single.toJson().toString(),
       isNot(contains(torrent.directUrl!)),
     );
+  });
+
+  test(
+    'validated movie direct source auto-pins and successful switch replaces it',
+    () async {
+      const imdbId = 'tt1000001';
+      await SeriesSourceService.setSources(imdbId, [
+        const SeriesSource(
+          torrentHash: 'ffffffffffffffffffffffffffffffffffffffff',
+          torrentName: 'Previous movie pin',
+          debridService: 'rd',
+          debridTorrentId: '',
+          boundAt: 1,
+        ),
+      ]);
+      final first = direct(
+        url: 'https://signed.test/movie-first',
+        key: 'movie-first',
+        index: 1,
+      );
+      final switched = direct(
+        url: 'https://signed.test/movie-switched',
+        key: 'movie-switched',
+        index: 2,
+      );
+      final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+        'rd',
+        const PlaybackMeta(imdbId: imdbId, contentType: 'movie'),
+      );
+
+      // Deliberately overlap callbacks: player commit notifications are
+      // fire-and-forget, but the latest successful movie switch must win.
+      final firstWrite = commit(first);
+      final switchedWrite = commit(switched);
+      await Future.wait([firstWrite, switchedWrite]);
+
+      final stored = await SeriesSourceService.getSources(imdbId);
+      expect(stored, hasLength(1));
+      expect(stored.single.isAddonDirect, isTrue);
+      expect(stored.single.streamKey, 'movie-switched');
+      expect(stored.single.streamIndex, 2);
+      expect(stored.single.toJson().toString(), isNot(contains('signed.test')));
+
+      final torrent = torrentSource(
+        name: 'Movie.2026.2160p',
+        hash: 'cccccccccccccccccccccccccccccccccccccccc',
+      );
+      await commit(torrent);
+      final torrentStored = await SeriesSourceService.getSources(imdbId);
+      expect(torrentStored, hasLength(1));
+      expect(torrentStored.single.torrentHash, torrent.infohash);
+      expect(torrentStored.single.isAddonDirect, isFalse);
+    },
+  );
+
+  test(
+    'validated series switches promote new source without replacing old pins',
+    () async {
+      const imdbId = 'tt1000002';
+      const previous = SeriesSource(
+        torrentHash: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        torrentName: 'Previous series pin',
+        debridService: 'rd',
+        debridTorrentId: '',
+        boundAt: 1,
+      );
+      await SeriesSourceService.setSources(imdbId, [previous]);
+      final first = direct(
+        url: 'https://signed.test/series-first',
+        key: 'series-first',
+        index: 1,
+      );
+      final torrent = torrentSource(
+        name: 'Show.S01E01.1080p',
+        hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      final switched = direct(
+        url: 'https://signed.test/series-switched',
+        key: 'series-switched',
+        index: 3,
+      );
+      final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+        'rd',
+        const PlaybackMeta(
+          imdbId: imdbId,
+          contentType: 'series',
+          season: 1,
+          episode: 1,
+        ),
+      );
+
+      await commit(first);
+      await commit(torrent);
+      await commit(switched);
+      await commit(switched);
+
+      final stored = await SeriesSourceService.getSources(imdbId);
+      expect(stored, hasLength(4));
+      expect(stored[0].streamKey, 'series-switched');
+      expect(stored[1].torrentHash, torrent.infohash);
+      expect(stored[2].streamKey, 'series-first');
+      expect(stored[3].bindingKey, previous.bindingKey);
+    },
+  );
+
+  test('unrefreshable direct source is never auto-pinned', () async {
+    const imdbId = 'tt1000003';
+    final unrefreshable = direct(
+      url: 'https://signed.test/no-stable-profile',
+      key: '',
+      index: 0,
+    );
+    final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+      'rd',
+      const PlaybackMeta(imdbId: imdbId, contentType: 'movie'),
+    );
+
+    await commit(unrefreshable);
+
+    expect(await SeriesSourceService.getSources(imdbId), isEmpty);
+
+    final refreshable = direct(
+      url: 'https://signed.test/valid-later-switch',
+      key: 'valid-later-switch',
+      index: 1,
+    );
+    await commit(refreshable);
+    final stored = await SeriesSourceService.getSources(imdbId);
+    expect(stored, hasLength(1));
+    expect(stored.single.streamKey, 'valid-later-switch');
   });
 
   test('fresh direct matcher prefers profile then original response index', () {

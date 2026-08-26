@@ -435,7 +435,7 @@ class IptvCatalogDb {
         WHERE channel_number IS NULL AND
           (CASE WHEN content_type IS NOT NULL
             THEN content_type = 'live'
-            ELSE (duration IS NULL OR duration = -1)
+            ELSE (duration IS NULL OR duration <= 0)
           END)
       )
       UPDATE channels
@@ -1458,7 +1458,7 @@ class IptvCatalogDb {
   static const _liveSql =
       '(CASE WHEN content_type IS NOT NULL '
       "THEN content_type = 'live' "
-      'ELSE (duration IS NULL OR duration = -1) END)';
+      'ELSE (duration IS NULL OR duration <= 0) END)';
 
   // ── EPG guide storage ────────────────────────────────────────────────────
 
@@ -1699,8 +1699,9 @@ class IptvCatalogDb {
     return age < _adoptionRetryBackoff.inMilliseconds;
   }
 
-  /// Builds [sourceKey]'s numbering namespace from the stored rows of
-  /// [catalogKey], on a worker isolate. See [adoptNumberingFromCatalog].
+  /// Builds or completes [sourceKey]'s numbering namespace from the stored
+  /// rows of [catalogKey], on a worker isolate. See
+  /// [adoptNumberingFromCatalog].
   ///
   /// Returns the number of rows whose stored number changed, so the caller
   /// knows whether the visible list needs rebuilding. Failures are recorded
@@ -2031,11 +2032,11 @@ class CatalogSnapshot {
   static const _base = 'FROM channels WHERE catalog_key = ? AND generation = ?';
 
   /// Exactly IptvChannel.isLive in SQL: an explicit content type decides;
-  /// otherwise the M3U duration heuristic (-1 or absent = live).
+  /// otherwise the M3U duration heuristic (non-positive or absent = live).
   static const _isLiveSql =
       '(CASE WHEN content_type IS NOT NULL '
       "THEN content_type = 'live' "
-      'ELSE (duration IS NULL OR duration = -1) END)';
+      'ELSE (duration IS NULL OR duration <= 0) END)';
 
   List<Object?> _args({String? group, String? search, int? beforePosition}) => [
     catalogKey,
@@ -2099,6 +2100,20 @@ class CatalogSnapshot {
       catalogKey,
       generation,
     ]).isNotEmpty;
+  }
+
+  /// Whether this generation has a live row that still needs a durable
+  /// channel number. This can be true even when the provider already owns a
+  /// numbering namespace: a classification fix may make a previously-VOD row
+  /// live without re-ingesting the catalog (EXTINF:0 is the first such case).
+  ///
+  /// Deliberately includes hidden categories. Numbering is provider-wide and
+  /// hiding a category must not change which identities own which numbers.
+  bool get hasUnnumberedLiveChannels {
+    return _db.select(
+      'SELECT 1 $_base AND $_isLiveSql AND channel_number IS NULL LIMIT 1',
+      [catalogKey, generation],
+    ).isNotEmpty;
   }
 
   /// Catalog position of the row matching url+name, or null. (Duplicate

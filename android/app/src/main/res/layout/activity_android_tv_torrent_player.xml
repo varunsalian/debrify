@@ -33,24 +33,34 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical">
+            android:layout_gravity="top|end"
+            android:layout_marginTop="32dp"
+            android:layout_marginEnd="48dp"
+            android:background="@drawable/startup_gate_status_pill"
+            android:elevation="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="10dp">
 
             <ProgressBar
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="15dp"
+                android:layout_height="15dp"
                 android:indeterminate="true"
-                android:indeterminateTint="#B3FFFFFF" />
+                android:indeterminateTint="#99FFFFFF" />
 
             <TextView
                 android:id="@+id/android_tv_startup_gate_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:gravity="center"
-                android:textColor="#99FFFFFF"
-                android:textSize="15sp" />
+                android:layout_marginStart="10dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center_vertical"
+                android:letterSpacing="0.01"
+                android:textColor="#B3FFFFFF"
+                android:textSize="13sp" />
         </LinearLayout>
     </FrameLayout>
 

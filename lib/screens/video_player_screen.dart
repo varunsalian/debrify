@@ -291,6 +291,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool startupFailoverEnabled;
   final String? startupResolverProvider;
   final Future<void> Function(Torrent)? onStremioSourceCommitted;
+  final Future<void> Function()? onStartupSourcesExhausted;
   // "Load more sources" backend for the source sheet (series pack/episode
   // searches, or the movie search for bound movie plays)
   final SeriesSourceFetcher? seriesSourceFetcher;
@@ -367,6 +368,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.startupFailoverEnabled = false,
     this.startupResolverProvider,
     this.onStremioSourceCommitted,
+    this.onStartupSourcesExhausted,
     this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
@@ -3214,13 +3216,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 );
           if (!opened) {
             if (mounted) {
+              final canRecover = widget.onStartupSourcesExhausted != null;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('No playable source could be started.'),
+                SnackBar(
+                  content: Text(
+                    canRecover
+                        ? 'Saved source failed. Looking for another source…'
+                        : 'No playable source could be started.',
+                  ),
                 ),
               );
-              await Future<void>.delayed(const Duration(milliseconds: 900));
-              if (mounted) Navigator.of(context).maybePop();
+              // Keep hold of this exact route: a dialog may briefly cover the
+              // player while the failure message is visible. Wait for that
+              // dialog to leave, but abandon the pending pop if the player
+              // itself was dismissed, so an underlying detail route can never
+              // be popped by this delayed callback.
+              final playerRoute = ModalRoute.of(context);
+              await Future<void>.delayed(
+                Duration(milliseconds: canRecover ? 250 : 900),
+              );
+              while (mounted && playerRoute?.isActive == true) {
+                if (playerRoute?.isCurrent == true) break;
+                await Future<void>.delayed(const Duration(milliseconds: 50));
+              }
+              if (mounted && playerRoute?.isCurrent == true) {
+                if (canRecover) {
+                  Navigator.of(
+                    context,
+                  ).pop(<String, dynamic>{'startupSourcesExhausted': true});
+                } else {
+                  Navigator.of(context).maybePop();
+                }
+              }
             }
             return;
           }
@@ -13052,30 +13079,74 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 if (_startupGateActive)
                   ColoredBox(
                     color: Colors.black,
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(
-                            width: 34,
-                            height: 34,
-                            child: CircularProgressIndicator(
-                              color: Colors.white70,
-                              strokeWidth: 2.5,
+                    child: SafeArea(
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            top: PlatformUtil.isTelevision ? 32 : 16,
+                            right: PlatformUtil.isTelevision ? 48 : 20,
+                          ),
+                          child: Container(
+                            constraints: BoxConstraints(
+                              maxWidth: math.min(
+                                PlatformUtil.isTelevision ? 440.0 : 320.0,
+                                math.max(
+                                  120.0,
+                                  MediaQuery.sizeOf(context).width -
+                                      (PlatformUtil.isTelevision ? 96.0 : 40.0),
+                                ),
+                              ),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xE61A1C20),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.14),
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x66000000),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white60,
+                                    strokeWidth: 1.8,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: Text(
+                                    _startupGateMessage,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    softWrap: true,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.1,
+                                      decoration: TextDecoration.none,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          Text(
-                            _startupGateMessage,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white60,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -13329,7 +13400,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     onPanEnd: _onPanEnd,
                   ),
                 // Controls overlay (shown only when ready)
-                if (isReady && !inPip)
+                if (isReady && !inPip && !_startupGateActive)
                   ValueListenableBuilder<bool>(
                     valueListenable: _controlsVisible,
                     builder: (context, visible, _) {

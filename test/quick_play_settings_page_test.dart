@@ -145,6 +145,10 @@ void main() {
     );
     await pumpPage(tester);
 
+    // The global "Play button opens" selector sits above the tabs, so the reset
+    // row no longer fits the default 800x600 test surface.
+    await tester.ensureVisible(find.text('Restore defaults'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Restore defaults'));
     await tester.pumpAndSettle();
 

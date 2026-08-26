@@ -114,9 +114,7 @@ class StremioAddonCatalog {
         extras.add(StremioExtraParam.fromJson(e));
       }
       // Also extract names for extraSupported if not already set
-      if (extraSupported == null) {
-        extraSupported = extras.map((e) => e.name).toList();
-      }
+      extraSupported ??= extras.map((e) => e.name).toList();
     }
 
     return StremioAddonCatalog(
@@ -598,6 +596,18 @@ class StremioAddon {
   /// sources store this digest instead of copying [manifestUrl]/[baseUrl].
   String get sourceBindingKey =>
       sha256.convert(utf8.encode(storageKey)).toString();
+
+  /// Stable, secret-free identity for preferences that must survive profile
+  /// backup and restore. Connection-resource IDs are device-local, while the
+  /// normalized manifest URL identifies the same configured addon after its
+  /// resource is recreated with a new ID.
+  String get portableConfigurationKey {
+    final normalized = manifestUrl.isEmpty
+        ? ''
+        : normalizeStremioManifestUri(manifestUrl).toString();
+    return sha256.convert(utf8.encode(normalized)).toString();
+  }
+
   bool get canManage => !connectionResourceReadOnly;
   bool get canRevealManifestUrl =>
       !connectionResourceCredentialsRedacted && manifestUrl.isNotEmpty;

@@ -11,6 +11,10 @@ import 'engine/engine_registry.dart';
 import 'engine/local_engine_storage.dart';
 import 'engine/remote_engine_manager.dart';
 import 'iptv_transfer_payload.dart';
+import 'mdblist/mdblist_calendar_service.dart';
+import 'mdblist/mdblist_continue_watching_service.dart';
+import 'mdblist/mdblist_service.dart';
+import 'mdblist/mdblist_sync_coordinator.dart';
 import 'pikpak_api_service.dart';
 import 'storage_service.dart';
 import 'stremio_service.dart';
@@ -618,6 +622,16 @@ class BackupRestoreService {
             await StorageService.setMdblistSyncCheckpoint(
               checkpoint is Map ? Map<String, dynamic>.from(checkpoint) : null,
             );
+            // The key was written directly (not via connect()), so the MDBList
+            // services still hold the previous account's response caches —
+            // drop them or restored credentials serve the old account's
+            // watched/library/CW data for up to the cache TTLs. Mirrors the
+            // MDBList subset of the profile-switch reset list in
+            // profile_app_lifecycle_participant.dart.
+            MdblistService.instance.resetProfileScope();
+            MdblistContinueWatchingService.instance.resetProfileScope();
+            MdblistCalendarService.instance.resetProfileScope();
+            MdblistSyncCoordinator.instance.resetProfileScope();
             report.mdblist = true;
           } catch (_) {
             report.errors.add('MDBList: restore failed');

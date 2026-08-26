@@ -122,7 +122,7 @@ class MdblistDiscoverSource {
     final libraryGeneration = _libraryGeneration;
     final loaded = view == MdblistLibraryView.continueWatching
         ? await _loadContinueWatching(force: force)
-        : await _loadLibrarySnapshot(view);
+        : await _loadLibrarySnapshot(view, force: force);
     if (_libraryScopeChanged(generation, libraryGeneration)) {
       return const MdblistDiscoverPage(
         kind: MdblistResultKind.transientFailure,
@@ -165,8 +165,9 @@ class MdblistDiscoverSource {
   }
 
   Future<MdblistDiscoverPage> _loadLibrarySnapshot(
-    MdblistLibraryView view,
-  ) async {
+    MdblistLibraryView view, {
+    required bool force,
+  }) async {
     if (view == MdblistLibraryView.watchlist) {
       final result = await service.fetchWatchlist();
       return _pageFromRows(result);
@@ -180,12 +181,16 @@ class MdblistDiscoverSource {
     };
     if (view == MdblistLibraryView.dropped) {
       return _pageFromRows(
-        await service.fetchSyncSnapshot(bucket, mediaType: 'show'),
+        await service.fetchSyncSnapshot(
+          bucket,
+          mediaType: 'show',
+          forceRefresh: force,
+        ),
       );
     }
     final results = await Future.wait([
-      service.fetchSyncSnapshot(bucket, mediaType: 'movie'),
-      service.fetchSyncSnapshot(bucket, mediaType: 'show'),
+      service.fetchSyncSnapshot(bucket, mediaType: 'movie', forceRefresh: force),
+      service.fetchSyncSnapshot(bucket, mediaType: 'show', forceRefresh: force),
     ]);
     final movieResult = results[0];
     final showResult = results[1];

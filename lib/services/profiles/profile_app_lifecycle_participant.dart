@@ -23,6 +23,7 @@ import '../stremio_service.dart';
 import '../subtitle_font_service.dart';
 import '../text_brightness.dart';
 import '../trakt/trakt_service.dart';
+import '../watched_status_service.dart';
 import '../torbox_account_service.dart';
 import '../tv_hero_artwork_quality_controller.dart';
 import '../tvos_top_shelf_service.dart';
@@ -59,6 +60,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     MdblistCalendarService.instance.resetProfileScope();
     MdblistDiscoverSource.instance.resetProfileScope();
     MdblistSyncCoordinator.instance.resetProfileScope();
+    WatchedStatusService.instance.resetProfileScope();
     IptvService.instance.clearCache();
     XtreamCodesService.instance.clearCache();
     DiscoverPrefs.resetProfileScope();

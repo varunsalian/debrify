@@ -102,6 +102,40 @@ void main() {
   });
 
   group('HomeListRowsService.resolve', () {
+    test('MDBList refreshes only directories used by enabled rows', () async {
+      var mineCalls = 0;
+      var likedCalls = 0;
+      var topCalls = 0;
+      const liked = MdblistListChoice(id: 2, name: 'Liked', liked: true);
+      final service = HomeListRowsService(
+        traktLoad: (_) async => _empty,
+        traktUserLists: () async => const [],
+        simklLoad: (_) async => _empty,
+        mdblistMine: () async {
+          mineCalls++;
+          return const [];
+        },
+        mdblistLiked: () async {
+          likedCalls++;
+          return const [liked];
+        },
+        mdblistTop: () async {
+          topCalls++;
+          return const [];
+        },
+        mdblistLoad: (_) async =>
+            (items: [_meta('liked')], failed: false, complete: true),
+      );
+
+      final rows = await service.resolve(const [
+        (id: 'mdblistlist:liked:2', title: 'Saved title'),
+      ]);
+
+      expect(rows.single.title, 'Saved title');
+      expect((mineCalls, likedCalls, topCalls), (0, 1, 0));
+      expect(rows.single.mdblistList?.liked, isTrue);
+    });
+
     test(
       'MDBList rows retain group order and require a complete item walk',
       () async {

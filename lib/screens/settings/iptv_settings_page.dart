@@ -21,6 +21,9 @@ import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
+import '../../services/profiles/profile_authorization.dart';
+import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_collection_resource_facade.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'iptv_hidden_categories_page.dart';
 import 'iptv_style_page.dart';
@@ -959,15 +962,97 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _showSnackBar(statusMsg, isError: false);
   }
 
-  Future<void> _removePlaylist(IptvPlaylist playlist) =>
-      _runProfileAction(() => _removePlaylistForProfile(playlist));
+  Future<void> _removePlaylist(IptvPlaylist playlist) async {
+    try {
+      final authorization = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.iptv,
+      );
+      if (!mounted) return;
+      if (authorization == null) {
+        await _removePlaylistForProfile(playlist);
+      } else {
+        await authorization.runIfCurrent(
+          () => _removePlaylistForProfile(
+            playlist,
+            initiatingAuthorization: authorization,
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(
+        'Could not remove "${playlist.name}". Please try again.',
+        isError: true,
+      );
+    }
+  }
 
-  Future<void> _removePlaylistForProfile(IptvPlaylist playlist) async {
+  Future<void> _removePlaylistForProfile(
+    IptvPlaylist playlist, {
+    ProfileAsyncAuthorization? initiatingAuthorization,
+  }) async {
+    var revokeBorrowers = false;
+    final resourceId = playlist.connectionResourceId;
+    if (ProfileCollectionResourceFacade.active && resourceId != null) {
+      final borrowerCount =
+          await ProfileCollectionResourceFacade.ownedBorrowerCount(
+            resourceId: resourceId,
+            feature: ProfileFeature.manageConnections,
+          );
+      if (borrowerCount > 0) {
+        final registry = ProfileBootstrap.registry;
+        var authorization = await ProfileAuthorizationContext.capture(registry);
+        var actor = await authorization.validate(registry);
+        if (!actor.isAdmin || !actor.allows(ProfileFeature.manageProfiles)) {
+          if (mounted) {
+            _showSnackBar(
+              'Only an Admin can remove a source shared with other profiles.',
+              isError: true,
+            );
+          }
+          return;
+        }
+        if (!mounted) return;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (_) => IptvSharedSourceDeleteDialog(
+            playlistName: playlist.name,
+            borrowerCount: borrowerCount,
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        try {
+          await initiatingAuthorization?.runIfCurrent(() async {});
+        } on StateError {
+          _showSnackBar(
+            'The active profile changed. Nothing was removed.',
+            isError: true,
+          );
+          return;
+        }
+
+        // The dialog is an async authorization boundary. Capture and verify
+        // the visible actor again so an Admin confirmation cannot be replayed
+        // after a profile switch, lock, or role/policy change.
+        authorization = await ProfileAuthorizationContext.capture(registry);
+        actor = await authorization.validate(registry);
+        if (!actor.isAdmin || !actor.allows(ProfileFeature.manageProfiles)) {
+          _showSnackBar(
+            'Admin authorization changed. Nothing was removed.',
+            isError: true,
+          );
+          return;
+        }
+        revokeBorrowers = true;
+      }
+    }
+
     final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
     final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
       newPlaylists,
       forSettings: true,
+      revokeBorrowers: revokeBorrowers,
     );
     await IptvCatalogDb.archiveNumberingSource(playlist.id);
 
@@ -3192,6 +3277,92 @@ class _PlaylistEdit {
   final String? username; // Xtream only
   final String? password; // Xtream only
   final String? epgUrl;
+}
+
+/// Confirmation used when an Admin removes a source granted to other profiles.
+/// Public so its remote-key contract can be covered without bootstrapping the
+/// entire profile-backed settings page in a widget test.
+class IptvSharedSourceDeleteDialog extends StatefulWidget {
+  const IptvSharedSourceDeleteDialog({
+    super.key,
+    required this.playlistName,
+    required this.borrowerCount,
+  });
+
+  final String playlistName;
+  final int borrowerCount;
+
+  @override
+  State<IptvSharedSourceDeleteDialog> createState() =>
+      _SharedIptvSourceDeleteDialogState();
+}
+
+class _SharedIptvSourceDeleteDialogState
+    extends State<IptvSharedSourceDeleteDialog> {
+  final FocusNode _cancelFocusNode = FocusNode(
+    debugLabel: 'shared-iptv-delete-cancel',
+  );
+  final FocusNode _okFocusNode = FocusNode(debugLabel: 'shared-iptv-delete-ok');
+
+  @override
+  void dispose() {
+    _cancelFocusNode.dispose();
+    _okFocusNode.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyRepeatEvent && isActivateOrSpaceKey(event.logicalKey)) {
+      return KeyEventResult.handled;
+    }
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowLeft:
+        _cancelFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowRight:
+        _okFocusNode.requestFocus();
+        return KeyEventResult.handled;
+    }
+    if (!isActivateOrSpaceKey(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
+    Navigator.of(context).pop(_okFocusNode.hasFocus);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profiles = widget.borrowerCount == 1
+        ? '1 other profile'
+        : '${widget.borrowerCount} other profiles';
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: _onKeyEvent,
+      child: AlertDialog(
+        title: const Text('Remove shared source?'),
+        content: Text(
+          '"${widget.playlistName}" is shared with $profiles. Removing it '
+          'will also remove access to this source from those profiles.',
+        ),
+        actions: [
+          TextButton(
+            focusNode: _cancelFocusNode,
+            autofocus: true,
+            style: _dialogButtonFocusStyle,
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            focusNode: _okFocusNode,
+            style: _dialogButtonFocusStyle,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Edit an existing playlist: rename, change the EPG URL, and — by type — the

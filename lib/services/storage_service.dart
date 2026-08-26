@@ -539,12 +539,26 @@ class StorageService {
   static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
   static const String _quickPlayMovieRulesKey = 'quick_play_movie_rules_v2';
   static const String _quickPlaySeriesRulesKey = 'quick_play_series_rules_v2';
+  static const String _playButtonModeKey = 'play_button_mode';
 
   // Series auto-pin: on a series play with no pinned source, search packs
   // first (complete series → season pack), and pin whatever source plays so
   // subsequent episode plays go straight through the bound path.
+  /// LEGACY MIRROR ONLY. Written by [setQuickPlayRules] to carry
+  /// `preferSeriesPacks` for downgrade builds, and read once by
+  /// [_quickPlayRulesFromPrefs] to migrate pre-v2 profiles. Nothing on the live
+  /// playback path may read it — see [_seriesAutoPinOnPlayKey].
   static const String _autoBindSeriesPacksKey =
       'auto_bind_series_packs_on_play';
+
+  /// Whether a series play pins the source that played. Split out of
+  /// [_autoBindSeriesPacksKey] because that key doubles as the legacy mirror of
+  /// `preferSeriesPacks`: turning OFF "Prefer season packs" in Quick Play also
+  /// silently disabled all series auto-pinning, so Smart mode never found a pin
+  /// and Quick Play lost its fast path. Deliberately does NOT inherit the old
+  /// key's value — a `false` there was the packs toggle bleeding through, never
+  /// an auto-pin choice (no UI ever wrote it directly).
+  static const String _seriesAutoPinOnPlayKey = 'series_auto_pin_on_play';
 
   // Trakt settings
   static const String _traktAccessTokenKey = 'trakt_access_token';
@@ -671,16 +685,41 @@ class StorageService {
   /// Use the in-app DPAD keyboard for text fields on TV (TvTextField) instead
   /// of the system IME, which can't be navigated with the remote on many
   /// devices (flutter/flutter#177360 — Chromecast/Google TV, some
-  /// Philips/Samsung panels). On by default; the Settings toggle lets users on
-  /// unaffected devices opt back into the system keyboard.
+  /// Philips/Samsung panels). On by default on Android TV. Apple TV defaults
+  /// to its system keyboard; the Settings toggle still lets users opt into the
+  /// Debrify keyboard.
   ///
   /// [tvKeyboardEnabledCached] mirrors the stored value for synchronous widget
   /// builds — warmed at startup (main.dart) and kept in sync by the setter.
-  static bool tvKeyboardEnabledCached = true;
+  static bool tvKeyboardEnabledCached = !PlatformUtil.isTvOS;
 
-  static Future<bool> getTvKeyboardEnabled() async {
+  // Apple TV keyboard default, generation 1 (2026-08): disable the Debrify
+  // keyboard once for every profile, including profiles whose user explicitly
+  // enabled it in an older build. The generation is committed only after the
+  // new value, so a failed/interrupted write retries safely next launch. Once
+  // committed, [setTvKeyboardEnabled] is authoritative and later user changes
+  // are never overwritten.
+  static const int _currentTvosKeyboardDefaultGeneration = 1;
+  static const String _tvosKeyboardDefaultGenerationKey =
+      'tvos_keyboard_default_generation';
+
+  static Future<bool> getTvKeyboardEnabled({
+    @visibleForTesting bool? tvOs,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    tvKeyboardEnabledCached = prefs.getBool('tv_keyboard_enabled') ?? true;
+    final runningOnTvOs = tvOs ?? PlatformUtil.isTvOS;
+    final generation = prefs.getInt(_tvosKeyboardDefaultGenerationKey) ?? 0;
+    if (runningOnTvOs && generation < _currentTvosKeyboardDefaultGeneration) {
+      final disabled = await prefs.setBool('tv_keyboard_enabled', false);
+      if (disabled) {
+        await prefs.setInt(
+          _tvosKeyboardDefaultGenerationKey,
+          _currentTvosKeyboardDefaultGeneration,
+        );
+      }
+    }
+    tvKeyboardEnabledCached =
+        prefs.getBool('tv_keyboard_enabled') ?? !runningOnTvOs;
     return tvKeyboardEnabledCached;
   }
 
@@ -7613,6 +7652,32 @@ class StorageService {
 
   // Quick Play Cache Fallback Settings methods
 
+  /// What the Play button does — NOT what it looks like. The button keeps its
+  /// label, icon and position in every mode; only the behavior behind the press
+  /// changes:
+  ///
+  ///  * `quick`  — the shipped contract: reuse a pinned source, else search and
+  ///               auto-play the best match.
+  ///  * `smart`  — reuse a pinned source; when none is usable, hand the user the
+  ///               source list instead of auto-picking.
+  ///  * `always` — skip pinned sources entirely and always hand over the list.
+  ///
+  /// Absent key means `quick`, so existing installs are untouched. Only the
+  /// user's own Play press honors this ([TorrentPlaybackService.playFromSelection]
+  /// applies it solely when a picker opener is supplied) — binge auto-advance and
+  /// post-failure recovery keep auto-selecting, since re-prompting mid-chain is
+  /// exactly what those paths exist to avoid.
+  static Future<String> getPlayButtonMode() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_playButtonModeKey);
+    return (raw == 'smart' || raw == 'always') ? raw! : 'quick';
+  }
+
+  static Future<void> setPlayButtonMode(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_playButtonModeKey, value);
+  }
+
   /// Loads the per-content Quick Play profile. When no v2 profile exists,
   /// legacy filter/retry/series-pack preferences are folded into one without
   /// changing what the next play will do. Non-default legacy values are
@@ -7687,6 +7752,12 @@ class StorageService {
     // Keep old readers and downgrade builds safe. Media-specific values can't
     // be represented perfectly by the legacy global keys, so the active v2
     // playback path never reads these; they are compatibility mirrors only.
+    //
+    // That invariant was violated once: series auto-pinning read
+    // _autoBindSeriesPacksKey, so writing this mirror turned pinning off
+    // whenever the user turned off "Prefer season packs". Auto-pin now owns
+    // _seriesAutoPinOnPlayKey. Before adding a reader for any key below, check
+    // it is genuinely write-only on this path.
     await prefs.setBool(
       _quickPlayTryMultipleTorrentsKey,
       rules.tryNextOnFailure,
@@ -7708,6 +7779,11 @@ class StorageService {
     );
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayHonorsFiltersKey, true);
+    // The page's reset button reads as "reset this page", and this function
+    // already resets a non-per-tab key above, so the Play button mode goes back
+    // to the shipped Quick Play too. Leaving it would restore defaults while
+    // Play kept behaving differently.
+    await prefs.remove(_playButtonModeKey);
   }
 
   /// Get whether to try multiple torrents if first is not cached
@@ -7722,16 +7798,20 @@ class StorageService {
     await prefs.setBool(_quickPlayTryMultipleTorrentsKey, tryMultiple);
   }
 
-  /// Whether series plays should search packs first and pin whatever source
-  /// plays. Defaults ON. See [_autoBindSeriesPacksKey].
-  static Future<bool> getAutoBindSeriesPacksOnPlay() async {
+  /// Whether a series play pins the source that played, so later episodes go
+  /// straight through the bound path. Defaults ON.
+  ///
+  /// Independent of "Prefer season packs" — the two shared a key until this
+  /// split, which meant turning packs off silently killed pinning. See
+  /// [_seriesAutoPinOnPlayKey].
+  static Future<bool> getSeriesAutoPinOnPlay() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_autoBindSeriesPacksKey) ?? true;
+    return prefs.getBool(_seriesAutoPinOnPlayKey) ?? true;
   }
 
-  static Future<void> setAutoBindSeriesPacksOnPlay(bool enabled) async {
+  static Future<void> setSeriesAutoPinOnPlay(bool enabled) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_autoBindSeriesPacksKey, enabled);
+    await prefs.setBool(_seriesAutoPinOnPlayKey, enabled);
   }
 
   /// Get max number of torrents to try before giving up
@@ -8427,7 +8507,10 @@ class StorageService {
   /// virtual one that reached the preference would be restored AND injected
   /// on the next load — two entries with the same id, where id-only equality
   /// makes lookups resolve the stale copy.
-  static Future<void> setIptvPlaylists(List<IptvPlaylist> playlists) async {
+  static Future<void> setIptvPlaylists(
+    List<IptvPlaylist> playlists, {
+    bool revokeBorrowers = false,
+  }) async {
     if (ProfileCollectionResourceFacade.active) {
       final stored = playlists.where((playlist) => !playlist.isVirtual);
       await ProfileCollectionResourceFacade.replace(
@@ -8451,6 +8534,7 @@ class StorageService {
               sourceResourceId: playlist.connectionResourceId,
             ),
         ],
+        revokeBorrowers: revokeBorrowers,
       );
       return;
     }
@@ -8475,11 +8559,12 @@ class StorageService {
   static Future<List<IptvPlaylist>> setIptvPlaylistsAndReload(
     List<IptvPlaylist> playlists, {
     required bool forSettings,
+    bool revokeBorrowers = false,
   }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
         ? ProfileRuntime.scope.value
         : null;
-    await setIptvPlaylists(playlists);
+    await setIptvPlaylists(playlists, revokeBorrowers: revokeBorrowers);
     if (expectedScope != null &&
         (!ProfileCollectionResourceFacade.active ||
             ProfileRuntime.scope.value != expectedScope)) {
@@ -9385,7 +9470,7 @@ class StorageService {
   /// Clears synchronous mirrors before a profile activation is published.
   /// The target bootstrap immediately warms them from its captured scope.
   static void resetProfileCaches() {
-    tvKeyboardEnabledCached = true;
+    tvKeyboardEnabledCached = !PlatformUtil.isTvOS;
     tvHomeStyleCached = 'canvas';
     debrifyTvStyleCached = 'grid';
     detailPageStyleCached = kDetailPageStyleDefault;

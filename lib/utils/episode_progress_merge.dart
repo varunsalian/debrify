@@ -105,6 +105,33 @@ bool hasActiveTraktEpisodeRewatch({
 typedef EpisodeCoordinate = ({int season, int episode});
 typedef EpisodeResumeTarget = ({int season, int episode, bool started});
 
+/// Whether a reconciled resume candidate should move to its next episode.
+///
+/// Tracker sessions at the completion threshold are considered done. A local
+/// checkpoint at the same percentage is only advanced when it was explicitly
+/// finished or a tracker has already reached a later episode. That latter
+/// evidence may come from any tracker; limiting it to one provider makes a
+/// newer near-complete local checkpoint incorrectly pull Resume behind the
+/// tracker-backed Continue Watching card.
+bool shouldAdvanceEpisodeResume({
+  required EpisodeCoordinate candidate,
+  required bool finished,
+  required double? progress,
+  required bool isTracker,
+  Iterable<EpisodeCoordinate> trackerFrontiers = const [],
+  double completionThreshold = 80.0,
+}) {
+  if (finished) return true;
+  if ((progress ?? 0.0) < completionThreshold) return false;
+  if (isTracker) return true;
+  return trackerFrontiers.any(
+    (frontier) =>
+        frontier.season > candidate.season ||
+        (frontier.season == candidate.season &&
+            frontier.episode > candidate.episode),
+  );
+}
+
 /// Add the semantic distinction the detail CTA needs to an up-next coordinate.
 ///
 /// A brand-new show still has a valid target (usually S1E1), but that target is

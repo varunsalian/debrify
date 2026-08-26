@@ -192,21 +192,38 @@ class TorrentPlaybackService {
     // involved, so the advance goes bound-sources → addon-stream flow.
     if (torrent.streamType == StreamType.directUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
+      final resolverProvider = await _defaultConfiguredProvider();
+      if (!context.mounted) return;
       final fetcher = meta?.contentType == 'movie'
           ? movieFetcherFor(meta: meta)
           : seriesFetcherFor(meta: meta, episodesFetched: sources != null);
+      // Even a one-row launch carries its source descriptor into the player:
+      // the validated-source callback is deliberately downstream of the
+      // decoder gate, so this binds the link that ACTUALLY rendered rather
+      // than the row the user merely selected.
+      final launchSources = sources == null || sources.isEmpty
+          ? <Torrent>[torrent]
+          : sources;
+      final launchSourceIndex = sources == null || sources.isEmpty
+          ? 0
+          : sourceIndex.clamp(0, launchSources.length - 1);
       await VideoPlayerLauncher.push(
         context,
         _playerArgs(
           videoUrl: torrent.directUrl!,
           title: torrent.displayTitle,
           subtitle: torrent.source.isNotEmpty ? torrent.source : null,
-          stremioSources: sources,
-          stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
-          resolveSourceToPlaylist:
-              ((sources != null && sources.length > 1) || fetcher != null)
+          stremioSources: launchSources,
+          stremioCurrentSourceIndex: launchSourceIndex,
+          resolveSourceToPlaylist: (launchSources.length > 1 || fetcher != null)
               ? _lazyProviderResolver()
               : null,
+          startupFailoverEnabled: true,
+          startupResolverProvider: resolverProvider,
+          onStremioSourceCommitted: _validatedLaunchCommitter(
+            resolverProvider ?? SeriesSource.addonDirectService,
+            meta,
+          ),
           seriesSourceFetcher: fetcher,
           meta: meta,
         ),
@@ -220,10 +237,12 @@ class TorrentPlaybackService {
     // directUrl.
     if (torrent.streamType == StreamType.externalUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
-      if (!await ProfilePolicyGuard.allows(ProfileFeature.externalPlayers)) {
-        if (context.mounted) {
-          _snack(context, 'External players are disabled for this profile.');
-        }
+      final externalAllowed = await ProfilePolicyGuard.allows(
+        ProfileFeature.externalPlayers,
+      );
+      if (!context.mounted) return;
+      if (!externalAllowed) {
+        _snack(context, 'External players are disabled for this profile.');
         return;
       }
       final uri = Uri.tryParse(torrent.directUrl!);
@@ -450,9 +469,10 @@ class TorrentPlaybackService {
               : null,
           startupFailoverEnabled: true,
           startupResolverProvider: resolverProvider,
-          onStremioSourceCommitted: resolverProvider == null
-              ? _lazySourceCommitter(meta)
-              : _sourceCommitter(resolverProvider, meta),
+          onStremioSourceCommitted: _validatedLaunchCommitter(
+            resolverProvider ?? SeriesSource.addonDirectService,
+            meta,
+          ),
           seriesSourceFetcher: seriesFetcher,
           meta: meta,
         );
@@ -1137,6 +1157,16 @@ class TorrentPlaybackService {
     // Skip the provider picker and use this provider directly — set by the
     // next-episode auto-advance so a binge never re-prompts mid-chain.
     String? preferredProvider,
+    // A player-level failure has already exhausted the applicable saved
+    // sources. Recovery re-enters below the binding gate so the same failed
+    // source cannot launch again in a loop.
+    bool skipBoundSources = false,
+    // Hands the user the manual source list for THIS selection instead of
+    // auto-picking. Supplying it is what opts a call site into the user's
+    // "Play button opens" preference (see [StorageService.getPlayButtonMode]):
+    // only a real Play press passes an opener, so binge auto-advance and
+    // post-failure recovery keep their existing no-prompt contract for free.
+    VoidCallback? openSourcePicker,
   }) async {
     final label = meta.title ?? '';
     if (imdbId.isEmpty) {
@@ -1151,12 +1181,42 @@ class TorrentPlaybackService {
       onCancel: () => cancelled = true,
     );
     late final QuickPlayRules rules;
+    // 'quick' (the default) leaves every path below exactly as it shipped. Read
+    // under the overlay, next to the rules, so the default path's time-to-overlay
+    // is unchanged.
+    var playMode = 'quick';
     try {
       rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+      if (openSourcePicker != null) {
+        playMode = await StorageService.getPlayButtonMode();
+      }
       if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
     } catch (_) {
       resolving.dismiss();
       rethrow;
+    }
+    // "Always ask" wants the list regardless of what is pinned, so it enters
+    // below the binding gate the same way failure-recovery does.
+    final skipBound = skipBoundSources || playMode == 'always';
+    // True when this press has been handed to the manual source list and the
+    // caller must stop. Reads the callback through a local so neither hand-off
+    // site needs a `!`, which would be a latent trap if [playMode] ever gained
+    // another writer.
+    final opener = openSourcePicker;
+    bool handedToPicker() {
+      if (playMode == 'quick' || opener == null) return false;
+      // The last link in the [SeriesResume] chain: whatever episode arrives
+      // here is the one the manual list opens on. Compare against the
+      // `play-launch` line — if they differ, the selection was rebuilt between
+      // the two; if they agree but disagree with `label-resolve-result`, the
+      // label and the press reconciled to different answers.
+      debugPrint(
+        '[SeriesResume] picker-handoff title="$label" mode=$playMode '
+        'target=S${season}E$episode metaTarget=S${meta.season}E${meta.episode}',
+      );
+      resolving.dismiss();
+      if (context.mounted && !cancelled) opener();
+      return true;
     }
     var activeRules = rules;
     if (!context.mounted || cancelled) {
@@ -1182,6 +1242,16 @@ class TorrentPlaybackService {
         );
         return;
       }
+      // Kitsu/tmdb-only catalogs are a real slice of the library, so the picker
+      // modes have to apply here too — otherwise "Always show sources" silently
+      // does nothing for anime. The manual list handles a non-`tt` id fine: it
+      // passes the id straight to searchByImdbWithStremio, whose addon half
+      // accepts it (the engine half just returns nothing). Handing over BEFORE
+      // the addon auto-play costs no pinned-source reuse — this branch already
+      // returns above the binding gate, so non-`tt` ids never had any. The
+      // torrents-only guard stays ahead of this: an empty picker would be a
+      // worse answer than the explicit message.
+      if (handedToPicker()) return;
       resolving.dismiss();
       await _playAddonStream(
         context,
@@ -1200,36 +1270,48 @@ class TorrentPlaybackService {
     // Bound-source reuse: if the user pinned a source for this title, play it
     // directly and skip the torrent search entirely. A series binding is only
     // usable when a concrete season+episode is requested (to land in the pack).
-    late final List<SeriesSource> bound;
-    try {
-      bound = await SeriesSourceService.getSources(imdbId);
-    } catch (_) {
-      resolving.dismiss();
-      rethrow;
+    if (!skipBound) {
+      late final List<SeriesSource> bound;
+      try {
+        bound = await SeriesSourceService.getSources(imdbId);
+      } catch (_) {
+        resolving.dismiss();
+        rethrow;
+      }
+      if (!context.mounted || cancelled) {
+        resolving.dismiss();
+        return;
+      }
+      // A series binding needs a concrete season+episode to land inside the
+      // pack. Gate on the same fields _launch forwards to the player (meta.*),
+      // so the requested episode reaches the existing exact-episode checks.
+      final boundUsable =
+          bound.isNotEmpty &&
+          (isMovie || (meta.season != null && meta.episode != null));
+      if (boundUsable) {
+        resolving.dismiss();
+        final played = await _playViaBound(
+          context,
+          imdbId,
+          bound,
+          label: label,
+          meta: meta,
+          preferredProvider: preferredProvider,
+        );
+        if (played) return;
+        if (!context.mounted) return;
+        // Bound source unplayable → fall through to a normal search below.
+      }
     }
-    if (!context.mounted || cancelled) {
-      resolving.dismiss();
-      return;
-    }
-    // A series binding needs a concrete season+episode to land inside the pack.
-    // Gate on the same fields _launch forwards to the player (meta.*), so the
-    // requested episode is guaranteed to reach findOriginalIndexBySeasonEpisode.
-    final boundUsable =
-        bound.isNotEmpty &&
-        (isMovie || (meta.season != null && meta.episode != null));
-    if (boundUsable) {
-      resolving.dismiss();
-      final played = await _playViaBound(
-        context,
-        imdbId,
-        bound,
-        label: label,
-        meta: meta,
-      );
-      if (played) return;
-      if (!context.mounted) return;
-      // Bound source unplayable → fall through to a normal search below.
-    }
+
+    // Everything above this line is the pinned-source contract; everything below
+    // it auto-picks. Both non-default modes stop here and hand the user the list
+    // instead — reaching this point already means "no pinned source played",
+    // whether because none was pinned, the pin didn't cover this episode, or the
+    // pin was dead. That makes the branch correct by construction: it needs no
+    // separate notion of pin eligibility, which a title-level count could not
+    // have answered for a series pinned only as single episodes.
+    if (handedToPicker()) return;
 
     // Addon-leading, exact-episode routes search addons before asking the user
     // to choose a debrid provider. Direct addon links need no provider at all;
@@ -3293,6 +3375,7 @@ class TorrentPlaybackService {
     List<SeriesSource> sources, {
     required String label,
     required PlaybackMeta meta,
+    String? preferredProvider,
   }) async {
     final usable = sources
         .where((s) => _boundProviderSupported(s.debridService))
@@ -3322,15 +3405,23 @@ class TorrentPlaybackService {
     // last-source hints in _tryPlayFromBoundSource*).
     String? fallbackHint;
 
-    for (final source in usable) {
+    for (
+      var sourcePosition = 0;
+      sourcePosition < usable.length;
+      sourcePosition++
+    ) {
+      final source = usable[sourcePosition];
+      final remainingSources = usable.sublist(sourcePosition + 1);
       if (cancel.cancelled) {
         return true; // Cancel already dismissed the overlay.
       }
 
       // Addon-direct pins store provenance, never the expiring URL. Resolve
       // the current movie/episode endpoint now and launch the freshly returned
-      // link. If the addon/config/stream disappeared, keep the pin and try the
-      // next source; a transient addon outage should not destroy user intent.
+      // link. A failed refresh or validation is attempt-scoped: addon,
+      // network, and CDN availability do not prove this durable profile is
+      // invalid. The loop still skips it for this play, and recovery bypasses
+      // bound sources before fresh search, so retaining it cannot loop now.
       if (source.isAddonDirect) {
         fallbackHint =
             'Saved direct source is unavailable. Falling back to search.';
@@ -3363,7 +3454,9 @@ class TorrentPlaybackService {
                 lenient: true,
               );
               if (cancel.cancelled) return true;
-              if (!alive) continue;
+              if (!alive) {
+                continue;
+              }
             }
             overlay.setStage(PlayLoadStage.starting);
             if (!context.mounted) {
@@ -3387,6 +3480,14 @@ class TorrentPlaybackService {
                   seriesFetcherFor(meta: meta) ?? movieFetcherFor(meta: meta),
               overlay: overlay,
               startupFailoverEnabled: true,
+              onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
+                context,
+                imdbId,
+                remainingSources,
+                label: label,
+                meta: meta,
+                preferredProvider: preferredProvider,
+              ),
             );
             return true;
           }
@@ -3436,6 +3537,14 @@ class TorrentPlaybackService {
             meta: meta,
             overlay: overlay,
             startupFailoverEnabled: true,
+            onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
+              context,
+              imdbId,
+              remainingSources,
+              label: label,
+              meta: meta,
+              preferredProvider: preferredProvider,
+            ),
           );
           return true;
         }
@@ -3546,6 +3655,14 @@ class TorrentPlaybackService {
                     movieFetcherFor(meta: meta, provider: prov)),
           overlay: overlay,
           startupFailoverEnabled: true,
+          onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
+            context,
+            imdbId,
+            remainingSources,
+            label: label,
+            meta: meta,
+            preferredProvider: preferredProvider,
+          ),
         );
         return true;
       }
@@ -3559,6 +3676,43 @@ class TorrentPlaybackService {
     // to a normal search.
     if (fallbackHint != null && context.mounted) _snack(context, fallbackHint);
     return false;
+  }
+
+  /// Continue after a saved source resolved successfully but the real player
+  /// rejected it before startup committed. [remainingSources] preserves the
+  /// saved priority order and [_playViaBound] keeps its exact-episode guards;
+  /// only after those candidates fail do we re-enter search below the binding
+  /// gate so the rejected source cannot loop.
+  static Future<void> _recoverAfterBoundStartupFailure(
+    BuildContext context,
+    String imdbId,
+    List<SeriesSource> remainingSources, {
+    required String label,
+    required PlaybackMeta meta,
+    String? preferredProvider,
+  }) async {
+    if (!context.mounted) return;
+    if (remainingSources.isNotEmpty) {
+      final played = await _playViaBound(
+        context,
+        imdbId,
+        remainingSources,
+        label: label,
+        meta: meta,
+        preferredProvider: preferredProvider,
+      );
+      if (played || !context.mounted) return;
+    }
+    await playFromSelection(
+      context,
+      imdbId: imdbId,
+      isMovie: meta.contentType == 'movie',
+      season: meta.season,
+      episode: meta.episode,
+      meta: meta,
+      preferredProvider: preferredProvider,
+      skipBoundSources: true,
+    );
   }
 
   /// Pin [torrent] as the playback source for [imdbId]. Adds it to the chosen
@@ -3650,27 +3804,14 @@ class TorrentPlaybackService {
       _snack(context, 'No IMDb match — can\'t pin a source.');
       return false;
     }
-    if (!torrent.isDirectStream ||
-        torrent.stremioAddonId == null ||
-        torrent.stremioAddonId!.isEmpty ||
-        torrent.stremioAddonKey == null ||
-        torrent.stremioAddonKey!.isEmpty ||
-        torrent.stremioStreamKey == null ||
-        torrent.stremioStreamKey!.isEmpty) {
+    final source = _durableBindingForSource(
+      torrent,
+      SeriesSource.addonDirectService,
+    );
+    if (source == null || !source.isAddonDirect) {
       _snack(context, 'This direct stream cannot be refreshed by its addon.');
       return false;
     }
-    final source = SeriesSource(
-      torrentHash: '',
-      torrentName: torrent.name,
-      debridService: SeriesSource.addonDirectService,
-      debridTorrentId: '',
-      boundAt: DateTime.now().millisecondsSinceEpoch,
-      addonId: torrent.stremioAddonId,
-      addonKey: torrent.stremioAddonKey,
-      streamKey: torrent.stremioStreamKey,
-      streamIndex: torrent.stremioStreamIndex ?? 0,
-    );
     if (isMovie) {
       await SeriesSourceService.setSources(imdbId, [source]);
     } else {
@@ -4170,6 +4311,7 @@ class TorrentPlaybackService {
     bool startupFailoverEnabled = false,
     String? startupResolverProvider,
     Future<void> Function(Torrent)? onStremioSourceCommitted,
+    Future<void> Function()? onStartupSourcesExhausted,
     SeriesSourceFetcher? seriesSourceFetcher,
     PlaybackMeta? meta,
     String? rdTorrentId,
@@ -4188,6 +4330,7 @@ class TorrentPlaybackService {
     startupFailoverEnabled: startupFailoverEnabled,
     startupResolverProvider: startupResolverProvider,
     onStremioSourceCommitted: onStremioSourceCommitted,
+    onStartupSourcesExhausted: onStartupSourcesExhausted,
     seriesSourceFetcher: seriesSourceFetcher,
     contentImdbId: meta?.imdbId,
     contentType: meta?.contentType,
@@ -4258,11 +4401,12 @@ class TorrentPlaybackService {
   }
 
   /// Old-screen parity: playing a catalog MOVIE remembers the just-played
-  /// torrent as that title's single bound source (override), so the catalog
-  /// flips "Select Source" → "Edit Source" and the next play reuses it. Series
-  /// never auto-bind (they accumulate an explicit priority list via "Pin as
-  /// source"); keyword play (meta == null) and non-IMDb / on-device plays don't
-  /// bind either. Best-effort — a storage hiccup must never break playback.
+  /// validated source as that title's single bound source (override), so the
+  /// catalog flips "Select Source" → "Edit Source" and the next play reuses
+  /// it.
+  /// Series use the accumulating path below; keyword play (meta == null) and
+  /// non-IMDb / on-device plays don't bind either. Best-effort — a storage
+  /// hiccup must never break playback.
   static Future<void> _autoBindMovieOnPlay(
     PlaybackMeta? meta,
     Torrent? winner,
@@ -4272,34 +4416,34 @@ class TorrentPlaybackService {
         meta.contentType != 'movie' ||
         meta.imdbId == null ||
         meta.imdbId!.isEmpty ||
-        winner == null ||
-        winner.infohash.isEmpty ||
-        provider == SeriesSource.localService ||
-        provider == SeriesSource.addonDirectService) {
+        winner == null) {
       return;
     }
+    final source = _durableBindingForSource(winner, provider);
+    if (source == null) return;
     try {
-      await SeriesSourceService.setSources(meta.imdbId!, [
-        SeriesSource(
-          torrentHash: winner.infohash,
-          torrentName: winner.name,
-          debridService: storedProviderKey(provider),
-          debridTorrentId: '',
-          boundAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      ]);
+      await SeriesSourceService.setSources(meta.imdbId!, [source]);
     } catch (_) {}
   }
 
   /// Series counterpart of [_autoBindMovieOnPlay] (on by default via the
-  /// series auto-pin setting): pin whatever torrent a series play resolved to
+  /// series auto-pin setting): pin whatever source a series play resolved to
   /// — a pack from the pack-first search or a single episode from the fallback
-  /// — so subsequent plays go straight through the bound path. A same-hash
-  /// binding is refreshed in place (keeps its priority); a new single-episode
+  /// — so subsequent plays go straight through the bound path. A replayed
+  /// binding is refreshed and promoted to primary; a new single-episode
   /// binding is capped so a pack-less show binged over time can't grow the
-  /// list without bound (older singles are evicted; packs and manually-pinned
-  /// sources are never touched). Never binds addon direct streams or local
-  /// sources.
+  /// list without bound (older singles are evicted; packs are never touched).
+  /// Refreshable addon-direct sources participate without persisting their
+  /// signed/temporary URL, and count toward that cap like any other single —
+  /// exempting them left the list unbounded. A manually pinned SINGLE is
+  /// therefore evictable once 20 accumulate for one series; there is no stored
+  /// manual/auto flag to tell them apart, and an unbounded list is the worse
+  /// failure. Local sources stay opt-in.
+  ///
+  /// Gated on [StorageService.getSeriesAutoPinOnPlay] — which is NOT the
+  /// "Prefer season packs" toggle. The two shared a preference key until it was
+  /// split; turning packs off used to disable pinning here, which left Smart
+  /// mode permanently unable to find a pin.
   static const int _maxAutoBoundSingles = 20;
 
   static Future<void> _autoBindSeriesOnPlay(
@@ -4318,26 +4462,17 @@ class TorrentPlaybackService {
         meta.season == null ||
         meta.episode == null ||
         winner == null ||
-        winner.infohash.isEmpty ||
-        winner.streamType != StreamType.torrent ||
-        provider == SeriesSource.localService ||
-        provider == SeriesSource.addonDirectService ||
         // Consistent with the pack-first block: the whole auto-pin feature is
         // off for PikPak (its bindings re-queue real downloads on each replay),
         // so a stale-true pref after switching default to PikPak stays inert.
-        provider == 'pikpak') {
+        (winner.streamType == StreamType.torrent && provider == 'pikpak')) {
       return;
     }
+    final source = _durableBindingForSource(winner, provider);
+    if (source == null) return;
     try {
-      if (!await StorageService.getAutoBindSeriesPacksOnPlay()) return;
+      if (!await StorageService.getSeriesAutoPinOnPlay()) return;
       final imdbId = meta.imdbId!;
-      final source = SeriesSource(
-        torrentHash: winner.infohash,
-        torrentName: winner.name,
-        debridService: storedProviderKey(provider),
-        debridTorrentId: '',
-        boundAt: DateTime.now().millisecondsSinceEpoch,
-      );
       final list = List<SeriesSource>.from(
         await SeriesSourceService.getSources(imdbId),
       );
@@ -4345,20 +4480,24 @@ class TorrentPlaybackService {
         (s) => s.bindingKey == source.bindingKey,
       );
       if (existingIdx >= 0) {
-        // Same source replayed — refresh in place, keep priority.
-        list[existingIdx] = source;
+        // The source that actually rendered becomes primary, while every
+        // other series fallback remains available.
+        list.removeAt(existingIdx);
       } else {
         // A NEW single-episode binding: bound how many auto-accumulate so a
-        // pack-less show doesn't grow the list forever. Packs and any
-        // non-single (e.g. manually pinned) sources are never evicted.
+        // pack-less show doesn't grow the list forever. Packs and anything else
+        // that isn't a single episode are never evicted.
+        //
+        // Addon-direct singles count here too. Exempting them left the list
+        // unbounded, and an unstable identity (see SeriesSource.bindingKey)
+        // appended a fresh one on every play. The identity is fixed now; this
+        // cap is the backstop for whatever destabilises it next. The cost is
+        // that a manually pinned single is evictable once 20 accumulate —
+        // there is no stored manual/auto flag to separate them.
         if (_singleEpisodeOf(source.torrentName) != null) {
           final singles =
               list
-                  .where(
-                    (s) =>
-                        !s.isAddonDirect &&
-                        _singleEpisodeOf(s.torrentName) != null,
-                  )
+                  .where((s) => _singleEpisodeOf(s.torrentName) != null)
                   .toList()
                 ..sort((a, b) => a.boundAt.compareTo(b.boundAt));
           final overflow = singles.length + 1 - _maxAutoBoundSingles;
@@ -4370,10 +4509,58 @@ class TorrentPlaybackService {
             list.removeWhere((s) => drop.contains(s.bindingKey));
           }
         }
-        list.add(source);
       }
+      list.insert(0, source);
       await SeriesSourceService.setSources(imdbId, list);
     } catch (_) {}
+  }
+
+  /// Converts an eligible playback source into its durable binding. Automatic
+  /// callers invoke this only after decoder validation. Direct streams keep
+  /// only opaque addon provenance so the next play re-queries a fresh URL;
+  /// arbitrary/external links and local rows cannot be auto-bound.
+  static SeriesSource? _durableBindingForSource(
+    Torrent source,
+    String provider,
+  ) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (source.streamType == StreamType.directUrl) {
+      final addonId = source.stremioAddonId;
+      final addonKey = source.stremioAddonKey;
+      final streamKey = source.stremioStreamKey;
+      if (addonId == null ||
+          addonId.isEmpty ||
+          addonKey == null ||
+          addonKey.isEmpty ||
+          streamKey == null ||
+          streamKey.isEmpty) {
+        return null;
+      }
+      return SeriesSource(
+        torrentHash: '',
+        torrentName: source.name,
+        debridService: SeriesSource.addonDirectService,
+        debridTorrentId: '',
+        boundAt: now,
+        addonId: addonId,
+        addonKey: addonKey,
+        streamKey: streamKey,
+        streamIndex: source.stremioStreamIndex ?? 0,
+      );
+    }
+    if (source.streamType != StreamType.torrent ||
+        source.infohash.isEmpty ||
+        provider == SeriesSource.localService ||
+        provider == SeriesSource.addonDirectService) {
+      return null;
+    }
+    return SeriesSource(
+      torrentHash: source.infohash,
+      torrentName: source.name,
+      debridService: storedProviderKey(provider),
+      debridTorrentId: '',
+      boundAt: now,
+    );
   }
 
   /// Launch the player. Passes the full source list + a resolver (so the player
@@ -4397,6 +4584,7 @@ class TorrentPlaybackService {
     // closing the detail-screen flash between "loading" and "playing".
     PipelineLoadingOverlay? overlay,
     bool startupFailoverEnabled = false,
+    Future<void> Function()? onStartupSourcesExhausted,
   }) async {
     // Once push() takes the handoff callback the LAUNCHER owns the dismissal
     // (player-visible time, or its own always-fires safety net); the finally
@@ -4473,6 +4661,7 @@ class TorrentPlaybackService {
                 provider == SeriesSource.addonDirectService
             ? _lazySourceCommitter(meta)
             : _validatedLaunchCommitter(provider, meta),
+        onStartupSourcesExhausted: onStartupSourcesExhausted,
         seriesSourceFetcher: seriesFetcher,
         meta: meta,
         rdTorrentId: r.rdTorrentId,
@@ -4748,57 +4937,80 @@ class TorrentPlaybackService {
     };
   }
 
-  /// Commit hook paired with the side-effect-free resolver. The players call
-  /// this only after a candidate has decoded and passed provider-slate checks.
-  static Future<void> Function(Torrent) _sourceCommitter(
-    String provider,
-    PlaybackMeta? meta,
-  ) {
-    return (Torrent t) async {
-      await _rebindOnSourceSwitch(meta, t, provider);
-    };
-  }
-
   /// The first validated candidate owns the normal play-time auto-binding;
-  /// later commits are explicit in-player switches and use replacement-only
-  /// rebinding. This keeps both behaviors transactional without allowing a
-  /// manual switch to create a binding for a title that was never pinned.
+  /// later commits are explicit in-player switches. Commits are serialized so
+  /// rapid successful switches cannot let an older SharedPreferences write
+  /// land after a newer one. Movies replace their sole binding; series retain
+  /// prior bindings and promote the newly validated source.
   static Future<void> Function(Torrent) _validatedLaunchCommitter(
     String provider,
     PlaybackMeta? meta,
   ) {
     var initialCommitPending = true;
-    return (Torrent t) async {
+    var tail = Future<void>.value();
+    return (Torrent t) {
+      final isInitial = initialCommitPending;
       if (initialCommitPending) {
         initialCommitPending = false;
-        await _autoBindMovieOnPlay(meta, t, provider);
-        await _autoBindSeriesOnPlay(meta, t, provider);
-        return;
       }
-      await _rebindOnSourceSwitch(meta, t, provider);
+      final commit = tail.then((_) async {
+        var bindingProvider = provider;
+        if (t.streamType == StreamType.torrent &&
+            bindingProvider == SeriesSource.addonDirectService) {
+          bindingProvider =
+              await _defaultConfiguredProvider() ?? bindingProvider;
+        }
+        if (isInitial) {
+          await _autoBindMovieOnPlay(meta, t, bindingProvider);
+          await _autoBindSeriesOnPlay(meta, t, bindingProvider);
+          return;
+        }
+        await _rebindOnSourceSwitch(meta, t, bindingProvider);
+      });
+      // Keep the chain usable even though persistence is deliberately
+      // best-effort. Return the original task so the bridge still observes a
+      // failure if a future implementation stops swallowing storage errors.
+      tail = commit.catchError((_) {});
+      return commit;
     };
   }
+
+  /// Public only for persistence regression tests; production players receive
+  /// the same callback through [_validatedLaunchCommitter].
+  @visibleForTesting
+  static Future<void> Function(Torrent) validatedSourceCommitterForTesting(
+    String provider,
+    PlaybackMeta? meta,
+  ) => _validatedLaunchCommitter(provider, meta);
 
   /// Commit hook for launches whose resolver chooses a provider lazily.
   static Future<void> Function(Torrent) _lazySourceCommitter(
     PlaybackMeta? meta,
   ) {
-    return (Torrent t) async {
-      final provider = await _defaultConfiguredProvider();
-      if (provider == null) return;
-      await _rebindOnSourceSwitch(meta, t, provider);
+    var tail = Future<void>.value();
+    return (Torrent t) {
+      final commit = tail.then((_) async {
+        if (t.streamType == StreamType.directUrl) {
+          await _rebindOnSourceSwitch(meta, t, SeriesSource.addonDirectService);
+          return;
+        }
+        final provider = await _defaultConfiguredProvider();
+        if (provider == null) return;
+        await _rebindOnSourceSwitch(meta, t, provider);
+      });
+      tail = commit.catchError((_) {});
+      return commit;
     };
   }
 
   /// Keep a title's pinned source in sync when the user switches sources in
-  /// the player: the chosen [switched] source becomes the binding, replacing
-  /// the one being switched away from, so the next play uses what the user
-  /// actually picked. Only syncs a title that ALREADY has a binding — never
-  /// creates one from a switch — and skips non-torrent / local sources.
+  /// the player. A validated switch can update or create the binding; local and
+  /// non-refreshable sources are skipped.
   ///
   /// A movie has a single bound source, so it's a straight replace (matching
-  /// [_autoBindMovieOnPlay]); a series keeps its other fallbacks and just
-  /// promotes the chosen source to primary. PikPak is excluded for series
+  /// [_autoBindMovieOnPlay]). A series keeps ALL other fallbacks and promotes
+  /// the chosen source to primary; switching never replaces a series pin.
+  /// PikPak torrents are excluded for series
   /// (matching the series auto-pin feature) but allowed for movies (matching
   /// [_autoBindMovieOnPlay]).
   static Future<void> _rebindOnSourceSwitch(
@@ -4809,44 +5021,40 @@ class TorrentPlaybackService {
     if (meta == null ||
         meta.imdbId == null ||
         meta.imdbId!.isEmpty ||
-        switched.infohash.isEmpty ||
-        switched.streamType != StreamType.torrent ||
-        provider == SeriesSource.localService) {
+        switched.streamType == StreamType.externalUrl) {
       return;
     }
     final isMovie = meta.contentType == 'movie';
     // A series needs a concrete episode, and its auto-pin feature is off for
     // PikPak; movies have neither constraint.
     if (!isMovie &&
-        (meta.season == null || meta.episode == null || provider == 'pikpak')) {
+        (meta.season == null ||
+            meta.episode == null ||
+            (switched.streamType == StreamType.torrent &&
+                provider == 'pikpak'))) {
       return;
     }
+    final source = _durableBindingForSource(switched, provider);
+    if (source == null) return;
     try {
       final imdbId = meta.imdbId!;
       final existing = await SeriesSourceService.getSources(imdbId);
-      // Only keep an existing binding in sync; never create one from a switch.
-      if (existing.isEmpty) return;
-      final source = SeriesSource(
-        torrentHash: switched.infohash,
-        torrentName: switched.name,
-        debridService: storedProviderKey(provider),
-        debridTorrentId: '',
-        boundAt: DateTime.now().millisecondsSinceEpoch,
-      );
       if (isMovie) {
         // Single bound source — replace it with the chosen one.
         await SeriesSourceService.setSources(imdbId, [source]);
         return;
       }
-      // Series: promote the chosen source to primary, replacing the one being
-      // switched away from, but keep any other fallbacks. Re-selecting the
-      // current primary leaves the rest of the list intact.
-      final currentPrimaryKey = existing.first.bindingKey;
+      // A switch after an unpersistable initial row can be the first bind. The
+      // existing series auto-pin preference still owns that opt-in boundary;
+      // once a list exists, a successful switch keeps it in sync regardless.
+      if (existing.isEmpty &&
+          !await StorageService.getSeriesAutoPinOnPlay()) {
+        return;
+      }
+      // Series: promote the winner but retain the previous primary and every
+      // other fallback. Re-selecting an existing entry just moves/refreshes it.
       final list = List<SeriesSource>.from(existing)
         ..removeWhere((s) => s.bindingKey == source.bindingKey);
-      if (currentPrimaryKey != source.bindingKey && list.isNotEmpty) {
-        list.removeAt(0);
-      }
       list.insert(0, source);
       await SeriesSourceService.setSources(imdbId, list);
     } catch (_) {}

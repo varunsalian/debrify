@@ -70,6 +70,36 @@ class WatchedStatusService extends ChangeNotifier {
     }
   }
 
+  /// Force one fresh snapshot for an explicitly activated/unlocked profile.
+  /// Marking it started first prevents the first visible badge from queuing a
+  /// second identical refresh while this one is still in flight.
+  void refreshForActiveProfile() {
+    _started = true;
+    refresh();
+  }
+
+  /// Drop profile-owned snapshots so the next visible badge starts exactly
+  /// one refresh for the newly active profile. Any older async pass is made
+  /// unable to publish by the generation bump.
+  void resetProfileScope() {
+    _generation++;
+    _localGeneration++;
+    _started = false;
+    _refreshPending = false;
+    _mdblistDirty = false;
+    _mdblistDirtyAt = null;
+    _mdblistRefreshTimer?.cancel();
+    _mdblistRefreshTimer = null;
+    _localMovies = const {};
+    _localSeries = const {};
+    _traktMovies = const {};
+    _traktSeries = const {};
+    _simklMovies = const {};
+    _simklSeries = const {};
+    _mdblistMovies = const {};
+    _mdblistSeries = const {};
+  }
+
   void _markMdblistDirty() {
     _mdblistDirty = true;
     _mdblistDirtyAt = DateTime.now();

@@ -327,14 +327,9 @@ class TvTextFieldState extends State<TvTextField> {
   /// the focus-loss listener doesn't read it as "editing was abandoned".
   bool _imeSwitch = false;
 
-  /// Apple TV takes this path too.
-  ///
-  /// It was Android-TV-only on the reasoning that tvOS has a real system
-  /// keyboard — it does, but on the flutter-tvos fork that keyboard never
-  /// delivers its submit action back to Dart, so `onSubmitted` never fires and
-  /// every field on the platform is a dead end: text goes in, nothing happens.
-  /// The in-app keyboard sidesteps the platform IME entirely, which is the
-  /// same reason it exists on Android TV.
+  /// Apple TV takes this path too when the user opts into the Debrify keyboard.
+  /// Its system keyboard is the tvOS default; [TvosKeyboardSignal] bridges the
+  /// platform's missing `onSubmitted` callback for that passthrough path.
   bool get _tvShell =>
       (widget.forceTvKeyboard ||
           (PlatformUtil.isTelevision &&

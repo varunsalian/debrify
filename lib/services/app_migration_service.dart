@@ -170,7 +170,8 @@ class AppMigrationService {
         (addon) =>
             addon.manifestUrl == cinemetaManifestUrl ||
             addon.id == 'cinemeta' ||
-            addon.id == 'com.stremio.cinemeta',
+            addon.id == 'com.stremio.cinemeta' ||
+            addon.id == 'com.linvo.cinemeta',
       );
 
       if (hasCinemeta) {
