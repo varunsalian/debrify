@@ -39,7 +39,14 @@ class DetailHoldHintController extends ValueNotifier<bool> {
 
   Object? _owner;
 
+  /// Reports arrive from cells' `dispose`, which during a page teardown can
+  /// run either side of this controller's own disposal depending on unmount
+  /// order. Notifying a disposed [ValueNotifier] throws, so late reports are
+  /// dropped rather than relied upon to be impossible.
+  bool _disposed = false;
+
   void report(Object cell, bool focused) {
+    if (_disposed) return;
     if (focused) {
       _owner = cell;
       value = true;
@@ -52,6 +59,13 @@ class DetailHoldHintController extends ValueNotifier<bool> {
   /// A cell leaving the tree without losing focus first — a season change
   /// rebuilding the rail under the cursor.
   void release(Object cell) => report(cell, false);
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _owner = null;
+    super.dispose();
+  }
 }
 
 /// Hands the page's [DetailHoldHintController] down to the episode cells.
@@ -157,7 +171,8 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
     _hold.reset();
     // A rail rebuilt under the cursor (season change) disposes the focused
     // cell without a loss callback — the hint would stay up over nothing.
-    _hint?.release(this);
+    // Only the focused cell owns the hint, so only it needs to hand it back.
+    if (_focused) _hint?.release(this);
     super.dispose();
   }
 
