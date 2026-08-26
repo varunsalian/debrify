@@ -544,8 +544,21 @@ class StorageService {
   // Series auto-pin: on a series play with no pinned source, search packs
   // first (complete series → season pack), and pin whatever source plays so
   // subsequent episode plays go straight through the bound path.
+  /// LEGACY MIRROR ONLY. Written by [setQuickPlayRules] to carry
+  /// `preferSeriesPacks` for downgrade builds, and read once by
+  /// [_quickPlayRulesFromPrefs] to migrate pre-v2 profiles. Nothing on the live
+  /// playback path may read it — see [_seriesAutoPinOnPlayKey].
   static const String _autoBindSeriesPacksKey =
       'auto_bind_series_packs_on_play';
+
+  /// Whether a series play pins the source that played. Split out of
+  /// [_autoBindSeriesPacksKey] because that key doubles as the legacy mirror of
+  /// `preferSeriesPacks`: turning OFF "Prefer season packs" in Quick Play also
+  /// silently disabled all series auto-pinning, so Smart mode never found a pin
+  /// and Quick Play lost its fast path. Deliberately does NOT inherit the old
+  /// key's value — a `false` there was the packs toggle bleeding through, never
+  /// an auto-pin choice (no UI ever wrote it directly).
+  static const String _seriesAutoPinOnPlayKey = 'series_auto_pin_on_play';
 
   // Trakt settings
   static const String _traktAccessTokenKey = 'trakt_access_token';
@@ -7739,6 +7752,12 @@ class StorageService {
     // Keep old readers and downgrade builds safe. Media-specific values can't
     // be represented perfectly by the legacy global keys, so the active v2
     // playback path never reads these; they are compatibility mirrors only.
+    //
+    // That invariant was violated once: series auto-pinning read
+    // _autoBindSeriesPacksKey, so writing this mirror turned pinning off
+    // whenever the user turned off "Prefer season packs". Auto-pin now owns
+    // _seriesAutoPinOnPlayKey. Before adding a reader for any key below, check
+    // it is genuinely write-only on this path.
     await prefs.setBool(
       _quickPlayTryMultipleTorrentsKey,
       rules.tryNextOnFailure,
@@ -7779,16 +7798,20 @@ class StorageService {
     await prefs.setBool(_quickPlayTryMultipleTorrentsKey, tryMultiple);
   }
 
-  /// Whether series plays should search packs first and pin whatever source
-  /// plays. Defaults ON. See [_autoBindSeriesPacksKey].
-  static Future<bool> getAutoBindSeriesPacksOnPlay() async {
+  /// Whether a series play pins the source that played, so later episodes go
+  /// straight through the bound path. Defaults ON.
+  ///
+  /// Independent of "Prefer season packs" — the two shared a key until this
+  /// split, which meant turning packs off silently killed pinning. See
+  /// [_seriesAutoPinOnPlayKey].
+  static Future<bool> getSeriesAutoPinOnPlay() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_autoBindSeriesPacksKey) ?? true;
+    return prefs.getBool(_seriesAutoPinOnPlayKey) ?? true;
   }
 
-  static Future<void> setAutoBindSeriesPacksOnPlay(bool enabled) async {
+  static Future<void> setSeriesAutoPinOnPlay(bool enabled) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_autoBindSeriesPacksKey, enabled);
+    await prefs.setBool(_seriesAutoPinOnPlayKey, enabled);
   }
 
   /// Get max number of torrents to try before giving up

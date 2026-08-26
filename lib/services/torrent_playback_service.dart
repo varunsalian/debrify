@@ -4435,6 +4435,11 @@ class TorrentPlaybackService {
   /// list without bound (older singles are evicted; packs and manually-pinned
   /// sources are never touched). Refreshable addon-direct sources participate
   /// without persisting their signed/temporary URL. Local sources stay opt-in.
+  ///
+  /// Gated on [StorageService.getSeriesAutoPinOnPlay] — which is NOT the
+  /// "Prefer season packs" toggle. The two shared a preference key until it was
+  /// split; turning packs off used to disable pinning here, which left Smart
+  /// mode permanently unable to find a pin.
   static const int _maxAutoBoundSingles = 20;
 
   static Future<void> _autoBindSeriesOnPlay(
@@ -4462,7 +4467,7 @@ class TorrentPlaybackService {
     final source = _durableBindingForSource(winner, provider);
     if (source == null) return;
     try {
-      if (!await StorageService.getAutoBindSeriesPacksOnPlay()) return;
+      if (!await StorageService.getSeriesAutoPinOnPlay()) return;
       final imdbId = meta.imdbId!;
       final list = List<SeriesSource>.from(
         await SeriesSourceService.getSources(imdbId),
@@ -5037,7 +5042,7 @@ class TorrentPlaybackService {
       // existing series auto-pin preference still owns that opt-in boundary;
       // once a list exists, a successful switch keeps it in sync regardless.
       if (existing.isEmpty &&
-          !await StorageService.getAutoBindSeriesPacksOnPlay()) {
+          !await StorageService.getSeriesAutoPinOnPlay()) {
         return;
       }
       // Series: promote the winner but retain the previous primary and every

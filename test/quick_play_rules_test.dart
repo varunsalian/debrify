@@ -193,6 +193,26 @@ void main() {
       );
     });
 
+    test('turning off season packs leaves series auto-pin alone', () async {
+      SharedPreferences.setMockInitialValues({});
+      expect(await StorageService.getSeriesAutoPinOnPlay(), isTrue);
+      // These two shared one preference key, so this toggle silently disabled
+      // ALL series pinning — Smart mode then never found a pin and Quick Play
+      // lost its fast path. They must stay independent.
+      await StorageService.setQuickPlayRules(
+        QuickPlayRules.debrifyDefault(
+          isMovie: false,
+        ).copyWith(preset: QuickPlayPreset.custom, preferSeriesPacks: false),
+        isMovie: false,
+      );
+      expect(await StorageService.getSeriesAutoPinOnPlay(), isTrue);
+      // …and the reverse: auto-pin off must not rewrite the packs rule.
+      await StorageService.setSeriesAutoPinOnPlay(false);
+      expect(await StorageService.getSeriesAutoPinOnPlay(), isFalse);
+      final rules = await StorageService.getQuickPlayRules(isMovie: false);
+      expect(rules.preferSeriesPacks, isFalse);
+    });
+
     test('play button mode defaults to quick and rejects junk', () async {
       SharedPreferences.setMockInitialValues({});
       expect(await StorageService.getPlayButtonMode(), 'quick');
