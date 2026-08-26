@@ -18,6 +18,8 @@ void main() {
   Future<void> pumpSeriesDetail(
     WidgetTester tester, {
     required Map<String, double> progress,
+    void Function(({bool started, int season, int episode})? promised)?
+    onPromise,
   }) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await tester.pumpWidget(
@@ -36,7 +38,7 @@ void main() {
             manifestUrl: '',
             baseUrl: '',
           ),
-          onResume: () async {},
+          onResume: (promised) async => onPromise?.call(promised),
           resumeInfoLoader: () async =>
               (started: false, season: null, episode: null),
           seasonsLoader: () async => [
@@ -67,6 +69,63 @@ void main() {
     await pumpSeriesDetail(tester, progress: const {'1-1': 25});
 
     expect(find.text('Resume · S1E1'), findsOneWidget);
+  });
+
+  // The bug this pins: the label is resolved by this screen's episode engine
+  // (which advances off watched state) while the host re-derived the episode
+  // from resume positions alone, so Play launched S01E01 under a "Resume · S1E2"
+  // button. The promise is what keeps the two in lock-step — assert it against
+  // the rendered label so they cannot drift apart again.
+  testWidgets('the promised target is the episode the label shows', (
+    tester,
+  ) async {
+    ({bool started, int season, int episode})? captured;
+    var pressed = false;
+    await pumpSeriesDetail(
+      tester,
+      progress: const {'1-1': 25},
+      onPromise: (p) {
+        captured = p;
+        pressed = true;
+      },
+    );
+
+    // Engine-derived: the loader stub reports started:false, so a label reading
+    // "Resume" can only have come from the watch-progress engine — exactly the
+    // source the host cannot see.
+    expect(find.text('Resume · S1E1'), findsOneWidget);
+
+    await tester.tap(find.text('Resume · S1E1'));
+    await tester.pump();
+
+    expect(pressed, isTrue);
+    expect(captured, isNotNull);
+    expect(captured!.season, 1);
+    expect(captured!.episode, 1);
+    expect(captured!.started, isTrue);
+  });
+
+  testWidgets('an untouched show promises nothing', (tester) async {
+    ({bool started, int season, int episode})? captured;
+    var pressed = false;
+    await pumpSeriesDetail(
+      tester,
+      progress: const {},
+      onPromise: (p) {
+        captured = p;
+        pressed = true;
+      },
+    );
+
+    // S01E01 with no evidence behind it: forwarding that would override the
+    // host's own (possibly better-informed) answer with a bare coordinate.
+    expect(find.text('Start Watching'), findsOneWidget);
+
+    await tester.tap(find.text('Start Watching'));
+    await tester.pump();
+
+    expect(pressed, isTrue);
+    expect(captured, isNull);
   });
 
   testWidgets('merged detail admits only one playback launch at a time', (
@@ -103,7 +162,7 @@ void main() {
             manifestUrl: '',
             baseUrl: '',
           ),
-          onResume: () {
+          onResume: (_) {
             launches++;
             return launches == 1 ? firstLaunch.future : Future<void>.value();
           },

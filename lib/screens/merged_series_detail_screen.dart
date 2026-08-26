@@ -74,7 +74,17 @@ class MergedDetailScreen extends StatefulWidget {
 
   /// Primary play action. Series: resume-and-play (last-played → S01E01).
   /// Movie: play the movie. Mirrors the detail screen's "Play".
-  final Future<void> Function() onResume;
+  ///
+  /// Receives the episode the BUTTON is currently promising, when this screen
+  /// has resolved one. The host must honor it over its own re-derivation: this
+  /// screen's episode engine advances off watched state, while the host's
+  /// reconciler only reads resume positions, so the two legitimately disagree
+  /// (a show whose progress lives in a tracker's watched list rather than its
+  /// continue-watching list resolves here to S1E2 and there to the S1E1
+  /// empty-candidates fallback). Null means this screen has nothing better than
+  /// what the host can work out for itself.
+  final Future<void> Function(({bool started, int season, int episode})? promised)
+  onResume;
 
   /// Resolves whether the title has prior progress and, for a series, the
   /// season/episode [onResume] would land on — so the button can read
@@ -508,14 +518,43 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   void _playPrimary() {
+    // Promise ONLY an engine-derived target ([_hasMergedEpisodeTarget]), and
+    // only a started one.
+    //
+    // The engine is the sole reason the label can disagree with the host: it
+    // advances off watched state, which the host's reconciler never reads. A
+    // label that came from the loader instead already equals what the host
+    // would work out for itself, so promising it buys nothing — and costs
+    // freshness, because these coordinates are only re-read at page open and on
+    // return from playback. Promising a loader echo would let a page left open
+    // while an episode was finished elsewhere override a fresher reconcile with
+    // the episode the user already watched.
+    //
+    // This also covers the post-playback window for free:
+    // [_refreshAfterPlayback] clears the flag before re-reading, so a press
+    // during the refresh promises nothing and the host decides — without having
+    // to block the button, which stays pressable throughout. An untouched show
+    // resolves to S01E01 with no evidence behind it, hence the started gate.
+    final season = _resumeSeason;
+    final episode = _resumeEpisode;
+    final promised =
+        (!_isMovie &&
+            _resumeStarted &&
+            _hasMergedEpisodeTarget &&
+            season != null &&
+            episode != null)
+        ? (started: true, season: season, episode: episode)
+        : null;
     debugPrint(
       '[SeriesResume] detail-primary-pressed title="${_item.name}" '
       'label="$_primaryLabel" loaded=$_resumeLoaded started=$_resumeStarted '
       'labelTarget=S${_resumeSeason}E$_resumeEpisode '
       'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
-      'mergedEngineTarget=$_hasMergedEpisodeTarget',
+      'mergedEngineTarget=$_hasMergedEpisodeTarget '
+      'loaderInFlight=$_resumeLoaderInFlight '
+      'promised=${promised == null ? 'none' : 'S${promised.season}E${promised.episode}'}',
     );
-    unawaited(_guardPlay(widget.onResume));
+    unawaited(_guardPlay(() => widget.onResume(promised)));
   }
 
   void _quickPlayEpisode(AdvancedSearchSelection selection) {

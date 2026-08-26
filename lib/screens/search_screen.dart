@@ -11861,12 +11861,16 @@ class _SearchScreenState extends State<SearchScreen>
                   isTraktSource: isTraktSource,
                   isMdblistSource: isMdblistSource,
                 ),
-                onResume: () => _onCatalogPlay(
+                onResume: (promised) => _onCatalogPlay(
                   item,
                   addon,
                   isTraktSource: isTraktSource,
                   isMdblistSource: isMdblistSource,
                   skipEpisodeFallback: true,
+                  // The merged page resolves its own episode target (it can see
+                  // watched state the reconciler can't) — Play must land on the
+                  // episode its label is showing.
+                  promisedTarget: promised,
                   // Play the Trakt paused episode when the Trakt-first label
                   // shows one, so the button and the action agree.
                   preferTraktResume: true,
@@ -12812,6 +12816,14 @@ class _SearchScreenState extends State<SearchScreen>
     // label from [_resolveResumeInfo]. Off elsewhere (Home/row quick-play keep
     // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
+    // The episode the pressed button was promising, when the caller had already
+    // resolved one (merged detail). It wins over [_reconcileSeriesResume]: that
+    // reconciler only reads resume/CW positions, while the merged page's episode
+    // engine also advances off watched state. A show whose progress lives in a
+    // tracker's WATCHED list but not its continue-watching list reconciles to the
+    // empty-candidates fallback (S01E01) while the label correctly reads S1E2 —
+    // and Play would then start the pilot under a "Resume · S1E2" button.
+    ({bool started, int season, int episode})? promisedTarget,
   }) async {
     debugPrint(
       '[SeriesResume] play-pressed title="${item.name}" '
@@ -12861,8 +12873,25 @@ class _SearchScreenState extends State<SearchScreen>
         final owned = await _mdblistResumeItemFor(item);
         if (!mounted || cancelled) return;
         if (owned != null) {
-          await launch(owned.selection);
-          return;
+          // This fast path skips the reconciler entirely, so it needs its own
+          // promise check — otherwise an in-page watched mutation moves the
+          // label while MDBList still reports the previous continue-watching
+          // coordinate, and Resume replays the episode the label moved past.
+          final p = promisedTarget;
+          final stale =
+              p != null &&
+              (owned.selection.season != p.season ||
+                  owned.selection.episode != p.episode);
+          if (!stale) {
+            await launch(owned.selection);
+            return;
+          }
+          debugPrint(
+            '[SeriesResume] play-mdblist-fastpath-skipped title="${item.name}" '
+            'owned=S${owned.selection.season}E${owned.selection.episode} '
+            'promised=S${p.season}E${p.episode}',
+          );
+          // Fall through to the reconciled/promised path below.
         }
       }
 
@@ -12876,16 +12905,38 @@ class _SearchScreenState extends State<SearchScreen>
           isTraktSource: isTraktSource,
         );
         if (!mounted || cancelled) return;
+        // The caller's button already promised an episode the reconciler can't
+        // see. Honor it: the label is the promise the user acted on, and a
+        // silent disagreement here replays an episode they already watched.
+        final promised = promisedTarget;
+        final overridden =
+            promised != null &&
+            (promised.season != r.season || promised.episode != r.episode);
+        if (overridden) {
+          debugPrint(
+            '[SeriesResume] play-promise-override title="${item.name}" '
+            'reconciled=S${r.season}E${r.episode}/started=${r.started} '
+            'promised=S${promised.season}E${promised.episode}',
+          );
+        }
         // Winner's original selection (Trakt or MDBList) — launches with its
-        // own progress percent intact.
-        if (r.selection != null) {
+        // own progress percent intact. Unusable once overridden: it points at
+        // the older coordinate, so it would re-open the episode we just moved
+        // past, carrying that episode's resume percent with it.
+        if (!overridden && r.selection != null) {
           await launch(r.selection!);
           return;
         }
         final rTtId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
         final rTracker = (r.sourcePrio ?? 3) <= 2;
-        if (r.started &&
-            (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
+        // A promise IS started-evidence — it is what made the button read
+        // "Resume". Without this, the empty-candidates fallback (started=false)
+        // drops through to the S01E01 tail below. Keyed on the promise itself
+        // rather than on [overridden]: when the promised coordinate happens to
+        // MATCH the reconciler's fallback, there is no override, yet the button
+        // still said "Resume" and must not fall through.
+        final started = r.started || (promised?.started ?? false);
+        if (started && (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
           await launch(
             AdvancedSearchSelection(
               imdbId: rTtId.isNotEmpty
@@ -12894,17 +12945,23 @@ class _SearchScreenState extends State<SearchScreen>
               isSeries: true,
               title: item.name,
               year: item.year,
-              season: r.season,
-              episode: r.episode,
+              season: overridden ? promised.season : r.season,
+              episode: overridden ? promised.episode : r.episode,
               contentType: item.type,
               posterUrl: item.poster,
               // Source flags from the WINNING provider (advanced or not) so
               // player scrobbling attribution follows the tracker that owned
               // the resume — not from how the page happened to be opened.
               traktSource: isTraktSource || r.sourcePrio == 0,
-              simklProgressPercent: r.simklProgress,
+              // Belongs to the reconciled coordinate — carrying it onto a
+              // different episode would seek the new one to a stale position.
+              simklProgressPercent: overridden ? null : r.simklProgress,
               simklSource: r.sourcePrio == 1,
-              mdblistSource: r.sourcePrio == 2,
+              // `isMdblistSource ||` mirrors the traktSource term above: when
+              // the MDBList fast path is skipped as stale, the reconciler's
+              // winner is usually the local candidate, and without this the
+              // play would silently stop attributing to MDBList.
+              mdblistSource: isMdblistSource || r.sourcePrio == 2,
             ),
           );
           return;
@@ -14092,6 +14149,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// Manual sources list in-tab — the screen searches itself (own loading) and
   /// each tap plays with the full source list + content metadata.
   void _browseSelection(AdvancedSearchSelection sel) {
+    // Every route into the manual list lands here — the Play-button hand-off,
+    // the movie Sources button, and the episode long-press — so this is where
+    // the episode the list will search is finally fixed.
+    debugPrint(
+      '[SeriesResume] picker-open title="${sel.title}" id=${sel.imdbId} '
+      'target=S${sel.season}E${sel.episode} label="${sel.formattedLabel}"',
+    );
     if (sel.imdbId.isEmpty) {
       _snack('No IMDb match to find sources for "${sel.title}".');
       return;

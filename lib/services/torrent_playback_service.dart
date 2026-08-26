@@ -1205,6 +1205,15 @@ class TorrentPlaybackService {
     final opener = openSourcePicker;
     bool handedToPicker() {
       if (playMode == 'quick' || opener == null) return false;
+      // The last link in the [SeriesResume] chain: whatever episode arrives
+      // here is the one the manual list opens on. Compare against the
+      // `play-launch` line — if they differ, the selection was rebuilt between
+      // the two; if they agree but disagree with `label-resolve-result`, the
+      // label and the press reconciled to different answers.
+      debugPrint(
+        '[SeriesResume] picker-handoff title="$label" mode=$playMode '
+        'target=S${season}E$episode metaTarget=S${meta.season}E${meta.episode}',
+      );
       resolving.dismiss();
       if (context.mounted && !cancelled) opener();
       return true;
