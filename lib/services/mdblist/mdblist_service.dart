@@ -118,6 +118,10 @@ class MdblistService {
   // Only successful responses are cached (failures fall through and retry).
   // Cleared on connect (possible account change) and logout.
   static const Duration _cacheTtl = Duration(minutes: 5);
+  // Snapshot walks beyond this many rows are served but not retained — a
+  // 10k+-row watched history is tens of MB of decoded maps, and pinning
+  // several such buckets for the TTL risks OOM on low-RAM TV boxes.
+  static const int _maxCachedSnapshotRows = 10000;
   List<Map<String, dynamic>>? _userListsCache;
   DateTime? _userListsAt;
   List<Map<String, dynamic>>? _topListsCache;
@@ -128,6 +132,28 @@ class MdblistService {
   _syncSnapshotInFlight = {};
   final Map<String, Future<MdblistResult<Map<String, dynamic>>>>
   _resolveImdbInFlight = {};
+  // Account-wide /sync/{bucket} walks are the most expensive reads in this
+  // client (up to 100 requests each), and several surfaces re-walk them per
+  // mount. Cache ONLY cleanly-finished, un-`since`-filtered walks; every local
+  // mutation that can change a bucket invalidates it (see
+  // [_invalidateSnapshotBucket] callers), and the sync coordinator invalidates
+  // on external changes via [invalidateSyncBuckets] — so the TTL only bounds
+  // staleness for external edits between coordinator polls. Rows are shared
+  // with callers (hits get a shallow list copy, the publishing walk shares
+  // the instance): callers must never mutate returned rows.
+  final Map<String, ({List<Map<String, dynamic>> data, DateTime at})>
+  _syncSnapshotCache = {};
+  // IMDb→metadata resolutions (ids + season inventory) are title facts, not
+  // user state — safe to serve from a short cache. Spares the per-row resolve
+  // in Continue Watching and repeat detail-page opens.
+  final Map<String, ({Map<String, dynamic> data, DateTime at})>
+  _resolveImdbCache = {};
+  // Bumped by [_clearCache] (connect/logout/profile switch) so a fetch that
+  // was in flight across the switch can't publish the old account's data.
+  int _cacheEpoch = 0;
+  // Per-bucket invalidation generations; monotonic, deliberately NOT reset in
+  // [_clearCache] so an in-flight walk's captured value can never re-match.
+  final Map<String, int> _snapshotBucketGen = {};
   final Map<int, ({Map<String, dynamic> data, DateTime at})> _itemsCache = {};
   Set<String>? _droppedImdbCache;
   DateTime? _droppedImdbAt;
@@ -145,10 +171,23 @@ class MdblistService {
     _likedListsAt = null;
     _syncSnapshotInFlight.clear();
     _resolveImdbInFlight.clear();
+    _syncSnapshotCache.clear();
+    _resolveImdbCache.clear();
+    _cacheEpoch++;
     _itemsCache.clear();
     _droppedImdbCache = null;
     _droppedImdbAt = null;
     _droppedImdbInFlight = null;
+  }
+
+  /// Drop cached `/sync/{bucket}` snapshots after a mutation (local or
+  /// coordinator-reported) that can change that bucket's contents. The
+  /// generation bump also fences walks already in flight: a walk started
+  /// before the mutation must not re-publish its pre-mutation rows into the
+  /// cache when it completes (see the publish guard in [fetchSyncSnapshot]).
+  void _invalidateSnapshotBucket(String bucket) {
+    _snapshotBucketGen[bucket] = (_snapshotBucketGen[bucket] ?? 0) + 1;
+    _syncSnapshotCache.removeWhere((key, _) => key.startsWith('$bucket|'));
   }
 
   /// Clear account-derived state without modifying the scoped credentials.
@@ -171,6 +210,9 @@ class MdblistService {
       'dropped',
     };
     if (all || buckets.any(libraryBuckets.contains)) libraryRevision.value++;
+    for (final bucket in const ['watched', 'ratings', 'collection', 'dropped']) {
+      if (all || buckets.contains(bucket)) _invalidateSnapshotBucket(bucket);
+    }
     if (all || buckets.contains('lists')) {
       _userListsCache = null;
       _userListsAt = null;
@@ -916,6 +958,9 @@ class MdblistService {
       capability: capability,
     );
     if (result.isSuccess) {
+      // A stop lands the title in watched history; drop the cached snapshot
+      // BEFORE notifying, so revision listeners refetch authoritative data.
+      if (action == 'stop') _invalidateSnapshotBucket('watched');
       if (target.isEpisode) {
         EpisodeTrackerSnapshotRevision.invalidateTitle(
           'mdblist',
@@ -1059,6 +1104,18 @@ class MdblistService {
     if (payload == null) return false;
     final response = await _trackerRequest('POST', path, body: payload);
     final success = response.isSuccess;
+    if (success) {
+      // Both '/sync/{bucket}' and '/sync/{bucket}/remove' change that bucket's
+      // snapshot; invalidate before the revision bumps below notify listeners.
+      for (final bucket in const [
+        'watched',
+        'ratings',
+        'collection',
+        'dropped',
+      ]) {
+        if (path.startsWith('/sync/$bucket')) _invalidateSnapshotBucket(bucket);
+      }
+    }
     if (success &&
         (type == 'episode' || type == 'series' || type == 'show') &&
         (path == '/sync/watched' || path == '/sync/watched/remove')) {
@@ -1186,6 +1243,7 @@ class MdblistService {
         ],
       },
     );
+    if (response.isSuccess) _invalidateSnapshotBucket('dropped');
     return response.isSuccess;
   }
 
@@ -1307,12 +1365,21 @@ class MdblistService {
     final normalized = imdbId.trim().toLowerCase();
     final mediaType = type == 'series' ? 'show' : type;
     final key = '$mediaType:$normalized';
+    final cached = _resolveImdbCache[key];
+    if (cached != null && _fresh(cached.at)) {
+      return Future.value(MdblistResult.success(cached.data));
+    }
     final existing = _resolveImdbInFlight[key];
     if (existing != null) return existing;
     late final Future<MdblistResult<Map<String, dynamic>>> future;
     future = () async {
       try {
-        return await _mapRequest('GET', '/imdb/$mediaType/$normalized/');
+        final epoch = _cacheEpoch;
+        final result = await _mapRequest('GET', '/imdb/$mediaType/$normalized/');
+        if (result.isSuccess && epoch == _cacheEpoch) {
+          _resolveImdbCache[key] = (data: result.data!, at: DateTime.now());
+        }
+        return result;
       } finally {
         if (identical(_resolveImdbInFlight[key], future)) {
           _resolveImdbInFlight.remove(key);
@@ -1560,6 +1627,7 @@ class MdblistService {
     String bucket, {
     String? mediaType,
     DateTime? since,
+    bool forceRefresh = false,
   }) {
     if (!const {
       'watched',
@@ -1574,16 +1642,65 @@ class MdblistService {
     final key =
         '$bucket|${mediaType ?? 'all'}|'
         '${since?.toUtc().toIso8601String() ?? ''}';
-    final existing = _syncSnapshotInFlight[key];
-    if (existing != null) return existing;
+    // A forced read must not coalesce onto an already-running plain walk: that
+    // walk may predate the mutation the force is trying to see past (and may
+    // even be serving the cache). It starts its own walk and REPLACES the
+    // in-flight entry so later plain callers join the fresher one.
+    if (!forceRefresh) {
+      final existing = _syncSnapshotInFlight[key];
+      if (existing != null) return existing;
+    }
     late final Future<MdblistResult<List<Map<String, dynamic>>>> future;
     future = () async {
       try {
-        return await _fetchSyncSnapshot(
+        // Serve a fresh cached full walk. `since`-filtered reads are
+        // checkpoint queries and are never cached. The list is copied so a
+        // caller can't mutate the cached snapshot. forceRefresh (user-driven
+        // refresh surfaces) skips the read but still publishes its result.
+        if (since == null && !forceRefresh) {
+          final cached = _syncSnapshotCache[key];
+          if (cached != null && _fresh(cached.at)) {
+            final capability = await _captureCapability();
+            try {
+              await capability?.runIfCurrent(() async {});
+            } catch (_) {
+              return const MdblistResult<List<Map<String, dynamic>>>.failure(
+                MdblistResultKind.transientFailure,
+              );
+            }
+            return MdblistResult.success(List.of(cached.data));
+          }
+          // An expired entry is dead weight (a full account walk can be tens
+          // of MB on a heavy account) — release it now instead of holding it
+          // until the next successful overwrite. Matters on low-RAM TV boxes.
+          if (cached != null) _syncSnapshotCache.remove(key);
+        }
+        final epoch = _cacheEpoch;
+        final bucketGen = _snapshotBucketGen[bucket] ?? 0;
+        final result = await _fetchSyncSnapshot(
           bucket,
           mediaType: mediaType,
           since: since,
         );
+        // Cache ONLY a cleanly-finished walk (mirrors _itemsCache) — a partial
+        // must retry on the next read; never publish across an account switch
+        // (epoch changed mid-flight), past a bucket invalidation that landed
+        // while this walk was running (its rows would predate the mutation),
+        // or from a walk a forceRefresh superseded in the in-flight map (the
+        // slower superseded walk would overwrite the forced walk's fresher
+        // rows with a fresh timestamp). Oversized walks are not retained at
+        // all: the memory cost of pinning a huge account's rows for the TTL
+        // outweighs the request saving on the devices that would feel it.
+        if (since == null &&
+            result.kind == MdblistResultKind.success &&
+            result.data!.length <= _maxCachedSnapshotRows &&
+            epoch == _cacheEpoch &&
+            bucketGen == (_snapshotBucketGen[bucket] ?? 0) &&
+            identical(_syncSnapshotInFlight[key], future)) {
+          _syncSnapshotCache.removeWhere((_, entry) => !_fresh(entry.at));
+          _syncSnapshotCache[key] = (data: result.data!, at: DateTime.now());
+        }
+        return result;
       } finally {
         if (identical(_syncSnapshotInFlight[key], future)) {
           _syncSnapshotInFlight.remove(key);

@@ -834,6 +834,21 @@ class _SearchScreenState extends State<SearchScreen>
   final List<FocusNode> _mdblistSeriesNodes = [];
   int _mdblistCwToken = 0;
   int _mdblistRevisionRefreshToken = 0;
+  // True while a revision-driven delayed CW reload is queued/running, so
+  // [_refreshAfterPlayback] can skip its own MDBList reload instead of doing a
+  // second full fetch ~1s before the authoritative one lands.
+  bool _mdblistRevisionRefreshPending = false;
+  // When the last FORCED CW load finished. Covers the slow-device case where
+  // the delayed reload completes (clearing the pending flag) while
+  // [_refreshAfterPlayback] is still awaiting its local loads — without this
+  // it would immediately repeat the full fetch it just skipped for.
+  DateTime? _mdblistCwForcedLoadAt;
+
+  bool get _mdblistCwForceFresh {
+    final at = _mdblistCwForcedLoadAt;
+    return at != null &&
+        DateTime.now().difference(at) < const Duration(seconds: 3);
+  }
 
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
@@ -4937,6 +4952,7 @@ class _SearchScreenState extends State<SearchScreen>
         ..clear()
         ..addAll(byImdb);
     });
+    if (force) _mdblistCwForcedLoadAt = DateTime.now();
     _maybeAutoFocusBoard();
     if (!hadRows) _maybeAnnounceMdblistRows();
     if (refreshBound) unawaited(_refreshBoundSources());
@@ -4946,23 +4962,33 @@ class _SearchScreenState extends State<SearchScreen>
     if (widget.searchMode || widget.discoverMode) return;
     MdblistContinueWatchingService.instance.invalidate();
     final token = ++_mdblistRevisionRefreshToken;
+    _mdblistRevisionRefreshPending = true;
     unawaited(_refreshMdblistAfterMutation(token));
   }
 
   Future<void> _refreshMdblistAfterMutation(int token) async {
-    // The stop response can arrive during the final frames of the player pop.
-    // Wait until Home is visible, then allow MDBList's watched snapshot a short
-    // propagation window before replacing the row with authoritative data.
-    for (var attempt = 0; attempt < 20; attempt++) {
+    try {
+      // The stop response can arrive during the final frames of the player pop.
+      // Wait until Home is visible, then allow MDBList's watched snapshot a
+      // short propagation window before replacing the row with authoritative
+      // data.
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (!mounted || token != _mdblistRevisionRefreshToken) return;
+        if (ModalRoute.of(context)?.isCurrent ?? true) break;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
       if (!mounted || token != _mdblistRevisionRefreshToken) return;
-      if (ModalRoute.of(context)?.isCurrent ?? true) break;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      await Future<void>.delayed(const Duration(milliseconds: 750));
+      if (!mounted || token != _mdblistRevisionRefreshToken) return;
+      await _loadMdblistContinueWatching(refreshBound: false, force: true);
+    } finally {
+      // Only the newest queued refresh owns the pending flag; a superseded one
+      // must not clear it while its successor is still due to run.
+      if (token == _mdblistRevisionRefreshToken) {
+        _mdblistRevisionRefreshPending = false;
+      }
     }
-    if (!mounted || token != _mdblistRevisionRefreshToken) return;
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
-    await Future<void>.delayed(const Duration(milliseconds: 750));
-    if (!mounted || token != _mdblistRevisionRefreshToken) return;
-    await _loadMdblistContinueWatching(refreshBound: false, force: true);
   }
 
   void _openMdblistCwItem(StremioMeta item) {
@@ -17472,7 +17498,12 @@ class _SearchScreenState extends State<SearchScreen>
         await Future.wait([
           _loadTraktContinueWatching(refreshBound: false),
           _loadSimklContinueWatching(refreshBound: false),
-          _loadMdblistContinueWatching(refreshBound: false, force: true),
+          // A scrobble revision already queued (pending) or just completed
+          // (force-fresh) the authoritative MDBList reload; loading here too
+          // would only repeat it or fetch pre-propagation data it replaces.
+          // When no scrobble fired (e.g. external playback), load as before.
+          if (!_mdblistRevisionRefreshPending && !_mdblistCwForceFresh)
+            _loadMdblistContinueWatching(refreshBound: false, force: true),
         ]);
         if (!mounted) return;
       }

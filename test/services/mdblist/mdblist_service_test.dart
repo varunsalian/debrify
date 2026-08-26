@@ -405,7 +405,7 @@ void main() {
 
   group('MDBList tracker reads', () {
     test(
-      'coalesces identical in-flight snapshots but never caches them',
+      'coalesces in-flight snapshots and serves a cached complete walk',
       () async {
         var calls = 0;
         var gate = Completer<void>();
@@ -429,14 +429,185 @@ void main() {
         gate.complete();
         await Future.wait([first, second]);
 
+        // A cleanly-finished walk is served from cache within the TTL.
         gate = Completer<void>()..complete();
         await service.fetchSyncSnapshot('watched');
+        expect(calls, 1);
+
+        // forceRefresh (user-driven refresh) bypasses the cache read.
+        await service.fetchSyncSnapshot('watched', forceRefresh: true);
         expect(calls, 2);
+
+        // A reported bucket change drops the cache for the next plain read.
+        service.invalidateSyncBuckets({'watched'});
+        await service.fetchSyncSnapshot('watched');
+        expect(calls, 3);
       },
     );
 
+    test('a partial walk is never cached', () async {
+      var calls = 0;
+      final service = serviceWith((request) async {
+        calls++;
+        final cursor = request.url.queryParameters['cursor'];
+        if (cursor == null) {
+          return http.Response(
+            jsonEncode({
+              'movies': [
+                {
+                  'movie': {
+                    'ids': {'imdb': 'tt1'},
+                  },
+                },
+              ],
+              'pagination': {'next_cursor': 'page2'},
+            }),
+            200,
+          );
+        }
+        return http.Response('', 503);
+      });
+
+      final first = await service.fetchSyncSnapshot('watched');
+      expect(first.kind, MdblistResultKind.partial);
+      final callsAfterFirst = calls;
+
+      // A truncated walk must go back to the network on the next read.
+      final second = await service.fetchSyncSnapshot('watched');
+      expect(second.kind, MdblistResultKind.partial);
+      expect(calls, greaterThan(callsAfterFirst));
+    });
+
+    test('scrobble stop invalidates the cached watched snapshot', () async {
+      var walkCalls = 0;
+      final service = serviceWith((request) async {
+        if (request.url.path == '/scrobble/stop') {
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }
+        walkCalls++;
+        return http.Response(
+          jsonEncode({
+            'movies': const [],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      await service.fetchSyncSnapshot('watched');
+      await service.fetchSyncSnapshot('watched');
+      expect(walkCalls, 1);
+
+      const target = MdblistScrobbleTarget.movie(MdblistMediaIds(imdb: 'tt1'));
+      expect((await service.scrobbleStop(target, 100)).isSuccess, isTrue);
+
+      // Revision listeners refetching after the stop must see fresh data.
+      await service.fetchSyncSnapshot('watched');
+      expect(walkCalls, 2);
+    });
+
+    test('a bucket invalidation mid-walk fences the stale publish', () async {
+      var calls = 0;
+      var gate = Completer<void>();
+      final service = serviceWith((request) async {
+        calls++;
+        await gate.future;
+        return http.Response(
+          jsonEncode({
+            'movies': const [],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      final inFlight = service.fetchSyncSnapshot('watched');
+      await Future<void>.delayed(Duration.zero);
+      // A mutation lands while the walk is running: its result is stale.
+      service.invalidateSyncBuckets({'watched'});
+      gate.complete();
+      expect((await inFlight).isSuccess, isTrue);
+
+      // The pre-invalidation walk must not have been published to the cache.
+      gate = Completer<void>()..complete();
+      await service.fetchSyncSnapshot('watched');
+      expect(calls, 2);
+    });
+
+    test('forceRefresh does not join an in-flight plain walk', () async {
+      var calls = 0;
+      final gates = <Completer<void>>[];
+      final service = serviceWith((request) async {
+        calls++;
+        final gate = Completer<void>();
+        gates.add(gate);
+        await gate.future;
+        return http.Response(
+          jsonEncode({
+            'movies': const [],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      final plain = service.fetchSyncSnapshot('watched');
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, 1);
+
+      // The plain walk may predate a mutation; force must start its own.
+      final forced = service.fetchSyncSnapshot('watched', forceRefresh: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, 2);
+      for (final gate in gates) {
+        gate.complete();
+      }
+      await Future.wait([plain, forced]);
+    });
+
+    test('a superseded plain walk cannot overwrite the forced result', () async {
+      var calls = 0;
+      final gates = <Completer<void>>[];
+      final service = serviceWith((request) async {
+        final index = calls++;
+        final gate = Completer<void>();
+        gates.add(gate);
+        await gate.future;
+        return http.Response(
+          jsonEncode({
+            'movies': [
+              {
+                'movie': {
+                  'ids': {'imdb': index == 0 ? 'tt-stale' : 'tt-fresh'},
+                },
+              },
+            ],
+            'pagination': {'next_cursor': null},
+          }),
+          200,
+        );
+      });
+
+      final plain = service.fetchSyncSnapshot('watched');
+      await Future<void>.delayed(Duration.zero);
+      final forced = service.fetchSyncSnapshot('watched', forceRefresh: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(gates.length, 2);
+
+      // The forced walk finishes first; the stale plain walk lands after it
+      // and must NOT re-publish its older rows over the forced result.
+      gates[1].complete();
+      await forced;
+      gates[0].complete();
+      await plain;
+
+      final cachedRead = await service.fetchSyncSnapshot('watched');
+      expect(calls, 2, reason: 'third read must be a cache hit');
+      expect(cachedRead.data!.single['movie']['ids']['imdb'], 'tt-fresh');
+    });
+
     test(
-      'coalesces concurrent IMDb resolution without retaining a cache',
+      'coalesces concurrent IMDb resolution and caches within one account',
       () async {
         var calls = 0;
         var gate = Completer<void>();
@@ -459,7 +630,13 @@ void main() {
         gate.complete();
         await Future.wait([first, second]);
 
+        // Title metadata is account-independent fact; repeats are cache hits.
         gate = Completer<void>()..complete();
+        await service.resolveImdb('tt-show', 'series');
+        expect(calls, 1);
+
+        // Account/profile scope changes drop every response cache.
+        service.resetProfileScope();
         await service.resolveImdb('tt-show', 'series');
         expect(calls, 2);
       },
