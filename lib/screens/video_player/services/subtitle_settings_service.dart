@@ -179,6 +179,8 @@ class SubtitleSettingsService {
   static const String _keyBgIndex = 'subtitle_bg_index';
   static const String _keyOutlineColorIndex = 'subtitle_outline_color_index';
   static const String _keyElevationIndex = 'subtitle_elevation_index';
+  static const String _keyExtremeBottomDefaultAdopted =
+      'subtitle_extreme_bottom_default_adopted_v1';
   static const String _keyBold = 'subtitle_bold';
 
   /// Default: bold off (normal weight). Matches Android's DEFAULT_BOLD.
@@ -207,6 +209,24 @@ class SubtitleSettingsService {
 
   Future<void> _ensurePrefs() async {
     _prefs ??= await ProfilePreferences.instance();
+    await _adoptExtremeBottomDefault(_prefs!);
+  }
+
+  Future<void> _adoptExtremeBottomDefault(SharedPreferences prefs) async {
+    if (prefs.getBool(_keyExtremeBottomDefaultAdopted) ?? false) return;
+
+    // Before Extreme Bottom existed, index 0 was also the default. Profiles
+    // that persisted that old default would otherwise stay at 48 px forever,
+    // even though the app now defaults MediaKit subtitles to 8 px. Migrate it
+    // once, then mark the profile so a later explicit Bottom selection sticks.
+    if (prefs.getInt(_keyElevationIndex) == 0) {
+      final migrated = await prefs.setInt(
+        _keyElevationIndex,
+        SubtitleElevation.defaultIndex,
+      );
+      if (!migrated) return;
+    }
+    await prefs.setBool(_keyExtremeBottomDefaultAdopted, true);
   }
 
   void resetProfileScope() {

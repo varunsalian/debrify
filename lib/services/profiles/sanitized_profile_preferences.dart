@@ -26,6 +26,7 @@ abstract final class SanitizedProfilePreferences {
       case 'detail_trailer_audio_enabled':
       case 'tv_trailer_underlay_enabled':
       case 'subtitle_bold':
+      case 'subtitle_extreme_bottom_default_adopted_v1':
         return value is bool;
       case 'tv_ui_scale_percent':
         return value is int && const <int>{80, 90, 100}.contains(value);
