@@ -195,6 +195,57 @@ void main() {
   );
 
   test(
+    'confirmed IPTV collection removal revokes borrower grants atomically',
+    () async {
+      await StorageService.setIptvPlaylists(<IptvPlaylist>[
+        IptvPlaylist(
+          id: 'shared-iptv',
+          name: 'Shared IPTV',
+          url: 'https://iptv.invalid/shared.m3u',
+          addedAt: DateTime.utc(2026, 8, 26),
+        ),
+      ]);
+      final stored = await StorageService.getIptvPlaylists(forSettings: true);
+      final resourceId = stored.single.connectionResourceId!;
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      await service.grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: memberId,
+        resourceId: resourceId,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+
+      await expectLater(
+        StorageService.setIptvPlaylistsAndReload(
+          const <IptvPlaylist>[],
+          forSettings: true,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('shared connection'),
+          ),
+        ),
+      );
+      expect(await registry.getResource(resourceId), isNotNull);
+      expect(await registry.getGrant(memberId, resourceId), isNotNull);
+
+      final remaining = await StorageService.setIptvPlaylistsAndReload(
+        const <IptvPlaylist>[],
+        forSettings: true,
+        revokeBorrowers: true,
+      );
+      expect(remaining, isEmpty);
+      expect(await registry.getResource(resourceId), isNull);
+      expect(await registry.getGrant(memberId, resourceId), isNull);
+    },
+  );
+
+  test(
     'all collection credentials stay redacted for Member and Child settings',
     () async {
       final service = ConnectionResourceService(

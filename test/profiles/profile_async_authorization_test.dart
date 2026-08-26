@@ -59,13 +59,23 @@ void main() {
       ProfileScope(profileId: secondId, dataGeneration: 1, sessionEpoch: 2),
     );
 
-    final completedScope = await capability!.run(() async {
-      return ProfileRuntime.capture();
+    final scopes = await capability!.run(() async {
+      return (
+        captured: ProfileRuntime.capture(),
+        visible: ProfileRuntime.scope.value!,
+      );
     });
 
-    expect(completedScope.profileId, firstId);
-    expect(completedScope.sessionEpoch, 1);
+    expect(scopes.captured.profileId, firstId);
+    expect(scopes.captured.sessionEpoch, 1);
+    // Interactive completions must consult the notifier, not capture(): the
+    // captured zone intentionally continues to expose First after Second is
+    // the visible profile.
+    expect(scopes.visible.profileId, secondId);
+    expect(scopes.visible.sessionEpoch, 2);
     expect(ProfileRuntime.capture().profileId, secondId);
+    expect(capability.isCurrentlyActive, isFalse);
+    await expectLater(capability.runIfCurrent(() async {}), throwsStateError);
   });
 
   test(

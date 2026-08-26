@@ -8427,7 +8427,10 @@ class StorageService {
   /// virtual one that reached the preference would be restored AND injected
   /// on the next load — two entries with the same id, where id-only equality
   /// makes lookups resolve the stale copy.
-  static Future<void> setIptvPlaylists(List<IptvPlaylist> playlists) async {
+  static Future<void> setIptvPlaylists(
+    List<IptvPlaylist> playlists, {
+    bool revokeBorrowers = false,
+  }) async {
     if (ProfileCollectionResourceFacade.active) {
       final stored = playlists.where((playlist) => !playlist.isVirtual);
       await ProfileCollectionResourceFacade.replace(
@@ -8451,6 +8454,7 @@ class StorageService {
               sourceResourceId: playlist.connectionResourceId,
             ),
         ],
+        revokeBorrowers: revokeBorrowers,
       );
       return;
     }
@@ -8475,11 +8479,12 @@ class StorageService {
   static Future<List<IptvPlaylist>> setIptvPlaylistsAndReload(
     List<IptvPlaylist> playlists, {
     required bool forSettings,
+    bool revokeBorrowers = false,
   }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
         ? ProfileRuntime.scope.value
         : null;
-    await setIptvPlaylists(playlists);
+    await setIptvPlaylists(playlists, revokeBorrowers: revokeBorrowers);
     if (expectedScope != null &&
         (!ProfileCollectionResourceFacade.active ||
             ProfileRuntime.scope.value != expectedScope)) {
