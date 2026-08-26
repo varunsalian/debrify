@@ -1003,6 +1003,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             installPremiumControllerLayout();
         }
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root);
+        // Media3 can hide the parent controller on its own timeout while our
+        // child dock still considers itself visible. Route that transition
+        // through the same cleanup as Back so subtitle lift is always restored.
+        playerView.setControllerVisibilityListener(
+                new PlayerView.ControllerVisibilityListener() {
+                    @Override
+                    public void onVisibilityChanged(int visibility) {
+                        if (visibility != View.VISIBLE && controlsMenuVisible) {
+                            hideControlsMenu();
+                        }
+                    }
+                });
         debrifyTimeDisplay = playerView.findViewById(R.id.debrify_time_display);
         debrifyTimeCurrent = playerView.findViewById(R.id.debrify_time_current);
         debrifyTimeTotal = playerView.findViewById(R.id.debrify_time_total);
@@ -1358,6 +1370,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             return;
         }
         cancelScheduledHideControlsMenu();
+
+        // A previous timeout may have hidden Media3's parent controller even
+        // though this activity only animates the child dock.
+        playerView.showController();
 
         // Cancel any ongoing animations to prevent race conditions
         controlsOverlay.animate().cancel();

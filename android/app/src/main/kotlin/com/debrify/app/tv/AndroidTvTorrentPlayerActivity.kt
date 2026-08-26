@@ -3881,6 +3881,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             installOttControlsSkin()
         }
         controlsOverlay = playerView.findViewById(R.id.debrify_controls_root)
+        // Media3 owns the parent controller surface and can hide it on its own
+        // timeout before our dock timer runs (for example while a dock button
+        // retains focus). Reconcile that independent hide through the same
+        // path as Back so the subtitle lift and the rest of our chrome state
+        // cannot remain stranded on screen.
+        playerView.setControllerVisibilityListener(
+            PlayerView.ControllerVisibilityListener { visibility ->
+                if (visibility != View.VISIBLE && controlsMenuVisible) {
+                    hideControlsMenu()
+                }
+            }
+        )
         pauseButton = playerView.findViewById(R.id.debrify_pause_button)
         nightModeButton = playerView.findViewById(R.id.debrify_night_mode_button)
         audioButton = playerView.findViewById(R.id.debrify_audio_button)
@@ -6806,6 +6818,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun showControlsMenu() {
         val overlay = controlsOverlay ?: return
         cancelScheduledHideControlsMenu()
+
+        // The previous menu may have disappeared via Media3's parent-controller
+        // timeout rather than our child dock animation.
+        playerView.showController()
 
         // The channel panel and the dock share the bottom strip, so they merge
         // into one surface: the panel rides flush on top of the dock for as
