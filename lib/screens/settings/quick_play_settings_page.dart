@@ -328,7 +328,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                   'Addon priority',
                   PlatformUtil.isTelevision
                       ? 'Results from the top of this list play first. Press OK to pick up a row, move it with ▲▼, press OK to drop.'
-                      : 'Results from the top of this list play first. Drag or use the arrows to reorder.',
+                      : PlatformUtil.isPhone
+                      ? 'Results from the top of this list play first. Drag or use the arrows to reorder.'
+                      : 'Results from the top of this list play first. Click the arrows, or press Enter on a row and move it with ↑↓.',
                 ),
                 const SizedBox(height: 10),
                 _priorityList(),
@@ -480,11 +482,14 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         ),
       );
     }
-    // TV: a plain Column. A nested scrollable — even shrinkwrapped and
-    // NeverScrollable — hides its children from DIRECTIONAL focus traversal,
-    // so DPAD DOWN skipped this whole list and landed on "Restore defaults".
-    // TV never drag-reorders anyway; the rows' pick-up/drop grammar covers it.
-    if (PlatformUtil.isTelevision) {
+    // TV AND desktop: a plain Column. A nested scrollable — even shrinkwrapped
+    // and NeverScrollable — hides its children from DIRECTIONAL focus
+    // traversal, so arrow keys / DPAD DOWN skipped this whole list and landed
+    // on "Restore defaults". TV never drag-reorders; desktop keeps the ▲▼
+    // buttons for the mouse and gains the rows' pick-up/drop grammar for the
+    // keyboard (Enter to grab, ↑↓ to move, Enter to drop). Only PHONES keep
+    // the ReorderableListView, where touch drag matters and keyboards don't.
+    if (!PlatformUtil.isPhone) {
       return _Panel(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -650,28 +655,39 @@ class _PriorityRowState extends State<_PriorityRow> {
                     ),
                   // Touch/desktop only: on TV these would be two extra DPAD
                   // stops per row that fight the pick-up/drop grammar (the
-                  // row itself is the only focus target there).
-                  if (!PlatformUtil.isTelevision) ...[
-                    IconButton(
-                      onPressed: widget.onMoveUp,
-                      tooltip: 'Move up',
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        Icons.keyboard_arrow_up_rounded,
-                        color: widget.onMoveUp == null ? t.line : t.dim,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: widget.onMoveDown,
-                      tooltip: 'Move down',
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: widget.onMoveDown == null ? t.line : t.dim,
-                      ),
-                    ),
-                  ],
+                  // row itself is the only focus target there). ExcludeFocus
+                  // keeps that grammar true for desktop keyboards too — the
+                  // buttons are pointer affordances; the keyboard reorders via
+                  // the row itself (Enter to grab, ↑↓, Enter to drop).
                   if (!PlatformUtil.isTelevision)
+                    ExcludeFocus(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: widget.onMoveUp,
+                            tooltip: 'Move up',
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: widget.onMoveUp == null ? t.line : t.dim,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: widget.onMoveDown,
+                            tooltip: 'Move down',
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: widget.onMoveDown == null ? t.line : t.dim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Phone only — the drag listener needs the
+                  // ReorderableListView ancestor, which desktop no longer has.
+                  if (PlatformUtil.isPhone)
                     ReorderableDragStartListener(
                       index: widget.index,
                       child: Padding(
