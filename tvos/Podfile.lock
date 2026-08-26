@@ -7,17 +7,17 @@ PODS:
   - wakelock_plus_tvos (0.0.1)
 
 DEPENDENCIES:
-  - media_kit_libs_tvos_video (from `/Users/varunbsalian/Documents/Projects/debrify_second_workspace/packages/media_kit_libs_tvos_video/tvos`)
-  - media_kit_video_tvos (from `/Users/varunbsalian/Documents/Projects/debrify_second_workspace/packages/media_kit_video_tvos/tvos`)
+  - media_kit_libs_tvos_video (from `/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_libs_tvos_video/tvos`)
+  - media_kit_video_tvos (from `/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_video_tvos/tvos`)
   - sqflite_tvos (from `/Users/varunbsalian/.pub-cache/hosted/pub.dev/sqflite_tvos-0.0.2/tvos`)
   - video_player_tvos (from `/Users/varunbsalian/.pub-cache/hosted/pub.dev/video_player_tvos-0.0.1/tvos`)
   - wakelock_plus_tvos (from `/Users/varunbsalian/.pub-cache/hosted/pub.dev/wakelock_plus_tvos-0.0.1/tvos`)
 
 EXTERNAL SOURCES:
   media_kit_libs_tvos_video:
-    :path: "/Users/varunbsalian/Documents/Projects/debrify_second_workspace/packages/media_kit_libs_tvos_video/tvos"
+    :path: "/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_libs_tvos_video/tvos"
   media_kit_video_tvos:
-    :path: "/Users/varunbsalian/Documents/Projects/debrify_second_workspace/packages/media_kit_video_tvos/tvos"
+    :path: "/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_video_tvos/tvos"
   sqflite_tvos:
     :path: "/Users/varunbsalian/.pub-cache/hosted/pub.dev/sqflite_tvos-0.0.2/tvos"
   video_player_tvos:
