@@ -1653,7 +1653,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           snapBefore != null &&
           snapBefore.channelCount > 0 &&
           snapBefore.hasLiveChannels &&
-          !IptvCatalogDb.hasNumberingSource(playlist.id) &&
+          (!IptvCatalogDb.hasNumberingSource(playlist.id) ||
+              snapBefore.hasUnnumberedLiveChannels) &&
           !IptvCatalogDb.adoptionRecentlyFailed(playlist.id);
       final narrate = IptvCatalogDb.hasPendingMigrations || willNumber;
       if (narrate) _scheduleMaintenanceChip(ticket);
@@ -1672,7 +1673,8 @@ class IptvResultsViewState extends State<IptvResultsView>
 
       final needsNumbering =
           snap.hasLiveChannels &&
-          !IptvCatalogDb.hasNumberingSource(playlist.id) &&
+          (!IptvCatalogDb.hasNumberingSource(playlist.id) ||
+              snap.hasUnnumberedLiveChannels) &&
           !IptvCatalogDb.adoptionRecentlyFailed(playlist.id);
       if (needsNumbering) {
         numbersMoved =
@@ -1784,9 +1786,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     return false;
   }
 
-  /// Give a catalog stored before channel numbering existed its durable
-  /// numbering namespace, derived on a worker from the rows already in the
-  /// catalog DB.
+  /// Give stored live rows durable numbers, derived on a worker from the
+  /// catalog DB. Usually this creates a missing namespace; it also fills gaps
+  /// when a classifier change makes an existing unnumbered row live.
   ///
   /// The path this replaces refetched the ENTIRE provider catalog just to
   /// establish the namespace — on a 50k-channel panel a full download, 50k
@@ -1811,8 +1813,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       if (!mounted || ticket != _loadTicket) return false;
       // Adoption normally confirms the numbers the v2 backfill already wrote,
       // in which case the rows on screen are correct and rebuilding them would
-      // cost focus and scroll for nothing. Only a namespace that relinked to an
-      // archived provider actually moves numbers.
+      // cost focus and scroll for nothing. Relinking an archived namespace or
+      // filling a newly-live row is a real correction and must repaint.
       if (corrected > 0) {
         final fresh = IptvCatalogDb.snapshot(cacheKey);
         if (fresh != null) _rebuildDbFacades(fresh);

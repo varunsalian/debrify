@@ -69,7 +69,7 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
       // (no live edge to tune to, and resume semantics don't apply).
       final isLive = contentType != null
           ? contentType == 'live'
-          : (duration == null || duration == -1);
+          : (duration == null || duration <= 0);
       if (!isLive) return;
 
       // Origin recorded per (list, url); the metadata's own playlistId is the

@@ -158,7 +158,7 @@ class IptvChannel {
   final String url;
   final String? logoUrl;
   final String? group; // Category/group
-  final int? duration; // -1 for live streams
+  final int? duration; // Non-positive for live streams; positive for VOD
   final String? contentType; // 'live', 'vod', or null (M3U channels)
   final Map<String, String> attributes; // Additional tvg-* attributes
 
@@ -202,7 +202,12 @@ class IptvChannel {
   /// content type; M3U channels fall back to the duration heuristic.
   bool get isLive {
     if (contentType != null) return contentType == 'live';
-    return duration == null || duration == -1;
+    // The M3U convention is -1 for an indefinite/live item, but several
+    // playlist editors (including EPGenius) emit EXTINF:0 for live channels.
+    // A positive duration is the only reliable VOD signal here. Treating 0
+    // as VOD prevents those channels from entering the XMLTV matching scan,
+    // even when their tvg-ids line up with the guide exactly.
+    return duration == null || duration! <= 0;
   }
 
   /// Get tvg-id attribute if present

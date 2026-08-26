@@ -11,6 +11,7 @@ IptvChannel _ch(
   String? group,
   String? name,
   String? contentType = 'live',
+  int? duration = -1,
   Map<String, String> attributes = const {},
   Map<String, String> headers = const {},
 }) => IptvChannel(
@@ -18,7 +19,7 @@ IptvChannel _ch(
   url: 'http://h/live/u/p/$i.ts',
   logoUrl: 'http://h/logo/$i.png',
   group: group,
-  duration: -1,
+  duration: duration,
   contentType: contentType,
   attributes: attributes,
   httpHeaders: headers,
@@ -155,21 +156,22 @@ void main() {
       )
     ''');
     db.execute(
-      "INSERT INTO catalogs VALUES ('old', 1, 3, 'd', NULL, NULL, 1)",
+      "INSERT INTO catalogs VALUES ('old', 1, 4, 'd', NULL, NULL, 1)",
     );
     db.execute(
       "INSERT INTO channels(catalog_key, generation, position, name, url, "
       "duration, content_type, search_key) VALUES "
       "('old', 1, 0, 'Live A', 'a', -1, 'live', 'live a'), "
       "('old', 1, 1, 'Movie', 'm', NULL, 'vod', 'movie'), "
-      "('old', 1, 2, 'Live B', 'b', -1, 'live', 'live b')",
+      "('old', 1, 2, 'Live B', 'b', -1, 'live', 'live b'), "
+      "('old', 1, 3, 'M3U Zero', 'z', 0, NULL, 'm3u zero')",
     );
     db.dispose();
 
     await IptvCatalogDb.open();
     await IptvCatalogDb.ensureMigrations();
     final page = IptvCatalogDb.snapshot('old')!.page(offset: 0, limit: 10);
-    expect(page.map((channel) => channel.channelNumber), [1, null, 2]);
+    expect(page.map((channel) => channel.channelNumber), [1, null, 2, 3]);
   });
 
   test('the number backfill never plans a correlated subquery', () async {
@@ -381,6 +383,59 @@ void main() {
         0,
         reason: 'a settled catalog must not rewrite rows — the caller uses '
             'this count to decide whether to rebuild the visible list',
+      );
+    });
+
+    test('existing namespace adopts rows made live by a classification fix',
+        () async {
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'stored',
+        numberingSourceKey: 'provider-a',
+        channels: [
+          _ch(1, attributes: const {'tvg-id': 'existing.live'}),
+          _ch(
+            2,
+            contentType: null,
+            duration: 5400,
+            attributes: const {'tvg-id': 'newly.live'},
+          ),
+        ],
+      );
+      expect(IptvCatalogDb.hasNumberingSource('provider-a'), isTrue);
+
+      // Shape of an already-migrated v2 catalog after EXTINF:0 becomes live:
+      // the provider namespace and its old assignments exist, while this row
+      // was stored as VOD with no number under the previous classifier.
+      final db = raw.sqlite3.open(IptvCatalogDb.path);
+      try {
+        db.execute(
+          'UPDATE channels SET duration = 0 WHERE catalog_key = ? AND url = ?',
+          ['stored', 'http://h/live/u/p/2.ts'],
+        );
+      } finally {
+        db.dispose();
+      }
+
+      var snap = IptvCatalogDb.snapshot('stored')!;
+      expect(snap.hasUnnumberedLiveChannels, isTrue);
+      expect(
+        snap.page(offset: 0, limit: 10).map((c) => c.channelNumber),
+        [1, null],
+      );
+
+      final corrected = await IptvCatalogDb.adoptNumbering(
+        catalogKey: 'stored',
+        sourceKey: 'provider-a',
+      );
+
+      expect(corrected, 1);
+      snap = IptvCatalogDb.snapshot('stored')!;
+      expect(snap.hasUnnumberedLiveChannels, isFalse);
+      expect(
+        snap.page(offset: 0, limit: 10).map((c) => c.channelNumber),
+        [1, 2],
+        reason: 'the old number stays stable and the newly-live row appends',
       );
     });
 
@@ -872,6 +927,44 @@ void main() {
 
     expect(IptvCatalogDb.snapshot('vod-only')!.hasLiveChannels, isFalse);
     expect(IptvCatalogDb.snapshot('mixed')!.hasLiveChannels, isTrue);
+  });
+
+  test('zero-duration M3U rows stay live through DB paging and EPG scan', () {
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'm3u-zero',
+      numberingSourceKey: 'm3u-zero-source',
+      channels: [
+        _ch(
+          0,
+          contentType: null,
+          duration: 0,
+          attributes: const {'tvg-id': 'awe.us', 'tvg-name': 'AWE'},
+        ),
+        _ch(
+          1,
+          contentType: null,
+          duration: 5400,
+          attributes: const {'tvg-id': 'movie.us'},
+        ),
+      ],
+    );
+
+    final snap = IptvCatalogDb.snapshot('m3u-zero')!;
+    expect(snap.hasLiveChannels, isTrue);
+    expect(snap.count(live: true), 1);
+    expect(snap.count(live: false), 1);
+    final live = snap.page(offset: 0, limit: 10, live: true).single;
+    expect(live.tvgId, 'awe.us');
+    expect(live.channelNumber, 1);
+
+    final epgRows = IptvCatalogDb.liveTvgRows(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'm3u-zero',
+    );
+    expect(epgRows, hasLength(1));
+    expect(epgRows.single.tvgId, 'awe.us');
+    expect(epgRows.single.tvgName, 'AWE');
   });
 
   test('live channel numbers survive reorder and append new channels', () {

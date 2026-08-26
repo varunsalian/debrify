@@ -163,4 +163,29 @@ http://host/live/h.m3u8
       expect(channel.playbackHeaders['user-agent'], 'VLC/3.0.20');
     });
   });
+
+  group('M3U live classification', () {
+    test('zero-duration EPGenius entries remain live and guide-eligible', () {
+      final result = M3uParser.parse('''
+#EXTM3U url-tvg="https://example.com/guide.xml.gz"
+#EXTINF:0 CUID="1495580" tvg-name="AWE" tvg-id="awe.us" group-title="TV Guide",AWE
+https://example.com/live/awe.ts
+''');
+
+      expect(result.epgUrl, 'https://example.com/guide.xml.gz');
+      expect(result.channels.single.duration, 0);
+      expect(result.channels.single.tvgId, 'awe.us');
+      expect(result.channels.single.isLive, isTrue);
+    });
+
+    test('positive-duration M3U entries remain VOD', () {
+      final channel = IptvChannel(
+        name: 'Movie',
+        url: 'https://example.com/movie.mp4',
+        duration: 5400,
+      );
+
+      expect(channel.isLive, isFalse);
+    });
+  });
 }
