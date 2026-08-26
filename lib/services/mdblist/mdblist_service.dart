@@ -124,6 +124,10 @@ class MdblistService {
   DateTime? _topListsAt;
   List<Map<String, dynamic>>? _likedListsCache;
   DateTime? _likedListsAt;
+  final Map<String, Future<MdblistResult<List<Map<String, dynamic>>>>>
+  _syncSnapshotInFlight = {};
+  final Map<String, Future<MdblistResult<Map<String, dynamic>>>>
+  _resolveImdbInFlight = {};
   final Map<int, ({Map<String, dynamic> data, DateTime at})> _itemsCache = {};
   Set<String>? _droppedImdbCache;
   DateTime? _droppedImdbAt;
@@ -139,6 +143,8 @@ class MdblistService {
     _topListsAt = null;
     _likedListsCache = null;
     _likedListsAt = null;
+    _syncSnapshotInFlight.clear();
+    _resolveImdbInFlight.clear();
     _itemsCache.clear();
     _droppedImdbCache = null;
     _droppedImdbAt = null;
@@ -1297,7 +1303,25 @@ class MdblistService {
   Future<MdblistResult<Map<String, dynamic>>> resolveImdb(
     String imdbId,
     String type,
-  ) => _mapRequest('GET', '/imdb/${type == 'series' ? 'show' : type}/$imdbId/');
+  ) {
+    final normalized = imdbId.trim().toLowerCase();
+    final mediaType = type == 'series' ? 'show' : type;
+    final key = '$mediaType:$normalized';
+    final existing = _resolveImdbInFlight[key];
+    if (existing != null) return existing;
+    late final Future<MdblistResult<Map<String, dynamic>>> future;
+    future = () async {
+      try {
+        return await _mapRequest('GET', '/imdb/$mediaType/$normalized/');
+      } finally {
+        if (identical(_resolveImdbInFlight[key], future)) {
+          _resolveImdbInFlight.remove(key);
+        }
+      }
+    }();
+    _resolveImdbInFlight[key] = future;
+    return future;
+  }
 
   Future<MdblistResult<Map<String, dynamic>>> resolveTmdb(
     int tmdbId,
@@ -1536,15 +1560,45 @@ class MdblistService {
     String bucket, {
     String? mediaType,
     DateTime? since,
-  }) async {
+  }) {
     if (!const {
       'watched',
       'ratings',
       'collection',
       'dropped',
     }.contains(bucket)) {
-      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+      return Future.value(
+        const MdblistResult.failure(MdblistResultKind.malformedResponse),
+      );
     }
+    final key =
+        '$bucket|${mediaType ?? 'all'}|'
+        '${since?.toUtc().toIso8601String() ?? ''}';
+    final existing = _syncSnapshotInFlight[key];
+    if (existing != null) return existing;
+    late final Future<MdblistResult<List<Map<String, dynamic>>>> future;
+    future = () async {
+      try {
+        return await _fetchSyncSnapshot(
+          bucket,
+          mediaType: mediaType,
+          since: since,
+        );
+      } finally {
+        if (identical(_syncSnapshotInFlight[key], future)) {
+          _syncSnapshotInFlight.remove(key);
+        }
+      }
+    }();
+    _syncSnapshotInFlight[key] = future;
+    return future;
+  }
+
+  Future<MdblistResult<List<Map<String, dynamic>>>> _fetchSyncSnapshot(
+    String bucket, {
+    String? mediaType,
+    DateTime? since,
+  }) async {
     final rows = <Map<String, dynamic>>[];
     String? cursor;
     const maxPages = 100;
@@ -1638,12 +1692,8 @@ class MdblistService {
     if (!await isAuthenticated()) {
       return (movies: <String>{}, series: <String>{});
     }
-    final results = await Future.wait([
-      fetchSyncSnapshot('watched', mediaType: 'movie'),
-      fetchSyncSnapshot('watched', mediaType: 'show'),
-      fetchSyncSnapshot('watched', mediaType: 'episode'),
-    ]);
-    if (results.any((result) => !result.isSuccess)) return null;
+    final watched = await fetchSyncSnapshot('watched');
+    if (!watched.isSuccess) return null;
     String? imdbOf(Map<String, dynamic> row) {
       final container = row['movie'] ?? row['show'];
       final ids = container is Map ? container['ids'] : row['ids'];
@@ -1654,7 +1704,8 @@ class MdblistService {
     }
 
     final movies = <String>{};
-    for (final row in results[0].data!) {
+    for (final row in watched.data!) {
+      if (row['movie'] is! Map) continue;
       final id = imdbOf(row);
       if (id != null && id.isNotEmpty) movies.add(id);
     }
@@ -1681,10 +1732,8 @@ class MdblistService {
       }
     }
 
-    for (final row in results[1].data!) {
-      addShowCandidate(row);
-    }
-    for (final row in results[2].data!) {
+    for (final row in watched.data!) {
+      if (row['show'] is! Map && row['episode'] is! Map) continue;
       addShowCandidate(row);
     }
 

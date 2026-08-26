@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
@@ -69,6 +70,7 @@ void main() {
       'uses batched show state to identify completed series from watched rows',
       () async {
         final stateBatchSizes = <int>[];
+        var watchedCalls = 0;
         final episodes = List.generate(101, (index) {
           return {
             'watched_at': '2026-08-25T00:00:00Z',
@@ -83,37 +85,24 @@ void main() {
         });
         final service = serviceWith((request) async {
           if (request.url.path == '/sync/watched') {
-            return switch (request.url.queryParameters['mediatype']) {
-              'movie' => http.Response(
-                jsonEncode({
-                  'movies': [
-                    {
-                      'watched_at': '2026-08-25T00:00:00Z',
-                      'movie': {
-                        'ids': {'imdb': 'ttmovie'},
-                      },
+            watchedCalls++;
+            expect(request.url.queryParameters.containsKey('mediatype'), false);
+            return http.Response(
+              jsonEncode({
+                'movies': [
+                  {
+                    'watched_at': '2026-08-25T00:00:00Z',
+                    'movie': {
+                      'ids': {'imdb': 'ttmovie'},
                     },
-                  ],
-                  'pagination': {'next_cursor': null},
-                }),
-                200,
-              ),
-              'show' => http.Response(
-                jsonEncode({
-                  'shows': const [],
-                  'pagination': {'next_cursor': null},
-                }),
-                200,
-              ),
-              'episode' => http.Response(
-                jsonEncode({
-                  'episodes': episodes,
-                  'pagination': {'next_cursor': null},
-                }),
-                200,
-              ),
-              _ => http.Response('{}', 400),
-            };
+                  },
+                ],
+                'shows': const [],
+                'episodes': episodes,
+                'pagination': {'next_cursor': null},
+              }),
+              200,
+            );
           }
           if (request.url.path == '/sync/state/show/mdblist') {
             final body = jsonDecode(request.body) as Map<String, dynamic>;
@@ -144,6 +133,7 @@ void main() {
         expect(snapshot.series, hasLength(100));
         expect(snapshot.series, isNot(contains('ttshow0')));
         expect(snapshot.series, containsAll(['ttshow1', 'ttshow100']));
+        expect(watchedCalls, 1);
         expect(stateBatchSizes, [100, 1]);
       },
     );
@@ -153,22 +143,19 @@ void main() {
       () async {
         final service = serviceWith((request) async {
           if (request.url.path == '/sync/watched') {
-            final mediaType = request.url.queryParameters['mediatype'];
             return http.Response(
               jsonEncode({
                 'movies': const [],
                 'shows': const [],
-                'episodes': mediaType == 'episode'
-                    ? [
-                        {
-                          'episode': {
-                            'show': {
-                              'ids': {'imdb': 'ttshow', 'mdblist': 'mdb-show'},
-                            },
-                          },
-                        },
-                      ]
-                    : const [],
+                'episodes': [
+                  {
+                    'episode': {
+                      'show': {
+                        'ids': {'imdb': 'ttshow', 'mdblist': 'mdb-show'},
+                      },
+                    },
+                  },
+                ],
                 'pagination': {'next_cursor': null},
               }),
               200,
@@ -417,6 +404,67 @@ void main() {
   });
 
   group('MDBList tracker reads', () {
+    test(
+      'coalesces identical in-flight snapshots but never caches them',
+      () async {
+        var calls = 0;
+        var gate = Completer<void>();
+        final service = serviceWith((request) async {
+          calls++;
+          await gate.future;
+          return http.Response(
+            jsonEncode({
+              'movies': const [],
+              'pagination': {'next_cursor': null},
+            }),
+            200,
+          );
+        });
+
+        final first = service.fetchSyncSnapshot('watched');
+        final second = service.fetchSyncSnapshot('watched');
+        expect(identical(first, second), isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(calls, 1);
+        gate.complete();
+        await Future.wait([first, second]);
+
+        gate = Completer<void>()..complete();
+        await service.fetchSyncSnapshot('watched');
+        expect(calls, 2);
+      },
+    );
+
+    test(
+      'coalesces concurrent IMDb resolution without retaining a cache',
+      () async {
+        var calls = 0;
+        var gate = Completer<void>();
+        final service = serviceWith((request) async {
+          calls++;
+          await gate.future;
+          return http.Response(
+            jsonEncode({
+              'ids': {'imdb': 'tt-show'},
+            }),
+            200,
+          );
+        });
+
+        final first = service.resolveImdb('TT-SHOW', 'series');
+        final second = service.resolveImdb('tt-show', 'series');
+        expect(identical(first, second), isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(calls, 1);
+        gate.complete();
+        await Future.wait([first, second]);
+
+        gate = Completer<void>()..complete();
+        await service.resolveImdb('tt-show', 'series');
+        expect(calls, 2);
+      },
+    );
+
     test('walks every cursor page of a sync snapshot', () async {
       final cursors = <String?>[];
       final service = serviceWith((request) async {
