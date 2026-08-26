@@ -17,6 +17,12 @@ void main() {
   final nativePlayer = File(
     'android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt',
   ).readAsStringSync();
+  final playerBridge = File(
+    'lib/services/android_tv_player_bridge.dart',
+  ).readAsStringSync();
+  final playbackService = File(
+    'lib/services/torrent_playback_service.dart',
+  ).readAsStringSync();
 
   test(
     'Flutter explicit source picks validate only the selected candidate',
@@ -155,5 +161,108 @@ void main() {
     );
     expect(flutterPlayer, contains('containsRequestedEpisode = false'));
     expect(flutterPlayer, contains('if (containsRequestedEpisode)'));
+  });
+
+  test('Flutter startup failures retain pins and still recover', () {
+    final startup = _between(
+      flutterPlayer,
+      'Future<bool> _openInitialVodWithFailover(',
+      'Future<void> _commitValidatedStremioSource(',
+    );
+    final directBinding = _between(
+      playbackService,
+      '// Addon-direct pins store provenance',
+      '// Cheap skip: a bound DEBRID source',
+    );
+
+    expect(startup, isNot(contains('_reportRejectedStremioSource')));
+    expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
+    expect(playbackService, isNot(contains('_rejectedDirectSourceHandler')));
+    expect(directBinding, isNot(contains('removeSourceEntry(imdbId, source)')));
+    expect(playbackService, contains('remainingSources'));
+    expect(playbackService, contains('skipBoundSources: true'));
+  });
+
+  test('bound startup recovery retains the preferred provider', () {
+    final selection = _between(
+      playbackService,
+      'static Future<void> playFromSelection(',
+      'static Future<FilterLadder> loadLadder(',
+    );
+    final boundPlayback = _between(
+      playbackService,
+      'static Future<bool> _playViaBound(',
+      '/// Continue after a saved source resolved successfully',
+    );
+    final recovery = _between(
+      playbackService,
+      'static Future<void> _recoverAfterBoundStartupFailure(',
+      '/// Pin [torrent] as the playback source',
+    );
+
+    expect(
+      RegExp(
+        r'_playViaBound\([\s\S]*?preferredProvider: preferredProvider',
+      ).hasMatch(selection),
+      isTrue,
+    );
+    expect(boundPlayback, contains('String? preferredProvider'));
+    expect(
+      RegExp(
+        r'_recoverAfterBoundStartupFailure\([\s\S]*?preferredProvider: preferredProvider',
+      ).allMatches(boundPlayback),
+      hasLength(3),
+    );
+    expect(recovery, contains('String? preferredProvider'));
+    expect(recovery, contains('preferredProvider: preferredProvider'));
+    expect(recovery, contains('skipBoundSources: true'));
+  });
+
+  test('Android TV reports exhaustion without deleting failed source pins', () {
+    final startupFailure = _between(
+      nativePlayer,
+      'private fun failStartupCandidate(',
+      'private fun failStartupResolution(',
+    );
+
+    expect(startupFailure, isNot(contains('reportRejectedSource')));
+    expect(startupFailure, contains('startupSourcesExhausted = true'));
+    expect(nativePlayer, contains('result["startupSourcesExhausted"] = true'));
+    expect(playerBridge, isNot(contains("case 'rejectStremioSource':")));
+    expect(
+      playerBridge,
+      contains("finishedArgs['startupSourcesExhausted'] == true"),
+    );
+  });
+
+  test('Android TV source commits are bounded and session scoped', () {
+    expect(playerBridge, contains('class _StremioSourcePersistenceSession'));
+    expect(playerBridge, contains('operation().timeout(timeout)'));
+    expect(playerBridge, contains('_tail.timeout(timeout)'));
+    expect(
+      playerBridge,
+      contains("payloadWithFont['sourcePersistenceSessionId']"),
+    );
+    expect(
+      nativePlayer,
+      contains('"sourcePersistenceSessionId" to sourcePersistenceSessionId'),
+    );
+    expect(
+      nativePlayer,
+      contains('payloadCheck.optInt("sourcePersistenceSessionId", 0)'),
+    );
+    expect(playerBridge, contains('ignoring stale playback finish'));
+  });
+
+  test('delayed startup recovery waits for the exact player route', () {
+    expect(
+      flutterPlayer,
+      contains('final playerRoute = ModalRoute.of(context)'),
+    );
+    expect(flutterPlayer, contains('mounted && playerRoute?.isActive == true'));
+    expect(
+      flutterPlayer,
+      contains('mounted && playerRoute?.isCurrent == true'),
+    );
   });
 }

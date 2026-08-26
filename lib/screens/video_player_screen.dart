@@ -291,6 +291,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final bool startupFailoverEnabled;
   final String? startupResolverProvider;
   final Future<void> Function(Torrent)? onStremioSourceCommitted;
+  final Future<void> Function()? onStartupSourcesExhausted;
   // "Load more sources" backend for the source sheet (series pack/episode
   // searches, or the movie search for bound movie plays)
   final SeriesSourceFetcher? seriesSourceFetcher;
@@ -367,6 +368,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.startupFailoverEnabled = false,
     this.startupResolverProvider,
     this.onStremioSourceCommitted,
+    this.onStartupSourcesExhausted,
     this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
@@ -3214,13 +3216,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 );
           if (!opened) {
             if (mounted) {
+              final canRecover = widget.onStartupSourcesExhausted != null;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('No playable source could be started.'),
+                SnackBar(
+                  content: Text(
+                    canRecover
+                        ? 'Saved source failed. Looking for another source…'
+                        : 'No playable source could be started.',
+                  ),
                 ),
               );
-              await Future<void>.delayed(const Duration(milliseconds: 900));
-              if (mounted) Navigator.of(context).maybePop();
+              // Keep hold of this exact route: a dialog may briefly cover the
+              // player while the failure message is visible. Wait for that
+              // dialog to leave, but abandon the pending pop if the player
+              // itself was dismissed, so an underlying detail route can never
+              // be popped by this delayed callback.
+              final playerRoute = ModalRoute.of(context);
+              await Future<void>.delayed(
+                Duration(milliseconds: canRecover ? 250 : 900),
+              );
+              while (mounted && playerRoute?.isActive == true) {
+                if (playerRoute?.isCurrent == true) break;
+                await Future<void>.delayed(const Duration(milliseconds: 50));
+              }
+              if (mounted && playerRoute?.isCurrent == true) {
+                if (canRecover) {
+                  Navigator.of(
+                    context,
+                  ).pop(<String, dynamic>{'startupSourcesExhausted': true});
+                } else {
+                  Navigator.of(context).maybePop();
+                }
+              }
             }
             return;
           }

@@ -1058,6 +1058,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var startupTryNextOnFailure = false
     private var startupMaxAttempts = 1
     private var startupResolverProvider: String? = null
+    private var startupRecoveryAvailable = false
+    private var startupSourcesExhausted = false
+    private var sourcePersistenceSessionId = 0
     private var startupPikPakTorrentAcquisitionAttempted = false
     // An explicit in-player source pick is a one-candidate transaction. It
     // shares the startup decoder/slate checks, but never advances to another
@@ -1826,6 +1829,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Check for IPTV mode before normal payload parsing
         try {
             val payloadCheck = JSONObject(rawPayload)
+            // IPTV returns from this block before [parsePayload], but its
+            // finish event must still identify the bridge launch that owns
+            // the callbacks it is about to clear.
+            sourcePersistenceSessionId =
+                payloadCheck.optInt("sourcePersistenceSessionId", 0)
             if (payloadCheck.optString("mode") == "iptv") {
                 initIptvMode(payloadCheck)
                 return
@@ -5312,7 +5320,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         try {
             MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
                 "commitStremioSource",
-                mapOf("sourceIndex" to sourceIndex),
+                mapOf(
+                    "sourceIndex" to sourceIndex,
+                    "sourcePersistenceSessionId" to sourcePersistenceSessionId,
+                ),
             )
         } catch (e: Exception) {
             android.util.Log.w(
@@ -15875,7 +15886,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun sendFinished() {
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackFinished", null)
+        val result = hashMapOf<String, Any>(
+            "sourcePersistenceSessionId" to sourcePersistenceSessionId,
+        )
+        if (startupSourcesExhausted) {
+            result["startupSourcesExhausted"] = true
+        }
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "torrentPlaybackFinished",
+            result,
+        )
     }
 
     /** The guide episode adjacent to the current item (specials excluded). */
@@ -16060,6 +16080,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════════════════
 
     private fun beginStartupFailoverIfEligible() {
+        startupSourcesExhausted = false
         val model = payload
         if (model == null) {
             startupLog("event=bypass reason=missing_payload")
@@ -16419,6 +16440,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         candidate?.streamType == "torrent")
             }
             if (nextIndex == null) {
+                startupSourcesExhausted = true
                 startupLog(
                     "event=exhausted attempts=${cursor.attempts} " +
                         "${startupSourceFields(currentStremioSourceIndex)} reason=$reason",
@@ -16428,7 +16450,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 hideStatusPill()
                 Toast.makeText(
                     this,
-                    "No playable source could be started",
+                    if (startupRecoveryAvailable) {
+                        "Saved source failed. Looking for another source…"
+                    } else {
+                        "No playable source could be started"
+                    },
                     Toast.LENGTH_LONG,
                 ).show()
                 finish()
@@ -17662,6 +17688,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupMaxAttempts = obj.optInt("startupMaxAttempts", 1).coerceIn(1, 10)
             startupResolverProvider = obj.optString("startupResolverProvider")
                 .takeIf { it.isNotEmpty() }
+            startupRecoveryAvailable = obj.optBoolean("startupRecoveryAvailable", false)
+            sourcePersistenceSessionId = obj.optInt("sourcePersistenceSessionId", 0)
             startupLog(
                 "event=payload_parsed sourceCount=${stremioSources.size} " +
                     "selectedIndex=$currentStremioSourceIndex " +

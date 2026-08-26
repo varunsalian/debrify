@@ -71,6 +71,7 @@ void main() {
 
     test('copyWith and widget preserve startup validation intent', () {
       Future<void> commit(Torrent _) async {}
+      Future<void> recover() async {}
 
       final original = VideoPlayerLaunchArgs(
         videoUrl: 'video',
@@ -78,17 +79,20 @@ void main() {
         startupFailoverEnabled: true,
         startupResolverProvider: 'pikpak',
         onStremioSourceCommitted: commit,
+        onStartupSourcesExhausted: recover,
       );
 
       final copy = original.copyWith(traktScrobble: true);
       expect(copy.startupFailoverEnabled, isTrue);
       expect(copy.startupResolverProvider, 'pikpak');
       expect(copy.onStremioSourceCommitted, same(commit));
+      expect(copy.onStartupSourcesExhausted, same(recover));
 
       final widget = copy.toWidget();
       expect(widget.startupFailoverEnabled, isTrue);
       expect(widget.startupResolverProvider, 'pikpak');
       expect(widget.onStremioSourceCommitted, same(commit));
+      expect(widget.onStartupSourcesExhausted, same(recover));
     });
 
     test('explicit launches do not opt into automatic startup failover', () {
