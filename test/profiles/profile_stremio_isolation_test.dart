@@ -217,7 +217,7 @@ void main() {
           'base_url': 'https://addon.invalid/shared-key',
           'enabled': true,
           'types': <String>['movie'],
-          'resources': <String>['stream', 'subtitles'],
+          'resources': <String>['stream', 'subtitles', 'meta'],
         },
       );
       await resourceService.grant(
@@ -241,8 +241,9 @@ void main() {
       expect(management.manifestUrl, sharedManifestUrl);
       expect(
         management.resources,
-        containsAll(<String>['stream', 'subtitles']),
+        containsAll(<String>['stream', 'subtitles', 'meta']),
       );
+      expect(management.baseUrl, 'https://addon.invalid/shared-key');
 
       await expectLater(
         () => service.addAddon(sharedManifestUrl),

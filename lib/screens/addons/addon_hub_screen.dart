@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -60,6 +61,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   final FocusNode _moreFocus = FocusNode(debugLabel: 'hub-more');
   final FocusNode _searchFocus = FocusNode(debugLabel: 'hub-search');
   final FocusNode _searchBtnFocus = FocusNode(debugLabel: 'hub-search-btn');
+  final FocusNode _metadataFocus = FocusNode(
+    debugLabel: 'hub-metadata-provider',
+  );
 
   /// Attached to the first focusable of the installed/engine lists (single-focus
   /// cards), so DOWN from the filter bar deterministically lands on item 1.
@@ -84,6 +88,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   // Installed addons.
   List<StremioAddon> _installed = const [];
   bool _installedLoading = true;
+  String? _metadataProviderPreference;
 
   // Marketplace addons (Official / Community).
   List<MarketplaceAddon> _market = const [];
@@ -153,6 +158,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     _moreFocus.dispose();
     _searchFocus.dispose();
     _searchBtnFocus.dispose();
+    _metadataFocus.dispose();
     _firstRowFocus.dispose();
     _marketNav.dispose();
     _remoteEngines.dispose();
@@ -167,10 +173,16 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       // This is the management inventory. It must include disabled addons so
       // they remain visible and can be enabled again; the normal read path
       // intentionally excludes profile-locally disabled rows for playback.
-      final addons = await _stremio.getAddons(forSettings: true);
+      final results = await Future.wait<Object?>([
+        _stremio.getAddonsForManagement(),
+        _stremio.getMetadataProviderPreference(),
+      ]);
+      final addons = results[0] as List<StremioAddon>;
+      final metadataPreference = results[1] as String?;
       if (mounted) {
         setState(() {
           _installed = addons;
+          _metadataProviderPreference = metadataPreference;
           _installedLoading = false;
         });
       }
@@ -454,6 +466,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         (_source == _AddonSource.official || _source == _AddonSource.community);
     if (isMarket) {
       _marketNav.focus(0);
+    } else if (_kind == _HubKind.addons &&
+        _source == _AddonSource.installed &&
+        _metadataFocus.context != null) {
+      _metadataFocus.requestFocus();
     } else if (_firstRowFocus.context != null) {
       _firstRowFocus.requestFocus();
     }
@@ -1443,29 +1459,174 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final items = _installed
         .where((a) => _matchesFilters(types: a.types, name: a.name))
         .toList();
-    if (items.isEmpty) {
-      return _emptyState(
-        icon: Icons.extension_outlined,
-        title: _installed.isEmpty ? 'No addons yet' : 'No matches',
-        subtitle: _installed.isEmpty
-            ? 'Add a manifest URL, or install one from Discover.'
-            : 'Try a different type or search.',
-      );
+    return Column(
+      children: [
+        _buildMetadataProviderSetting(),
+        Expanded(
+          child: items.isEmpty
+              ? _emptyState(
+                  icon: Icons.extension_outlined,
+                  title: _installed.isEmpty ? 'No addons yet' : 'No matches',
+                  subtitle: _installed.isEmpty
+                      ? 'Add a manifest URL, or install one from Discover.'
+                      : 'Try a different type or search.',
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
+                  // DPAD can only move to rows that are BUILT — pre-build far
+                  // past the viewport so focus never hits an unbuilt-row wall.
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 14),
+                  itemBuilder: (_, i) => _InstalledRow(
+                    addon: items[i],
+                    focusNode: i == 0 ? _firstRowFocus : null,
+                    warnDebrid:
+                        !_hasDebrid && items[i].resources.contains('stream'),
+                    onTap: () => _showOptions(items[i]),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetadataProviderSetting() {
+    final app = AppThemeScope.of(context);
+    final providers = _installed
+        .where(
+          (a) =>
+              a.enabled && a.resources.contains('meta') && a.baseUrl.isNotEmpty,
+        )
+        .toList();
+    providers.sort((a, b) {
+      final aCinemeta = StremioService.isCinemetaAddon(a);
+      final bCinemeta = StremioService.isCinemetaAddon(b);
+      if (aCinemeta == bCinemeta) return 0;
+      return aCinemeta ? -1 : 1;
+    });
+
+    final providerValues = providers
+        .map(StremioService.metadataProviderValue)
+        .toSet();
+    String value;
+    if (_metadataProviderPreference ==
+        StremioService.automaticMetadataProvider) {
+      value = StremioService.automaticMetadataProvider;
+    } else if (_metadataProviderPreference != null &&
+        providerValues.contains(_metadataProviderPreference)) {
+      value = _metadataProviderPreference!;
+    } else {
+      final cinemeta = providers.where(StremioService.isCinemetaAddon);
+      value = cinemeta.isNotEmpty
+          ? StremioService.metadataProviderValue(cinemeta.first)
+          : StremioService.automaticMetadataProvider;
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-      // DPAD can only move to rows that are BUILT — pre-build far past the
-      // viewport so a fast scroll-by-focus never hits an unbuilt-row wall.
-      cacheExtent: 2000,
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 14),
-      itemBuilder: (_, i) => _InstalledRow(
-        addon: items[i],
-        focusNode: i == 0 ? _firstRowFocus : null,
-        warnDebrid: !_hasDebrid && items[i].resources.contains('stream'),
-        onTap: () => _showOptions(items[i]),
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 4, 24, 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: app.seeAll.panel,
+        borderRadius: app.shape.br(13),
+        border: Border.all(color: app.seeAll.line),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final info = Row(
+            children: [
+              Icon(
+                Icons.badge_outlined,
+                size: 20,
+                color: app.fade(app.seeAll.accent2, 0.9),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Metadata provider',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Used to enrich details from Trakt, Simkl and MDBList.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: app.fade(app.core.tx, 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          final picker = StremioDropdown<String>(
+            value: value,
+            focusNode: _metadataFocus,
+            isTelevision: _isTv,
+            onUpArrowPressed: () => _typeFocus.requestFocus(),
+            onDownArrowPressed: () {
+              if (_firstRowFocus.context != null) {
+                _firstRowFocus.requestFocus();
+              }
+            },
+            options: [
+              for (final addon in providers)
+                StremioDropdownOption(
+                  StremioService.metadataProviderValue(addon),
+                  StremioService.isCinemetaAddon(addon)
+                      ? '${addon.name} · Recommended'
+                      : addon.name,
+                ),
+              const StremioDropdownOption(
+                StremioService.automaticMetadataProvider,
+                'Automatic',
+              ),
+            ],
+            onSelected: _setMetadataProvider,
+          );
+          if (constraints.maxWidth < 500) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                info,
+                const SizedBox(height: 12),
+                SizedBox(width: double.infinity, child: picker),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: info),
+              const SizedBox(width: 14),
+              picker,
+            ],
+          );
+        },
       ),
     );
+  }
+
+  Future<void> _setMetadataProvider(String value) async {
+    final previous = _metadataProviderPreference;
+    setState(() => _metadataProviderPreference = value);
+    try {
+      await _stremio.setMetadataProviderPreference(value);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _metadataProviderPreference = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Couldn\'t save metadata provider: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildMarketList() {
@@ -1615,7 +1776,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-      cacheExtent: 2000, // see installed list — keep DPAD off the unbuilt wall
+      // See installed list — keep DPAD off the unbuilt wall.
+      scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (_, i) {
@@ -1663,7 +1825,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
-      cacheExtent: 2000,
+      scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
       children: [
         if (_importedEngines.isNotEmpty) ...[
           _engineSectionHeader('Imported', _importedEngines.length),

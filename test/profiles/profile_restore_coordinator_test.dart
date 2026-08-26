@@ -4,6 +4,7 @@ import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
+import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
@@ -22,6 +23,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -559,6 +561,73 @@ void main() {
       ProfilePinResult.resetRequired,
     );
   });
+
+  test(
+    'metadata provider still matches after graph restore recreates its resource',
+    () async {
+      const manifestUrl = 'https://metadata.invalid/config-token/manifest.json';
+      final addon = StremioAddon(
+        id: 'configured.metadata',
+        name: 'Configured metadata',
+        manifestUrl: manifestUrl,
+        baseUrl: 'https://metadata.invalid/config-token',
+        types: const <String>['movie', 'series'],
+        resources: const <String>['meta'],
+      );
+      final resourceService = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final originalResource = await resourceService.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.stremioAddon,
+        label: addon.name,
+        publicConfig: <String, dynamic>{
+          'addonName': addon.name,
+          'contentKinds': addon.types,
+        },
+        secretConfig: addon.toJson(),
+      );
+      final selectedValue = StremioService.metadataProviderValue(
+        addon.copyWith(connectionResourceId: originalResource.id),
+      );
+      await StremioService.instance.setMetadataProviderPreference(
+        selectedValue,
+      );
+
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package = await ProfilePackageService(
+        registry: registry,
+        resources: resourceService,
+      ).exportAllProfiles(context: authorization, includeSecrets: true);
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final recreatedResource =
+          (await registry.listGrantedResources(imported.id)).firstWhere(
+            (resource) =>
+                resource.type == ConnectionResourceType.stremioAddon &&
+                resource.id != originalResource.id,
+          );
+      expect(recreatedResource.id, isNot(originalResource.id));
+      final restoredValue = (await SharedPreferences.getInstance()).getString(
+        'p.${imported.id}.g.${imported.visibleDataGeneration}.'
+        'stremio_metadata_provider_v1',
+      );
+      expect(restoredValue, selectedValue);
+      expect(
+        StremioService.metadataProviderValue(
+          addon.copyWith(connectionResourceId: recreatedResource.id),
+        ),
+        restoredValue,
+      );
+    },
+  );
 
   test(
     'device graph publishes a final manifest covering preferences db and file',

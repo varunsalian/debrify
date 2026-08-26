@@ -133,6 +133,9 @@ abstract final class SanitizedProfilePreferences {
               'performance',
               'full_hd',
             }.contains(value);
+      case 'stremio_metadata_provider_v1':
+        return value is String &&
+            (value == 'automatic' || RegExp(r'^[a-f0-9]{64}$').hasMatch(value));
     }
     return false;
   }
