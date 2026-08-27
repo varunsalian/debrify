@@ -11058,20 +11058,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// yank playback away from where the user put it or seek a replacement
   /// stream it was never watching.
   Future<void> _verifyResumeLanding(int targetMs, int epoch) async {
-    if (await _resumeSeekLanded(targetMs, epoch)) return;
-    if (!mounted || _screenDisposed) return;
-    if (epoch != _resumeVerifyEpoch) return;
-    if (_resumeWriteGuard.pendingTargetMs != targetMs) return;
-    debugPrint(
-      'Resume: seek did not land (position=${_player.state.position.inMilliseconds}ms '
-      'target=${targetMs}ms) — re-issuing',
-    );
-    await _player.seek(Duration(milliseconds: targetMs));
+    // A viewer who sees playback start from 0 decides "broken" within a couple
+    // of seconds — a single retry after 5s (the first version of this) lost
+    // the race against the user's own quit on the observed phone repro. Check
+    // early and re-issue up to three times: the first retry catches the common
+    // case (mpv restarted a barely-warmed debrid stream at 0), the later ones
+    // land on a progressively warmer stream. Every cycle keeps the same abort
+    // conditions, so a user seek, item change, or dispose stops it instantly.
+    const waits = [
+      Duration(milliseconds: 1500),
+      Duration(milliseconds: 1500),
+      Duration(seconds: 3),
+    ];
+    for (var attempt = 0; attempt < waits.length; attempt++) {
+      if (await _resumeSeekLanded(targetMs, epoch, timeout: waits[attempt])) {
+        return;
+      }
+      if (!mounted || _screenDisposed) return;
+      if (epoch != _resumeVerifyEpoch) return;
+      if (_resumeWriteGuard.pendingTargetMs != targetMs) return;
+      debugPrint(
+        'Resume: seek did not land '
+        '(position=${_player.state.position.inMilliseconds}ms '
+        'target=${targetMs}ms) — re-issuing (${attempt + 1}/${waits.length})',
+      );
+      await _player.seek(Duration(milliseconds: targetMs));
+    }
     if (await _resumeSeekLanded(targetMs, epoch)) return;
     // Still adrift: leave playback where it is rather than fighting the stream.
     // The write guard keeps the stored resume point intact either way.
     debugPrint(
-      'Resume: seek still unlanded after retry — leaving playback in place',
+      'Resume: seek still unlanded after retries — leaving playback in place',
     );
   }
 
@@ -11082,17 +11099,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Returns true for "stop verifying", which covers landing as well as the
   /// cases where the target stopped being ours: the screen went away, the
   /// epoch moved on, the user seeked, or another item loaded.
-  Future<bool> _resumeSeekLanded(int targetMs, int epoch) async {
-    const timeout = Duration(seconds: 5);
+  Future<bool> _resumeSeekLanded(
+    int targetMs,
+    int epoch, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     const interval = Duration(milliseconds: 200);
+    // mpv can MASK a seek: it reports the target position for a moment, then
+    // a cold debrid stream answers the actual seek by restarting at 0 — the
+    // observed "seekbar at halfway for a few ms" phone repro. A single
+    // position reading is therefore worthless as landing proof: require the
+    // position to still be at the target after a beat, or keep watching.
+    const confirmDelay = Duration(milliseconds: 800);
+    bool atTarget() =>
+        _player.state.position.inMilliseconds >=
+        targetMs - _resumeWriteGuard.toleranceMs;
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       if (!mounted || _screenDisposed) return true;
       if (epoch != _resumeVerifyEpoch) return true;
       if (_resumeWriteGuard.pendingTargetMs != targetMs) return true;
-      if (_player.state.position.inMilliseconds >=
-          targetMs - _resumeWriteGuard.toleranceMs) {
-        return true;
+      if (atTarget()) {
+        await Future<void>.delayed(confirmDelay);
+        if (!mounted || _screenDisposed) return true;
+        if (epoch != _resumeVerifyEpoch) return true;
+        if (_resumeWriteGuard.pendingTargetMs != targetMs) return true;
+        if (atTarget()) return true;
+        debugPrint(
+          'Resume: landing was transient (masked seek unwound to '
+          '${_player.state.position.inMilliseconds}ms) — still watching',
+        );
+        continue;
       }
       await Future<void>.delayed(interval);
     }
