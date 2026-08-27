@@ -4,6 +4,7 @@ import '../../models/stremio_addon.dart';
 import '../watched_status_service.dart';
 import 'mdblist_models.dart';
 import 'mdblist_service.dart';
+import '../watched_action_coordinator.dart';
 
 enum MdblistItemMenuAction {
   addToWatchlist,
@@ -167,11 +168,19 @@ Future<void> handleMdblistMenuAction(
       success = await service.removeFromWatchlist(ids, type);
       label = 'Removed from MDBList Watchlist';
     case MdblistItemMenuAction.markWatched:
-      success = await service.markWatched(ids, type);
-      label = 'Marked watched on MDBList';
+      success = (await WatchedActionCoordinator.setTitleWatched(
+        imdbId: imdb,
+        contentType: item.type,
+        watched: true,
+      )).success;
+      label = 'Marked watched';
     case MdblistItemMenuAction.markUnwatched:
-      success = await service.markUnwatched(ids, type);
-      label = 'Marked unwatched on MDBList';
+      success = (await WatchedActionCoordinator.setTitleWatched(
+        imdbId: imdb,
+        contentType: item.type,
+        watched: false,
+      )).success;
+      label = 'Marked unwatched';
     case MdblistItemMenuAction.rate:
       if (!context.mounted) return;
       final rating = presetRating ?? await showMdblistRatingDialog(context);

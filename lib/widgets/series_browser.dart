@@ -7,6 +7,7 @@ import '../models/series_playlist.dart';
 import '../services/episode_info_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
 import '../services/storage_service.dart';
+import '../services/tracking_source_policy.dart';
 import '../services/tvmaze_service.dart';
 import '../utils/episode_progress_merge.dart';
 import '../utils/series_parser.dart';
@@ -126,6 +127,16 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   // MDBList's launch-time snapshot follows the same replaceable-store contract
   // as Simkl and participates in every player-guide progress decision.
   Map<String, double> _mdblistEpisodeProgress = {};
+  TrackingSourcePolicy _trackingPolicy = const TrackingSourcePolicy(
+    scrobbleTargets: {TrackingSource.local},
+    progressSource: WatchProgressSource.smart,
+    homeTickSources: {
+      TrackingSource.local,
+      TrackingSource.trakt,
+      TrackingSource.simkl,
+      TrackingSource.mdblist,
+    },
+  );
   int _trackerRefreshGeneration = 0;
   bool _initialDependencyPassSeen = false;
 
@@ -464,6 +475,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           (imdbId != null && imdbId.isNotEmpty)
               ? StorageService.getEpisodeMdblistProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
+          TrackingSourcePolicy.load(),
         ]);
         if (mounted) {
           setState(() {
@@ -471,6 +483,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             _traktEpisodeProgress = results[1] as Map<String, double>;
             _simklEpisodeProgress = results[2] as Map<String, double>;
             _mdblistEpisodeProgress = results[3] as Map<String, double>;
+            _trackingPolicy = results[4] as TrackingSourcePolicy;
           });
         }
       }
@@ -937,16 +950,29 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       positionMs = progressData['positionMs'] as int? ?? 0;
       durationMs = progressData['durationMs'] as int? ?? 0;
     }
-    final traktPercent = _traktEpisodeProgress[episodeKey];
-    final simklPercent = _simklEpisodeProgress[episodeKey];
-    final mdblistPercent = _mdblistEpisodeProgress[episodeKey];
+    final traktPercent = _trackingPolicy.guideProgressFrom(
+      TrackingSource.trakt,
+      _traktEpisodeProgress[episodeKey],
+    );
+    final simklPercent = _trackingPolicy.guideProgressFrom(
+      TrackingSource.simkl,
+      _simklEpisodeProgress[episodeKey],
+    );
+    final mdblistPercent = _trackingPolicy.guideProgressFrom(
+      TrackingSource.mdblist,
+      _mdblistEpisodeProgress[episodeKey],
+    );
+    // Ticks and bars both follow the Progress source — local contributes
+    // nothing (tick or position) when this device isn't an admitted source.
+    final localEligible = _trackingPolicy.progressFrom(TrackingSource.local);
     final localState = resolveEpisodeLocalWatchState(
       locallyWatched:
-          _finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(
-            episode.seriesInfo.episode,
-          ) ??
-          false,
-      localPositionMs: positionMs,
+          localEligible &&
+          (_finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(
+                episode.seriesInfo.episode,
+              ) ??
+              false),
+      localPositionMs: localEligible ? positionMs : 0,
       localDurationMs: durationMs,
       traktPercent: traktPercent,
       simklPercent: simklPercent,
@@ -974,16 +1000,33 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     final number = episode.seriesInfo.episode;
     if (season == null || number == null) return false;
     final key = '${season}_$number';
-    final trakt = _traktEpisodeProgress[key] ?? 0.0;
-    final simkl = _simklEpisodeProgress[key] ?? 0.0;
-    final mdblist = _mdblistEpisodeProgress[key] ?? 0.0;
+    final trakt =
+        _trackingPolicy.guideProgressFrom(
+          TrackingSource.trakt,
+          _traktEpisodeProgress[key],
+        ) ??
+        0.0;
+    final simkl =
+        _trackingPolicy.guideProgressFrom(
+          TrackingSource.simkl,
+          _simklEpisodeProgress[key],
+        ) ??
+        0.0;
+    final mdblist =
+        _trackingPolicy.guideProgressFrom(
+          TrackingSource.mdblist,
+          _mdblistEpisodeProgress[key],
+        ) ??
+        0.0;
     final progressData = _episodeProgress[key];
     final positionMs = progressData?['positionMs'] as int? ?? 0;
     final durationMs = progressData?['durationMs'] as int? ?? 0;
+    final localEligible = _trackingPolicy.progressFrom(TrackingSource.local);
     final localState = resolveEpisodeLocalWatchState(
       locallyWatched:
+          localEligible &&
           _finishedEpisodes[season.toString()]?.contains(number) == true,
-      localPositionMs: positionMs,
+      localPositionMs: localEligible ? positionMs : 0,
       localDurationMs: durationMs,
       traktPercent: trakt,
       simklPercent: simkl,
@@ -994,7 +1037,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
     // A real local partial means the user has started a rewatch; match the
     // progress-bar rule and show that active state instead of a remote tick.
-    if (progressData != null) {
+    if (_trackingPolicy.progressFrom(TrackingSource.local) &&
+        progressData != null) {
       if (durationMs > 0) {
         final local = localState.positionMs / durationMs;
         if (local > 0 && local < 0.95) return false;

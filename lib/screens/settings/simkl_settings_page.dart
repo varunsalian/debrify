@@ -6,8 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../services/simkl/simkl_service.dart';
+import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -24,7 +24,6 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _username;
-  bool _syncCatalogItems = false;
 
   // PIN flow
   String? _userCode;
@@ -66,14 +65,12 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   Future<void> _loadSettings() async {
     final isAuth = await SimklService.instance.isAuthenticated();
     final username = await SimklService.instance.getUsername();
-    final syncCatalog = await StorageService.getSimklSyncCatalogItems();
 
     if (!mounted) return;
 
     setState(() {
       _isConnected = isAuth;
       _username = username;
-      _syncCatalogItems = syncCatalog;
       _loading = false;
     });
     // TV entry focus: land DPAD users on the login/logout button — unless
@@ -154,10 +151,8 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
         _isConnected = true;
         _isConnecting = false;
         _username = username;
-        _syncCatalogItems = true;
         _resetPinState();
       });
-      await StorageService.setSimklSyncCatalogItems(true);
       AnalyticsService.integrationConnected('simkl', {
         'surface': 'settings',
         'method': 'pin',
@@ -236,7 +231,14 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
       _username = null;
     });
     MainPageBridge.notifyIntegrationChanged();
-    _showSnackBar('Logged out from Simkl', isError: false);
+    final fellBack = await StorageService.takeTrackingProgressFallbackNotice();
+    if (!mounted) return;
+    _showSnackBar(
+      fellBack
+          ? 'Logged out from Simkl. Progress source changed to Smart.'
+          : 'Logged out from Simkl',
+      isError: false,
+    );
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
@@ -357,30 +359,6 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                       ),
                     ),
                   ),
-
-                  // Sync Catalog Items toggle (only when connected)
-                  if (_isConnected) ...[
-                    const SizedBox(height: 16),
-                    // _SimklFocusRing: SwitchListTile's built-in focus
-                    // highlight is too subtle for TV, so paint the accent
-                    // ring around it.
-                    _SimklFocusRing(
-                      child: Card(
-                        child: SwitchListTile(
-                          title: const Text('Sync Catalog Items'),
-                          subtitle: Text(
-                            'Scrobble playback to Simkl for all content played from addons, not just Simkl items',
-                            style: TextStyle(fontSize: 12, color: t.dim),
-                          ),
-                          value: _syncCatalogItems,
-                          onChanged: (value) {
-                            setState(() => _syncCatalogItems = value);
-                            StorageService.setSimklSyncCatalogItems(value);
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
 
                   const SizedBox(height: 16),
 

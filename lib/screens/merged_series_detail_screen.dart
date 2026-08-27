@@ -3443,6 +3443,7 @@ class _RecCardState extends State<_RecCard> {
                         imdbId: rec.effectiveImdbId ?? rec.id,
                         contentType: rec.type,
                         compact: true,
+                        tickPolicyScoped: true,
                       ),
                     ),
                 ],

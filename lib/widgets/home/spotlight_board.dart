@@ -2621,6 +2621,7 @@ class _CardState extends State<_Card> {
                     imdbId: c.watchedImdbId!,
                     contentType: c.watchedContentType ?? 'movie',
                     compact: true,
+                    tickPolicyScoped: true,
                   ),
                 ),
             ],

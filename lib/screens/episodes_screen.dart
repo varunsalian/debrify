@@ -56,7 +56,7 @@ class EpisodesScreen extends StatefulWidget {
   /// When true, episode Sources/Play carry the Trakt scrobble flag + Trakt
   /// resume position so playback syncs to Trakt exactly like the old home
   /// episode view. Left false for plain catalog/addon items so their scrobble
-  /// stays governed by the user's "Sync Catalog Items" setting.
+  /// stays governed by the user's Tracking scrobble selection.
   final bool isTraktSource;
   final bool isMdblistSource;
 

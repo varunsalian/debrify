@@ -56,6 +56,7 @@ import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
+import '../services/tracking_source_policy.dart';
 import '../utils/concurrency.dart';
 import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
@@ -948,6 +949,72 @@ class _SearchScreenState extends State<SearchScreen>
   /// source dropdown (hidden when disconnected, so an unauthed user isn't shown
   /// a dead source; kept visible if it's somehow the active source).
   bool _isMdblistAuthenticated = false;
+
+  /// The Progress source, mirrored for the CW card lookups below. Smart until
+  /// the first load resolves it (Smart = every row keeps its own numbers,
+  /// which is also the pre-Tracking behaviour).
+  WatchProgressSource _cwProgressSource = WatchProgressSource.smart;
+
+  /// Continue Watching cards show the title from whichever row owns it, but
+  /// the PROGRESS comes from the selected Progress source — so a card can
+  /// never advertise a resume point the detail page and Play button refuse to
+  /// honour. In Smart mode each row keeps its own numbers (legacy behaviour);
+  /// in a dedicated mode a title the chosen source doesn't know simply renders
+  /// as a plain poster. IPTV rows are exempt: they are routeKey-keyed player
+  /// history that no tracker can describe.
+  double? _cwCardProgress(_CwKind kind, StremioMeta item) =>
+      _cwCardMaps(kind).progress[item.imdbId];
+
+  String? _cwCardEpisode(_CwKind kind, StremioMeta item) =>
+      _cwCardMaps(kind).episode[item.imdbId];
+
+  int? _cwCardRemainingMinutes(_CwKind kind, StremioMeta item) =>
+      _cwCardMaps(kind).remaining?[item.imdbId];
+
+  ({
+    Map<String, double> progress,
+    Map<String, String> episode,
+    Map<String, int>? remaining,
+  })
+  _cwCardMaps(_CwKind kind) {
+    final effective = kind == _CwKind.iptv
+        ? kind
+        : switch (_cwProgressSource) {
+            WatchProgressSource.smart => kind,
+            WatchProgressSource.local => _CwKind.local,
+            WatchProgressSource.trakt => _CwKind.trakt,
+            WatchProgressSource.simkl => _CwKind.simkl,
+            WatchProgressSource.mdblist => _CwKind.mdblist,
+          };
+    return switch (effective) {
+      _CwKind.local => (
+        progress: _cwProgress,
+        episode: _cwEpisode,
+        remaining: _cwRemainingMinutes,
+      ),
+      _CwKind.trakt => (
+        progress: _traktProgress,
+        episode: _traktEpisode,
+        remaining: _traktRemainingMinutes,
+      ),
+      _CwKind.simkl => (
+        progress: _simklProgress,
+        episode: _simklEpisode,
+        remaining: null,
+      ),
+      _CwKind.mdblist => (
+        progress: _mdblistProgress,
+        episode: _mdblistEpisode,
+        remaining: null,
+      ),
+      _CwKind.iptv => (
+        progress: _iptvCwProgress,
+        episode: _iptvCwEpisode,
+        remaining: null,
+      ),
+    };
+  }
+
   // Addons that produced homepage rows, indexed by id, so a Continue Watching
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
@@ -967,9 +1034,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.local,
         items: _cwMovies,
         nodes: _cwMovieNodes,
-        progressOf: (m) => _cwProgress[m.imdbId],
+        progressOf: (m) => _cwCardProgress(_CwKind.local, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (m) => _cwRemainingMinutes[m.imdbId],
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
@@ -986,9 +1053,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.local,
         items: _cwSeries,
         nodes: _cwSeriesNodes,
-        progressOf: (m) => _cwProgress[m.imdbId],
-        episodeOf: (m) => _cwEpisode[m.imdbId],
-        remainingMinutesOf: (m) => _cwRemainingMinutes[m.imdbId],
+        progressOf: (m) => _cwCardProgress(_CwKind.local, m),
+        episodeOf: (m) => _cwCardEpisode(_CwKind.local, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
         episodeArtworkOf: (m) => _cwEpisodeArtwork[m.imdbId],
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
@@ -1003,9 +1070,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.trakt,
         items: _traktMovies,
         nodes: _traktMovieNodes,
-        progressOf: (m) => _traktProgress[m.imdbId],
+        progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (m) => _traktRemainingMinutes[m.imdbId],
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
@@ -1020,9 +1087,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.trakt,
         items: _traktSeries,
         nodes: _traktSeriesNodes,
-        progressOf: (m) => _traktProgress[m.imdbId],
-        episodeOf: (m) => _traktEpisode[m.imdbId],
-        remainingMinutesOf: (m) => _traktRemainingMinutes[m.imdbId],
+        progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
+        episodeOf: (m) => _cwCardEpisode(_CwKind.trakt, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
         episodeArtworkOf: (m) => _traktEpisodeArtwork[m.imdbId],
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
@@ -1043,9 +1110,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.simkl,
         items: _simklMovies,
         nodes: _simklMovieNodes,
-        progressOf: (m) => _simklProgress[m.imdbId],
+        progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (_) => null,
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
@@ -1060,9 +1127,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.simkl,
         items: _simklSeries,
         nodes: _simklSeriesNodes,
-        progressOf: (m) => _simklProgress[m.imdbId],
-        episodeOf: (m) => _simklEpisode[m.imdbId],
-        remainingMinutesOf: (_) => null,
+        progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
+        episodeOf: (m) => _cwCardEpisode(_CwKind.simkl, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
         episodeArtworkOf: (m) => _simklEpisodeArtwork[m.imdbId],
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
@@ -1077,9 +1144,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.mdblist,
         items: _mdblistMovies,
         nodes: _mdblistMovieNodes,
-        progressOf: (m) => _mdblistProgress[m.imdbId],
+        progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (_) => null,
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
@@ -1095,9 +1162,9 @@ class _SearchScreenState extends State<SearchScreen>
         kind: _CwKind.mdblist,
         items: _mdblistSeries,
         nodes: _mdblistSeriesNodes,
-        progressOf: (m) => _mdblistProgress[m.imdbId],
-        episodeOf: (m) => _mdblistEpisode[m.imdbId],
-        remainingMinutesOf: (_) => null,
+        progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
+        episodeOf: (m) => _cwCardEpisode(_CwKind.mdblist, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
@@ -1145,7 +1212,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Whether any Continue Watching row is currently on-screen (drives focus
   /// wiring between it and the first catalog row). Uses allocation-free field
-  /// checks (not `_cwRows`) since it's read on the per-card build hot path.
+  /// checks (not `_cwRows`) since it's read on the per-card build hot path —
+  /// keep these conditions in lock-step with the `_cwRows` row gates above.
   bool get _cwVisible =>
       ((_cwEnabled &&
               ((_cwMovies.isNotEmpty && !_homeDisabled.contains('cw:movies')) ||
@@ -1819,6 +1887,11 @@ class _SearchScreenState extends State<SearchScreen>
     _refreshSimklAuthState();
     _refreshMdblistAuthState();
     _refreshPikpakOnly();
+    // Connect/disconnect can change what the local shelves should hold (the
+    // single-owner rule keys off scrobbling), so re-read local CW before the
+    // tracker rows; _reloadForHomeSettings can legitimately return early when
+    // no row/layout preference changed.
+    if (!widget.searchMode && !widget.discoverMode) _loadContinueWatching();
     // Trakt/Simkl Continue Watching rows are never rendered on the dedicated
     // Search tab, so don't refetch them there.
     if (!widget.searchMode) {
@@ -2686,8 +2759,15 @@ class _SearchScreenState extends State<SearchScreen>
   /// (e.g. after returning from a detail/playback).
   Future<void> _loadContinueWatching() async {
     final token = ++_cwLoadToken;
+    // Every CW reload passes through here (init, Home-settings change,
+    // integration change, post-playback), so it is the one place the card
+    // lookups need their Progress source refreshed.
+    final progressSource = await StorageService.getWatchProgressSource();
     final enabled = await StorageService.getHomeContinueWatchingEnabled();
     if (!mounted || token != _cwLoadToken) return;
+    if (progressSource != _cwProgressSource) {
+      setState(() => _cwProgressSource = progressSource);
+    }
     if (!enabled) {
       // Free the focus nodes too — otherwise they linger allocated until
       // dispose while the rows are hidden.
@@ -4840,7 +4920,7 @@ class _SearchScreenState extends State<SearchScreen>
       title: 'Simkl Continue Watching',
       initialCategory: initialCategory,
       items: _simklAll,
-      progressOf: (m) => _simklProgress[m.imdbId],
+      progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
       onOpen: _openSimklCwItem,
       onQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
       // One uniform pass instead of an explicit Simkl fetch followed by
@@ -5032,7 +5112,7 @@ class _SearchScreenState extends State<SearchScreen>
       title: 'MDBList Continue Watching',
       initialCategory: initialCategory,
       items: _mdblistAll,
-      progressOf: (m) => _mdblistProgress[m.imdbId],
+      progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
       onOpen: _openMdblistCwItem,
       onQuickPlay: _pikpakOnly ? null : _playMdblistCwItem,
       onReload: () async {
@@ -12825,6 +12905,7 @@ class _SearchScreenState extends State<SearchScreen>
     // and Play would then start the pilot under a "Resume · S1E2" button.
     ({bool started, int season, int episode})? promisedTarget,
   }) async {
+    final trackingPolicy = await TrackingSourcePolicy.load();
     debugPrint(
       '[SeriesResume] play-pressed title="${item.name}" '
       'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
@@ -12869,7 +12950,8 @@ class _SearchScreenState extends State<SearchScreen>
       // stale one left over from a previously-browsed series.
       _activeAddonId = addon.id;
 
-      if (isMdblistSource) {
+      if (isMdblistSource &&
+          trackingPolicy.progressFrom(TrackingSource.mdblist)) {
         final owned = await _mdblistResumeItemFor(item);
         if (!mounted || cancelled) return;
         if (owned != null) {
@@ -12972,7 +13054,9 @@ class _SearchScreenState extends State<SearchScreen>
 
       // Trakt-sourced MOVIE keeps its cached-CW fast path (series resolve
       // through the reconciler above).
-      if (item.type != 'series' && isTraktSource) {
+      if (item.type != 'series' &&
+          isTraktSource &&
+          trackingPolicy.progressFrom(TrackingSource.trakt)) {
         final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
         if (cw != null) {
           final sel = await TraktContinueWatchingService.instance
@@ -13003,17 +13087,20 @@ class _SearchScreenState extends State<SearchScreen>
           // launch with local-only resume — the reconciliation in the player
           // degrades gracefully to the local position.
           final lookups = await Future.wait<double?>([
-            (_isTraktAuthenticated || isTraktSource)
+            trackingPolicy.progressFrom(TrackingSource.trakt) &&
+                    (_isTraktAuthenticated || isTraktSource)
                 ? _traktMoviePercent(
                     item,
                   ).timeout(const Duration(seconds: 4), onTimeout: () => null)
                 : Future<double?>.value(null),
-            _isSimklAuthenticated
+            trackingPolicy.progressFrom(TrackingSource.simkl) &&
+                    _isSimklAuthenticated
                 ? _simklMoviePercent(
                     item,
                   ).timeout(const Duration(seconds: 4), onTimeout: () => null)
                 : Future<double?>.value(null),
-            _isMdblistAuthenticated
+            trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+                    _isMdblistAuthenticated
                 ? _mdblistMoviePercent(
                     item,
                   ).timeout(const Duration(seconds: 4), onTimeout: () => null)
@@ -13032,13 +13119,16 @@ class _SearchScreenState extends State<SearchScreen>
         // ≥80% stop re-marks it completed when the rewatch finishes. Gated on the
         // sync setting + auth so we never un-complete a movie that won't actually
         // be re-tracked. Row quick-play (no preferTraktResume) is left untouched.
+        // WRITE-side action: gated on auth + the Scrobble master (below), NOT
+        // the Progress source — a This-device user scrobbling to Simkl still
+        // needs the replay session created.
         if (preferTraktResume && _isSimklAuthenticated) {
           // Same id resolution the detail screen's status loader uses (_imdbOf),
           // so the "Rewatch" label and this flip never disagree on the title.
           final imdb = _imdbOf(item);
-          final syncCatalog = await StorageService.getSimklSyncCatalogItems();
+          final scrobblesSimkl = trackingPolicy.scrobbles(TrackingSource.simkl);
           if (!mounted || cancelled) return;
-          if (imdb != null && syncCatalog) {
+          if (imdb != null && scrobblesSimkl) {
             // Time-boxed like the tracker-percent lookups above: a degraded Simkl
             // API must never stall the Play press. On timeout we just skip the
             // flip — worst case the rewatch doesn't surface in Continue Watching,
@@ -13093,14 +13183,16 @@ class _SearchScreenState extends State<SearchScreen>
       // last-played episode for this show (by imdbId, then by title), else S01E01.
       int? season;
       int? episode;
-      final byId = await StorageService.getLastPlayedEpisodeByImdbId(playId);
+      final byId = trackingPolicy.progressFrom(TrackingSource.local)
+          ? await StorageService.getLastPlayedEpisodeByImdbId(playId)
+          : null;
       season = byId?['season'] as int?;
       episode = byId?['episode'] as int?;
       final lastFinished = byId?['finished'] == true;
       if (season == null || episode == null) {
-        final byTitle = await StorageService.getLastPlayedEpisode(
-          seriesTitle: item.name,
-        );
+        final byTitle = trackingPolicy.progressFrom(TrackingSource.local)
+            ? await StorageService.getLastPlayedEpisode(seriesTitle: item.name)
+            : null;
         season ??= byTitle?['season'] as int?;
         episode ??= byTitle?['episode'] as int?;
       }
@@ -13110,6 +13202,7 @@ class _SearchScreenState extends State<SearchScreen>
       // freezes the Play press — on timeout it falls through to S01E01.
       if ((season == null || episode == null) &&
           _isSimklAuthenticated &&
+          trackingPolicy.progressFrom(TrackingSource.simkl) &&
           preferTraktResume) {
         final next = await _simklNextToWatchFor(
           item,
@@ -13122,6 +13215,7 @@ class _SearchScreenState extends State<SearchScreen>
       }
       if ((season == null || episode == null) &&
           _isMdblistAuthenticated &&
+          trackingPolicy.progressFrom(TrackingSource.mdblist) &&
           preferTraktResume) {
         final next = await _mdblistResumeItemFor(
           item,
@@ -13204,7 +13298,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// tracker-availability flags — auth settling, a connect/disconnect, or a
   /// Trakt-sourced reopen must recompute rather than reuse an answer built
   /// from a different set of eligible sources.
-  String _seriesResumeRev(String playId, bool isTraktSource) =>
+  String _seriesResumeRev(
+    String playId,
+    bool isTraktSource,
+    WatchProgressSource progressSource,
+  ) =>
       '${EpisodeTrackerSnapshotRevision.identity('trakt', playId)}.'
       '${EpisodeTrackerSnapshotRevision.identity('simkl', playId)}.'
       '${EpisodeTrackerSnapshotRevision.identity('mdblist', playId)}.'
@@ -13212,7 +13310,8 @@ class _SearchScreenState extends State<SearchScreen>
       // one resume input with no tracker revision of its own.
       '${EpisodeTrackerSnapshotRevision.identity('local', playId)}.'
       '${_isTraktAuthenticated ? 1 : 0}${_isSimklAuthenticated ? 1 : 0}'
-      '${_isMdblistAuthenticated ? 1 : 0}${isTraktSource ? 1 : 0}';
+      '${_isMdblistAuthenticated ? 1 : 0}${isTraktSource ? 1 : 0}.'
+      '${progressSource.name}';
 
   /// The reconciled series-resume answer (2026-08-25 redesign — fixes the
   /// home-card / pill / Play three-way disagreement):
@@ -13236,9 +13335,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// `sourcePrio` names the winning provider (0 Trakt, 1 Simkl, 2 MDBList,
   /// 3 local, null fallback/none) — Play stamps the rebuilt selection's
   /// source flags from it, so an ADVANCED tracker winner keeps its player
-  /// scrobbling attribution (the launcher's auto-enable only rescues users
-  /// with the catalog-sync setting ON; tracker-connected users with it OFF
-  /// relied entirely on the selection flag).
+  /// scrobbling attribution. The launcher's shared normalization still applies
+  /// the independent Scrobble masters before any write reaches a tracker.
   Future<
     ({
       bool started,
@@ -13250,10 +13348,15 @@ class _SearchScreenState extends State<SearchScreen>
     })
   >
   _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false}) async {
+    final trackingPolicy = await TrackingSourcePolicy.load();
     final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
     final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final rev = _seriesResumeRev(playId, isTraktSource);
+    final rev = _seriesResumeRev(
+      playId,
+      isTraktSource,
+      trackingPolicy.progressSource,
+    );
     final hit = _seriesResumeCache[playId];
     if (hit != null && nowMs - hit.atMs < 45000 && hit.rev == rev) {
       debugPrint(
@@ -13275,25 +13378,37 @@ class _SearchScreenState extends State<SearchScreen>
 
     // Kick everything off together; a degraded tracker API must never stall
     // the Play press (same 4s boxes the old chain used).
-    final traktF = (_isTraktAuthenticated || isTraktSource)
+    final traktF =
+        trackingPolicy.progressFrom(TrackingSource.trakt) &&
+            (_isTraktAuthenticated || isTraktSource)
         ? _traktSelectionFor(
             item,
           ).timeout(const Duration(seconds: 4), onTimeout: () => null)
         : Future<({AdvancedSearchSelection sel, int? tsMs})?>.value(null);
-    final simklF = _isSimklAuthenticated
+    final simklF =
+        trackingPolicy.progressFrom(TrackingSource.simkl) &&
+            _isSimklAuthenticated
         ? _simklResumeFor(
             item,
           ).timeout(const Duration(seconds: 4), onTimeout: () => null)
         : Future<
             ({int season, int episode, double? progress, DateTime? pausedAt})?
           >.value(null);
-    final mdbF = _isMdblistAuthenticated
+    final mdbF =
+        trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+            _isMdblistAuthenticated
         ? _mdblistResumeItemFor(
             item,
           ).timeout(const Duration(seconds: 4), onTimeout: () => null)
         : Future<MdblistContinueWatchingItem?>.value(null);
-    final localF = _localSeriesResumeFor(item, playId);
-    final nextF = _isSimklAuthenticated
+    final localF = trackingPolicy.progressFrom(TrackingSource.local)
+        ? _localSeriesResumeFor(item, playId)
+        : Future<
+            ({int season, int episode, double? pct, int? tsMs, bool finished})?
+          >.value(null);
+    final nextF =
+        trackingPolicy.progressFrom(TrackingSource.simkl) &&
+            _isSimklAuthenticated
         ? _simklNextToWatchFor(
             item,
           ).timeout(const Duration(seconds: 4), onTimeout: () => null)
@@ -13464,7 +13579,8 @@ class _SearchScreenState extends State<SearchScreen>
         'source=${_resumeSourceName(w.prio)} base=S${w.s}E${w.e} '
         'pct=${w.pct} timestamp=${_formatResumeTimestamp(w.tsMs)} '
         'finished=${w.finished} trackerFrontierAhead=$trackerFrontierAhead '
-        'willAdvance=$done',
+        'willAdvance=$done '
+        'progressPolicy=${trackingPolicy.progressSource.name}',
       );
       if (done) {
         // 4s-boxed like every other network hop here: the guide fetch's body
@@ -13770,12 +13886,14 @@ class _SearchScreenState extends State<SearchScreen>
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
+    final trackingPolicy = await TrackingSourcePolicy.load();
     debugPrint(
       '[SeriesResume] label-resolve-start title="${item.name}" '
       'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
       'traktSource=$isTraktSource mdblistSource=$isMdblistSource',
     );
-    if (isMdblistSource) {
+    if (isMdblistSource &&
+        trackingPolicy.progressFrom(TrackingSource.mdblist)) {
       final owned = await _mdblistResumeItemFor(item);
       if (!mounted) return (started: false, season: null, episode: null);
       if (owned != null) {
@@ -13808,7 +13926,7 @@ class _SearchScreenState extends State<SearchScreen>
     // same fast path the old Trakt-first arm gave movies (a non-Trakt-sourced
     // movie deliberately stays local-first; Play resumes it from the local
     // byte offset, so a tracker-first label would over-promise).
-    if (isTraktSource) {
+    if (isTraktSource && trackingPolicy.progressFrom(TrackingSource.trakt)) {
       final resume = await _traktResumeFor(item);
       if (!mounted) return (started: false, season: null, episode: null);
       if (resume != null) return resume;
@@ -13819,18 +13937,26 @@ class _SearchScreenState extends State<SearchScreen>
     // a movie paused on another device, matching what Play now seeks to (kept
     // in lock-step with the movie branch of _onCatalogPlay).
     final playId = item.imdbId ?? item.effectiveImdbId ?? item.id;
-    final st = await StorageService.getVideoPlaybackStateByImdbId(playId);
+    final st = trackingPolicy.progressFrom(TrackingSource.local)
+        ? await StorageService.getVideoPlaybackStateByImdbId(playId)
+        : null;
     if (!mounted) return (started: false, season: null, episode: null);
     var started = st != null;
-    if (!started && (_isTraktAuthenticated || isTraktSource)) {
+    if (!started &&
+        trackingPolicy.progressFrom(TrackingSource.trakt) &&
+        (_isTraktAuthenticated || isTraktSource)) {
       started = (await _traktMoviePercent(item)) != null;
       if (!mounted) return (started: false, season: null, episode: null);
     }
-    if (!started && _isSimklAuthenticated) {
+    if (!started &&
+        trackingPolicy.progressFrom(TrackingSource.simkl) &&
+        _isSimklAuthenticated) {
       started = (await _simklMoviePercent(item)) != null;
       if (!mounted) return (started: false, season: null, episode: null);
     }
-    if (!started && _isMdblistAuthenticated) {
+    if (!started &&
+        trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+        _isMdblistAuthenticated) {
       started = (await _mdblistMoviePercent(item)) != null;
       if (!mounted) return (started: false, season: null, episode: null);
     }
@@ -13885,7 +14011,7 @@ class _SearchScreenState extends State<SearchScreen>
     contentType: item.type,
     posterUrl: item.poster,
     // Trakt-sourced movies scrobble to Trakt like the old home view; catalog
-    // movies leave this false so scrobble follows the "Sync Catalog Items"
+    // movies leave this false so scrobble follows the Tracking master
     // setting.
     traktSource: isTraktSource,
     traktProgressPercent: traktProgressPercent,
@@ -16609,7 +16735,7 @@ class _SearchScreenState extends State<SearchScreen>
       return TraktSeeAllScreen(
         key: const ValueKey('disc_trakt'),
         cwItems: _traktAll,
-        cwProgress: _traktProgress,
+        cwProgress: _cwCardMaps(_CwKind.trakt).progress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
         onItemFocused: _onDiscFocused,
@@ -16701,7 +16827,7 @@ class _SearchScreenState extends State<SearchScreen>
       key: const ValueKey('disc_cw'),
       title: 'Continue Watching',
       items: _cwAll,
-      progressOf: (m) => _cwProgress[m.imdbId],
+      progressOf: (m) => _cwCardProgress(_CwKind.local, m),
       onOpen: _openContinueItem,
       onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
       onItemFocused: _onDiscFocused,
@@ -17492,7 +17618,7 @@ class _SearchScreenState extends State<SearchScreen>
       screen = TraktSeeAllScreen(
         initialList: section.traktChoice,
         cwItems: List<StremioMeta>.of(_traktAll),
-        cwProgress: _traktProgress,
+        cwProgress: _cwCardMaps(_CwKind.trakt).progress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
         isBound: _isBound,
@@ -17666,7 +17792,7 @@ class _SearchScreenState extends State<SearchScreen>
       title: 'Continue Watching',
       initialCategory: initialCategory,
       items: _cwAll,
-      progressOf: (m) => _cwProgress[m.imdbId],
+      progressOf: (m) => _cwCardProgress(_CwKind.local, m),
       onOpen: _openContinueItem,
       onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
       // Reload CW + refresh bound sources (sequenced), then hand the grid the
@@ -17703,7 +17829,7 @@ class _SearchScreenState extends State<SearchScreen>
               // bars reflect any refresh while the screen is open, matching the
               // old live-closure behaviour; items stay a snapshot so the grid
               // doesn't shift under the user.
-              cwProgress: _traktProgress,
+              cwProgress: _cwCardMaps(_CwKind.trakt).progress,
               onOpen: _openTraktItem,
               onQuickPlay: _pikpakOnly ? null : _playTraktItem,
               // CW items are all rail-loaded, so _boundCounts covers them.

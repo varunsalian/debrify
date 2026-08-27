@@ -85,6 +85,8 @@ void main() {
     await down(tester);
     expect(focusLabel(), 'quick-play-prefer-torrents');
     await down(tester);
+    expect(focusLabel(), 'quick-play-max-attempts');
+    await down(tester);
     expect(focusLabel(), 'quick-play-priority-stremio:alpha');
     await down(tester);
     expect(focusLabel(), 'quick-play-priority-stremio:beta');
@@ -105,6 +107,7 @@ void main() {
     await pumpTvPage(tester);
 
     await down(tester); // prefer-torrents
+    await down(tester); // streams-to-try
     await down(tester); // alpha
     await down(tester); // beta
 

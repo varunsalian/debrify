@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/advanced_search_selection.dart';
 import '../../services/trakt/trakt_service.dart';
+import '../../services/watched_action_coordinator.dart';
 import '../../services/trakt/trakt_item_transformer.dart';
 import '../../services/trakt/trakt_episode_model.dart';
 import 'trakt_menu_helpers.dart';
@@ -928,13 +929,21 @@ class TraktResultsViewState extends State<TraktResultsView> {
         if (success && mounted) _fetchItems();
       case TraktItemMenuAction.markWatched:
         actionLabel = 'Marked as Watched';
-        success = await _traktService.addToHistory(imdbId, type);
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdbId,
+          contentType: type,
+          watched: true,
+        )).success;
         if (success && mounted) {
           setState(() => _watchProgress[imdbId] = 100.0);
         }
       case TraktItemMenuAction.markUnwatched:
         actionLabel = 'Marked as Unwatched';
-        success = await _traktService.removeFromHistory(imdbId, type);
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdbId,
+          contentType: type,
+          watched: false,
+        )).success;
         if (success && mounted) {
           setState(() => _watchProgress.remove(imdbId));
         }
@@ -2071,21 +2080,25 @@ class TraktResultsViewState extends State<TraktResultsView> {
     switch (action) {
       case TraktEpisodeMenuAction.markWatched:
         actionLabel = 'Marked as Watched';
-        success = await _traktService.markEpisodeWatched(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
+        success = (await WatchedActionCoordinator.setEpisodeWatched(
+          imdbId: showImdbId,
+          seriesTitle: show.name,
+          season: episode.season,
+          episode: episode.number,
+          watched: true,
+        )).success;
         if (success && mounted) {
           setState(() => _episodeWatchProgress[key] = 100.0);
         }
       case TraktEpisodeMenuAction.markUnwatched:
         actionLabel = 'Marked as Unwatched';
-        success = await _traktService.markEpisodeUnwatched(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
+        success = (await WatchedActionCoordinator.setEpisodeWatched(
+          imdbId: showImdbId,
+          seriesTitle: show.name,
+          season: episode.season,
+          episode: episode.number,
+          watched: false,
+        )).success;
         if (success && mounted) {
           setState(() => _episodeWatchProgress.remove(key));
         }

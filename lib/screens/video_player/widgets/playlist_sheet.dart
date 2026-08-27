@@ -7,6 +7,7 @@ import '../../../widgets/movie_collection_browser.dart';
 import '../models/playlist_entry.dart';
 import '../constants/color_constants.dart';
 import '../../../services/storage_service.dart';
+import '../../../services/tracking_source_policy.dart';
 import '../../../utils/episode_progress_merge.dart';
 import '../constants/timing_constants.dart';
 
@@ -108,18 +109,30 @@ class PlaylistSheet {
                               ])
                             : const <Map<String, double>>[];
                         final episodeKey = '${season}_$episode';
+                        final trackingPolicy =
+                            await TrackingSourcePolicy.load();
                         final localState = localProgress[episodeKey];
                         final localPosition =
                             (localState?['positionMs'] as num?)?.toInt() ?? 0;
                         final localDuration =
                             (localState?['durationMs'] as num?)?.toInt() ?? 0;
                         final hasLocalResume =
+                            trackingPolicy.progressFrom(TrackingSource.local) &&
                             localPosition > 0 &&
                             localDuration > 0 &&
                             localPosition < localDuration;
                         final trackerPercent = furthestEpisodeTrackerPercent([
-                          for (final progress in trackerMaps)
-                            progress[episodeKey],
+                          if (trackerMaps.isNotEmpty &&
+                              trackingPolicy.progressFrom(TrackingSource.trakt))
+                            trackerMaps[0][episodeKey],
+                          if (trackerMaps.length > 1 &&
+                              trackingPolicy.progressFrom(TrackingSource.simkl))
+                            trackerMaps[1][episodeKey],
+                          if (trackerMaps.length > 2 &&
+                              trackingPolicy.progressFrom(
+                                TrackingSource.mdblist,
+                              ))
+                            trackerMaps[2][episodeKey],
                         ]);
                         final hasTrackerResume =
                             trackerPercent != null &&

@@ -7,6 +7,7 @@ import 'local_series_completion_service.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
 import 'mdblist/mdblist_service.dart';
+import '../models/tracking_source.dart';
 
 /// One asynchronous, account-wide watched snapshot for every poster card.
 ///
@@ -18,6 +19,8 @@ class WatchedStatusService extends ChangeNotifier {
     StorageService.movieFinishedRevision.addListener(refresh);
     StorageService.localCompletionRevision.addListener(_refreshLocal);
     MdblistService.instance.watchedRevision.addListener(_markMdblistDirty);
+    StorageService.trackingSourceRevision.addListener(_refreshTickPolicy);
+    _refreshTickPolicy();
   }
 
   static final WatchedStatusService instance = WatchedStatusService._();
@@ -38,6 +41,9 @@ class WatchedStatusService extends ChangeNotifier {
   bool _mdblistDirty = false;
   DateTime? _mdblistDirtyAt;
   Timer? _mdblistRefreshTimer;
+  Set<TrackingSource> _tickSources = Set<TrackingSource>.of(
+    TrackingSource.values,
+  );
 
   bool isWatched(String imdbId, String contentType) {
     final id = imdbId.trim().toLowerCase();
@@ -52,6 +58,33 @@ class WatchedStatusService extends ChangeNotifier {
         _traktMovies.contains(id) ||
         _simklMovies.contains(id) ||
         _mdblistMovies.contains(id);
+  }
+
+  bool isWatchedForTicks(String imdbId, String contentType) {
+    final id = imdbId.trim().toLowerCase();
+    if (id.isEmpty) return false;
+    final series = contentType.toLowerCase() == 'series';
+    return _isWatchedForTicks(id, series);
+  }
+
+  bool _isWatchedForTicks(String id, bool series) {
+    return (_tickSources.contains(TrackingSource.local) &&
+            (series ? _localSeries : _localMovies).contains(id)) ||
+        (_tickSources.contains(TrackingSource.trakt) &&
+            (series ? _traktSeries : _traktMovies).contains(id)) ||
+        (_tickSources.contains(TrackingSource.simkl) &&
+            (series ? _simklSeries : _simklMovies).contains(id)) ||
+        (_tickSources.contains(TrackingSource.mdblist) &&
+            (series ? _mdblistSeries : _mdblistMovies).contains(id));
+  }
+
+  void _refreshTickPolicy() {
+    unawaited(() async {
+      final next = await StorageService.getHomeTickSources();
+      if (setEquals(next, _tickSources)) return;
+      _tickSources = next;
+      notifyListeners();
+    }());
   }
 
   /// Starts loading without returning work for the UI to await.
@@ -98,6 +131,8 @@ class WatchedStatusService extends ChangeNotifier {
     _simklSeries = const {};
     _mdblistMovies = const {};
     _mdblistSeries = const {};
+    _tickSources = Set<TrackingSource>.of(TrackingSource.values);
+    _refreshTickPolicy();
   }
 
   void _markMdblistDirty() {
@@ -150,21 +185,25 @@ class WatchedStatusService extends ChangeNotifier {
       final results = await Future.wait([
         StorageService.getFinishedMovieIds(),
         LocalSeriesCompletionService.instance.caughtUpIds(),
+        StorageService.getExplicitlyWatchedSeriesIds(),
       ]);
       if (generation != _localGeneration) return;
       _localMovies = results[0];
-      _localSeries = results[1];
+      _localSeries = <String>{...results[1], ...results[2]};
       notifyListeners();
 
       // Calendar reconciliation may involve network requests. Keep it behind
       // the immediate local snapshot so card rendering never waits on Simkl.
       final calendarSeries = await LocalSeriesCompletionService.instance
           .refreshCalendarIfDue();
+      final explicitSeries =
+          await StorageService.getExplicitlyWatchedSeriesIds();
+      final combinedSeries = <String>{...calendarSeries, ...explicitSeries};
       if (generation != _localGeneration ||
-          setEquals(_localSeries, calendarSeries)) {
+          setEquals(_localSeries, combinedSeries)) {
         return;
       }
-      _localSeries = calendarSeries;
+      _localSeries = combinedSeries;
       notifyListeners();
     }());
   }
@@ -199,11 +238,15 @@ class WatchedStatusService extends ChangeNotifier {
     final mdblistFuture = MdblistService.instance.fetchCompletedTitleIds();
     final localSeriesFuture = LocalSeriesCompletionService.instance
         .caughtUpIds();
+    final explicitSeriesFuture = StorageService.getExplicitlyWatchedSeriesIds();
     final calendarFuture = LocalSeriesCompletionService.instance
         .refreshCalendarIfDue();
 
     final localMovies = await StorageService.getFinishedMovieIds();
-    final localSeries = await localSeriesFuture;
+    final localSeries = <String>{
+      ...await localSeriesFuture,
+      ...await explicitSeriesFuture,
+    };
     if (generation == _generation && localGeneration == _localGeneration) {
       _localMovies = localMovies;
       _localSeries = localSeries;
@@ -234,7 +277,10 @@ class WatchedStatusService extends ChangeNotifier {
       _simklSeries = simkl.series;
     }
     if (localGeneration == _localGeneration) {
-      _localSeries = results[2] as Set<String>;
+      _localSeries = <String>{
+        ...results[2] as Set<String>,
+        ...await StorageService.getExplicitlyWatchedSeriesIds(),
+      };
     }
     final mdblist = results[3] as ({Set<String> movies, Set<String> series})?;
     if (mdblist != null) {

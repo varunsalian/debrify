@@ -14,6 +14,7 @@ import '../../services/trakt/trakt_list_source.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/home/home_theme.dart';
+import '../../models/tracking_source.dart';
 
 /// Full-screen DPAD-first Home-row manager — a two-pane "group → item" filter,
 /// modelled on the Stremio TV channel filter's grammar but 2 levels deep (no
@@ -199,6 +200,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     bool on(String id) => !d.contains(id);
     final extraById = {for (final r in widget.extraRows) r.id: r};
     bool extraOn(String id) => extraById.containsKey(id);
+    _Item cw(String id, String label, TrackingSource source, {String? badge}) =>
+        _Item(id, label, on(id), badge: badge);
 
     // Opt-in leaf factory: ON = present in the extras store.
     _Item opt(String id, String label, {String? badge}) => _Item(
@@ -221,12 +224,12 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
 
     final groups = <_Group>[
       _Group('Continue Watching', [
-        _Item('cw:movies', 'Movies', on('cw:movies')),
-        _Item('cw:series', 'Series', on('cw:series')),
+        cw('cw:movies', 'Movies', TrackingSource.local),
+        cw('cw:series', 'Series', TrackingSource.local),
       ]),
       _Group('Trakt', [
-        _Item('trakt:movies', 'Movies', on('trakt:movies'), badge: 'CW'),
-        _Item('trakt:shows', 'Shows', on('trakt:shows'), badge: 'CW'),
+        cw('trakt:movies', 'Movies', TrackingSource.trakt, badge: 'CW'),
+        cw('trakt:shows', 'Shows', TrackingSource.trakt, badge: 'CW'),
         for (final l in TraktSeeAllList.values)
           if (l != TraktSeeAllList.continueWatching)
             opt(HomeExtraRowIds.traktBuiltin(l), l.label, badge: 'LIST'),
@@ -236,16 +239,16 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
           opt(HomeExtraRowIds.traktUserList(c), c.label, badge: 'LIKED'),
       ]),
       _Group('Simkl', [
-        _Item('simkl:movies', 'Movies', on('simkl:movies'), badge: 'CW'),
-        _Item('simkl:shows', 'Shows', on('simkl:shows'), badge: 'CW'),
+        cw('simkl:movies', 'Movies', TrackingSource.simkl, badge: 'CW'),
+        cw('simkl:shows', 'Shows', TrackingSource.simkl, badge: 'CW'),
         for (final l in SimklSeeAllList.values)
           if (l != SimklSeeAllList.continueWatching)
             opt(HomeExtraRowIds.simkl(l), l.label, badge: 'LIST'),
       ]),
       if (kMdblistEnabled)
         _Group('MDBList', [
-          _Item('mdblist:movies', 'Movies', on('mdblist:movies'), badge: 'CW'),
-          _Item('mdblist:shows', 'Shows', on('mdblist:shows'), badge: 'CW'),
+          cw('mdblist:movies', 'Movies', TrackingSource.mdblist, badge: 'CW'),
+          cw('mdblist:shows', 'Shows', TrackingSource.mdblist, badge: 'CW'),
           for (final l in widget.mdblistMine)
             opt(HomeExtraRowIds.mdblistMine(l), l.label, badge: 'MINE'),
           for (final l in widget.mdblistLiked)

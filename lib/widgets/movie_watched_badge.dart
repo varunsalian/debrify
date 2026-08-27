@@ -13,11 +13,17 @@ class MovieWatchedBadge extends StatefulWidget {
     required this.imdbId,
     this.contentType = 'movie',
     this.compact = false,
+    this.tickPolicyScoped = false,
   });
 
   final String imdbId;
   final String contentType;
   final bool compact;
+
+  /// Draw the ✓ only for histories selected in Settings → Tracking → Watched
+  /// ticks. Poster cards everywhere opt in; in-guide episode ticks do not
+  /// (those follow the Progress source instead).
+  final bool tickPolicyScoped;
 
   @override
   State<MovieWatchedBadge> createState() => _MovieWatchedBadgeState();
@@ -63,7 +69,10 @@ class _MovieWatchedBadgeState extends State<MovieWatchedBadge> {
   @override
   Widget build(BuildContext context) {
     if (TickerMode.valuesOf(context).enabled) _status.ensureStarted();
-    if (!_status.isWatched(widget.imdbId, widget.contentType)) {
+    final watched = widget.tickPolicyScoped
+        ? _status.isWatchedForTicks(widget.imdbId, widget.contentType)
+        : _status.isWatched(widget.imdbId, widget.contentType);
+    if (!watched) {
       return const SizedBox.shrink();
     }
     final extent = widget.compact ? 20.0 : 23.0;

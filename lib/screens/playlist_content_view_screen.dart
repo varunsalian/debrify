@@ -3289,6 +3289,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Future<void> _toggleWatchedState(SeriesEpisode episode) async {
     if (_seriesPlaylist == null) return;
 
+    // Cloud-playlist rows are intentionally local-only: they have file/folder
+    // identity but no reliable tracker title identity. Tracker-aware catalog
+    // and detail actions fan out through WatchedActionCoordinator instead.
+
     // Get the series title for storage
     final String? seriesTitle =
         _seriesPlaylist!.seriesTitle ?? widget.playlistItem['title'] as String?;

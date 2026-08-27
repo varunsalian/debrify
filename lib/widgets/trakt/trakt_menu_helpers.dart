@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/trakt/trakt_service.dart';
+import '../../services/watched_action_coordinator.dart';
 
 /// Actions available in the Trakt episode overflow menu.
 enum TraktEpisodeMenuAction { markWatched, markUnwatched, rate }
@@ -49,10 +50,7 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
                   SizedBox(width: 8),
                   Text(
                     'Rate this item',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -164,9 +162,7 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
                           Icons.playlist_play,
                           color: Color(0xFFEC4899),
                         ),
-                        title: Text(
-                          name,
-                        ),
+                        title: Text(name),
                         subtitle: Text(
                           '$itemCount items',
                           style: const TextStyle(color: Colors.white54),
@@ -208,6 +204,7 @@ Future<void> handleTraktMenuAction(
   Future<void> Function(StremioMeta)? onPlayRandomEpisode,
   void Function(StremioMeta)? onSearchPacks,
   Future<void> Function(StremioMeta)? onAddToStremioTv,
+
   /// Skips the rating dialog for [TraktItemMenuAction.rate] and submits this
   /// value directly — for surfaces that pick the rating themselves (the merged
   /// detail sheet's inline 1–10 strip). Omit it and the dialog behaves as
@@ -228,8 +225,12 @@ Future<void> handleTraktMenuAction(
       actionLabel = 'Added to Trakt Collection';
       success = await traktService.addToCollection(imdbId, type);
     case TraktItemMenuAction.markWatched:
-      actionLabel = 'Marked as Watched on Trakt';
-      success = await traktService.addToHistory(imdbId, type);
+      actionLabel = 'Marked as Watched';
+      success = (await WatchedActionCoordinator.setTitleWatched(
+        imdbId: imdbId,
+        contentType: type,
+        watched: true,
+      )).success;
     case TraktItemMenuAction.rate:
       if (!context.mounted) return;
       final rating = presetRating ?? await showTraktRatingDialog(context);
@@ -254,7 +255,11 @@ Future<void> handleTraktMenuAction(
       success = await traktService.removeFromCollection(imdbId, type);
     case TraktItemMenuAction.markUnwatched:
       actionLabel = 'Marked as Unwatched';
-      success = await traktService.removeFromHistory(imdbId, type);
+      success = (await WatchedActionCoordinator.setTitleWatched(
+        imdbId: imdbId,
+        contentType: type,
+        watched: false,
+      )).success;
     case TraktItemMenuAction.removeRating:
       actionLabel = 'Rating Removed';
       success = await traktService.removeRating(imdbId, type);

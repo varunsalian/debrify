@@ -1,6 +1,8 @@
 import 'package:debrify/services/local_series_completion_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
+import 'package:debrify/services/watched_action_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -99,6 +101,57 @@ void main() {
     expect(
       await LocalSeriesCompletionService.instance.caughtUpIds(),
       isNot(contains('tt-returning-show')),
+    );
+  });
+
+  test('series-level unwatch clears derived local completion', () async {
+    final now = DateTime.now();
+    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      TrackingSource.local,
+    });
+    await StorageService.markEpisodeAsFinished(
+      seriesTitle: 'Unwatched Show',
+      season: 1,
+      episode: 1,
+    );
+    await LocalSeriesCompletionService.instance.recordEpisodeInventory(
+      imdbId: 'tt-unwatched-show',
+      seriesTitle: 'Unwatched Show',
+      seasons: [
+        season([episode(1, now.subtract(const Duration(days: 1)))]),
+      ],
+    );
+    await StorageService.setSeriesExplicitlyWatched(
+      'tt-unwatched-show',
+      watched: true,
+    );
+    expect(
+      await LocalSeriesCompletionService.instance.caughtUpIds(),
+      contains('tt-unwatched-show'),
+    );
+    expect(
+      await StorageService.getFinishedEpisodes(seriesTitle: 'Unwatched Show'),
+      isNotEmpty,
+    );
+
+    final result = await WatchedActionCoordinator.setTitleWatched(
+      imdbId: 'tt-unwatched-show',
+      contentType: 'series',
+      watched: false,
+    );
+
+    expect(result.success, isTrue);
+    expect(
+      await StorageService.getExplicitlyWatchedSeriesIds(),
+      isNot(contains('tt-unwatched-show')),
+    );
+    expect(
+      await StorageService.getFinishedEpisodes(seriesTitle: 'Unwatched Show'),
+      isEmpty,
+    );
+    expect(
+      await LocalSeriesCompletionService.instance.caughtUpIds(),
+      isNot(contains('tt-unwatched-show')),
     );
   });
 

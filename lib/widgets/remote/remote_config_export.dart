@@ -54,6 +54,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _trakt;
   _ConfigItem? _simkl;
   _ConfigItem? _mdblist;
+  _ConfigItem? _trackingPreferences;
   _ConfigItem? _searchEngines;
   _ConfigItem? _webDav;
   _ConfigItem? _indexerManagers;
@@ -289,6 +290,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: hasMdblist,
         );
 
+        _trackingPreferences = _ConfigItem(
+          id: ConfigCommand.trackingPreferences,
+          name: 'Tracking preferences',
+          icon: 'tk',
+          isConfigured: true,
+          selected: true,
+        );
+
         _searchEngines = _ConfigItem(
           id: ConfigCommand.searchEngines,
           name: 'Search Engines',
@@ -357,6 +366,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       _trakt,
       _simkl,
       _mdblist,
+      _trackingPreferences,
       _searchEngines,
       _webDav,
       _indexerManagers,
@@ -605,6 +615,18 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             ),
           );
         },
+      );
+      await sendSelected(
+        _trackingPreferences?.selected == true,
+        'Tracking preferences',
+        ConfigCommand.trackingPreferences,
+        () async => state.sendConfigCommandToDevice(
+          ConfigCommand.trackingPreferences,
+          targetIp,
+          configData: transferData(
+            jsonEncode(await StorageService.buildTrackingPreferencesPayload()),
+          ),
+        ),
       );
       await sendSelected(
         _searchEngines?.selected == true,

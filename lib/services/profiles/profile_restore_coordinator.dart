@@ -638,6 +638,11 @@ class ProfileRestoreCoordinator {
                 iptvPlaylists: false,
                 iptvFavorites: true,
                 iptvLists: true,
+                // Tracking prefs are profile-scoped plain prefs like the IPTV
+                // favorites above — they ride the legacy follow-up, not the
+                // staged-resource path, or a profile import silently resets
+                // them to Smart/all/seeded defaults.
+                trackingPreferences: true,
               ),
               refreshEngineRuntime: false,
             ),

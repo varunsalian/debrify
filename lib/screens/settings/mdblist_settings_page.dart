@@ -37,7 +37,6 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   bool _obscure = true;
   bool _loading = true;
   bool _saving = false;
-  bool _syncCatalog = false;
 
   @override
   void initState() {
@@ -57,17 +56,12 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Future<void> _load() async {
-    final values = await Future.wait<Object>([
-      StorageService.hasMdblistCredential(),
-      StorageService.getMdblistSyncCatalogItems(),
-    ]);
-    final configured = values[0] as bool;
+    final configured = await StorageService.hasMdblistCredential();
     if (!mounted) return;
     setState(() {
       _savedApiKey = configured ? '' : null;
       _account = MdblistService.instance.currentAccount;
       _loading = false;
-      _syncCatalog = values[1] as bool;
     });
 
     // Refresh the account card in the background if we're connected. A failure
@@ -134,9 +128,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
       _saving = false;
       _apiKeyController.clear();
     });
-    await StorageService.setMdblistSyncCatalogItems(true);
     if (!mounted) return;
-    setState(() => _syncCatalog = true);
     _refocusOnTv(_logoutButtonFocusNode);
     AnalyticsService.integrationConnected('mdblist', {'surface': 'settings'});
     _snack('MDBList connected successfully');
@@ -160,7 +152,13 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
       _isEditing = false;
       _apiKeyController.clear();
     });
-    _snack('Logged out from MDBList');
+    final fellBack = await StorageService.takeTrackingProgressFallbackNotice();
+    if (!mounted) return;
+    _snack(
+      fellBack
+          ? 'Logged out from MDBList. Progress source changed to Smart.'
+          : 'Logged out from MDBList',
+    );
     MainPageBridge.notifyIntegrationChanged();
     _refocusOnTv(_addApiKeyButtonFocusNode);
   }
@@ -202,7 +200,6 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
                   const SizedBox(height: 16),
                   _buildAccountCard(context),
                   const SizedBox(height: 16),
-                  _buildSyncCard(context),
                 ],
                 const SizedBox(height: 16),
                 _buildHelpCard(context),
@@ -441,25 +438,6 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildSyncCard(BuildContext context) {
-    return Card(
-      child: SwitchListTile.adaptive(
-        title: const Text('Sync playback and library'),
-        subtitle: const Text(
-          'Scrobble watched progress and use MDBList for cross-device resume. '
-          'External-player handoffs create a 1% resume checkpoint because '
-          'their playback progress cannot return to Debrify.',
-        ),
-        value: _syncCatalog,
-        onChanged: (value) async {
-          setState(() => _syncCatalog = value);
-          await StorageService.setMdblistSyncCatalogItems(value);
-          MainPageBridge.notifyIntegrationChanged();
-        },
       ),
     );
   }

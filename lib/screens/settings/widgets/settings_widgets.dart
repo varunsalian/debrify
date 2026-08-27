@@ -1046,6 +1046,7 @@ class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo iptv;
   final ConnectionInfo trakt;
   final ConnectionInfo simkl;
+  final ConnectionInfo tracking;
   // Null when MDBList is hidden (alpha) — its card + focus node are then omitted.
   final ConnectionInfo? mdblist;
   final FocusNode? firstCardFocusNode;
@@ -1062,6 +1063,7 @@ class ConnectionsSummary extends StatefulWidget {
     required this.iptv,
     required this.trakt,
     required this.simkl,
+    required this.tracking,
     this.mdblist,
     this.firstCardFocusNode,
   });
@@ -1087,6 +1089,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   late final FocusNode _webDavFocusNode;
   late final FocusNode _indexerManagersFocusNode;
   late final FocusNode _iptvFocusNode;
+  late final FocusNode _trackingFocusNode;
   late final FocusNode _traktFocusNode;
   late final FocusNode _simklFocusNode;
   late final FocusNode _mdblistFocusNode;
@@ -1103,6 +1106,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
       debugLabel: 'settings-indexer-managers',
     );
     _iptvFocusNode = FocusNode(debugLabel: 'settings-iptv');
+    _trackingFocusNode = FocusNode(debugLabel: 'settings-tracking');
     _traktFocusNode = FocusNode(debugLabel: 'settings-trakt');
     _simklFocusNode = FocusNode(debugLabel: 'settings-simkl');
     _mdblistFocusNode = FocusNode(debugLabel: 'settings-mdblist');
@@ -1117,6 +1121,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
     _webDavFocusNode.dispose();
     _indexerManagersFocusNode.dispose();
     _iptvFocusNode.dispose();
+    _trackingFocusNode.dispose();
     _traktFocusNode.dispose();
     _simklFocusNode.dispose();
     _mdblistFocusNode.dispose();
@@ -1254,7 +1259,9 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         isLeftColumn: true,
                         rightNeighbor: wide ? _iptvFocusNode : null,
                         upNeighbor: wide ? _pikpakFocusNode : _webDavFocusNode,
-                        downNeighbor: wide ? _traktFocusNode : _iptvFocusNode,
+                        downNeighbor: wide
+                            ? _trackingFocusNode
+                            : _iptvFocusNode,
                       ),
                     ),
                     SizedBox(
@@ -1267,9 +1274,9 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         upNeighbor: wide
                             ? _webDavFocusNode
                             : _indexerManagersFocusNode,
-                        // Wide grid: Simkl (row 5 right) now sits directly below
-                        // IPTV (row 4 right), not Trakt (row 5 left).
-                        downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
+                        downNeighbor: wide
+                            ? _traktFocusNode
+                            : _trackingFocusNode,
                       ),
                     ),
                   ],
@@ -1280,52 +1287,57 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Row 1: Trakt (left), Simkl (right)
+                    // Row 1: Tracking policy (left), Trakt (right)
+                    SizedBox(
+                      width: itemWidth,
+                      child: ConnectionCard(
+                        info: widget.tracking,
+                        focusNode: _trackingFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _traktFocusNode : null,
+                        upNeighbor: wide
+                            ? _indexerManagersFocusNode
+                            : _iptvFocusNode,
+                        downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
+                      ),
+                    ),
                     SizedBox(
                       width: itemWidth,
                       child: ConnectionCard(
                         info: widget.trakt,
                         focusNode: _traktFocusNode,
-                        isLeftColumn: true,
-                        rightNeighbor: wide ? _simklFocusNode : null,
-                        upNeighbor: wide
-                            ? _indexerManagersFocusNode
-                            : _iptvFocusNode,
-                        // Wide: MDBList sits alone in the left column of row 6,
-                        // directly below Trakt. Narrow (single column): the next
-                        // card down is Simkl, not MDBList. When MDBList is hidden
-                        // (alpha), down goes nowhere in wide.
-                        downNeighbor: wide
-                            ? (widget.mdblist != null
-                                  ? _mdblistFocusNode
-                                  : null)
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? _trackingFocusNode : null,
+                        upNeighbor: wide ? _iptvFocusNode : _trackingFocusNode,
+                        downNeighbor: wide && widget.mdblist != null
+                            ? _mdblistFocusNode
                             : _simklFocusNode,
                       ),
                     ),
+                    // Row 2: Simkl (left), MDBList (right when enabled).
                     SizedBox(
                       width: itemWidth,
                       child: ConnectionCard(
                         info: widget.simkl,
                         focusNode: _simklFocusNode,
-                        isLeftColumn: !wide,
-                        leftNeighbor: wide ? _traktFocusNode : null,
-                        upNeighbor: wide ? _iptvFocusNode : _traktFocusNode,
-                        // Down lands on the lone MDBList card, or nowhere when it's
-                        // hidden (alpha).
-                        downNeighbor: widget.mdblist != null
+                        isLeftColumn: true,
+                        rightNeighbor: wide && widget.mdblist != null
+                            ? _mdblistFocusNode
+                            : null,
+                        upNeighbor: wide ? _trackingFocusNode : _traktFocusNode,
+                        downNeighbor: !wide && widget.mdblist != null
                             ? _mdblistFocusNode
                             : null,
                       ),
                     ),
-                    // Row 6: MDBList (left column, alone — no right partner).
-                    // Omitted entirely when MDBList is hidden for the alpha.
                     if (widget.mdblist != null)
                       SizedBox(
                         width: itemWidth,
                         child: ConnectionCard(
                           info: widget.mdblist!,
                           focusNode: _mdblistFocusNode,
-                          isLeftColumn: true,
+                          isLeftColumn: !wide,
+                          leftNeighbor: wide ? _simklFocusNode : null,
                           upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
                         ),
                       ),

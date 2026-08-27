@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/simkl/simkl_item_transformer.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/widgets/movie_watched_badge.dart';
@@ -49,6 +50,36 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.check_rounded), findsNothing);
+  });
+
+  testWidgets('Home-scoped badge follows Home tick sources only', (
+    tester,
+  ) async {
+    await StorageService.markMovieAsFinished('tt-home-mask');
+    await StorageService.setHomeTickSources(<TrackingSource>{});
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              MovieWatchedBadge(imdbId: 'tt-home-mask'),
+              MovieWatchedBadge(imdbId: 'tt-home-mask', tickPolicyScoped: true),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Detail/search consumers remain merged; only the Home instance is masked.
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+    await StorageService.setHomeTickSources(<TrackingSource>{
+      TrackingSource.local,
+    });
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
   });
 
   test(
