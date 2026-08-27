@@ -308,6 +308,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ),
         );
       }
+      items.add(
+        _TransferItem(
+          key: ConfigCommand.trackingPreferences,
+          label: 'Tracking preferences',
+          icon: Icons.sync_alt_rounded,
+          color: const Color(0xFF38BDF8),
+        ),
+      );
       if (hasEngines) {
         items.add(
           _TransferItem(
@@ -875,6 +883,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               'api_key': apiKey,
               if (username != null) 'username': username,
             }),
+          ),
+        );
+      case ConfigCommand.trackingPreferences:
+        return state.sendConfigCommandToDevice(
+          ConfigCommand.trackingPreferences,
+          targetIp,
+          configData: transferData(
+            jsonEncode(await StorageService.buildTrackingPreferencesPayload()),
           ),
         );
       case ConfigCommand.searchEngines:

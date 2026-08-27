@@ -43,6 +43,7 @@ import '../services/mdblist/mdblist_scrobble_session.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_policy_guard.dart';
+import 'tracking_source_policy.dart';
 
 /// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
 String? _traktLastScrobbleAction;
@@ -640,6 +641,17 @@ class VideoPlayerLauncher {
         (requested || autoEligible);
   }
 
+  @visibleForTesting
+  static VideoPlayerLaunchArgs normalizeScrobbleFlags(
+    VideoPlayerLaunchArgs args,
+    TrackingSourcePolicy policy,
+  ) => args.copyWith(
+    traktScrobble: args.traktScrobble && policy.scrobbles(TrackingSource.trakt),
+    simklScrobble: args.simklScrobble && policy.scrobbles(TrackingSource.simkl),
+    mdblistScrobble:
+        args.mdblistScrobble && policy.scrobbles(TrackingSource.mdblist),
+  );
+
   /// Whether a launch needs to explain why the user's external-player default
   /// cannot be honored. Authenticated WebDAV playback is the current caller:
   /// its Basic auth header can be consumed by Debrify's player but is not part
@@ -747,8 +759,9 @@ class VideoPlayerLauncher {
     required VoidCallback handoffNow,
     required VoidCallback handoffWhenCovered,
   }) async {
-    // If "Sync Catalog Items" is enabled and content has IMDB ID, enable scrobble
+    // Apply the tracker master switches to catalog content with stable IDs.
     var args = originalArgs;
+    final trackingPolicy = await TrackingSourcePolicy.load();
     final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
     if (!context.mounted) return;
     if (shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
@@ -761,13 +774,8 @@ class VideoPlayerLauncher {
         !args.suppressTraktAutoSync &&
         args.contentImdbId != null &&
         args.stremioTvChannels == null) {
-      final results = await Future.wait([
-        StorageService.getTraktSyncCatalogItems(),
-        TraktService.instance.isAuthenticated(),
-      ]);
-      final syncCatalog = results[0] as bool;
-      final isAuth = results[1] as bool;
-      if (syncCatalog && isAuth) {
+      final isAuth = await TraktService.instance.isAuthenticated();
+      if (trackingPolicy.scrobbles(TrackingSource.trakt) && isAuth) {
         args = VideoPlayerLaunchArgs(
           videoUrl: args.videoUrl,
           audioUrl: args.audioUrl,
@@ -844,7 +852,9 @@ class VideoPlayerLauncher {
           initialSubtitles: args.initialSubtitles,
         );
         // Clean up any existing local Continue Watching entry (Trakt tracks it now)
-        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+        if (!trackingPolicy.forcesLocalCompletion) {
+          await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+        }
       }
     }
 
@@ -858,13 +868,8 @@ class VideoPlayerLauncher {
         !args.suppressTraktAutoSync &&
         args.contentImdbId != null &&
         args.stremioTvChannels == null) {
-      final results = await Future.wait([
-        StorageService.getSimklSyncCatalogItems(),
-        SimklService.instance.isAuthenticated(),
-      ]);
-      final syncCatalog = results[0];
-      final isAuth = results[1];
-      if (syncCatalog && isAuth) {
+      final isAuth = await SimklService.instance.isAuthenticated();
+      if (trackingPolicy.scrobbles(TrackingSource.simkl) && isAuth) {
         args = VideoPlayerLaunchArgs(
           videoUrl: args.videoUrl,
           audioUrl: args.audioUrl,
@@ -944,7 +949,9 @@ class VideoPlayerLauncher {
         // Simkl was connected, or a prior non-Simkl play) — Simkl's own CW row
         // tracks it now, so leaving the local entry would duplicate it. Mirrors
         // the Trakt branch above.
-        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+        if (!trackingPolicy.forcesLocalCompletion) {
+          await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+        }
       }
     }
 
@@ -962,7 +969,7 @@ class VideoPlayerLauncher {
         mdblistIdentityAvailable &&
         (mdblistRequested || mdblistAutoEligible)) {
       final results = await Future.wait([
-        StorageService.getMdblistSyncCatalogItems(),
+        Future<bool>.value(trackingPolicy.scrobbles(TrackingSource.mdblist)),
         MdblistService.instance.isAuthenticated(),
       ]);
       mdblistSyncEnabled = results[0];
@@ -986,7 +993,7 @@ class VideoPlayerLauncher {
         'type=${args.contentType} requested=$mdblistRequested '
         'suppressAuto=${args.suppressTrackerAutoSync} '
         'stremioTv=${args.stremioTvChannels != null} '
-        'syncCatalog=$mdblistSyncEnabled '
+        'scrobbleMaster=$mdblistSyncEnabled '
         'authenticated=$mdblistAuthenticated '
         'effective=$effectiveMdblistTracking',
       );
@@ -995,8 +1002,15 @@ class VideoPlayerLauncher {
       debugPrint(
         '[MDBListDiag] launch tracking enabled imdb=${args.contentImdbId}',
       );
-      await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+      if (!trackingPolicy.forcesLocalCompletion) {
+        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+      }
     }
+
+    // Tracker-row launches arrive with their flag already true and skip the
+    // auto-enable branches above. Normalize once on the shared path before
+    // native payload construction, external seeding, or in-app playback.
+    args = normalizeScrobbleFlags(args, trackingPolicy);
 
     // Persist before launching playback so Android TV handoff cannot race the write.
     // Skip when a tracker already owns this title's Continue Watching entry —
@@ -1006,9 +1020,10 @@ class VideoPlayerLauncher {
     // it applies to both the native-TV and in-app players.
     if (args.contentImdbId != null &&
         args.contentType != null &&
-        !args.traktScrobble &&
-        !args.simklScrobble &&
-        !args.mdblistScrobble &&
+        (trackingPolicy.forcesLocalCompletion ||
+            (!args.traktScrobble &&
+                !args.simklScrobble &&
+                !args.mdblistScrobble)) &&
         args.stremioTvChannels == null) {
       await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,
@@ -1393,10 +1408,17 @@ class VideoPlayerLauncher {
 
         int startIndex = 0;
         if (seriesPlaylist.isSeries && seriesPlaylist.allEpisodes.isNotEmpty) {
-          // Get last played episode for resume
-          final lastEpisode = await StorageService.getLastPlayedEpisode(
-            seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-          );
+          // Local last-played drives the episode choice only when the
+          // Progress source admits this device — the chosen entry is seeded
+          // to tracker Continue Watching, so a dedicated-tracker mode must
+          // not replay stale local state (falls to first episode instead).
+          final trackingPolicy = await TrackingSourcePolicy.load();
+          final lastEpisode =
+              trackingPolicy.progressFrom(TrackingSource.local)
+              ? await StorageService.getLastPlayedEpisode(
+                  seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
+                )
+              : null;
 
           if (lastEpisode != null) {
             final lastSeason = lastEpisode['season'] as int;
@@ -2103,6 +2125,7 @@ class VideoPlayerLauncher {
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
       return _launchIptvOnAndroidTv(args);
     }
+    final trackingPolicy = await TrackingSourcePolicy.load();
 
     // Reset Trakt scrobble state for clean session
     _traktHeartbeatTimer?.cancel();
@@ -2322,9 +2345,18 @@ class VideoPlayerLauncher {
                 : null;
             final trackerPercent = episodeKey != null
                 ? furthestEpisodeTrackerPercent([
-                    sourceTraktProgress[episodeKey],
-                    sourceSimklProgress[episodeKey],
-                    sourceMdblistProgress[episodeKey],
+                    trackingPolicy.guideProgressFrom(
+                      TrackingSource.trakt,
+                      sourceTraktProgress[episodeKey],
+                    ),
+                    trackingPolicy.guideProgressFrom(
+                      TrackingSource.simkl,
+                      sourceSimklProgress[episodeKey],
+                    ),
+                    trackingPolicy.guideProgressFrom(
+                      TrackingSource.mdblist,
+                      sourceMdblistProgress[episodeKey],
+                    ),
                   ])
                 : null;
             final localState = episodeKey != null
@@ -2342,17 +2374,28 @@ class VideoPlayerLauncher {
                 (localState?['durationMs'] as num?)?.toInt() ?? 0;
             final resolvedLocal = resolveEpisodeLocalWatchState(
               locallyWatched: locallyWatched,
-              localPositionMs: localPositionMs,
+              localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
+                  ? localPositionMs
+                  : 0,
               localDurationMs: localDurationMs,
               traktPercent: episodeKey == null
                   ? null
-                  : sourceTraktProgress[episodeKey],
+                  : trackingPolicy.guideProgressFrom(
+                      TrackingSource.trakt,
+                      sourceTraktProgress[episodeKey],
+                    ),
               simklPercent: episodeKey == null
                   ? null
-                  : sourceSimklProgress[episodeKey],
+                  : trackingPolicy.guideProgressFrom(
+                      TrackingSource.simkl,
+                      sourceSimklProgress[episodeKey],
+                    ),
               mdblistPercent: episodeKey == null
                   ? null
-                  : sourceMdblistProgress[episodeKey],
+                  : trackingPolicy.guideProgressFrom(
+                      TrackingSource.mdblist,
+                      sourceMdblistProgress[episodeKey],
+                    ),
             );
             items.add({
               'id': '${entry.title}_$i',
@@ -2670,9 +2713,18 @@ class VideoPlayerLauncher {
               final episodeKey = '${season}_$episode';
               if (trackerMaps.isNotEmpty) {
                 final trackerPercent = furthestEpisodeTrackerPercent([
-                  trackerMaps[0][episodeKey],
-                  trackerMaps[1][episodeKey],
-                  trackerMaps[2][episodeKey],
+                  trackingPolicy.guideProgressFrom(
+                    TrackingSource.trakt,
+                    trackerMaps[0][episodeKey],
+                  ),
+                  trackingPolicy.guideProgressFrom(
+                    TrackingSource.simkl,
+                    trackerMaps[1][episodeKey],
+                  ),
+                  trackingPolicy.guideProgressFrom(
+                    TrackingSource.mdblist,
+                    trackerMaps[2][episodeKey],
+                  ),
                 ]);
                 if (trackerPercent != null) {
                   row['traktProgressPercent'] = trackerPercent;
@@ -2688,16 +2740,28 @@ class VideoPlayerLauncher {
                   false;
               final resolvedLocal = resolveEpisodeLocalWatchState(
                 locallyWatched: localWatched,
-                localPositionMs: localPositionMs,
+                localPositionMs:
+                    trackingPolicy.progressFrom(TrackingSource.local)
+                    ? localPositionMs
+                    : 0,
                 localDurationMs: localDurationMs,
                 traktPercent: trackerMaps.isNotEmpty
-                    ? trackerMaps[0][episodeKey]
+                    ? trackingPolicy.guideProgressFrom(
+                        TrackingSource.trakt,
+                        trackerMaps[0][episodeKey],
+                      )
                     : null,
                 simklPercent: trackerMaps.length > 1
-                    ? trackerMaps[1][episodeKey]
+                    ? trackingPolicy.guideProgressFrom(
+                        TrackingSource.simkl,
+                        trackerMaps[1][episodeKey],
+                      )
                     : null,
                 mdblistPercent: trackerMaps.length > 2
-                    ? trackerMaps[2][episodeKey]
+                    ? trackingPolicy.guideProgressFrom(
+                        TrackingSource.mdblist,
+                        trackerMaps[2][episodeKey],
+                      )
                     : null,
               );
               row['resumePositionMs'] = resolvedLocal.positionMs;
@@ -3230,6 +3294,7 @@ class VideoPlayerLauncher {
     // Run in background - don't await
     () async {
       try {
+        final trackingPolicy = await TrackingSourcePolicy.load();
         // Determine forceSeries: prefer viewMode, then use contentType from catalog
         bool? forceSeries = viewMode?.toForceSeries();
         if (forceSeries == null && contentType != null) {
@@ -3372,17 +3437,28 @@ class VideoPlayerLauncher {
             final locallyWatched =
                 locallyFinished[season.toString()]?.contains(episode) ?? false;
             final traktPercent = trackerMaps.isNotEmpty
-                ? trackerMaps[0][episodeKey]
+                ? trackingPolicy.guideProgressFrom(
+                    TrackingSource.trakt,
+                    trackerMaps[0][episodeKey],
+                  )
                 : null;
             final simklPercent = trackerMaps.length > 1
-                ? trackerMaps[1][episodeKey]
+                ? trackingPolicy.guideProgressFrom(
+                    TrackingSource.simkl,
+                    trackerMaps[1][episodeKey],
+                  )
                 : null;
             final mdblistPercent = trackerMaps.length > 2
-                ? trackerMaps[2][episodeKey]
+                ? trackingPolicy.guideProgressFrom(
+                    TrackingSource.mdblist,
+                    trackerMaps[2][episodeKey],
+                  )
                 : null;
             final localState = resolveEpisodeLocalWatchState(
               locallyWatched: locallyWatched,
-              localPositionMs: positionMs,
+              localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
+                  ? positionMs
+                  : 0,
               localDurationMs: durationMs,
               traktPercent: traktPercent,
               simklPercent: simklPercent,
@@ -4849,10 +4925,12 @@ class _AndroidTvPlaybackPayloadBuilder {
             isMovie: contentType != _PlaybackContentType.series,
           )
         : null;
+    final trackingPolicy = await TrackingSourcePolicy.load();
     final localCompletionTracking =
-        !args.traktScrobble &&
-        !args.simklScrobble &&
-        !args.mdblistScrobble &&
+        (trackingPolicy.forcesLocalCompletion ||
+            (!args.traktScrobble &&
+                !args.simklScrobble &&
+                !args.mdblistScrobble)) &&
         args.stremioTvChannels == null &&
         args.iptvChannels == null;
     final completionThresholds = localCompletionTracking
@@ -4904,6 +4982,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       seriesPlaylist,
       playlistEntries,
       perItemStates,
+      trackingPolicy,
     );
 
     final preparedEntries = await _prepareEntries(playlistEntries, startIndex);
@@ -4980,11 +5059,28 @@ class _AndroidTvPlaybackPayloadBuilder {
           : false;
       final resolvedLocal = resolveEpisodeLocalWatchState(
         locallyWatched: locallyWatched,
-        localPositionMs: resumeInfo.positionMs,
+        localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
+            ? resumeInfo.positionMs
+            : 0,
         localDurationMs: resumeInfo.durationMs,
-        traktPercent: episodeKey == null ? null : traktProgress[episodeKey],
-        simklPercent: episodeKey == null ? null : simklProgress[episodeKey],
-        mdblistPercent: episodeKey == null ? null : mdblistProgress[episodeKey],
+        traktPercent: episodeKey == null
+            ? null
+            : trackingPolicy.guideProgressFrom(
+                TrackingSource.trakt,
+                traktProgress[episodeKey],
+              ),
+        simklPercent: episodeKey == null
+            ? null
+            : trackingPolicy.guideProgressFrom(
+                TrackingSource.simkl,
+                simklProgress[episodeKey],
+              ),
+        mdblistPercent: episodeKey == null
+            ? null
+            : trackingPolicy.guideProgressFrom(
+                TrackingSource.mdblist,
+                mdblistProgress[episodeKey],
+              ),
       );
 
       items.add(
@@ -5008,9 +5104,18 @@ class _AndroidTvPlaybackPayloadBuilder {
           watched: resolvedLocal.watched,
           traktProgressPercent: episodeKey != null
               ? furthestEpisodeTrackerPercent([
-                  traktProgress[episodeKey],
-                  simklProgress[episodeKey],
-                  mdblistProgress[episodeKey],
+                  trackingPolicy.guideProgressFrom(
+                    TrackingSource.trakt,
+                    traktProgress[episodeKey],
+                  ),
+                  trackingPolicy.guideProgressFrom(
+                    TrackingSource.simkl,
+                    simklProgress[episodeKey],
+                  ),
+                  trackingPolicy.guideProgressFrom(
+                    TrackingSource.mdblist,
+                    mdblistProgress[episodeKey],
+                  ),
                 ])
               : null,
         ),
@@ -5113,11 +5218,18 @@ class _AndroidTvPlaybackPayloadBuilder {
       startupResolverProvider: args.startupResolverProvider,
       startupRecoveryAvailable: args.onStartupSourcesExhausted != null,
       traktScrobble: args.traktScrobble,
-      traktProgressPercent: args.traktProgressPercent,
+      traktProgressPercent: trackingPolicy.progressFrom(TrackingSource.trakt)
+          ? args.traktProgressPercent
+          : null,
       simklScrobble: args.simklScrobble,
-      simklProgressPercent: args.simklProgressPercent,
+      simklProgressPercent: trackingPolicy.progressFrom(TrackingSource.simkl)
+          ? args.simklProgressPercent
+          : null,
       mdblistScrobble: args.mdblistScrobble,
-      mdblistProgressPercent: args.mdblistProgressPercent,
+      mdblistProgressPercent:
+          trackingPolicy.progressFrom(TrackingSource.mdblist)
+          ? args.mdblistProgressPercent
+          : null,
       localCompletionTracking: localCompletionTracking,
       movieCompletionThreshold: completionThresholds[0],
       episodeCompletionThreshold: completionThresholds[1],
@@ -5441,18 +5553,25 @@ class _AndroidTvPlaybackPayloadBuilder {
     SeriesPlaylist? seriesPlaylist,
     List<PlaylistEntry> entries,
     List<_PerItemState> perItemState,
+    TrackingSourcePolicy trackingPolicy,
   ) async {
     switch (contentType) {
       case _PlaybackContentType.series:
-        return await _determineSeriesStartIndex(seriesPlaylist);
+        return await _determineSeriesStartIndex(seriesPlaylist, trackingPolicy);
       case _PlaybackContentType.collection:
+        if (!trackingPolicy.progressFrom(TrackingSource.local)) {
+          return args.startIndex ?? 0;
+        }
         return _determineCollectionStartIndex(entries, perItemState);
       case _PlaybackContentType.single:
         return args.startIndex ?? 0;
     }
   }
 
-  Future<int> _determineSeriesStartIndex(SeriesPlaylist? playlist) async {
+  Future<int> _determineSeriesStartIndex(
+    SeriesPlaylist? playlist,
+    TrackingSourcePolicy trackingPolicy,
+  ) async {
     // If auto-resume is disabled, use startIndex directly
     if (args.disableAutoResume) {
       debugPrint(
@@ -5485,7 +5604,8 @@ class _AndroidTvPlaybackPayloadBuilder {
     // a target WAS requested but isn't in this pack, falling back to last-played
     // would replay the just-finished episode (the "Next replays the same
     // episode" bug), so skip straight to the first episode below.
-    final lastEpisode = hadExplicitTarget
+    final lastEpisode =
+        hadExplicitTarget || !trackingPolicy.progressFrom(TrackingSource.local)
         ? null
         : await StorageService.getLastPlayedEpisode(
             seriesTitle: playlist.seriesTitle ?? 'Unknown Series',

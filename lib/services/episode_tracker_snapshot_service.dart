@@ -10,6 +10,7 @@ import 'profiles/profile_async_authorization.dart';
 import 'simkl/simkl_service.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
+import 'tracking_source_policy.dart';
 
 class _EpisodeSnapshotCacheEntry {
   final DateTime expiresAt;
@@ -556,7 +557,10 @@ class EpisodeTrackerSnapshotService {
       );
       final service = MdblistService.instance;
       final enabled = await Future.wait<bool>([
-        _runBound(authorization, StorageService.getMdblistSyncCatalogItems),
+        _runBound(authorization, () async {
+          final policy = await TrackingSourcePolicy.load();
+          return policy.progressFrom(TrackingSource.mdblist);
+        }),
         _runBound(authorization, service.isAuthenticated),
       ]);
       final operationKey = _refreshKey(
@@ -565,7 +569,10 @@ class EpisodeTrackerSnapshotService {
         authorization,
       );
       final storeWriteKey = _storeWriteKey('mdblist', authorization);
-      if (!enabled[0] || !enabled[1]) {
+      if (!enabled[1]) {
+        // Disconnected: self-heal the store as before this feature — the
+        // launcher reads it raw (no auth gate), so stale percents would
+        // otherwise feed guide bars and resume arbitration forever.
         await _refreshCoordinator.serialize(
           operationKey,
           () => _refreshCoordinator.serialize(
@@ -580,6 +587,19 @@ class EpisodeTrackerSnapshotService {
           ),
         );
         return const {};
+      }
+      if (!enabled[0]) {
+        // A foreign provider's partial playback is ineligible, but its
+        // completed guide ticks stay merged. Never erase those completed
+        // entries merely because another provider owns Progress.
+        final existing = await _runBound(
+          authorization,
+          () => StorageService.getEpisodeMdblistProgress(imdbId: imdbId),
+        );
+        return <String, double>{
+          for (final entry in existing.entries)
+            if (entry.value >= 95.0) entry.key: entry.value,
+        };
       }
       final snapshotRevision = EpisodeTrackerSnapshotRevision.identity(
         'mdblist',
@@ -667,17 +687,22 @@ class EpisodeTrackerSnapshotService {
         ProfileFeature.trackersAndDiscovery,
       );
       final service = MdblistService.instance;
-      final enabled = await Future.wait<bool>([
-        _runBound(authorization, StorageService.getMdblistSyncCatalogItems),
-        _runBound(authorization, service.isAuthenticated),
-      ]);
+      // Full history supplies always-merged completed guide ticks. Fetch it
+      // whenever authenticated; EpisodesPanel masks any partial values from a
+      // non-selected provider before they reach bars or up-next arbitration.
+      final authenticated = await _runBound(
+        authorization,
+        service.isAuthenticated,
+      );
       final operationKey = _refreshKey(
         'mdblist-operation',
         imdbId,
         authorization,
       );
       final storeWriteKey = _storeWriteKey('mdblist', authorization);
-      if (!enabled[0] || !enabled[1]) {
+      if (!authenticated) {
+        // Disconnected: self-heal the store (mirrors seedMdblistPlayback) so
+        // the launcher's raw reads can't serve a departed account's percents.
         await _refreshCoordinator.serialize(
           operationKey,
           () => _refreshCoordinator.serialize(

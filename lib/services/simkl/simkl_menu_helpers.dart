@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import 'simkl_service.dart';
+import '../watched_action_coordinator.dart';
 
 /// Actions available in the Simkl episode overflow menu.
 enum SimklEpisodeMenuAction { markWatched, markUnwatched, rate }
@@ -52,10 +53,7 @@ Future<int?> showSimklRatingDialog(BuildContext context) {
                   SizedBox(width: 8),
                   Text(
                     'Rate this item',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -111,6 +109,7 @@ Future<void> handleSimklMenuAction(
   BuildContext context,
   StremioMeta item,
   SimklItemMenuAction action, {
+
   /// Skips the rating dialog for [SimklItemMenuAction.rate] and submits this
   /// value directly — mirrors `handleTraktMenuAction`'s [presetRating], for
   /// the merged detail sheet's inline 1–10 strip.
@@ -133,13 +132,15 @@ Future<void> handleSimklMenuAction(
       actionLabel = 'Moved to On Hold on Simkl';
       success = await simklService.addToList(imdbId, type, 'hold');
     case SimklItemMenuAction.moveToCompleted:
-      actionLabel = 'Marked Completed on Simkl';
-      success = await simklService.addToList(imdbId, type, 'completed');
-      // Completed/Dropped titles are NOT hidden by status (a paused session on
-      // them is an active rewatch), so clearing the paused session is what takes
-      // this OFF Continue Watching — fold the result in: a failed clear leaves
-      // it in the row, so don't report a clean success.
-      if (success) success = await simklService.deletePlaybackForImdb(imdbId);
+      actionLabel = 'Marked Completed';
+      // The coordinator owns the Simkl history write AND the paused-session
+      // clear (both behind the Scrobble gate) — no direct Simkl write here,
+      // or an unticked Simkl would still lose its paused session.
+      success = (await WatchedActionCoordinator.setTitleWatched(
+        imdbId: imdbId,
+        contentType: type,
+        watched: true,
+      )).success;
     case SimklItemMenuAction.moveToDropped:
       actionLabel = 'Marked Dropped on Simkl';
       success = await simklService.addToList(imdbId, type, 'dropped');
@@ -243,7 +244,12 @@ List<SimklMenuOption> buildSimklMenuOptions({
   final String? current = status?.currentStatus;
   final int? currentRating = status?.rating;
 
-  SimklMenuOption moveOption(String value, String label, IconData icon, Color color) {
+  SimklMenuOption moveOption(
+    String value,
+    String label,
+    IconData icon,
+    Color color,
+  ) {
     return SimklMenuOption(
       action: _statusMoveAction(value),
       icon: icon,

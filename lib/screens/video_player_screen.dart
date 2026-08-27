@@ -27,6 +27,7 @@ import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
 import '../services/profiles/profile_lock_controller.dart';
+import '../services/tracking_source_policy.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../widgets/recording_limit_dialogs.dart';
 import '../services/debrid_service.dart';
@@ -1485,6 +1486,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // a previous video's offset can't leak in (mirrors the TV side's onCreate).
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
+    unawaited(_loadTrackingPolicy());
     unawaited(_loadSkipSegmentSettings());
     unawaited(_loadLocalCompletionThresholds());
     MediaKitInit.ensureInitialized();
@@ -1572,11 +1574,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   bool get _usesLocalCompletionTracking =>
-      !widget.traktScrobble &&
-      !widget.simklScrobble &&
-      !widget.mdblistScrobble &&
+      (_forceLocalCompletionTracking ||
+          (!widget.traktScrobble &&
+              !widget.simklScrobble &&
+              !widget.mdblistScrobble)) &&
       widget.stremioTvChannels == null &&
       _effectiveIptvChannels == null;
+
+  bool _forceLocalCompletionTracking = false;
+
+  Future<void> _loadTrackingPolicy() async {
+    final policy = await TrackingSourcePolicy.load();
+    if (!mounted) return;
+    _forceLocalCompletionTracking = policy.forcesLocalCompletion;
+    // A very short item can cross its completion threshold before this async
+    // profile read returns. Re-evaluate immediately so This-device mode never
+    // misses the forced-local rule merely because scrobbling is also enabled.
+    _checkAndApplyLocalCompletion();
+  }
 
   String? get _currentLocalMovieImdbId {
     if (_effectiveContentType != 'movie') return null;
@@ -1763,7 +1778,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.traktScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    _traktScrobbleEnabled = await TraktService.instance.isAuthenticated();
+    final policy = await TrackingSourcePolicy.load();
+    _traktScrobbleEnabled =
+        policy.scrobbles(TrackingSource.trakt) &&
+        await TraktService.instance.isAuthenticated();
     if (!mounted) return;
     // If player started playing before auth resolved, scrobble start now
     if (_traktScrobbleEnabled && _isPlaying && _duration > Duration.zero) {
@@ -1984,7 +2002,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.simklScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    _simklScrobbleEnabled = await SimklService.instance.isAuthenticated();
+    final policy = await TrackingSourcePolicy.load();
+    _simklScrobbleEnabled =
+        policy.scrobbles(TrackingSource.simkl) &&
+        await SimklService.instance.isAuthenticated();
     if (!mounted) return;
     // Pause-centric model: do NOT POST Simkl's /scrobble/start. Unlike Trakt,
     // it persists NO resumable position AND deletes the existing /sync/playback
@@ -2181,6 +2202,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('[MDBListDiag] player init skipped: tracking not requested');
       return;
     }
+    final policy = await TrackingSourcePolicy.load();
+    if (!policy.scrobbles(TrackingSource.mdblist)) return;
     // Playlist launches resolve their requested/resume episode asynchronously.
     // Before that finishes `_currentIndex` is still zero, so constructing the
     // MDBList target here used to scrobble S1E1 while the player actually
@@ -2303,7 +2326,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _mdblistEpisodeProgress = null;
   }
 
-  Future<double?> _currentEpisodeTraktPercent() async {
+  Future<double?> _currentEpisodeTraktPercent({bool forGuide = false}) async {
+    final policy = await TrackingSourcePolicy.load();
+    if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
     _bindEpisodeTrackerProgressIdentity(imdbId);
@@ -2350,13 +2375,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (season == null || episode == null) return null;
 
-    return _traktEpisodeProgress!['${season}_$episode'];
+    final percent = _traktEpisodeProgress!['${season}_$episode'];
+    return forGuide
+        ? policy.guideProgressFrom(TrackingSource.trakt, percent)
+        : percent;
   }
 
   /// Current episode's Simkl snapshot percent. This mirrors the Trakt lookup
   /// above but remains independently stored so remote unwatch changes never
   /// mutate local playback history.
-  Future<double?> _currentEpisodeSimklPercent() async {
+  Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
+    final policy = await TrackingSourcePolicy.load();
+    if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
     _bindEpisodeTrackerProgressIdentity(imdbId);
@@ -2397,10 +2427,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (season == null || episode == null) return null;
 
-    return _simklEpisodeProgress!['${season}_$episode'];
+    final percent = _simklEpisodeProgress!['${season}_$episode'];
+    return forGuide
+        ? policy.guideProgressFrom(TrackingSource.simkl, percent)
+        : percent;
   }
 
-  Future<double?> _currentEpisodeMdblistPercent() async {
+  Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
+    final policy = await TrackingSourcePolicy.load();
+    if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
     _bindEpisodeTrackerProgressIdentity(imdbId);
@@ -2413,7 +2448,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     final se = _traktSeasonEpisode();
     if (se.season == null || se.episode == null) return null;
-    return _mdblistEpisodeProgress!['${se.season}_${se.episode}'];
+    final percent = _mdblistEpisodeProgress!['${se.season}_${se.episode}'];
+    return forGuide
+        ? policy.guideProgressFrom(TrackingSource.mdblist, percent)
+        : percent;
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -10808,6 +10846,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Don't reset _isManualEpisodeSelection here - let it be reset after a delay
       return;
     }
+    final trackingPolicy = await TrackingSourcePolicy.load();
     // The launched item's widget percent is a first-load-only signal; capture it
     // before marking it spent so it can't apply to a later switched-to episode.
     final firstLoad = !_launchTraktPercentSpent;
@@ -10830,7 +10869,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     double? simklProviderPct;
     double? mdblistProviderPct;
     var explicitLaunch = false;
-    if (!preferLocalResume) {
+    if (!preferLocalResume &&
+        trackingPolicy.progressFrom(TrackingSource.trakt)) {
       final launchPct = firstLoad ? widget.traktProgressPercent : null;
       if (launchPct != null) {
         traktPct = launchPct;
@@ -10841,7 +10881,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         traktProviderPct = traktPct;
       }
     }
-    if (!preferLocalResume) {
+    if (!preferLocalResume &&
+        trackingPolicy.progressFrom(TrackingSource.mdblist)) {
       final explicitMdblistPct = mdblistFirstLoad
           ? widget.mdblistProgressPercent
           : null;
@@ -10856,7 +10897,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Simkl candidate: the explicit launch promise on first load, otherwise
     // this episode's launch-time snapshot. Folded into the same candidate as
     // Trakt so the furthest remote progress wins.
-    if (!preferLocalResume) {
+    if (!preferLocalResume &&
+        trackingPolicy.progressFrom(TrackingSource.simkl)) {
       final explicitSimklPct = simklFirstLoad
           ? widget.simklProgressPercent
           : null;
@@ -10878,17 +10920,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Local candidate + speed/aspect restore (enhanced state preferred, else the
     // legacy resume store). Speed/aspect are restored regardless of the seek.
     int localMs = 0;
+    final allowLocalResume =
+        preferLocalResume || trackingPolicy.progressFrom(TrackingSource.local);
     final localMovieImdbId = _currentLocalMovieImdbId;
     final locallyFinishedMovie =
         !preferLocalResume &&
         localMovieImdbId != null &&
         await StorageService.isMovieFinished(localMovieImdbId);
+    // Speed/aspect are device prefs riding in the resume record — restore
+    // them in EVERY progress mode; only the POSITION is a policy-gated
+    // resume candidate.
     final state = locallyFinishedMovie
         ? null
         : await _getEnhancedPlaybackState() ??
               await StorageService.getVideoResume(_resumeKey);
     if (state != null) {
-      localMs = (state['positionMs'] ?? 0) as int;
+      if (allowLocalResume) {
+        localMs = (state['positionMs'] ?? 0) as int;
+      }
       final speed = (state['speed'] ?? 1.0) as double;
       final aspect = (state['aspect'] ?? 'contain') as String;
       if (speed != 1.0) {
@@ -10919,13 +10968,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // completed position must not force a fresh start. Keep this migration
     // in-memory; the old record has no provenance and may be genuine local
     // history. Independent Simkl/MDBList completion still wins.
-    if (localMs >= hiMs &&
-        hasActiveTraktEpisodeRewatch(
-          traktPercent: traktProviderPct,
-          simklPercent: simklProviderPct,
-          mdblistPercent: mdblistProviderPct,
-        )) {
-      localMs = 0;
+    if (localMs >= hiMs) {
+      // The rewatch detector consumes the same inputs as guide rendering:
+      // partials from the selected source, plus completed ticks from every
+      // provider. A foreign partial cannot un-tick local completion, while an
+      // independent foreign completion still protects it.
+      traktProviderPct ??= await _currentEpisodeTraktPercent(forGuide: true);
+      simklProviderPct ??= await _currentEpisodeSimklPercent(forGuide: true);
+      mdblistProviderPct ??= await _currentEpisodeMdblistPercent(
+        forGuide: true,
+      );
+      if (hasActiveTraktEpisodeRewatch(
+        traktPercent: traktProviderPct,
+        simklPercent: simklProviderPct,
+        mdblistPercent: mdblistProviderPct,
+      )) {
+        localMs = 0;
+      }
     }
     // The details-screen Resume promised THIS position — honour it outright when
     // seekable (matching the pre-rework launched-item behaviour), even over a

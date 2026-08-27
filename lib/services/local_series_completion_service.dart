@@ -57,6 +57,22 @@ class LocalSeriesCompletionService {
         return _caughtUpIds(state);
       });
 
+  /// Remove the local completed-episode history that derives a show's
+  /// caught-up state. The recorded inventory supplies the canonical title so
+  /// installs with pre-IMDb, title-keyed playback records are cleared too.
+  Future<void> clearCompletedHistory(String imdbId) async {
+    final id = imdbId.trim().toLowerCase();
+    if (id.isEmpty) return;
+    final title = await _stateLock.synchronized(() async {
+      final state = await _readState();
+      return state[id]?['title']?.toString();
+    });
+    await StorageService.unmarkSeriesAsFinished(id, seriesTitle: title);
+    // Await the re-derivation so a completed badge cannot survive past the
+    // watched action's own Future even if the revision listener is delayed.
+    await caughtUpIds();
+  }
+
   /// Records a successfully resolved episode inventory and immediately derives
   /// the local series status. Specials are excluded. Episodes without a date
   /// are conservatively considered already available.

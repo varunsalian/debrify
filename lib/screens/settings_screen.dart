@@ -104,6 +104,7 @@ import 'profiles/profile_wall_screen.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
+import 'settings/tracking_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
 import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
@@ -767,6 +768,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     caption: _mdblistCaption,
     onTap: _openMdblistSettings,
   );
+  ConnectionInfo get _trackingInfo => ConnectionInfo(
+    title: 'Tracking',
+    connected: true,
+    status: 'Configured',
+    caption: 'Scrobble, progress source & Home ticks',
+    onTap: _openTrackingSettings,
+  );
   ConnectionInfo get _indexerManagersInfo => ConnectionInfo(
     title: 'Jackett & Prowlarr',
     connected: _indexerManagersConfigured,
@@ -790,6 +798,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Watch history lives on its own rail category — Connections had grown
       // to ten cards covering five unrelated jobs.
       trackers: [
+        _trackingInfo,
         _traktInfo,
         _simklInfo,
         // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
@@ -898,6 +907,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         iptv: _iptvInfo,
         trakt: _traktInfo,
         simkl: _simklInfo,
+        tracking: _trackingInfo,
         // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
         mdblist: kMdblistEnabled ? _mdblistInfo : null,
         indexerManagers: _indexerManagersInfo,
@@ -1182,6 +1192,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'sync',
         'watch history',
         'watchlist',
+      ], category: 'Trackers'),
+      conn(_trackingInfo, const [
+        'scrobble',
+        'sync catalog',
+        'watch progress',
+        'continue watching source',
+        'home ticks',
       ], category: 'Trackers'),
       conn(_simklInfo, const [
         'scrobble',
@@ -2059,6 +2076,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'IPTV Playlists': Icons.playlist_play_rounded,
       'Recordings': Icons.fiber_dvr_rounded,
       'Trakt': Icons.sync_rounded,
+      'Tracking': Icons.sync_alt_rounded,
       'Simkl': Icons.sync_rounded,
       'MDBList': Icons.list_alt_rounded,
       'Remote': Icons.phonelink_rounded,
@@ -2080,6 +2098,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'IPTV Playlists': _openIptvSettings,
       'Recordings': _openRecordings,
       'Trakt': _openTraktSettings,
+      'Tracking': _openTrackingSettings,
       'Simkl': _openSimklSettings,
       'MDBList': _openMdblistSettings,
       'Remote': _openRemoteControl,
@@ -2925,9 +2944,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Trackers — the pages behind the connection cards.
       leaf(
-        'Trakt',
-        'Sync Catalog Items',
-        'Sync your Trakt lists and watch history into catalogs',
+        'Tracking',
+        'Scrobble',
+        'Choose which connected services record playback',
         const [
           'sync',
           'catalog',
@@ -2939,9 +2958,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       leaf(
-        'Simkl',
-        'Sync Catalog Items',
-        'Sync your Simkl lists and watch history into catalogs',
+        'Tracking',
+        'Progress source',
+        'Choose resume, progress bar and Continue Watching ownership',
         const [
           'sync',
           'catalog',
@@ -2951,6 +2970,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'scrobble',
           'refresh',
         ],
+      ),
+      leaf(
+        'Tracking',
+        'Home tick marks',
+        'Choose which histories draw watched ticks on Home cards',
+        const ['watched', 'checkmark', 'tick', 'local', 'trakt', 'simkl'],
       ),
       if (kMdblistEnabled)
         leaf(
@@ -3065,6 +3090,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const TraktSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
+  }
+
+  Future<void> _openTrackingSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
+    await pushSettingsPage(context, const TrackingSettingsPage());
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _openSimklSettings() async {
@@ -5554,6 +5589,7 @@ class _SettingsLayout extends StatelessWidget {
   ];
 
   List<ConnectionInfo> get _trackerConnections => [
+    connections.tracking,
     connections.trakt,
     connections.simkl,
     if (connections.mdblist != null) connections.mdblist!,

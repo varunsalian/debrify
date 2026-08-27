@@ -15,6 +15,7 @@ import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/tracking_source_policy.dart';
 import '../../services/account_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../services/premiumize_account_service.dart';
@@ -1781,6 +1782,9 @@ class RemoteCommandRouter {
       case ConfigCommand.mdblist:
         payload['mdblist'] = decoded();
         break;
+      case ConfigCommand.trackingPreferences:
+        payload['trackingPreferences'] = decoded();
+        break;
       case ConfigCommand.searchEngines:
         payload['searchEngineIds'] = decoded();
         break;
@@ -2234,6 +2238,7 @@ class RemoteCommandRouter {
         'trakt': ConfigCommand.trakt,
         'simkl': ConfigCommand.simkl,
         'mdblist': ConfigCommand.mdblist,
+        'trackingPreferences': ConfigCommand.trackingPreferences,
         'searchEngineIds': ConfigCommand.searchEngines,
         'webDavServers': ConfigCommand.webDav,
         'indexerManagers': ConfigCommand.indexerManagers,
@@ -2567,6 +2572,9 @@ class RemoteCommandRouter {
       case ConfigCommand.mdblist:
         await _handleMdblistConfig(data);
         break;
+      case ConfigCommand.trackingPreferences:
+        await _handleTrackingPreferencesConfig(data);
+        break;
       case ConfigCommand.searchEngines:
         await _handleSearchEnginesConfig(data);
         break;
@@ -2602,6 +2610,34 @@ class RemoteCommandRouter {
         break;
       default:
         debugPrint('RemoteCommandRouter: Unknown config command: $command');
+    }
+  }
+
+  /// Handle profile-scoped tracking preferences.
+  Future<void> _handleTrackingPreferencesConfig(String data) async {
+    try {
+      final decoded = jsonDecode(data);
+      if (decoded is! Map) throw const FormatException();
+      await StorageService.applyTrackingPreferencesPayload(decoded);
+      final requested = decoded['progress_source']?.toString();
+      final effective = await TrackingSourcePolicy.load();
+      final fellBack =
+          requested != null &&
+          requested != WatchProgressSource.smart.name &&
+          effective.progressSource == WatchProgressSource.smart;
+      if (fellBack) {
+        await StorageService.takeTrackingProgressFallbackNotice();
+      }
+      _showSnackBar(
+        fellBack
+            ? 'Tracking configured. Progress tracker is disconnected; using Smart.'
+            : 'Tracking preferences configured successfully',
+      );
+    } catch (_) {
+      _showSnackBar(
+        'Tracking preferences: Configuration failed',
+        isError: true,
+      );
     }
   }
 

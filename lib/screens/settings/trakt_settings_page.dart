@@ -24,7 +24,6 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _username;
-  bool _syncCatalogItems = false;
 
   // Device code flow
   String? _userCode;
@@ -67,14 +66,12 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   Future<void> _loadSettings() async {
     final isAuth = await TraktService.instance.isAuthenticated();
     final username = await TraktService.instance.getUsername();
-    final syncCatalog = await StorageService.getTraktSyncCatalogItems();
 
     if (!mounted) return;
 
     setState(() {
       _isConnected = isAuth;
       _username = username;
-      _syncCatalogItems = syncCatalog;
       _loading = false;
     });
     // TV entry focus: land DPAD users on the login/logout button — unless
@@ -156,10 +153,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         _isConnected = true;
         _isConnecting = false;
         _username = username;
-        _syncCatalogItems = true;
         _resetDeviceCodeState();
       });
-      await StorageService.setTraktSyncCatalogItems(true);
       AnalyticsService.integrationConnected('trakt', {
         'surface': 'settings',
         'method': 'device_code',
@@ -247,7 +242,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       _username = null;
     });
     MainPageBridge.notifyIntegrationChanged();
-    _showSnackBar('Logged out from Trakt', isError: false);
+    final fellBack = await StorageService.takeTrackingProgressFallbackNotice();
+    if (!mounted) return;
+    _showSnackBar(
+      fellBack
+          ? 'Logged out from Trakt. Progress source changed to Smart.'
+          : 'Logged out from Trakt',
+      isError: false,
+    );
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
@@ -368,29 +370,6 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                       ),
                     ),
                   ),
-
-                  // Sync Catalog Items toggle (only when connected)
-                  if (_isConnected) ...[
-                    const SizedBox(height: 16),
-                    // _FocusRing: SwitchListTile's built-in focus highlight is
-                    // too subtle for TV, so paint the accent ring around it.
-                    _FocusRing(
-                      child: Card(
-                        child: SwitchListTile(
-                          title: const Text('Sync Catalog Items'),
-                          subtitle: Text(
-                            'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
-                            style: TextStyle(fontSize: 12, color: t.dim),
-                          ),
-                          value: _syncCatalogItems,
-                          onChanged: (value) {
-                            setState(() => _syncCatalogItems = value);
-                            StorageService.setTraktSyncCatalogItems(value);
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
 
                   const SizedBox(height: 16),
 

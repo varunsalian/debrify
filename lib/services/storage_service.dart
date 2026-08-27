@@ -24,6 +24,7 @@ import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/tv_hero_artwork_quality.dart';
+import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 
@@ -56,6 +57,15 @@ enum TvRenderQuality {
 }
 
 class StorageService {
+  static const String _explicitlyWatchedSeriesKey =
+      'explicitly_watched_series_v1';
+  static const String trackingScrobbleTargetsKey = 'tracking_scrobble_targets';
+  static const String watchProgressSourceKey = 'watch_progress_source';
+  static const String homeTickSourcesKey = 'home_tick_sources';
+
+  /// Invalidates policy consumers that keep an in-memory snapshot.
+  static final ValueNotifier<int> trackingSourceRevision = ValueNotifier(0);
+
   /// Tracker/account watched-title invalidation. Kept separate from local
   /// playback so finishing an episode never reloads entire remote histories.
   static final ValueNotifier<int> movieFinishedRevision = ValueNotifier(0);
@@ -2075,6 +2085,7 @@ class StorageService {
     await prefs.remove(_mdblistUsernameKey);
     await prefs.remove(_mdblistSavedClonesKey);
     await prefs.remove(_mdblistSyncCheckpointKey);
+    await fallbackDisconnectedProgressSource(TrackingSource.mdblist);
   }
 
   // Maps a source MDBList list id -> the id of the static list we CLONED it
@@ -2443,7 +2454,6 @@ class StorageService {
     String? year,
   }) async {
     final prefs = await ProfilePreferences.instance();
-    if (!(prefs.getBool(_homeContinueWatchingEnabledKey) ?? true)) return;
     final raw = prefs.getString(_continueWatchingKey);
     List<Map<String, dynamic>> items = [];
     if (raw != null && raw.isNotEmpty) {
@@ -2561,6 +2571,35 @@ class StorageService {
     }
     localCompletionRevision.value++;
     debugPrint('StorageService: unmarkMovieAsFinished imdbId="$normalized"');
+  }
+
+  static Future<Set<String>> getExplicitlyWatchedSeriesIds() async {
+    final prefs = await ProfilePreferences.instance();
+    return (prefs.getStringList(_explicitlyWatchedSeriesKey) ?? const [])
+        .map((id) => id.trim().toLowerCase())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+  }
+
+  static Future<void> setSeriesExplicitlyWatched(
+    String imdbId, {
+    required bool watched,
+  }) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    final ids = await getExplicitlyWatchedSeriesIds();
+    final changed = watched ? ids.add(normalized) : ids.remove(normalized);
+    if (!changed) return;
+    final prefs = await ProfilePreferences.instance();
+    if (ids.isEmpty) {
+      await prefs.remove(_explicitlyWatchedSeriesKey);
+    } else {
+      await prefs.setStringList(
+        _explicitlyWatchedSeriesKey,
+        ids.toList()..sort(),
+      );
+    }
+    localCompletionRevision.value++;
   }
 
   // Enhanced Playback State methods
@@ -2785,6 +2824,69 @@ class StorageService {
 
     await _savePlaybackStateMap(map);
     localCompletionRevision.value++;
+  }
+
+  /// Clear every completed episode owned by a stable series identity.
+  ///
+  /// This is the local equivalent of removing a show from tracker history.
+  /// Synthetic watched rows and completed checkpoints are cleared across all
+  /// release-title aliases, while genuine partial rewatch progress survives.
+  static Future<void> unmarkSeriesAsFinished(
+    String imdbId, {
+    String? seriesTitle,
+  }) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    final normalizedTitle = seriesTitle?.trim().toLowerCase();
+    final map = await _getPlaybackStateMap();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var changed = false;
+
+    for (final raw in map.values) {
+      if (raw is! Map<String, dynamic> || raw['type'] != 'series') continue;
+      final storedId = raw['imdbId']?.toString().trim().toLowerCase();
+      final storedTitle = raw['title']?.toString().trim().toLowerCase();
+      final matchesStableId = storedId == normalized;
+      final matchesLegacyTitle =
+          normalizedTitle != null &&
+          normalizedTitle.isNotEmpty &&
+          storedTitle == normalizedTitle;
+      if (!matchesStableId && !matchesLegacyTitle) continue;
+
+      final coordinates = <({int season, int episode})>{};
+      void collect(Object? seasons) {
+        if (seasons is! Map) return;
+        for (final seasonEntry in seasons.entries) {
+          final season = int.tryParse(seasonEntry.key.toString());
+          final episodes = seasonEntry.value;
+          if (season == null || episodes is! Map) continue;
+          for (final episodeKey in episodes.keys) {
+            final episode = int.tryParse(episodeKey.toString());
+            if (episode != null) {
+              coordinates.add((season: season, episode: episode));
+            }
+          }
+        }
+      }
+
+      collect(raw['finishedEpisodes']);
+      collect(raw['seasons']);
+      for (final coordinate in coordinates) {
+        if (_clearEpisodeCompletion(
+          seriesData: raw,
+          season: coordinate.season,
+          episode: coordinate.episode,
+          updatedAt: now,
+        )) {
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) return;
+    await _savePlaybackStateMap(map);
+    localCompletionRevision.value++;
+    debugPrint('StorageService: unmarkSeriesAsFinished imdbId="$normalized"');
   }
 
   /// Remove one episode's explicit completion and any synthetic/completed
@@ -5894,6 +5996,178 @@ class StorageService {
     await prefs.setBool(_redditHiddenFromNavKey, value);
   }
 
+  // Tracking source policy -------------------------------------------------
+
+  static const Set<TrackingSource> _allTrackingSources = <TrackingSource>{
+    TrackingSource.local,
+    TrackingSource.trakt,
+    TrackingSource.simkl,
+    TrackingSource.mdblist,
+  };
+
+  /// Reads the new master scrobble switches. On first read, adopt the retired
+  /// per-tracker catalog switches once. An absent legacy value means ON: that
+  /// matches interactive connection and old Trakt/Simkl restore behavior.
+  static Future<Set<TrackingSource>> getTrackingScrobbleTargets() async {
+    final prefs = await ProfilePreferences.instance();
+    final stored = prefs.getStringList(trackingScrobbleTargetsKey);
+    if (stored != null) {
+      return <TrackingSource>{
+        TrackingSource.local,
+        for (final value in stored)
+          if (TrackingSourceStorageName.parse(value) case final source?) source,
+      };
+    }
+
+    final seeded = <TrackingSource>{TrackingSource.local};
+    const legacyKeys = <TrackingSource, String>{
+      TrackingSource.trakt: 'trakt_sync_catalog_items',
+      TrackingSource.simkl: 'simkl_sync_catalog_items',
+      TrackingSource.mdblist: 'mdblist_sync_catalog_items',
+    };
+    for (final entry in legacyKeys.entries) {
+      if (!prefs.containsKey(entry.value) ||
+          (prefs.getBool(entry.value) ?? true)) {
+        seeded.add(entry.key);
+      }
+    }
+    await prefs.setStringList(
+      trackingScrobbleTargetsKey,
+      seeded.map((source) => source.storageName).toList(growable: false),
+    );
+    return seeded;
+  }
+
+  static Future<void> setTrackingScrobbleTargets(
+    Set<TrackingSource> value,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
+    final normalized = <TrackingSource>{
+      TrackingSource.local,
+      ...value.where(_allTrackingSources.contains),
+    };
+    await prefs.setStringList(
+      trackingScrobbleTargetsKey,
+      normalized.map((source) => source.storageName).toList(growable: false),
+    );
+    trackingSourceRevision.value++;
+  }
+
+  static Future<WatchProgressSource> getWatchProgressSource() async {
+    final prefs = await ProfilePreferences.instance();
+    final stored = prefs.getString(watchProgressSourceKey);
+    return WatchProgressSource.values.firstWhere(
+      (source) => source.name == stored,
+      orElse: () => WatchProgressSource.smart,
+    );
+  }
+
+  static Future<void> setWatchProgressSource(WatchProgressSource value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(watchProgressSourceKey, value.name);
+    trackingSourceRevision.value++;
+  }
+
+  static Future<bool> fallbackDisconnectedProgressSource(
+    TrackingSource disconnected,
+  ) async {
+    final current = await getWatchProgressSource();
+    final owns = switch (current) {
+      WatchProgressSource.trakt => disconnected == TrackingSource.trakt,
+      WatchProgressSource.simkl => disconnected == TrackingSource.simkl,
+      WatchProgressSource.mdblist => disconnected == TrackingSource.mdblist,
+      _ => false,
+    };
+    if (!owns) return false;
+    await setWatchProgressSource(WatchProgressSource.smart);
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('tracking_progress_fallback_notice', true);
+    return true;
+  }
+
+  static Future<bool> takeTrackingProgressFallbackNotice() async {
+    final prefs = await ProfilePreferences.instance();
+    final pending = prefs.getBool('tracking_progress_fallback_notice') ?? false;
+    if (pending) await prefs.remove('tracking_progress_fallback_notice');
+    return pending;
+  }
+
+  static Future<Set<TrackingSource>> getHomeTickSources() async {
+    final prefs = await ProfilePreferences.instance();
+    final stored = prefs.getStringList(homeTickSourcesKey);
+    if (stored == null) return Set<TrackingSource>.of(_allTrackingSources);
+    return <TrackingSource>{
+      for (final value in stored)
+        if (TrackingSourceStorageName.parse(value) case final source?) source,
+    };
+  }
+
+  static Future<void> setHomeTickSources(Set<TrackingSource> value) async {
+    final prefs = await ProfilePreferences.instance();
+    final normalized = value.where(_allTrackingSources.contains).toSet();
+    await prefs.setStringList(
+      homeTickSourcesKey,
+      normalized.map((source) => source.storageName).toList(growable: false),
+    );
+    trackingSourceRevision.value++;
+  }
+
+  static Future<Map<String, dynamic>> buildTrackingPreferencesPayload() async {
+    final scrobble = await getTrackingScrobbleTargets();
+    final progress = await getWatchProgressSource();
+    final ticks = await getHomeTickSources();
+    return <String, dynamic>{
+      'scrobble_targets': scrobble
+          .map((source) => source.storageName)
+          .toList(growable: false),
+      'progress_source': progress.name,
+      'home_tick_sources': ticks
+          .map((source) => source.storageName)
+          .toList(growable: false),
+    };
+  }
+
+  /// Drops the seeded scrobble masters so the next read re-adopts the legacy
+  /// per-tracker switches. Needed after restoring an OLD backup (one with no
+  /// tracking payload): the masters were already seeded on first policy read
+  /// at app start, so without this the restored legacy values — notably an
+  /// MDBList sync-catalog OFF — would be silently ignored.
+  static Future<void> reseedTrackingScrobbleTargetsFromLegacy() async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.remove(trackingScrobbleTargetsKey);
+    trackingSourceRevision.value++;
+  }
+
+  /// Applies only explicitly present new-format preferences. Old backups omit
+  /// this object; [reseedTrackingScrobbleTargetsFromLegacy] runs on that
+  /// restore path instead so the restored legacy switches are re-adopted by
+  /// [getTrackingScrobbleTargets], preserving the absent-key migration rule.
+  static Future<void> applyTrackingPreferencesPayload(
+    Map<dynamic, dynamic> payload,
+  ) async {
+    final scrobble = payload['scrobble_targets'];
+    if (scrobble is List) {
+      await setTrackingScrobbleTargets(<TrackingSource>{
+        for (final value in scrobble.whereType<String>())
+          if (TrackingSourceStorageName.parse(value) case final source?) source,
+      });
+    }
+    final progress = payload['progress_source'];
+    if (progress is String) {
+      final parsed = WatchProgressSource.values
+          .where((source) => source.name == progress)
+          .firstOrNull;
+      if (parsed != null) await setWatchProgressSource(parsed);
+    }
+    final ticks = payload['home_tick_sources'];
+    if (ticks is List) {
+      await setHomeTickSources(<TrackingSource>{
+        for (final value in ticks.whereType<String>())
+          if (TrackingSourceStorageName.parse(value) case final source?) source,
+      });
+    }
+  }
+
   static Future<String?> getRedditLastSubreddit() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getString(_redditLastSubredditKey);
@@ -5997,6 +6271,7 @@ class StorageService {
     }
     await prefs.remove(_traktUsernameKey);
     await prefs.remove(_traktTokenExpiryKey);
+    await fallbackDisconnectedProgressSource(TrackingSource.trakt);
     return !disposition.handled || disposition.shouldRevokeRemote;
   }
 
@@ -6057,6 +6332,7 @@ class StorageService {
       await prefs.remove(_simklAccessTokenKey);
     }
     await prefs.remove(_simklUsernameKey);
+    await fallbackDisconnectedProgressSource(TrackingSource.simkl);
   }
 
   static Future<List<String>> getRedditRecentSubreddits() async {

@@ -14,6 +14,7 @@ import '../../services/trakt/trakt_list_source.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/home/home_theme.dart';
+import '../../models/tracking_source.dart';
 
 /// Full-screen DPAD-first Home-row manager — a two-pane "group → item" filter,
 /// modelled on the Stremio TV channel filter's grammar but 2 levels deep (no
@@ -90,6 +91,7 @@ class _Item {
   final bool defaultOn;
   final String? extraTitle;
   final bool unavailable;
+  final bool hiddenByProgress;
   bool on;
   _Item(
     this.id,
@@ -99,6 +101,7 @@ class _Item {
     this.defaultOn = true,
     this.extraTitle,
     this.unavailable = false,
+    this.hiddenByProgress = false,
   });
 }
 
@@ -122,7 +125,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   static const Color _onColor = Color(0xFF34D399);
   static const Color _offColor = Color(0xFF4B465F);
 
-  late final List<_Group> _groups;
+  late List<_Group> _groups;
+  WatchProgressSource _progressSource = WatchProgressSource.smart;
   int _selectedGroup = 0;
   int _selectedItem = 0;
   bool _changed = false;
@@ -153,6 +157,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     super.initState();
     AnalyticsService.screenView('home_sections_filter');
     _groups = _buildModel();
+    _loadProgressSource();
     final seededOrder = HomeRowOrder.insertMissingAfter(
       widget.rowOrder,
       additions: const ['mdblist:movies', 'mdblist:shows'],
@@ -177,6 +182,18 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     });
   }
 
+  Future<void> _loadProgressSource() async {
+    final source = await StorageService.getWatchProgressSource();
+    if (!mounted || source == _progressSource) return;
+    setState(() {
+      _progressSource = source;
+      _groups = _buildModel();
+      _selectedGroup = _selectedGroup.clamp(0, _groups.length - 1);
+      _selectedItem = 0;
+    });
+    _rebuildListNodes();
+  }
+
   @override
   void dispose() {
     for (final n in _headerNodes) {
@@ -199,6 +216,17 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     bool on(String id) => !d.contains(id);
     final extraById = {for (final r in widget.extraRows) r.id: r};
     bool extraOn(String id) => extraById.containsKey(id);
+    bool progressFrom(TrackingSource source) =>
+        _progressSource == WatchProgressSource.smart ||
+        _progressSource.name == source.name;
+    _Item cw(String id, String label, TrackingSource source, {String? badge}) =>
+        _Item(
+          id,
+          label,
+          on(id),
+          badge: badge,
+          hiddenByProgress: !progressFrom(source),
+        );
 
     // Opt-in leaf factory: ON = present in the extras store.
     _Item opt(String id, String label, {String? badge}) => _Item(
@@ -221,12 +249,12 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
 
     final groups = <_Group>[
       _Group('Continue Watching', [
-        _Item('cw:movies', 'Movies', on('cw:movies')),
-        _Item('cw:series', 'Series', on('cw:series')),
+        cw('cw:movies', 'Movies', TrackingSource.local),
+        cw('cw:series', 'Series', TrackingSource.local),
       ]),
       _Group('Trakt', [
-        _Item('trakt:movies', 'Movies', on('trakt:movies'), badge: 'CW'),
-        _Item('trakt:shows', 'Shows', on('trakt:shows'), badge: 'CW'),
+        cw('trakt:movies', 'Movies', TrackingSource.trakt, badge: 'CW'),
+        cw('trakt:shows', 'Shows', TrackingSource.trakt, badge: 'CW'),
         for (final l in TraktSeeAllList.values)
           if (l != TraktSeeAllList.continueWatching)
             opt(HomeExtraRowIds.traktBuiltin(l), l.label, badge: 'LIST'),
@@ -236,16 +264,16 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
           opt(HomeExtraRowIds.traktUserList(c), c.label, badge: 'LIKED'),
       ]),
       _Group('Simkl', [
-        _Item('simkl:movies', 'Movies', on('simkl:movies'), badge: 'CW'),
-        _Item('simkl:shows', 'Shows', on('simkl:shows'), badge: 'CW'),
+        cw('simkl:movies', 'Movies', TrackingSource.simkl, badge: 'CW'),
+        cw('simkl:shows', 'Shows', TrackingSource.simkl, badge: 'CW'),
         for (final l in SimklSeeAllList.values)
           if (l != SimklSeeAllList.continueWatching)
             opt(HomeExtraRowIds.simkl(l), l.label, badge: 'LIST'),
       ]),
       if (kMdblistEnabled)
         _Group('MDBList', [
-          _Item('mdblist:movies', 'Movies', on('mdblist:movies'), badge: 'CW'),
-          _Item('mdblist:shows', 'Shows', on('mdblist:shows'), badge: 'CW'),
+          cw('mdblist:movies', 'Movies', TrackingSource.mdblist, badge: 'CW'),
+          cw('mdblist:shows', 'Shows', TrackingSource.mdblist, badge: 'CW'),
           for (final l in widget.mdblistMine)
             opt(HomeExtraRowIds.mdblistMine(l), l.label, badge: 'MINE'),
           for (final l in widget.mdblistLiked)
@@ -490,13 +518,13 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   // group — scoped so "All off" clears just the group you're looking at.
   void _setCurrentGroup(bool v) => _mutate(() {
     for (final it in _groups[_selectedGroup].items) {
-      it.on = v;
+      if (!it.hiddenByProgress) it.on = v;
     }
   });
 
   void _invertCurrentGroup() => _mutate(() {
     for (final it in _groups[_selectedGroup].items) {
-      it.on = !it.on;
+      if (!it.hiddenByProgress) it.on = !it.on;
     }
   });
 
@@ -505,11 +533,14 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     final g = _groups[i];
     final v = g.onCount != g.total;
     for (final it in g.items) {
-      it.on = v;
+      if (!it.hiddenByProgress) it.on = v;
     }
   });
 
-  void _toggleItem(_Item it) => _mutate(() => it.on = !it.on);
+  void _toggleItem(_Item it) {
+    if (it.hiddenByProgress) return;
+    _mutate(() => it.on = !it.on);
+  }
 
   void _setArrangeMode(bool value) {
     if (_arranging == value) return;
@@ -1368,25 +1399,46 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                         child: Row(
                           children: [
                             Flexible(
-                              child: Text(
-                                it.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  // Unavailable = enabled but its backing
-                                  // data didn't load (outage / deleted list)
-                                  // — dimmed, still toggleable off.
-                                  color: it.unavailable
-                                      ? Colors.white.withValues(alpha: 0.45)
-                                      : Colors.white,
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    it.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      // Unavailable = enabled but its backing
+                                      // data didn't load (outage / deleted list)
+                                      // — dimmed, still toggleable off.
+                                      color:
+                                          it.unavailable || it.hiddenByProgress
+                                          ? Colors.white.withValues(alpha: 0.45)
+                                          : Colors.white,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (it.hiddenByProgress)
+                                    Text(
+                                      'Hidden by your Progress source in Tracking',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.38,
+                                        ),
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             if (it.unavailable) ...[
                               const SizedBox(width: 8),
                               _typeBadge('UNAVAILABLE'),
+                            ] else if (it.hiddenByProgress) ...[
+                              const SizedBox(width: 8),
+                              _typeBadge('HIDDEN BY TRACKING'),
                             ] else if (it.badge != null) ...[
                               const SizedBox(width: 8),
                               _typeBadge(it.badge!),

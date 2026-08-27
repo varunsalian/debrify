@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
-import '../services/episode_tracker_snapshot_revision.dart';
 import '../services/debrify_image_cache.dart';
 import '../services/stremio_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
@@ -30,6 +29,8 @@ import '../services/mdblist/mdblist_continue_watching_service.dart';
 import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import 'home/home_theme.dart';
+import '../services/tracking_source_policy.dart';
+import '../services/watched_action_coordinator.dart';
 
 /// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
 /// can be hosted both as a standalone route (the existing `EpisodesScreen`
@@ -151,7 +152,7 @@ class EpisodesPanel extends StatefulWidget {
   /// When true, episode Sources/Play carry the Trakt scrobble flag + Trakt
   /// resume position so playback syncs to Trakt exactly like the old home
   /// episode view. Left false for plain catalog/addon items so their scrobble
-  /// stays governed by the user's "Sync Catalog Items" setting.
+  /// stays governed by the user's Tracking scrobble selection.
   final bool isTraktSource;
   final bool isMdblistSource;
 
@@ -284,6 +285,22 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action that preserves the catalog pack-search path on demand.
   bool _episodesUnavailable = false;
   Map<String, double> _episodeWatchProgress = {};
+  Map<String, double> _episodeResumeProgress = {};
+  TrackingSourcePolicy _trackingPolicy = const TrackingSourcePolicy(
+    scrobbleTargets: <TrackingSource>{
+      TrackingSource.local,
+      TrackingSource.trakt,
+      TrackingSource.simkl,
+      TrackingSource.mdblist,
+    },
+    progressSource: WatchProgressSource.smart,
+    homeTickSources: <TrackingSource>{
+      TrackingSource.local,
+      TrackingSource.trakt,
+      TrackingSource.simkl,
+      TrackingSource.mdblist,
+    },
+  );
   Map<String, int> _episodeMdblistRatings = {};
 
   /// Bumped when resolved episodes are PUBLISHED and on every season swap —
@@ -387,6 +404,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     StremioMeta show,
     int generation,
   ) async {
+    final policy = await TrackingSourcePolicy.load();
+    if (!mounted || generation != _episodeModeGeneration) return;
+    _trackingPolicy = policy;
     // Direct-source mode: the host owns progress (URL-keyed player positions
     // mapped to S-E), and none of the IMDb-keyed sources below can know these
     // episodes.
@@ -395,7 +415,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final map = await progressLoader();
         if (!mounted || generation != _episodeModeGeneration) return;
-        setState(() => _episodeWatchProgress = map);
+        setState(() {
+          _episodeWatchProgress = map;
+          _episodeResumeProgress = map;
+        });
       } catch (e) {
         debugPrint('EpisodesPanel: direct progress fetch failed: $e');
       }
@@ -406,8 +429,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (imdbId == null) return;
 
     // Local in-app playback progress (works without a Trakt account).
+    final localProgress = await StorageService.getEpisodeWatchProgressByImdbId(
+      imdbId,
+    );
     final merged = <String, double>{
-      ...await StorageService.getEpisodeWatchProgressByImdbId(imdbId),
+      for (final entry in localProgress.entries)
+        if (entry.value >= 100 || policy.progressFrom(TrackingSource.local))
+          entry.key: entry.value,
+    };
+    final resumeProgress = <String, double>{
+      if (policy.progressFrom(TrackingSource.local)) ...localProgress,
     };
     if (!mounted || generation != _episodeModeGeneration) return;
 
@@ -421,22 +452,35 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final watched = await _traktService.fetchWatchedShowEpisodes(imdbId);
         if (!mounted || generation != _episodeModeGeneration) return;
-        final playback = await _traktService.fetchEpisodePlaybackProgress(
-          imdbId,
-        );
+        final playback = policy.progressFrom(TrackingSource.trakt)
+            ? await _traktService.fetchEpisodePlaybackProgress(imdbId)
+            : const <String, double>{};
         if (!mounted || generation != _episodeModeGeneration) return;
 
         // Fully-watched episodes win outright.
         for (final key in watched) {
           merged[key] = 100.0;
+          if (policy.progressFrom(TrackingSource.trakt)) {
+            resumeProgress[key] = 100.0;
+          }
         }
         // Partial playback overlays, but never downgrades a completed episode
         // and only when it's meaningful and higher than what we already have.
+        // The resume map keeps its OWN "existing": in a dedicated mode a
+        // foreign tick lives only in the visual map and must neither block
+        // the selected source's partial nor be overwritten by it there.
         for (final entry in playback.entries) {
           final existing = merged[entry.key] ?? 0;
-          if (existing >= 100.0) continue;
-          if (entry.value > 5.0 && entry.value > existing) {
+          if (existing < 100.0 &&
+              entry.value > 5.0 &&
+              entry.value > existing) {
             merged[entry.key] = entry.value;
+          }
+          final resumeExisting = resumeProgress[entry.key] ?? 0;
+          if (resumeExisting < 100.0 &&
+              entry.value > 5.0 &&
+              entry.value > resumeExisting) {
+            resumeProgress[entry.key] = entry.value;
           }
         }
       } catch (e) {
@@ -463,19 +507,30 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
         if (!mounted || generation != _episodeModeGeneration) return;
-        final playback = await _simklService.fetchEpisodePlaybackProgress(
-          imdbId,
-        );
+        final playback = policy.progressFrom(TrackingSource.simkl)
+            ? await _simklService.fetchEpisodePlaybackProgress(imdbId)
+            : const <String, double>{};
         if (!mounted || generation != _episodeModeGeneration) return;
 
         for (final key in watched) {
           merged[key] = 100.0;
+          if (policy.progressFrom(TrackingSource.simkl)) {
+            resumeProgress[key] = 100.0;
+          }
         }
         for (final entry in playback.entries) {
           final existing = merged[entry.key] ?? 0;
-          if (existing >= 100.0) continue;
-          if (entry.value > 5.0 && entry.value > existing) {
+          if (existing < 100.0 &&
+              entry.value > 5.0 &&
+              entry.value > existing) {
             merged[entry.key] = entry.value;
+          }
+          // Same decoupled resume-map rule as the Trakt overlay above.
+          final resumeExisting = resumeProgress[entry.key] ?? 0;
+          if (resumeExisting < 100.0 &&
+              entry.value > 5.0 &&
+              entry.value > resumeExisting) {
+            resumeProgress[entry.key] = entry.value;
           }
         }
       } catch (e) {
@@ -490,8 +545,21 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (result.isUsable) {
           for (final entry in result.data!.entries) {
             final existing = merged[entry.key] ?? 0;
-            if (entry.value >= 100 || entry.value > existing) {
+            if (entry.value >= 100 ||
+                (policy.progressFrom(TrackingSource.mdblist) &&
+                    entry.value > existing)) {
               merged[entry.key] = entry.value;
+            }
+            // Decoupled resume-map rule (see the Trakt overlay): compare
+            // against the resume map's own value so a stale lower MDBList
+            // session can't clobber a 100 already placed there, and a
+            // foreign tick in the visual map can't mask this source's own
+            // partial in a dedicated mode.
+            if (policy.progressFrom(TrackingSource.mdblist)) {
+              final resumeExisting = resumeProgress[entry.key] ?? 0;
+              if (entry.value >= 100 || entry.value > resumeExisting) {
+                resumeProgress[entry.key] = entry.value;
+              }
             }
           }
         }
@@ -510,9 +578,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
 
     if (mounted && generation == _episodeModeGeneration) {
-      final next = _mergedUpNext(merged, _trackerNextRaw);
+      final next = _mergedUpNext(resumeProgress, _trackerNextRaw);
       setState(() {
         _episodeWatchProgress = merged;
+        _episodeResumeProgress = resumeProgress;
         _nextEpisode = next;
       });
       if (next != null) _publishNextEpisode(next);
@@ -534,7 +603,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   void _publishNextEpisode(EpisodeCoordinate next, {bool mutation = false}) {
     widget.onNextEpisodeChanged?.call(
-      episodeResumeTarget(next: next, progress: _episodeWatchProgress),
+      episodeResumeTarget(next: next, progress: _episodeResumeProgress),
       mutation: mutation,
     );
   }
@@ -616,11 +685,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     final imdb = show == null ? '' : (show.effectiveImdbId ?? show.id);
     final targets = <String>[
-      if (_isTraktAuthenticated) 'Trakt',
-      if (_isSimklAuthenticated) 'Simkl',
-      if (_isMdblistAuthenticated && imdb.startsWith('tt')) 'MDBList',
+      if (_isTraktAuthenticated &&
+          _trackingPolicy.scrobbles(TrackingSource.trakt))
+        'Trakt',
+      if (_isSimklAuthenticated &&
+          _trackingPolicy.scrobbles(TrackingSource.simkl))
+        'Simkl',
+      if (_isMdblistAuthenticated &&
+          imdb.startsWith('tt') &&
+          _trackingPolicy.scrobbles(TrackingSource.mdblist))
+        'MDBList',
+      'this device',
     ];
-    if (!watched || targets.isEmpty) targets.add('this device');
     return targets;
   }
 
@@ -645,101 +721,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final showImdbId = show.effectiveImdbId ?? show.id;
     final key = '${episode.season}-${episode.number}';
     final targets = _watchedSyncTargets(watched: watched);
-    final failed = <String>[];
-    var mdblistChanged = false;
-
-    if (!watched) {
-      // Local completion is a tick source of its own and only the app can
-      // clear it — no amount of unwatching on the trackers' side touches it.
-      await StorageService.unmarkEpisodeAsFinished(
-        seriesTitle: show.name,
-        season: episode.season,
-        episode: episode.number,
-        imdbId: show.effectiveImdbId,
-      );
-      // Local completion is a resume input too — bump the local revision so
-      // the host's cached reconciled answer can't survive the mark.
-      EpisodeTrackerSnapshotRevision.invalidateTitle(
-        'local',
-        show.effectiveImdbId,
-      );
-    } else if (targets.contains('this device')) {
-      // No tracker to carry the state — record it locally so the tick still
-      // works. Deliberately NOT written when a tracker is connected: a local
-      // copy is exactly the source an external unwatch can never clear.
-      await StorageService.markEpisodeAsFinished(
-        seriesTitle: show.name,
-        season: episode.season,
-        episode: episode.number,
-        imdbId: show.effectiveImdbId,
-      );
-      EpisodeTrackerSnapshotRevision.invalidateTitle(
-        'local',
-        show.effectiveImdbId,
-      );
-    }
-
-    if (_isTraktAuthenticated) {
-      final ok = watched
-          ? await _traktService.markEpisodeWatched(
-              showImdbId,
-              episode.season,
-              episode.number,
-            )
-          : await _traktService.markEpisodeUnwatched(
-              showImdbId,
-              episode.season,
-              episode.number,
-            );
-      if (!ok) failed.add('Trakt');
-    }
-
-    if (_isSimklAuthenticated) {
-      final ok = watched
-          ? await _simklService.markEpisodeWatched(
-              showImdbId,
-              episode.season,
-              episode.number,
-            )
-          : await _simklService.markEpisodeUnwatched(
-              showImdbId,
-              episode.season,
-              episode.number,
-            );
-      if (ok && watched) {
-        // Finishing this episode also clears its paused session, so the show
-        // stops lingering in Continue Watching at this episode (and can
-        // surface as "up next" for the following one). Best-effort.
-        await _simklService.deletePlaybackForEpisode(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
-      }
-      if (!ok) failed.add('Simkl');
-    }
-
-    if (_isMdblistAuthenticated && showImdbId.startsWith('tt')) {
-      final ids = MdblistMediaIds(imdb: showImdbId);
-      final ok = watched
-          ? await _mdblistService.markWatched(
-              ids,
-              'episode',
-              season: episode.season,
-              episode: episode.number,
-            )
-          : await _mdblistService.markUnwatched(
-              ids,
-              'episode',
-              season: episode.season,
-              episode: episode.number,
-            );
-      if (ok) mdblistChanged = true;
-      if (!ok) failed.add('MDBList');
-    }
+    final result = await WatchedActionCoordinator.setEpisodeWatched(
+      imdbId: showImdbId,
+      seriesTitle: show.name,
+      season: episode.season,
+      episode: episode.number,
+      watched: watched,
+    );
+    final failed = result.failedTargets;
 
     if (!mounted) return;
-    if (mdblistChanged) MdblistContinueWatchingService.instance.invalidate();
+    MdblistContinueWatchingService.instance.invalidate();
     // Only move the tick if some store actually changed — when every write
     // failed, an optimistic update would paint a state that silently reverts
     // on the next re-merge. (Unwatch always changes at least local storage.)
@@ -751,7 +743,28 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         } else {
           _episodeWatchProgress.remove(key);
         }
-        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
+        // The visual map is an all-source completion union, while resume
+        // arbitration is intentionally filtered to the chosen Progress
+        // source. Keep that filtered snapshot current only when this action
+        // successfully wrote a source that participates in it.
+        final changesResume =
+            _trackingPolicy.isSmart ||
+            (_trackingPolicy.progressFrom(TrackingSource.local) &&
+                done.contains('this device')) ||
+            (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
+                done.contains('Trakt')) ||
+            (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
+                done.contains('Simkl')) ||
+            (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+                done.contains('MDBList'));
+        if (changesResume) {
+          if (watched) {
+            _episodeResumeProgress[key] = 100.0;
+          } else {
+            _episodeResumeProgress.remove(key);
+          }
+        }
+        _nextEpisode = _mergedUpNext(_episodeResumeProgress, _trackerNextRaw);
       });
       final next = _nextEpisode;
       if (next != null) _publishNextEpisode(next, mutation: true);
@@ -826,41 +839,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null) return;
     final showImdbId = show.effectiveImdbId ?? show.id;
-    final key = '${episode.season}-${episode.number}';
     bool success = false;
     String actionLabel = '';
 
     switch (action) {
       case SimklEpisodeMenuAction.markWatched:
-        actionLabel = 'Marked as Watched on Simkl';
-        success = await _simklService.markEpisodeWatched(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
-        if (success) {
-          // Finishing this episode also clears its paused session, so the show
-          // stops lingering in Continue Watching at this episode (and can
-          // surface as "up next" for the following one). Best-effort.
-          await _simklService.deletePlaybackForEpisode(
-            showImdbId,
-            episode.season,
-            episode.number,
-          );
-          if (mounted) {
-            setState(() => _episodeWatchProgress[key] = 100.0);
-          }
-        }
+        return _setEpisodeWatchedEverywhere(episode, watched: true);
       case SimklEpisodeMenuAction.markUnwatched:
-        actionLabel = 'Marked as Unwatched on Simkl';
-        success = await _simklService.markEpisodeUnwatched(
-          showImdbId,
-          episode.season,
-          episode.number,
-        );
-        if (success && mounted) {
-          setState(() => _episodeWatchProgress.remove(key));
-        }
+        return _setEpisodeWatchedEverywhere(episode, watched: false);
       case SimklEpisodeMenuAction.rate:
         if (!mounted) return;
         final rating = await showSimklRatingDialog(context);
@@ -900,39 +886,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     String label;
     switch (action) {
       case MdblistEpisodeMenuAction.markWatched:
-        success = await _mdblistService.markWatched(
-          ids,
-          'episode',
-          season: episode.season,
-          episode: episode.number,
-        );
-        label = 'Marked watched on MDBList';
-        if (success && mounted) {
-          MdblistContinueWatchingService.instance.invalidate();
-          setState(() {
-            _episodeWatchProgress[key] = 100;
-            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
-          });
-          final next = _nextEpisode;
-          if (next != null) _publishNextEpisode(next, mutation: true);
-        }
+        return _setEpisodeWatchedEverywhere(episode, watched: true);
       case MdblistEpisodeMenuAction.markUnwatched:
-        success = await _mdblistService.markUnwatched(
-          ids,
-          'episode',
-          season: episode.season,
-          episode: episode.number,
-        );
-        label = 'Marked unwatched on MDBList';
-        if (success && mounted) {
-          MdblistContinueWatchingService.instance.invalidate();
-          setState(() {
-            _episodeWatchProgress.remove(key);
-            _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
-          });
-          final next = _nextEpisode;
-          if (next != null) _publishNextEpisode(next, mutation: true);
-        }
+        return _setEpisodeWatchedEverywhere(episode, watched: false);
       case MdblistEpisodeMenuAction.rate:
         if (!mounted) return;
         final rating = await showMdblistRatingDialog(context);
@@ -1127,6 +1083,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     int? initialEpisode,
   }) async {
     final generation = ++_episodeModeGeneration;
+    final trackingPolicy = await TrackingSourcePolicy.load();
+    if (!mounted || generation != _episodeModeGeneration) return;
+    _trackingPolicy = trackingPolicy;
 
     setState(() {
       _selectedShow = show;
@@ -1163,7 +1122,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // landing target. Instant/null without a Trakt account (no token → no
       // request). Direct-source shows have no Trakt identity — skip outright
       // rather than fire a request keyed on a sentinel id.
-      final nextEpisodeFuture = _isDirectSource
+      final nextEpisodeFuture =
+          _isDirectSource || !trackingPolicy.progressFrom(TrackingSource.trakt)
           ? Future<({int season, int episode})?>.value(null)
           : _traktService
                 .fetchNextEpisode(show.effectiveImdbId ?? show.id)
@@ -1252,6 +1212,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       // 3. Last-played (local) fallback — by IMDb id, then by title.
       if (!_isDirectSource &&
+          trackingPolicy.progressFrom(TrackingSource.local) &&
           effectiveSeason == null &&
           effectiveEpisode == null) {
         final imdbId = show.effectiveImdbId;
@@ -1303,7 +1264,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       setState(() {
         _episodeSeasons = seasons;
-        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
+        _nextEpisode = _mergedUpNext(_episodeResumeProgress, _trackerNextRaw);
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
         _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;

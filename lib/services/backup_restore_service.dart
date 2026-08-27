@@ -80,10 +80,13 @@ class BackupRestoreService {
     final simklUsername = await StorageService.getSimklUsername();
     final mdblistApiKey = await StorageService.getMdblistApiKey();
     final mdblistUsername = await StorageService.getMdblistUsername();
-    final mdblistSyncCatalogItems =
-        await StorageService.getMdblistSyncCatalogItems();
     final mdblistSyncCheckpoint =
         await StorageService.getMdblistSyncCheckpoint();
+    final trackingPreferences =
+        await StorageService.buildTrackingPreferencesPayload();
+    final scrobbleTargets = (trackingPreferences['scrobble_targets'] as List)
+        .map((value) => value.toString())
+        .toSet();
 
     await LocalEngineStorage.instance.initialize();
     final engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
@@ -167,6 +170,7 @@ class BackupRestoreService {
     return <String, dynamic>{
       'version': payloadVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
+      'trackingPreferences': trackingPreferences,
       if (includeCredentials) ...{
         if (realDebridKey != null && realDebridKey.isNotEmpty)
           'realDebridApiKey': realDebridKey,
@@ -204,7 +208,10 @@ class BackupRestoreService {
             'api_key': mdblistApiKey,
             if (mdblistUsername != null && mdblistUsername.isNotEmpty)
               'username': mdblistUsername,
-            'sync_catalog_items': mdblistSyncCatalogItems,
+            // Retained only as a compatibility field for older Debrify
+            // restores. Derive it from the new master; never read the retired
+            // preference again after one-time master seeding.
+            'sync_catalog_items': scrobbleTargets.contains('mdblist'),
             if (mdblistSyncCheckpoint != null)
               'sync_checkpoint': mdblistSyncCheckpoint,
           },
@@ -717,6 +724,25 @@ class BackupRestoreService {
       }
     }
 
+    final trackingPreferences = map['trackingPreferences'];
+    if (selection.trackingPreferences && trackingPreferences is Map) {
+      try {
+        await StorageService.applyTrackingPreferencesPayload(
+          trackingPreferences,
+        );
+      } catch (_) {
+        report.errors.add('Tracking preferences: restore failed');
+      }
+    } else if (trackingPreferences == null &&
+        (report.trakt || report.simkl || report.mdblist)) {
+      // Old backup: it restored the legacy per-tracker sync-catalog switches
+      // but carries no tracking payload. The scrobble masters were already
+      // seeded on this install's first policy read, so drop them and let the
+      // next read re-adopt the just-restored legacy values (absent-key rule:
+      // Trakt/Simkl default ON, MDBList follows its restored switch).
+      await StorageService.reseedTrackingScrobbleTargetsFromLegacy();
+    }
+
     return report;
   }
 
@@ -977,6 +1003,7 @@ class BackupSelection {
   final bool iptvPlaylists;
   final bool iptvFavorites;
   final bool iptvLists;
+  final bool trackingPreferences;
 
   const BackupSelection({
     required this.realDebrid,
@@ -994,6 +1021,7 @@ class BackupSelection {
     this.iptvPlaylists = true,
     this.iptvFavorites = true,
     this.iptvLists = true,
+    this.trackingPreferences = false,
   });
 
   const BackupSelection.all()
@@ -1011,7 +1039,8 @@ class BackupSelection {
       indexerManagers = true,
       iptvPlaylists = true,
       iptvFavorites = true,
-      iptvLists = true;
+      iptvLists = true,
+      trackingPreferences = true;
 
   BackupSelection copyWith({
     bool? realDebrid,
@@ -1029,6 +1058,7 @@ class BackupSelection {
     bool? iptvPlaylists,
     bool? iptvFavorites,
     bool? iptvLists,
+    bool? trackingPreferences,
   }) {
     return BackupSelection(
       realDebrid: realDebrid ?? this.realDebrid,
@@ -1046,6 +1076,7 @@ class BackupSelection {
       iptvPlaylists: iptvPlaylists ?? this.iptvPlaylists,
       iptvFavorites: iptvFavorites ?? this.iptvFavorites,
       iptvLists: iptvLists ?? this.iptvLists,
+      trackingPreferences: trackingPreferences ?? this.trackingPreferences,
     );
   }
 }
