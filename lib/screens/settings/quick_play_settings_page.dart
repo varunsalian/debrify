@@ -15,10 +15,10 @@ import 'widgets/settings_widgets.dart';
 
 /// Quick Play settings, simplified: Movies/Series tabs, an "Addon Priority"
 /// list (torrent engines and Stremio addons in one flat, reorderable list),
-/// a "Prefer torrents" switch, and — for series — a "Prefer season packs"
-/// switch. The underlying [QuickPlayRules] engine keeps every capability;
-/// legacy customizations still load and apply, they just can't be edited
-/// here anymore.
+/// a "Prefer torrents" switch, a "Streams to try" failover budget, and — for
+/// series — a "Prefer season packs" switch. The underlying [QuickPlayRules]
+/// engine keeps every capability; legacy customizations still load and apply,
+/// they just can't be edited here anymore.
 class QuickPlaySettingsPage extends StatefulWidget {
   const QuickPlaySettingsPage({super.key});
 
@@ -53,6 +53,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   final _seriesTab = FocusNode(debugLabel: 'quick-play-series-tab');
   final _torrentToggle = FocusNode(debugLabel: 'quick-play-prefer-torrents');
   final _packToggle = FocusNode(debugLabel: 'quick-play-prefer-packs');
+  final _attemptsNode = FocusNode(debugLabel: 'quick-play-max-attempts');
   final _reset = FocusNode(debugLabel: 'quick-play-reset');
   final Map<String, FocusNode> _rowNodes = {};
 
@@ -80,6 +81,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _seriesTab,
       _torrentToggle,
       _packToggle,
+      _attemptsNode,
       _reset,
       ..._rowNodes.values,
     ]) {
@@ -180,6 +182,22 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             ? QuickPlayPackPreference.widestFirst
             : null,
       ),
+    );
+  }
+
+  /// What the player will actually count up to — it computes
+  /// `tryNext ? maxAttempts : 1`, so a legacy profile with failover OFF reads
+  /// as 1 here no matter what `maxAttempts` still stores.
+  int get _effectiveAttempts =>
+      _rules.tryNextOnFailure ? _rules.maxAttempts.clamp(1, 10) : 1;
+
+  /// One control drives both fields: 1 means "never fall back", which is
+  /// exactly `tryNextOnFailure: false`. Anything higher re-arms failover so
+  /// the number the user picked is the number the player honors.
+  void _setMaxAttempts(int value) {
+    final attempts = value.clamp(1, 10);
+    _change(
+      (r) => r.copyWith(tryNextOnFailure: attempts > 1, maxAttempts: attempts),
     );
   }
 
@@ -325,6 +343,16 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 ],
                 const SizedBox(height: 24),
                 _heading(
+                  'Streams to try',
+                  'When a stream fails to start, Debrify moves down the list '
+                      'and tries the next one. This is the count the player '
+                      'shows while it works ("Checking stream 1 of '
+                      '$_effectiveAttempts…").',
+                ),
+                const SizedBox(height: 10),
+                _attemptsSelect(),
+                const SizedBox(height: 24),
+                _heading(
                   'Addon priority',
                   PlatformUtil.isTelevision
                       ? 'Results from the top of this list play first. Press OK to pick up a row, move it with ▲▼, press OK to drop.'
@@ -468,6 +496,41 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           ),
         ],
       ],
+    ),
+  );
+
+  /// 1–10 mirrors the clamp in [QuickPlayRules.copyWith] and the player's own
+  /// `maxAttempts.clamp(1, 10)`, so every value offered here is a value both
+  /// players can honor — including legacy prefs left by the old slider.
+  Widget _attemptsSelect() => _Panel(
+    child: SettingsSelectDropdown(
+      focusNode: _attemptsNode,
+      value: '$_effectiveAttempts',
+      options: [
+        for (var n = 1; n <= 10; n++)
+          SettingsSelectOption(
+            '$n',
+            n == 1
+                ? '1 stream'
+                : n == 5
+                ? '5 streams (default)'
+                : '$n streams',
+            switch (n) {
+              1 =>
+                'Play the first source only. If it fails, playback stops '
+                    'instead of falling back.',
+              5 =>
+                'Debrify’s default — a good balance between starting fast '
+                    'and finding a working stream.',
+              _ when n < 5 =>
+                'Gives up sooner. Fails fast when nothing is working.',
+              _ =>
+                'Digs deeper before giving up, so a bad run takes longer to '
+                    'start.',
+            },
+          ),
+      ],
+      onChanged: (v) => _setMaxAttempts(int.tryParse(v) ?? 5),
     ),
   );
 

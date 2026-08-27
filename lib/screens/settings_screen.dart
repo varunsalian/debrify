@@ -2351,6 +2351,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Quick Play',
+        'Streams to try',
+        'How many sources Quick Play tries before giving up',
+        // People search for the count they saw in the player, not its name.
+        const [
+          'attempts',
+          'retries',
+          'checking stream',
+          'stream count',
+          'try next',
+          'failover',
+          'fallback',
+        ],
+      ),
+      leaf(
+        'Quick Play',
         'Prefer season packs',
         'Grab whole seasons, or fetch one episode',
         const ['series', 'packs', 'season pack', 'episode'],
