@@ -143,7 +143,10 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
           title: Text(_label(source)),
           subtitle: Text(
             source == TrackingSource.local
-                ? 'Always on — Debrify keeps its own watch history'
+                ? 'Always on — Debrify keeps its own watch history (resume '
+                      'positions, episode progress, watched marks). On Home, '
+                      'a title\'s Continue Watching card lives under the one '
+                      'service that tracks it, so it isn\'t listed twice.'
                 : !_available(source)
                 ? 'Connect this tracker to enable it'
                 : 'Send playback progress and watched marks to '
