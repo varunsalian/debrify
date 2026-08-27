@@ -15,6 +15,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/startup_stream_policy.dart';
+import '../services/resume_write_guard.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
@@ -44,7 +45,6 @@ import '../services/iptv_epg_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
-import '../services/pikpak_api_service.dart';
 import '../services/next_episode_service.dart';
 
 import '../widgets/tv_text_field.dart';
@@ -53,7 +53,7 @@ import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 // Video Player Components
-import 'video_player/models/playlist_entry.dart';
+import '../core/playback/playlist_entry.dart';
 import 'video_player/services/external_subtitle_payload.dart';
 import 'video_player/services/subtitle_track_utils.dart';
 import 'video_player/models/gesture_state.dart';
@@ -72,7 +72,7 @@ import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
-import 'video_player/widgets/pikpak_retry_overlay.dart';
+import 'video_player/widgets/retry_overlay.dart';
 import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/player_menu_panel.dart';
@@ -114,9 +114,10 @@ import '../services/mdblist/mdblist_service.dart';
 import 'package:http/http.dart' as http;
 import '../utils/episode_progress_merge.dart';
 import '../utils/tv_keys.dart';
+import '../app/wiring.dart';
 
 // Re-export PlaylistEntry for backward compatibility
-export 'video_player/models/playlist_entry.dart';
+export '../core/playback/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
 
 class _ManualSourceValidationFailure implements Exception {
@@ -1187,6 +1188,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool get _validationGateActive =>
       _startupGateActive || _manualSourceGateActive;
   String _startupGateMessage = 'Checking stream…';
+  // Blocks the autosave from filing a near-zero position over a deep resume
+  // point while a requested resume seek has not landed. See ResumeWriteGuard.
+  final ResumeWriteGuard _resumeWriteGuard = ResumeWriteGuard();
+  // Bumped whenever the media the landing verifier is watching stops being
+  // current (item change, source switch). Aborts the verifier WITHOUT
+  // releasing the guard — the guard must survive through the outgoing
+  // checkpoint save, which the verifier must not outlive.
+  int _resumeVerifyEpoch = 0;
   bool _isPlaying = false;
   // True while the activity is shrunk into a Picture-in-Picture window; the
   // build collapses all interactive/decorative chrome so only the video shows.
@@ -1765,12 +1774,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  /// The position trackers and stores may persist: the live position, unless
+  /// a requested resume never landed — then the HELD target. The live value in
+  /// that window describes a stream that restarted at the beginning, and
+  /// scrobbling it would reset every tracker's REMOTE resume point to ~0:
+  /// invisible on this device (local kept the bookmark) but lost on every
+  /// other one, since resume takes the furthest of local and tracker.
+  Duration get _persistablePosition {
+    final heldMs = _resumeWriteGuard.heldTargetIfBlocked(
+      _position.inMilliseconds,
+    );
+    if (heldMs == null) return _position;
+    // The target was <80% of the duration AT ARM TIME, but _duration mirrors
+    // mpv live and can transiently read short on a fresh remote stream —
+    // against which the held target could compute as >80% or >100% progress,
+    // turning a tracker start/pause into a stop (a watched mark for content
+    // playing at 0:00). Same rule as _saveResume's short-duration skip: fall
+    // back to the raw position for the few seconds the reading is off. A raw
+    // ~0 start-scrobble in that window is the pre-guard behavior, not a new
+    // harm.
+    final durMs = _duration.inMilliseconds;
+    if (durMs <= 0 || heldMs >= (durMs * 0.8).floor()) return _position;
+    return Duration(milliseconds: heldMs);
+  }
+
   double _traktProgress() {
     if (_duration.inMilliseconds <= 0) return 0.0;
-    return (_position.inMilliseconds / _duration.inMilliseconds * 100).clamp(
-      0.0,
-      100.0,
-    );
+    return (_persistablePosition.inMilliseconds /
+            _duration.inMilliseconds *
+            100)
+        .clamp(0.0, 100.0);
   }
 
   /// Resolve season/episode: prefer current playlist entry (tracks auto-advance),
@@ -1902,7 +1935,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Send updated progress to Trakt after a user seek (bypasses dedup guard).
+  ///
+  /// This is also the shared funnel every user-initiated seek passes through
+  /// (scrubber, tap/DPAD seek, pan, skip-segment), so it is where the resume
+  /// write guard learns the user has taken over the position. Released before
+  /// the Trakt-specific early returns below — the handover happens whether or
+  /// not Trakt is connected.
   void _traktScrobbleSeek(Duration seekTarget) {
+    _resumeWriteGuard.noteUserSeek();
     if (_validationGateActive) return;
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
     if (!_isPlaying || _duration.inMilliseconds <= 0) return;
@@ -2190,7 +2230,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _updateMdblistPosition() {
     if (_validationGateActive) return;
-    _mdblistSession?.updatePosition(_position, _duration);
+    // Held-target substitution, same reason as _traktProgress.
+    _mdblistSession?.updatePosition(_persistablePosition, _duration);
   }
 
   void _mdblistPlay() {
@@ -3168,21 +3209,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Wait for the video to load and duration to be available
           await _waitForVideoReady();
           if (!pikpakStillCurrent()) return;
-          // Random start takes precedence over resume, then startAtPercent
+          // Random start takes precedence over resume, then startAtPercent.
+          // Same initial-open shape as the ranked branch below — and PikPak
+          // cold-storage streams are the slowest remote opens in the app, the
+          // likeliest to answer the startup seek with a restart at 0 — so the
+          // same guarded, landing-verified seeks apply.
           if (widget.startFromRandom) {
             final offset = _randomStartOffset(_duration);
             if (offset != null) {
+              // A random start has no bookmark to protect — plain seek.
               await _player.seek(offset);
             } else {
-              await _maybeRestoreResume();
+              await _maybeRestoreResume(verifyLanding: true);
             }
           } else if (widget.startAtPercent != null) {
             final offset = _percentStartOffset(_duration);
             if (offset != null) {
-              await _player.seek(offset);
+              await _seekForResume(offset.inMilliseconds, verifyLanding: true);
             }
           } else {
-            await _maybeRestoreResume();
+            await _maybeRestoreResume(verifyLanding: true);
           }
           if (!pikpakStillCurrent()) return;
           // Restore audio and subtitle track preferences
@@ -3260,15 +3306,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (widget.startFromRandom) {
             final offset = _randomStartOffset(_duration);
             if (offset != null) {
+              // A random start has no bookmark to protect and no "correct"
+              // position to verify against — plain seek, as before.
               await _player.seek(offset);
             } else {
-              await _maybeRestoreResume();
+              await _maybeRestoreResume(verifyLanding: true);
             }
           } else if (widget.startAtPercent != null) {
             final offset = _percentStartOffset(_duration);
-            if (offset != null) await _player.seek(offset);
+            if (offset != null) {
+              // An explicit promised start position, exposed to the same
+              // startup seek failure as a stored resume.
+              await _seekForResume(offset.inMilliseconds, verifyLanding: true);
+            }
           } else {
-            await _maybeRestoreResume();
+            await _maybeRestoreResume(verifyLanding: true);
           }
           _scheduleAutoHide();
           await _restoreTrackPreferences();
@@ -3709,9 +3761,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final media = _activeOpenedMedia!;
     final oldPlayer = _player;
     final oldState = oldPlayer.state;
-    final resumePosition = _position > Duration.zero
+    // A renderer rebuild mid-startup can race an unlanded resume seek: the
+    // live position is then a restart artifact, and the rebuilt player must
+    // come back at the promised target, not ~0. (Pure query — the guard stays
+    // armed for the rebuilt player's own landing.)
+    final livePosition = _position > Duration.zero
         ? _position
         : oldState.position;
+    final heldMs = _resumeWriteGuard.heldTargetIfBlocked(
+      livePosition.inMilliseconds,
+    );
+    final resumePosition = heldMs != null
+        ? Duration(milliseconds: heldMs)
+        : livePosition;
     final shouldResumePlayback =
         _activeMediaShouldPlay && !_activeMediaUserPaused && !_sleepStopLatched;
     final rate = oldState.rate;
@@ -3799,7 +3861,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _setExternalAudioTrack(externalAudio);
       }
       if (!isLive && resumePosition > Duration.zero) {
-        await _player.seek(resumePosition);
+        // Re-ARMS the guard at the carried position: the rebuilt player gets
+        // its own protected landing instead of an unguarded raw seek.
+        await _seekForResume(resumePosition.inMilliseconds);
       }
       unawaited(_restoreTrackPreferences());
       if (shouldResumePlayback && !_pausedByLifecycle && !playOnOpen) {
@@ -4109,6 +4173,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool? desiredPlay,
     bool liveStream = false,
   }) async {
+    // EVERY content open invalidates the outgoing media's resume protection —
+    // the one choke point all switch paths share, so no path (Stremio TV
+    // channel, Magic TV next, zap, source switch, startup ladder) can leave a
+    // stale guard suppressing the new media's saves or a live verifier
+    // re-seeking the old target against it. Ordering is safe by construction:
+    // every outgoing checkpoint save runs BEFORE its new open, and every path
+    // that re-protects (_seekForResume) re-arms AFTER it.
+    _resumeVerifyEpoch++;
+    _resumeWriteGuard.clear();
     _activeOpenedMedia = media;
     _activeMediaShouldPlay = desiredPlay ?? play;
     _activeMediaUserPaused = false;
@@ -7346,6 +7419,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     final channel = channels[index];
     _clearBufferingIndicator();
+    // The zap path never runs _maybeRestoreResume, so the previous channel's
+    // resume guard (a VOD movie mid-resume) would otherwise stay armed and
+    // suppress the incoming channel's saves. Same switch-boundary rule as
+    // _loadPlaylistIndex.
+    _resumeWriteGuard.clear();
     setState(() {
       // A quiet recovery re-tune is not a zap: no transition overlay, no
       // zap banner — the reconnect pill is the only narration (plan
@@ -8046,6 +8124,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _handleSourceSelected(int index, String url) async {
+    // Picking a source aborts the landing verifier — it must not re-issue the
+    // old target against the replacement stream (that could even trip the
+    // validator's position gate). The GUARD deliberately stays armed: the
+    // switch paths below checkpoint the outgoing position, and that save must
+    // still be protected (they substitute the held target where needed).
+    _resumeVerifyEpoch++;
     // Live IPTV channel: the movie pipeline below seeks to the previous
     // position and reloads subtitles — both meaningless (and harmful) for a
     // live stream. Route to the dedicated live switch instead.
@@ -8137,7 +8221,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         : List<PlaylistEntry>.of(_activePlaylist!);
     final outgoingIndex = _currentIndex;
     final outgoingSourceIndex = _currentSourceIndex;
-    final outgoingPosition = _position;
+    // If a startup resume never landed, the live position is a restart
+    // artifact — carry the HELD target across the switch (and into the
+    // failure-restore path) so the new source opens at the bookmark, not ~0.
+    // Pure query: the guard itself stays armed for the checkpoint save below.
+    final outgoingHeldMs = _resumeWriteGuard.heldTargetIfBlocked(
+      _position.inMilliseconds,
+    );
+    final outgoingPosition = outgoingHeldMs != null
+        ? Duration(milliseconds: outgoingHeldMs)
+        : _position;
     final outgoingDirectUrl = _currentStreamUrl;
     final selectedSource =
         (_effectiveSources != null &&
@@ -8304,7 +8397,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             preferLocalResume: true,
           );
           if (restored && outgoingPosition > Duration.zero) {
-            await _player.seek(outgoingPosition);
+            // Guarded: a failure-path restore must not leave the bookmark at
+            // the mercy of a stream that answers this seek with a restart.
+            await _seekForResume(outgoingPosition.inMilliseconds);
           }
         } else if (!committed &&
             outgoingDirectUrl != null &&
@@ -8327,7 +8422,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             );
             await _waitForVideoReady();
             if (outgoingPosition > Duration.zero) {
-              await _player.seek(outgoingPosition);
+              await _seekForResume(outgoingPosition.inMilliseconds);
             }
             _currentStreamUrl = outgoingDirectUrl;
             unawaited(_restoreTrackPreferences());
@@ -8375,8 +8470,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _switchToStremioSource(int index, String url) async {
     _hideSourceSheet();
 
-    // Capture current position before switching so playback continues seamlessly
-    final resumePosition = _position;
+    // Capture current position before switching so playback continues
+    // seamlessly. A held (unlanded) resume target outranks the live position —
+    // the live value is a restart artifact and the new source must open at
+    // the bookmark. Pure query; the guard stays armed so the new source's own
+    // landing (or failure) keeps the bookmark protected.
+    final heldSwitchMs = _resumeWriteGuard.heldTargetIfBlocked(
+      _position.inMilliseconds,
+    );
+    final resumePosition = heldSwitchMs != null
+        ? Duration(milliseconds: heldSwitchMs)
+        : _position;
     final previousUrl = _currentStreamUrl;
     final previousSourceIndex = _currentSourceIndex;
     final source =
@@ -8443,9 +8547,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (hasExternalAudio) {
         await _setExternalAudioTrack(widget.audioUrl!);
       }
-      // Seek to the position from the previous source
+      // Seek to the position from the previous source. _seekForResume
+      // re-ARMS the guard (a pure held-target query never restarted the
+      // settle window), so a switched-to stream that restarts at 0 cannot
+      // have its first autosave file ~0 over the carried bookmark — the
+      // identical failure the guard exists for, on the switch path.
       if (resumePosition > Duration.zero) {
-        await _player.seek(resumePosition);
+        await _seekForResume(resumePosition.inMilliseconds);
       }
       if (hasExternalAudio) {
         await _player.play();
@@ -8485,7 +8593,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             await _setExternalAudioTrack(widget.audioUrl!);
           }
           if (resumePosition > Duration.zero) {
-            await _player.seek(resumePosition);
+            await _seekForResume(resumePosition.inMilliseconds);
           }
           _currentStreamUrl = previousUrl;
           if (!hasExternalAudio) {
@@ -9221,9 +9329,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int? manualValidationSourceIndex,
   }) async {
     // A new item is being loaded: any scrub in flight belongs to the outgoing
-    // one and must never land on this one.
+    // one and must never land on this one; same for the landing verifier
+    // (epoch bump — a verifier retry must never seek the incoming item).
+    // NOTE: the resume write GUARD is deliberately NOT cleared here — the
+    // outgoing item's checkpoint _saveResume() below must still run against
+    // the armed guard, or an unlanded resume's ~0 position would be filed over
+    // that item's bookmark by the very switch that abandons it. The clear sits
+    // immediately after that save.
     _tvScrubGeneration++;
     _tvAbandonScrub();
+    _resumeVerifyEpoch++;
     if (_activePlaylist == null ||
         index < 0 ||
         index >= _activePlaylist!.length) {
@@ -9266,6 +9381,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!skipInitialSave) {
       await _saveResume();
     }
+    // The outgoing item's guarded checkpoint has run; from here on the guard
+    // belongs to nobody. Clearing now stops it suppressing the incoming item's
+    // saves and makes any in-flight landing verifier abort instead of
+    // re-issuing the outgoing item's target against the new one.
+    _resumeWriteGuard.clear();
     final entry = _activePlaylist![index];
     _currentIndex = index;
     await _switchMdblistTarget();
@@ -9455,9 +9575,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         throw Exception('PikPak file metadata missing');
       }
       try {
-        final pikpak = PikPakApiService.instance;
+        final pikpak = AppServices.pikpak;
         final fileData = await pikpak.getFileDetails(fileId);
-        final url = pikpak.getStreamingUrl(fileData);
+        final url = fileData.streamingUrl;
         if (url == null || url.isEmpty) {
           throw Exception('PikPak returned an empty stream URL');
         }
@@ -10664,7 +10784,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// past the 90% cutoff, matching the native TV player) and skip Trakt.
   /// Threaded as a parameter, not ambient state, so an early return or throw
   /// anywhere in the load path can never leak it into a later load.
-  Future<void> _maybeRestoreResume({bool preferLocalResume = false}) async {
+  ///
+  /// [verifyLanding]: this is the initial open, where the startup gate commits
+  /// a candidate after ~40ms of decoded media and the seek can be answered with
+  /// a stream restart. Confirm the seek took and re-issue once. See
+  /// [_seekForResume].
+  Future<void> _maybeRestoreResume({
+    bool preferLocalResume = false,
+    bool verifyLanding = false,
+  }) async {
+    // Every item load lands here, so this is where a previous item's unlanded
+    // resume target stops applying — including on the paths below that return
+    // without arming a new one (auto-advance, manual episode pick).
+    _resumeWriteGuard.clear();
     // If this is auto-advancing, don't restore position
     if (_isAutoAdvancing) {
       _isAutoAdvancing = false; // Reset the flag
@@ -10774,7 +10906,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // the native TV player's source-switch semantics.
     if (preferLocalResume) {
       if (localMs > 0 && localMs < dur.inMilliseconds) {
-        await _player.seek(Duration(milliseconds: localMs));
+        await _seekForResume(localMs, verifyLanding: verifyLanding);
       }
       return;
     }
@@ -10800,7 +10932,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // deeper/stale local. An unseekable promise falls through to furthest-wins.
     if (explicitLaunch && traktMs > loMs && traktMs < hiMs) {
       debugPrint('Resume: explicit tracker percent -> ${traktMs}ms');
-      await _player.seek(Duration(milliseconds: traktMs));
+      await _seekForResume(traktMs, verifyLanding: verifyLanding);
       return;
     }
     // FURTHEST-WATCHED WINS: seek the deeper of the local position and the Trakt
@@ -10817,8 +10949,95 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint(
         'Resume: furthest of remote=${traktMs}ms local=${localMs}ms -> ${target}ms',
       );
-      await _player.seek(Duration(milliseconds: target));
+      await _seekForResume(target, verifyLanding: verifyLanding);
     }
+  }
+
+  /// Single exit for every resume seek: arms the write guard so a seek that
+  /// never lands cannot have its own bookmark overwritten, and — on the startup
+  /// path only — confirms the position actually moved.
+  ///
+  /// [verifyLanding] is opt-in because only the startup path seeks into a
+  /// stream the gate committed after ~40ms of decoded media. mpv can answer
+  /// that seek by restarting the remote stream at 0 (observed on a debrid link
+  /// via the pinned-source ladder), which leaves playback at the beginning with
+  /// no error to react to. Re-issuing once, after the stream has warmed up,
+  /// recovers it. Mid-session seeks (source switch, episode change) already run
+  /// against a settled stream and keep their existing single-shot behaviour.
+  Future<void> _seekForResume(
+    int targetMs, {
+    bool verifyLanding = false,
+  }) async {
+    // Never GUARD a near-finished target (≥80% of a known duration — the
+    // trackers' stop-scrobble threshold): substituting one would scrobble a
+    // watched mark and store a finished-looking position for content that may
+    // be playing at 0:00. The seek itself still happens; such a start just
+    // plays unguarded.
+    final durMs = _duration.inMilliseconds;
+    final nearFinished = durMs > 0 && targetMs >= (durMs * 0.8).floor();
+    if (nearFinished) {
+      _resumeWriteGuard.clear();
+    } else {
+      _resumeWriteGuard.arm(targetMs);
+    }
+    final target = Duration(milliseconds: targetMs);
+    await _player.seek(target);
+    // Without an armed guard the verifier would abort on its first check.
+    if (!verifyLanding || nearFinished) return;
+    // Deliberately NOT awaited: the caller is the startup chain, and the
+    // "Checking stream…" gate does not come down until it returns. Blocking
+    // here would hold that overlay over the video for the whole verification
+    // window on exactly the runs that already went wrong.
+    unawaited(_verifyResumeLanding(targetMs, _resumeVerifyEpoch));
+  }
+
+  /// Confirms a startup resume seek took, re-issuing it once if it did not.
+  ///
+  /// Aborts the moment its media stops being current — [epoch] changed (item
+  /// change, source switch), the guard stopped pointing at [targetMs] (user
+  /// seek), or the position reached the target — so a late retry can never
+  /// yank playback away from where the user put it or seek a replacement
+  /// stream it was never watching.
+  Future<void> _verifyResumeLanding(int targetMs, int epoch) async {
+    if (await _resumeSeekLanded(targetMs, epoch)) return;
+    if (!mounted || _screenDisposed) return;
+    if (epoch != _resumeVerifyEpoch) return;
+    if (_resumeWriteGuard.pendingTargetMs != targetMs) return;
+    debugPrint(
+      'Resume: seek did not land (position=${_player.state.position.inMilliseconds}ms '
+      'target=${targetMs}ms) — re-issuing',
+    );
+    await _player.seek(Duration(milliseconds: targetMs));
+    if (await _resumeSeekLanded(targetMs, epoch)) return;
+    // Still adrift: leave playback where it is rather than fighting the stream.
+    // The write guard keeps the stored resume point intact either way.
+    debugPrint(
+      'Resume: seek still unlanded after retry — leaving playback in place',
+    );
+  }
+
+  /// Polls for the resume target within a bounded window. Landing is judged
+  /// with the same tolerance the write guard uses, since a seek resolves to the
+  /// nearest keyframe rather than the exact millisecond.
+  ///
+  /// Returns true for "stop verifying", which covers landing as well as the
+  /// cases where the target stopped being ours: the screen went away, the
+  /// epoch moved on, the user seeked, or another item loaded.
+  Future<bool> _resumeSeekLanded(int targetMs, int epoch) async {
+    const timeout = Duration(seconds: 5);
+    const interval = Duration(milliseconds: 200);
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (!mounted || _screenDisposed) return true;
+      if (epoch != _resumeVerifyEpoch) return true;
+      if (_resumeWriteGuard.pendingTargetMs != targetMs) return true;
+      if (_player.state.position.inMilliseconds >=
+          targetMs - _resumeWriteGuard.toleranceMs) {
+        return true;
+      }
+      await Future<void>.delayed(interval);
+    }
+    return false;
   }
 
   /// Get enhanced playback state for current content
@@ -10936,10 +11155,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
-    final pos = _position;
+    var pos = _position;
     final dur = _duration;
     if (dur <= Duration.zero) {
       return;
+    }
+
+    // A resume seek was requested and playback is still nowhere near it: the
+    // seek did not land, so the live position describes a stream that
+    // restarted at the beginning. Filing it would destroy the very bookmark we
+    // tried to resume from — persist the REQUESTED target instead, which keeps
+    // the bookmark where it was while still recording speed/aspect changes
+    // made in the window (this is their only persistence route). The guard
+    // self-releases once the seek lands, the user seeks, or they have watched
+    // from here long enough for it to be their real position.
+    if (!_resumeWriteGuard.allowsPersist(pos.inMilliseconds)) {
+      // allowsPersist(false) implies an armed target.
+      final heldTarget = _resumeWriteGuard.pendingTargetMs!;
+      if (heldTarget >= dur.inMilliseconds) {
+        // _duration mirrors mpv live and can briefly read short on a fresh
+        // remote stream. Writing the target against that duration would store
+        // a ≥100% (finished-looking) position, so skip this tick entirely —
+        // including speed/aspect, which the next tick (or exit save) persists
+        // once the duration settles. Deliberate trade: a rare few-second delay
+        // beats a bookmark that reads as watched.
+        return;
+      }
+      pos = Duration(milliseconds: heldTarget);
     }
 
     // Completion clears local movie resume/CW state. Do not let the autosave
@@ -13513,6 +13755,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onShowTracks: () => _showTracksSheet(context),
                                   onSeekBarChangedStart: () {
                                     _isSeekingWithSlider = true;
+                                    // The viewer owns the position from the
+                                    // first touch — release the resume guard
+                                    // NOW, not at drag end, or the landing
+                                    // verifier could re-issue its target and
+                                    // yank playback mid-drag.
+                                    _resumeWriteGuard.noteUserSeek();
                                   },
                                   onSeekBarChanged: (v) {
                                     final newPos = _duration * v;
@@ -13760,7 +14008,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     _buildDebrifyTvInfoPanel(flush: true) !=
                                         null ||
                                     !widget.hideOptions);
-                            return PikPakRetryOverlay(
+                            return PlaybackRetryOverlay(
                               message: _pikPakRetryMessage!,
                               bottom: dockVisible
                                   ? math.max(80.0, dockExtent + 12)

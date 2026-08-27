@@ -11,7 +11,7 @@ import '../services/main_page_bridge.dart';
 import '../services/remote_control/remote_control_state.dart';
 import '../services/remote_control/remote_command_router.dart';
 import '../utils/platform_util.dart';
-import '../widgets/initial_setup_flow.dart';
+import 'initial_setup_flow.dart';
 import '../main.dart';
 
 /// How long the corner spinner takes to fade out on TV. Shared so the widget's

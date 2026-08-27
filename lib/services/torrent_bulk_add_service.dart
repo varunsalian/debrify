@@ -7,11 +7,11 @@ import '../widgets/channel_created_share_dialog.dart';
 import 'alldebrid_service.dart';
 import 'debrid_service.dart';
 import 'debrify_tv_channel_add_service.dart';
-import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'storage_service.dart';
 import 'torbox_service.dart';
 import 'torrent_file_service.dart';
+import '../app/wiring.dart';
 
 /// Isolated bulk-add engine for the Search tab.
 ///
@@ -255,7 +255,7 @@ class TorrentBulkAddService {
   ) async {
     if (torrentsToAdd.isEmpty) return;
 
-    final pikpak = PikPakApiService.instance;
+    final pikpak = AppServices.pikpak;
     final controller = BulkAddProgressController.show(
       context,
       accent: const Color(0xFFFFAA00),
@@ -340,7 +340,7 @@ class TorrentBulkAddService {
       controller.close();
       if (!context.mounted) return;
       final folderExists =
-          await PikPakApiService.instance.verifyRestrictedFolderExists();
+          await AppServices.pikpak.verifyRestrictedFolderExists();
       if (!folderExists) {
         if (context.mounted) await _handleRestrictedFolderDeleted(context);
         return;
@@ -922,7 +922,7 @@ class TorrentBulkAddService {
 
   static Future<void> _handleRestrictedFolderDeleted(
       BuildContext context) async {
-    await PikPakApiService.instance.logout();
+    await AppServices.pikpak.logout();
     if (!context.mounted) return;
     _snack(context, 'Restricted folder was deleted. You have been logged out.',
         isError: true);

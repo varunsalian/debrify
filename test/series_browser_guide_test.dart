@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/series_playlist.dart';
-import 'package:debrify/screens/video_player/models/playlist_entry.dart';
+import 'package:debrify/core/playback/playlist_entry.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/series_browser.dart';
 

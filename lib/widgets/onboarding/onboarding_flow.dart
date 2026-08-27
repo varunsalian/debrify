@@ -13,7 +13,6 @@ import '../../services/engine/engine_registry.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/remote_engine_manager.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/pikpak_api_service.dart';
 import '../../services/premiumize_account_service.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/remote_control/remote_constants.dart';
@@ -21,7 +20,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../utils/platform_util.dart';
-import '../pikpak_folder_picker_dialog.dart';
+import '../../features/pikpak/ui/folder_picker_dialog.dart';
 import 'controllers/tracker_auth_controller.dart';
 import 'key_codec.dart';
 import 'onboarding_focus.dart';
@@ -37,6 +36,7 @@ import 'steps/services_step.dart';
 import 'steps/trackers_step.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import 'tv_keyboard_slot.dart';
+import '../../app/wiring.dart';
 
 typedef OnboardingValidationOverride =
     Future<bool> Function(
@@ -407,7 +407,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   }
 
   Future<bool> _loginPikPak(String email, String password) async {
-    final success = await PikPakApiService.instance.login(email, password);
+    final success = await AppServices.pikpak.login(email, password);
     if (success) await StorageService.setPikPakEnabled(true);
     return success;
   }

@@ -96,8 +96,8 @@ def main() -> int:
         return 2
     if "--record" in sys.argv:
         BASELINE.write_text(
-            "# Pre-existing failures, compared BY NAME by tool/test_baseline.py.\n"
-            "# Regenerate deliberately: python3 tool/test_baseline.py --record\n"
+            "# Pre-existing failures, compared BY NAME by dev/tool/test_baseline.py.\n"
+            "# Regenerate deliberately: python3 dev/tool/test_baseline.py --record\n"
             + "\n".join(sorted(failed)) + "\n"
         )
         print(f"recorded {len(failed)} known failures -> {BASELINE.name}")

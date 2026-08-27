@@ -178,6 +178,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.1
+  dart_code_linter: ^1.1.3
 
 flutter_launcher_icons:
   image_path: assets/app_icon.png

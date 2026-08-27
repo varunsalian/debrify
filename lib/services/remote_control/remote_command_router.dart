@@ -12,25 +12,24 @@ import 'remote_chunked_send.dart';
 import 'remote_session.dart';
 import 'udp_command_service.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
-import '../../services/main_page_bridge.dart';
-import '../../services/stremio_service.dart';
-import '../../services/storage_service.dart';
-import '../../services/account_service.dart';
-import '../../services/torbox_account_service.dart';
-import '../../services/premiumize_account_service.dart';
-import '../../services/alldebrid_account_service.dart';
-import '../../services/pikpak_api_service.dart';
-import '../../services/mdblist/mdblist_service.dart';
-import '../../services/engine/config_loader.dart';
-import '../../services/engine/engine_registry.dart';
-import '../../services/engine/remote_engine_manager.dart';
-import '../../services/engine/local_engine_storage.dart';
-import '../../services/community/magnet_yaml_service.dart';
-import '../../services/debrify_tv_zip_importer.dart';
-import '../../services/iptv_transfer_payload.dart';
-import '../../services/debrify_tv_database.dart';
-import '../../services/debrify_tv_repository.dart';
-import '../../services/debrify_tv_cache_service.dart';
+import '../main_page_bridge.dart';
+import '../stremio_service.dart';
+import '../storage_service.dart';
+import '../account_service.dart';
+import '../torbox_account_service.dart';
+import '../premiumize_account_service.dart';
+import '../alldebrid_account_service.dart';
+import '../mdblist/mdblist_service.dart';
+import '../engine/config_loader.dart';
+import '../engine/engine_registry.dart';
+import '../engine/remote_engine_manager.dart';
+import '../engine/local_engine_storage.dart';
+import '../community/magnet_yaml_service.dart';
+import '../debrify_tv_zip_importer.dart';
+import '../iptv_transfer_payload.dart';
+import '../debrify_tv_database.dart';
+import '../debrify_tv_repository.dart';
+import '../debrify_tv_cache_service.dart';
 import '../../models/debrify_tv_cache.dart';
 import '../../models/debrify_tv_channel_record.dart';
 import '../../models/indexer_manager_config.dart';
@@ -50,7 +49,8 @@ import '../profiles/profile_lifecycle.dart';
 import '../profiles/native_profile_projection.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../profiles/device_key_provider.dart';
-import '../../services/backup_restore_service.dart';
+import '../backup_restore_service.dart';
+import '../../app/wiring.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback =
@@ -1467,7 +1467,7 @@ class RemoteCommandRouter {
           registry: registry,
           cipher: DeviceKeyProvider.cipher,
           lifecycleParticipants: <ProfileLifecycleParticipant>[
-            ProfileAppLifecycleParticipant(),
+            ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
           ],
         ).restoreDeviceGraph(package: package, authorization: authorization);
       } catch (_) {
@@ -1557,7 +1557,7 @@ class RemoteCommandRouter {
       registry: registry,
       participants:
           debugOnboardingLifecycleParticipants ??
-          <ProfileLifecycleParticipant>[ProfileAppLifecycleParticipant()],
+          <ProfileLifecycleParticipant>[ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak)],
     );
     try {
       await lifecycle.switchTo(
@@ -2716,7 +2716,7 @@ class RemoteCommandRouter {
       }
 
       // Attempt login
-      final result = await PikPakApiService.instance.login(email, password);
+      final result = await AppServices.pikpak.login(email, password);
       if (!result) {
         _showSnackBar('PikPak: Login failed', isError: true);
         return;

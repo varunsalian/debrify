@@ -1,5 +1,17 @@
 # Pre-existing failures, compared BY NAME by dev/tool/test_baseline.py.
 # Regenerate deliberately: python3 dev/tool/test_baseline.py --record
+test/debrify_tv_spotlight_dialog_test.dart::TV import dialog matches the Spotlight visual contract
+test/debrify_tv_spotlight_dialog_test.dart::phone import dialog matches the responsive visual contract
+test/detail_theme_test.dart::no raw colour literals survive in the themed files detail_episode_cells.dart
+test/dock_golden_test.dart::narrow — phone landscape
+test/dock_golden_test.dart::regular — a plain single-file session
+test/dock_golden_test.dart::regular — two tiers
+test/dock_golden_test.dart::wide — aurum, the dark-ink palette
+test/dock_golden_test.dart::wide — cinema bar
+test/dock_golden_test.dart::wide — large density
+test/menu_dpad_repro_test.dart::subtitles pane roundtrip keeps rail DPAD alive
+test/onboarding/onboarding_flow_test.dart::a successful default engine import returns true
+test/onboarding/onboarding_flow_test.dart::mode → services → engines off → trackers skip → done returns false
 test/series_parser_test.dart::SeriesParser Tests should NOT treat 4-letter release code as series
 test/series_parser_test.dart::SeriesParser Tests should NOT treat 4-letter release code mp4 as series
 test/series_parser_test.dart::SeriesParser Tests should NOT treat 5-letter release code with brackets as series
@@ -7,5 +19,19 @@ test/series_parser_test.dart::SeriesParser Tests should NOT treat release code w
 test/series_parser_test.dart::cleanCollectionTitle Tests PHASE 2: should handle alternative season range - through
 test/series_parser_test.dart::cleanCollectionTitle Tests PHASE 2: should handle alternative season range - thru
 test/series_parser_test.dart::cleanCollectionTitle Tests should preserve numbers in show title like Beverly Hills 90210
+test/settings_spotlight_shell_test.dart::desktop Spotlight appearance visual
+test/settings_spotlight_shell_test.dart::phone Spotlight appearance visual
+test/settings_spotlight_shell_test.dart::phone Spotlight settings visual
+test/settings_spotlight_shell_test.dart::tablet Spotlight appearance visual
+test/settings_tv_spotlight_layout_test.dart::TV Spotlight settings visual
+test/theme/goldens_test.dart::boundary demo — broadsheet (light theme)
+test/theme/goldens_test.dart::boundary demo — broadsheet × dim (preset on a light ground)
+test/theme/goldens_test.dart::boundary demo — legacy
+test/theme/goldens_test.dart::boundary demo — signal (dark theme)
+test/theme/goldens_test.dart::surface gallery — broadsheet
+test/theme/goldens_test.dart::surface gallery — concrete
+test/theme/goldens_test.dart::surface gallery — legacy
+test/theme/goldens_test.dart::surface gallery — noir
+test/theme/shape_manifest_test.dart::no swept file grows a new bare radius
 test/widget_test.dart::Debrify app smoke test
 test/xmltv_legacy_guide_retention_test.dart::a guide with nothing to import is still dropped

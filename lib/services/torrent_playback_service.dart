@@ -18,7 +18,7 @@ import '../models/torbox_file.dart';
 import '../models/torbox_web_download.dart';
 import '../models/torrent.dart';
 import '../models/indexer_manager_config.dart';
-import '../screens/video_player/models/playlist_entry.dart';
+import '../core/playback/playlist_entry.dart';
 import '../models/torrent_filter_state.dart';
 import '../theme/app_theme_scope.dart';
 import '../utils/deovr_utils.dart' as deovr;
@@ -42,7 +42,7 @@ import 'debrify_tv_channel_add_service.dart';
 import 'download_service.dart';
 import 'local_bound_source_service.dart';
 import 'main_page_bridge.dart';
-import 'pikpak_api_service.dart';
+import '../features/pikpak/data/api_service.dart';
 import 'premiumize_service.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
@@ -56,6 +56,8 @@ import 'torbox_service.dart';
 import 'torrent_file_service.dart';
 import 'torrent_service.dart';
 import 'video_player_launcher.dart';
+import '../app/wiring.dart';
+import '../features/pikpak/models/file.dart';
 
 /// Content identity for a playback, so the player can record Continue Watching,
 /// fetch subtitles, and drive the Episodes button (matching Home).
@@ -1119,7 +1121,7 @@ class TorrentPlaybackService {
             } else if (prov == 'pikpak' &&
                 (r.pikpakFileId?.isNotEmpty ?? false)) {
               try {
-                await PikPakApiService.instance.batchDeleteFiles([
+                await AppServices.pikpak.batchDeleteFiles([
                   r.pikpakFileId!,
                 ]);
               } catch (_) {}
@@ -3291,13 +3293,13 @@ class TorrentPlaybackService {
         );
 
       case 'pikpak':
-        final pikpak = PikPakApiService.instance;
+        final pikpak = AppServices.pikpak;
         if (source.cloudSourceKind == SeriesSource.cloudKindFile) {
           final data = await pikpak.getFileDetails(sourceId);
-          if (data['phase'] != 'PHASE_TYPE_COMPLETE') return null;
-          final url = pikpak.getStreamingUrl(data);
+          if (!data.isReady) return null;
+          final url = data.streamingUrl;
           if (url == null || url.isEmpty) return null;
-          final name = (data['name'] ?? source.torrentName).toString();
+          final name = (data.name.isNotEmpty ? data.name : source.torrentName).toString();
           return _Resolved(
             title: source.torrentName,
             playUrl: url,
@@ -3313,29 +3315,28 @@ class TorrentPlaybackService {
           includePaths: true,
         );
         final videos = all.where((file) {
-          final name = file['name']?.toString() ?? '';
-          final mime = file['mime_type']?.toString() ?? '';
+          final name = file.name.toString();
+          final mime = file.mimeType.toString();
           return mime.startsWith('video/') || FileUtils.isVideoFile(name);
         }).toList();
         if (videos.isEmpty) return null;
         if (meta.contentType != 'series') {
           int sizeOf(Map<String, dynamic> file) =>
               int.tryParse(file['size']?.toString() ?? '') ?? 0;
-          final video = videos.reduce((a, b) => sizeOf(a) >= sizeOf(b) ? a : b);
-          final videoId = video['id']?.toString() ?? '';
+          final video = videos.reduce((a, b) => a.size >= b.size ? a : b);
+          final videoId = video.id.toString();
           if (videoId.isEmpty) return null;
           final data = await pikpak.getFileDetails(videoId);
-          if (data['phase'] != 'PHASE_TYPE_COMPLETE') return null;
-          final url = pikpak.getStreamingUrl(data);
+          if (!data.isReady) return null;
+          final url = data.streamingUrl;
           if (url == null || url.isEmpty) return null;
           return _Resolved(
             title: source.torrentName,
             playUrl: url,
             downloadUrls: [url],
             fileName:
-                video['_fullPath']?.toString() ??
-                video['name']?.toString() ??
-                source.torrentName,
+                video.fullPath ??
+                (video.name.isNotEmpty ? video.name : source.torrentName),
             pikpakFileId: sourceId,
             pikpakVideoFileId: videoId,
           );
@@ -3604,7 +3605,7 @@ class TorrentPlaybackService {
                 prov == 'pikpak' &&
                 (r.pikpakFileId?.isNotEmpty ?? false)) {
               try {
-                await PikPakApiService.instance.batchDeleteFiles([
+                await AppServices.pikpak.batchDeleteFiles([
                   r.pikpakFileId!,
                 ]);
               } catch (_) {}
@@ -6061,18 +6062,12 @@ class TorrentPlaybackService {
   /// PikPak root rather than a dedicated subfolder, for simplicity).
   static Future<_Resolved> _addPikPak(String magnet, Torrent torrent) async {
     final title = torrent.displayTitle;
-    final pikpak = PikPakApiService.instance;
+    final pikpak = AppServices.pikpak;
     final add = await pikpak.addOfflineDownload(magnet);
-    String? fileId;
-    String? taskId;
-    if (add['file'] != null) {
-      fileId = add['file']['id']?.toString();
-    } else if (add['task'] != null) {
-      fileId = add['task']['file_id']?.toString();
-      taskId = add['task']['id']?.toString();
-    } else if (add['id'] != null) {
-      fileId = add['id']?.toString();
-    }
+    // PikPakTask folds PikPak's three add shapes into one, so the drive entry
+    // and the task id are just fields now.
+    final fileId = add.destinationId;
+    final taskId = (add.id.isEmpty || add.id == fileId) ? null : add.id;
     if (fileId == null) throw Exception('PikPak: no file id returned');
 
     const pollInterval = Duration(seconds: 2);
@@ -6082,21 +6077,18 @@ class TorrentPlaybackService {
         if (a > 0) await Future.delayed(pollInterval);
         try {
           final t = await pikpak.getTaskStatus(taskId);
-          final phase = t['phase'];
-          if (phase == 'PHASE_TYPE_COMPLETE') {
+          if (t.isComplete) {
             phase1 = true;
             break;
           }
-          if (phase == 'PHASE_TYPE_ERROR') {
+          if (t.hasFailed) {
             throw const _PikPakFailed();
           }
-          final rp = t['progress'];
-          if (rp != null) {
-            final p = rp is int ? rp : int.tryParse(rp.toString()) ?? 0;
-            if (p >= 90) {
-              phase1 = true;
-              break;
-            }
+          final rp = t.progress;
+          final p = rp;
+          if (p >= 90) {
+            phase1 = true;
+            break;
           }
         } on _PikPakFailed {
           rethrow; // surface "Download failed on PikPak"
@@ -6106,21 +6098,20 @@ class TorrentPlaybackService {
       }
     }
 
-    List<Map<String, dynamic>> videoFiles = const [];
+    List<PikPakFile> videoFiles = const [];
     for (var a = 0; a < 5; a++) {
       if (a > 0 || !phase1) await Future.delayed(pollInterval);
       try {
         final fd = await pikpak.getFileDetails(fileId);
-        if (fd['phase'] == 'PHASE_TYPE_COMPLETE') {
-          if (fd['kind'] == 'drive#folder') {
+        if (fd.isReady) {
+          if (fd.isFolder) {
             videoFiles = await _extractPikPakVideos(pikpak, fileId);
-          } else {
-            final mt = (fd['mime_type'] ?? '').toString();
-            if (mt.startsWith('video/')) videoFiles = [fd];
+          } else if (fd.isVideo) {
+            videoFiles = [fd];
           }
           break;
         }
-        if (fd['phase'] == 'PHASE_TYPE_ERROR') {
+        if (fd.hasFailed) {
           throw const _PikPakFailed();
         }
       } on _PikPakFailed {
@@ -6165,7 +6156,7 @@ class TorrentPlaybackService {
     );
   }
 
-  static Future<List<Map<String, dynamic>>> _extractPikPakVideos(
+  static Future<List<PikPakFile>> _extractPikPakVideos(
     PikPakApiService pikpak,
     String folderId, {
     int maxDepth = 5,
@@ -6173,38 +6164,30 @@ class TorrentPlaybackService {
     String currentPath = '',
   }) async {
     if (currentDepth >= maxDepth) return [];
-    final videos = <Map<String, dynamic>>[];
+    final videos = <PikPakFile>[];
     try {
       final result = await pikpak.listFiles(parentId: folderId);
       for (final file in result.files) {
-        final kind = file['kind'] ?? '';
-        final mimeType = (file['mime_type'] ?? '').toString();
-        final itemName = (file['name'] ?? 'unknown').toString();
-        if (kind == 'drive#folder') {
-          final subPath = currentPath.isEmpty
-              ? itemName
-              : '$currentPath/$itemName';
+        final itemName = file.name.isEmpty ? 'unknown' : file.name;
+        final path = currentPath.isEmpty ? itemName : '$currentPath/$itemName';
+        if (file.isFolder) {
           videos.addAll(
             await _extractPikPakVideos(
               pikpak,
-              file['id'].toString(),
+              file.id,
               maxDepth: maxDepth,
               currentDepth: currentDepth + 1,
-              currentPath: subPath,
+              currentPath: path,
             ),
           );
-        } else if (mimeType.startsWith('video/')) {
-          final videoWithPath = Map<String, dynamic>.from(file);
-          if (currentPath.isNotEmpty) {
-            videoWithPath['name'] = '$currentPath/$itemName';
-          }
-          videos.add(videoWithPath);
+        } else if (file.isVideo) {
+          videos.add(currentPath.isEmpty ? file : file.at(path));
         }
       }
     } catch (_) {}
     videos.sort(
-      (a, b) => (a['name'] ?? '').toString().toLowerCase().compareTo(
-        (b['name'] ?? '').toString().toLowerCase(),
+      (a, b) => a.displayPath.toLowerCase().compareTo(
+        b.displayPath.toLowerCase(),
       ),
     );
     return videos;
@@ -6212,24 +6195,24 @@ class TorrentPlaybackService {
 
   static Future<List<PlaylistEntry>?> _buildPikPakPlaylist(
     String torrentName,
-    List<Map<String, dynamic>> videoFiles,
+    List<PikPakFile> videoFiles,
     PikPakApiService pikpak,
   ) async {
     if (videoFiles.isEmpty) return null;
     if (videoFiles.length == 1) {
       final file = videoFiles.first;
       try {
-        final fullData = await pikpak.getFileDetails(file['id'].toString());
-        final url = pikpak.getStreamingUrl(fullData);
+        final fullData = await pikpak.getFileDetails(file.id.toString());
+        final url = fullData.streamingUrl;
         if (url == null) return null;
         return [
           PlaylistEntry(
             url: url,
-            title: (file['name'] ?? torrentName).toString(),
-            relativePath: file['_fullPath'] as String?,
+            title: (file.name.isNotEmpty ? file.name : torrentName).toString(),
+            relativePath: file.fullPath,
             provider: 'pikpak',
-            pikpakFileId: file['id']?.toString(),
-            sizeBytes: int.tryParse(file['size']?.toString() ?? '0') ?? 0,
+            pikpakFileId: file.id.toString(),
+            sizeBytes: int.tryParse(file.size.toString()) ?? 0,
           ),
         ];
       } catch (_) {
@@ -6278,9 +6261,9 @@ class TorrentPlaybackService {
     String initialUrl = '';
     try {
       final fullData = await pikpak.getFileDetails(
-        sorted[startIndex].file['id'].toString(),
+        sorted[startIndex].file.id.toString(),
       );
-      initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
+      initialUrl = fullData.streamingUrl ?? '';
     } catch (_) {
       return null;
     }
@@ -6304,20 +6287,20 @@ class TorrentPlaybackService {
         PlaylistEntry(
           url: i == startIndex ? initialUrl : '',
           title: combinedTitle,
-          relativePath: entry.file['_fullPath'] as String?,
+          relativePath: entry.file.fullPath,
           provider: 'pikpak',
-          pikpakFileId: entry.file['id']?.toString(),
-          sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
+          pikpakFileId: entry.file.id.toString(),
+          sizeBytes: int.tryParse(entry.file.size.toString()),
         ),
       );
     }
     return entries.isEmpty ? null : entries;
   }
 
-  static String _pikpakDisplayName(Map<String, dynamic> file) {
-    final name = file['name']?.toString() ?? '';
+  static String _pikpakDisplayName(PikPakFile file) {
+    final name = file.displayPath;
     if (name.isNotEmpty) return FileUtils.getFileName(name);
-    return 'File ${file['id']}';
+    return 'File ${file.id}';
   }
 
   static String _formatPikPakTitle({
@@ -6640,7 +6623,7 @@ class _PikPakFailed implements Exception {
 
 /// One PikPak video file + its parsed series metadata, for playlist ordering.
 class _PikPakItem {
-  final Map<String, dynamic> file;
+  final PikPakFile file;
   final SeriesInfo seriesInfo;
   final String displayName;
   const _PikPakItem({

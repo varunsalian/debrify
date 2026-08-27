@@ -46,7 +46,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
   'lib/screens/magic_tv_screen.dart': 7,
-  'lib/screens/pikpak/pikpak_files_screen.dart': 9,
+  'lib/features/pikpak/ui/screen.dart': 9,
   'lib/screens/playlist_content_view_screen.dart': 0,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,

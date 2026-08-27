@@ -1,0 +1,3224 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
+import '../../../screens/video_player_screen.dart';
+import '../../../services/analytics_service.dart';
+import '../../../services/storage_service.dart';
+import '../../../services/download_service.dart';
+import '../../../services/video_player_launcher.dart';
+import '../../../services/main_page_bridge.dart';
+import '../../../services/series_source_service.dart';
+import '../../../utils/file_utils.dart';
+import '../../../utils/formatters.dart';
+import '../../../utils/series_parser.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../utils/tv_keys.dart';
+import '../../../widgets/cloud/cloud_file_row.dart';
+import '../../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../../widgets/cloud/cloud_theme.dart';
+import '../../../widgets/file_selection_dialog.dart';
+import '../../../widgets/tv_text_field.dart';
+import '../../../app/wiring.dart';
+import '../../../core/cloud/listing.dart';
+import '../models/file.dart';
+import '../listing.dart';
+
+class PikPakFilesScreen extends StatefulWidget {
+  final String? initialFolderId;
+  final String? initialFolderName;
+  final bool selectSourceMode;
+  final Future<void> Function(SeriesSource)? onSourceSelected;
+
+  /// When true, this screen was pushed as a route (not displayed in a tab).
+  /// Back navigation will pop the route instead of switching tabs.
+  final bool isPushedRoute;
+
+  const PikPakFilesScreen({
+    super.key,
+    this.initialFolderId,
+    this.initialFolderName,
+    this.isPushedRoute = false,
+    this.selectSourceMode = false,
+    this.onSourceSelected,
+  });
+
+  @override
+  State<PikPakFilesScreen> createState() => _PikPakFilesScreenState();
+}
+
+/// View modes for folder display
+class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
+  final ScrollController _scrollController = ScrollController();
+  final List<PikPakFile> _files = [];
+
+  // TV content focus handler (stored for proper unregistration)
+  VoidCallback? _tvContentFocusHandler;
+
+  bool _isLoading = false;
+  bool _initialLoad = true;
+  String _errorMessage = '';
+  bool _pikpakEnabled = false;
+  bool _showVideosOnly = true;
+  bool _ignoreSmallVideos = true;
+  String? _email;
+
+  // Add link state
+  final TextEditingController _linkController = TextEditingController();
+  bool _isAddingLink = false;
+
+  // Pagination state
+  String? _nextPageToken;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
+  // Folder navigation state
+  String? _currentFolderId;
+  String _currentFolderName = 'My Files';
+  final List<({String? id, String name})> _navigationStack = [];
+  String? _restrictedFolderId;
+  String? _restrictedFolderName;
+  bool _isAtRestrictedRoot = false;
+
+  // View mode state (per-folder persistence during session)
+  final Map<String, CloudViewMode> _folderViewModes = {};
+
+  // Virtual folder navigation for Series Arrange mode
+  bool _isInVirtualFolder = false;
+  String? _virtualFolderName; // e.g., "Season 1"
+  List<PikPakFile> _virtualFolderFiles = []; // Files in virtual Season
+
+  // Cache for recursive file listings (avoid repeated API calls)
+  final Map<String, List<PikPakFile>> _recursiveFileCache = {};
+
+  // Focus nodes for TV/DPAD navigation
+  final FocusNode _refreshButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-refresh',
+  );
+  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'pikpak-back');
+  final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'pikpak-retry');
+  final FocusNode _settingsButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-settings',
+  );
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(
+    debugLabel: 'pikpak-view-mode',
+  );
+  final FocusNode _addLinkButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-add-link',
+  );
+  final FocusNode _firstItemFocusNode = FocusNode(
+    debugLabel: 'pikpak-first-item',
+  );
+
+  // Flag to focus first item after data loads (set by TV content focus handler)
+  bool _shouldFocusOnLoad = false;
+
+  // Multi-select state
+  bool _isSelectionMode = false;
+  final Set<String> _selectedFileIds = {};
+  int get _selectableFileCount => _files.where((f) => !f.isVirtual).length;
+  bool get _isAllSelected =>
+      _selectedFileIds.length == _selectableFileCount &&
+      _selectableFileCount > 0;
+  final FocusNode _deleteButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-delete-btn',
+  );
+
+  // Search state (for folder browsing mode)
+  bool _isSearchActive = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'pikpak-search');
+  final FocusNode _searchButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-search-button',
+  );
+  final FocusNode _searchClearFocusNode = FocusNode(
+    debugLabel: 'pikpak-search-clear',
+  );
+  List<_PikPakSearchResult> _searchResults = [];
+
+  @override
+  void initState() {
+    super.initState();
+    AnalyticsService.screenView('pikpak_files');
+    _scrollController.addListener(_onScroll);
+    _loadSettings();
+
+    // Register back navigation handler for folder navigation
+    if (widget.isPushedRoute) {
+      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+      // Set up timeout - only when DEEP-LINKED into a specific folder
+      // (initialFolderId). Browsing from the Cloud hub has no target, so the
+      // root is the resting state — no spurious auto-close.
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted &&
+            widget.isPushedRoute &&
+            widget.initialFolderId != null &&
+            _currentFolderId == null) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to open folder. Please try again.'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
+          );
+        }
+      });
+    } else {
+      MainPageBridge.registerTabBackHandler('pikpak', _handleBackNavigation);
+      // Register TV sidebar focus handler (tab index 6 = PikPak)
+      _tvContentFocusHandler = () {
+        // Set flag to focus after data loads
+        _shouldFocusOnLoad = true;
+        // Try to focus now in case data is already loaded
+        _focusFirstItemOrFallback();
+      };
+      MainPageBridge.registerTvContentFocusHandler(6, _tvContentFocusHandler!);
+    }
+  }
+
+  Future<void> _selectBoundSource(PikPakFile file) async {
+    final id = file.id.toString();
+    final name = file.name.isNotEmpty ? file.name : 'PikPak Source';
+    final isFolder = file.isFolder;
+    final isVideo = file.isVideo || FileUtils.isVideoFile(name);
+    if (id.isEmpty || (!isFolder && !isVideo)) {
+      _showSnackBar('Choose a video file or folder', isError: true);
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Checking PikPak source...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+    var checkingDialogOpen = true;
+    void closeCheckingDialog() {
+      if (!checkingDialogOpen || !mounted) return;
+      checkingDialogOpen = false;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    try {
+      if (isFolder) {
+        final folderDetails = await AppServices.pikpak.getFileDetails(id);
+        if (!folderDetails.isReady) {
+          if (!mounted) return;
+          closeCheckingDialog();
+          _showSnackBar(
+            'This PikPak folder is not ready to stream',
+            isError: true,
+          );
+          return;
+        }
+        final files = await AppServices.pikpak.listFilesRecursive(
+          folderId: id,
+          includePaths: true,
+        );
+        final videos = files.where((entry) {
+          final entryName = entry.name.toString();
+          final mime = entry.mimeType.toString();
+          return mime.startsWith('video/') || FileUtils.isVideoFile(entryName);
+        }).toList();
+        if (!mounted) return;
+        if (videos.isEmpty) {
+          closeCheckingDialog();
+          _showSnackBar('This folder has no playable videos', isError: true);
+          return;
+        }
+
+        // A completed folder can still contain an incomplete or otherwise
+        // unstreamable file. Confirm that at least one video resolves to a
+        // fresh PikPak URL before persisting only the stable folder id.
+        var hasPlayableVideo = false;
+        for (final video in videos) {
+          if (!video.isReady) continue;
+          final videoId = video.id.toString();
+          if (videoId.isEmpty) continue;
+          try {
+            final details = await AppServices.pikpak.getFileDetails(videoId);
+            final url = details.streamingUrl;
+            if (details.isReady && url != null && url.isNotEmpty) {
+              hasPlayableVideo = true;
+              break;
+            }
+          } catch (_) {
+            // One stale child must not hide another playable video.
+          }
+        }
+        if (!mounted) return;
+        closeCheckingDialog();
+        if (!hasPlayableVideo) {
+          _showSnackBar(
+            'This PikPak folder has no ready video streams',
+            isError: true,
+          );
+          return;
+        }
+      } else {
+        final details = await AppServices.pikpak.getFileDetails(id);
+        if (!mounted) return;
+        closeCheckingDialog();
+        if (!details.isReady || details.streamingUrl == null) {
+          _showSnackBar(
+            'This PikPak file is not ready to stream',
+            isError: true,
+          );
+          return;
+        }
+      }
+
+      await widget.onSourceSelected?.call(
+        SeriesSource(
+          torrentHash: '',
+          torrentName: name,
+          debridService: 'pikpak',
+          debridTorrentId: id,
+          cloudSourceKind: isFolder
+              ? SeriesSource.cloudKindFolder
+              : SeriesSource.cloudKindFile,
+          boundAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        closeCheckingDialog();
+        _showSnackBar('Could not bind this PikPak source: $e', isError: true);
+      }
+    }
+  }
+
+  void _onScroll() {
+    // Load more when user scrolls near the bottom (200px threshold)
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreFiles();
+    }
+  }
+
+  /// Reset scroll while the outgoing list is still attached, so the next
+  /// listing never inherits the old offset. The load-more listener is
+  /// detached around the jump — otherwise jumpTo(0) can fire _onScroll while
+  /// the OLD folder's pagination state is still live and append its next
+  /// page into the new folder's list.
+  void _resetListScroll() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.removeListener(_onScroll);
+    _scrollController.jumpTo(0);
+    _scrollController.addListener(_onScroll);
+  }
+
+  /// Focus first item if data is loaded, otherwise focus add button
+  void _focusFirstItemOrFallback() {
+    if (!_shouldFocusOnLoad) return;
+
+    // Use post-frame callback to ensure widgets are built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_shouldFocusOnLoad) return;
+
+      if (_files.isNotEmpty) {
+        _shouldFocusOnLoad = false;
+        _firstItemFocusNode.requestFocus();
+      } else if (!_isLoading) {
+        // No items and not loading - focus fallback
+        _shouldFocusOnLoad = false;
+        _addLinkButtonFocusNode.requestFocus();
+      }
+      // If still loading, keep the flag set - will be called again after load
+    });
+  }
+
+  @override
+  void dispose() {
+    // Unregister back navigation handler
+    if (widget.isPushedRoute) {
+      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    } else {
+      MainPageBridge.unregisterTabBackHandler('pikpak');
+      if (_tvContentFocusHandler != null) {
+        MainPageBridge.unregisterTvContentFocusHandler(
+          6,
+          _tvContentFocusHandler!,
+        );
+      }
+    }
+
+    _scrollController.dispose();
+    _linkController.dispose();
+    _refreshButtonFocusNode.dispose();
+    _backButtonFocusNode.dispose();
+    _retryButtonFocusNode.dispose();
+    _settingsButtonFocusNode.dispose();
+    _viewModeDropdownFocusNode.dispose();
+    _addLinkButtonFocusNode.dispose();
+    _firstItemFocusNode.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchButtonFocusNode.dispose();
+    _searchClearFocusNode.dispose();
+    _deleteButtonFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Handle back navigation for folder browsing.
+  /// Returns true if handled (navigated up), false if at root level.
+  bool _handleBackNavigation() {
+    // Exit selection mode first if active
+    if (_isSelectionMode) {
+      _exitSelectionMode();
+      return true;
+    }
+
+    // Close search first if active
+    if (_isSearchActive) {
+      _toggleSearch();
+      return true;
+    }
+
+    // If inside a virtual folder or subfolder, navigate up
+    if (_isInVirtualFolder ||
+        _navigationStack.isNotEmpty ||
+        (_restrictedFolderId != null &&
+            _currentFolderId != _restrictedFolderId)) {
+      _navigateUpWithVirtual();
+      return true;
+    }
+
+    // At torrent/folder root level (no subfolders to go up to)
+    if (_currentFolderId != null) {
+      // If pushed as a route, pop to go back
+      if (widget.isPushedRoute) {
+        Navigator.of(context).pop();
+        return true;
+      }
+      // If came from torrent search flow, switch back to torrent search tab
+      if (MainPageBridge.returnToTorrentSearchOnBack) {
+        MainPageBridge.returnToTorrentSearchOnBack = false;
+        MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
+        return true;
+      }
+    }
+
+    return false; // At root, let app handle it
+  }
+
+  Future<void> _loadSettings() async {
+    final enabled = await StorageService.getPikPakEnabled();
+    final showVideosOnly = await StorageService.getPikPakShowVideosOnly();
+    final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
+    final email = await AppServices.pikpak.getEmail();
+    final restrictedId = await StorageService.getPikPakRestrictedFolderId();
+    final restrictedName = await StorageService.getPikPakRestrictedFolderName();
+
+    if (!mounted) return;
+
+    // If enabled and has a restricted folder, verify it still exists
+    if (enabled && restrictedId != null && restrictedId.isNotEmpty) {
+      final folderExists = await AppServices.pikpak
+          .verifyRestrictedFolderExists();
+      if (!folderExists) {
+        // Restricted folder was deleted externally
+        await _handleRestrictedFolderDeleted();
+        return;
+      }
+    }
+
+    setState(() {
+      _pikpakEnabled = enabled;
+      _showVideosOnly = showVideosOnly;
+      _ignoreSmallVideos = ignoreSmallVideos;
+      _email = email;
+      _restrictedFolderId = restrictedId;
+      _restrictedFolderName = restrictedName;
+
+      // If initial folder is provided, navigate to it
+      if (widget.initialFolderId != null && widget.initialFolderName != null) {
+        _currentFolderId = widget.initialFolderId;
+        _currentFolderName = widget.initialFolderName!;
+        _isAtRestrictedRoot = false;
+      }
+      // Otherwise, initialize at restricted folder instead of root
+      else if (restrictedId != null) {
+        _currentFolderId = restrictedId;
+        _currentFolderName = restrictedName ?? 'Restricted Folder';
+        _isAtRestrictedRoot = true;
+      }
+    });
+
+    if (enabled) {
+      _loadFiles();
+    }
+  }
+
+  /// Handle the case when the restricted folder has been deleted externally
+  Future<void> _handleRestrictedFolderDeleted() async {
+    print(
+      'PikPak: Restricted folder was deleted externally, logging out user...',
+    );
+
+    // A shared owner must resolve borrower impact before this local account
+    // can be removed. Do not claim logout or clear the screen on failure.
+    try {
+      await AppServices.pikpak.logout();
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(
+        'This connection is shared. Manage profile access before disconnecting.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Update state
+    setState(() {
+      _pikpakEnabled = false;
+      _restrictedFolderId = null;
+      _restrictedFolderName = null;
+      _isLoading = false;
+      _initialLoad = false;
+      _errorMessage = '';
+    });
+
+    // Show snackbar
+    _showSnackBar(
+      'Restricted folder was deleted. You have been logged out.',
+      isError: true,
+      duration: const Duration(seconds: 5),
+    );
+  }
+
+  Future<void> _loadFiles() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+      // Reset pagination state for fresh load
+      _nextPageToken = null;
+      _hasMore = true;
+    });
+
+    try {
+      final result = await AppServices.pikpak.listFiles(
+        parentId: _currentFolderId,
+      );
+
+      if (!mounted) return;
+
+      // Filter files based on settings
+      final filteredFiles = _filterFiles(result.files);
+
+      // Apply current view mode transformation
+      final mode = _getCurrentViewMode();
+      final transformedFiles = mode == CloudViewMode.seriesArrange
+          ? filteredFiles // Series Arrange is handled separately in _setViewMode
+          : _applyViewMode(mode, filteredFiles);
+
+      setState(() {
+        _files.clear();
+        _files.addAll(transformedFiles);
+        _nextPageToken = result.nextPageToken;
+        _hasMore =
+            result.nextPageToken != null && result.nextPageToken!.isNotEmpty;
+        _isLoading = false;
+        _initialLoad = false;
+      });
+
+      // Focus first item if navigated from sidebar
+      _focusFirstItemOrFallback();
+    } catch (e) {
+      print('Error loading PikPak files: $e');
+      if (!mounted) return;
+
+      // Check if the restricted folder has been deleted externally
+      if (_restrictedFolderId != null &&
+          _currentFolderId == _restrictedFolderId) {
+        // The error is likely because the restricted folder was deleted
+        // Auto-logout the user
+        await _handleRestrictedFolderDeleted();
+        return;
+      }
+
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+        _initialLoad = false;
+      });
+    }
+  }
+
+  Future<void> _loadMoreFiles() async {
+    // Don't load more if already loading, no more pages, or no page token
+    if (_isLoadingMore || !_hasMore || _nextPageToken == null) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final result = await AppServices.pikpak.listFiles(
+        parentId: _currentFolderId,
+        pageToken: _nextPageToken,
+      );
+
+      if (!mounted) return;
+
+      // Filter files based on settings
+      final filteredFiles = _filterFiles(result.files);
+
+      setState(() {
+        _files.addAll(filteredFiles);
+        _nextPageToken = result.nextPageToken;
+        _hasMore =
+            result.nextPageToken != null && result.nextPageToken!.isNotEmpty;
+
+        // Re-apply current view mode to maintain consistency
+        final mode = _getCurrentViewMode();
+        if (mode != CloudViewMode.raw && mode != CloudViewMode.seriesArrange) {
+          final transformed = _applyViewMode(mode, _files);
+          _files.clear();
+          _files.addAll(transformed);
+        }
+
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      print('Error loading more PikPak files: $e');
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingMore = false;
+      });
+
+      _showSnackBar('Failed to load more files: $e');
+    }
+  }
+
+  /// Filter files based on user settings (videos only, ignore small videos)
+  List<PikPakFile> _filterFiles(List<PikPakFile> files) => pikpakListing.filter(
+    files,
+    videosOnly: _showVideosOnly,
+    minVideoBytes: _ignoreSmallVideos ? pikpakMinVideoBytes : 0,
+  );
+
+  void _navigateIntoFolder(String folderId, String folderName) {
+    _exitSelectionMode();
+    // Focus first item after folder contents load
+    _shouldFocusOnLoad = true;
+
+    _resetListScroll();
+    setState(() {
+      // Push current folder to stack before navigating
+      _navigationStack.add((id: _currentFolderId, name: _currentFolderName));
+      _currentFolderId = folderId;
+      _currentFolderName = folderName;
+      // Clear stale rows so the loading skeleton shows instead of the
+      // outgoing folder's contents sitting frozen while the fetch runs.
+      _files.clear();
+      // We're navigating into a subfolder, so we're no longer at restricted root
+      _isAtRestrictedRoot = false;
+    });
+    _loadFiles();
+  }
+
+  void _navigateUp() {
+    _exitSelectionMode();
+    // Don't navigate above restricted folder
+    if (_restrictedFolderId != null &&
+        _currentFolderId == _restrictedFolderId) {
+      _showSnackBar('Already at restricted folder root', isError: false);
+      return;
+    }
+
+    // Refocus the first row once the parent listing loads — clearing _files
+    // disposes the focused row and nothing else reclaims DPAD focus.
+    _shouldFocusOnLoad = true;
+    _resetListScroll();
+    setState(() {
+      _files.clear();
+      // Pop from stack to go back one level
+      if (_navigationStack.isNotEmpty) {
+        final previous = _navigationStack.removeLast();
+        _currentFolderId = previous.id;
+        _currentFolderName = previous.name;
+
+        // Check if we're back at the restricted root
+        _isAtRestrictedRoot =
+            (_restrictedFolderId != null &&
+            _currentFolderId == _restrictedFolderId);
+      } else {
+        // Already at root (or restricted root)
+        if (_restrictedFolderId != null) {
+          _currentFolderId = _restrictedFolderId;
+          _currentFolderName = _restrictedFolderName ?? 'Restricted Folder';
+          _isAtRestrictedRoot = true;
+        } else {
+          _currentFolderId = null;
+          _currentFolderName = 'My Files';
+        }
+      }
+    });
+    _loadFiles();
+  }
+
+  /// Navigate up with virtual folder support
+  /// If in virtual folder, exit virtual folder first before navigating real folders
+  void _navigateUpWithVirtual() {
+    if (_isInVirtualFolder) {
+      // Exit virtual folder, go back to transformed view
+      _shouldFocusOnLoad = true;
+      _resetListScroll();
+      setState(() {
+        _isInVirtualFolder = false;
+        _virtualFolderName = null;
+        _virtualFolderFiles.clear();
+      });
+
+      // Re-apply current view mode to show the season folders again
+      final mode = _getCurrentViewMode();
+      _setViewMode(mode);
+      _focusFirstItemOrFallback();
+    } else {
+      // Normal navigation up real folders
+      _navigateUp();
+    }
+  }
+
+  /// Navigate into a virtual Season folder
+  void _navigateIntoVirtualFolder(PikPakFile virtualFolder) {
+    _exitSelectionMode();
+    final seasonName = virtualFolder.name.isEmpty
+        ? 'Virtual Folder'
+        : virtualFolder.name;
+    final virtualFiles = virtualFolder.children;
+
+    // Validate virtual files exist
+    if (virtualFiles.isEmpty) {
+      _showSnackBar('Virtual folder is empty', isError: true);
+      return;
+    }
+
+    // Focus first item after navigation
+    _shouldFocusOnLoad = true;
+
+    _resetListScroll();
+    try {
+      final typedFiles = virtualFiles.cast<PikPakFile>();
+      setState(() {
+        _isInVirtualFolder = true;
+        _virtualFolderName = seasonName;
+        _virtualFolderFiles = typedFiles;
+        _files.clear();
+        _files.addAll(_virtualFolderFiles);
+      });
+
+      // Focus first item after navigation
+      _focusFirstItemOrFallback();
+    } catch (e) {
+      print('Error navigating into virtual folder: $e');
+      _showSnackBar('Failed to open virtual folder: $e', isError: true);
+    }
+  }
+
+  Future<void> _playFile(PikPakFile fileData) async {
+    try {
+      // Check if it's a folder
+      if (fileData.isFolder) {
+        _showSnackBar(
+          'Cannot play folders. Please select a video file.',
+          isError: true,
+        );
+        return;
+      }
+
+      // Check if it's a video
+      final mimeType = fileData.mimeType;
+      if (!mimeType.startsWith('video/')) {
+        _showSnackBar('Only video files can be played', isError: true);
+        return;
+      }
+
+      // CRITICAL FIX: Fetch fresh file details with download URLs
+      // listFiles() returns empty web_content_link/medias, so we need to call
+      // getFileDetails() with usage=FETCH to get populated download URLs
+      final fileId = fileData.id;
+
+      // Show loading indicator
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) =>
+            const Center(child: CircularProgressIndicator()),
+      );
+
+      PikPakFile freshFileData;
+      try {
+        freshFileData = await AppServices.pikpak.getFileDetails(fileId);
+      } finally {
+        // Close loading indicator
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
+
+      // Extract streaming URL from fresh data
+      final streamingUrl = freshFileData.streamingUrl;
+
+      if (streamingUrl == null || streamingUrl.isEmpty) {
+        _showSnackBar(
+          'No streaming URL available for this file',
+          isError: true,
+        );
+        return;
+      }
+
+      // Links ready - play the video
+      if (!mounted) return;
+
+      await VideoPlayerLauncher.push(
+        context,
+        VideoPlayerLaunchArgs(
+          videoUrl: streamingUrl,
+          title: freshFileData.name.isNotEmpty ? freshFileData.name : 'Video',
+        ),
+      );
+    } catch (e) {
+      print('Error playing file: $e');
+      _showSnackBar('Failed to play video: $e', isError: true);
+    }
+  }
+
+  /// Download a single file
+  Future<void> _downloadFile(PikPakFile file) async {
+    final fileId = file.id;
+    final fileName = file.name.isNotEmpty ? file.name : 'download';
+
+    if (fileId.isEmpty) {
+      _showSnackBar('Invalid file ID', isError: true);
+      return;
+    }
+
+    // Check if it's a folder
+    if (file.isFolder) {
+      _showSnackBar(
+        'Cannot download folders directly. Use Download button on folder.',
+        isError: true,
+      );
+      return;
+    }
+
+    try {
+      // Show loading indicator
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Preparing download...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      // Get fresh file details with download URLs
+      PikPakFile freshFileData;
+      try {
+        freshFileData = await AppServices.pikpak.getFileDetails(fileId);
+      } catch (e) {
+        // Close loading indicator
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        _showSnackBar('Failed to get download URL: $e', isError: true);
+        return;
+      }
+
+      // Extract download URL (use web_content_link for all files)
+      final downloadUrl = freshFileData.webContentLink;
+
+      // Close loading indicator
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (downloadUrl == null || downloadUrl.isEmpty) {
+        _showSnackBar('No download URL available for this file', isError: true);
+        return;
+      }
+
+      // Prepare metadata for download service
+      final meta = jsonEncode({
+        'pikpakDownload': true,
+        'pikpakFileId': fileId,
+        'pikpakFileName': fileName,
+      });
+
+      // Enqueue download
+      await DownloadService.instance.enqueueDownload(
+        credentialKey: 'pikpak_email',
+        url: downloadUrl,
+        fileName: fileName,
+        meta: meta,
+        context: mounted ? context : null,
+      );
+
+      _showSnackBar('Download queued: $fileName', isError: false);
+    } catch (e) {
+      print('Error downloading file: $e');
+      // Close loading indicator if still open
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to download: $e', isError: true);
+    }
+  }
+
+  /// Download all files in a folder with file selection dialog
+  /// Works for both root folders and subfolders
+  /// When downloading a subfolder, only shows that subfolder's contents (not parent structure)
+  Future<void> _downloadFolder(PikPakFile folder) async {
+    final folderId = folder.id;
+    final folderName = folder.name.isNotEmpty ? folder.name : 'Folder';
+
+    if (folderId.isEmpty) {
+      _showSnackBar('Invalid folder ID', isError: true);
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning folder for files...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recursively scan folder for all files WITH path tracking
+      // This ensures the dialog shows folder structure starting from this folder
+      final allFiles = await AppServices.pikpak.listFilesRecursive(
+        folderId: folderId,
+        includePaths: true, // Enable path tracking for folder structure
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!mounted) return;
+
+      // Filter out folders, keep only files
+      final filesOnly = allFiles.where((file) => !file.isFolder).toList();
+
+      if (filesOnly.isEmpty) {
+        _showSnackBar('This folder doesn\'t contain any files', isError: true);
+        return;
+      }
+
+      // Show file selection dialog
+      await showDialog(
+        context: context,
+        // FileSelectionDialog is shared with the other providers and speaks
+        // maps, so the typed files are adapted at that boundary and mapped
+        // back by id on the way out.
+        builder: (context) => FileSelectionDialog(
+          files: [
+            for (final f in filesOnly)
+              {'id': f.id, 'name': f.displayPath, 'size': f.size},
+          ],
+          torrentName: folderName,
+          onDownload: (selectedFiles) {
+            final ids = selectedFiles.map((m) => m['id']).toSet();
+            _downloadSelectedPikPakFiles(
+              filesOnly.where((f) => ids.contains(f.id)).toList(),
+              folderName,
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      print('Error downloading folder: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
+  }
+
+  /// Download selected PikPak files from the file selection dialog
+  /// Handles error reporting and uses folder name for download organization
+  Future<void> _downloadSelectedPikPakFiles(
+    List<PikPakFile> selectedFiles,
+    String folderName,
+  ) async {
+    if (selectedFiles.isEmpty) {
+      _showSnackBar('No files selected', isError: true);
+      return;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+
+    // Show progress indicator
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      for (final file in selectedFiles) {
+        try {
+          final fileId = file.id;
+          // Prefer the scan path when the recursive walk tracked one.
+          final fileName =
+              file.fullPath ?? (file.name.isNotEmpty ? file.name : 'download');
+
+          if (fileId.isEmpty) {
+            failCount++;
+            continue;
+          }
+
+          // Get fresh file details with download URLs
+          final freshFileData = await AppServices.pikpak.getFileDetails(fileId);
+          final downloadUrl = freshFileData.webContentLink;
+
+          if (downloadUrl == null || downloadUrl.isEmpty) {
+            failCount++;
+            continue;
+          }
+
+          // Prepare metadata for download service
+          final meta = jsonEncode({
+            'pikpakDownload': true,
+            'pikpakFileId': fileId,
+            'pikpakFileName': fileName,
+          });
+
+          // Enqueue download with folder name for organization
+          await DownloadService.instance.enqueueDownload(
+            credentialKey: 'pikpak_email',
+            url: downloadUrl,
+            fileName: fileName,
+            meta: meta,
+            torrentName: folderName, // Use folder name for organization
+            context: mounted ? context : null,
+          );
+
+          successCount++;
+        } catch (e) {
+          print('Error queuing file for download: $e');
+          failCount++;
+        }
+      }
+    } finally {
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    if (!mounted) return;
+
+    // Show result
+    if (successCount > 0 && failCount == 0) {
+      _showSnackBar(
+        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
+        isError: false,
+      );
+    } else if (successCount > 0 && failCount > 0) {
+      _showSnackBar(
+        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
+        isError: true,
+      );
+    } else {
+      _showSnackBar('Failed to queue any files for download', isError: true);
+    }
+  }
+
+  Future<void> _refreshFiles() async {
+    _exitSelectionMode();
+
+    // Clear cache for current folder when refreshing
+    if (_currentFolderId != null) {
+      _recursiveFileCache.remove(_currentFolderId!);
+    }
+
+    // Exit virtual folder if in one
+    if (_isInVirtualFolder) {
+      setState(() {
+        _isInVirtualFolder = false;
+        _virtualFolderName = null;
+        _virtualFolderFiles.clear();
+      });
+    }
+
+    await _loadFiles();
+    _showSnackBar('Files refreshed', isError: false);
+  }
+
+  void _showDeleteDialog(PikPakFile file) {
+    final fileName = file.name.isNotEmpty ? file.name : 'this item';
+    final fileId = file.id;
+
+    if (fileId.isEmpty) {
+      _showSnackBar('Cannot delete: Invalid file ID');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete File'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('What would you like to do with "$fileName"?'),
+            const SizedBox(height: 16),
+            const Text(
+              'Move to Trash: File can be recovered later\nDelete Permanently: Cannot be undone',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            autofocus: true, // Safe default for TV/DPAD
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteFile(fileId, fileName, permanent: false);
+            },
+            child: const Text('Move to Trash'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteFile(fileId, fileName, permanent: true);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteFile(
+    String fileId,
+    String fileName, {
+    required bool permanent,
+  }) async {
+    try {
+      _showSnackBar(
+        permanent ? 'Deleting permanently...' : 'Moving to trash...',
+        isError: false,
+      );
+
+      if (permanent) {
+        await AppServices.pikpak.batchDeleteFiles([fileId]);
+      } else {
+        await AppServices.pikpak.batchTrashFiles([fileId]);
+      }
+
+      if (!mounted) return;
+
+      // Remove the file from the local list
+      setState(() {
+        _files.removeWhere((f) => f.id == fileId);
+      });
+
+      _showSnackBar(
+        permanent
+            ? '"$fileName" deleted permanently'
+            : '"$fileName" moved to trash',
+        isError: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Failed to delete: $e');
+    }
+  }
+
+  // --- Multi-select helpers ---
+
+  void _toggleSelectionMode() {
+    setState(() {
+      if (_isSelectionMode) {
+        _selectedFileIds.clear();
+      }
+      _isSelectionMode = !_isSelectionMode;
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_isSelectionMode) return;
+    setState(() {
+      _isSelectionMode = false;
+      _selectedFileIds.clear();
+    });
+  }
+
+  void _toggleFileSelection(String id) {
+    setState(() {
+      if (_selectedFileIds.contains(id)) {
+        _selectedFileIds.remove(id);
+      } else {
+        _selectedFileIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _selectedFileIds.clear();
+      } else {
+        for (final file in _files) {
+          if (file.isVirtual) continue;
+          if (file.id.isNotEmpty) _selectedFileIds.add(file.id);
+        }
+      }
+    });
+  }
+
+  Future<void> _handleDeleteSelected() async {
+    if (_selectedFileIds.isEmpty) return;
+
+    final count = _selectedFileIds.length;
+    final itemType = count == 1 ? 'file' : 'files';
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete $count $itemType',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'What would you like to do with $count selected $itemType?',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Move to Trash: Files can be recovered later\nDelete Permanently: Cannot be undone',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('trash'),
+            child: const Text('Move to Trash'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('permanent'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      await _executeDeleteSelected(
+        List<String>.from(_selectedFileIds),
+        permanent: result == 'permanent',
+      );
+    }
+  }
+
+  Future<void> _executeDeleteSelected(
+    List<String> ids, {
+    required bool permanent,
+  }) async {
+    final count = ids.length;
+    final label = permanent ? 'Deleting permanently' : 'Moving to trash';
+
+    _showSnackBar(
+      '$label $count ${count == 1 ? 'file' : 'files'}...',
+      isError: false,
+    );
+
+    try {
+      if (permanent) {
+        await AppServices.pikpak.batchDeleteFiles(ids);
+      } else {
+        await AppServices.pikpak.batchTrashFiles(ids);
+      }
+
+      if (!mounted) return;
+
+      final deletedSet = ids.toSet();
+      setState(() {
+        _files.removeWhere((f) => deletedSet.contains(f.id));
+        _selectedFileIds.clear();
+        _isSelectionMode = false;
+      });
+
+      _showSnackBar(
+        permanent
+            ? '$count ${count == 1 ? 'file' : 'files'} deleted permanently'
+            : '$count ${count == 1 ? 'file' : 'files'} moved to trash',
+        isError: false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _exitSelectionMode();
+      _showSnackBar('Failed to delete: $e');
+    }
+  }
+
+  void _showSnackBar(
+    String message, {
+    bool isError = true,
+    Duration? duration,
+  }) {
+    if (!mounted) return;
+
+    final app = AppThemeScope.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isError
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFF22C55E),
+                borderRadius: app.shape.br(8),
+              ),
+              child: Icon(
+                isError ? Icons.error : Icons.check_circle,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: app.cloud.dialogSurface,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
+        margin: const EdgeInsets.all(16),
+        duration: duration ?? const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ========== VIEW MODE TRANSFORMATION METHODS ==========
+
+  /// Get current view mode for the active folder
+  CloudViewMode _getCurrentViewMode() {
+    // Virtual folders don't have their own view modes
+    if (_isInVirtualFolder) return CloudViewMode.seriesArrange;
+
+    // Root level (no folder selected) defaults to Raw
+    if (_currentFolderId == null) return CloudViewMode.raw;
+
+    return _folderViewModes[_currentFolderId!] ?? CloudViewMode.raw;
+  }
+
+  /// Set view mode and refresh display
+  Future<void> _setViewMode(CloudViewMode mode) async {
+    if (_currentFolderId == null) return;
+
+    // If user selected Series Arrange, we need to fetch all files recursively
+    if (mode == CloudViewMode.seriesArrange) {
+      // Show loading indicator
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        // Fetch all files recursively from this folder
+        List<PikPakFile> allFiles;
+        if (_recursiveFileCache.containsKey(_currentFolderId!)) {
+          allFiles = _recursiveFileCache[_currentFolderId!]!;
+        } else {
+          allFiles = await AppServices.pikpak.listFilesRecursive(
+            folderId: _currentFolderId!,
+          );
+          _recursiveFileCache[_currentFolderId!] = allFiles;
+        }
+
+        // Filter for video files only
+        final videoFiles = allFiles
+            .where((file) => !file.isFolder && file.isVideo)
+            .toList();
+
+        // Detect if it's actually a series
+        if (videoFiles.length < 3) {
+          _showFallbackToSorted(
+            'Not enough video files for series detection',
+            allFiles,
+          );
+          return;
+        }
+
+        final filenames = videoFiles
+            .map((f) => f.name)
+            .toList();
+        final isSeries = SeriesParser.isSeriesPlaylist(filenames);
+
+        if (!isSeries) {
+          _showFallbackToSorted('No series detected in this folder', allFiles);
+          return;
+        }
+
+        // It's a series! Apply Series Arrange view
+        setState(() {
+          _folderViewModes[_currentFolderId!] = mode;
+          final transformed = _applySeriesArrangeView(allFiles);
+          _files.clear();
+          _files.addAll(transformed);
+          _isLoading = false;
+        });
+      } catch (e) {
+        print('Error applying Series Arrange view: $e');
+        _showFallbackToSorted('Failed to load series view', null);
+      }
+    } else {
+      // For Raw and Sort modes, work with current page files
+      setState(() {
+        _folderViewModes[_currentFolderId!] = mode;
+        final transformed = _applyViewMode(mode, _files);
+        _files.clear();
+        _files.addAll(transformed);
+        // Reset pagination when transforming (can't mix transformed/raw data)
+        _nextPageToken = null;
+        _hasMore = false;
+      });
+    }
+  }
+
+  /// Show snackbar and fallback to sorted view
+  /// If allFiles is provided (from recursive fetch), use those instead of _files
+  void _showFallbackToSorted(String reason, List<PikPakFile>? allFiles) {
+    if (!mounted) return;
+
+    final app = AppThemeScope.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'No series detected in this folder. Switching to Sort (A-Z) view.',
+        ),
+        duration: const Duration(seconds: 3),
+        backgroundColor: app.cloud.dialogSurface,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    setState(() {
+      _folderViewModes[_currentFolderId!] = CloudViewMode.sortedAZ;
+      // Use allFiles if provided (preserves full recursive fetch), otherwise use _files
+      final filesToTransform = allFiles ?? _files;
+      final transformed = pikpakListing.sorted(filesToTransform);
+      _files.clear();
+      _files.addAll(transformed);
+      _isLoading = false;
+    });
+  }
+
+  /// Apply view mode transformation to a list of files
+  List<PikPakFile> _applyViewMode(CloudViewMode mode, List<PikPakFile> items) {
+    switch (mode) {
+      case CloudViewMode.raw:
+        return items;
+      case CloudViewMode.sortedAZ:
+        return pikpakListing.sorted(items);
+      case CloudViewMode.seriesArrange:
+        return _applySeriesArrangeView(items);
+    }
+  }
+
+  /// Apply series arranged view (create virtual Season folders)
+  List<PikPakFile> _applySeriesArrangeView(List<PikPakFile> items) {
+    final (:folders, :videos, :others) = pikpakListing.partition(items);
+    if (videos.isEmpty) return items;
+
+    final videoFiles = videos;
+    final nonVideoFiles = others;
+    final filenames = videoFiles.map((f) => f.name).toList();
+
+    try {
+      final parsedInfos = SeriesParser.parsePlaylist(filenames);
+
+      // Group by season
+      final Map<int, List<PikPakFile>> seasonMap = {};
+      for (int i = 0; i < videoFiles.length; i++) {
+        final info = parsedInfos[i];
+        if (info.isSeries && info.season != null) {
+          seasonMap.putIfAbsent(info.season!, () => []);
+          seasonMap[info.season!]!.add(videoFiles[i]);
+        } else {
+          // If not parsed as series, default to Season 1
+          seasonMap.putIfAbsent(1, () => []);
+          seasonMap[1]!.add(videoFiles[i]);
+        }
+      }
+
+      // Create virtual season folders, seasons in order and episodes in
+      // order within each.
+      final seasons = seasonMap.keys.toList()..sort();
+      final seasonFolders = [
+        for (final season in seasons)
+          PikPakFile.seasonGroup(
+            season: season,
+            files: seasonMap[season]!
+              ..sort((a, b) {
+                final aEp = SeriesParser.parseFilename(a.name).episode ?? 0;
+                final bEp = SeriesParser.parseFilename(b.name).episode ?? 0;
+                return aEp.compareTo(bEp);
+              }),
+          ),
+      ];
+
+      return [...folders, ...seasonFolders, ...nonVideoFiles];
+    } catch (e) {
+      print('Series arrangement failed: $e');
+      return pikpakListing.sorted(items); // Fallback to sorted view
+    }
+  }
+
+  /// Build the view mode dropdown (shown below AppBar when inside folders)
+  Widget _buildViewModeDropdown() {
+    final theme = Theme.of(context);
+    final mode = _getCurrentViewMode();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Focus(
+        skipTraversal: true,
+        onKeyEvent: (node, event) {
+          // Navigate to back button on up arrow
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _backButtonFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: DropdownButtonFormField<CloudViewMode>(
+          focusNode: _viewModeDropdownFocusNode,
+          autofocus: true,
+          isExpanded: true,
+          value: mode,
+          decoration: InputDecoration(
+            labelText: 'View Mode',
+            prefixIcon: Icon(
+              mode == CloudViewMode.raw
+                  ? Icons.view_list
+                  : mode == CloudViewMode.sortedAZ
+                  ? Icons.sort_by_alpha
+                  : Icons.video_library,
+              color: theme.colorScheme.primary,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            filled: true,
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+          ),
+          items: const [
+            DropdownMenuItem(value: CloudViewMode.raw, child: Text('Raw')),
+            DropdownMenuItem(
+              value: CloudViewMode.sortedAZ,
+              child: Text('Sort (A-Z)'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) _setViewMode(value);
+          },
+        ),
+      ),
+    );
+  }
+
+  // ============ Search Methods ============
+
+  /// Toggle search mode on/off
+  void _toggleSearch() {
+    setState(() {
+      _isSearchActive = !_isSearchActive;
+      if (!_isSearchActive) {
+        _searchController.clear();
+        _searchResults.clear();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  /// Perform deep search across all files in current folder recursively
+  Future<void> _performSearch(String query) async {
+    if (query.isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+
+    final lowerQuery = query.toLowerCase();
+    final results = <_PikPakSearchResult>[];
+
+    // Get cached recursive files or fetch them
+    final folderId = _currentFolderId ?? '';
+    List<PikPakFile> allFiles;
+
+    if (_recursiveFileCache.containsKey(folderId)) {
+      allFiles = _recursiveFileCache[folderId]!;
+    } else {
+      // For search, we need to use the current files if recursive cache not available
+      allFiles = _files;
+    }
+
+    for (final file in allFiles) {
+      final name = file.name;
+      final isVideo = file.isVideo || FileUtils.isVideoFile(name);
+
+      if (isVideo && name.toLowerCase().contains(lowerQuery)) {
+        // Get path from file data if available
+        final parentPath = file.parentName ?? '';
+        results.add(_PikPakSearchResult(file: file, path: parentPath));
+      }
+    }
+
+    setState(() => _searchResults = results);
+  }
+
+  /// Build the search bar widget
+  Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
+    final hasText = _searchController.text.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TvTextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              textInputAction: TextInputAction.search,
+              // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
+              onUpArrow: () => _searchFocusNode.unfocus(),
+              onDownArrow: () => _searchFocusNode.unfocus(),
+              onRightArrow: hasText
+                  ? () => _searchClearFocusNode.requestFocus()
+                  : null,
+              decoration: InputDecoration(
+                hintText: 'Search files...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                filled: true,
+                fillColor: app.fade(app.core.tx, 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: app.shape.br(8),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+              onChanged: _performSearch,
+              onSubmitted: (_) => _searchFocusNode.unfocus(),
+            ),
+          ),
+          // Clear button - separate focusable widget for D-pad navigation
+          if (hasText)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Focus(
+                focusNode: _searchClearFocusNode,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final key = event.logicalKey;
+
+                  // Select/Enter: clear search
+                  if (isActivateKey(key)) {
+                    setState(() {
+                      _searchController.clear();
+                      _searchResults.clear();
+                    });
+                    _searchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+
+                  // Arrow Left: go back to TextField
+                  if (key == LogicalKeyboardKey.arrowLeft) {
+                    _searchFocusNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+
+                  return KeyEventResult.ignored;
+                },
+                child: Builder(
+                  builder: (context) {
+                    final isFocused = Focus.of(context).hasFocus;
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: app.fade(app.core.tx, 0.06),
+                        borderRadius: app.shape.br(8),
+                        border: isFocused
+                            ? Border.all(color: app.core.tx, width: 2)
+                            : null,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchResults.clear();
+                          });
+                          _searchFocusNode.requestFocus();
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Build search results list
+  Widget _buildSearchResults() {
+    if (_searchController.text.isEmpty) {
+      return const Center(
+        child: Text(
+          'Type to search files',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Text('No files found', style: TextStyle(color: Colors.grey)),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        return _buildSearchResultCard(result);
+      },
+    );
+  }
+
+  /// Build a card for a search result
+  Widget _buildSearchResultCard(_PikPakSearchResult result) {
+    final file = result.file;
+    final name = file.name.isNotEmpty ? file.name : 'Unknown';
+    final size = file.size;
+
+    if (widget.selectSourceMode) {
+      return CloudFileRow(
+        kind: CloudRowKind.video,
+        title: name,
+        meta: result.path.isEmpty
+            ? Formatters.formatFileSize(size)
+            : result.path,
+        onTap: () => _selectBoundSource(file),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1.2,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _playFile(file),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.play_circle_outline,
+                  color: Colors.blue,
+                  size: 32,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (result.path.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          result.path,
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      Text(
+                        Formatters.formatFileSize(size),
+                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Pushed from the Cloud hub to browse (no folder target) — the root has no
+  /// folder-up Back, so the AppBar offers a Back-to-hub instead.
+  bool get _isBrowsePush =>
+      widget.isPushedRoute && widget.initialFolderId == null;
+
+  @override
+  Widget build(BuildContext context) {
+    // When DEEP-LINKED into a specific folder (pushed WITH a target) and still
+    // at root, show the loading state. Browsing from the Cloud hub has no target
+    // (and non-restricted accounts stay at a null root folder), so don't gate the
+    // real content behind a spinner.
+    if (widget.isPushedRoute &&
+        widget.initialFolderId != null &&
+        _currentFolderId == null) {
+      return CloudScaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Back',
+          ),
+          title: const Text('Opening folder...'),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading folder contents...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!_pikpakEnabled) {
+      return _buildNotEnabled();
+    }
+
+    if (_initialLoad && _isLoading) {
+      return const CloudScaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return _buildError();
+    }
+
+    // Check if we should show the view mode dropdown
+    // Only show when navigated at least one level deep (inside a folder)
+    final showViewModeDropdown =
+        _navigationStack.isNotEmpty || _isInVirtualFolder;
+    final currentMode = _getCurrentViewMode();
+    final showSearch =
+        showViewModeDropdown &&
+        currentMode != CloudViewMode.seriesArrange &&
+        !_isInVirtualFolder;
+
+    final bool isCompactActions = MediaQuery.sizeOf(context).width < 500;
+    final double actionIconSize = isCompactActions ? 20 : 24;
+    final EdgeInsets actionIconPadding = isCompactActions
+        ? const EdgeInsets.all(6)
+        : const EdgeInsets.all(8);
+    final BoxConstraints actionIconConstraints = isCompactActions
+        ? const BoxConstraints(minWidth: 36, minHeight: 36)
+        : const BoxConstraints(minWidth: 48, minHeight: 48);
+
+    // Back navigation is handled via MainPageBridge.handleBackNavigation
+    return CloudScaffold(
+      appBar: AppBar(
+        leading:
+            (_currentFolderId != null && !_isAtRestrictedRoot) ||
+                _isInVirtualFolder
+            ? Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                      MainPageBridge.focusTvSidebar != null) {
+                    MainPageBridge.focusTvSidebar!();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: IconButton(
+                  focusNode: _backButtonFocusNode,
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => _handleBackNavigation(),
+                  tooltip: 'Back',
+                ),
+              )
+            // At the browse root (opened from the Cloud hub with no folder
+            // target) there's no folder-up back — offer a Back-to-hub instead.
+            : (_isBrowsePush
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    )
+                  : null),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _isInVirtualFolder
+                  ? _virtualFolderName ?? 'Virtual Folder'
+                  : widget.selectSourceMode
+                  ? 'Select PikPak Source'
+                  : _currentFolderName,
+            ),
+            if (_restrictedFolderId != null && !_isInVirtualFolder)
+              const Text(
+                'Restricted Access',
+                style: TextStyle(fontSize: 12, color: Colors.amber),
+              ),
+          ],
+        ),
+        actions: [
+          // Keep the button mounted while a navigation fetch runs (_files is
+          // cleared then) so the AppBar doesn't flicker and TV focus parked
+          // on it isn't dropped.
+          if ((_files.isNotEmpty || _isLoading) &&
+              !_isInVirtualFolder &&
+              !widget.selectSourceMode)
+            IconButton(
+              icon: Icon(
+                _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+              ),
+              onPressed: _toggleSelectionMode,
+              tooltip: _isSelectionMode ? 'Exit selection' : 'Select items',
+              color: _isSelectionMode
+                  ? Theme.of(context).colorScheme.error
+                  : null,
+              iconSize: actionIconSize,
+              padding: actionIconPadding,
+              constraints: actionIconConstraints,
+              visualDensity: VisualDensity.compact,
+            ),
+          if (showSearch)
+            IconButton(
+              focusNode: _searchButtonFocusNode,
+              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              onPressed: _toggleSearch,
+              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+              iconSize: actionIconSize,
+              padding: actionIconPadding,
+              constraints: actionIconConstraints,
+              visualDensity: VisualDensity.compact,
+            ),
+          if (!widget.selectSourceMode)
+            IconButton(
+              focusNode: _addLinkButtonFocusNode,
+              icon: const Icon(Icons.add_link),
+              onPressed: _isLoading ? null : _showAddLinkDialog,
+              tooltip: 'Add Link',
+              iconSize: actionIconSize,
+              padding: actionIconPadding,
+              constraints: actionIconConstraints,
+              visualDensity: VisualDensity.compact,
+            ),
+          IconButton(
+            focusNode: _refreshButtonFocusNode,
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _refreshFiles,
+            tooltip: 'Refresh',
+            iconSize: actionIconSize,
+            padding: actionIconPadding,
+            constraints: actionIconConstraints,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_isSelectionMode) _buildSelectionBar(),
+          // View mode dropdown (only shown when inside folders)
+          if (showViewModeDropdown && !_isInVirtualFolder)
+            _buildViewModeDropdown(),
+          if (_isSearchActive && showSearch) _buildSearchBar(),
+          Expanded(
+            child: _isSearchActive
+                ? _buildSearchResults()
+                : FocusTraversalGroup(
+                    policy: OrderedTraversalPolicy(),
+                    child: RefreshIndicator(
+                      onRefresh: _refreshFiles,
+                      // Folder navigation clears _files, so a fetch with
+                      // nothing to show gets the shimmer skeleton;
+                      // pull-to-refresh keeps its items and skips it.
+                      child: _isLoading && _files.isEmpty
+                          ? const CloudRowSkeletonList()
+                          : _files.isEmpty
+                          ? _buildEmpty()
+                          : _buildFileList(),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotEnabled() {
+    final app = AppThemeScope.of(context);
+    return CloudScaffold(
+      appBar: AppBar(title: const Text('PikPak Files')),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
+                const SizedBox(height: 24),
+                Text(
+                  'PikPak Not Configured',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Configure your PikPak account in Settings to view and manage files.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  focusNode: _settingsButtonFocusNode,
+                  autofocus: true,
+                  onPressed: () {
+                    // TODO: Navigate to settings
+                    _showSnackBar(
+                      'Open Settings > PikPak to configure',
+                      isError: false,
+                    );
+                  },
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Go to Settings'),
+                  style: FilledButton.styleFrom().copyWith(
+                    side: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.focused)) {
+                        return BorderSide(color: app.core.tx, width: 3);
+                      }
+                      return null;
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    final app = AppThemeScope.of(context);
+    return CloudScaffold(
+      appBar: AppBar(title: const Text('PikPak Files')),
+      body: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+                const SizedBox(height: 24),
+                Text(
+                  'Failed to Load Files',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  focusNode: _retryButtonFocusNode,
+                  autofocus: true,
+                  onPressed: _refreshFiles,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                  style: FilledButton.styleFrom().copyWith(
+                    side: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.focused)) {
+                        return BorderSide(color: app.core.tx, width: 3);
+                      }
+                      return null;
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmpty() {
+    final isInFolder = _currentFolderId != null;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.folder_open, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 24),
+            Text(
+              isInFolder ? 'Folder is Empty' : 'No Files Yet',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isInFolder
+                  ? 'This folder doesn\'t contain any files or subfolders.'
+                  : 'Add torrents from the search screen to see them here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionBar() {
+    final app = AppThemeScope.of(context);
+    final theme = Theme.of(context);
+    final count = _selectedFileIds.length;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: app.shape.br(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '$count selected',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: _toggleSelectAll,
+            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            focusNode: _deleteButtonFocusNode,
+            onPressed: count > 0 ? _handleDeleteSelected : null,
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Delete'),
+            style:
+                FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.error,
+                  disabledBackgroundColor: theme.colorScheme.error.withValues(
+                    alpha: 0.3,
+                  ),
+                ).copyWith(
+                  side: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.focused)) {
+                      return BorderSide(color: app.core.tx, width: 3);
+                    }
+                    return null;
+                  }),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFileList() {
+    // Add 1 to item count for loading indicator when loading more
+    final itemCount = _files.length + (_isLoadingMore || _hasMore ? 1 : 0);
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        // Show loading indicator at the end
+        if (index >= _files.length) {
+          return _buildLoadingIndicator();
+        }
+        final file = _files[index];
+        return KeyedSubtree(
+          key: ValueKey(file.id.isEmpty ? index : file.id),
+          child: _buildFileCard(file, index),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    // Show a subtle hint that more can be loaded
+    if (_hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            'Scroll for more',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildFileCard(PikPakFile file, int index) {
+    final name = file.name.isEmpty ? 'Unknown' : file.name;
+    final size = file.size;
+    final fileId = file.id;
+
+    final isFolder = file.isFolder;
+    final isVirtualFolder = file.isVirtual;
+    final isVideo = file.isVideo || FileUtils.isVideoFile(name);
+    final isComplete = file.isReady;
+
+    final date = _formatDate(file.createdTime);
+    final metaParts = <String>[
+      if (size > 0) Formatters.formatFileSize(size),
+      if (date.isNotEmpty) date,
+    ];
+
+    if (widget.selectSourceMode) {
+      final selectable =
+          !isVirtualFolder && (isFolder || (isVideo && isComplete));
+      return CloudFileRow(
+        kind: isVirtualFolder
+            ? CloudRowKind.season
+            : isFolder
+            ? CloudRowKind.folder
+            : isVideo
+            ? CloudRowKind.video
+            : CloudRowKind.file,
+        title: name,
+        meta: metaParts.isEmpty ? null : metaParts.join(' · '),
+        extra: (!isComplete && !isVirtualFolder)
+            ? Text(
+                'Still downloading',
+                style: TextStyle(color: Colors.orange.shade700, fontSize: 12.5),
+              )
+            : null,
+        onTap: selectable ? () => _selectBoundSource(file) : null,
+        actions: isFolder
+            ? [
+                CloudRowAction(
+                  icon: Icons.folder_open_rounded,
+                  label: 'Browse folder',
+                  onSelected: () => _navigateIntoFolder(file.id, name),
+                ),
+              ]
+            : const [],
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+      );
+    }
+
+    // Same action set (labels, conditions) the old pills + ⋮ menu offered.
+    // Virtual Season folders keep their special shape: Open only (via tap),
+    // no menu, not selectable.
+    final actions = <CloudRowAction>[
+      if (!isVirtualFolder) ...[
+        if (isFolder || (isVideo && isComplete))
+          CloudRowAction(
+            icon: Icons.play_arrow_rounded,
+            label: 'Play',
+            showInStrip: true,
+            onSelected: () {
+              if (isFolder) {
+                _playFolder(file);
+              } else {
+                _playFile(file);
+              }
+            },
+          ),
+        CloudRowAction(
+          icon: Icons.download,
+          label: 'Download',
+          showInStrip: true,
+          onSelected: () {
+            if (isFolder) {
+              _downloadFolder(file);
+            } else {
+              _downloadFile(file);
+            }
+          },
+        ),
+        CloudRowAction(
+          icon: Icons.playlist_add,
+          label: 'Add to Playlist',
+          onSelected: () => _handleAddToPlaylist(file),
+        ),
+        CloudRowAction(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          destructive: true,
+          onSelected: () => _showDeleteDialog(file),
+        ),
+      ],
+    ];
+
+    return CloudFileRow(
+      kind: isVirtualFolder
+          ? CloudRowKind.season
+          : isFolder
+          ? CloudRowKind.folder
+          : isVideo
+          ? CloudRowKind.video
+          : CloudRowKind.file,
+      title: name,
+      meta: metaParts.isEmpty ? null : metaParts.join(' · '),
+      // Virtual season rows are client-synthesized and carry no 'phase', so
+      // without the !isVirtualFolder gate they'd show a perpetual spinner.
+      extra: (!isComplete && !isVirtualFolder && !_isSelectionMode)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Downloading...',
+                  style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            )
+          : null,
+      onTap: isVirtualFolder
+          ? () => _navigateIntoVirtualFolder(file)
+          : isFolder
+          ? () => _navigateIntoFolder(file.id, name)
+          : (isVideo && isComplete)
+          ? () => _playFile(file)
+          : null,
+      actions: actions,
+      selectionMode: _isSelectionMode,
+      selected: _selectedFileIds.contains(fileId),
+      selectable: !isVirtualFolder,
+      onToggleSelected: () => _toggleFileSelection(fileId),
+      focusNode: index == 0 ? _firstItemFocusNode : null,
+    );
+  }
+
+  String _formatDate(DateTime? when) {
+    if (when == null) return '';
+    try {
+      final date = when;
+      final now = DateTime.now();
+      final difference = now.difference(date);
+
+      if (difference.inDays == 0) {
+        if (difference.inHours == 0) {
+          return '${difference.inMinutes}m ago';
+        }
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d ago';
+      } else {
+        return '${date.month}/${date.day}/${date.year}';
+      }
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /// Play all videos in a folder (recursively scans subfolders)
+  Future<void> _playFolder(PikPakFile folder) async {
+    final folderId = folder.id;
+    final folderName = folder.name.isNotEmpty ? folder.name : 'Folder';
+
+    if (folderId.isEmpty) {
+      _showSnackBar('Invalid folder ID', isError: true);
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning folder for videos...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recursively scan folder for all files (includePaths for auxiliary folder detection)
+      final allFiles = await AppServices.pikpak.listFilesRecursive(
+        folderId: folderId,
+        includePaths: true,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!mounted) return;
+
+      // Filter for videos only
+      List<PikPakFile> videoFiles = allFiles
+          .where((file) => file.isVideo && file.isReady)
+          .toList();
+
+      // Apply user settings filters
+      if (_showVideosOnly) {
+        // Already filtered for videos above
+      }
+
+      if (_ignoreSmallVideos) {
+        // size is 0 when PikPak did not report one; that is "unknown", not
+        // "tiny", so it must not be filtered out.
+        videoFiles = videoFiles
+            .where((file) => file.size == 0 || file.size >= 100 * 1024 * 1024)
+            .toList();
+      }
+
+      if (videoFiles.isEmpty) {
+        _showSnackBar('This folder doesn\'t contain any videos', isError: true);
+        return;
+      }
+
+      // Use the same logic as torrent_search_screen.dart
+      await _playPikPakVideos(videoFiles, folderName);
+    } catch (e) {
+      print('Error playing folder: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
+  }
+
+  /// Play PikPak videos (single or playlist) - mirrors torrent_search_screen.dart logic
+  Future<void> _playPikPakVideos(
+    List<PikPakFile> videoFiles,
+    String collectionName,
+  ) async {
+    if (videoFiles.isEmpty) return;
+
+    final pikpak = AppServices.pikpak;
+
+    // Single video - play with playlist entry for consistent resume key
+    if (videoFiles.length == 1) {
+      final file = videoFiles.first;
+      try {
+        final fullData = await pikpak.getFileDetails(file.id);
+        final url = fullData.streamingUrl;
+        if (url != null && mounted) {
+          final sizeBytes = int.tryParse(file.size.toString()) ?? 0;
+          final title = file.name.isNotEmpty ? file.name : collectionName;
+          await VideoPlayerLauncher.push(
+            context,
+            VideoPlayerLaunchArgs(
+              videoUrl: url,
+              title: title,
+              subtitle: Formatters.formatFileSize(sizeBytes),
+              playlist: [
+                PlaylistEntry(
+                  url: url,
+                  title: title,
+                  relativePath: file.fullPath,
+                  provider: 'pikpak',
+                  pikpakFileId: file.id,
+                  sizeBytes: sizeBytes,
+                ),
+              ],
+              startIndex: 0,
+            ),
+          );
+        }
+      } catch (e) {
+        _showSnackBar('Failed to play: ${e.toString()}', isError: true);
+      }
+      return;
+    }
+
+    // Multiple videos - build playlist
+    final entries = <_PikPakPlaylistItem>[];
+    for (int i = 0; i < videoFiles.length; i++) {
+      final file = videoFiles[i];
+      final displayName = _pikpakDisplayName(file);
+      final info = SeriesParser.parseFilename(displayName);
+      entries.add(
+        _PikPakPlaylistItem(
+          file: file,
+          originalIndex: i,
+          seriesInfo: info,
+          displayName: displayName,
+        ),
+      );
+    }
+
+    // Detect if it's a series collection
+    final filenames = entries.map((e) => e.displayName).toList();
+    final bool isSeriesCollection =
+        entries.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+
+    // Sort entries
+    final sortedEntries = [...entries];
+    if (isSeriesCollection) {
+      sortedEntries.sort((a, b) {
+        final aInfo = a.seriesInfo;
+        final bInfo = b.seriesInfo;
+        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
+        if (seasonCompare != 0) return seasonCompare;
+        final episodeCompare = (aInfo.episode ?? 0).compareTo(
+          bInfo.episode ?? 0,
+        );
+        if (episodeCompare != 0) return episodeCompare;
+        return a.displayName.toLowerCase().compareTo(
+          b.displayName.toLowerCase(),
+        );
+      });
+    } else {
+      sortedEntries.sort(
+        (a, b) =>
+            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+      );
+    }
+
+    // Find first episode to start from
+    final seriesInfos = sortedEntries.map((e) => e.seriesInfo).toList();
+    int startIndex = isSeriesCollection
+        ? _findFirstEpisodeIndex(seriesInfos)
+        : 0;
+    if (startIndex < 0 || startIndex >= sortedEntries.length) {
+      startIndex = 0;
+    }
+
+    // Resolve only the first video URL (lazy loading for rest)
+    String initialUrl = '';
+    try {
+      final firstFile = sortedEntries[startIndex].file;
+      final fullData = await pikpak.getFileDetails(firstFile.id);
+      initialUrl = fullData.streamingUrl ?? '';
+    } catch (e) {
+      _showSnackBar('Failed to prepare stream: ${e.toString()}', isError: true);
+      return;
+    }
+
+    if (initialUrl.isEmpty) {
+      _showSnackBar('Could not get streaming URL', isError: true);
+      return;
+    }
+
+    // Build playlist entries
+    final playlistEntries = <PlaylistEntry>[];
+    for (int i = 0; i < sortedEntries.length; i++) {
+      final entry = sortedEntries[i];
+      final seriesInfo = entry.seriesInfo;
+      final episodeLabel = _formatPikPakPlaylistTitle(
+        info: seriesInfo,
+        fallback: entry.displayName,
+        isSeriesCollection: isSeriesCollection,
+      );
+      final combinedTitle = _combineSeriesAndEpisodeTitle(
+        seriesTitle: seriesInfo.title,
+        episodeLabel: episodeLabel,
+        isSeriesCollection: isSeriesCollection,
+        fallback: entry.displayName,
+      );
+      playlistEntries.add(
+        PlaylistEntry(
+          url: i == startIndex ? initialUrl : '',
+          title: combinedTitle,
+          relativePath: entry.file.fullPath,
+          provider: 'pikpak',
+          pikpakFileId: entry.file.id,
+          sizeBytes: int.tryParse(entry.file.size.toString()),
+        ),
+      );
+    }
+
+    // Calculate subtitle
+    final totalBytes = sortedEntries.fold<int>(
+      0,
+      (sum, e) => sum + (int.tryParse(e.file.size.toString()) ?? 0),
+    );
+    final subtitle =
+        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
+
+    if (!mounted) return;
+    await VideoPlayerLauncher.push(
+      context,
+      VideoPlayerLaunchArgs(
+        videoUrl: initialUrl,
+        title: collectionName,
+        subtitle: subtitle,
+        playlist: playlistEntries,
+        startIndex: startIndex,
+      ),
+    );
+  }
+
+  /// Handle adding a file or folder to playlist
+  Future<void> _handleAddToPlaylist(PikPakFile file) async {
+    if (file.isFolder) {
+      await _addFolderToPlaylist(file);
+    } else {
+      await _addSingleFileToPlaylist(file);
+    }
+  }
+
+  /// Add a single video file to playlist
+  Future<void> _addSingleFileToPlaylist(PikPakFile file) async {
+    final mimeType = file.mimeType;
+    final isVideo = mimeType.startsWith('video/');
+
+    if (!isVideo) {
+      _showSnackBar('Only video files can be added to playlist', isError: true);
+      return;
+    }
+
+    final added = await StorageService.addPlaylistItemRaw({
+      'provider': 'pikpak',
+      'title': FileUtils.cleanPlaylistTitle(
+        file.name.isNotEmpty ? file.name : 'Video',
+      ),
+      'kind': 'single',
+      'pikpakFileId': file.id,
+      // Store full metadata for instant playback
+      'pikpakFile': {
+        'id': file.id,
+        'name': file.name,
+        'size': file.size,
+        'mime_type': file.mimeType,
+      },
+      'sizeBytes': int.tryParse(file.size.toString()),
+    });
+
+    _showSnackBar(
+      added ? 'Added to playlist' : 'Already in playlist',
+      isError: !added,
+    );
+  }
+
+  /// Add all videos in a folder to playlist (recursively scans subfolders)
+  Future<void> _addFolderToPlaylist(PikPakFile folder) async {
+    final folderId = folder.id;
+    final folderName = folder.name.isNotEmpty ? folder.name : 'Folder';
+
+    if (folderId.isEmpty) {
+      _showSnackBar('Invalid folder ID', isError: true);
+      return;
+    }
+
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Scanning folder for videos...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Recursively scan folder for all files (includePaths for auxiliary folder detection)
+      final allFiles = await AppServices.pikpak.listFilesRecursive(
+        folderId: folderId,
+        includePaths: true,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
+      if (!mounted) return;
+
+      // Filter for videos only
+      List<PikPakFile> videoFiles = allFiles
+          .where((file) => file.isVideo && file.isReady)
+          .toList();
+
+      // Apply user settings filters
+      if (_ignoreSmallVideos) {
+        // size is 0 when PikPak did not report one; that is "unknown", not
+        // "tiny", so it must not be filtered out.
+        videoFiles = videoFiles
+            .where((file) => file.size == 0 || file.size >= 100 * 1024 * 1024)
+            .toList();
+      }
+
+      if (videoFiles.isEmpty) {
+        _showSnackBar('This folder doesn\'t contain any videos', isError: true);
+        return;
+      }
+
+      // Add to playlist
+      if (videoFiles.length == 1) {
+        // Single video file - store full metadata for instant playback
+        final file = videoFiles.first;
+        final added = await StorageService.addPlaylistItemRaw({
+          'provider': 'pikpak',
+          'title': FileUtils.cleanPlaylistTitle(
+            file.name.isNotEmpty ? file.name : folderName,
+          ),
+          'kind': 'single',
+          'pikpakFileId': file.id,
+          'pikpakFile': {
+            'id': file.id,
+            'name': file.name,
+            'size': file.size,
+            'mime_type': file.mimeType,
+          },
+          'sizeBytes': int.tryParse(file.size.toString()),
+        });
+        _showSnackBar(
+          added ? 'Added to playlist' : 'Already in playlist',
+          isError: !added,
+        );
+      } else {
+        // Multiple videos - save as collection with full metadata for instant playback
+        // Store both pikpakFiles (new format) and pikpakFileIds (for dedupe compatibility)
+        final fileIds = videoFiles.map((f) => f.id).toList();
+        final filesMetadata = videoFiles
+            .map(
+              (f) => {
+                'id': f.id,
+                'name': f.name,
+                'size': f.size,
+                'mime_type': f.mimeType,
+              },
+            )
+            .toList();
+
+        final added = await StorageService.addPlaylistItemRaw({
+          'provider': 'pikpak',
+          'title': FileUtils.cleanPlaylistTitle(folderName),
+          'kind': 'collection',
+          'pikpakFileId': folderId, // Store the folder ID for folder structure
+          'pikpakFiles':
+              filesMetadata, // NEW: Full metadata for instant playback
+          'pikpakFileIds':
+              fileIds, // KEEP: For backward compatibility and deduplication
+          'count': videoFiles.length,
+        });
+        _showSnackBar(
+          added
+              ? 'Added ${videoFiles.length} videos to playlist'
+              : 'Already in playlist',
+          isError: !added,
+        );
+      }
+    } catch (e) {
+      print('Error adding folder to playlist: $e');
+      if (mounted) {
+        // Close loading dialog if still open
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      _showSnackBar('Failed to scan folder: $e', isError: true);
+    }
+  }
+
+  String _pikpakDisplayName(PikPakFile file) {
+    final name = file.name.toString();
+    if (name.isNotEmpty) {
+      return FileUtils.getFileName(name);
+    }
+    return 'File ${file.id}';
+  }
+
+  String _formatPikPakPlaylistTitle({
+    required SeriesInfo info,
+    required String fallback,
+    required bool isSeriesCollection,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final season = info.season;
+    final episode = info.episode;
+    if (info.isSeries && season != null && episode != null) {
+      final seasonLabel = season.toString().padLeft(2, '0');
+      final episodeLabel = episode.toString().padLeft(2, '0');
+      final description = info.episodeTitle?.trim().isNotEmpty == true
+          ? info.episodeTitle!.trim()
+          : info.title?.trim().isNotEmpty == true
+          ? info.title!.trim()
+          : fallback;
+      return 'S${seasonLabel}E$episodeLabel · $description';
+    }
+
+    return fallback;
+  }
+
+  String _combineSeriesAndEpisodeTitle({
+    required String? seriesTitle,
+    required String episodeLabel,
+    required bool isSeriesCollection,
+    required String fallback,
+  }) {
+    if (!isSeriesCollection) {
+      return fallback;
+    }
+
+    final cleanSeriesTitle = seriesTitle
+        ?.replaceAll(RegExp(r'[._\-]+$'), '')
+        .trim();
+    if (cleanSeriesTitle != null && cleanSeriesTitle.isNotEmpty) {
+      return '$cleanSeriesTitle $episodeLabel';
+    }
+
+    return fallback;
+  }
+
+  int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
+    int startIndex = 0;
+    int? bestSeason;
+    int? bestEpisode;
+
+    for (int i = 0; i < infos.length; i++) {
+      final info = infos[i];
+      final season = info.season;
+      final episode = info.episode;
+      if (!info.isSeries || season == null || episode == null) {
+        continue;
+      }
+
+      final bool isBetterSeason = bestSeason == null || season < bestSeason;
+      final bool isBetterEpisode =
+          bestSeason != null &&
+          season == bestSeason &&
+          (bestEpisode == null || episode < bestEpisode);
+
+      if (isBetterSeason || isBetterEpisode) {
+        bestSeason = season;
+        bestEpisode = episode;
+        startIndex = i;
+      }
+    }
+
+    return startIndex;
+  }
+
+  // ============================================================================
+  // Add Link Dialog
+  // ============================================================================
+
+  Future<void> _showAddLinkDialog() async {
+    // Auto-paste link from clipboard if available
+    await _autoPasteLink();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Add Link',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter a link to download:',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                  node.nextFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextField(
+                controller: _linkController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'magnet:?xt=... or https://...',
+                  hintStyle: TextStyle(color: Colors.grey[600]),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF475569)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF475569)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFFFFAA00)),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+                maxLines: 3,
+                minLines: 1,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Supported: Magnet links, HTTP/HTTPS URLs',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    _linkController.clear();
+                    Navigator.of(context).pop();
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Color(0xFF475569)),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _isAddingLink ? null : _addLink,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: const Color(0xFFFFAA00),
+                  ),
+                  child: _isAddingLink
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Add',
+                          style: TextStyle(color: Colors.black),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _autoPasteLink() async {
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData?.text != null) {
+        final text = clipboardData!.text!.trim();
+        // Check if it looks like a supported link
+        if (text.startsWith('http://') ||
+            text.startsWith('https://') ||
+            text.startsWith('magnet:')) {
+          _linkController.text = text;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to read clipboard: $e');
+    }
+  }
+
+  bool _isValidPikPakLink(String link) {
+    final trimmedLink = link.trim();
+    return trimmedLink.startsWith('http://') ||
+        trimmedLink.startsWith('https://') ||
+        trimmedLink.startsWith('magnet:');
+  }
+
+  Future<void> _addLink() async {
+    final link = _linkController.text.trim();
+    if (link.isEmpty) {
+      _showSnackBar('Please enter a link', isError: true);
+      return;
+    }
+
+    if (!_isValidPikPakLink(link)) {
+      _showSnackBar('Please enter a valid URL or magnet link', isError: true);
+      return;
+    }
+
+    Navigator.of(context).pop(); // Close the dialog
+
+    setState(() {
+      _isAddingLink = true;
+    });
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Color(0xFFFFAA00)),
+            const SizedBox(height: 16),
+            const Text('Adding to PikPak...'),
+            const SizedBox(height: 8),
+            Text(
+              link.length > 50 ? '${link.substring(0, 50)}...' : link,
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final pikpak = AppServices.pikpak;
+
+      // Use current folder if browsing, otherwise use restricted folder or root
+      final parentFolderId = _currentFolderId ?? _restrictedFolderId;
+
+      final result = await pikpak.addOfflineDownload(
+        link,
+        parentFolderId: parentFolderId,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      // Extract file name from response
+      String? fileName;
+      if (result.name.isNotEmpty) fileName = result.name;
+
+      _showSnackBar(
+        'Added to PikPak${fileName != null ? ': $fileName' : ''}',
+        isError: false,
+      );
+
+      // Clear the controller and refresh
+      _linkController.clear();
+      _refreshFiles();
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+
+      _showSnackBar('Failed to add: ${e.toString()}', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAddingLink = false;
+        });
+      }
+    }
+  }
+}
+
+/// Helper class for building PikPak playlists
+class _PikPakPlaylistItem {
+  final PikPakFile file;
+  final int originalIndex;
+  final SeriesInfo seriesInfo;
+  final String displayName;
+
+  const _PikPakPlaylistItem({
+    required this.file,
+    required this.originalIndex,
+    required this.seriesInfo,
+    required this.displayName,
+  });
+}
+
+/// Helper class to hold search result with its folder path
+class _PikPakSearchResult {
+  final PikPakFile file;
+  final String path;
+
+  const _PikPakSearchResult({required this.file, required this.path});
+}

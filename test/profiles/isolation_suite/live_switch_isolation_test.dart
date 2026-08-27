@@ -11,6 +11,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/app_storage.dart';
+import 'package:debrify/app/wiring.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -95,7 +96,7 @@ void main() {
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
       participants: <ProfileLifecycleParticipant>[
-        ProfileAppLifecycleParticipant(),
+        ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
       ],
     );
     addTearDown(lifecycle.dispose);
@@ -136,7 +137,7 @@ void main() {
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
       participants: <ProfileLifecycleParticipant>[
-        ProfileAppLifecycleParticipant(),
+        ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
       ],
     );
     addTearDown(lifecycle.dispose);
@@ -161,7 +162,7 @@ void main() {
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
       participants: <ProfileLifecycleParticipant>[
-        ProfileAppLifecycleParticipant(),
+        ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
       ],
     );
     addTearDown(lifecycle.dispose);

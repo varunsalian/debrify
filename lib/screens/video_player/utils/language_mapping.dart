@@ -251,9 +251,9 @@ class LanguageMapper {
     var realIndex = 0;
     return [
       for (final t in tracks)
-        (t.id as String) == 'auto'
+        t.id == 'auto'
             ? build('auto', 'Automatic')
-            : build(t.id as String, labelForTrack(t, realIndex++)),
+            : build(t.id, labelForTrack(t, realIndex++)),
     ];
   }
 
@@ -279,9 +279,8 @@ class LanguageMapper {
     }
 
     // 3. Fall back to id (unlikely to help but keep for compatibility)
-    final id = (t.id as String?)?.trim();
-    if (id != null &&
-        id.isNotEmpty &&
+    final id = t.id.trim();
+    if (id.isNotEmpty &&
         id.toLowerCase() != 'no' &&
         id.toLowerCase() != 'auto') {
       final langPretty = niceLanguage(id);

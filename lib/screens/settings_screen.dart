@@ -42,7 +42,6 @@ import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/premiumize_account_service.dart';
 import '../services/alldebrid_account_service.dart';
-import '../services/pikpak_api_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
@@ -85,7 +84,7 @@ import 'settings/tv_sidebar_style_page.dart';
 import 'settings/profile_backup_flows.dart';
 import 'settings/profile_appearance_page.dart';
 import 'settings/widgets/settings_widgets.dart';
-import 'settings/pikpak_settings_page.dart';
+import '../features/pikpak/ui/settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/iptv_settings_page.dart';
 import 'settings/home_page_settings_page.dart';
@@ -110,6 +109,7 @@ import '../widgets/remote/remote_role_picker_screen.dart';
 import '../theme/app_looks.dart';
 import '../theme/app_theme_scope.dart';
 import '../models/tv_hero_artwork_quality.dart';
+import '../app/wiring.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -306,7 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final results = await Future.wait([
       StorageService.hasRealDebridCredential(),
       StorageService.hasTorboxCredential(),
-      PikPakApiService.instance.isAuthenticated(),
+      AppServices.pikpak.isAuthenticated(),
       StorageService.getWebDavEnabled(),
       StorageService.getWebDavServers(forSettings: true),
       StorageService.hasTraktCredential(),
@@ -2348,6 +2348,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Prefer torrents',
         'Torrents first, or addon direct links first',
         const ['torrents', 'direct links', 'addons', 'prefer'],
+      ),
+      leaf(
+        'Quick Play',
+        'Streams to try',
+        'How many sources Quick Play tries before giving up',
+        // People search for the count they saw in the player, not its name.
+        const [
+          'attempts',
+          'retries',
+          'checking stream',
+          'stream count',
+          'try next',
+          'failover',
+          'fallback',
+        ],
       ),
       leaf(
         'Quick Play',
@@ -4531,7 +4546,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await ProfileResetService(
         registry: ProfileBootstrap.registry,
         lifecycleParticipants: <ProfileLifecycleParticipant>[
-          ProfileAppLifecycleParticipant(),
+          ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
         ],
       ).resetActiveProfile();
       if (!mounted) return;

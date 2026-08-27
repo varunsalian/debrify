@@ -19,8 +19,7 @@ import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_service.dart';
 import '../../services/torbox_torrent_control_service.dart';
-import '../../services/pikpak_api_service.dart';
-import '../../services/pikpak_tv_service.dart';
+import '../../features/pikpak/data/tv_service.dart';
 import '../../services/premiumize_service.dart';
 import '../../models/premiumize_file.dart';
 import '../../services/alldebrid_service.dart';
@@ -43,6 +42,7 @@ import 'widgets/stremio_tv_guide_sheet.dart';
 import 'widgets/stremio_tv_local_catalogs_dialog.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/tv_text_field.dart';
+import '../../app/wiring.dart';
 
 /// Main Stremio TV screen — a TV guide powered by Stremio addon catalogs.
 ///
@@ -2232,9 +2232,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           final targetFileId = targetFile['id'] as String?;
           if (targetFileId == null || targetFileId.isEmpty) return null;
 
-          final api = PikPakApiService.instance;
+          final api = AppServices.pikpak;
           final fileData = await api.getFileDetails(targetFileId);
-          final url = api.getStreamingUrl(fileData);
+          final url = fileData.streamingUrl;
           if (url == null || url.isEmpty) return null;
           streamUrl = url;
         } else if (isSeries && season != null && episode != null) {
@@ -2267,7 +2267,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     if (rootId == null) return;
 
     try {
-      await PikPakApiService.instance
+      await AppServices.pikpak
           .batchTrashFiles(<String>[rootId])
           .timeout(const Duration(seconds: 10));
     } catch (e) {

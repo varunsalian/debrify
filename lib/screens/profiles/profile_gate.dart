@@ -25,6 +25,7 @@ import 'profile_gate_looks.dart';
 import 'profile_picker_screen.dart';
 import 'profile_wall_screen.dart';
 import 'profile_pin_screen.dart';
+import '../../app/wiring.dart';
 
 @visibleForTesting
 bool shouldAutoEnterSoleProfile(
@@ -65,7 +66,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
       _lifecycle = ProfileLifecycleCoordinator(
         registry: registry,
         participants: <ProfileLifecycleParticipant>[
-          ProfileAppLifecycleParticipant(),
+          ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
         ],
       );
       ProfileRuntime.scope.addListener(_scopeChanged);

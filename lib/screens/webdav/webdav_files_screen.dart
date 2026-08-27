@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../utils/tv_keys.dart';
 import '../../models/webdav_item.dart';
-import '../../screens/video_player/models/playlist_entry.dart';
+import '../../core/playback/playlist_entry.dart';
 import '../../services/analytics_service.dart';
 import '../../services/download_service.dart';
 import '../../services/main_page_bridge.dart';

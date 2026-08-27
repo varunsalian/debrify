@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'deep_link_service.dart';
 import 'debrid_service.dart';
 import 'torbox_service.dart';
-import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'alldebrid_service.dart';
 import 'storage_service.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
 import '../widgets/not_cached_dialog.dart';
+import '../features/pikpak/data/api_service.dart';
 
 /// Handles incoming magnet links and shared URLs, routing them to appropriate debrid service
 class MagnetLinkHandler {
@@ -31,8 +31,14 @@ class MagnetLinkHandler {
   final Function(int webDownloadId, String fileName)? onTorboxUrlResult;
   final Function()? onAllDebridUrlResult;
 
+  /// Injected rather than reached for: this is one of the callers that already
+  /// has a constructor, so it takes the dependency properly instead of going
+  /// through [AppServices].
+  final PikPakApiService pikpak;
+
   MagnetLinkHandler({
     required this.context,
+    required this.pikpak,
     this.onRealDebridAdded,
     this.onTorboxAdded,
     this.onPikPakAdded,
@@ -296,7 +302,7 @@ class MagnetLinkHandler {
 
   /// Add URL to PikPak (offline download)
   Future<void> _addUrlToPikPak(String url, String displayName) async {
-    final isAuth = await PikPakApiService.instance.isAuthenticated();
+    final isAuth = await pikpak.isAuthenticated();
     if (!isAuth) {
       _showError('PikPak not configured. Please login in Settings.');
       return;
@@ -311,7 +317,7 @@ class MagnetLinkHandler {
       // Find or create subfolder (reuse torrents folder for shared URLs)
       String? subFolderId;
       try {
-        subFolderId = await PikPakApiService.instance.findOrCreateSubfolder(
+        subFolderId = await pikpak.findOrCreateSubfolder(
           folderName: 'debrify-torrents',
           parentFolderId: parentFolderId,
           getCachedId: StorageService.getPikPakTorrentsFolderId,
@@ -321,7 +327,7 @@ class MagnetLinkHandler {
         if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
           if (!context.mounted) return;
           Navigator.of(context).pop();
-          await PikPakApiService.instance.logout();
+          await pikpak.logout();
           if (context.mounted) {
             _showError(
               'Restricted folder was deleted. You have been logged out.',
@@ -332,7 +338,7 @@ class MagnetLinkHandler {
         subFolderId = parentFolderId;
       }
 
-      final result = await PikPakApiService.instance.addOfflineDownload(
+      final result = await pikpak.addOfflineDownload(
         url,
         parentFolderId: subFolderId,
       );
@@ -343,22 +349,15 @@ class MagnetLinkHandler {
       // Extract file ID and name
       String? fileId;
       String? fileName;
-      if (result['file'] != null) {
-        fileId = result['file']['id'];
-        fileName = result['file']['name'] ?? displayName;
-      } else if (result['task'] != null) {
-        fileId = result['task']['file_id'];
-        fileName = result['task']['name'] ?? displayName;
-      } else {
-        fileId = result['id'];
-        fileName = displayName;
-      }
+      fileId = result.destinationId;
+      fileName = result.name.isNotEmpty ? result.name : displayName;
 
-      // Use post-action handling if available
+      // Use post-action handling if available. Without a drive entry there is
+      // nothing for the post-action to open, so fall through to the snackbar.
       if (onPikPakResult != null && fileId != null) {
-        await onPikPakResult!(fileId, fileName ?? displayName);
+        await onPikPakResult!(fileId, fileName);
       } else {
-        _showSuccess('Link added to PikPak: ${fileName ?? displayName}');
+        _showSuccess('Link added to PikPak: $fileName');
         if (onPikPakAdded != null) {
           onPikPakAdded!();
         }
@@ -367,10 +366,10 @@ class MagnetLinkHandler {
       if (!context.mounted) return;
       Navigator.of(context).pop();
 
-      final folderExists = await PikPakApiService.instance
+      final folderExists = await pikpak
           .verifyRestrictedFolderExists();
       if (!folderExists) {
-        await PikPakApiService.instance.logout();
+        await pikpak.logout();
         if (context.mounted) {
           _showError(
             'Restricted folder was deleted. You have been logged out.',
@@ -627,7 +626,7 @@ class MagnetLinkHandler {
     String torrentName,
   ) async {
     // Check if authenticated
-    final isAuth = await PikPakApiService.instance.isAuthenticated();
+    final isAuth = await pikpak.isAuthenticated();
     if (!isAuth) {
       _showError('PikPak not configured. Please login in Settings.');
       return;
@@ -642,7 +641,7 @@ class MagnetLinkHandler {
       // Find or create "debrify-torrents" subfolder (same as search)
       String? subFolderId;
       try {
-        subFolderId = await PikPakApiService.instance.findOrCreateSubfolder(
+        subFolderId = await pikpak.findOrCreateSubfolder(
           folderName: 'debrify-torrents',
           parentFolderId: parentFolderId,
           getCachedId: StorageService.getPikPakTorrentsFolderId,
@@ -655,7 +654,7 @@ class MagnetLinkHandler {
           debugPrint('PikPak: Detected restricted folder was deleted');
           if (!context.mounted) return;
           Navigator.of(context).pop(); // Close loading dialog
-          await PikPakApiService.instance.logout();
+          await pikpak.logout();
           if (context.mounted) {
             _showError(
               'Restricted folder was deleted. You have been logged out.',
@@ -669,7 +668,7 @@ class MagnetLinkHandler {
         subFolderId = parentFolderId;
       }
 
-      final result = await PikPakApiService.instance.addOfflineDownload(
+      final result = await pikpak.addOfflineDownload(
         magnetUri,
         parentFolderId: subFolderId,
       );
@@ -680,20 +679,13 @@ class MagnetLinkHandler {
       // Extract file ID and name from response
       String? fileId;
       String? fileName;
-      if (result['file'] != null) {
-        fileId = result['file']['id'];
-        fileName = result['file']['name'] ?? torrentName;
-      } else if (result['task'] != null) {
-        fileId = result['task']['file_id'];
-        fileName = result['task']['name'] ?? torrentName;
-      } else {
-        fileId = result['id'];
-        fileName = torrentName;
-      }
+      fileId = result.destinationId;
+      fileName = result.name.isNotEmpty ? result.name : torrentName;
 
-      // Use post-action handling if available
+      // Use post-action handling if available. Without a drive entry there is
+      // nothing for the post-action to open, so fall through to the snackbar.
       if (onPikPakResult != null && fileId != null) {
-        await onPikPakResult!(fileId, fileName ?? torrentName);
+        await onPikPakResult!(fileId, fileName);
       } else {
         // Fallback: just show success
         _showSuccess('Successfully added to PikPak: $fileName');
@@ -706,10 +698,10 @@ class MagnetLinkHandler {
       Navigator.of(context).pop(); // Close loading dialog
 
       // Check if the error is because the restricted folder was deleted
-      final folderExists = await PikPakApiService.instance
+      final folderExists = await pikpak
           .verifyRestrictedFolderExists();
       if (!folderExists) {
-        await PikPakApiService.instance.logout();
+        await pikpak.logout();
         if (context.mounted) {
           _showError(
             'Restricted folder was deleted. You have been logged out.',

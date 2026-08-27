@@ -1309,6 +1309,59 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private lateinit var pikPakReactivationIndicator: View
     private lateinit var pikPakReactivationText: TextView
     private var hasEverBeenReady = false
+    // ── Resume hold ──────────────────────────────────────────────────────────
+    // While a resume target is armed and playback has not reached it, progress
+    // reports substitute the TARGET for the live position. This protects the
+    // stored bookmark (local and tracker-side) from the two ways a resume can
+    // silently not happen: the anti-yank guard dropping the seek, and a seek
+    // that a stream answers by clamping back to the start. Armed exactly where
+    // the READY handler picks its seek target, so the held value is always the
+    // position this player actually chose — never a re-derivation.
+    // Self-releasing: playback reaching the target (within tolerance), any
+    // viewer seek, an item change, or the settle window elapsing all release.
+    private var resumeHoldTargetMs = 0L
+    private var resumeHoldArmedAtMs = 0L
+
+    private fun armResumeHold(targetMs: Long, durationMs: Long) {
+        // Arming ALWAYS supersedes any previous hold, even when the new
+        // target is rejected below — an early return that kept the old item's
+        // target armed would file the old position against the new content
+        // on paths that reach READY without passing playItem's release.
+        releaseResumeHold()
+        // Never hold a near-finished target: the Dart bridge stop-scrobbles
+        // Trakt/Simkl above 80%, so substituting a target in that band would
+        // finalize a watched mark for content playing at 0:00. Those launches
+        // play unguarded, like a fresh start.
+        if (targetMs <= 0L || durationMs <= 0L) return
+        if (targetMs >= (durationMs * 0.8).toLong()) return
+        resumeHoldTargetMs = targetMs
+        resumeHoldArmedAtMs = android.os.SystemClock.elapsedRealtime()
+    }
+
+    private fun releaseResumeHold() {
+        resumeHoldTargetMs = 0L
+    }
+
+    // Returns the held target to report instead of [actualMs], or null when
+    // no hold applies. Releases itself when playback reaches the target or
+    // the 30 s settle window has elapsed (the viewer is really watching from
+    // wherever playback is — their progress must not be blocked forever).
+    private fun heldResumePositionMs(actualMs: Long): Long? {
+        val target = resumeHoldTargetMs
+        if (target <= 0L) return null
+        if (actualMs >= target - RESUME_HOLD_TOLERANCE_MS) {
+            releaseResumeHold()
+            return null
+        }
+        if (android.os.SystemClock.elapsedRealtime() - resumeHoldArmedAtMs >=
+            RESUME_HOLD_SETTLE_MS
+        ) {
+            releaseResumeHold()
+            return null
+        }
+        return target
+    }
+    // ─────────────────────────────────────────────────────────────────────────
     // Guards against falsely marking an item watched on Trakt. maxStableDurationMs
     // is the largest duration ExoPlayer has reported this item; lastRealPositionMs
     // is the most recent genuine playback position. A source re-prepare (channel/
@@ -1399,6 +1452,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         if (duration > 0) {
                             val offset = (duration * startPct).toLong()
                             if (offset in 1 until duration) {
+                                armResumeHold(offset, duration)
                                 player?.seekTo(offset)
                                 android.util.Log.d("AndroidTvPlayer", "Seeked to ${startPct * 100}% ($offset ms of $duration ms)")
                             }
@@ -1422,36 +1476,49 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                 // already watched real seconds, dropping the resume
                                 // beats jumping them mid-viewing.
                                 val pos = player?.currentPosition ?: 0L
-                                if (pos <= 5000) {
-                                    val hi = (duration * 0.9).toLong()
-                                    // The launched item's payload percent is an EXPLICIT
-                                    // promise (the details-screen Resume advertised this
-                                    // position) — honour it outright when seekable,
-                                    // matching the pre-rework launched-item behaviour.
-                                    val launchMs =
-                                        if (launchTrakt > 0 && launchTrakt < 100) (duration * launchTrakt / 100.0).toLong() else 0L
-                                    if (launchMs > 2000 && launchMs < hi) {
-                                        player?.seekTo(launchMs)
-                                        android.util.Log.d("AndroidTvPlayer", "Resume: explicit launch tracker ${launchTrakt.toInt()}% -> $launchMs ms of $duration ms")
-                                    } else {
-                                        // FURTHEST-WATCHED WINS: the per-episode tracker
-                                        // candidate is gated to the resumable window
-                                        // (past 2s, before the last 10%); the LOCAL
-                                        // candidate keeps the old cascade's semantics —
-                                        // ANY explicit position inside the duration is
-                                        // honoured (a source switch may capture 93% and
-                                        // must come back exactly there).
-                                        val rawTraktMs =
-                                            if (pendingItemTraktPercent > 0 && pendingItemTraktPercent < 100) (duration * pendingItemTraktPercent / 100.0).toLong() else 0L
-                                        val traktMs = if (rawTraktMs > 2000 && rawTraktMs < hi) rawTraktMs else 0L
-                                        val localMs =
-                                            if (pendingSeekMs > 0 && pendingSeekMs < duration) pendingSeekMs else 0L
-                                        val target = maxOf(traktMs, localMs)
-                                        if (target > 0) {
-                                            player?.seekTo(target)
-                                            android.util.Log.d("AndroidTvPlayer", "Resume: furthest trakt=$traktMs local=$localMs -> $target ms of $duration ms")
-                                        }
-                                    }
+                                val hi = (duration * 0.9).toLong()
+                                // The launched item's payload percent is an EXPLICIT
+                                // promise (the details-screen Resume advertised this
+                                // position) — honour it outright when seekable,
+                                // matching the pre-rework launched-item behaviour.
+                                val launchMs =
+                                    if (launchTrakt > 0 && launchTrakt < 100) (duration * launchTrakt / 100.0).toLong() else 0L
+                                // The candidate this player would seek — computed
+                                // OUTSIDE the anti-yank gate so a dropped seek can
+                                // still arm the resume hold: the drop leaves reports
+                                // carrying the shallow live position, which must not
+                                // overwrite the bookmark this target names.
+                                val chosenResumeMs = if (launchMs > 2000 && launchMs < hi) {
+                                    launchMs
+                                } else {
+                                    // FURTHEST-WATCHED WINS: the per-episode tracker
+                                    // candidate is gated to the resumable window
+                                    // (past 2s, before the last 10%); the LOCAL
+                                    // candidate keeps the old cascade's semantics —
+                                    // ANY explicit position inside the duration is
+                                    // honoured (a source switch may capture 93% and
+                                    // must come back exactly there).
+                                    val rawTraktMs =
+                                        if (pendingItemTraktPercent > 0 && pendingItemTraktPercent < 100) (duration * pendingItemTraktPercent / 100.0).toLong() else 0L
+                                    val traktMs = if (rawTraktMs > 2000 && rawTraktMs < hi) rawTraktMs else 0L
+                                    val localMs =
+                                        if (pendingSeekMs > 0 && pendingSeekMs < duration) pendingSeekMs else 0L
+                                    maxOf(traktMs, localMs)
+                                }
+                                // Arm only while playback is still near the
+                                // start. Past ~15s the viewer has genuinely
+                                // been watching (duration resolved late) —
+                                // holding the stale bookmark over their real
+                                // position would misreport them for 30s and
+                                // discard genuine viewing on a quick exit.
+                                if (chosenResumeMs > 0 && pos <= 15_000L) {
+                                    armResumeHold(chosenResumeMs, duration)
+                                }
+                                if (pos <= 5000 && chosenResumeMs > 0) {
+                                    player?.seekTo(chosenResumeMs)
+                                    android.util.Log.d("AndroidTvPlayer", "Resume: chosen $chosenResumeMs ms of $duration ms (launchTrakt=${launchTrakt.toInt()}%)")
+                                } else if (chosenResumeMs > 0) {
+                                    android.util.Log.d("AndroidTvPlayer", "Resume: anti-yank dropped seek to $chosenResumeMs ms (pos=$pos ms) — holding bookmark")
                                 }
                                 percentSeekApplied = true
                                 pendingSeekMs = 0
@@ -1754,6 +1821,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // Auto-sync anchoring: every discontinuity (seek, transition) tells
             // the PCM tap where its newest audio run sits on the media timeline.
             speechTap?.notifyDiscontinuity(newPosition.positionMs)
+            // Resume-hold catch-all for viewer seeks arriving OUTSIDE the
+            // on-screen controls (e.g. a MediaSession remote): a MEANINGFUL
+            // backward seek can only be the viewer — every seek this activity
+            // issues itself (resume, source-switch restore, skip) moves
+            // forward. The 3s floor exists because "forward" is not exact:
+            // the subtitle-offset self-seek (seekTo(currentPosition)) resolves
+            // a few hundred ms BEHIND the live clock and must not release the
+            // hold. Forward viewer seeks release in the control handlers, so
+            // the activity's own seeks can never release the hold they arm.
+            if (reason == Player.DISCONTINUITY_REASON_SEEK &&
+                oldPosition.positionMs - newPosition.positionMs > 3_000L
+            ) {
+                releaseResumeHold()
+            }
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -4216,6 +4297,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // switch on the same content (must honour the captured live position).
         val autoAdvance = isAutoAdvancing
         isAutoAdvancing = false
+        // A new item starts: any hold belongs to the outgoing one. (A
+        // suppressed resume then simply never re-arms — pendingSeekMs stays 0.)
+        releaseResumeHold()
         pendingSeekMs = if (suppressResume) 0L else item.resumePositionMs
         pendingItemTraktPercent =
             if (autoAdvance || suppressTrakt || suppressResume) 0.0 else (item.traktProgressPercent ?: 0.0)
@@ -7287,6 +7371,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun confirmCinemaSeek() {
         if (!cinemaSeekMode || player == null) return
+        releaseResumeHold()  // viewer owns the position now
         player?.seekTo(seekbarPosition)
         exitCinemaSeekMode(confirm = true)
         pauseButton?.requestFocus()
@@ -7410,6 +7495,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun confirmSeekPosition() {
         if (!seekbarVisible || player == null) return
+        releaseResumeHold()  // viewer owns the position now
         player?.seekTo(seekbarPosition)
         hideSeekbar()
     }
@@ -7501,6 +7587,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             target = target.coerceAtLeast(0L)
         }
+        releaseResumeHold()  // viewer owns the position now
         p.seekTo(target)
 
         // Show visual feedback for quick seek
@@ -7699,6 +7786,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         if (target <= position) return
 
+        // Only caller is the on-screen skip button — a viewer choice, so it
+        // outranks any pending resume hold even though the jump is forward.
+        releaseResumeHold()
         p.seekTo(target)
         if (::seekFeedbackManager.isInitialized) {
             val seconds = ((target - position) / 1_000L).coerceAtLeast(1L)
@@ -15799,7 +15889,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // short duration right after a source re-prepare, which would otherwise
         // inflate progress% and scrobble a false watch on Trakt.
         val duration = maxOf(player?.duration ?: 0L, maxStableDurationMs)
-        val position = if (completed) duration else player?.currentPosition ?: 0
+        val rawPosition = if (completed) duration else player?.currentPosition ?: 0
+        // Resume hold: while the chosen resume target has not landed (dropped
+        // by the anti-yank, or clamped away by the stream), report the TARGET
+        // instead of the live position — otherwise this ping would overwrite
+        // the very bookmark the resume promised, in the local store and on
+        // every connected tracker alike. Completion below stays on the RAW
+        // position: a held target must never fabricate a watched mark.
+        val position = if (completed) rawPosition
+            else heldResumePositionMs(rawPosition) ?: rawPosition
         val completionThreshold = if (model.contentType == "series") {
             model.episodeCompletionThreshold
         } else {
@@ -15815,8 +15913,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val localCompleted =
             model.localCompletionTracking &&
             duration > 0L &&
-            position > 0L &&
-            position.toDouble() * 100.0 / duration.toDouble() >= completionThreshold &&
+            rawPosition > 0L &&
+            rawPosition.toDouble() * 100.0 / duration.toDouble() >= completionThreshold &&
             locallyCompletedItemKeys.add(completionKey)
 
         // Update the item's progress in the payload for live UI updates
@@ -16123,7 +16221,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (manualSourceSwitchSnapshot != null) {
             failManualSourceCandidate("superseded", showFailure = false)
         }
-        val position = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+        // An unlanded resume outranks the live position: a failed candidate
+        // must roll back to the BOOKMARK, not to the ~0 the dropped/clamped
+        // resume left playback at. (The hold window restarts on rollback via
+        // playItem → READY re-arm from this snapshot's resumePositionMs.)
+        val livePosition = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+        val position = heldResumePositionMs(livePosition) ?: livePosition
         val savedItems = model.items.mapIndexed { index, item ->
             if (index == currentIndex) item.copy(resumePositionMs = position) else item
         }
@@ -17155,9 +17258,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Capture playback position + current item identity so the new source
         // resumes the same content instead of restarting from the beginning.
+        // An unlanded resume outranks the live position (same rule as
+        // switchToStremioSource): carry the HELD bookmark into the new pack,
+        // not the ~0 a dropped/clamped resume left playback at. playItem's
+        // READY re-arm restarts the hold window for the new source.
         // An explicit episode-guide target is different content: land there
         // instead, and never carry the current position onto it.
-        val resumePositionMs = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+        val liveSwitchPos = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
+        val resumePositionMs = heldResumePositionMs(liveSwitchPos) ?: liveSwitchPos
         val currentItem = model.items.getOrNull(currentIndex)
         val explicitTarget = targetSeason != null && targetEpisode != null
         val resumeSeason = targetSeason ?: currentItem?.season
@@ -17476,8 +17584,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: index=$sourceIndex, url=${url.take(60)}...")
 
-        // Capture current position for resume
-        val currentPos = player?.currentPosition ?: 0L
+        // Capture current position for resume. If a resume hold is active the
+        // live position is a not-yet-landed artifact — carry the HELD target
+        // into the new source so the switch restores the bookmark, not ~0.
+        // The hold's settle window restarts: the new source gets its own full
+        // chance to land the restore before real playback wins.
+        val livePos = player?.currentPosition ?: 0L
+        val heldPos = heldResumePositionMs(livePos)
+        if (heldPos != null) {
+            resumeHoldArmedAtMs = android.os.SystemClock.elapsedRealtime()
+        }
+        val currentPos = heldPos ?: livePos
 
         // Update state
         currentStremioSourceIndex = sourceIndex
@@ -18517,6 +18634,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // READY never fired (rapid switch mid-buffer) — the resume branch now
         // arms on it, and a live channel must never seek to a stale tracker offset.
         pendingItemTraktPercent = 0.0
+        // This path replaces the payload WITHOUT passing playItem, so the
+        // item-change release there never runs. A slot with no resume signal
+        // would otherwise inherit the previous item's hold and file its stale
+        // position against the new content. (A slot WITH a signal re-arms at
+        // READY — armResumeHold supersedes unconditionally.)
+        releaseResumeHold()
         hasEverBeenReady = false
 
         val metadata = MediaMetadata.Builder()
@@ -18747,6 +18870,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     companion object {
         const val PAYLOAD_KEY = "payload"
         private const val DECODER_LOG_TAG = "DEBRIFY_PLAYER_DECODER"
+        // Resume hold (see resumeHoldTargetMs): landing tolerance (seeks
+        // resolve to keyframes) and how long an unlanded target keeps
+        // substituting before real playback wins.
+        private const val RESUME_HOLD_TOLERANCE_MS = 10_000L
+        private const val RESUME_HOLD_SETTLE_MS = 30_000L
         private const val STARTUP_FAILOVER_LOG_TAG = "DebrifyStartupGate"
         /**
          * When true, the dock buttons (Audio, Subs, Fill, Speed, Night, Shuffle) open the

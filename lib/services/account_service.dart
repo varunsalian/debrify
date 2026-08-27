@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/rd_user.dart';
-import '../services/debrid_service.dart';
-import '../services/storage_service.dart';
+import 'debrid_service.dart';
+import 'storage_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/connection_resource_service.dart';

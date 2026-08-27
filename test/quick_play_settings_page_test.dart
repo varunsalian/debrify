@@ -103,7 +103,10 @@ void main() {
 
     final rules = await StorageService.getQuickPlayRules(isMovie: false);
     expect(rules.preferSeriesPacks, isTrue);
-    expect(rules.packPreference, isNot(QuickPlayPackPreference.exactEpisodeOnly));
+    expect(
+      rules.packPreference,
+      isNot(QuickPlayPackPreference.exactEpisodeOnly),
+    );
   });
 
   testWidgets('legacy advanced knobs are gone from the UI but still load', (
@@ -120,7 +123,8 @@ void main() {
     );
     await pumpPage(tester);
 
-    // No advanced section, no ranking/attempt controls anywhere.
+    // No advanced section, no ranking control anywhere. ("Streams to try" is
+    // editable again, but it is a plain rule row, not the old advanced card.)
     expect(find.text('Advanced control'), findsNothing);
     expect(find.textContaining('Try up to'), findsNothing);
 
@@ -131,6 +135,50 @@ void main() {
     expect(rules.maxAttempts, 2);
     expect(rules.ranking, QuickPlayRanking.smallest);
     expect(rules.sourceMode, QuickPlaySourceMode.addonsThenTorrents);
+  });
+
+  testWidgets('streams to try shows the stored count and persists a change', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // A device carrying the OLD slider's pref: the page must show 10, not the
+    // 5 default — this is the desktop-vs-Apple-TV mismatch users reported.
+    await StorageService.setQuickPlayMaxRetries(10);
+    await pumpPage(tester);
+
+    expect(find.text('Streams to try'), findsOneWidget);
+    expect(find.text('10 streams'), findsWidgets);
+
+    await tester.ensureVisible(find.text('10 streams').first);
+    await tester.tap(find.text('10 streams').first);
+    await tester.pumpAndSettle();
+    // The closed field echoes the selection too, so take the menu entry.
+    await tester.tap(find.text('3 streams').last);
+    await tester.pumpAndSettle();
+
+    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    expect(movie.maxAttempts, 3);
+    expect(movie.tryNextOnFailure, isTrue);
+    // Per-content: the Series tab keeps its own count.
+    final show = await StorageService.getQuickPlayRules(isMovie: false);
+    expect(show.maxAttempts, 10);
+  });
+
+  testWidgets('picking 1 stream disarms failover', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester);
+
+    await tester.ensureVisible(find.text('5 streams (default)').first);
+    await tester.tap(find.text('5 streams (default)').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1 stream').last);
+    await tester.pumpAndSettle();
+
+    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    expect(movie.maxAttempts, 1);
+    // The players compute `tryNext ? maxAttempts : 1` — both fields must agree
+    // or a later "back to 5" would silently stay at one attempt.
+    expect(movie.tryNextOnFailure, isFalse);
   });
 
   testWidgets('restore defaults resets both tabs', (tester) async {

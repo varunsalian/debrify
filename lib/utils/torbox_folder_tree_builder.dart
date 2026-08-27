@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/rd_file_node.dart';
 import '../models/torbox_file.dart';
-import '../utils/file_utils.dart';
+import 'file_utils.dart';
 
 /// Builds a folder tree from Torbox's flat file list
 /// Torbox files have paths in the `name` field like:

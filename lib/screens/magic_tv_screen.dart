@@ -26,8 +26,7 @@ import '../services/analytics_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
-import '../services/pikpak_api_service.dart';
-import '../services/pikpak_tv_service.dart';
+import '../features/pikpak/data/tv_service.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/debrify_tv_cache_service.dart';
@@ -70,6 +69,7 @@ import 'debrify_tv/dialogs/community_channels_dialog.dart';
 import 'debrify_tv/dialogs/external_player_notice_dialog.dart';
 import 'debrify_tv/dialogs/import_channels_dialog.dart';
 import 'debrify_tv/dialogs/spotlight_dialog.dart';
+import '../app/wiring.dart';
 
 const int _randomStartPercentDefault = 20;
 const int _randomStartPercentMin = 10;
@@ -7131,7 +7131,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final next = _queue.removeAt(0);
         if (next is Map && next['type'] == _torboxFileEntryType) {
           final resolved = await _resolveTorboxQueuedFile(
-            entry: Map<String, dynamic>.from(next as Map),
+            entry: Map<String, dynamic>.from(next),
             apiKey: apiKey,
             log: log,
           );
@@ -9512,9 +9512,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     // Get streaming URL for selected file
     String streamUrl;
     try {
-      final api = PikPakApiService.instance;
+      final api = AppServices.pikpak;
       final fullFileData = await api.getFileDetails(selectedFileId);
-      final url = api.getStreamingUrl(fullFileData);
+      final url = fullFileData.streamingUrl;
       if (url == null || url.isEmpty) {
         log('⚠️ No streaming URL for selected file');
         return null;

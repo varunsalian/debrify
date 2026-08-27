@@ -14,7 +14,7 @@ import '../mdblist/mdblist_calendar_service.dart';
 import '../mdblist/mdblist_discover_source.dart';
 import '../mdblist/mdblist_sync_coordinator.dart';
 import '../main_page_bridge.dart';
-import '../pikpak_api_service.dart';
+import '../../features/pikpak/data/api_service.dart';
 import '../premiumize_account_service.dart';
 import '../remote_control/remote_command_router.dart';
 import '../simkl/simkl_service.dart';
@@ -40,6 +40,13 @@ import 'profile_session_memory.dart';
 /// Resets process-wide mirrors that otherwise retain profile A, then warms the
 /// target under its captured scope after authoritative publication.
 class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
+  /// Injected, not reached for: stale_runtime_guard_test matches this file's
+  /// source against each participant's basename to prove the cache is wired
+  /// into the switch, and routing through a service locator hides it.
+  final PikPakApiService pikpak;
+
+  ProfileAppLifecycleParticipant({required this.pikpak});
+
   @override
   Future<void> prepareDeactivate(ProfileScope current) async {
     ProfileSessionMemory.clearAll();
@@ -53,7 +60,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     StremioService.instance.invalidateCache();
     TraktService.instance.resetProfileScope();
     SimklService.instance.resetProfileScope();
-    PikPakApiService.instance.resetProfileScope();
+    pikpak.resetProfileScope();
     MdblistService.instance.resetProfileScope();
     MdblistIdResolver.instance.resetProfileScope();
     MdblistContinueWatchingService.instance.resetProfileScope();
@@ -115,7 +122,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       _warmed('Stremio', scope, StremioService.instance.invalidateCache);
       _warmed('Trakt', scope, TraktService.instance.resetProfileScope);
       _warmed('Simkl', scope, SimklService.instance.resetProfileScope);
-      _warmed('PikPak', scope, PikPakApiService.instance.resetProfileScope);
+      _warmed('PikPak', scope, pikpak.resetProfileScope);
       _warmed('MDBList', scope, MdblistService.instance.resetProfileScope);
       await StorageService.retireMdblistSavedCloneMarkers();
       _warmed('IPTV', scope, IptvService.instance.clearCache);

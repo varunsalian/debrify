@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../screens/profiles/profile_wall_screen.dart';
+import '../profiles/profile_wall_screen.dart';
 import '../../services/analytics_service.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
