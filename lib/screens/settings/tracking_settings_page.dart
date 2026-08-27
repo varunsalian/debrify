@@ -157,7 +157,9 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
   Widget _progressSection() => SettingsSection(
     title: 'Progress source',
     blurb:
-        'Controls resume, episode-list progress and ✓ ticks, and which Continue Watching rows are eligible on Home.',
+        'Controls resume, Continue Watching progress, and the bars and ✓ ticks '
+        'in episode lists. Which rows appear on Home stays yours to choose in '
+        'Home layout.',
     children: [
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -195,15 +197,13 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
         }),
         subtitle: Text(switch (_progress) {
           WatchProgressSource.smart =>
-            'All Continue Watching rows show on Home.',
+            'Every Continue Watching row stays available on Home.',
           WatchProgressSource.local =>
-            'Trakt, Simkl and MDBList rows are hidden on Home. Scrobbling '
-                'still sends your history to ticked services, but progress '
-                "won't follow you to other devices.",
+            'Scrobbling still sends your history to ticked services, but '
+                "progress won't follow you to other devices.",
           _ =>
-            'Other sources\' Continue Watching rows (including this '
-                'device\'s) are hidden on Home. IPTV rows are never '
-                'affected.',
+            'Every Continue Watching row stays available on Home — hide the '
+                'ones you don\'t want in Home layout.',
         }),
       ),
     ],

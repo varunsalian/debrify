@@ -91,7 +91,6 @@ class _Item {
   final bool defaultOn;
   final String? extraTitle;
   final bool unavailable;
-  final bool hiddenByProgress;
   bool on;
   _Item(
     this.id,
@@ -101,7 +100,6 @@ class _Item {
     this.defaultOn = true,
     this.extraTitle,
     this.unavailable = false,
-    this.hiddenByProgress = false,
   });
 }
 
@@ -125,8 +123,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   static const Color _onColor = Color(0xFF34D399);
   static const Color _offColor = Color(0xFF4B465F);
 
-  late List<_Group> _groups;
-  WatchProgressSource _progressSource = WatchProgressSource.smart;
+  late final List<_Group> _groups;
   int _selectedGroup = 0;
   int _selectedItem = 0;
   bool _changed = false;
@@ -157,7 +154,6 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     super.initState();
     AnalyticsService.screenView('home_sections_filter');
     _groups = _buildModel();
-    _loadProgressSource();
     final seededOrder = HomeRowOrder.insertMissingAfter(
       widget.rowOrder,
       additions: const ['mdblist:movies', 'mdblist:shows'],
@@ -182,18 +178,6 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     });
   }
 
-  Future<void> _loadProgressSource() async {
-    final source = await StorageService.getWatchProgressSource();
-    if (!mounted || source == _progressSource) return;
-    setState(() {
-      _progressSource = source;
-      _groups = _buildModel();
-      _selectedGroup = _selectedGroup.clamp(0, _groups.length - 1);
-      _selectedItem = 0;
-    });
-    _rebuildListNodes();
-  }
-
   @override
   void dispose() {
     for (final n in _headerNodes) {
@@ -216,17 +200,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     bool on(String id) => !d.contains(id);
     final extraById = {for (final r in widget.extraRows) r.id: r};
     bool extraOn(String id) => extraById.containsKey(id);
-    bool progressFrom(TrackingSource source) =>
-        _progressSource == WatchProgressSource.smart ||
-        _progressSource.name == source.name;
     _Item cw(String id, String label, TrackingSource source, {String? badge}) =>
-        _Item(
-          id,
-          label,
-          on(id),
-          badge: badge,
-          hiddenByProgress: !progressFrom(source),
-        );
+        _Item(id, label, on(id), badge: badge);
 
     // Opt-in leaf factory: ON = present in the extras store.
     _Item opt(String id, String label, {String? badge}) => _Item(
@@ -518,13 +493,13 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   // group — scoped so "All off" clears just the group you're looking at.
   void _setCurrentGroup(bool v) => _mutate(() {
     for (final it in _groups[_selectedGroup].items) {
-      if (!it.hiddenByProgress) it.on = v;
+      it.on = v;
     }
   });
 
   void _invertCurrentGroup() => _mutate(() {
     for (final it in _groups[_selectedGroup].items) {
-      if (!it.hiddenByProgress) it.on = !it.on;
+      it.on = !it.on;
     }
   });
 
@@ -533,14 +508,11 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     final g = _groups[i];
     final v = g.onCount != g.total;
     for (final it in g.items) {
-      if (!it.hiddenByProgress) it.on = v;
+      it.on = v;
     }
   });
 
-  void _toggleItem(_Item it) {
-    if (it.hiddenByProgress) return;
-    _mutate(() => it.on = !it.on);
-  }
+  void _toggleItem(_Item it) => _mutate(() => it.on = !it.on);
 
   void _setArrangeMode(bool value) {
     if (_arranging == value) return;
@@ -1399,46 +1371,25 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                         child: Row(
                           children: [
                             Flexible(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    it.label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      // Unavailable = enabled but its backing
-                                      // data didn't load (outage / deleted list)
-                                      // — dimmed, still toggleable off.
-                                      color:
-                                          it.unavailable || it.hiddenByProgress
-                                          ? Colors.white.withValues(alpha: 0.45)
-                                          : Colors.white,
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (it.hiddenByProgress)
-                                    Text(
-                                      'Hidden by your Progress source in Tracking',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.38,
-                                        ),
-                                        fontSize: 10.5,
-                                      ),
-                                    ),
-                                ],
+                              child: Text(
+                                it.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  // Unavailable = enabled but its backing
+                                  // data didn't load (outage / deleted list)
+                                  // — dimmed, still toggleable off.
+                                  color: it.unavailable
+                                      ? Colors.white.withValues(alpha: 0.45)
+                                      : Colors.white,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                             if (it.unavailable) ...[
                               const SizedBox(width: 8),
                               _typeBadge('UNAVAILABLE'),
-                            ] else if (it.hiddenByProgress) ...[
-                              const SizedBox(width: 8),
-                              _typeBadge('HIDDEN BY TRACKING'),
                             ] else if (it.badge != null) ...[
                               const SizedBox(width: 8),
                               _typeBadge(it.badge!),

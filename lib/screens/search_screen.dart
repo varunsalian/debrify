@@ -949,21 +949,6 @@ class _SearchScreenState extends State<SearchScreen>
   /// source dropdown (hidden when disconnected, so an unauthed user isn't shown
   /// a dead source; kept visible if it's somehow the active source).
   bool _isMdblistAuthenticated = false;
-  TrackingSourcePolicy _trackingPolicy = const TrackingSourcePolicy(
-    scrobbleTargets: <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.trakt,
-      TrackingSource.simkl,
-      TrackingSource.mdblist,
-    },
-    progressSource: WatchProgressSource.smart,
-    homeTickSources: <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.trakt,
-      TrackingSource.simkl,
-      TrackingSource.mdblist,
-    },
-  );
   // Addons that produced homepage rows, indexed by id, so a Continue Watching
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
@@ -974,7 +959,6 @@ class _SearchScreenState extends State<SearchScreen>
   /// and open / quick-play handlers so local and Trakt sources coexist.
   List<_CwRow> get _cwRows => [
     if (_cwEnabled &&
-        _trackingPolicy.progressFrom(TrackingSource.local) &&
         _cwMovies.isNotEmpty &&
         !_homeDisabled.contains('cw:movies'))
       _CwRow(
@@ -994,7 +978,6 @@ class _SearchScreenState extends State<SearchScreen>
         onSeeAll: () => _openContinueWatchingSeeAll('movie'),
       ),
     if (_cwEnabled &&
-        _trackingPolicy.progressFrom(TrackingSource.local) &&
         _cwSeries.isNotEmpty &&
         !_homeDisabled.contains('cw:series'))
       _CwRow(
@@ -1013,9 +996,7 @@ class _SearchScreenState extends State<SearchScreen>
         onRemove: _removeLocalCwItem,
         onSeeAll: () => _openContinueWatchingSeeAll('series'),
       ),
-    if (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
-        _traktMovies.isNotEmpty &&
-        !_homeDisabled.contains('trakt:movies'))
+    if (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies'))
       _CwRow(
         rowId: 'trakt:movies',
         title: 'Trakt Continue Watching',
@@ -1032,9 +1013,7 @@ class _SearchScreenState extends State<SearchScreen>
         onRemove: _removeTraktCwItem,
         onSeeAll: () => _openTraktSeeAll('movie'),
       ),
-    if (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
-        _traktSeries.isNotEmpty &&
-        !_homeDisabled.contains('trakt:shows'))
+    if (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'))
       _CwRow(
         rowId: 'trakt:shows',
         title: 'Trakt Continue Watching',
@@ -1057,9 +1036,7 @@ class _SearchScreenState extends State<SearchScreen>
     // its slot open with skeletons — so when the Simkl rows land they settle in
     // once, like any other content row. (A dedicated Simkl skeleton could make
     // that zero-shift too, but it isn't worth the board index-math complexity.)
-    if (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
-        _simklMovies.isNotEmpty &&
-        !_homeDisabled.contains('simkl:movies'))
+    if (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies'))
       _CwRow(
         rowId: 'simkl:movies',
         title: 'Simkl Continue Watching',
@@ -1076,9 +1053,7 @@ class _SearchScreenState extends State<SearchScreen>
         onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('movie'),
       ),
-    if (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
-        _simklSeries.isNotEmpty &&
-        !_homeDisabled.contains('simkl:shows'))
+    if (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows'))
       _CwRow(
         rowId: 'simkl:shows',
         title: 'Simkl Continue Watching',
@@ -1095,9 +1070,7 @@ class _SearchScreenState extends State<SearchScreen>
         onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('series'),
       ),
-    if (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-        _mdblistMovies.isNotEmpty &&
-        !_homeDisabled.contains('mdblist:movies'))
+    if (_mdblistMovies.isNotEmpty && !_homeDisabled.contains('mdblist:movies'))
       _CwRow(
         rowId: 'mdblist:movies',
         title: 'MDBList Continue Watching',
@@ -1115,9 +1088,7 @@ class _SearchScreenState extends State<SearchScreen>
         canRemove: _canRemoveMdblistCwItem,
         onSeeAll: () => _openMdblistCwSeeAll('movie'),
       ),
-    if (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-        _mdblistSeries.isNotEmpty &&
-        !_homeDisabled.contains('mdblist:shows'))
+    if (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows'))
       _CwRow(
         rowId: 'mdblist:shows',
         title: 'MDBList Continue Watching',
@@ -1179,25 +1150,19 @@ class _SearchScreenState extends State<SearchScreen>
   /// keep these conditions in lock-step with the `_cwRows` row gates above.
   bool get _cwVisible =>
       ((_cwEnabled &&
-              _trackingPolicy.progressFrom(TrackingSource.local) &&
               ((_cwMovies.isNotEmpty && !_homeDisabled.contains('cw:movies')) ||
                   (_cwSeries.isNotEmpty &&
                       !_homeDisabled.contains('cw:series')))) ||
-          (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
-              ((_traktMovies.isNotEmpty &&
-                      !_homeDisabled.contains('trakt:movies')) ||
-                  (_traktSeries.isNotEmpty &&
-                      !_homeDisabled.contains('trakt:shows')))) ||
-          (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
-              ((_simklMovies.isNotEmpty &&
-                      !_homeDisabled.contains('simkl:movies')) ||
-                  (_simklSeries.isNotEmpty &&
-                      !_homeDisabled.contains('simkl:shows')))) ||
-          (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-              ((_mdblistMovies.isNotEmpty &&
-                      !_homeDisabled.contains('mdblist:movies')) ||
-                  (_mdblistSeries.isNotEmpty &&
-                      !_homeDisabled.contains('mdblist:shows')))) ||
+          (_traktMovies.isNotEmpty &&
+              !_homeDisabled.contains('trakt:movies')) ||
+          (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows')) ||
+          (_simklMovies.isNotEmpty &&
+              !_homeDisabled.contains('simkl:movies')) ||
+          (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')) ||
+          (_mdblistMovies.isNotEmpty &&
+              !_homeDisabled.contains('mdblist:movies')) ||
+          (_mdblistSeries.isNotEmpty &&
+              !_homeDisabled.contains('mdblist:shows')) ||
           (_iptvCwMovies.isNotEmpty &&
               !_homeDisabled.contains('iptv:movies')) ||
           (_iptvCwSeries.isNotEmpty &&
@@ -1856,11 +1821,10 @@ class _SearchScreenState extends State<SearchScreen>
     _refreshSimklAuthState();
     _refreshMdblistAuthState();
     _refreshPikpakOnly();
-    // Tracking's Progress source uses this signal as well as the ordinary
-    // Home-settings signal. A dedicated source may previously have cleared
-    // the local shelves, so always re-read local CW before the tracker rows;
-    // _reloadForHomeSettings can legitimately return early when no row/layout
-    // preference changed.
+    // Connect/disconnect can change what the local shelves should hold (the
+    // single-owner rule keys off scrobbling), so re-read local CW before the
+    // tracker rows; _reloadForHomeSettings can legitimately return early when
+    // no row/layout preference changed.
     if (!widget.searchMode && !widget.discoverMode) _loadContinueWatching();
     // Trakt/Simkl Continue Watching rows are never rendered on the dedicated
     // Search tab, so don't refetch them there.
@@ -2729,21 +2693,16 @@ class _SearchScreenState extends State<SearchScreen>
   /// (e.g. after returning from a detail/playback).
   Future<void> _loadContinueWatching() async {
     final token = ++_cwLoadToken;
-    final policy = await TrackingSourcePolicy.load();
     final enabled = await StorageService.getHomeContinueWatchingEnabled();
     if (!mounted || token != _cwLoadToken) return;
-    _trackingPolicy = policy;
-    if (!enabled || !policy.progressFrom(TrackingSource.local)) {
-      debugPrint(
-        '[TrackingDiag] home local-cw hidden (cwSwitch=$enabled '
-        'progress=${policy.progressSource.name})',
-      );
+    if (!enabled) {
+      debugPrint('[TrackingDiag] home local-cw hidden (cwSwitch=false)');
       // Free the focus nodes too — otherwise they linger allocated until
       // dispose while the rows are hidden.
       _syncCwNodes(_cwMovieNodes, 0, 'movie');
       _syncCwNodes(_cwSeriesNodes, 0, 'series');
       setState(() {
-        _cwEnabled = enabled;
+        _cwEnabled = false;
         _cwMovies = [];
         _cwSeries = [];
         _cwAll = [];
@@ -2871,8 +2830,7 @@ class _SearchScreenState extends State<SearchScreen>
     debugPrint(
       '[TrackingDiag] home local-cw movies=${movies.length} '
       'series=${series.length} '
-      'firstSeries=${series.isNotEmpty ? '"${series.first.name}" ${_cwEpisode[series.first.imdbId] ?? '?'} pct=${_cwProgress[series.first.imdbId]?.toStringAsFixed(2)}' : 'none'} '
-      'progress=${policy.progressSource.name}',
+      'firstSeries=${series.isNotEmpty ? '"${series.first.name}" ${_cwEpisode[series.first.imdbId] ?? '?'} pct=${_cwProgress[series.first.imdbId]?.toStringAsFixed(2)}' : 'none'}',
     );
     unawaited(
       _enrichCwEpisodeArtwork(
@@ -4180,22 +4138,6 @@ class _SearchScreenState extends State<SearchScreen>
     // assignment, not setState: the sync prefix runs during initState on cold
     // start, and the first build reads the field anyway.
     _traktCwLoading = true;
-    final policy = await TrackingSourcePolicy.load();
-    if (!mounted || token != _traktCwToken) return;
-    _trackingPolicy = policy;
-    if (!policy.progressFrom(TrackingSource.trakt)) {
-      debugPrint(
-        '[TrackingDiag] home trakt-cw hidden by policy '
-        '(progress=${policy.progressSource.name})',
-      );
-      setState(() {
-        _traktCwLoading = false;
-        _traktMovies = [];
-        _traktSeries = [];
-        _traktAll = [];
-      });
-      return;
-    }
     final List<TraktContinueWatchingItem> movies;
     final List<TraktContinueWatchingItem> shows;
     try {
@@ -4794,21 +4736,6 @@ class _SearchScreenState extends State<SearchScreen>
   /// runs a bound-source refresh at the end (skip when the caller already does).
   Future<void> _loadSimklContinueWatching({bool refreshBound = true}) async {
     final token = ++_simklCwToken;
-    final policy = await TrackingSourcePolicy.load();
-    if (!mounted || token != _simklCwToken) return;
-    _trackingPolicy = policy;
-    if (!policy.progressFrom(TrackingSource.simkl)) {
-      debugPrint(
-        '[TrackingDiag] home simkl-cw hidden by policy '
-        '(progress=${policy.progressSource.name})',
-      );
-      setState(() {
-        _simklMovies = [];
-        _simklSeries = [];
-        _simklAll = [];
-      });
-      return;
-    }
     final result = await SimklContinueWatchingService.instance.fetchItems();
     if (!mounted || token != _simklCwToken) return;
     // Null = a transient fetch failure — leave any existing rows in place (a
@@ -4954,22 +4881,6 @@ class _SearchScreenState extends State<SearchScreen>
     bool force = false,
   }) async {
     final token = ++_mdblistCwToken;
-    final policy = await TrackingSourcePolicy.load();
-    if (!mounted || token != _mdblistCwToken) return;
-    _trackingPolicy = policy;
-    if (!policy.progressFrom(TrackingSource.mdblist)) {
-      debugPrint(
-        '[TrackingDiag] home mdblist-cw hidden by policy '
-        '(progress=${policy.progressSource.name})',
-      );
-      setState(() {
-        _mdblistMovies = [];
-        _mdblistSeries = [];
-        _mdblistAll = [];
-        _mdblistByImdb.clear();
-      });
-      return;
-    }
     debugPrint(
       '[MDBListDiag] Home CW load start token=$token '
       'refreshBound=$refreshBound force=$force flag=$kMdblistEnabled',
