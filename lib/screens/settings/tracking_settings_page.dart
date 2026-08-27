@@ -141,11 +141,14 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
               ? null
               : (value) => _setScrobble(source, value ?? false),
           title: Text(_label(source)),
-          subtitle: source == TrackingSource.local
-              ? const Text('Always on')
-              : !_available(source)
-              ? const Text('Connect this tracker to enable it')
-              : null,
+          subtitle: Text(
+            source == TrackingSource.local
+                ? 'Always on — Debrify keeps its own watch history'
+                : !_available(source)
+                ? 'Connect this tracker to enable it'
+                : 'Send playback progress and watched marks to '
+                      '${_label(source)}',
+          ),
           secondary: const Icon(Icons.sync_alt_rounded),
         ),
     ],
@@ -179,15 +182,29 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
       ListTile(
         title: Text(switch (_progress) {
           WatchProgressSource.smart =>
-            'Combines this device with connected trackers; the most recent activity wins.',
+            'Everything combined — this device and your connected trackers. '
+                'The most recent activity wins.',
           WatchProgressSource.local =>
-            'Resume and Continue Watching use only this device and your watched-at setting. Tracker rows are hidden on Home; history is still sent to ticked services.',
+            'Only what you watch in Debrify counts: resume, episode lists '
+                'and Continue Watching use this device and your watched-at '
+                'setting.',
           _ =>
-            '${_progressLabel(_progress)} owns your progress. Shows leave Continue Watching by ${_progressLabel(_progress)}\'s rules.',
+            '${_progressLabel(_progress)} owns resume, episode lists and '
+                'Continue Watching. Shows leave Continue Watching by '
+                '${_progressLabel(_progress)}\'s rules.',
         }),
-        subtitle: _progress == WatchProgressSource.local
-            ? const Text("Progress won't follow you to other devices.")
-            : null,
+        subtitle: Text(switch (_progress) {
+          WatchProgressSource.smart =>
+            'All Continue Watching rows show on Home.',
+          WatchProgressSource.local =>
+            'Trakt, Simkl and MDBList rows are hidden on Home. Scrobbling '
+                'still sends your history to ticked services, but progress '
+                "won't follow you to other devices.",
+          _ =>
+            'Other sources\' Continue Watching rows (including this '
+                'device\'s) are hidden on Home. IPTV rows are never '
+                'affected.',
+        }),
       ),
     ],
   );
@@ -204,9 +221,13 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
               ? null
               : (value) => _setTick(source, value ?? false),
           title: Text(_label(source)),
-          subtitle: !_available(source)
-              ? const Text('Tracker is not connected')
-              : null,
+          subtitle: Text(
+            !_available(source)
+                ? 'Tracker is not connected'
+                : source == TrackingSource.local
+                ? '✓ for titles finished in Debrify'
+                : '✓ for titles watched on your ${_label(source)} account',
+          ),
           secondary: const Icon(Icons.check_circle_outline),
         ),
     ],
