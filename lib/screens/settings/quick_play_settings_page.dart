@@ -517,8 +517,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 : '$n streams',
             switch (n) {
               1 =>
-                'Play the first source only. If it fails, playback stops '
-                    'instead of falling back.',
+                'Play the first source only, without falling back. (One '
+                    'exception: if a season pack was ranked first, the best '
+                    'single episode still gets a try.)',
               5 =>
                 'Debrify’s default — a good balance between starting fast '
                     'and finding a working stream.',
