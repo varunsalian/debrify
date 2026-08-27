@@ -10986,16 +10986,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         localMs = 0;
       }
     }
-    debugPrint(
-      '[TrackingDiag] player resume-candidates local=${localMs}ms '
-      'furthestRemotePct=${traktPct?.toStringAsFixed(1)} '
-      'trakt=${traktProviderPct?.toStringAsFixed(1)} '
-      'simkl=${simklProviderPct?.toStringAsFixed(1)} '
-      'mdblist=${mdblistProviderPct?.toStringAsFixed(1)} '
-      'remote=${traktMs}ms dur=${dur.inMilliseconds}ms '
-      'explicitLaunch=$explicitLaunch preferLocal=$preferLocalResume '
-      'progress=${trackingPolicy.progressSource.name}',
-    );
     // The details-screen Resume promised THIS position — honour it outright when
     // seekable (matching the pre-rework launched-item behaviour), even over a
     // deeper/stale local. An unseekable promise falls through to furthest-wins.
@@ -11049,11 +11039,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else {
       _resumeWriteGuard.arm(targetMs);
     }
-    debugPrint(
-      '[TrackingDiag] player resume-seek target=${targetMs}ms '
-      'dur=${durMs}ms guard=${nearFinished ? 'skipped(nearFinished)' : 'armed'} '
-      'verifyLanding=$verifyLanding',
-    );
     final target = Duration(milliseconds: targetMs);
     await _player.seek(target);
     // Without an armed guard the verifier would abort on its first check.

@@ -1010,18 +1010,7 @@ class VideoPlayerLauncher {
     // Tracker-row launches arrive with their flag already true and skip the
     // auto-enable branches above. Normalize once on the shared path before
     // native payload construction, external seeding, or in-app playback.
-    final preNormalize =
-        '${args.traktScrobble ? 't' : '-'}${args.simklScrobble ? 's' : '-'}'
-        '${args.mdblistScrobble ? 'm' : '-'}';
     args = normalizeScrobbleFlags(args, trackingPolicy);
-    debugPrint(
-      '[TrackingDiag] launch imdb=${args.contentImdbId} '
-      'scrobble pre=$preNormalize '
-      'post=${args.traktScrobble ? 't' : '-'}${args.simklScrobble ? 's' : '-'}${args.mdblistScrobble ? 'm' : '-'} '
-      '(t/s/m; policy scrobble='
-      '${TrackingSource.values.where(trackingPolicy.scrobbles).map((s) => s.name).join('+')} '
-      'progress=${trackingPolicy.progressSource.name})',
-    );
 
     // Persist before launching playback so Android TV handoff cannot race the write.
     // Skip when a tracker already owns this title's Continue Watching entry —
@@ -1424,8 +1413,7 @@ class VideoPlayerLauncher {
           // to tracker Continue Watching, so a dedicated-tracker mode must
           // not replay stale local state (falls to first episode instead).
           final trackingPolicy = await TrackingSourcePolicy.load();
-          final lastEpisode =
-              trackingPolicy.progressFrom(TrackingSource.local)
+          final lastEpisode = trackingPolicy.progressFrom(TrackingSource.local)
               ? await StorageService.getLastPlayedEpisode(
                   seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                 )
@@ -5001,15 +4989,6 @@ class _AndroidTvPlaybackPayloadBuilder {
       perItemStates,
       trackingPolicy,
     );
-    debugPrint(
-      '[TrackingDiag] tv payload imdb=${args.contentImdbId} '
-      'startIndex=$startIndex localCompletion=$localCompletionTracking '
-      'launchPct(sent) '
-      't=${trackingPolicy.progressFrom(TrackingSource.trakt) ? args.traktProgressPercent : 'masked'} '
-      's=${trackingPolicy.progressFrom(TrackingSource.simkl) ? args.simklProgressPercent : 'masked'} '
-      'm=${trackingPolicy.progressFrom(TrackingSource.mdblist) ? args.mdblistProgressPercent : 'masked'} '
-      'progress=${trackingPolicy.progressSource.name}',
-    );
 
     final preparedEntries = await _prepareEntries(playlistEntries, startIndex);
     final seasons = _buildSeriesSeasons(seriesPlaylist);
@@ -5085,8 +5064,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           : false;
       final resolvedLocal = resolveEpisodeLocalWatchState(
         locallyWatched:
-            trackingPolicy.progressFrom(TrackingSource.local) &&
-            locallyWatched,
+            trackingPolicy.progressFrom(TrackingSource.local) && locallyWatched,
         localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
             ? resumeInfo.positionMs
             : 0,

@@ -1036,8 +1036,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _cwMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.local, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.local, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
@@ -1056,8 +1055,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _cwSeriesNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.local, m),
         episodeOf: (m) => _cwCardEpisode(_CwKind.local, m),
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.local, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
         episodeArtworkOf: (m) => _cwEpisodeArtwork[m.imdbId],
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
@@ -1074,8 +1072,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _traktMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.trakt, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
@@ -1092,8 +1089,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _traktSeriesNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
         episodeOf: (m) => _cwCardEpisode(_CwKind.trakt, m),
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.trakt, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
         episodeArtworkOf: (m) => _traktEpisodeArtwork[m.imdbId],
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
@@ -1116,8 +1112,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _simklMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.simkl, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
@@ -1134,8 +1129,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _simklSeriesNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
         episodeOf: (m) => _cwCardEpisode(_CwKind.simkl, m),
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.simkl, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
         episodeArtworkOf: (m) => _simklEpisodeArtwork[m.imdbId],
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
@@ -1152,8 +1146,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _mdblistMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
         episodeOf: (_) => null,
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.mdblist, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
@@ -1171,8 +1164,7 @@ class _SearchScreenState extends State<SearchScreen>
         nodes: _mdblistSeriesNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
         episodeOf: (m) => _cwCardEpisode(_CwKind.mdblist, m),
-        remainingMinutesOf: (m) =>
-            _cwCardRemainingMinutes(_CwKind.mdblist, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
@@ -2775,12 +2767,8 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted || token != _cwLoadToken) return;
     if (progressSource != _cwProgressSource) {
       setState(() => _cwProgressSource = progressSource);
-      debugPrint(
-        '[TrackingDiag] home cw card progress source=${progressSource.name}',
-      );
     }
     if (!enabled) {
-      debugPrint('[TrackingDiag] home local-cw hidden (cwSwitch=false)');
       // Free the focus nodes too — otherwise they linger allocated until
       // dispose while the rows are hidden.
       _syncCwNodes(_cwMovieNodes, 0, 'movie');
@@ -2911,11 +2899,6 @@ class _SearchScreenState extends State<SearchScreen>
         ..clear()
         ..addAll(addonIds);
     });
-    debugPrint(
-      '[TrackingDiag] home local-cw movies=${movies.length} '
-      'series=${series.length} '
-      'firstSeries=${series.isNotEmpty ? '"${series.first.name}" ${_cwEpisode[series.first.imdbId] ?? '?'} pct=${_cwProgress[series.first.imdbId]?.toStringAsFixed(2)}' : 'none'}',
-    );
     unawaited(
       _enrichCwEpisodeArtwork(
         refs: episodeRefs,
@@ -4324,11 +4307,6 @@ class _SearchScreenState extends State<SearchScreen>
     // fresh appearance (skeleton → content) announces itself below; a refresh
     // of rows the user can already see stays quiet.
     final hadTraktRows = _traktMovies.isNotEmpty || _traktSeries.isNotEmpty;
-    debugPrint(
-      '[TrackingDiag] home trakt-cw movies=${movieMetas.length} '
-      'shows=${showMetas.length} '
-      'firstShow=${showMetas.isNotEmpty ? '"${showMetas.first.name}" ${episode[showMetas.first.imdbId] ?? '?'} pct=${progress[showMetas.first.imdbId]?.toStringAsFixed(2)}' : 'none'}',
-    );
     _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
     _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
     setState(() {
@@ -4878,10 +4856,6 @@ class _SearchScreenState extends State<SearchScreen>
     // fresh appearance announces itself below; a refresh of rows the user can
     // already see stays quiet.
     final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
-    debugPrint(
-      '[TrackingDiag] home simkl-cw movies=${movieMetas.length} '
-      'shows=${showMetas.length}',
-    );
     _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
     _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
     setState(() {

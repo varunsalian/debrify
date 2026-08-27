@@ -6082,10 +6082,6 @@ class StorageService {
     await setWatchProgressSource(WatchProgressSource.smart);
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool('tracking_progress_fallback_notice', true);
-    debugPrint(
-      '[TrackingDiag] progress source fell back to smart '
-      '(disconnected=${disconnected.name})',
-    );
     return true;
   }
 

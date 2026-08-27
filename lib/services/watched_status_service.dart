@@ -64,14 +64,7 @@ class WatchedStatusService extends ChangeNotifier {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) return false;
     final series = contentType.toLowerCase() == 'series';
-    final shown = _isWatchedForTicks(id, series);
-    if (shown != isWatched(imdbId, contentType) && _tickMaskLogged.add(id)) {
-      debugPrint(
-        '[TrackingDiag] watched tick masked id=$id series=$series '
-        '(shown=$shown, all-source would be ${!shown})',
-      );
-    }
-    return shown;
+    return _isWatchedForTicks(id, series);
   }
 
   bool _isWatchedForTicks(String id, bool series) {
@@ -90,22 +83,9 @@ class WatchedStatusService extends ChangeNotifier {
       final next = await StorageService.getHomeTickSources();
       if (setEquals(next, _tickSources)) return;
       _tickSources = next;
-      _tickMaskLogged.clear();
-      debugPrint(
-        '[TrackingDiag] watched ticks from='
-        '${next.map((s) => s.name).join('+')} '
-        'sets local=${_localMovies.length}/${_localSeries.length} '
-        'trakt=${_traktMovies.length}/${_traktSeries.length} '
-        'simkl=${_simklMovies.length}/${_simklSeries.length} '
-        'mdblist=${_mdblistMovies.length}/${_mdblistSeries.length}',
-      );
       notifyListeners();
     }());
   }
-
-  /// One line per title whose policy tick DIFFERS from the all-source tick —
-  /// the interesting cases when verifying option 3 — logged once per policy.
-  final Set<String> _tickMaskLogged = {};
 
   /// Starts loading without returning work for the UI to await.
   void ensureStarted() {

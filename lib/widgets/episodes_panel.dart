@@ -510,9 +510,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (await _mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
         try {
-          final result = await _mdblistService.fetchShowEpisodeProgress(
-            imdbId,
-          );
+          final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
           if (!mounted || generation != _episodeModeGeneration) return;
           if (result.isUsable) {
             for (final entry in result.data!.entries) {
@@ -523,7 +521,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             }
           }
         } catch (e) {
-          debugPrint('EpisodesPanel: MDBList episode progress fetch failed: $e');
+          debugPrint(
+            'EpisodesPanel: MDBList episode progress fetch failed: $e',
+          );
         }
       }
       try {
@@ -539,12 +539,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     if (mounted && generation == _episodeModeGeneration) {
       final next = _mergedUpNext(merged, _trackerNextRaw);
-      debugPrint(
-        '[TrackingDiag] guide imdb=$imdbId entries=${merged.length} '
-        'ticks=${merged.values.where((v) => v >= 100).length} '
-        'upNext=${next != null ? 'S${next.season}E${next.episode}' : 'none'} '
-        'progress=${policy.progressSource.name}',
-      );
       setState(() {
         _episodeWatchProgress = merged;
         _nextEpisode = next;
