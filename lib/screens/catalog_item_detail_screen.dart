@@ -2156,6 +2156,7 @@ class _RecCardState extends State<_RecCard> {
                                     widget.item.id,
                                 contentType: widget.item.type,
                                 compact: true,
+                                tickPolicyScoped: true,
                               ),
                             ),
                         ],

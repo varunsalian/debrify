@@ -198,6 +198,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           child: MovieWatchedBadge(
             imdbId: movieId,
             contentType: item.type,
+            tickPolicyScoped: true,
           ),
         ),
 

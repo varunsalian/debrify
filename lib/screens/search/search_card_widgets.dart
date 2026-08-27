@@ -217,6 +217,7 @@ class _StremioCardState extends State<_StremioCard>
             imdbId: movieId,
             contentType: item.type,
             compact: true,
+            tickPolicyScoped: true,
           ),
         ),
       if (widget.hasBoundSource)

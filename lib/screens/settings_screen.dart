@@ -2973,8 +2973,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Tracking',
-        'Home tick marks',
-        'Choose which histories draw watched ticks on Home cards',
+        'Watched ticks',
+        'Choose which histories draw watched ticks on posters',
         const ['watched', 'checkmark', 'tick', 'local', 'trakt', 'simkl'],
       ),
       if (kMdblistEnabled)

@@ -210,9 +210,10 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
   );
 
   Widget _ticksSection() => SettingsSection(
-    title: 'Home tick marks',
+    title: 'Watched ticks',
     blurb:
-        'Which histories draw the ✓ on Home cards. Episode lists follow your Progress source.',
+        'Which histories draw the ✓ on posters — Home, Search, Discover and '
+        'detail pages. Episode lists follow your Progress source instead.',
     children: [
       for (final source in TrackingSource.values)
         CheckboxListTile(
@@ -246,7 +247,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
   );
 
   Widget _tvBody() {
-    const labels = ['Scrobble', 'Progress source', 'Home tick marks'];
+    const labels = ['Scrobble', 'Progress source', 'Watched ticks'];
     const icons = [
       Icons.sync_alt_rounded,
       Icons.play_circle_outline_rounded,

@@ -64,7 +64,7 @@ void main() {
           body: Column(
             children: [
               MovieWatchedBadge(imdbId: 'tt-home-mask'),
-              MovieWatchedBadge(imdbId: 'tt-home-mask', homeScoped: true),
+              MovieWatchedBadge(imdbId: 'tt-home-mask', tickPolicyScoped: true),
             ],
           ),
         ),

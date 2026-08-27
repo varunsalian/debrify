@@ -19,8 +19,8 @@ class WatchedStatusService extends ChangeNotifier {
     StorageService.movieFinishedRevision.addListener(refresh);
     StorageService.localCompletionRevision.addListener(_refreshLocal);
     MdblistService.instance.watchedRevision.addListener(_markMdblistDirty);
-    StorageService.trackingSourceRevision.addListener(_refreshHomeTickPolicy);
-    _refreshHomeTickPolicy();
+    StorageService.trackingSourceRevision.addListener(_refreshTickPolicy);
+    _refreshTickPolicy();
   }
 
   static final WatchedStatusService instance = WatchedStatusService._();
@@ -41,7 +41,7 @@ class WatchedStatusService extends ChangeNotifier {
   bool _mdblistDirty = false;
   DateTime? _mdblistDirtyAt;
   Timer? _mdblistRefreshTimer;
-  Set<TrackingSource> _homeTickSources = Set<TrackingSource>.of(
+  Set<TrackingSource> _tickSources = Set<TrackingSource>.of(
     TrackingSource.values,
   );
 
@@ -60,39 +60,39 @@ class WatchedStatusService extends ChangeNotifier {
         _mdblistMovies.contains(id);
   }
 
-  bool isWatchedForHome(String imdbId, String contentType) {
+  bool isWatchedForTicks(String imdbId, String contentType) {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) return false;
     final series = contentType.toLowerCase() == 'series';
-    final home = _isWatchedForHome(id, series);
-    if (home != isWatched(imdbId, contentType) && _tickMaskLogged.add(id)) {
+    final shown = _isWatchedForTicks(id, series);
+    if (shown != isWatched(imdbId, contentType) && _tickMaskLogged.add(id)) {
       debugPrint(
-        '[TrackingDiag] home tick masked id=$id series=$series '
-        '(shown=$home, all-source would be ${!home})',
+        '[TrackingDiag] watched tick masked id=$id series=$series '
+        '(shown=$shown, all-source would be ${!shown})',
       );
     }
-    return home;
+    return shown;
   }
 
-  bool _isWatchedForHome(String id, bool series) {
-    return (_homeTickSources.contains(TrackingSource.local) &&
+  bool _isWatchedForTicks(String id, bool series) {
+    return (_tickSources.contains(TrackingSource.local) &&
             (series ? _localSeries : _localMovies).contains(id)) ||
-        (_homeTickSources.contains(TrackingSource.trakt) &&
+        (_tickSources.contains(TrackingSource.trakt) &&
             (series ? _traktSeries : _traktMovies).contains(id)) ||
-        (_homeTickSources.contains(TrackingSource.simkl) &&
+        (_tickSources.contains(TrackingSource.simkl) &&
             (series ? _simklSeries : _simklMovies).contains(id)) ||
-        (_homeTickSources.contains(TrackingSource.mdblist) &&
+        (_tickSources.contains(TrackingSource.mdblist) &&
             (series ? _mdblistSeries : _mdblistMovies).contains(id));
   }
 
-  void _refreshHomeTickPolicy() {
+  void _refreshTickPolicy() {
     unawaited(() async {
       final next = await StorageService.getHomeTickSources();
-      if (setEquals(next, _homeTickSources)) return;
-      _homeTickSources = next;
+      if (setEquals(next, _tickSources)) return;
+      _tickSources = next;
       _tickMaskLogged.clear();
       debugPrint(
-        '[TrackingDiag] home ticks from='
+        '[TrackingDiag] watched ticks from='
         '${next.map((s) => s.name).join('+')} '
         'sets local=${_localMovies.length}/${_localSeries.length} '
         'trakt=${_traktMovies.length}/${_traktSeries.length} '
@@ -103,7 +103,7 @@ class WatchedStatusService extends ChangeNotifier {
     }());
   }
 
-  /// One line per title whose Home tick DIFFERS from the all-source tick —
+  /// One line per title whose policy tick DIFFERS from the all-source tick —
   /// the interesting cases when verifying option 3 — logged once per policy.
   final Set<String> _tickMaskLogged = {};
 
@@ -151,8 +151,8 @@ class WatchedStatusService extends ChangeNotifier {
     _simklSeries = const {};
     _mdblistMovies = const {};
     _mdblistSeries = const {};
-    _homeTickSources = Set<TrackingSource>.of(TrackingSource.values);
-    _refreshHomeTickPolicy();
+    _tickSources = Set<TrackingSource>.of(TrackingSource.values);
+    _refreshTickPolicy();
   }
 
   void _markMdblistDirty() {
