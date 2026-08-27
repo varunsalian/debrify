@@ -962,22 +962,23 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       TrackingSource.mdblist,
       _mdblistEpisodeProgress[episodeKey],
     );
+    // Ticks and bars both follow the Progress source — local contributes
+    // nothing (tick or position) when this device isn't an admitted source.
+    final localEligible = _trackingPolicy.progressFrom(TrackingSource.local);
     final localState = resolveEpisodeLocalWatchState(
       locallyWatched:
-          _finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(
-            episode.seriesInfo.episode,
-          ) ??
-          false,
-      localPositionMs: positionMs,
+          localEligible &&
+          (_finishedEpisodes[episode.seriesInfo.season.toString()]?.contains(
+                episode.seriesInfo.episode,
+              ) ??
+              false),
+      localPositionMs: localEligible ? positionMs : 0,
       localDurationMs: durationMs,
       traktPercent: traktPercent,
       simklPercent: simklPercent,
       mdblistPercent: mdblistPercent,
     );
-    if (durationMs > 0 &&
-        (_trackingPolicy.progressFrom(TrackingSource.local) ||
-            localState.watched ||
-            positionMs / durationMs >= 0.95)) {
+    if (durationMs > 0) {
       local = (localState.positionMs / durationMs).clamp(0.0, 1.0);
     }
     final tracker =
@@ -1020,10 +1021,12 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     final progressData = _episodeProgress[key];
     final positionMs = progressData?['positionMs'] as int? ?? 0;
     final durationMs = progressData?['durationMs'] as int? ?? 0;
+    final localEligible = _trackingPolicy.progressFrom(TrackingSource.local);
     final localState = resolveEpisodeLocalWatchState(
       locallyWatched:
+          localEligible &&
           _finishedEpisodes[season.toString()]?.contains(number) == true,
-      localPositionMs: positionMs,
+      localPositionMs: localEligible ? positionMs : 0,
       localDurationMs: durationMs,
       traktPercent: trakt,
       simklPercent: simkl,

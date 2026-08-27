@@ -226,8 +226,15 @@ shown per their own rules.
 - **Detail pill/card:** the series MAINLINE is downstream of the reconciler;
   the movie/fast paths above are the exceptions — after gating those, nothing
   extra here.
-- **Episode guides: completed ticks stay merged; PARTIAL progress follows
-  option 2** (DECIDED, Varun, round 4 — refines the original ticks-only
+- **SUPERSEDED (Varun, 2026-08-27 post-build): episode-guide ticks follow
+  option 2 exactly like the bars — nothing foreign renders in episode
+  lists.** `guideProgressFrom` is now a plain policy mask (no completion
+  pass-through), the panel's dual visual/resume map collapsed back to one,
+  and local ticks/positions are gated at every supplier too. Home ticks
+  (option 3) remain the only always-selectable tick surface. The original
+  round-4 text below is kept for history:
+- ~~**Episode guides: completed ticks stay merged; PARTIAL progress follows
+  option 2**~~ (DECIDED, Varun, round 4 — refines the original ticks-only
   scope decision): in a dedicated mode,
   `EpisodesPanel._loadEpisodeWatchProgress` masks non-selected sources'
   partial percentages and tracker frontiers before they enter
@@ -270,10 +277,10 @@ shown per their own rules.
   are hidden on Home; history is still sent to ticked services. Progress
   won't follow you to other devices." · Trakt/Simkl/MDBList: "<X> owns your
   progress. Shows leave Continue Watching by <X>'s rules."
-- Home ticks: "Which histories draw the ✓ on Home cards. Episode lists always
-  show every service's ✓." (NOT "combined history" — since round 4, episode
-  lists combine TICKS from everything but show partial bars only from the
-  selected progress source; the copy must not promise merged bars.)
+- Home ticks: "Which histories draw the ✓ on Home cards. Episode lists follow
+  your Progress source." (UPDATED 2026-08-27 with the superseding decision
+  above — episode lists render ticks and bars from the selected source only,
+  so the copy must not promise merged anything.)
 
 ## Defaults & migration
 - scrobble = seeded from the three SyncCatalogItems values (per Option B

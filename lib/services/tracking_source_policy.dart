@@ -76,19 +76,14 @@ class TrackingSourcePolicy {
 
   bool homeTicksFrom(TrackingSource source) => homeTickSources.contains(source);
 
-  /// Episode guides always merge completed ticks, while partial bars follow
-  /// [progressSource]. This supplier-side mask is also used by the native TV
-  /// payload so late metadata cannot reintroduce a foreign partial bar.
-  double? guideProgressFrom(
-    TrackingSource source,
-    double? percent, {
-    double completionThreshold = 95.0,
-  }) {
+  /// Episode-guide supplier mask: ticks AND partial bars both follow
+  /// [progressSource] (Varun, 2026-08-27 — supersedes the earlier
+  /// ticks-always-merged decision). Also used by the native TV payload so
+  /// late metadata cannot reintroduce a foreign entry.
+  double? guideProgressFrom(TrackingSource source, double? percent) {
     if (percent == null || !percent.isFinite) return null;
-    final normalized = percent.clamp(0.0, 100.0).toDouble();
-    return progressFrom(source) || normalized >= completionThreshold
-        ? normalized
-        : null;
+    if (!progressFrom(source)) return null;
+    return percent.clamp(0.0, 100.0).toDouble();
   }
 
   bool get forcesLocalCompletion => progressSource == WatchProgressSource.local;

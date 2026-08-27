@@ -2384,7 +2384,9 @@ class VideoPlayerLauncher {
             final localDurationMs =
                 (localState?['durationMs'] as num?)?.toInt() ?? 0;
             final resolvedLocal = resolveEpisodeLocalWatchState(
-              locallyWatched: locallyWatched,
+              locallyWatched:
+                  trackingPolicy.progressFrom(TrackingSource.local) &&
+                  locallyWatched,
               localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
                   ? localPositionMs
                   : 0,
@@ -2750,7 +2752,9 @@ class VideoPlayerLauncher {
                   locallyFinished[season.toString()]?.contains(episode) ??
                   false;
               final resolvedLocal = resolveEpisodeLocalWatchState(
-                locallyWatched: localWatched,
+                locallyWatched:
+                    trackingPolicy.progressFrom(TrackingSource.local) &&
+                    localWatched,
                 localPositionMs:
                     trackingPolicy.progressFrom(TrackingSource.local)
                     ? localPositionMs
@@ -3466,7 +3470,9 @@ class VideoPlayerLauncher {
                   )
                 : null;
             final localState = resolveEpisodeLocalWatchState(
-              locallyWatched: locallyWatched,
+              locallyWatched:
+                  trackingPolicy.progressFrom(TrackingSource.local) &&
+                  locallyWatched,
               localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
                   ? positionMs
                   : 0,
@@ -5078,7 +5084,9 @@ class _AndroidTvPlaybackPayloadBuilder {
           ? locallyFinished[season.toString()]?.contains(episode) ?? false
           : false;
       final resolvedLocal = resolveEpisodeLocalWatchState(
-        locallyWatched: locallyWatched,
+        locallyWatched:
+            trackingPolicy.progressFrom(TrackingSource.local) &&
+            locallyWatched,
         localPositionMs: trackingPolicy.progressFrom(TrackingSource.local)
             ? resumeInfo.positionMs
             : 0,

@@ -65,7 +65,9 @@ void main() {
       expect(normalized.mdblistScrobble, isFalse);
     });
 
-    test('guide mask keeps foreign completion but drops foreign partials', () {
+    test('guide mask drops everything foreign — ticks included', () {
+      // 2026-08-27 decision: episode-list ticks follow the Progress source
+      // exactly like partial bars (supersedes ticks-always-merged).
       const policy = TrackingSourcePolicy(
         scrobbleTargets: {TrackingSource.local},
         progressSource: WatchProgressSource.trakt,
@@ -73,8 +75,9 @@ void main() {
       );
 
       expect(policy.guideProgressFrom(TrackingSource.simkl, 42), isNull);
-      expect(policy.guideProgressFrom(TrackingSource.simkl, 100), 100);
+      expect(policy.guideProgressFrom(TrackingSource.simkl, 100), isNull);
       expect(policy.guideProgressFrom(TrackingSource.trakt, 42), 42);
+      expect(policy.guideProgressFrom(TrackingSource.trakt, 100), 100);
     });
   });
 }

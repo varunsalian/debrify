@@ -589,17 +589,11 @@ class EpisodeTrackerSnapshotService {
         return const {};
       }
       if (!enabled[0]) {
-        // A foreign provider's partial playback is ineligible, but its
-        // completed guide ticks stay merged. Never erase those completed
-        // entries merely because another provider owns Progress.
-        final existing = await _runBound(
-          authorization,
-          () => StorageService.getEpisodeMdblistProgress(imdbId: imdbId),
-        );
-        return <String, double>{
-          for (final entry in existing.entries)
-            if (entry.value >= 95.0) entry.key: entry.value,
-        };
+        // Ineligible per the Progress source — ticks AND bars both follow it
+        // (2026-08-27 decision), so nothing from this provider reaches the
+        // guide. The store is left intact for a later mode switch; consumers
+        // mask at their suppliers.
+        return const {};
       }
       final snapshotRevision = EpisodeTrackerSnapshotRevision.identity(
         'mdblist',

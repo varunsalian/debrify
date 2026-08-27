@@ -285,7 +285,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action that preserves the catalog pack-search path on demand.
   bool _episodesUnavailable = false;
   Map<String, double> _episodeWatchProgress = {};
-  Map<String, double> _episodeResumeProgress = {};
   TrackingSourcePolicy _trackingPolicy = const TrackingSourcePolicy(
     scrobbleTargets: <TrackingSource>{
       TrackingSource.local,
@@ -415,10 +414,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final map = await progressLoader();
         if (!mounted || generation != _episodeModeGeneration) return;
-        setState(() {
-          _episodeWatchProgress = map;
-          _episodeResumeProgress = map;
-        });
+        setState(() => _episodeWatchProgress = map);
       } catch (e) {
         debugPrint('EpisodesPanel: direct progress fetch failed: $e');
       }
@@ -428,17 +424,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final imdbId = show.effectiveImdbId;
     if (imdbId == null) return;
 
-    // Local in-app playback progress (works without a Trakt account).
-    final localProgress = await StorageService.getEpisodeWatchProgressByImdbId(
-      imdbId,
-    );
+    // Ticks and bars BOTH follow the Progress source (2026-08-27 decision —
+    // supersedes ticks-always-merged): each source contributes only when the
+    // policy admits it, so one map serves rendering and resume arbitration.
     final merged = <String, double>{
-      for (final entry in localProgress.entries)
-        if (entry.value >= 100 || policy.progressFrom(TrackingSource.local))
-          entry.key: entry.value,
-    };
-    final resumeProgress = <String, double>{
-      if (policy.progressFrom(TrackingSource.local)) ...localProgress,
+      if (policy.progressFrom(TrackingSource.local))
+        ...await StorageService.getEpisodeWatchProgressByImdbId(imdbId),
     };
     if (!mounted || generation != _episodeModeGeneration) return;
 
@@ -447,40 +438,28 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // empty no-ops without a token, but they logged "failed (null)" on every
     // refresh — indistinguishable from a real API failure, which sent a whole
     // debugging session chasing a phantom credential after a disconnect.
-    if (await _traktService.isAuthenticated()) {
+    if (policy.progressFrom(TrackingSource.trakt) &&
+        await _traktService.isAuthenticated()) {
       if (!mounted || generation != _episodeModeGeneration) return;
       try {
         final watched = await _traktService.fetchWatchedShowEpisodes(imdbId);
         if (!mounted || generation != _episodeModeGeneration) return;
-        final playback = policy.progressFrom(TrackingSource.trakt)
-            ? await _traktService.fetchEpisodePlaybackProgress(imdbId)
-            : const <String, double>{};
+        final playback = await _traktService.fetchEpisodePlaybackProgress(
+          imdbId,
+        );
         if (!mounted || generation != _episodeModeGeneration) return;
 
         // Fully-watched episodes win outright.
         for (final key in watched) {
           merged[key] = 100.0;
-          if (policy.progressFrom(TrackingSource.trakt)) {
-            resumeProgress[key] = 100.0;
-          }
         }
         // Partial playback overlays, but never downgrades a completed episode
         // and only when it's meaningful and higher than what we already have.
-        // The resume map keeps its OWN "existing": in a dedicated mode a
-        // foreign tick lives only in the visual map and must neither block
-        // the selected source's partial nor be overwritten by it there.
         for (final entry in playback.entries) {
           final existing = merged[entry.key] ?? 0;
-          if (existing < 100.0 &&
-              entry.value > 5.0 &&
-              entry.value > existing) {
+          if (existing >= 100.0) continue;
+          if (entry.value > 5.0 && entry.value > existing) {
             merged[entry.key] = entry.value;
-          }
-          final resumeExisting = resumeProgress[entry.key] ?? 0;
-          if (resumeExisting < 100.0 &&
-              entry.value > 5.0 &&
-              entry.value > resumeExisting) {
-            resumeProgress[entry.key] = entry.value;
           }
         }
       } catch (e) {
@@ -503,34 +482,24 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // it was a miss. One storage read here keeps the no-API-when-disconnected
     // intent without racing anybody; the field keeps gating the episode MENU
     // rows, where by open-time it has long settled.
-    if (await _simklService.isAuthenticated()) {
+    if (policy.progressFrom(TrackingSource.simkl) &&
+        await _simklService.isAuthenticated()) {
       try {
         final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
         if (!mounted || generation != _episodeModeGeneration) return;
-        final playback = policy.progressFrom(TrackingSource.simkl)
-            ? await _simklService.fetchEpisodePlaybackProgress(imdbId)
-            : const <String, double>{};
+        final playback = await _simklService.fetchEpisodePlaybackProgress(
+          imdbId,
+        );
         if (!mounted || generation != _episodeModeGeneration) return;
 
         for (final key in watched) {
           merged[key] = 100.0;
-          if (policy.progressFrom(TrackingSource.simkl)) {
-            resumeProgress[key] = 100.0;
-          }
         }
         for (final entry in playback.entries) {
           final existing = merged[entry.key] ?? 0;
-          if (existing < 100.0 &&
-              entry.value > 5.0 &&
-              entry.value > existing) {
+          if (existing >= 100.0) continue;
+          if (entry.value > 5.0 && entry.value > existing) {
             merged[entry.key] = entry.value;
-          }
-          // Same decoupled resume-map rule as the Trakt overlay above.
-          final resumeExisting = resumeProgress[entry.key] ?? 0;
-          if (resumeExisting < 100.0 &&
-              entry.value > 5.0 &&
-              entry.value > resumeExisting) {
-            resumeProgress[entry.key] = entry.value;
           }
         }
       } catch (e) {
@@ -539,32 +508,23 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
 
     if (await _mdblistService.isAuthenticated()) {
-      try {
-        final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
-        if (!mounted || generation != _episodeModeGeneration) return;
-        if (result.isUsable) {
-          for (final entry in result.data!.entries) {
-            final existing = merged[entry.key] ?? 0;
-            if (entry.value >= 100 ||
-                (policy.progressFrom(TrackingSource.mdblist) &&
-                    entry.value > existing)) {
-              merged[entry.key] = entry.value;
-            }
-            // Decoupled resume-map rule (see the Trakt overlay): compare
-            // against the resume map's own value so a stale lower MDBList
-            // session can't clobber a 100 already placed there, and a
-            // foreign tick in the visual map can't mask this source's own
-            // partial in a dedicated mode.
-            if (policy.progressFrom(TrackingSource.mdblist)) {
-              final resumeExisting = resumeProgress[entry.key] ?? 0;
-              if (entry.value >= 100 || entry.value > resumeExisting) {
-                resumeProgress[entry.key] = entry.value;
+      if (policy.progressFrom(TrackingSource.mdblist)) {
+        try {
+          final result = await _mdblistService.fetchShowEpisodeProgress(
+            imdbId,
+          );
+          if (!mounted || generation != _episodeModeGeneration) return;
+          if (result.isUsable) {
+            for (final entry in result.data!.entries) {
+              final existing = merged[entry.key] ?? 0;
+              if (entry.value >= 100 || entry.value > existing) {
+                merged[entry.key] = entry.value;
               }
             }
           }
+        } catch (e) {
+          debugPrint('EpisodesPanel: MDBList episode progress fetch failed: $e');
         }
-      } catch (e) {
-        debugPrint('EpisodesPanel: MDBList episode progress fetch failed: $e');
       }
       try {
         final result = await _mdblistService.fetchShowEpisodeRatings(imdbId);
@@ -578,21 +538,15 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
 
     if (mounted && generation == _episodeModeGeneration) {
-      final next = _mergedUpNext(resumeProgress, _trackerNextRaw);
-      final maskedKeys = merged.keys
-          .where((k) => !resumeProgress.containsKey(k))
-          .take(5)
-          .join(',');
+      final next = _mergedUpNext(merged, _trackerNextRaw);
       debugPrint(
-        '[TrackingDiag] guide imdb=$imdbId visualEntries=${merged.length} '
-        'resumeEntries=${resumeProgress.length} '
-        'visualOnly=[$maskedKeys${merged.length - resumeProgress.length > 5 ? ',…' : ''}] '
+        '[TrackingDiag] guide imdb=$imdbId entries=${merged.length} '
+        'ticks=${merged.values.where((v) => v >= 100).length} '
         'upNext=${next != null ? 'S${next.season}E${next.episode}' : 'none'} '
         'progress=${policy.progressSource.name}',
       );
       setState(() {
         _episodeWatchProgress = merged;
-        _episodeResumeProgress = resumeProgress;
         _nextEpisode = next;
       });
       if (next != null) _publishNextEpisode(next);
@@ -614,7 +568,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   void _publishNextEpisode(EpisodeCoordinate next, {bool mutation = false}) {
     widget.onNextEpisodeChanged?.call(
-      episodeResumeTarget(next: next, progress: _episodeResumeProgress),
+      episodeResumeTarget(next: next, progress: _episodeWatchProgress),
       mutation: mutation,
     );
   }
@@ -747,35 +701,27 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // failed, an optimistic update would paint a state that silently reverts
     // on the next re-merge. (Unwatch always changes at least local storage.)
     final done = targets.where((t) => !failed.contains(t)).toList();
-    if (done.isNotEmpty) {
+    // Guide ticks follow the Progress source, so the optimistic update only
+    // sticks when this action reached a source the guide actually renders —
+    // otherwise the next re-merge would silently revert it.
+    final rendersHere =
+        _trackingPolicy.isSmart ||
+        (_trackingPolicy.progressFrom(TrackingSource.local) &&
+            done.contains('this device')) ||
+        (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
+            done.contains('Trakt')) ||
+        (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
+            done.contains('Simkl')) ||
+        (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+            done.contains('MDBList'));
+    if (done.isNotEmpty && rendersHere) {
       setState(() {
         if (watched) {
           _episodeWatchProgress[key] = 100.0;
         } else {
           _episodeWatchProgress.remove(key);
         }
-        // The visual map is an all-source completion union, while resume
-        // arbitration is intentionally filtered to the chosen Progress
-        // source. Keep that filtered snapshot current only when this action
-        // successfully wrote a source that participates in it.
-        final changesResume =
-            _trackingPolicy.isSmart ||
-            (_trackingPolicy.progressFrom(TrackingSource.local) &&
-                done.contains('this device')) ||
-            (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
-                done.contains('Trakt')) ||
-            (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
-                done.contains('Simkl')) ||
-            (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-                done.contains('MDBList'));
-        if (changesResume) {
-          if (watched) {
-            _episodeResumeProgress[key] = 100.0;
-          } else {
-            _episodeResumeProgress.remove(key);
-          }
-        }
-        _nextEpisode = _mergedUpNext(_episodeResumeProgress, _trackerNextRaw);
+        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
       });
       final next = _nextEpisode;
       if (next != null) _publishNextEpisode(next, mutation: true);
@@ -1275,7 +1221,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       setState(() {
         _episodeSeasons = seasons;
-        _nextEpisode = _mergedUpNext(_episodeResumeProgress, _trackerNextRaw);
+        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
         _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;

@@ -154,7 +154,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
   Widget _progressSection() => SettingsSection(
     title: 'Progress source',
     blurb:
-        'Controls resume, partial progress bars, and which Continue Watching rows are eligible on Home.',
+        'Controls resume, episode-list progress and ✓ ticks, and which Continue Watching rows are eligible on Home.',
     children: [
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -195,7 +195,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
   Widget _ticksSection() => SettingsSection(
     title: 'Home tick marks',
     blurb:
-        'Which histories draw the ✓ on Home cards. Episode lists always show every service\'s ✓.',
+        'Which histories draw the ✓ on Home cards. Episode lists follow your Progress source.',
     children: [
       for (final source in TrackingSource.values)
         CheckboxListTile(

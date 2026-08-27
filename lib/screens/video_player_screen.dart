@@ -10969,10 +10969,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // in-memory; the old record has no provenance and may be genuine local
     // history. Independent Simkl/MDBList completion still wins.
     if (localMs >= hiMs) {
-      // The rewatch detector consumes the same inputs as guide rendering:
-      // partials from the selected source, plus completed ticks from every
-      // provider. A foreign partial cannot un-tick local completion, while an
-      // independent foreign completion still protects it.
+      // The rewatch detector consumes the same policy-masked inputs as guide
+      // rendering (ticks AND partials both follow the Progress source since
+      // 2026-08-27) — a non-selected provider's session can't un-tick local
+      // completion.
       traktProviderPct ??= await _currentEpisodeTraktPercent(forGuide: true);
       simklProviderPct ??= await _currentEpisodeSimklPercent(forGuide: true);
       mdblistProviderPct ??= await _currentEpisodeMdblistPercent(
