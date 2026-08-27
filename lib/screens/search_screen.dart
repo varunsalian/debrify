@@ -2734,6 +2734,10 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted || token != _cwLoadToken) return;
     _trackingPolicy = policy;
     if (!enabled || !policy.progressFrom(TrackingSource.local)) {
+      debugPrint(
+        '[TrackingDiag] home local-cw hidden (cwSwitch=$enabled '
+        'progress=${policy.progressSource.name})',
+      );
       // Free the focus nodes too — otherwise they linger allocated until
       // dispose while the rows are hidden.
       _syncCwNodes(_cwMovieNodes, 0, 'movie');
@@ -2864,6 +2868,12 @@ class _SearchScreenState extends State<SearchScreen>
         ..clear()
         ..addAll(addonIds);
     });
+    debugPrint(
+      '[TrackingDiag] home local-cw movies=${movies.length} '
+      'series=${series.length} '
+      'firstSeries=${series.isNotEmpty ? '"${series.first.name}" ${_cwEpisode[series.first.imdbId] ?? '?'} pct=${_cwProgress[series.first.imdbId]?.toStringAsFixed(2)}' : 'none'} '
+      'progress=${policy.progressSource.name}',
+    );
     unawaited(
       _enrichCwEpisodeArtwork(
         refs: episodeRefs,
@@ -4174,6 +4184,10 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted || token != _traktCwToken) return;
     _trackingPolicy = policy;
     if (!policy.progressFrom(TrackingSource.trakt)) {
+      debugPrint(
+        '[TrackingDiag] home trakt-cw hidden by policy '
+        '(progress=${policy.progressSource.name})',
+      );
       setState(() {
         _traktCwLoading = false;
         _traktMovies = [];
@@ -4284,6 +4298,11 @@ class _SearchScreenState extends State<SearchScreen>
     // fresh appearance (skeleton → content) announces itself below; a refresh
     // of rows the user can already see stays quiet.
     final hadTraktRows = _traktMovies.isNotEmpty || _traktSeries.isNotEmpty;
+    debugPrint(
+      '[TrackingDiag] home trakt-cw movies=${movieMetas.length} '
+      'shows=${showMetas.length} '
+      'firstShow=${showMetas.isNotEmpty ? '"${showMetas.first.name}" ${episode[showMetas.first.imdbId] ?? '?'} pct=${progress[showMetas.first.imdbId]?.toStringAsFixed(2)}' : 'none'}',
+    );
     _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
     _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
     setState(() {
@@ -4779,6 +4798,10 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted || token != _simklCwToken) return;
     _trackingPolicy = policy;
     if (!policy.progressFrom(TrackingSource.simkl)) {
+      debugPrint(
+        '[TrackingDiag] home simkl-cw hidden by policy '
+        '(progress=${policy.progressSource.name})',
+      );
       setState(() {
         _simklMovies = [];
         _simklSeries = [];
@@ -4844,6 +4867,10 @@ class _SearchScreenState extends State<SearchScreen>
     // fresh appearance announces itself below; a refresh of rows the user can
     // already see stays quiet.
     final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
+    debugPrint(
+      '[TrackingDiag] home simkl-cw movies=${movieMetas.length} '
+      'shows=${showMetas.length}',
+    );
     _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
     _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
     setState(() {
@@ -4931,6 +4958,10 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted || token != _mdblistCwToken) return;
     _trackingPolicy = policy;
     if (!policy.progressFrom(TrackingSource.mdblist)) {
+      debugPrint(
+        '[TrackingDiag] home mdblist-cw hidden by policy '
+        '(progress=${policy.progressSource.name})',
+      );
       setState(() {
         _mdblistMovies = [];
         _mdblistSeries = [];
@@ -13579,7 +13610,8 @@ class _SearchScreenState extends State<SearchScreen>
         'source=${_resumeSourceName(w.prio)} base=S${w.s}E${w.e} '
         'pct=${w.pct} timestamp=${_formatResumeTimestamp(w.tsMs)} '
         'finished=${w.finished} trackerFrontierAhead=$trackerFrontierAhead '
-        'willAdvance=$done',
+        'willAdvance=$done '
+        'progressPolicy=${trackingPolicy.progressSource.name}',
       );
       if (done) {
         // 4s-boxed like every other network hop here: the guide fetch's body

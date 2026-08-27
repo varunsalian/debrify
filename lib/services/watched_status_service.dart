@@ -64,6 +64,17 @@ class WatchedStatusService extends ChangeNotifier {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) return false;
     final series = contentType.toLowerCase() == 'series';
+    final home = _isWatchedForHome(id, series);
+    if (home != isWatched(imdbId, contentType) && _tickMaskLogged.add(id)) {
+      debugPrint(
+        '[TrackingDiag] home tick masked id=$id series=$series '
+        '(shown=$home, all-source would be ${!home})',
+      );
+    }
+    return home;
+  }
+
+  bool _isWatchedForHome(String id, bool series) {
     return (_homeTickSources.contains(TrackingSource.local) &&
             (series ? _localSeries : _localMovies).contains(id)) ||
         (_homeTickSources.contains(TrackingSource.trakt) &&
@@ -79,9 +90,22 @@ class WatchedStatusService extends ChangeNotifier {
       final next = await StorageService.getHomeTickSources();
       if (setEquals(next, _homeTickSources)) return;
       _homeTickSources = next;
+      _tickMaskLogged.clear();
+      debugPrint(
+        '[TrackingDiag] home ticks from='
+        '${next.map((s) => s.name).join('+')} '
+        'sets local=${_localMovies.length}/${_localSeries.length} '
+        'trakt=${_traktMovies.length}/${_traktSeries.length} '
+        'simkl=${_simklMovies.length}/${_simklSeries.length} '
+        'mdblist=${_mdblistMovies.length}/${_mdblistSeries.length}',
+      );
       notifyListeners();
     }());
   }
+
+  /// One line per title whose Home tick DIFFERS from the all-source tick —
+  /// the interesting cases when verifying option 3 — logged once per policy.
+  final Set<String> _tickMaskLogged = {};
 
   /// Starts loading without returning work for the UI to await.
   void ensureStarted() {

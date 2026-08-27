@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'episode_tracker_snapshot_revision.dart';
 import 'local_series_completion_service.dart';
 import 'mdblist/mdblist_models.dart';
@@ -73,6 +75,11 @@ class WatchedActionCoordinator {
       if (!ok) failures.add('MDBList');
     }
     WatchedStatusService.instance.ensureStarted();
+    debugPrint(
+      '[TrackingDiag] watched-action title imdb=$id watched=$watched '
+      'scrobbleSet=${policy.scrobbleTargets.map((s) => s.name).join('+')} '
+      'failures=${failures.isEmpty ? 'none' : failures.join('+')}',
+    );
     return WatchedActionResult(failures);
   }
 
@@ -158,6 +165,12 @@ class WatchedActionCoordinator {
             );
       if (!ok) failures.add('MDBList');
     }
+    debugPrint(
+      '[TrackingDiag] watched-action episode imdb=$imdbId '
+      'S${season}E$episode watched=$watched '
+      'scrobbleSet=${policy.scrobbleTargets.map((s) => s.name).join('+')} '
+      'failures=${failures.isEmpty ? 'none' : failures.join('+')}',
+    );
     return WatchedActionResult(failures);
   }
 }

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/tracking_source.dart';
 import 'storage_service.dart';
 
@@ -39,12 +41,25 @@ class TrackingSourcePolicy {
         progressSource = WatchProgressSource.smart;
       }
     }
-    return TrackingSourcePolicy(
+    final policy = TrackingSourcePolicy(
       scrobbleTargets: scrobbleTargets,
       progressSource: progressSource,
       homeTickSources: await StorageService.getHomeTickSources(),
     );
+    // Diagnostic trail: one line whenever the effective policy CHANGES (this
+    // loader runs constantly — logging every load would drown the capture).
+    final snapshot =
+        'scrobble=${policy.scrobbleTargets.map((s) => s.name).join('+')} '
+        'progress=${policy.progressSource.name} '
+        'homeTicks=${policy.homeTickSources.map((s) => s.name).join('+')}';
+    if (snapshot != _lastLoggedSnapshot) {
+      _lastLoggedSnapshot = snapshot;
+      debugPrint('[TrackingDiag] policy $snapshot');
+    }
+    return policy;
   }
+
+  static String? _lastLoggedSnapshot;
 
   bool scrobbles(TrackingSource source) =>
       source == TrackingSource.local || scrobbleTargets.contains(source);

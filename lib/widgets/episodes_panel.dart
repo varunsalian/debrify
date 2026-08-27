@@ -579,6 +579,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     if (mounted && generation == _episodeModeGeneration) {
       final next = _mergedUpNext(resumeProgress, _trackerNextRaw);
+      final maskedKeys = merged.keys
+          .where((k) => !resumeProgress.containsKey(k))
+          .take(5)
+          .join(',');
+      debugPrint(
+        '[TrackingDiag] guide imdb=$imdbId visualEntries=${merged.length} '
+        'resumeEntries=${resumeProgress.length} '
+        'visualOnly=[$maskedKeys${merged.length - resumeProgress.length > 5 ? ',…' : ''}] '
+        'upNext=${next != null ? 'S${next.season}E${next.episode}' : 'none'} '
+        'progress=${policy.progressSource.name}',
+      );
       setState(() {
         _episodeWatchProgress = merged;
         _episodeResumeProgress = resumeProgress;
