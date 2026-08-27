@@ -7688,6 +7688,139 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// exact player session on success. Unlike the old Dart HEAD probe this has
   /// no validation/playback race: decoded video or advancing position commits
   /// the candidate; an error, open throw, or bounded startup stall rejects it.
+  /// Debrid-resolved candidates skip the decode probe. The debrid API minted
+  /// (and thereby vouched for) the URL moments ago, so the probe's dead-link
+  /// protection is redundant — and its cost is real: committing on the first
+  /// decoded frame means the resume seek lands mid-startup-burst at 0, which
+  /// mpv on a cold stream answers by restarting (the masked-seek repro).
+  /// A plain open instead accepts on duration (header metadata, pre-decode),
+  /// so the resume seek folds into startup as "begin here" — the pre-ladder
+  /// timing that always worked. Addon direct URLs (the stale-cached-link
+  /// class the probe exists for) keep the full validation.
+  Future<bool> _openStartupDebridDirect(
+    String url, {
+    Map<String, String>? httpHeaders,
+    Torrent? source,
+    int? sourceIndex,
+    int attempt = 1,
+    int maxAttempts = 1,
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    final completer = Completer<bool>();
+    var candidateDuration = Duration.zero;
+    var bufferedAmount = Duration.zero;
+    final sourceFields = _startupSourceFields(sourceIndex, source);
+    debugPrint(
+      '[StartupFailover] event=candidate_open platform=flutter '
+      'attempt=$attempt/$maxAttempts $sourceFields route=debrid_direct '
+      'timeoutMs=${timeout.inMilliseconds}',
+    );
+    void finish(bool ok, String reason) {
+      if (completer.isCompleted) return;
+      debugPrint(
+        '[StartupFailover] event=candidate_result platform=flutter '
+        'attempt=$attempt/$maxAttempts $sourceFields ok=$ok reason=$reason '
+        'elapsedMs=${stopwatch.elapsedMilliseconds} '
+        'durationMs=${candidateDuration.inMilliseconds}',
+      );
+      completer.complete(ok);
+    }
+
+    // A dead debrid link (deleted torrent race, expired token) errors or
+    // serves something with no parseable duration — either way the ladder
+    // advances to the next candidate exactly like a failed probe.
+    final subs = <StreamSubscription>[
+      _player.stream.error.listen((error) {
+        if (AndroidRendererStartupFallback.isRendererFailure(error) &&
+            AndroidRendererStartupFallback.shouldArm(
+              isAndroid: Platform.isAndroid,
+              isAndroidTv: PlatformUtil.isAndroidTvCached,
+              mode: _androidVideoRendererMode,
+              alreadyValidated: _rendererValidatedForSession,
+              fallbackInProgress: _rendererFallbackInProgress,
+            )) {
+          // Renderer-bound failure, owned by the renderer fallback — same
+          // contract as the probe path (see _tryOpenStartupVod).
+          finish(true, 'renderer_fallback_deferred');
+          return;
+        }
+        finish(false, 'player_error');
+      }),
+      _player.stream.duration.listen((value) {
+        candidateDuration = value;
+        if (value > Duration.zero) finish(true, 'duration_known');
+      }),
+      // Durationless media (some MPEG-TS/M2TS and non-seekable progressive
+      // files) never publishes a duration — accept on decoded, advancing
+      // video like the probe would, or the watchdog eventually kills a
+      // stream that is visibly playing. Duration almost always arrives
+      // first, so this fallback does not delay the common case.
+      _player.stream.width.listen((width) {
+        if ((width ?? 0) > 0 &&
+            _player.state.position > Duration.zero) {
+          finish(true, 'decoded_video');
+        }
+      }),
+      _player.stream.position.listen((value) {
+        if (value > Duration.zero &&
+            (_player.state.width ?? 0) > 0) {
+          finish(true, 'decoded_video');
+        }
+      }),
+      _player.stream.buffer.listen((value) {
+        bufferedAmount = value;
+      }),
+    ];
+    try {
+      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+    } catch (e) {
+      debugPrint(
+        '[StartupFailover] event=open_exception platform=flutter '
+        '$sourceFields exception=${e.runtimeType}',
+      );
+      finish(false, 'open_exception');
+    }
+    // Same slow-versus-dead distinction as the probe path: a link whose
+    // buffer keeps growing is downloading, not dead — failing it would burn
+    // a possibly single-use debrid link. Extend in steps up to the same cap.
+    const extendStep = Duration(seconds: 3);
+    const maxWait = Duration(seconds: 45);
+    var lastBufferMark = Duration.zero;
+    var ok = false;
+    while (true) {
+      final remaining = timeout - stopwatch.elapsed;
+      try {
+        ok = await completer.future.timeout(
+          remaining > Duration.zero ? remaining : extendStep,
+        );
+        break;
+      } on TimeoutException {
+        if (bufferedAmount > lastBufferMark && stopwatch.elapsed < maxWait) {
+          lastBufferMark = bufferedAmount;
+          debugPrint(
+            '[StartupFailover] event=watchdog_extend platform=flutter '
+            '$sourceFields elapsedMs=${stopwatch.elapsedMilliseconds} '
+            'bufferedMs=${bufferedAmount.inMilliseconds}',
+          );
+          continue;
+        }
+        finish(false, 'timeout');
+        ok = false;
+        break;
+      }
+    }
+    for (final sub in subs) {
+      unawaited(sub.cancel());
+    }
+    if (!ok) {
+      try {
+        await _player.stop();
+      } catch (_) {}
+    }
+    return ok;
+  }
+
   Future<bool> _tryOpenStartupVod(
     String url, {
     Duration timeout = const Duration(seconds: 12),
@@ -8058,14 +8191,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         continue;
       }
-      final ok = await _tryOpenStartupVod(
-        url,
-        httpHeaders: httpHeaders,
-        source: source,
-        sourceIndex: sourceIndex,
-        attempt: attempts,
-        maxAttempts: maxAttempts,
-      );
+      // Debrid-resolved torrents bypass the decode probe (see
+      // _openStartupDebridDirect); addon direct URLs keep it, and so do
+      // PikPak sessions — cold-storage opens are the slowest in the app and
+      // have their own readiness needs.
+      final isDebridResolved =
+          !pikPakResolver && source?.streamType == StreamType.torrent;
+      final ok = isDebridResolved
+          ? await _openStartupDebridDirect(
+              url,
+              httpHeaders: httpHeaders,
+              source: source,
+              sourceIndex: sourceIndex,
+              attempt: attempts,
+              maxAttempts: maxAttempts,
+            )
+          : await _tryOpenStartupVod(
+              url,
+              httpHeaders: httpHeaders,
+              source: source,
+              sourceIndex: sourceIndex,
+              attempt: attempts,
+              maxAttempts: maxAttempts,
+            );
       if (!mounted) return false;
       if (!ok) continue;
 

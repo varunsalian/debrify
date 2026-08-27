@@ -1441,6 +1441,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     }
                     reportIptvStremioWinnerIfNeeded()
                     hideBufferingIndicator()
+                    // Debrid-resolved torrents commit at READY: the debrid API
+                    // vouched for the link moments ago, and READY proves the
+                    // stream demuxes and buffers — matching the Dart ladder's
+                    // debrid-direct path. Addon direct URLs keep the
+                    // first-frame proof (their stale/interstitial links are
+                    // what the gate exists for), and PikPak keeps its own
+                    // cold-storage gate.
+                    if (startupFailoverCursor?.committed == false &&
+                        stremioSources.getOrNull(currentStremioSourceIndex)
+                            ?.streamType == "torrent" &&
+                        !currentPlaybackItemIsPikPak()
+                    ) {
+                        commitStartupCandidate()
+                    }
                     // Furthest-watched resume (same rule as the Dart player): seek
                     // the DEEPER of the local position and the Trakt percent so
                     // playback never jumps backward. startAtPercent (Stremio TV
