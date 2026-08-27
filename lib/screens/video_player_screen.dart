@@ -1182,6 +1182,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // media_kit state
   bool _isReady = false;
   bool _startupGateActive = false;
+  // Debrid-direct first open keeps the LOGICAL gate (tracking suppression,
+  // restore sequencing) but hides the overlay: the player's own surface and
+  // buffering spinner show and controls come up on tap — the pre-ladder look.
+  // The overlay appears only when failover actually starts retrying.
+  bool _startupGateOverlayHidden = false;
   // A source explicitly picked from the in-player sheet is validated as one
   // isolated candidate. While this is true, renderer events belong to an
   // untrusted replacement and must not update local completion or any tracker.
@@ -8095,8 +8100,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       attempts++;
       final sourceFields = _startupSourceFields(sourceIndex, source);
+      // A debrid-direct first open isn't "checking" anything — it's loading
+      // the user's own source; say so. Failover retries keep the counter
+      // (the ladder really is trying alternatives at that point).
+      final firstAttempt = attempts == 1 && !initialAttemptAlreadyFailed;
+      final debridFirstOpen =
+          firstAttempt &&
+          !pikPakResolver &&
+          source.streamType == StreamType.torrent;
+      if (_startupGateOverlayHidden != debridFirstOpen) {
+        _startupGateOverlayHidden = debridFirstOpen;
+        if (mounted) setState(() {});
+      }
       _setStartupGateMessage(
-        attempts == 1 && !initialAttemptAlreadyFailed
+        debridFirstOpen
+            ? 'Loading stream…'
+            : firstAttempt
             ? 'Checking stream 1 of $maxAttempts…'
             : 'Stream unavailable · Trying $attempts of $maxAttempts…',
       );
@@ -8269,6 +8288,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _setStartupGateActive(bool active) {
     if (_startupGateActive == active) return;
     _startupGateActive = active;
+    if (!active) _startupGateOverlayHidden = false;
     if (mounted) setState(() {});
   }
 
@@ -13562,7 +13582,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
-                if (_startupGateActive)
+                if (_startupGateActive && !_startupGateOverlayHidden)
                   ColoredBox(
                     color: Colors.black,
                     child: SafeArea(
@@ -13840,7 +13860,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     // status. Keeping the ordinary buffering indicator above
                     // it produces two overlapping loaders while candidates
                     // are being rejected and retried.
-                    if (_startupGateActive) {
+                    if (_startupGateActive && !_startupGateOverlayHidden) {
                       return const SizedBox.shrink();
                     }
                     return IgnorePointer(
@@ -13886,7 +13906,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     onPanEnd: _onPanEnd,
                   ),
                 // Controls overlay (shown only when ready)
-                if (isReady && !inPip && !_startupGateActive)
+                if (isReady &&
+                    !inPip &&
+                    (!_startupGateActive || _startupGateOverlayHidden))
                   ValueListenableBuilder<bool>(
                     valueListenable: _controlsVisible,
                     builder: (context, visible, _) {

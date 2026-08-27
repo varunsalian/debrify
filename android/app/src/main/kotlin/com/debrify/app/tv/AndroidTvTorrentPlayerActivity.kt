@@ -16218,7 +16218,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startupPikPakTorrentAcquisitionAttempted =
             startupResolverProvider.equals("pikpak", ignoreCase = true) &&
                 stremioSources.getOrNull(currentStremioSourceIndex)?.streamType == "torrent"
-        startupGateView.visibility = View.VISIBLE
+        // Visibility is decided per candidate in armStartupCandidate: a
+        // debrid-direct first open keeps the player surface (pre-ladder
+        // look); the gate appears only when failover starts retrying.
         hideStremioSourceBadgeImmediately()
         val item = model.items.getOrNull(currentIndex)
         startupLog(
@@ -16452,7 +16454,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.postDelayed(timeout, STARTUP_FAILOVER_TIMEOUT_MS)
         val attempt = startupFailoverCursor?.attempts ?: 1
         val attemptLimit = if (startupTryNextOnFailure) startupMaxAttempts else 1
-        startupGateStatus.text = if (attempt <= 1) {
+        // Mirrors the Dart gate copy: a debrid-direct first open is loading
+        // the user's own source, not "checking" candidates. Failover retries
+        // keep the counter.
+        val debridFirstOpen = attempt <= 1 &&
+            stremioSources.getOrNull(sourceIndex)?.streamType == "torrent" &&
+            !currentPlaybackItemIsPikPak()
+        startupGateView.visibility =
+            if (debridFirstOpen) View.GONE else View.VISIBLE
+        startupGateStatus.text = if (debridFirstOpen) {
+            "Loading stream…"
+        } else if (attempt <= 1) {
             "Checking stream 1 of $attemptLimit…"
         } else {
             "Stream unavailable · Trying $attempt of $attemptLimit…"
