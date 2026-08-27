@@ -4,7 +4,7 @@ import '../../../models/movie_collection.dart';
 import '../../../models/playlist_view_mode.dart';
 import '../../../widgets/series_browser.dart';
 import '../../../widgets/movie_collection_browser.dart';
-import '../models/playlist_entry.dart';
+import '../../../core/playback/playlist_entry.dart';
 import '../constants/color_constants.dart';
 import '../../../services/storage_service.dart';
 import '../../../utils/episode_progress_merge.dart';

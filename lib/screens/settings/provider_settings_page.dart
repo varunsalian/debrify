@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
-import '../../services/pikpak_api_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../app/wiring.dart';
 
 /// Provider settings page for configuring default torrent provider.
 class ProviderSettingsPage extends StatefulWidget {
@@ -62,7 +62,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final rdConfigured = await StorageService.hasRealDebridCredential();
     final premiumizeConfigured = await StorageService.hasPremiumizeCredential();
     final allDebridConfigured = await StorageService.hasAllDebridCredential();
-    final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
+    final pikpakAuth = await AppServices.pikpak.isAuthenticated();
 
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();

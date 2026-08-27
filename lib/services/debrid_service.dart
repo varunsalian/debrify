@@ -4,7 +4,7 @@ import '../models/debrid_download.dart';
 import '../models/rd_torrent.dart';
 import '../models/rd_user.dart';
 import '../models/rd_file_node.dart';
-import '../services/storage_service.dart';
+import 'storage_service.dart';
 import '../utils/concurrency.dart';
 import '../utils/file_utils.dart';
 import '../utils/json_isolate.dart';

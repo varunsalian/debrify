@@ -10,7 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
-import '../../services/secret_vault.dart';
+import '../secret_vault.dart';
 import '../../utils/app_storage.dart';
 import '../../utils/platform_util.dart';
 import 'device_key_provider.dart';

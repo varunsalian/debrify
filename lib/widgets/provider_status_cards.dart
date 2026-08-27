@@ -4,10 +4,10 @@ import '../models/rd_user.dart';
 import '../models/torbox_user.dart';
 import '../services/account_service.dart';
 import '../services/torbox_account_service.dart';
-import '../services/pikpak_api_service.dart';
 import '../services/storage_service.dart';
 import 'home_focus_controller.dart';
 import '../utils/tv_keys.dart';
+import '../app/wiring.dart';
 
 // Callback type for notifier listeners
 typedef _VoidCallback = void Function();
@@ -90,7 +90,7 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
 
     AccountService.userNotifier.addListener(_rdListener);
     TorboxAccountService.userNotifier.addListener(_torboxListener);
-    PikPakApiService.instance.authStateNotifier.addListener(_pikpakListener);
+    AppServices.pikpakAuthenticated.addListener(_pikpakListener);
 
     _loadProviderStatuses();
   }
@@ -100,7 +100,7 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
     // Remove notifier listeners
     AccountService.userNotifier.removeListener(_rdListener);
     TorboxAccountService.userNotifier.removeListener(_torboxListener);
-    PikPakApiService.instance.authStateNotifier.removeListener(_pikpakListener);
+    AppServices.pikpakAuthenticated.removeListener(_pikpakListener);
 
     // Unregister from controller
     widget.focusController?.unregisterSection(HomeSection.providers);
@@ -304,7 +304,7 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
 
   Future<void> _loadPikPakStatus() async {
     try {
-      final isAuth = await PikPakApiService.instance.isAuthenticated();
+      final isAuth = await AppServices.pikpak.isAuthenticated();
       if (!isAuth) {
         _pikpakStatus = const ProviderStatus(
           name: 'PikPak',
@@ -313,8 +313,8 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
         return;
       }
 
-      final email = await PikPakApiService.instance.getEmail();
-      final testOk = await PikPakApiService.instance.testConnection();
+      final email = await AppServices.pikpak.getEmail();
+      final testOk = await AppServices.pikpak.testConnection();
 
       _pikpakStatus = ProviderStatus(
         name: 'PikPak',

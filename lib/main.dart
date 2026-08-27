@@ -13,7 +13,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/app_route_observer.dart';
 // Old Home board deprecated — moved to screens/deprecated/ and commented out.
-// import 'screens/torrent_search_screen.dart';
 import 'screens/browse_screen.dart';
 import 'screens/cloud_screen.dart';
 import 'screens/search_screen.dart';
@@ -21,7 +20,7 @@ import 'widgets/iptv/iptv_results_view.dart';
 import 'widgets/youtube/youtube_results_view.dart';
 import 'screens/debrid_downloads_screen.dart';
 import 'screens/torbox/torbox_downloads_screen.dart';
-import 'screens/pikpak/pikpak_files_screen.dart';
+import 'features/pikpak/ui/screen.dart';
 import 'screens/premiumize/premiumize_files_screen.dart';
 import 'screens/alldebrid/alldebrid_files_screen.dart';
 import 'screens/webdav/webdav_files_screen.dart';
@@ -101,6 +100,7 @@ import 'utils/tvos_device.dart';
 import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
+import 'app/wiring.dart';
 
 /// Flutter's default image cache (1000 images / 100 MB) is far too large for a
 /// 2 GB Android TV box — a screenful of full-res posters plus offscreen ones
@@ -1902,6 +1902,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       // Create handler with callbacks
       final handler = MagnetLinkHandler(
         context: context,
+        pikpak: AppServices.pikpak,
         onRealDebridResult: (result, torrentName, apiKey) async {
           // Use the same post-action flow as torrent search
           await MainPageBridge.handleRealDebridResult?.call(
@@ -1959,6 +1960,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       // Create handler with callbacks for URL handling
       final handler = MagnetLinkHandler(
         context: context,
+        pikpak: AppServices.pikpak,
         onRealDebridUrlResult: (result) {
           // Show success message with download info
           final filename = result['filename']?.toString() ?? 'Link';

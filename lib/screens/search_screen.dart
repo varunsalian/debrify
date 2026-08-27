@@ -113,7 +113,7 @@ import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'torbox/torbox_downloads_screen.dart';
 import 'premiumize/premiumize_files_screen.dart';
 import 'alldebrid/alldebrid_files_screen.dart';
-import 'pikpak/pikpak_files_screen.dart';
+import '../features/pikpak/ui/screen.dart';
 
 part 'search/search_sources.dart';
 part 'search/search_card_widgets.dart';

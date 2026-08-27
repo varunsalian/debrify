@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:path/path.dart' as path;
 import 'debrid_service.dart';
 import 'torbox_service.dart';
-import 'pikpak_api_service.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
@@ -23,6 +22,7 @@ import 'profiles/profile_bootstrap.dart';
 import 'profiles/profile_credential_facade.dart';
 import 'profiles/profile_runtime.dart';
 import 'package:synchronized/synchronized.dart';
+import '../app/wiring.dart';
 
 class DownloadEntry {
   final Task task;
@@ -518,35 +518,33 @@ class DownloadService {
       final path = await _recordsFilePath();
       final raw = await File(path).readAsString();
       final data = await _decodeRecords(raw);
-      if (data is Map<String, dynamic>) {
-        final all = data.map(
-          (k, v) => MapEntry(k, (v as Map).cast<String, dynamic>()),
+      final all = data.map(
+        (k, v) => MapEntry(k, (v as Map).cast<String, dynamic>()),
+      );
+      if (ProfileRuntime.isProfileCommitted) {
+        final owner = _activeOwnerProfileId;
+        _records = Map<String, Map<String, dynamic>>.fromEntries(
+          all.entries.where((entry) {
+            final storedOwner = entry.value['ownerProfileId']?.toString();
+            return (storedOwner ?? 'legacy-admin-v1') == owner;
+          }),
         );
-        if (ProfileRuntime.isProfileCommitted) {
-          final owner = _activeOwnerProfileId;
-          _records = Map<String, Map<String, dynamic>>.fromEntries(
-            all.entries.where((entry) {
-              final storedOwner = entry.value['ownerProfileId']?.toString();
-              return (storedOwner ?? 'legacy-admin-v1') == owner;
-            }),
-          );
-          var sanitized = false;
-          for (final record in _records.values) {
-            final rawMeta = record['meta'];
-            if (rawMeta is! String || rawMeta.isEmpty) continue;
-            try {
-              final decoded = jsonDecode(rawMeta);
-              if (decoded is Map<String, dynamic> &&
-                  decoded.remove('apiKey') != null) {
-                record['meta'] = jsonEncode(decoded);
-                sanitized = true;
-              }
-            } catch (_) {}
-          }
-          if (sanitized) await _saveRecords();
-        } else {
-          _records = all;
+        var sanitized = false;
+        for (final record in _records.values) {
+          final rawMeta = record['meta'];
+          if (rawMeta is! String || rawMeta.isEmpty) continue;
+          try {
+            final decoded = jsonDecode(rawMeta);
+            if (decoded is Map<String, dynamic> &&
+                decoded.remove('apiKey') != null) {
+              record['meta'] = jsonEncode(decoded);
+              sanitized = true;
+            }
+          } catch (_) {}
         }
+        if (sanitized) await _saveRecords();
+      } else {
+        _records = all;
       }
     } catch (_) {
       _records = {};
@@ -2794,8 +2792,8 @@ class DownloadService {
       debugPrint('DL RETRY PIKPAK FAILED: refreshing signed link');
 
       // Get fresh file details
-      final freshData = await PikPakApiService.instance.getFileDetails(fileId);
-      final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+      final freshData = await AppServices.pikpak.getFileDetails(fileId);
+      final freshUrl = freshData.streamingUrl;
 
       if (freshUrl == null || freshUrl.isEmpty) {
         debugPrint('DL RETRY PIKPAK FAILED: Failed to get fresh URL');
@@ -2845,10 +2843,10 @@ class DownloadService {
       if (meta['pikpakDownload'] == true) {
         final fileId = (meta['pikpakFileId'] ?? '').toString();
         if (fileId.isEmpty) return null;
-        final freshData = await PikPakApiService.instance.getFileDetails(
+        final freshData = await AppServices.pikpak.getFileDetails(
           fileId,
         );
-        final freshUrl = PikPakApiService.instance.getStreamingUrl(freshData);
+        final freshUrl = freshData.streamingUrl;
         if (freshUrl == null || freshUrl.isEmpty) return null;
         return (url: freshUrl, fileName: null);
       }
@@ -3931,11 +3929,9 @@ class DownloadService {
                     debugPrint('DL RETRY PIKPAK: refreshing signed link');
 
                     // Get fresh file details
-                    final freshData = await PikPakApiService.instance
+                    final freshData = await AppServices.pikpak
                         .getFileDetails(fileId);
-                    final freshUrl = PikPakApiService.instance.getStreamingUrl(
-                      freshData,
-                    );
+                    final freshUrl = freshData.streamingUrl;
 
                     if (freshUrl != null && freshUrl.isNotEmpty) {
                       // Update meta with incremented cold attempt count

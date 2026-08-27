@@ -12,7 +12,6 @@ import '../services/debrid_service.dart';
 import '../services/alldebrid_service.dart';
 import '../models/alldebrid_file.dart';
 import '../services/torbox_service.dart';
-import '../services/pikpak_api_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/main_page_bridge.dart';
 import '../services/android_native_downloader.dart';
@@ -31,8 +30,9 @@ import '../widgets/view_mode_dropdown.dart';
 import '../widgets/tvmaze_search_dialog.dart';
 import '../widgets/tv_text_field.dart';
 import '../models/webdav_item.dart';
-import 'video_player/models/playlist_entry.dart';
+import '../core/playback/playlist_entry.dart';
 import '../utils/tv_keys.dart';
+import '../app/wiring.dart';
 
 /// Screen for viewing contents of a playlist item
 /// Supports Raw, Sort, and Series Arrange view modes
@@ -459,7 +459,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     int depth = 0,
     String currentPath = '',
   }) async {
-    final pikpak = PikPakApiService.instance;
+    final pikpak = AppServices.pikpak;
 
     // Prevent infinite recursion or excessively deep folder structures
     const int maxDepth = 4;
@@ -477,9 +477,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     int fileIndex = 0;
 
     for (final file in files) {
-      final kind = file['kind'] ?? '';
-      final name = (file['name'] as String?) ?? 'Unknown';
-      final fileId = file['id'] as String?;
+      final kind = file.kind;
+      final name = (file.name as String?) ?? 'Unknown';
+      final fileId = file.id as String?;
 
       if (kind == 'drive#folder') {
         // Recursively build subfolder
@@ -497,10 +497,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         }
       } else {
         // Add file node
-        final sizeRaw = file['size'];
-        final size = sizeRaw is int
-            ? sizeRaw
-            : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
+        final size = file.size;
 
         // Store the PikPak file metadata in the node's path field (we'll parse it later)
         // Format: "pikpak://fileId|fileName"
@@ -813,9 +810,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           break;
         }
 
-        if (child != null) {
-          currentFolder = child;
-        }
+        currentFolder = child;
       }
 
       // Apply transformation based on mode
@@ -2095,25 +2090,25 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Future<void> _saveImdbIdToPlaylist({bool force = false}) async {
     final imdbId = _seriesPlaylist?.imdbId;
     if (imdbId == null || !imdbId.startsWith('tt')) return;
-    if (!force && (widget.playlistItem?['imdbId'] as String?) != null) return;
+    if (!force && (widget.playlistItem['imdbId'] as String?) != null) return;
 
-    final rdTorrentId = widget.playlistItem?['rdTorrentId'] as String?;
-    final torboxTorrentId = widget.playlistItem?['torboxTorrentId']?.toString();
-    final pikpakCollectionId = widget.playlistItem?['pikpakFileId'] as String?;
+    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
+    final torboxTorrentId = widget.playlistItem['torboxTorrentId']?.toString();
+    final pikpakCollectionId = widget.playlistItem['pikpakFileId'] as String?;
     final isPremiumize =
-        (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
+        (widget.playlistItem['provider'] as String?)?.toLowerCase() ==
         'premiumize';
     final String? premiumizeHash = isPremiumize
-        ? (widget.playlistItem?['torrent_hash'] as String?)
+        ? (widget.playlistItem['torrent_hash'] as String?)
         : null;
     final String? premiumizeItemId = isPremiumize
-        ? (widget.playlistItem?['premiumizeItemId']?.toString())
+        ? (widget.playlistItem['premiumizeItemId']?.toString())
         : null;
     final bool isAllDebrid =
-        (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
+        (widget.playlistItem['provider'] as String?)?.toLowerCase() ==
         'alldebrid';
     final String? allDebridHash = isAllDebrid
-        ? (widget.playlistItem?['torrent_hash'] as String?)
+        ? (widget.playlistItem['torrent_hash'] as String?)
         : null;
 
     await StorageService.updatePlaylistItemImdbId(
@@ -2193,13 +2188,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Check if we have a saved TVMaze mapping (indicates cached data)
       // Only show loading indicator if data needs to be fetched
       bool showLoading = true;
-      if (widget.playlistItem != null) {
-        final mapping = await StorageService.getTVMazeSeriesMapping(
-          widget.playlistItem!,
-        );
-        if (mapping != null) {
-          showLoading = false; // Data should be cached, skip loading indicator
-        }
+      final mapping = await StorageService.getTVMazeSeriesMapping(
+        widget.playlistItem,
+      );
+      if (mapping != null) {
+        showLoading = false; // Data should be cached, skip loading indicator
       }
 
       if (showLoading) {
@@ -2213,7 +2206,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         _seriesPlaylist!
             .fetchEpisodeInfo(
               playlistItem: widget.playlistItem,
-              imdbId: widget.playlistItem?['imdbId'] as String?,
+              imdbId: widget.playlistItem['imdbId'] as String?,
             )
             .then((_) async {
               await _saveImdbIdToPlaylist();
@@ -2310,7 +2303,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         _seriesPlaylist!
             .fetchEpisodeInfo(
               playlistItem: widget.playlistItem,
-              imdbId: widget.playlistItem?['imdbId'] as String?,
+              imdbId: widget.playlistItem['imdbId'] as String?,
             )
             .then((_) async {
               await _saveImdbIdToPlaylist(force: true);
@@ -3769,7 +3762,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     List<RDFileNode> videoFiles,
     int startIndex,
   ) async {
-    final pikpak = PikPakApiService.instance;
+    final pikpak = AppServices.pikpak;
 
     if (!await pikpak.isAuthenticated()) {
       throw Exception('Please login to PikPak in Settings');
@@ -3797,7 +3790,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Get streaming URL for first file
         try {
           final fileData = await pikpak.getFileDetails(fileId);
-          final streamingUrl = pikpak.getStreamingUrl(fileData);
+          final streamingUrl = fileData.streamingUrl;
           entries.add(
             PlaylistEntry(
               url: streamingUrl ?? '',

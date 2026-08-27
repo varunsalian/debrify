@@ -60,3 +60,8 @@ dev/tool/discord/nightly_logs/
 # packages/media_kit_libs_tvos_video/fetch_frameworks.sh.
 packages/media_kit_libs_tvos_video/tvos/Frameworks/
 tvos/build/
+
+# Golden-test failure artifacts. `flutter test` drops four PNGs
+# (masterImage/testImage/maskedDiff/isolatedDiff) beside the test for every
+# failed matchesGoldenFile, and rewrites them on every run.
+test/**/failures/

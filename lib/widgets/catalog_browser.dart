@@ -14,7 +14,7 @@ import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/alldebrid/alldebrid_files_screen.dart';
-import '../screens/pikpak/pikpak_files_screen.dart';
+import '../features/pikpak/ui/screen.dart';
 import '../screens/premiumize/premiumize_files_screen.dart';
 import '../screens/torbox/torbox_downloads_screen.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';

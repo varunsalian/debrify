@@ -26,6 +26,7 @@ import '../../utils/app_storage.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../app/wiring.dart';
 
 /// The profile backup/restore user flows, extracted from the settings screen
 /// so the Profiles hub can offer them at its first level. Behavior is
@@ -445,7 +446,7 @@ class ProfileBackupFlows {
       registry: registry,
       cipher: DeviceKeyProvider.cipher,
       lifecycleParticipants: <ProfileLifecycleParticipant>[
-        ProfileAppLifecycleParticipant(),
+        ProfileAppLifecycleParticipant(pikpak: AppServices.pikpak),
       ],
     );
     if (graphRestore) {

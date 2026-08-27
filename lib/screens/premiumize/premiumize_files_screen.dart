@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
+import '../video_player_screen.dart'; // re-exports PlaylistEntry
 import '../../services/analytics_service.dart';
 import '../../services/premiumize_service.dart';
 import '../../services/storage_service.dart';

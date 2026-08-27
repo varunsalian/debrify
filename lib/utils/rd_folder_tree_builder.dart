@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/rd_file_node.dart';
-import '../utils/file_utils.dart';
+import 'file_utils.dart';
 
 class RDFolderTreeBuilder {
   /// Build a folder tree from Real-Debrid torrent info files array

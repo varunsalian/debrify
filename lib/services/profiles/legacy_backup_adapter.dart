@@ -1,4 +1,4 @@
-import '../../services/backup_restore_service.dart';
+import '../backup_restore_service.dart';
 import 'portable_profile_package.dart';
 
 /// Normalizes the last non-profile plain-v1 / encrypted-v2 inner payload into

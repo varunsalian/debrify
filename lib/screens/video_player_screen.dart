@@ -45,7 +45,6 @@ import '../services/iptv_epg_service.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../services/torbox_service.dart';
-import '../services/pikpak_api_service.dart';
 import '../services/next_episode_service.dart';
 
 import '../widgets/tv_text_field.dart';
@@ -54,7 +53,7 @@ import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 // Video Player Components
-import 'video_player/models/playlist_entry.dart';
+import '../core/playback/playlist_entry.dart';
 import 'video_player/services/external_subtitle_payload.dart';
 import 'video_player/services/subtitle_track_utils.dart';
 import 'video_player/models/gesture_state.dart';
@@ -73,7 +72,7 @@ import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
-import 'video_player/widgets/pikpak_retry_overlay.dart';
+import 'video_player/widgets/retry_overlay.dart';
 import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/player_menu_panel.dart';
@@ -115,9 +114,10 @@ import '../services/mdblist/mdblist_service.dart';
 import 'package:http/http.dart' as http;
 import '../utils/episode_progress_merge.dart';
 import '../utils/tv_keys.dart';
+import '../app/wiring.dart';
 
 // Re-export PlaylistEntry for backward compatibility
-export 'video_player/models/playlist_entry.dart';
+export '../core/playback/playlist_entry.dart';
 export 'video_player/models/channel_entry.dart';
 
 class _ManualSourceValidationFailure implements Exception {
@@ -9575,9 +9575,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         throw Exception('PikPak file metadata missing');
       }
       try {
-        final pikpak = PikPakApiService.instance;
+        final pikpak = AppServices.pikpak;
         final fileData = await pikpak.getFileDetails(fileId);
-        final url = pikpak.getStreamingUrl(fileData);
+        final url = fileData.streamingUrl;
         if (url == null || url.isEmpty) {
           throw Exception('PikPak returned an empty stream URL');
         }
@@ -14008,7 +14008,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     _buildDebrifyTvInfoPanel(flush: true) !=
                                         null ||
                                     !widget.hideOptions);
-                            return PikPakRetryOverlay(
+                            return PlaybackRetryOverlay(
                               message: _pikPakRetryMessage!,
                               bottom: dockVisible
                                   ? math.max(80.0, dockExtent + 12)

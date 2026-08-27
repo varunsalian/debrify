@@ -15,9 +15,9 @@ import 'mdblist/mdblist_calendar_service.dart';
 import 'mdblist/mdblist_continue_watching_service.dart';
 import 'mdblist/mdblist_service.dart';
 import 'mdblist/mdblist_sync_coordinator.dart';
-import 'pikpak_api_service.dart';
 import 'storage_service.dart';
 import 'stremio_service.dart';
+import '../app/wiring.dart';
 
 /// Service for creating and applying configuration backups.
 ///
@@ -529,7 +529,7 @@ class BackupRestoreService {
             // saved so the user can retry from PikPak settings.
             if (password != null && password.isNotEmpty) {
               try {
-                final loggedIn = await PikPakApiService.instance.login(
+                final loggedIn = await AppServices.pikpak.login(
                   email,
                   password,
                 );

@@ -17,7 +17,7 @@ import '../../services/storage_service.dart';
 import '../../screens/catalog_item_detail_screen.dart';
 import '../../screens/debrid_downloads_screen.dart';
 import '../../screens/alldebrid/alldebrid_files_screen.dart';
-import '../../screens/pikpak/pikpak_files_screen.dart';
+import '../../features/pikpak/ui/screen.dart';
 import '../../screens/premiumize/premiumize_files_screen.dart';
 import '../../screens/torbox/torbox_downloads_screen.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';

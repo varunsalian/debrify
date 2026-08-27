@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('PikPak logs never interpolate authentication material', () {
     final source = File(
-      'lib/services/pikpak_api_service.dart',
+      'lib/features/pikpak/data/api_service.dart',
     ).readAsStringSync();
     final logCalls = RegExp(
       r'(?:print|debugPrint)\s*\(([\s\S]*?)\);',

@@ -7,7 +7,6 @@ import 'debrid_service.dart';
 import 'torbox_service.dart';
 import 'video_player_launcher.dart';
 import 'main_page_bridge.dart';
-import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'webdav_service.dart';
 import 'alldebrid_service.dart';
@@ -21,9 +20,11 @@ import '../models/rd_file_node.dart';
 import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/webdav_item.dart';
-import '../screens/video_player/models/playlist_entry.dart';
+import '../core/playback/playlist_entry.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
+import '../app/wiring.dart';
+import '../features/pikpak/models/file.dart';
 
 /// Standalone service for playing playlist items.
 /// Extracted from PlaylistScreen so it can be called from any screen.
@@ -936,7 +937,7 @@ class PlaylistPlayerService {
     required String fallbackTitle,
     bool playRandom = false,
   }) async {
-    final pikpak = PikPakApiService.instance;
+    final pikpak = AppServices.pikpak;
 
     if (!await pikpak.isAuthenticated()) {
       if (!context.mounted) return;
@@ -970,7 +971,7 @@ class PlaylistPlayerService {
             storedFile != null && storedFile.isNotEmpty;
 
         final fileData = await pikpak.getFileDetails(pikpakFileId);
-        final url = pikpak.getStreamingUrl(fileData);
+        final url = fileData.streamingUrl;
 
         if (url == null || url.isEmpty) {
           if (!context.mounted) return;
@@ -986,13 +987,13 @@ class PlaylistPlayerService {
             ? ((storedFile['name'] as String?)?.isNotEmpty == true
                   ? storedFile['name'] as String
                   : fallbackTitle)
-            : ((fileData['name'] as String?)?.isNotEmpty == true
-                  ? fileData['name'] as String
+            : ((fileData.name as String?)?.isNotEmpty == true
+                  ? fileData.name
                   : fallbackTitle);
 
         final int? sizeBytes = hasStoredMetadata
             ? _asInt(storedFile['size'])
-            : _asInt(fileData['size']);
+            : _asInt(fileData.size);
         final String? subtitle = sizeBytes != null && sizeBytes > 0
             ? Formatters.formatFileSize(sizeBytes)
             : null;
@@ -1008,7 +1009,7 @@ class PlaylistPlayerService {
         final singleFileRelativePath = hasStoredMetadata
             ? ((storedFile['_fullPath'] as String?) ??
                   (storedFile['name'] as String?))
-            : (fileData['name'] as String?);
+            : (fileData.name as String?);
 
         await VideoPlayerLauncher.push(
           context,
@@ -1079,25 +1080,22 @@ class PlaylistPlayerService {
     }
 
     try {
-      final List<Map<String, dynamic>> videoFiles = [];
+      final List<PikPakFile> videoFiles = [];
 
       if (hasStoredMetadata) {
-        for (final file in pikpakFiles) {
-          if (file is Map<String, dynamic>) {
-            final mimeType = (file['mime_type'] as String?) ?? '';
-            final fileName = (file['name'] as String?) ?? '';
-            if (mimeType.startsWith('video/') ||
-                FileUtils.isVideoFile(fileName)) {
-              videoFiles.add(file);
-            }
+        for (final raw in pikpakFiles) {
+          if (raw is! Map) continue;
+          final file = PikPakFile.fromJson(raw);
+          if (file.isVideo || FileUtils.isVideoFile(file.name)) {
+            videoFiles.add(file);
           }
         }
       } else {
         for (final fileId in pikpakFileIds!) {
           try {
             final fileData = await pikpak.getFileMetadata(fileId.toString());
-            final mimeType = (fileData['mime_type'] as String?) ?? '';
-            final fileName = (fileData['name'] as String?) ?? '';
+            final mimeType = (fileData.mimeType as String?) ?? '';
+            final fileName = (fileData.name as String?) ?? '';
             if (mimeType.startsWith('video/') ||
                 FileUtils.isVideoFile(fileName)) {
               videoFiles.add(fileData);
@@ -1126,7 +1124,7 @@ class PlaylistPlayerService {
 
       final List<_PikPakPlaylistCandidate> candidates = [];
       for (final file in videoFiles) {
-        final displayName = (file['name'] as String?) ?? 'Unknown';
+        final displayName = (file.name as String?) ?? 'Unknown';
         final info = SeriesParser.parseFilename(displayName);
         candidates.add(
           _PikPakPlaylistCandidate(
@@ -1194,10 +1192,10 @@ class PlaylistPlayerService {
       // Resolve initial URL
       String initialUrl = '';
       try {
-        final firstFileId = candidates[startIndex].file['id'] as String?;
+        final firstFileId = candidates[startIndex].file.id as String?;
         if (firstFileId != null) {
           final fullData = await pikpak.getFileDetails(firstFileId);
-          initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
+          initialUrl = fullData.streamingUrl ?? '';
         }
       } catch (e) {
         debugPrint(
@@ -1234,11 +1232,11 @@ class PlaylistPlayerService {
           fallback: candidate.displayName,
         );
 
-        final fileId = candidate.file['id'] as String?;
-        final sizeBytes = _asInt(candidate.file['size']);
+        final fileId = candidate.file.id as String?;
+        final sizeBytes = _asInt(candidate.file.size);
         final relativePath =
-            (candidate.file['_fullPath'] as String?) ??
-            (candidate.file['name'] as String?);
+            candidate.file.fullPath ??
+            (candidate.file.name as String?);
 
         playlistEntries.add(
           PlaylistEntry(
@@ -1254,7 +1252,7 @@ class PlaylistPlayerService {
 
       final totalBytes = candidates.fold<int>(
         0,
-        (sum, c) => sum + (_asInt(c.file['size']) ?? 0),
+        (sum, c) => sum + (_asInt(c.file.size) ?? 0),
       );
       final subtitle =
           '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
@@ -1267,7 +1265,7 @@ class PlaylistPlayerService {
       if (!context.mounted) return;
 
       final firstFileId = candidates.isNotEmpty
-          ? (candidates[0].file['id'] as String?)
+          ? (candidates[0].file.id as String?)
           : null;
 
       MainPageBridge.notifyPlayerLaunching();
@@ -2483,7 +2481,7 @@ class PlaylistPlayerService {
     final folderGroups = <String, List<_PikPakPlaylistCandidate>>{};
     for (final candidate in candidates) {
       final fullPath =
-          (candidate.file['name'] as String?) ?? candidate.displayName;
+          (candidate.file.name as String?) ?? candidate.displayName;
       final lastSlashIndex = fullPath.lastIndexOf('/');
       final folderPath = lastSlashIndex >= 0
           ? fullPath.substring(0, lastSlashIndex)
@@ -2816,7 +2814,7 @@ class _TorboxPlaylistCandidate {
 }
 
 class _PikPakPlaylistCandidate {
-  final Map<String, dynamic> file;
+  final PikPakFile file;
   final SeriesInfo info;
   final String displayName;
   _PikPakPlaylistCandidate({

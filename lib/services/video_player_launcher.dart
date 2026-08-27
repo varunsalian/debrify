@@ -13,36 +13,36 @@ import '../models/iptv_playlist.dart';
 import '../theme/app_surfaces.dart';
 import '../models/movie_collection.dart';
 import '../models/torrent.dart';
-import '../services/external_player_service.dart';
+import 'external_player_service.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
 import '../models/stremio_subtitle.dart';
 import '../screens/video_player_screen.dart';
-import '../services/android_native_downloader.dart';
-import '../services/android_tv_player_bridge.dart';
-import '../services/debrid_service.dart';
-import '../services/main_page_bridge.dart';
-import '../services/next_episode_service.dart';
-import '../services/analytics_service.dart';
-import '../services/episode_tracker_snapshot_service.dart';
-import '../services/series_source_fetcher.dart';
-import '../services/storage_service.dart';
-import '../services/torbox_service.dart';
-import '../services/pikpak_api_service.dart';
-import '../services/premiumize_service.dart';
-import '../services/alldebrid_service.dart';
+import 'android_native_downloader.dart';
+import 'android_tv_player_bridge.dart';
+import 'debrid_service.dart';
+import 'main_page_bridge.dart';
+import 'next_episode_service.dart';
+import 'analytics_service.dart';
+import 'episode_tracker_snapshot_service.dart';
+import 'series_source_fetcher.dart';
+import 'storage_service.dart';
+import 'torbox_service.dart';
+import 'premiumize_service.dart';
+import 'alldebrid_service.dart';
 import '../utils/episode_progress_merge.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
-import '../services/movie_metadata_service.dart';
-import '../services/trakt/trakt_service.dart';
-import '../services/simkl/simkl_service.dart';
-import '../services/mdblist/mdblist_models.dart';
-import '../services/mdblist/mdblist_scrobble_session.dart';
-import '../services/mdblist/mdblist_service.dart';
+import 'movie_metadata_service.dart';
+import 'trakt/trakt_service.dart';
+import 'simkl/simkl_service.dart';
+import 'mdblist/mdblist_models.dart';
+import 'mdblist/mdblist_scrobble_session.dart';
+import 'mdblist/mdblist_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_policy_guard.dart';
+import '../app/wiring.dart';
 
 /// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
 String? _traktLastScrobbleAction;
@@ -765,8 +765,8 @@ class VideoPlayerLauncher {
         StorageService.getTraktSyncCatalogItems(),
         TraktService.instance.isAuthenticated(),
       ]);
-      final syncCatalog = results[0] as bool;
-      final isAuth = results[1] as bool;
+      final syncCatalog = results[0];
+      final isAuth = results[1];
       if (syncCatalog && isAuth) {
         args = VideoPlayerLaunchArgs(
           videoUrl: args.videoUrl,
@@ -4104,7 +4104,7 @@ class VideoPlayerLauncher {
           );
           final persistedUrl =
               progressUrl ??
-              (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
+              (_resolvedStreamCache[resumeId]) ??
               item.url;
 
           await StorageService.saveVideoPlaybackState(
@@ -4317,9 +4317,9 @@ class VideoPlayerLauncher {
       if (fileId == null) {
         throw Exception('PikPak file metadata missing');
       }
-      final pikpak = PikPakApiService.instance;
+      final pikpak = AppServices.pikpak;
       final fileData = await pikpak.getFileDetails(fileId);
-      final url = pikpak.getStreamingUrl(fileData);
+      final url = fileData.streamingUrl;
       if (url == null || url.isEmpty) {
         throw Exception('PikPak returned an empty stream URL');
       }
@@ -4790,7 +4790,7 @@ class _AndroidTvPlaylistResolver {
         index < entries.length) {
       target = entries[index];
       debugPrint(
-        'AndroidTvPlaylistResolver: found by index: ${target != null}, entry: ${target?.entry.title}',
+        'AndroidTvPlaylistResolver: found by index: ${target != null}, entry: ${target.entry.title}',
       );
     }
     if (target == null) {
