@@ -2,11 +2,13 @@
 ///
 /// Provider-agnostic on purpose. All six cloud browsers — Real-Debrid, TorBox,
 /// PikPak, Premiumize, AllDebrid, WebDAV — do the same three things to a
-/// listing and each had written its own copy. Their file models cannot share an
+/// listing and each has written its own copy. Their file models cannot share an
 /// interface (`TorboxFile.id` is an `int`, `RDFileNode` uses `bytes`,
 /// `WebDavItem` uses `isDirectory`), so the shape is supplied as accessors
 /// instead. Nothing here names a provider type, and no model has to change to
 /// be usable through it.
+///
+/// Only PikPak reads this today; the other five still have their own copies.
 ///
 /// Build one per provider and keep it:
 ///

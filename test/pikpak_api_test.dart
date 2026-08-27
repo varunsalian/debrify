@@ -140,7 +140,7 @@ void main() {
       expect(session.refreshes, 1);
     });
 
-    test('a failed refresh expires the session', () async {
+    test('a failed refresh reports, but does not clear, the session', () async {
       session.canRefresh = false;
       final api = apiFor((_) async => http.Response('{}', 401));
 
@@ -149,7 +149,10 @@ void main() {
         throwsA(isA<PikPakSessionExpired>()),
       );
 
-      expect(session.expired, isTrue);
+      // refreshAccessToken() returns false for recoverable reasons too — a
+      // re-auth cooldown, a network blip — and clearing here wiped the user's
+      // stored email, password, device id and restricted-folder pin.
+      expect(session.token, isNotNull);
     });
 
     test('no access token at all fails before any request', () async {
@@ -276,7 +279,6 @@ class _FakeSession implements PikPakSession {
   String? captcha = 'captcha-1';
   bool canRefresh = true;
   int refreshes = 0;
-  bool expired = false;
   bool captchaInvalidated = false;
 
   @override
@@ -300,11 +302,5 @@ class _FakeSession implements PikPakSession {
   Future<void> invalidateCaptcha() async {
     captchaInvalidated = true;
     captcha = null;
-  }
-
-  @override
-  Future<void> expire() async {
-    expired = true;
-    token = null;
   }
 }

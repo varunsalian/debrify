@@ -1,5 +1,5 @@
-# Pre-existing failures, compared BY NAME by tool/test_baseline.py.
-# Regenerate deliberately: python3 tool/test_baseline.py --record
+# Pre-existing failures, compared BY NAME by dev/tool/test_baseline.py.
+# Regenerate deliberately: python3 dev/tool/test_baseline.py --record
 test/debrify_tv_spotlight_dialog_test.dart::TV import dialog matches the Spotlight visual contract
 test/debrify_tv_spotlight_dialog_test.dart::phone import dialog matches the responsive visual contract
 test/detail_theme_test.dart::no raw colour literals survive in the themed files detail_episode_cells.dart

@@ -1330,9 +1330,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         releaseResumeHold()
         // Never hold a near-finished target: the Dart bridge stop-scrobbles
         // Trakt/Simkl above 80%, so substituting a target in that band would
-        // finalize a watched mark for content playing at 0:00 (and ≥90% would
-        // additionally read as locally finished). Those launches play
-        // unguarded, like a fresh start.
+        // finalize a watched mark for content playing at 0:00. Those launches
+        // play unguarded, like a fresh start.
         if (targetMs <= 0L || durationMs <= 0L) return
         if (targetMs >= (durationMs * 0.8).toLong()) return
         resumeHoldTargetMs = targetMs

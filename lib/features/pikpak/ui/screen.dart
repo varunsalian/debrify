@@ -115,8 +115,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   // Multi-select state
   bool _isSelectionMode = false;
   final Set<String> _selectedFileIds = {};
-  int get _selectableFileCount =>
-      _files.where((f) => (f.kind) != 'virtual#season').length;
+  int get _selectableFileCount => _files.where((f) => !f.isVirtual).length;
   bool get _isAllSelected =>
       _selectedFileIds.length == _selectableFileCount &&
       _selectableFileCount > 0;
@@ -179,8 +178,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   Future<void> _selectBoundSource(PikPakFile file) async {
     final id = file.id.toString();
     final name = file.name.isNotEmpty ? file.name : 'PikPak Source';
-    final kind = file.kind.toString();
-    final isFolder = kind == 'drive#folder';
+    final isFolder = file.isFolder;
     final isVideo = file.isVideo || FileUtils.isVideoFile(name);
     if (id.isEmpty || (!isFolder && !isVideo)) {
       _showSnackBar('Choose a video file or folder', isError: true);
@@ -808,10 +806,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Download a single file
   Future<void> _downloadFile(PikPakFile file) async {
-    final fileId = file.id as String?;
+    final fileId = file.id;
     final fileName = file.name.isNotEmpty ? file.name : 'download';
 
-    if (fileId == null) {
+    if (fileId.isEmpty) {
       _showSnackBar('Invalid file ID', isError: true);
       return;
     }
@@ -903,10 +901,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   /// Works for both root folders and subfolders
   /// When downloading a subfolder, only shows that subfolder's contents (not parent structure)
   Future<void> _downloadFolder(PikPakFile folder) async {
-    final folderId = folder.id as String?;
+    final folderId = folder.id;
     final folderName = folder.name.isNotEmpty ? folder.name : 'Folder';
 
-    if (folderId == null) {
+    if (folderId.isEmpty) {
       _showSnackBar('Invalid folder ID', isError: true);
       return;
     }
@@ -947,10 +945,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       if (!mounted) return;
 
       // Filter out folders, keep only files
-      final filesOnly = allFiles.where((file) {
-        final kind = file.kind;
-        return kind != 'drive#folder';
-      }).toList();
+      final filesOnly = allFiles.where((file) => !file.isFolder).toList();
 
       if (filesOnly.isEmpty) {
         _showSnackBar('This folder doesn\'t contain any files', isError: true);
@@ -1025,12 +1020,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     try {
       for (final file in selectedFiles) {
         try {
-          final fileId = file.id as String?;
+          final fileId = file.id;
           // Prefer the scan path when the recursive walk tracked one.
           final fileName =
               file.fullPath ?? (file.name.isNotEmpty ? file.name : 'download');
 
-          if (fileId == null) {
+          if (fileId.isEmpty) {
             failCount++;
             continue;
           }
@@ -1115,9 +1110,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   void _showDeleteDialog(PikPakFile file) {
     final fileName = file.name.isNotEmpty ? file.name : 'this item';
-    final fileId = file.id as String?;
+    final fileId = file.id;
 
-    if (fileId == null) {
+    if (fileId.isEmpty) {
       _showSnackBar('Cannot delete: Invalid file ID');
       return;
     }
@@ -1235,10 +1230,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         _selectedFileIds.clear();
       } else {
         for (final file in _files) {
-          final kind = file.kind;
-          if (kind == 'virtual#season') continue; // Skip virtual folders
-          final id = file.id as String?;
-          if (id != null) _selectedFileIds.add(id);
+          if (file.isVirtual) continue;
+          if (file.id.isNotEmpty) _selectedFileIds.add(file.id);
         }
       }
     });
@@ -1423,11 +1416,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         }
 
         // Filter for video files only
-        final videoFiles = allFiles.where((file) {
-          final kind = file.kind;
-          final mimeType = file.mimeType;
-          return kind != 'drive#folder' && mimeType.startsWith('video/');
-        }).toList();
+        final videoFiles = allFiles
+            .where((file) => !file.isFolder && file.isVideo)
+            .toList();
 
         // Detect if it's actually a series
         if (videoFiles.length < 3) {
@@ -1439,7 +1430,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         }
 
         final filenames = videoFiles
-            .map((f) => f.name as String? ?? '')
+            .map((f) => f.name)
             .toList();
         final isSeries = SeriesParser.isSeriesPlaylist(filenames);
 
@@ -1669,9 +1660,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     for (final file in allFiles) {
-      final name = file.name as String? ?? '';
-      final kind = file.kind as String? ?? '';
-      final isVideo = kind.contains('video') || FileUtils.isVideoFile(name);
+      final name = file.name;
+      final isVideo = file.isVideo || FileUtils.isVideoFile(name);
 
       if (isVideo && name.toLowerCase().contains(lowerQuery)) {
         // Get path from file data if available
@@ -1809,15 +1799,15 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   /// Build a card for a search result
   Widget _buildSearchResultCard(_PikPakSearchResult result) {
     final file = result.file;
-    final name = file.name as String? ?? 'Unknown';
-    final size = file.size as String? ?? '0';
+    final name = file.name.isNotEmpty ? file.name : 'Unknown';
+    final size = file.size;
 
     if (widget.selectSourceMode) {
       return CloudFileRow(
         kind: CloudRowKind.video,
         title: name,
         meta: result.path.isEmpty
-            ? Formatters.formatFileSize(int.tryParse(size) ?? 0)
+            ? Formatters.formatFileSize(size)
             : result.path,
         onTap: () => _selectBoundSource(file),
       );
@@ -1875,7 +1865,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                         ),
                       ],
                       Text(
-                        Formatters.formatFileSize(int.tryParse(size) ?? 0),
+                        Formatters.formatFileSize(size),
                         style: TextStyle(color: Colors.grey[400], fontSize: 12),
                       ),
                     ],
@@ -2493,10 +2483,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Play all videos in a folder (recursively scans subfolders)
   Future<void> _playFolder(PikPakFile folder) async {
-    final folderId = folder.id as String?;
+    final folderId = folder.id;
     final folderName = folder.name.isNotEmpty ? folder.name : 'Folder';
 
-    if (folderId == null) {
+    if (folderId.isEmpty) {
       _showSnackBar('Invalid folder ID', isError: true);
       return;
     }
@@ -2536,13 +2526,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       if (!mounted) return;
 
       // Filter for videos only
-      List<PikPakFile> videoFiles = allFiles.where((file) {
-        final mimeType = file.mimeType;
-        final phase = file.phase;
-        final isVideo = mimeType.startsWith('video/');
-        final isComplete = phase == 'PHASE_TYPE_COMPLETE';
-        return isVideo && isComplete;
-      }).toList();
+      List<PikPakFile> videoFiles = allFiles
+          .where((file) => file.isVideo && file.isReady)
+          .toList();
 
       // Apply user settings filters
       if (_showVideosOnly) {
@@ -2550,12 +2536,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       }
 
       if (_ignoreSmallVideos) {
-        videoFiles = videoFiles.where((file) {
-          final size = file.size;
-          final sizeBytes = int.tryParse(size.toString()) ?? 0;
-          final sizeMB = sizeBytes / (1024 * 1024);
-          return sizeMB >= 100;
-        }).toList();
+        // size is 0 when PikPak did not report one; that is "unknown", not
+        // "tiny", so it must not be filtered out.
+        videoFiles = videoFiles
+            .where((file) => file.size == 0 || file.size >= 100 * 1024 * 1024)
+            .toList();
       }
 
       if (videoFiles.isEmpty) {
@@ -2739,10 +2724,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Handle adding a file or folder to playlist
   Future<void> _handleAddToPlaylist(PikPakFile file) async {
-    final kind = file.kind;
-    final isFolder = kind == 'drive#folder';
-
-    if (isFolder) {
+    if (file.isFolder) {
       await _addFolderToPlaylist(file);
     } else {
       await _addSingleFileToPlaylist(file);
@@ -2784,10 +2766,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Add all videos in a folder to playlist (recursively scans subfolders)
   Future<void> _addFolderToPlaylist(PikPakFile folder) async {
-    final folderId = folder.id as String?;
+    final folderId = folder.id;
     final folderName = folder.name.isNotEmpty ? folder.name : 'Folder';
 
-    if (folderId == null) {
+    if (folderId.isEmpty) {
       _showSnackBar('Invalid folder ID', isError: true);
       return;
     }
@@ -2827,22 +2809,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       if (!mounted) return;
 
       // Filter for videos only
-      List<PikPakFile> videoFiles = allFiles.where((file) {
-        final mimeType = file.mimeType;
-        final phase = file.phase;
-        final isVideo = mimeType.startsWith('video/');
-        final isComplete = phase == 'PHASE_TYPE_COMPLETE';
-        return isVideo && isComplete;
-      }).toList();
+      List<PikPakFile> videoFiles = allFiles
+          .where((file) => file.isVideo && file.isReady)
+          .toList();
 
       // Apply user settings filters
       if (_ignoreSmallVideos) {
-        videoFiles = videoFiles.where((file) {
-          final size = file.size;
-          final sizeBytes = int.tryParse(size.toString()) ?? 0;
-          final sizeMB = sizeBytes / (1024 * 1024);
-          return sizeMB >= 100;
-        }).toList();
+        // size is 0 when PikPak did not report one; that is "unknown", not
+        // "tiny", so it must not be filtered out.
+        videoFiles = videoFiles
+            .where((file) => file.size == 0 || file.size >= 100 * 1024 * 1024)
+            .toList();
       }
 
       if (videoFiles.isEmpty) {

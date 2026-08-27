@@ -477,13 +477,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     int fileIndex = 0;
 
     for (final file in files) {
-      final kind = file.kind;
-      final name = (file.name as String?) ?? 'Unknown';
-      final fileId = file.id as String?;
+      final name = file.name.isNotEmpty ? file.name : 'Unknown';
+      final fileId = file.id;
 
-      if (kind == 'drive#folder') {
+      if (file.isFolder) {
         // Recursively build subfolder
-        if (fileId != null) {
+        if (fileId.isNotEmpty) {
           // Build path for subfolder
           final subPath = currentPath.isEmpty ? name : '$currentPath/$name';
           final subTree = await _buildPikPakFolderTree(

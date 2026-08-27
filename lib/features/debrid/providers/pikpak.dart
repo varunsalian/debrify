@@ -305,8 +305,8 @@ class PikPakProvider implements DebridProvider {
     final add = await pikpak.addOfflineDownload(magnet);
     // PikPakTask folds PikPak's three add shapes into one, so the drive entry
     // and the task id are just fields now.
-    final fileId = add.destinationId.isEmpty ? null : add.destinationId;
-    final taskId = add.id.isEmpty ? null : add.id;
+    final fileId = add.destinationId;
+    final taskId = (add.id.isEmpty || add.id == fileId) ? null : add.id;
     if (fileId == null) throw Exception('PikPak: no file id returned');
 
     const pollInterval = Duration(seconds: 2);

@@ -40,10 +40,9 @@ import 'profile_session_memory.dart';
 /// Resets process-wide mirrors that otherwise retain profile A, then warms the
 /// target under its captured scope after authoritative publication.
 class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
-  /// Injected, not reached for. It also keeps this file naming
-  /// pikpak_api_service.dart, which is how stale_runtime_guard_test proves the
-  /// cache is actually wired into the switch — routing the call through a
-  /// service locator hides it from that guard.
+  /// Injected, not reached for: stale_runtime_guard_test matches this file's
+  /// source against each participant's basename to prove the cache is wired
+  /// into the switch, and routing through a service locator hides it.
   final PikPakApiService pikpak;
 
   ProfileAppLifecycleParticipant({required this.pikpak});

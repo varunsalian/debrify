@@ -170,8 +170,8 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
 
       // Sort folders alphabetically
       folders.sort((a, b) {
-        final nameA = (a.name as String? ?? '').toLowerCase();
-        final nameB = (b.name as String? ?? '').toLowerCase();
+        final nameA = a.name.toLowerCase();
+        final nameB = b.name.toLowerCase();
         return nameA.compareTo(nameB);
       });
 
@@ -226,8 +226,8 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
 
       // Sort folders alphabetically
       subfolders.sort((a, b) {
-        final nameA = (a.name as String? ?? '').toLowerCase();
-        final nameB = (b.name as String? ?? '').toLowerCase();
+        final nameA = a.name.toLowerCase();
+        final nameB = b.name.toLowerCase();
         return nameA.compareTo(nameB);
       });
 

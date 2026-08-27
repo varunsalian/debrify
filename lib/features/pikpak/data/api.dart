@@ -44,8 +44,10 @@ class PikPakApi {
     var response = await _attempt(method, url, body);
 
     if (_isStaleToken(response)) {
+      // refreshAccessToken() owns the logout decision: it returns false for
+      // recoverable reasons too (re-auth cooldown, network, profile scope), and
+      // clearing the session on those wipes the user's stored PikPak config.
       if (!await _session.refresh()) {
-        await _session.expire();
         throw const PikPakSessionExpired();
       }
       response = await _attempt(method, url, body);
@@ -122,7 +124,8 @@ class PikPakApi {
     }
   }
 
-  /// The three shapes PikPak uses to say the access token is stale.
+  /// The shapes PikPak uses to say the access token is stale. PikPak sends
+  /// `error_code` 16 under a 200, so status alone does not settle it.
   bool _isStaleToken(_Answer answer) {
     if (answer.statusCode == 401) return true;
     final payload = answer.payload;
@@ -130,6 +133,10 @@ class PikPakApi {
     final code = payload['error_code'];
     if (code == 16 || code == '16') return true;
     if (payload['error'] == 'unauthenticated') return true;
+    // Loose enough to match a legitimate success body, and the retry re-sends
+    // the request — which is not safe for addOfflineDownload or batchDelete.
+    // Only trust it on a rejection.
+    if (answer.statusCode >= 200 && answer.statusCode < 300) return false;
     final description = '${payload['error_description'] ?? ''}'.toLowerCase();
     return description.contains('access token');
   }
@@ -161,7 +168,16 @@ class PikPakApi {
   Map<String, dynamic> _asMap(Object? payload, int statusCode) {
     if (payload is Map<String, dynamic>) return payload;
     if (payload is Map) return Map<String, dynamic>.from(payload);
-    if (payload == null) return const {};
+    if (payload == null) {
+      // 204/205 carry no body by definition. An empty body under any other
+      // status is a truncated response, not an empty object — reading it as
+      // one shows an empty folder where there was an error.
+      if (statusCode == 204 || statusCode == 205) return const {};
+      throw PikPakUnexpectedResponse(
+        'PikPak returned an empty response.',
+        statusCode: statusCode,
+      );
+    }
     throw PikPakUnexpectedResponse(
       'PikPak returned an unexpected response shape.',
       statusCode: statusCode,

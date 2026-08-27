@@ -191,7 +191,13 @@ class PikPakApiService implements PikPakRepository {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final token = data['captcha_token'] as String;
+        final token = data is Map ? data['captcha_token'] : null;
+        if (token is! String || token.isEmpty) {
+          throw PikPakUnexpectedResponse(
+            'PikPak returned no captcha token.',
+            statusCode: response.statusCode,
+          );
+        }
         debugPrint('PikPak: Captcha token obtained successfully');
         return token;
       } else {
@@ -223,7 +229,7 @@ class PikPakApiService implements PikPakRepository {
         ProfileFeature.cloud,
       );
       if (authorization == null) {
-        return _loginScoped(email, password);
+        return await _loginScoped(email, password);
       }
       return await authorization.run(
         () => _loginScoped(email, password, authorization: authorization),
@@ -344,7 +350,7 @@ class PikPakApiService implements PikPakRepository {
       final authorization = await ProfileAsyncAuthorization.capture(
         ProfileFeature.cloud,
       );
-      if (authorization == null) return _refreshAccessTokenScoped(null);
+      if (authorization == null) return await _refreshAccessTokenScoped(null);
       return await authorization.run(
         () => _refreshAccessTokenScoped(authorization),
       );
@@ -699,10 +705,7 @@ class PikPakApiService implements PikPakRepository {
   /// out three times and time none of them out.
   late final PikPakApi _api = PikPakApi(
     http: _http,
-    session: StoragePikPakSession(
-      onRefresh: refreshAccessToken,
-      onExpire: logout,
-    ),
+    session: StoragePikPakSession(onRefresh: refreshAccessToken),
     identity: _identity,
   );
 
@@ -886,35 +889,39 @@ class PikPakApiService implements PikPakRepository {
 
   /// Move files to trash (recoverable)
   /// Returns true if successful
-  Future<bool> batchTrashFiles(List<String> fileIds) =>
-      _retryWithFreshCaptcha('POST:/drive/v1/files:batchTrash', () async {
-        debugPrint('PikPak: Moving ${fileIds.length} file(s) to trash...');
+  Future<bool> batchTrashFiles(List<String> fileIds) {
+    if (fileIds.isEmpty) return Future.value(true);
+    return _retryWithFreshCaptcha('POST:/drive/v1/files:batchTrash', () async {
+      debugPrint('PikPak: Moving ${fileIds.length} file(s) to trash...');
 
-        await _makeAuthenticatedRequest(
-          'POST',
-          '$_driveBaseUrl/drive/v1/files:batchTrash',
-          {'ids': fileIds},
-        );
+      await _makeAuthenticatedRequest(
+        'POST',
+        '$_driveBaseUrl/drive/v1/files:batchTrash',
+        {'ids': fileIds},
+      );
 
-        debugPrint('PikPak: Files moved to trash successfully');
-        return true;
-      });
+      debugPrint('PikPak: Files moved to trash successfully');
+      return true;
+    });
+  }
 
   /// Permanently delete files (not recoverable)
   /// Returns true if successful
-  Future<bool> batchDeleteFiles(List<String> fileIds) =>
-      _retryWithFreshCaptcha('POST:/drive/v1/files:batchDelete', () async {
-        debugPrint('PikPak: Permanently deleting ${fileIds.length} file(s)...');
+  Future<bool> batchDeleteFiles(List<String> fileIds) {
+    if (fileIds.isEmpty) return Future.value(true);
+    return _retryWithFreshCaptcha('POST:/drive/v1/files:batchDelete', () async {
+      debugPrint('PikPak: Permanently deleting ${fileIds.length} file(s)...');
 
-        await _makeAuthenticatedRequest(
-          'POST',
-          '$_driveBaseUrl/drive/v1/files:batchDelete',
-          {'ids': fileIds},
-        );
+      await _makeAuthenticatedRequest(
+        'POST',
+        '$_driveBaseUrl/drive/v1/files:batchDelete',
+        {'ids': fileIds},
+      );
 
-        debugPrint('PikPak: Files deleted permanently');
-        return true;
-      });
+      debugPrint('PikPak: Files deleted permanently');
+      return true;
+    });
+  }
 
   /// Whether credentials are present. A query, not a publication: it used to
   /// publish on its way out, so any observer that reacted by
@@ -1125,6 +1132,8 @@ class PikPakApiService implements PikPakRepository {
     debugPrint('PikPak: Waiting for download to complete');
     final startTime = DateTime.now();
 
+    String? failure;
+
     while (DateTime.now().difference(startTime) < timeout) {
       await Future.delayed(pollInterval);
 
@@ -1173,21 +1182,20 @@ class PikPakApiService implements PikPakRepository {
           return fileData;
         }
 
-        // Check if failed
         if (fileData.hasFailed) {
-          throw Exception('Download failed with error phase');
+          failure = 'PikPak reported the download failed';
+          break;
         }
 
-        // Update progress if callback provided
-        if (onProgress != null && fileData.progress > 0) {
-          onProgress(fileData.progress);
-        }
+        onProgress?.call(fileData.progress);
       } catch (e) {
         // File might not exist yet, continue polling
         debugPrint('PikPak: Polling error; will retry (${e.runtimeType})');
         continue;
       }
     }
+
+    if (failure != null) throw Exception(failure);
 
     throw TimeoutException(
       'Download did not complete within ${timeout.inMinutes} minutes',

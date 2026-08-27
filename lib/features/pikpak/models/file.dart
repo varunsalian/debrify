@@ -123,10 +123,9 @@ class PikPakFile {
     return (web != null && web.isNotEmpty) ? web : null;
   }
 
-  static PikPakFile fromJson(dynamic json) {
+  static PikPakFile fromJson(Map json) {
     // createFolder and some drive endpoints wrap the entry in `file`.
-    final outer = json as Map;
-    final map = outer['file'] is Map ? outer['file'] as Map : outer;
+    final map = json['file'] is Map ? json['file'] as Map : json;
     return PikPakFile(
       id: '${map['id'] ?? ''}',
       name: '${map['name'] ?? ''}',
@@ -140,21 +139,26 @@ class PikPakFile {
       parentName: _text(map['parent_name']),
       createdTime: DateTime.tryParse('${map['created_time'] ?? ''}'),
       medias: switch (map['medias']) {
-        final List raw => raw.map(PikPakMedia.fromJson).toList(),
+        final List raw => raw.whereType<Map>().map(PikPakMedia.fromJson).toList(),
         _ => const [],
       },
     );
   }
 
-  /// PikPak's list endpoints wrap the array in `files`.
-  static List<PikPakFile> listFromJson(dynamic json) => switch (json) {
-    final List raw => raw.map(PikPakFile.fromJson).toList(),
+  /// PikPak's list endpoints wrap the array in `files`. An entry that is not
+  /// an object is dropped rather than thrown on: one malformed element must
+  /// not cost the whole listing.
+  static List<PikPakFile> listFromJson(Object? json) => switch (json) {
+    final List raw => _each(raw),
     final Map map => switch (map['files']) {
-      final List raw => raw.map(PikPakFile.fromJson).toList(),
+      final List raw => _each(raw),
       _ => const [],
     },
     _ => const [],
   };
+
+  static List<PikPakFile> _each(List raw) =>
+      raw.whereType<Map>().map(PikPakFile.fromJson).toList();
 
   static String? _text(Object? value) {
     final text = value?.toString();
@@ -174,12 +178,11 @@ class PikPakMedia {
     this.url,
   });
 
-  static PikPakMedia fromJson(dynamic json) {
-    final map = json as Map;
-    final link = map['link'];
+  static PikPakMedia fromJson(Map json) {
+    final link = json['link'];
     return PikPakMedia(
-      isDefault: map['is_default'] == true,
-      isOrigin: map['is_origin'] == true,
+      isDefault: json['is_default'] == true,
+      isOrigin: json['is_origin'] == true,
       url: link is Map ? PikPakFile._text(link['url']) : null,
     );
   }

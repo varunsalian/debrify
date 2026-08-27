@@ -987,9 +987,7 @@ class PlaylistPlayerService {
             ? ((storedFile['name'] as String?)?.isNotEmpty == true
                   ? storedFile['name'] as String
                   : fallbackTitle)
-            : ((fileData.name as String?)?.isNotEmpty == true
-                  ? fileData.name
-                  : fallbackTitle);
+            : (fileData.name.isNotEmpty ? fileData.name : fallbackTitle);
 
         final int? sizeBytes = hasStoredMetadata
             ? _asInt(storedFile['size'])
@@ -1009,7 +1007,7 @@ class PlaylistPlayerService {
         final singleFileRelativePath = hasStoredMetadata
             ? ((storedFile['_fullPath'] as String?) ??
                   (storedFile['name'] as String?))
-            : (fileData.name as String?);
+            : fileData.name;
 
         await VideoPlayerLauncher.push(
           context,
@@ -1094,8 +1092,8 @@ class PlaylistPlayerService {
         for (final fileId in pikpakFileIds!) {
           try {
             final fileData = await pikpak.getFileMetadata(fileId.toString());
-            final mimeType = (fileData.mimeType as String?) ?? '';
-            final fileName = (fileData.name as String?) ?? '';
+            final mimeType = fileData.mimeType;
+            final fileName = fileData.name;
             if (mimeType.startsWith('video/') ||
                 FileUtils.isVideoFile(fileName)) {
               videoFiles.add(fileData);
@@ -1124,7 +1122,7 @@ class PlaylistPlayerService {
 
       final List<_PikPakPlaylistCandidate> candidates = [];
       for (final file in videoFiles) {
-        final displayName = (file.name as String?) ?? 'Unknown';
+        final displayName = file.name.isNotEmpty ? file.name : 'Unknown';
         final info = SeriesParser.parseFilename(displayName);
         candidates.add(
           _PikPakPlaylistCandidate(
@@ -1192,8 +1190,8 @@ class PlaylistPlayerService {
       // Resolve initial URL
       String initialUrl = '';
       try {
-        final firstFileId = candidates[startIndex].file.id as String?;
-        if (firstFileId != null) {
+        final firstFileId = candidates[startIndex].file.id;
+        if (firstFileId.isNotEmpty) {
           final fullData = await pikpak.getFileDetails(firstFileId);
           initialUrl = fullData.streamingUrl ?? '';
         }
@@ -1232,11 +1230,9 @@ class PlaylistPlayerService {
           fallback: candidate.displayName,
         );
 
-        final fileId = candidate.file.id as String?;
+        final fileId = candidate.file.id;
         final sizeBytes = _asInt(candidate.file.size);
-        final relativePath =
-            candidate.file.fullPath ??
-            (candidate.file.name as String?);
+        final relativePath = candidate.file.fullPath ?? candidate.file.name;
 
         playlistEntries.add(
           PlaylistEntry(
@@ -1265,7 +1261,7 @@ class PlaylistPlayerService {
       if (!context.mounted) return;
 
       final firstFileId = candidates.isNotEmpty
-          ? (candidates[0].file.id as String?)
+          ? candidates[0].file.id
           : null;
 
       MainPageBridge.notifyPlayerLaunching();
@@ -2480,8 +2476,9 @@ class PlaylistPlayerService {
   ) {
     final folderGroups = <String, List<_PikPakPlaylistCandidate>>{};
     for (final candidate in candidates) {
-      final fullPath =
-          (candidate.file.name as String?) ?? candidate.displayName;
+      final fullPath = candidate.file.name.isNotEmpty
+          ? candidate.file.name
+          : candidate.displayName;
       final lastSlashIndex = fullPath.lastIndexOf('/');
       final folderPath = lastSlashIndex >= 0
           ? fullPath.substring(0, lastSlashIndex)

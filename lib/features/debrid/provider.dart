@@ -3,12 +3,14 @@ import 'resolved_playback.dart';
 
 /// One debrid provider, seen the way the app actually uses one.
 ///
-/// Everything that used to be a `switch (provider)` in a screen, a widget, or
-/// the playback service lives behind this: identity and branding come off
-/// [descriptor], settings come off the account methods, and the add/resolve
-/// flow is the provider's own. Adding a provider means implementing this and
-/// registering it — no file under `screens/` or `widgets/` should learn its
-/// name.
+/// Identity and branding come off [descriptor], settings come off the account
+/// methods, and the add/resolve flow is the provider's own. The intent is that
+/// adding a provider means implementing this and registering it, with no file
+/// under `screens/` or `widgets/` learning its name.
+///
+/// NOT YET ADOPTED: `AppServices.debrid` has no readers, and the
+/// `switch (provider)` chains in `torrent_playback_service.dart` and the
+/// screens are still the live path.
 abstract interface class DebridProvider {
   DebridProviderDescriptor get descriptor;
 

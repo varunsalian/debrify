@@ -4,8 +4,10 @@ import '../features/debrid/descriptor.dart';
 
 /// A provider's brand ink. Two palettes, both pre-existing and deliberately
 /// different: [tile] is the flat chip colour on source lists, [accent] and
-/// [accentDeep] are the play-loader gradient the pipeline overlay and the TV
-/// player share.
+/// [accentDeep] are the play-loader gradient.
+///
+/// NOT YET ADOPTED: `torrent_playback_service.dart` still carries the same
+/// values in its own `_providerGradient`/`_providerIcon` switches.
 class DebridBrand {
   final Color tile;
   final Color accent;

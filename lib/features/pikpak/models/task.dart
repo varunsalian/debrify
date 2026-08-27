@@ -39,11 +39,9 @@ class PikPakTask {
   /// advance: `{task: {...}}` with the destination in `file_id`, `{file: {...}}`
   /// where the entry's own `id` IS the destination, or a bare task from
   /// getTaskStatus. All three land here so no call site has to branch.
-  static PikPakTask fromJson(dynamic json) {
-    final outer = json as Map;
-
-    if (outer['file'] is Map) {
-      final file = outer['file'] as Map;
+  static PikPakTask fromJson(Map json) {
+    if (json['file'] is Map) {
+      final file = json['file'] as Map;
       final id = '${file['id'] ?? ''}';
       return PikPakTask(
         id: id,
@@ -54,7 +52,7 @@ class PikPakTask {
       );
     }
 
-    final map = outer['task'] is Map ? outer['task'] as Map : outer;
+    final map = json['task'] is Map ? json['task'] as Map : json;
     return PikPakTask(
       id: '${map['id'] ?? ''}',
       name: '${map['name'] ?? ''}',
@@ -68,6 +66,8 @@ class PikPakTask {
     );
   }
 
-  /// The drive entry to poll and eventually play, whichever shape PikPak used.
-  String get destinationId => fileId.isNotEmpty ? fileId : id;
+  /// The drive entry to poll and eventually play, or null while PikPak has not
+  /// created it yet. Never falls back to [id]: in the `{task: ...}` shape that
+  /// is a task id, and polling it as a file id always fails.
+  String? get destinationId => fileId.isEmpty ? null : fileId;
 }

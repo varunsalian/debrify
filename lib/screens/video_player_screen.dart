@@ -10969,10 +10969,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool verifyLanding = false,
   }) async {
     // Never GUARD a near-finished target (≥80% of a known duration — the
-    // trackers' stop-scrobble threshold, below the 90% local finished cutoff):
-    // substituting one would scrobble a watched mark and store a finished-
-    // looking position for content that may be playing at 0:00. The seek
-    // itself still happens; such a start just plays unguarded.
+    // trackers' stop-scrobble threshold): substituting one would scrobble a
+    // watched mark and store a finished-looking position for content that may
+    // be playing at 0:00. The seek itself still happens; such a start just
+    // plays unguarded.
     final durMs = _duration.inMilliseconds;
     final nearFinished = durMs > 0 && targetMs >= (durMs * 0.8).floor();
     if (nearFinished) {

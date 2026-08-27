@@ -6,8 +6,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 > ⚠️ **Grep, don't read whole.** The files flagged 🔴 are huge (8k–26k lines). Always `grep` for the
 > symbol and Read only the surrounding ±40 lines — never read them end-to-end.
 >
-> 🔴 huge: `screens/deprecated/torrent_search_screen.dart` (26k, legacy — usually ignore) ·
-> `screens/search_screen.dart` (16k) · `screens/magic_tv_screen.dart` (11k) ·
+> 🔴 huge: `screens/search_screen.dart` (16k) · `screens/magic_tv_screen.dart` (11k) ·
 > `screens/video_player_screen.dart` (8k) · `screens/torbox/torbox_downloads_screen.dart` (6.8k) ·
 > `screens/debrid_downloads_screen.dart` (6.2k) · `services/storage_service.dart` (5.8k) ·
 > `services/torrent_playback_service.dart` (4.7k) · `services/video_player_launcher.dart` (4k) ·
@@ -39,8 +38,10 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 
 ## Debrid providers & cloud
 - Provider clients: `services/debrid_service.dart` (Real-Debrid), `services/torbox_service.dart`,
-  `services/premiumize_service.dart`, `services/alldebrid_service.dart`, `services/pikpak_api_service.dart`.
-  **No shared provider interface** — each is hand-wired via string-keyed switches (see hubs +
+  `services/premiumize_service.dart`, `services/alldebrid_service.dart`,
+  `features/pikpak/data/api_service.dart`.
+  `features/debrid/` holds a typed provider interface + registry, but **nothing calls it yet** —
+  the live paths are still hand-wired via string-keyed switches (see hubs +
   `download_service.dart`, `magnet_link_handler.dart`, `backup_restore_service.dart`, pickers, settings).
   AllDebrid is the newest = the template for adding a provider.
 - File-tree browse (per provider, post-add): `debrid_service.getTorrentFolderTree`,

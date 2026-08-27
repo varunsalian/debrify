@@ -4,18 +4,14 @@ import '../../../services/storage_service.dart';
 /// [PikPakSession] over the app's existing credential storage.
 ///
 /// Recovery is injected rather than reached for: [PikPakApi] needs a token
-/// refresh and a logout, both of which live on `PikPakApiService`, and taking
-/// the service directly would close a cycle (service → api → session →
-/// service). Tear-offs break it.
+/// refresh, which lives on `PikPakApiService`, and taking the service directly
+/// would close a cycle (service → api → session → service). A tear-off breaks
+/// it.
 class StoragePikPakSession implements PikPakSession {
   final Future<bool> Function() _onRefresh;
-  final Future<void> Function() _onExpire;
 
-  const StoragePikPakSession({
-    required Future<bool> Function() onRefresh,
-    required Future<void> Function() onExpire,
-  }) : _onRefresh = onRefresh,
-       _onExpire = onExpire;
+  const StoragePikPakSession({required Future<bool> Function() onRefresh})
+    : _onRefresh = onRefresh;
 
   @override
   Future<String?> accessToken() => StorageService.getPikPakAccessToken();
@@ -31,7 +27,4 @@ class StoragePikPakSession implements PikPakSession {
 
   @override
   Future<void> invalidateCaptcha() => StorageService.clearPikPakCaptchaToken();
-
-  @override
-  Future<void> expire() => _onExpire();
 }

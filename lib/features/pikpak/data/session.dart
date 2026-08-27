@@ -30,9 +30,6 @@ abstract interface class PikPakSession {
   /// PikPak rejected the captcha (`error_code` 4002). Drop the stored one so
   /// the next call fetches a fresh token.
   Future<void> invalidateCaptcha();
-
-  /// [refresh] failed. Clear the session; the user has to log in again.
-  Future<void> expire();
 }
 
 /// Everything a PikPak call can fail with once the transport has succeeded.

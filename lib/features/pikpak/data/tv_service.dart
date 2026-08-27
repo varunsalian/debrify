@@ -94,9 +94,7 @@ class PikPakTvService {
       // PikPakTask already folds PikPak's three add shapes into one, so the
       // task id and the drive entry it is filling in are just fields.
       taskId = addResponse.id.isEmpty ? null : addResponse.id;
-      fileId = addResponse.destinationId.isEmpty
-          ? null
-          : addResponse.destinationId;
+      fileId = addResponse.destinationId;
 
       log('Initial IDs - Task: ${taskId ?? "none"}, File: ${fileId ?? "none"}');
 
@@ -111,8 +109,8 @@ class PikPakTvService {
 
           try {
             final taskData = await _api.getTaskStatus(taskId);
-            final taskFileId = taskData.fileId as String?;
-            if (taskFileId != null && taskFileId.isNotEmpty) {
+            final taskFileId = taskData.fileId;
+            if (taskFileId.isNotEmpty) {
               fileId = taskFileId;
               log('Got file ID from task: $fileId');
               break;
@@ -436,11 +434,11 @@ class PikPakTvService {
       log('Found ${files.length} files in folder');
 
       // Collect all video files with size >= threshold (recursively)
-      final videoFiles = <Map<String, dynamic>>[];
+      final videoFiles = <PikPakFile>[];
       const int maxDepth = 5; // Prevent infinite recursion
 
       Future<void> collectVideosRecursively(
-        List<dynamic> fileList,
+        List<PikPakFile> fileList,
         String parentId, {
         int depth = 0,
         String parentPath = '',
@@ -454,40 +452,34 @@ class PikPakTvService {
         }
 
         for (final file in fileList) {
-          final mimeType = (file['mime_type'] ?? '') as String;
-          final name = (file['name'] ?? '') as String;
-          final size = _parseSize(file['size']);
-          final fileKind = file['kind'] as String?;
+          final name = file.name;
+          final nextPath = parentPath.isEmpty ? name : '$parentPath/$name';
 
           // Recursively check subfolders
-          if (fileKind == 'drive#folder') {
-            final folderId = file['id'] as String?;
-            if (folderId == null || folderId.isEmpty) {
+          if (file.isFolder) {
+            if (file.id.isEmpty) {
               log('Folder missing ID, skipping');
               continue;
             }
-            final nextPath = parentPath.isEmpty ? name : '$parentPath/$name';
             try {
-              final subResult = await _api.listFiles(parentId: folderId);
+              final subResult = await _api.listFiles(parentId: file.id);
               await collectVideosRecursively(
                 subResult.files,
-                folderId,
+                file.id,
                 depth: depth + 1,
                 parentPath: nextPath,
               );
             } catch (e) {
-              log('Error scanning subfolder ${file['name']}: $e');
+              log('Error scanning subfolder $name: $e');
             }
             continue;
           }
 
-          final isVideo =
-              mimeType.startsWith('video/') || FileUtils.isVideoFile(name);
+          final isVideo = file.isVideo || FileUtils.isVideoFile(name);
 
-          if (isVideo && size >= _minVideoSizeBytes) {
-            final fullPath = parentPath.isEmpty ? name : '$parentPath/$name';
-            videoFiles.add({...file, '_fullPath': fullPath});
-            log('Found video: $name (${_formatSize(size)})');
+          if (isVideo && file.size >= _minVideoSizeBytes) {
+            videoFiles.add(file.at(nextPath));
+            log('Found video: $name (${_formatSize(file.size)})');
           }
         }
       }
@@ -502,10 +494,9 @@ class PikPakTvService {
       log('Total videos found: ${videoFiles.length}');
 
       // Get first file for initial playback
-      final firstFile = videoFiles[0];
-      final firstFileId = firstFile['id'] as String?;
+      final firstFileId = videoFiles[0].id;
 
-      if (firstFileId == null || firstFileId.isEmpty) {
+      if (firstFileId.isEmpty) {
         log('First video file has no ID');
         return null;
       }
@@ -531,10 +522,10 @@ class PikPakTvService {
         'allVideoFiles': videoFiles
             .map(
               (f) => {
-                'id': f['id'],
-                'name': f['name'],
-                'size': _parseSize(f['size']),
-                '_fullPath': f['_fullPath'],
+                'id': f.id,
+                'name': f.name,
+                'size': f.size,
+                '_fullPath': f.displayPath,
               },
             )
             .toList(),
@@ -556,17 +547,6 @@ class PikPakTvService {
     }
   }
 
-  /// Parse size from file data
-  int _parseSize(dynamic size) {
-    if (size == null) return 0;
-    if (size is int) return size;
-    if (size is double) return size.round();
-    if (size is String) {
-      return int.tryParse(size) ?? 0;
-    }
-    return 0;
-  }
-
   /// Format size for logging
   String _formatSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
@@ -579,8 +559,8 @@ class PikPakTvService {
 
   /// Extract title from file data
   String _extractTitle(PikPakFile fileData, String fallback) {
-    final name = fileData.name as String?;
-    if (name != null && name.trim().isNotEmpty) {
+    final name = fileData.name;
+    if (name.trim().isNotEmpty) {
       return name.trim();
     }
     return fallback;

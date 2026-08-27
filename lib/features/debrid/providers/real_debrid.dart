@@ -265,7 +265,9 @@ class RealDebridProvider implements DebridProvider {
     List<dynamic> files,
     String apiKey,
   ) async {
-    final selectedFiles = files.where((file) => file['selected'] == 1).toList();
+    final selectedFiles = files
+        .where((file) => file['selected'] == 1 || file['selected'] == true)
+        .toList();
     final allFilesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
 
     final filesToUse = allFilesToUse.where((file) {

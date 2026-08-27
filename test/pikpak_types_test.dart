@@ -123,6 +123,37 @@ void main() {
       expect(PikPakFile.listFromJson({}), isEmpty);
       expect(PikPakFile.listFromJson(null), isEmpty);
     });
+
+    test('one malformed entry does not cost the whole listing', () {
+      final files = PikPakFile.listFromJson({
+        'files': [
+          {'id': 'a'},
+          null,
+          'not an object',
+          42,
+          {'id': 'b'},
+        ],
+      });
+
+      expect(files.map((f) => f.id), ['a', 'b']);
+    });
+
+    test('a junk medias entry is skipped, not thrown on', () {
+      final file = PikPakFile.fromJson({
+        'id': 'a',
+        'medias': [
+          null,
+          'nope',
+          {
+            'is_default': true,
+            'link': {'url': 'https://example.test/v.m3u8'},
+          },
+        ],
+      });
+
+      expect(file.medias, hasLength(1));
+      expect(file.streamingUrl, 'https://example.test/v.m3u8');
+    });
   });
 
   group('PikPakTask', () {

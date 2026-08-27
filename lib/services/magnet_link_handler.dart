@@ -352,8 +352,9 @@ class MagnetLinkHandler {
       fileId = result.destinationId;
       fileName = result.name.isNotEmpty ? result.name : displayName;
 
-      // Use post-action handling if available
-      if (onPikPakResult != null) {
+      // Use post-action handling if available. Without a drive entry there is
+      // nothing for the post-action to open, so fall through to the snackbar.
+      if (onPikPakResult != null && fileId != null) {
         await onPikPakResult!(fileId, fileName);
       } else {
         _showSuccess('Link added to PikPak: $fileName');
@@ -681,8 +682,9 @@ class MagnetLinkHandler {
       fileId = result.destinationId;
       fileName = result.name.isNotEmpty ? result.name : torrentName;
 
-      // Use post-action handling if available
-      if (onPikPakResult != null) {
+      // Use post-action handling if available. Without a drive entry there is
+      // nothing for the post-action to open, so fall through to the snackbar.
+      if (onPikPakResult != null && fileId != null) {
         await onPikPakResult!(fileId, fileName);
       } else {
         // Fallback: just show success

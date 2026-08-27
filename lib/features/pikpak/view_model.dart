@@ -19,11 +19,14 @@ typedef SeasonOf = int? Function(String filename);
 
 /// The PikPak file browser, without the widget.
 ///
-/// Everything `_PikPakFilesScreenState` did to *decide* what to show —
-/// listing, paging, walking in and out of folders, filtering, ordering,
-/// multi-select, search, delete — lives here and is reachable from a plain
-/// `test()`. What stayed in the widget is what the framework owns: focus
-/// nodes, scroll controllers, text controllers.
+/// Listing, paging, walking in and out of folders, filtering, ordering,
+/// multi-select, search and delete live here, reachable from a plain `test()`.
+/// What belongs in the widget is what the framework owns: focus nodes, scroll
+/// controllers, text controllers.
+///
+/// NOT YET ADOPTED: `ui/screen.dart` still carries its own copy of all of it
+/// and does not import this. Until it does, these are two implementations that
+/// will drift — and only this one has tests.
 ///
 /// Dependencies arrive through the constructor. [drive] is a port, so a test
 /// hands it a fake and nothing opens a socket.
