@@ -165,7 +165,7 @@ Download the unsigned IPA and sideload using **AltStore** or **Sideloadly**. See
 
 Debrify is free, open source, and built by one person. If it has been useful to you, you can help fund development:
 
-- [Support on Ko-fi](https://ko-fi.com/debrify)
+- [Sponsor on GitHub](https://github.com/sponsors/varunsalian)
 
 Every bit helps keep the app improving.
 
