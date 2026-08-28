@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../models/tracking_source.dart';
 import '../watched_status_service.dart';
 import 'mdblist_models.dart';
 import 'mdblist_service.dart';
@@ -172,6 +173,8 @@ Future<void> handleMdblistMenuAction(
         imdbId: imdb,
         contentType: item.type,
         watched: true,
+        // MDBList-branded menu — writes to MDBList regardless of Scrobble.
+        forceTargets: const {TrackingSource.mdblist},
       )).success;
       label = 'Marked watched';
     case MdblistItemMenuAction.markUnwatched:
@@ -179,6 +182,7 @@ Future<void> handleMdblistMenuAction(
         imdbId: imdb,
         contentType: item.type,
         watched: false,
+        forceTargets: const {TrackingSource.mdblist},
       )).success;
       label = 'Marked unwatched';
     case MdblistItemMenuAction.rate:

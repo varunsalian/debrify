@@ -17,13 +17,29 @@ class WatchedActionResult {
 
 /// Single fan-out point for every user-initiated watched/unwatched action.
 /// Local is unconditional; remote writes follow the Scrobble selection.
+///
+/// [forceTargets] is the ONE exception, and it exists for tracker-BRANDED
+/// surfaces only — the Trakt sheet, the Simkl sheet, the MDBList menu. A row
+/// labelled with a tracker's name must write to that tracker whether or not
+/// it's ticked in Scrobble; the Scrobble set governs automatic scrobbling and
+/// the generic (episode-panel / Home-card / guide) actions, not a command the
+/// user aimed at one service by name. Auth is still required — a forced target
+/// you aren't signed into is skipped, same as before.
 class WatchedActionCoordinator {
   WatchedActionCoordinator._();
+
+  static bool _writes(
+    TrackingSourcePolicy policy,
+    Set<TrackingSource> forceTargets,
+    TrackingSource source,
+  ) =>
+      policy.scrobbleTargets.contains(source) || forceTargets.contains(source);
 
   static Future<WatchedActionResult> setTitleWatched({
     required String imdbId,
     required String contentType,
     required bool watched,
+    Set<TrackingSource> forceTargets = const <TrackingSource>{},
   }) async {
     final id = imdbId.trim();
     if (id.isEmpty) return const WatchedActionResult(['this device']);
@@ -41,14 +57,14 @@ class WatchedActionCoordinator {
 
     final policy = await TrackingSourcePolicy.load();
     final failures = <String>[];
-    if (policy.scrobbleTargets.contains(TrackingSource.trakt) &&
+    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated()) {
       final ok = watched
           ? await TraktService.instance.addToHistory(id, contentType)
           : await TraktService.instance.removeFromHistory(id, contentType);
       if (!ok) failures.add('Trakt');
     }
-    if (policy.scrobbleTargets.contains(TrackingSource.simkl) &&
+    if (_writes(policy, forceTargets, TrackingSource.simkl) &&
         await SimklService.instance.isAuthenticated()) {
       var ok = watched
           ? await SimklService.instance.markWatched(id, contentType)
@@ -63,7 +79,7 @@ class WatchedActionCoordinator {
       if (!ok) failures.add('Simkl');
     }
     if (id.startsWith('tt') &&
-        policy.scrobbleTargets.contains(TrackingSource.mdblist) &&
+        _writes(policy, forceTargets, TrackingSource.mdblist) &&
         await MdblistService.instance.isAuthenticated()) {
       final ids = MdblistMediaIds(imdb: id);
       final type = series ? 'show' : 'movie';
@@ -82,6 +98,7 @@ class WatchedActionCoordinator {
     required int season,
     required int episode,
     required bool watched,
+    Set<TrackingSource> forceTargets = const <TrackingSource>{},
   }) async {
     if (watched) {
       await StorageService.markEpisodeAsFinished(
@@ -102,7 +119,7 @@ class WatchedActionCoordinator {
 
     final policy = await TrackingSourcePolicy.load();
     final failures = <String>[];
-    if (policy.scrobbleTargets.contains(TrackingSource.trakt) &&
+    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated()) {
       final ok = watched
           ? await TraktService.instance.markEpisodeWatched(
@@ -117,7 +134,7 @@ class WatchedActionCoordinator {
             );
       if (!ok) failures.add('Trakt');
     }
-    if (policy.scrobbleTargets.contains(TrackingSource.simkl) &&
+    if (_writes(policy, forceTargets, TrackingSource.simkl) &&
         await SimklService.instance.isAuthenticated()) {
       final ok = watched
           ? await SimklService.instance.markEpisodeWatched(
@@ -140,7 +157,7 @@ class WatchedActionCoordinator {
       if (!ok) failures.add('Simkl');
     }
     if (imdbId.startsWith('tt') &&
-        policy.scrobbleTargets.contains(TrackingSource.mdblist) &&
+        _writes(policy, forceTargets, TrackingSource.mdblist) &&
         await MdblistService.instance.isAuthenticated()) {
       final ids = MdblistMediaIds(imdb: imdbId);
       final ok = watched

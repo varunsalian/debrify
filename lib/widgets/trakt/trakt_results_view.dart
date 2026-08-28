@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/advanced_search_selection.dart';
+import '../../models/tracking_source.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../services/watched_action_coordinator.dart';
 import '../../services/trakt/trakt_item_transformer.dart';
@@ -933,6 +934,8 @@ class TraktResultsViewState extends State<TraktResultsView> {
           imdbId: imdbId,
           contentType: type,
           watched: true,
+          // Trakt-branded view — writes to Trakt regardless of the Scrobble set.
+          forceTargets: const {TrackingSource.trakt},
         )).success;
         if (success && mounted) {
           setState(() => _watchProgress[imdbId] = 100.0);
@@ -943,6 +946,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
           imdbId: imdbId,
           contentType: type,
           watched: false,
+          forceTargets: const {TrackingSource.trakt},
         )).success;
         if (success && mounted) {
           setState(() => _watchProgress.remove(imdbId));
@@ -2086,6 +2090,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
           season: episode.season,
           episode: episode.number,
           watched: true,
+          forceTargets: const {TrackingSource.trakt},
         )).success;
         if (success && mounted) {
           setState(() => _episodeWatchProgress[key] = 100.0);
@@ -2098,6 +2103,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
           season: episode.season,
           episode: episode.number,
           watched: false,
+          forceTargets: const {TrackingSource.trakt},
         )).success;
         if (success && mounted) {
           setState(() => _episodeWatchProgress.remove(key));

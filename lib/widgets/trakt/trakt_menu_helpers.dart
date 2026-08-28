@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../models/tracking_source.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../services/watched_action_coordinator.dart';
 
@@ -230,6 +231,9 @@ Future<void> handleTraktMenuAction(
         imdbId: imdbId,
         contentType: type,
         watched: true,
+        // Trakt-branded surface: writes to Trakt even when Trakt is unticked
+        // in Scrobble. See WatchedActionCoordinator.forceTargets.
+        forceTargets: const {TrackingSource.trakt},
       )).success;
     case TraktItemMenuAction.rate:
       if (!context.mounted) return;
@@ -259,6 +263,7 @@ Future<void> handleTraktMenuAction(
         imdbId: imdbId,
         contentType: type,
         watched: false,
+        forceTargets: const {TrackingSource.trakt},
       )).success;
     case TraktItemMenuAction.removeRating:
       actionLabel = 'Rating Removed';
