@@ -7,6 +7,7 @@ import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/backup_restore_service.dart';
 import '../../services/iptv_transfer_payload.dart';
+import '../../services/storage_service.dart';
 import 'device_key_provider.dart';
 import 'native_profile_projection.dart';
 import 'portable_profile_package.dart';
@@ -120,6 +121,7 @@ class ProfileRestoreCoordinator {
       }
       final values = _normalizePreferenceValues(section['values'] as Map);
       _validatePreferenceOverlay(values);
+      StorageService.rearmGhostPurgeForImportedPlayback(values);
       final id = _newId('profile');
       if (profileIds.putIfAbsent(backupId, () => id) != id) {
         throw const FormatException('Duplicate imported profile ID');
@@ -491,6 +493,10 @@ class ProfileRestoreCoordinator {
     }
     final values = _normalizePreferenceValues(section['values'] as Map);
     _validatePreferenceOverlay(values);
+    // Merge-mode restore keeps destination keys the package omits, so imported
+    // playback must re-arm the purge or its ghosts are stranded behind an
+    // already-satisfied generation marker.
+    StorageService.rearmGhostPurgeForImportedPlayback(values);
 
     final operationId = _newId('restore');
     final current = ProfileRuntime.capture();

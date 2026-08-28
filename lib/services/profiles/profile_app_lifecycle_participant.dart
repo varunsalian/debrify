@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../screens/video_player/services/subtitle_settings_service.dart';
 import '../../theme/app_theme_controller.dart';
 import '../account_service.dart';
@@ -141,6 +143,17 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       );
 
       await StorageService.migrateDefaultsGeneration();
+      // Also run here, not just at cold start: the startup pass in main.dart
+      // executes BEFORE the profile gate resolves, so it only ever reaches
+      // whichever profile happened to be active then. The generation marker is
+      // profile-scoped, so every other profile would keep its resume ghosts
+      // forever. Best-effort — a profile switch must not fail over cleanup of
+      // playback state written by builds as old as 0.7.0.
+      try {
+        await StorageService.purgeUnwatchedResumeGhosts();
+      } catch (e) {
+        debugPrint('ProfileAppLifecycle: resume-ghost purge failed — $e');
+      }
       await Future.wait(<Future<Object?>>[
         StorageService.getPlayerStartPortrait(),
         StorageService.getTvKeyboardEnabled(),

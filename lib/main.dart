@@ -547,6 +547,14 @@ Future<void> _continueApplicationStartup() async {
     'playback-completion-migration',
     StorageService.migrateExistingPlaybackCompletionThresholds,
   );
+  // Drop the zero-position rows older builds left behind when unwatching an
+  // episode; they outrank real progress and pin Continue Watching to an
+  // episode the user already declared unwatched. Also profile-scoped and
+  // one-shot, and best-effort for the same reason as the step above.
+  await _bestEffortStartupStep(
+    'resume-ghost-purge',
+    StorageService.purgeUnwatchedResumeGhosts,
+  );
   // Warm the layout prefs the shell reads through field initializers —
   // without this the first frame paints canvas/ghost/rail and then snaps
   // to the stored (possibly just-migrated) look. A warm that fails costs
