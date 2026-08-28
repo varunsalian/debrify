@@ -19,7 +19,6 @@
 
 <p align="center">
   <a href="https://varunsalian.github.io/debrify/"><strong>Website</strong></a> &bull;
-  <a href="https://varunsalian.github.io/debrify/guides/index.html"><strong>Guides</strong></a> &bull;
   <a href="https://github.com/varunsalian/debrify/releases"><strong>Download</strong></a> &bull;
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
