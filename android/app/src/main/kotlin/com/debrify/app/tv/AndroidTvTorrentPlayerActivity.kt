@@ -3994,6 +3994,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             PlayerView.ControllerVisibilityListener { visibility ->
                 if (visibility != View.VISIBLE && controlsMenuVisible) {
                     hideControlsMenu()
+                    // This callback fires from inside Media3's hide-animation end
+                    // dispatch, where the restore animation kicked off by
+                    // hideControlsMenu never lands — the subtitle view stays
+                    // translated off-screen until the next lift call. Snap it
+                    // back directly; a no-op when the animated restore worked.
+                    subtitleControlsLift.restore(animate = false)
                 }
             }
         )
