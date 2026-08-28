@@ -98,6 +98,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDebrifyTvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  final String playLoaderStyleLabel;
+  final Future<void> Function() onOpenPlayLoaderStyle;
   // Native player control skin (OTT dock vs Legacy). The ROW is gated on
   // PlatformUtil.isAndroidTvCached in the pane builder: this layout renders
   // on Apple TV too (form-factor TV), where the native player — the pref's
@@ -197,6 +199,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDebrifyTvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.playLoaderStyleLabel,
+    required this.onOpenPlayLoaderStyle,
     required this.tvPlayerControlsStyleLabel,
     required this.onOpenTvPlayerControlsStyle,
     required this.debrifyTvPlayerStyleLabel,
@@ -359,7 +363,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 18;
+  static const int _kMaxCategoryRows = 19;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -943,16 +947,22 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[10],
               ),
               SettingsTile.spec(
+                SettingsRows.playLoaderStyle,
+                subtitle: widget.playLoaderStyleLabel,
+                onTap: widget.onOpenPlayLoaderStyle,
+                focusNode: _paneNodes[11],
+              ),
+              SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[12],
               ),
               SettingsTile.spec(
                 SettingsRows.profileAppearance,
                 subtitle: widget.profileAppearanceLabel,
                 onTap: widget.onOpenProfileAppearance,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[13],
               ),
             ],
           ),
@@ -967,19 +977,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[13],
+                focusNode: _paneNodes[14],
               ),
               SettingsTile.spec(
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[14],
+                focusNode: _paneNodes[15],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHeroArtworkQuality,
                 subtitle: widget.tvHeroArtworkQualityLabel,
                 onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[15],
+                focusNode: _paneNodes[16],
               ),
             ],
           ),
@@ -1000,13 +1010,13 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   SettingsRows.tvPlayerControls,
                   subtitle: widget.tvPlayerControlsStyleLabel,
                   onTap: widget.onOpenTvPlayerControlsStyle,
-                  focusNode: _paneNodes[16],
+                  focusNode: _paneNodes[17],
                 ),
                 SettingsTile.spec(
                   SettingsRows.debrifyTvPlayer,
                   subtitle: widget.debrifyTvPlayerStyleLabel,
                   onTap: widget.onOpenDebrifyTvPlayerStyle,
-                  focusNode: _paneNodes[17],
+                  focusNode: _paneNodes[18],
                 ),
               ],
             ),

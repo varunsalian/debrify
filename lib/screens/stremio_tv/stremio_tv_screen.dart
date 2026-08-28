@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/pipeline_loading_overlay.dart';
+import '../../models/play_loader_art.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../models/torrent.dart';
+import '../../services/play_loader_style.dart';
 import '../../services/analytics_service.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/debrid_service.dart';
@@ -902,6 +904,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       loaderAccent: app.stremioTv.loaderAccent,
       loaderAccent2: app.stremioTv.loaderAccent2,
       railFar: app.stremioTv.loaderRailFar,
+      // Settings → Appearance → Play Loader: the same look the Home/detail
+      // play path uses, so a Debrify TV launch doesn't contradict the choice.
+      style: PlayLoaderStyleController.cached ==
+              PlayLoaderStyleController.classic
+          ? PlayLoaderStyle.classic
+          : PlayLoaderStyle.marquee,
+      art: PlayLoaderArt.fromMeta(item),
       ink: app.onGlass,
       inkOnFill: app.stremioTv.inkOnFill,
       onCancel: () {

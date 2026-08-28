@@ -18,6 +18,7 @@ import '../models/webdav_item.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/profiles/user_profile.dart';
 import '../services/main_page_bridge.dart';
+import '../services/play_loader_style.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/profiles/connection_resource_service.dart';
 import '../services/profiles/portable_profile_package.dart';
@@ -72,6 +73,7 @@ import '../widgets/detail/theme/detail_themes.dart';
 import '../theme/app_theme_controller.dart';
 import 'settings/parents_guide_style_page.dart';
 import 'settings/player_dock_page.dart';
+import 'settings/play_loader_style_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_player_controls_style_page.dart';
 import 'settings/debrify_tv_player_style_page.dart';
@@ -226,6 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _iptvStyle = 'command';
   String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
+  String _playLoaderStyle = PlayLoaderStyleController.defaultStyle;
   String _tvPlayerControlsStyle = 'marquee';
   String _debrifyTvPlayerStyle = 'cinema';
   String _playerDockStyle = 'classic';
@@ -345,6 +348,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getDebrifyTvStyle(),
       StorageService.getTvPlayerControlsStyle(),
       StorageService.getDebrifyTvPlayerStyle(),
+      StorageService.getPlayLoaderStyle(),
     ]);
 
     if (!mounted) return;
@@ -391,6 +395,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final debrifyTvStyle = results[37] as String;
     final tvPlayerControlsStyle = results[38] as String;
     final debrifyTvPlayerStyle = results[39] as String;
+    final playLoaderStyle = results[40] as String;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -525,6 +530,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _iptvStyle = iptvStyle;
     _debrifyTvStyle = debrifyTvStyle;
     _playerGuideStyle = playerGuideStyle;
+    _playLoaderStyle = playLoaderStyle;
     _tvPlayerControlsStyle = tvPlayerControlsStyle;
     _debrifyTvPlayerStyle = debrifyTvPlayerStyle;
     _playerDockStyle = playerDockStyle;
@@ -864,6 +870,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
       onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
+      playLoaderStyleLabel: playLoaderStyleLabel(_playLoaderStyle),
+      onOpenPlayLoaderStyle: _openPlayLoaderStylePage,
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       tvPlayerControlsStyleLabel: tvPlayerControlsStyleLabel(
         _tvPlayerControlsStyle,
@@ -964,6 +972,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
       onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
+      playLoaderStyleLabel: playLoaderStyleLabel(_playLoaderStyle),
+      onOpenPlayLoaderStyle: _openPlayLoaderStylePage,
       playerDockLabel: playerDockLabel(
         _playerDockStyle,
         _playerDockPalette,
@@ -1540,6 +1550,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv',
           'dvr',
           'live tv & dvr',
+        ],
+      ),
+      // Ungated — every platform shows a loader between Play and the
+      // picture. Lands on the picker.
+      nav(
+        SettingsRows.playLoaderStyle,
+        'Appearance',
+        _openPlayLoaderStylePage,
+        subtitle: playLoaderStyleLabel(_playLoaderStyle),
+        keywords: const [
+          'play',
+          'loading',
+          'loader',
+          'spinner',
+          'searching',
+          'resolving',
+          'progress',
+          'marquee',
+          'backdrop',
+          'logo',
+          'stages',
+          'pipeline',
         ],
       ),
       // Android TV only: the skin picker for the NATIVE player's controls.
@@ -4973,6 +5005,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvHomeStyle], for the play loader look. Also
+  /// re-warms the synchronous mirror the play path reads, so a change picked
+  /// here applies to the very next play.
+  Future<void> _openPlayLoaderStylePage() async {
+    await pushSettingsPage(context, const PlayLoaderStylePage());
+    if (!mounted) return;
+    await PlayLoaderStyleController.warm();
+    if (!mounted) return;
+    setState(() {
+      _playLoaderStyle = PlayLoaderStyleController.cached;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the native TV control skin.
   Future<void> _openTvPlayerControlsStylePage() async {
     await pushSettingsPage(context, const TvPlayerControlsStylePage());
@@ -5118,6 +5163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvHomeStyle = await StorageService.getTvHomeStyle();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    final playLoaderStyle = await StorageService.getPlayLoaderStyle();
     final tvPlayerControlsStyle =
         await StorageService.getTvPlayerControlsStyle();
     final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
@@ -5126,6 +5172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _tvHomeStyle = tvHomeStyle;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
+      _playLoaderStyle = playLoaderStyle;
       _tvPlayerControlsStyle = tvPlayerControlsStyle;
       _debrifyTvStyle = debrifyTvStyle;
     });
@@ -5473,6 +5520,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenIptvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  final String playLoaderStyleLabel;
+  final Future<void> Function() onOpenPlayLoaderStyle;
   final String playerDockLabel;
   final Future<void> Function() onOpenPlayerDock;
   final String detailPageStyleLabel;
@@ -5556,6 +5605,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenIptvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.playLoaderStyleLabel,
+    required this.onOpenPlayLoaderStyle,
     required this.playerDockLabel,
     required this.onOpenPlayerDock,
     required this.detailPageStyleLabel,
@@ -5755,6 +5806,11 @@ class _SettingsLayout extends StatelessWidget {
                   SettingsRows.playerGuideStyle,
                   subtitle: playerGuideStyleLabel,
                   onTap: onOpenPlayerGuideStyle,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.playLoaderStyle,
+                  subtitle: playLoaderStyleLabel,
+                  onTap: onOpenPlayLoaderStyle,
                 ),
                 if (!PlatformUtil.isTelevision)
                   SettingsTile.spec(
@@ -6097,6 +6153,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.playerGuideStyle,
                       subtitle: playerGuideStyleLabel,
                       onTap: onOpenPlayerGuideStyle,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.playLoaderStyle,
+                      subtitle: playLoaderStyleLabel,
+                      onTap: onOpenPlayLoaderStyle,
                     ),
                     // Televisions build TvControls, not Controls, so this
                     // pref has no consumer there. SettingsTvLayout omits the

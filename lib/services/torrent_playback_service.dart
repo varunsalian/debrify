@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/alldebrid_file.dart';
+import '../models/play_loader_art.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/premiumize_file.dart';
 import '../models/profiles/profile_policy.dart';
@@ -43,6 +44,7 @@ import 'download_service.dart';
 import 'local_bound_source_service.dart';
 import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
+import 'play_loader_style.dart';
 import 'premiumize_service.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
@@ -77,6 +79,11 @@ class PlaybackMeta {
   final bool simklScrobble;
   final double? mdblistProgressPercent;
   final bool mdblistScrobble;
+
+  /// Presentation-only artwork + meta line for the play loader (Marquee).
+  /// Null on every path that doesn't have it — the loader falls back to the
+  /// poster, exactly as it did before this existed.
+  final PlayLoaderArt? art;
   const PlaybackMeta({
     this.imdbId,
     this.contentType,
@@ -92,6 +99,7 @@ class PlaybackMeta {
     this.simklScrobble = false,
     this.mdblistProgressPercent,
     this.mdblistScrobble = false,
+    this.art,
   });
 }
 
@@ -4225,6 +4233,10 @@ class TorrentPlaybackService {
         traktScrobble: meta.traktScrobble,
         simklScrobble: meta.simklScrobble,
         mdblistScrobble: meta.mdblistScrobble,
+        // Show-level artwork, so the loader keeps its backdrop and logo for
+        // every episode of a binge instead of falling back to the poster from
+        // episode 2 onward. Nothing in it is episode-specific.
+        art: meta.art,
       );
       // Defer one frame (matching Home's addPostFrameCallback) so the previous
       // episode's entire play chain unwinds before the next one starts — an
@@ -6491,6 +6503,14 @@ class TorrentPlaybackService {
       railFar: app.stremioTv.loaderRailFar,
       ink: app.onGlass,
       inkOnFill: app.stremioTv.inkOnFill,
+      // Settings → Appearance → Play Loader. Read from the synchronous mirror:
+      // a play cannot await a preference, and the mirror's default IS the
+      // stored default, so an unwarmed read only ever mis-serves someone who
+      // explicitly chose Classic.
+      style: PlayLoaderStyleController.cached == PlayLoaderStyleController.classic
+          ? PlayLoaderStyle.classic
+          : PlayLoaderStyle.marquee,
+      art: meta?.art,
       onCancel: onCancel,
     );
   }

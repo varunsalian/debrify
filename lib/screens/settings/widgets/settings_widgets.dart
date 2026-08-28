@@ -253,6 +253,12 @@ abstract final class SettingsRows {
     title: 'Debrify TV Player',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen look) — passed per call site.
+  static const playLoaderStyle = SettingsRowContent(
+    icon: Icons.play_circle_outline_rounded,
+    title: 'Play Loader',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const playerGuideStyle = SettingsRowContent(
     icon: Icons.smart_display_rounded,

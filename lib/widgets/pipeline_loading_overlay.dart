@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/play_loader_art.dart';
 import '../theme/overlay_theme.dart';
 import '../utils/platform_util.dart';
 
@@ -10,6 +11,14 @@ import '../utils/platform_util.dart';
 /// relevant to the play (a bound-source play skips searching/cache; a provider
 /// with no cache check skips [cacheCheck]).
 enum PlayLoadStage { searching, cacheCheck, preparing, starting }
+
+/// The two looks this loader wears — see `PlayLoaderStyleController` for the
+/// stored preference and Settings → Appearance → Play Loader for the picker.
+///
+/// [show] defaults to [classic] deliberately: the widget keeps its shipped
+/// behaviour for any caller that doesn't ask, and the play paths pass the
+/// user's choice. The USER-facing default is Marquee, which lives in the pref.
+enum PlayLoaderStyle { classic, marquee }
 
 /// "The Pipeline" play loader — a cinematic overlay that ticks off each real
 /// resolve stage (search → cache-check → prepare → start) instead of a frozen
@@ -46,6 +55,8 @@ class PipelineLoadingOverlay {
     Color? railFar,
     Color? ink,
     Color? inkOnFill,
+    PlayLoaderStyle style = PlayLoaderStyle.classic,
+    PlayLoaderArt? art,
     VoidCallback? onCancel,
   }) {
     final steps = <PlayLoadStage>[
@@ -103,6 +114,8 @@ class PipelineLoadingOverlay {
           railFar: railFar,
           ink: ink,
           inkOnFill: inkOnFill,
+          style: style,
+          art: art,
           onCancel: onCancel == null
               ? null
               : () {
@@ -212,6 +225,11 @@ class _PlContent extends StatefulWidget {
 
   /// The progress rail's far gradient stop, paired with [loaderAccent].
   final Color? railFar;
+
+  /// Which look to paint. [PlayLoaderStyle.marquee] uses [art] when it has a
+  /// backdrop/logo and degrades to the poster when it doesn't.
+  final PlayLoaderStyle style;
+  final PlayLoaderArt? art;
   final VoidCallback? onCancel;
 
   const _PlContent({
@@ -225,6 +243,8 @@ class _PlContent extends StatefulWidget {
     required this.providerColor,
     required this.isTv,
     required this.onCancel,
+    this.style = PlayLoaderStyle.classic,
+    this.art,
     this.loaderGround,
     this.loaderAccent,
     this.loaderAccent2,
@@ -237,9 +257,12 @@ class _PlContent extends StatefulWidget {
   State<_PlContent> createState() => _PlContentState();
 }
 
-class _PlContentState extends State<_PlContent>
-    with SingleTickerProviderStateMixin {
+class _PlContentState extends State<_PlContent> with TickerProviderStateMixin {
   late final AnimationController _kb;
+
+  /// Drives the active segment's crawl on the Marquee rail. Separate from the
+  /// Ken Burns controller because it runs even with no artwork at all.
+  late final AnimationController _crawl;
   bool _reduceMotion = false;
 
   @override
@@ -249,6 +272,10 @@ class _PlContentState extends State<_PlContent>
       vsync: this,
       duration: const Duration(seconds: 18),
     );
+    _crawl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
   }
 
   @override
@@ -256,19 +283,41 @@ class _PlContentState extends State<_PlContent>
     super.didChangeDependencies();
     _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     // Only drive the Ken Burns controller when there's a backdrop to animate
-    // (TV renders the static gradient backdrop — see _backdrop).
-    if (!_reduceMotion && !widget.isTv && _hasPoster && !_kb.isAnimating) {
+    // (classic TV renders the static gradient backdrop — see _backdrop).
+    final animatePlate = _marquee ? _hasPlate : (!widget.isTv && _hasPoster);
+    if (!_reduceMotion && animatePlate && !_kb.isAnimating) {
       _kb.repeat(reverse: true);
+    }
+    if (_marquee && !_reduceMotion && !_crawl.isAnimating) {
+      _crawl.repeat(reverse: true);
     }
   }
 
   @override
   void dispose() {
     _kb.dispose();
+    _crawl.dispose();
     super.dispose();
   }
 
   bool get _hasPoster => widget.posterUrl != null && widget.posterUrl!.isNotEmpty;
+
+  bool get _marquee => widget.style == PlayLoaderStyle.marquee;
+
+  /// The Marquee plate: the backdrop when the caller had one, otherwise the
+  /// poster (blurred, as the classic backdrop always was).
+  String? get _plateUrl {
+    final backdrop = widget.art?.backdropUrl;
+    if (backdrop != null && backdrop.isNotEmpty) return backdrop;
+    return _hasPoster ? widget.posterUrl : null;
+  }
+
+  bool get _hasPlate => _plateUrl != null;
+
+  /// A poster stretched to fill a 16:9 plate is unreadable — blur it, which is
+  /// also exactly what the classic backdrop did with the same image.
+  bool get _plateIsPoster =>
+      (widget.art?.backdropUrl == null || widget.art!.backdropUrl!.isEmpty);
 
   // The palette, resolved once: each falls back to the literal it replaced, so
   // a caller that passes nothing renders exactly as this overlay shipped.
@@ -285,6 +334,7 @@ class _PlContentState extends State<_PlContent>
     // This surface stays a dark cinematic plate on every theme (its Material
     // ground, scrims and vignettes are all black at alpha), so its ink is
     // `onGlass` — page ink would go near-black on a paper theme and vanish.
+    if (_marquee) return _marqueeBuild(size, landscape);
     return Material(
       color: Colors.black,
       child: Stack(
@@ -372,6 +422,347 @@ class _PlContentState extends State<_PlContent>
           ],
         ),
       ),
+    );
+  }
+
+  // ── Marquee ─────────────────────────────────────────────────────────────
+  /// Full-bleed plate, the title's logo art, and the resolve stages collapsed
+  /// onto a segmented rail. Degrades all the way down: no backdrop → the
+  /// blurred poster (what the classic backdrop always was), no artwork at all →
+  /// the ground gradient, no logo art → the title set as type.
+  Widget _marqueeBuild(Size size, bool landscape) {
+    final scale = widget.isTv
+        ? (size.width / 960).clamp(1.0, 1.55).toDouble()
+        : 1.0;
+    final body = _marqueeBody(size, landscape, scale);
+    return Material(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _marqueePlate(),
+          _marqueeScrim(landscape),
+          SafeArea(
+            child: landscape
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        // TV-safe margin on TV, a desktop gutter elsewhere.
+                        horizontal: widget.isTv ? size.width * 0.06 : 44,
+                        vertical: 24,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: (size.width * (widget.isTv ? 0.56 : 0.6))
+                              .clamp(320.0, 760.0),
+                        ),
+                        child: body,
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(26, 24, 26, 28),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Bottom-anchored, and scrollable when a short or
+                        // split-screen phone can't fit the column — the
+                        // checklist card's overflow lesson, kept.
+                        Flexible(
+                          child: SingleChildScrollView(
+                            reverse: true,
+                            child: body,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _marqueePlate() {
+    final url = _plateUrl;
+    final blur = _plateIsPoster;
+    // No artwork, or a poster on TV: the blurred full-screen plate is the most
+    // expensive effect a weak TV GPU can be asked for, and a poster stretched
+    // to 16:9 needs that blur to be legible. Both fall back to the gradient.
+    if (url == null || (blur && widget.isTv)) return _marqueeGround();
+
+    Widget image = Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _marqueeGround(),
+    );
+    if (blur) {
+      image = ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+        child: image,
+      );
+    }
+    return AnimatedBuilder(
+      animation: _kb,
+      builder: (_, child) {
+        final t = _reduceMotion ? 0.5 : _kb.value;
+        return Transform.scale(
+          scale: 1.03 + (blur ? 0.12 : 0.06) * t,
+          child: Transform.translate(
+            offset: Offset(-5 * t, -8 * t),
+            child: child,
+          ),
+        );
+      },
+      child: image,
+    );
+  }
+
+  Widget _marqueeGround() => DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: RadialGradient(
+        center: const Alignment(0, -0.35),
+        radius: 1.15,
+        // No token holds this near-black far stop; it stays a literal, as in
+        // the classic backdrop.
+        colors: [_ground, const Color(0xFF08060D)],
+      ),
+    ),
+  );
+
+  /// Real key art is bright, and this plate carries every word of UI on it —
+  /// so the scrim does real work rather than a token gradient.
+  Widget _marqueeScrim(bool landscape) {
+    if (landscape) {
+      return Stack(
+        fit: StackFit.expand,
+        children: const [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xF505040B),
+                  Color(0xEB05040B),
+                  Color(0x7005040B),
+                  Color(0x1405040B),
+                ],
+                stops: [0, 0.38, 0.66, 0.94],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Color(0xEB05040B), Color(0x5905040B), Color(0x0005040B)],
+                stops: [0, 0.34, 0.62],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0x2E05040B),
+            Color(0x8C05040B),
+            Color(0xE605040B),
+            Color(0xFF05040B),
+          ],
+          stops: [0, 0.34, 0.58, 0.88],
+        ),
+      ),
+    );
+  }
+
+  Widget _marqueeBody(Size size, bool landscape, double scale) {
+    final ink = _ink;
+    final crawl = _reduceMotion
+        ? const AlwaysStoppedAnimation<double>(0.55)
+        : _crawl.view;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.subtitle != null) ...[
+          Text(
+            widget.subtitle!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _accent2,
+              fontSize: 12 * scale,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+          SizedBox(height: 10 * scale),
+        ],
+        _marqueeIdentity(landscape, scale),
+        SizedBox(height: 12 * scale),
+        _marqueeMeta(size, scale),
+        SizedBox(height: 22 * scale),
+        _StageRail(
+          state: widget.state,
+          steps: widget.steps,
+          crawl: crawl,
+          accent: _accent,
+          accent2: _accent2,
+          railFar: widget.railFar ?? const Color(0xFFC4B2FF),
+          ink: ink,
+          scale: scale,
+        ),
+        SizedBox(height: 14 * scale),
+        _MarqueeStatus(
+          state: widget.state,
+          steps: widget.steps,
+          accent2: _accent2,
+          ink: ink,
+          scale: scale,
+        ),
+        _NoteLine(
+          state: widget.state,
+          scale: scale,
+          accent2: _accent2,
+          ink: ink,
+        ),
+        SizedBox(height: 22 * scale),
+        Row(
+          children: [
+            _providerChip(),
+            const Spacer(),
+            if (widget.onCancel != null)
+              _CancelButton(
+                onCancel: widget.onCancel!,
+                isTv: widget.isTv,
+                scale: scale,
+                accent: _accent,
+                ink: ink,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Logo art when the title has it, the title as type when it doesn't — and
+  /// the type again if the image fails, so a dead logo URL never leaves the
+  /// plate untitled.
+  Widget _marqueeIdentity(bool landscape, double scale) {
+    final title = Text(
+      widget.title,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: (landscape ? (widget.isTv ? 34 : 29) : 26) * scale,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.6,
+        height: 1.03,
+      ),
+    );
+    final logo = widget.art?.logoUrl;
+    if (logo == null || logo.isEmpty) return title;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: (landscape ? (widget.isTv ? 104 : 84) : 68) * scale,
+          maxWidth: (landscape ? 460 : 300) * scale,
+        ),
+        // The logo REPLACES the title text, so it carries the title's
+        // semantics — without this the only announced name on the plate would
+        // be the provider chip.
+        child: Image.network(
+          logo,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+          semanticLabel: widget.title,
+          errorBuilder: (_, __, ___) => title,
+        ),
+      ),
+    );
+  }
+
+  /// Rating · year · runtime · certificate · genres — whichever of them the
+  /// play actually carried. Genres are the first thing dropped when the line
+  /// would wrap on a phone.
+  Widget _marqueeMeta(Size size, double scale) {
+    final art = widget.art;
+    final ink = _ink;
+    final bits = <Widget>[];
+    void text(String? value) {
+      if (value == null || value.isEmpty) return;
+      bits.add(
+        Text(
+          value,
+          style: TextStyle(
+            color: ink.withValues(alpha: 0.68),
+            fontSize: 11.5 * scale,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    if (art?.ratingLabel != null) {
+      bits.add(
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 5 * scale,
+            vertical: 1.5 * scale,
+          ),
+          decoration: BoxDecoration(
+            // IMDb's brand yellow and its ink — fixed on every theme, like the
+            // badge everywhere else in the app.
+            color: const Color(0xFFF5C518),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            'IMDb ${art!.ratingLabel}',
+            style: TextStyle(
+              color: const Color(0xFF0B0913),
+              fontSize: 10 * scale,
+              fontWeight: FontWeight.w800,
+              height: 1.25,
+            ),
+          ),
+        ),
+      );
+    }
+    text(art?.yearLabel);
+    text(art?.runtimeLabel);
+    text(art?.certificate);
+    // A phone meta line fits four bits; genres are the fifth.
+    if (size.width >= 430) text(art?.genreLabel);
+    if (bits.isEmpty) return const SizedBox.shrink();
+
+    final children = <Widget>[];
+    for (var i = 0; i < bits.length; i++) {
+      if (i > 0) {
+        children.add(
+          Container(
+            width: 3 * scale,
+            height: 3 * scale,
+            decoration: BoxDecoration(
+              color: ink.withValues(alpha: 0.32),
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      }
+      children.add(bits[i]);
+    }
+    return Wrap(
+      spacing: 8 * scale,
+      runSpacing: 6 * scale,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
     );
   }
 
@@ -710,6 +1101,209 @@ class _TopRail extends StatelessWidget {
   }
 }
 
+/// Marquee's stage rail: one segment per shown stage, done ones filled, the
+/// active one crawling. Same monotonic stage source as the classic checklist —
+/// only the shape differs.
+class _StageRail extends StatelessWidget {
+  final ValueNotifier<_PlState> state;
+  final List<PlayLoadStage> steps;
+
+  /// 0→1 crawl driver. A fixed [AlwaysStoppedAnimation] under reduced motion,
+  /// so the active segment reads as in-progress without animating.
+  final Animation<double> crawl;
+  final Color accent;
+  final Color accent2;
+  final Color railFar;
+  final Color ink;
+  final double scale;
+
+  const _StageRail({
+    required this.state,
+    required this.steps,
+    required this.crawl,
+    required this.accent,
+    required this.accent2,
+    required this.railFar,
+    required this.ink,
+    required this.scale,
+  });
+
+  /// Short forms — the full sentence lives in the status line below the rail.
+  static String _short(PlayLoadStage s) {
+    switch (s) {
+      case PlayLoadStage.searching:
+        return 'Search';
+      case PlayLoadStage.cacheCheck:
+        return 'Cache';
+      case PlayLoadStage.preparing:
+        return 'Prepare';
+      case PlayLoadStage.starting:
+        return 'Start';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<_PlState>(
+      valueListenable: state,
+      builder: (context, st, _) {
+        var active = steps.indexOf(st.stage);
+        if (active < 0) active = 0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                for (var i = 0; i < steps.length; i++)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: i == steps.length - 1 ? 0 : 8 * scale,
+                      ),
+                      child: Text(
+                        _short(steps[i]).toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 9.5 * scale,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1,
+                          color: i == active
+                              ? accent2
+                              : ink.withValues(alpha: i < active ? 0.5 : 0.32),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            SizedBox(height: 7 * scale),
+            Row(
+              children: [
+                for (var i = 0; i < steps.length; i++)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: i == steps.length - 1 ? 0 : 8 * scale,
+                      ),
+                      child: _segment(i, active),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _segment(int i, int active) {
+    final done = i < active;
+    return SizedBox(
+      height: 3 * scale,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: ink.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: done
+            ? _fill(1)
+            : i == active
+                ? AnimatedBuilder(
+                    animation: crawl,
+                    builder: (_, __) => _fill(0.22 + 0.6 * crawl.value),
+                  )
+                : const SizedBox.shrink(),
+      ),
+    );
+  }
+
+  Widget _fill(double factor) => Align(
+    alignment: Alignment.centerLeft,
+    child: FractionallySizedBox(
+      widthFactor: factor.clamp(0.0, 1.0),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [accent, railFar]),
+          borderRadius: BorderRadius.circular(2),
+          boxShadow: [
+            BoxShadow(color: accent.withValues(alpha: 0.55), blurRadius: 8),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The one live sentence under Marquee's rail — the full stage label plus its
+/// running count ("Searching sources · 148 found").
+class _MarqueeStatus extends StatelessWidget {
+  final ValueNotifier<_PlState> state;
+  final List<PlayLoadStage> steps;
+  final Color accent2;
+  final Color ink;
+  final double scale;
+
+  const _MarqueeStatus({
+    required this.state,
+    required this.steps,
+    required this.accent2,
+    required this.ink,
+    required this.scale,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<_PlState>(
+      valueListenable: state,
+      builder: (context, st, _) {
+        var active = steps.indexOf(st.stage);
+        if (active < 0) active = 0;
+        final stage = steps[active];
+        // Counts are sticky, so the cache count keeps reading after its stage
+        // ends — show the one that belongs to where we are now.
+        final count = switch (stage) {
+          PlayLoadStage.searching when st.sourceCount != null =>
+            '${st.sourceCount} found',
+          PlayLoadStage.cacheCheck when st.cachedCount != null =>
+            '${st.cachedCount} ready',
+          _ => null,
+        };
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Flexible(
+              child: Text(
+                _StepsList.labelFor(stage),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14.5 * scale,
+                  fontWeight: FontWeight.w700,
+                  color: ink,
+                ),
+              ),
+            ),
+            if (count != null) ...[
+              SizedBox(width: 9 * scale),
+              Text(
+                count,
+                style: TextStyle(
+                  fontSize: 11.5 * scale,
+                  fontWeight: FontWeight.w600,
+                  color: accent2,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// The staged checklist. Rebuilds only on stage change (ValueListenable).
 class _StepsList extends StatelessWidget {
   final ValueNotifier<_PlState> state;
@@ -733,7 +1327,9 @@ class _StepsList extends StatelessWidget {
     required this.inkOnFill,
   });
 
-  String _label(PlayLoadStage s) {
+  /// The one source of stage copy — Marquee's status line reads it too, so the
+  /// two looks can never drift apart on wording.
+  static String labelFor(PlayLoadStage s) {
     switch (s) {
       case PlayLoadStage.searching:
         return 'Searching sources';
@@ -814,7 +1410,7 @@ class _StepsList extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.only(bottom: last ? 0 : 8 * scale),
               child: Text(
-                _label(s),
+                labelFor(s),
                 style: TextStyle(
                   color: labelColor,
                   fontSize: 14.5 * scale,

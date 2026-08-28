@@ -21,6 +21,7 @@ import '../simkl/simkl_service.dart';
 import '../storage_service.dart';
 import '../stremio_service.dart';
 import '../subtitle_font_service.dart';
+import '../play_loader_style.dart';
 import '../text_brightness.dart';
 import '../trakt/trakt_service.dart';
 import '../watched_status_service.dart';
@@ -156,6 +157,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
         StorageService.getParentsGuideStyle(),
       ]);
       await TextBrightnessController.warm();
+      await PlayLoaderStyleController.warm();
       await AppThemeController.warm();
       await TvHeroArtworkQualityController.warm();
       await DiscoverPrefs.warmUp();

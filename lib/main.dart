@@ -54,6 +54,7 @@ import 'models/profiles/profile_policy.dart';
 import 'models/profiles/user_profile.dart';
 import 'models/sidebar_configuration.dart';
 import 'services/secret_vault.dart';
+import 'services/play_loader_style.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/tvos_top_shelf_service.dart';
@@ -565,6 +566,13 @@ Future<void> _continueApplicationStartup() async {
   await _bestEffortStartupStep(
     'text-brightness-warm',
     TextBrightnessController.warm,
+  );
+  // Warms Appearance → Play Loader. The play path reads it synchronously (a
+  // play cannot await a preference), so an unwarmed session would show Marquee
+  // to someone who chose Classic.
+  await _bestEffortStartupStep(
+    'play-loader-style-warm',
+    PlayLoaderStyleController.warm,
   );
   // Warms the app theme AFTER the preset (it is an input), for the same
   // reason: the controller's memoized ThemeData is read in the first build.

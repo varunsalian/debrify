@@ -1491,6 +1491,31 @@ class StorageService {
     );
   }
 
+  static const String _playLoaderStyleKey = 'play_loader_style';
+  static const Set<String> _playLoaderStyles = {'marquee', 'classic'};
+
+  /// The look of the play → resolve loader: 'marquee' (the default — backdrop,
+  /// logo art and a segmented stage rail) or 'classic' (the poster-and-
+  /// checklist card this overlay shipped with). Unknown or unset coerces to
+  /// 'marquee' on BOTH read and write, so a value written by a newer build can
+  /// never pin a look this one cannot render.
+  ///
+  /// The play path reads it synchronously through
+  /// [PlayLoaderStyleController.cached]; this getter is the warm source.
+  static Future<String> getPlayLoaderStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_playLoaderStyleKey);
+    return _playLoaderStyles.contains(raw) ? raw! : 'marquee';
+  }
+
+  static Future<void> setPlayLoaderStyle(String style) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _playLoaderStyleKey,
+      _playLoaderStyles.contains(style) ? style : 'marquee',
+    );
+  }
+
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
   static const Set<String> _tvPlayerControlsStyles = {
     'classic',
