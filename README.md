@@ -14,7 +14,7 @@
   <a href="https://github.com/varunsalian/debrify/stargazers"><img src="https://img.shields.io/github/stars/varunsalian/debrify?style=flat-square&color=f59e0b" alt="Stars"></a>
   <a href="https://github.com/varunsalian/debrify/releases"><img src="https://img.shields.io/github/downloads/varunsalian/debrify/total?style=flat-square&color=22c55e" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Flutter-3.8+-02569B?style=flat-square&logo=flutter&logoColor=white" alt="Flutter">
-  <img src="https://img.shields.io/badge/License-Polyform%20NC-blue?style=flat-square" alt="License">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="GNU AGPL v3"></a>
 </p>
 
 <p align="center">
@@ -221,7 +221,11 @@ flutter build linux --release            # Linux
 
 ## 📄 License
 
-Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). Free for personal use. Commercial use is not permitted.
+Copyright © 2025–2026 Varun Salian and contributors.
+
+Debrify's original source code is free software licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). If you distribute a modified or unmodified build, you must comply with the AGPL, including its corresponding-source requirements. Modified network-accessible versions must also offer their corresponding source to users.
+
+Third-party components and assets remain under their respective licenses. The AGPL does not grant permission to use the Debrify name, logo, or other project branding for modified or unofficial distributions; see the [Trademark Policy](TRADEMARKS.md).
 
 ---
 
@@ -232,5 +236,5 @@ Debrify is released under the [Polyform Noncommercial License 1.0.0](LICENSE). F
 </p>
 
 <p align="center">
-  <sub>Made with Flutter. Free for personal use.</sub>
+  <sub>Made with Flutter. Free and open-source software.</sub>
 </p>

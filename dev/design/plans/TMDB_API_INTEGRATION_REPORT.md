@@ -425,7 +425,7 @@ Official documentation: <https://developer.themoviedb.org/docs/faq>
 
 ### Attribution and licensing
 
-Debrify is already noncommercially licensed (`LICENSE`), which generally aligns with TMDB's developer API model. Nevertheless, the integration must include:
+Debrify is licensed under `AGPL-3.0-only`, which permits commercial use and redistribution. The project license therefore does not by itself establish noncommercial use under TMDB's developer API model. The integration must include:
 
 - An approved TMDB logo in About/Credits
 - The required notice that the product uses TMDB but is not endorsed or certified by TMDB

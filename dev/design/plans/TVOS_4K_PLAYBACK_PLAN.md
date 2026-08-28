@@ -138,7 +138,7 @@ behaviour, long-playback thermals, background/foreground, Siri Remote.
 
 ## Licensing
 
-Debrify is **Polyform Noncommercial**. AetherEngine is **LGPL-3.0 with an Apple
+Debrify is **AGPL-3.0-only**. AetherEngine is **LGPL-3.0 with an Apple
 Store / DRM exception**, and ships FFmpeg/LibDovi as dynamic frameworks — link
 dynamically and this is compatible. **KSPlayer was rejected**: GPL by default,
 which is not compatible; its LGPL version is paid.
