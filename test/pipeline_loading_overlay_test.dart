@@ -267,6 +267,96 @@ void main() {
     expect(cancelled, isTrue);
   });
 
+  testWidgets('marquee rail segments actually paint — done fills, active crawls',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final handle = await showOverlay(tester, style: PlayLoaderStyle.marquee);
+
+    // Stage 1 of 4: only the active segment carries a fill.
+    var fills = find.byKey(PipelineLoadingOverlay.railFillKey);
+    expect(fills, findsOneWidget);
+    // The regression: a fill that builds but has zero height paints nothing.
+    // Assert real pixels, not mere existence.
+    var size = tester.getSize(fills);
+    expect(size.height, greaterThan(0));
+    expect(size.width, greaterThan(0));
+
+    // Third of four stages: two completed fills plus the active one.
+    handle.setStage(PlayLoadStage.preparing);
+    await tester.pump();
+    fills = find.byKey(PipelineLoadingOverlay.railFillKey);
+    expect(fills, findsNWidgets(3));
+    for (var i = 0; i < 3; i++) {
+      expect(tester.getSize(fills.at(i)).height, greaterThan(0));
+    }
+    // A completed segment fills its whole track; the active one does not.
+    final done = tester.getSize(fills.at(0)).width;
+    final active = tester.getSize(fills.at(2)).width;
+    expect(active, lessThan(done));
+  });
+
+  testWidgets('marquee keeps a spinner running on every stage', (tester) async {
+    final handle = await showOverlay(tester, style: PlayLoaderStyle.marquee);
+    // Present from the first stage to the last — the plate must never look
+    // frozen while a slow resolve is still working.
+    for (final stage in PlayLoadStage.values) {
+      handle.setStage(stage);
+      await tester.pump();
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsOneWidget,
+        reason: 'no spinner on $stage',
+      );
+    }
+    // Indeterminate (spinning), not a fixed arc, when motion is allowed.
+    expect(
+      tester.widget<CircularProgressIndicator>(
+        find.byType(CircularProgressIndicator),
+      ).value,
+      isNull,
+    );
+  });
+
+  testWidgets('marquee spinner holds a static arc under reduced motion',
+      (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => PipelineLoadingOverlay.show(
+                    context,
+                    title: 'The Last of Us',
+                    providerLabel: 'TorBox',
+                    providerCode: 'TB',
+                    providerColor: const Color(0xFF35D6B8),
+                    style: PlayLoaderStyle.marquee,
+                  ),
+                  child: const Text('go'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('go'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 320));
+
+    final spinner = tester.widget<CircularProgressIndicator>(
+      find.byType(CircularProgressIndicator),
+    );
+    expect(spinner.value, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('marquee logo art still announces the title to a screen reader',
       (tester) async {
     await showOverlay(

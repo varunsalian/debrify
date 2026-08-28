@@ -31,6 +31,13 @@ enum PlayLoaderStyle { classic, marquee }
 class PipelineLoadingOverlay {
   static const Color accent = Color(0xFF8B6BFF);
 
+  /// Tags the painted fill inside a Marquee rail segment so a test can assert
+  /// it has real size. A zero-height fill still builds and still satisfies a
+  /// `findsNWidgets` check while showing nothing on screen — which is exactly
+  /// how this rail shipped.
+  @visibleForTesting
+  static const Key railFillKey = Key('marquee-rail-fill');
+
   final NavigatorState _nav;
   final ValueNotifier<_PlState> _state;
   final List<PlayLoadStage> _steps;
@@ -622,9 +629,11 @@ class _PlContentState extends State<_PlContent> with TickerProviderStateMixin {
         _MarqueeStatus(
           state: widget.state,
           steps: widget.steps,
+          accent: _accent,
           accent2: _accent2,
           ink: ink,
           scale: scale,
+          reduceMotion: _reduceMotion,
         ),
         _NoteLine(
           state: widget.state,
@@ -1105,6 +1114,7 @@ class _TopRail extends StatelessWidget {
 /// active one crawling. Same monotonic stage source as the classic checklist —
 /// only the shape differs.
 class _StageRail extends StatelessWidget {
+
   final ValueNotifier<_PlState> state;
   final List<PlayLoadStage> steps;
 
@@ -1218,11 +1228,17 @@ class _StageRail extends StatelessWidget {
     );
   }
 
+  /// [heightFactor] is load-bearing, not decoration: without it the box gets
+  /// LOOSE height constraints, and a childless [DecoratedBox] then sizes to
+  /// `constraints.smallest` — zero tall. The gradient paints into nothing and
+  /// no segment ever appears to fill.
   Widget _fill(double factor) => Align(
     alignment: Alignment.centerLeft,
     child: FractionallySizedBox(
       widthFactor: factor.clamp(0.0, 1.0),
+      heightFactor: 1,
       child: DecoratedBox(
+        key: PipelineLoadingOverlay.railFillKey,
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: [accent, railFar]),
           borderRadius: BorderRadius.circular(2),
@@ -1240,16 +1256,26 @@ class _StageRail extends StatelessWidget {
 class _MarqueeStatus extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final List<PlayLoadStage> steps;
+  final Color accent;
   final Color accent2;
   final Color ink;
   final double scale;
 
+  /// A spinner is the one element here that says "still working" without
+  /// waiting for a stage to change — the rail's crawl is deliberately quiet,
+  /// and the classic look has a spinner on its active step. Under reduced
+  /// motion it renders as a static arc rather than disappearing, so the line
+  /// still reads as in-progress.
+  final bool reduceMotion;
+
   const _MarqueeStatus({
     required this.state,
     required this.steps,
+    required this.accent,
     required this.accent2,
     required this.ink,
     required this.scale,
+    required this.reduceMotion,
   });
 
   @override
@@ -1269,10 +1295,23 @@ class _MarqueeStatus extends StatelessWidget {
             '${st.cachedCount} ready',
           _ => null,
         };
+        // Centred, not baseline-aligned: the spinner has no text baseline, and
+        // the label/count sizes are close enough that centring reads level.
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
           children: [
+            SizedBox(
+              width: 15 * scale,
+              height: 15 * scale,
+              child: CircularProgressIndicator(
+                strokeWidth: 2 * scale,
+                // A fixed arc when the platform asks for less motion: still
+                // legible as "working", just not spinning.
+                value: reduceMotion ? 0.28 : null,
+                valueColor: AlwaysStoppedAnimation<Color>(accent),
+                backgroundColor: ink.withValues(alpha: 0.12),
+              ),
+            ),
+            SizedBox(width: 11 * scale),
             Flexible(
               child: Text(
                 _StepsList.labelFor(stage),
