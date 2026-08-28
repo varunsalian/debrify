@@ -2230,6 +2230,25 @@ class ProfileRegistry {
     return rows.map(_decodeResource).toList(growable: false);
   }
 
+  /// Every resource a profile owns, INCLUDING disabled ones.
+  ///
+  /// [listAllResources] hides disabled rows, but the delete-time owned-resource
+  /// count does not — so any caller deciding whether a profile is disposable
+  /// must look through this, or it will classify a profile as owning nothing
+  /// of value and then delete a disabled credential it never saw.
+  Future<List<ConnectionResource>> listOwnedResourcesIncludingDisabled(
+    String ownerProfileId,
+  ) async {
+    final rows = await _db.query(
+      'connection_resources',
+      columns: _resourceRowColumns,
+      where: 'owner_profile_id = ?',
+      whereArgs: <Object>[ownerProfileId],
+      orderBy: 'created_at_ms, id',
+    );
+    return rows.map(_decodeResource).toList(growable: false);
+  }
+
   Future<List<Map<String, Object?>>> listAllResourceGrants() =>
       _db.query('profile_resource_grants', orderBy: 'profile_id, resource_id');
 

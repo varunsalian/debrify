@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+
+import '../../utils/app_storage.dart';
 
 import 'remote_constants.dart';
 import 'remote_control_state.dart';
@@ -50,7 +54,12 @@ import '../profiles/profile_app_lifecycle_participant.dart';
 import '../profiles/profile_lifecycle.dart';
 import '../profiles/native_profile_projection.dart';
 import '../profiles/profile_restore_coordinator.dart';
+import '../../models/profiles/connection_resource.dart';
+import '../../services/app_migration_service.dart';
+import '../profiles/connection_resource_service.dart';
 import '../profiles/device_key_provider.dart';
+import '../profiles/profile_cleanup_ledger.dart';
+import '../profiles/profile_data_generation.dart';
 import '../../services/backup_restore_service.dart';
 
 /// Callback type for remote command handlers
@@ -1418,7 +1427,8 @@ class RemoteCommandRouter {
               'From: $sender\n\n'
               'The profiles and their shared connections are staged under '
               'new IDs, then made visible together. Existing profiles are '
-              'not overwritten. Profiles keep their PINs when the transfer '
+              'not overwritten; only the unused automatic setup profile is '
+              'removed. Profiles keep their PINs when the transfer '
               'carries them.'
               '${librariesOmitted ? '\n\nLarge library databases were left '
                         'out of this transfer; catalogs rebuild from their '
@@ -1507,6 +1517,20 @@ class RemoteCommandRouter {
 
       if (receivingDuringOnboarding &&
           actor.id == ProfileBootstrap.freshAdminId) {
+        // Retire onboarding BEFORE handing authority over. The hand-off makes
+        // this a multi-profile device, so ProfileGate immediately locks the
+        // newly active profile — and a locked profile cannot make the
+        // active-session write that clears onboarding (the registry refuses
+        // it: "Active profile session has ended"). Doing it here, while the
+        // bootstrap Admin is still active and unlocked, is the only moment
+        // this write is legal.
+        try {
+          await StorageService.setInitialSetupComplete(true);
+        } catch (e) {
+          debugPrint(
+            'RemoteCommandRouter: could not pre-clear onboarding — $e',
+          );
+        }
         await _activateImportedAdminForOnboarding(report);
       }
       _showSnackBar(
@@ -1517,13 +1541,26 @@ class RemoteCommandRouter {
       if (receivingDuringOnboarding) {
         try {
           _notifyHandlers(RemoteAction.config, ConfigCommand.complete, null);
-          await _handleConfigComplete(wasOnboardingOverride: true);
-        } catch (_) {
+          // Re-pinned for the same reason as the retirement above: the
+          // onboarding flag and the privacy projection must be written for the
+          // profile the runtime actually published, not the stale captured one.
+          final live = ProfileRuntime.scope.value;
+          await (live == null
+              ? _handleConfigComplete(wasOnboardingOverride: true)
+              : ProfileRuntime.withCapturedScope(
+                  live,
+                  () => _handleConfigComplete(wasOnboardingOverride: true),
+                ));
+        } catch (e, stack) {
           // The graph is already published and the sender has its success
           // result. Never turn a post-import navigation failure into a second,
-          // contradictory "nothing changed" result.
+          // contradictory "nothing changed" result. Log the cause: a silent
+          // throw here strands the user on the onboarding screen with a fully
+          // imported device behind it, which is indistinguishable from the
+          // restart never being wired up.
           debugPrint(
-            'RemoteCommandRouter: imported profiles but could not leave onboarding',
+            'RemoteCommandRouter: imported profiles but could not leave '
+            'onboarding — $e\n$stack',
           );
         }
       }
@@ -1532,10 +1569,15 @@ class RemoteCommandRouter {
     }
   }
 
-  /// Move authority to an imported usable Admin after an onboarding restore.
-  /// The existing setup profile is deliberately retained: users may have
-  /// configured services before navigating back to import, so setup-incomplete
-  /// is not proof that the profile (or its private files) is disposable.
+  /// Move authority to an imported usable Admin after an onboarding restore,
+  /// then retire the bootstrap setup profile it replaced.
+  ///
+  /// The setup profile used to be retained unconditionally, because a user may
+  /// have configured services before navigating back to import and
+  /// setup-incomplete is not proof the profile is disposable. That concern is
+  /// now enforced precisely rather than by blanket retention — see
+  /// [_retireBootstrapProfileAfterImport], which only removes a profile that
+  /// owns nothing.
   Future<void> _activateImportedAdminForOnboarding(
     ProfileGraphRestoreReport report,
   ) async {
@@ -1552,7 +1594,15 @@ class RemoteCommandRouter {
       importedAdmin = profile;
       break;
     }
-    if (importedAdmin == null) return;
+    if (importedAdmin == null) {
+      // Nothing in the graph can take authority (disabled, non-Admin, or every
+      // Admin needs a new PIN). The bootstrap Admin stays active and owns the
+      // device — and is therefore never retired below.
+      debugPrint(
+        'RemoteCommandRouter: no usable imported Admin to hand off to',
+      );
+      return;
+    }
 
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
@@ -1570,13 +1620,385 @@ class RemoteCommandRouter {
     } catch (_) {
       // Publication already succeeded. Keep the bootstrap Admin active so the
       // restored profiles stay manageable instead of claiming the import did
-      // not happen and encouraging a duplicate graph.
+      // not happen and encouraging a duplicate graph. NOTE: switchTo can also
+      // throw AFTER its registry commit (a participant warm failure), in which
+      // case the imported Admin IS authoritative despite the throw — which is
+      // why the retire gate below asks the registry who is active instead of
+      // trusting a success flag here.
       debugPrint(
         'RemoteCommandRouter: onboarding profile hand-off was deferred',
       );
     } finally {
       lifecycle.dispose();
     }
+    // Only ever retire after a hand-off that actually landed: a bootstrap
+    // Admin still active is the sole way into the device. The registry is the
+    // authority on that — not the switchTo return path (see above).
+    final activeAfterHandoff = (await registry.activeProfile())?.id;
+    if (activeAfterHandoff != importedAdmin.id) {
+      debugPrint(
+        'RemoteCommandRouter: hand-off did not land; '
+        'keeping the bootstrap setup profile',
+      );
+      return;
+    }
+    // This handler was entered under the PRE-hand-off scope, and
+    // ProfileRuntime.capture() prefers an inherited zone value over the live
+    // one — so everything below would otherwise still act as the bootstrap
+    // Admin we are trying to retire. Re-pin to what the runtime actually
+    // published so the acting profile matches the registry.
+    final live = ProfileRuntime.scope.value;
+    if (live == null) return;
+    await ProfileRuntime.withCapturedScope(
+      live,
+      () => _retireBootstrapProfileAfterImport(report.importedProfileIds),
+    );
+  }
+
+  /// Remove the bootstrap setup profile once an imported Admin owns the device.
+  ///
+  /// A profile the user actually configured before importing survives; only an
+  /// untouched one is removed. That is the same protection the old
+  /// unconditional retention provided, without keeping an empty "Profile 1"
+  /// around forever. "Untouched" is decided in layers — identity first (a PIN
+  /// or a rename proves the profile was somebody's, since ProfileResetService
+  /// can send an established profile back into onboarding with both intact),
+  /// then data:
+  ///
+  /// - Owned connections veto the delete — with ONE carve-out. On an online
+  ///   first launch, AppMigrationService seeds the essential addons before
+  ///   onboarding even starts, and each becomes a `stremioAddon` connection
+  ///   resource owned by the bootstrap Admin — no user action involved. If
+  ///   every owned connection is exactly such a seed (matched by unsealed
+  ///   manifest URL against the essential set), they are deleted along with
+  ///   the profile; anything else — a debrid account, a user-added addon —
+  ///   keeps the veto. Without the carve-out virtually every real device
+  ///   would retain the profile, since import implies being online.
+  /// - Private generation files veto it ([_bootstrapProfileHasPrivateData]).
+  /// - `detachPublicArtifacts: false` lets the registry refuse over public
+  ///   files, and its other invariants (active profile, admin floor, shared
+  ///   grants, live jobs) all still throw into the catch below.
+  ///
+  /// The registry checks cannot see PRIVATE generation files — search engines
+  /// imported during local onboarding are YAMLs in the profile's scoped
+  /// documents tree, not connection resources — so any file there also counts
+  /// as "configured" and vetoes the delete ([_bootstrapProfileHasPrivateData]).
+  ///
+  /// Mirrors the delete sequence in ProfileRowActions — schedule, delete,
+  /// erase data, complete — so a crash mid-way cannot strand generation data.
+  /// A stranded schedule is self-cancelling: [ProfileCleanupLedger.resume]
+  /// drops any pending entry whose profile still exists.
+  Future<void> _retireBootstrapProfileAfterImport(
+    List<String> importedProfileIds,
+  ) async {
+    final registry = ProfileBootstrap.registry;
+    try {
+      final bootstrap = await registry.getProfile(
+        ProfileBootstrap.freshAdminId,
+      );
+      if (bootstrap == null) return;
+      // Re-read authority from the runtime rather than trusting the switch:
+      // deleteProfileWithDisposition compares the acting revision and session
+      // epoch exactly, and refuses to delete the ACTIVE profile anyway.
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      if (actor.profileId == ProfileBootstrap.freshAdminId) {
+        // The registry committed the hand-off but the in-process runtime scope
+        // has not caught up, so this session still acts AS the profile we are
+        // about to delete — which the registry would refuse anyway.
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after import '
+          '(runtime scope is still ${actor.profileId})',
+        );
+        return;
+      }
+      // The bootstrap ID alone does not prove a factory profile:
+      // ProfileResetService sends an ESTABLISHED profile back into onboarding
+      // with its identity, PIN, policy, and connections intact. Connections
+      // and private files are vetoed below; of the rest, a PIN is the one
+      // identity marker whose silent loss hurts — and no factory bootstrap
+      // ever has one — so it is the cheap "was this ever somebody's profile"
+      // test. A reset profile without a PIN is an empty husk its owner chose
+      // to replace; retiring it is the point of this method.
+      if (bootstrap.hasPin) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it is PIN-protected)',
+        );
+        return;
+      }
+      // Same reasoning for a rename: the factory scaffold is always created
+      // as [ProfileBootstrap.freshAdminName], so any other stored name was
+      // chosen by a person — an established profile back in onboarding via
+      // reset, not a disposable husk.
+      if (bootstrap.name != ProfileBootstrap.freshAdminName) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it was renamed)',
+        );
+        return;
+      }
+      // ProfileResetService also preserves presentation and policy. An avatar
+      // is the customization a user would actually miss; a policy differing
+      // from the role's defaults is a deliberate choice. Either proves the row
+      // was somebody's, even with the factory name and no PIN. Deliberately
+      // NOT an exhaustive field sweep — that would silently absorb every
+      // future field and veto far more than it protects.
+      // ProfilePolicy has no value equality, so compare the feature SET —
+      // `policy != defaultsFor(role)` would compare identities, always differ,
+      // and silently veto every retirement.
+      final defaultPolicy = ProfilePolicy.defaultsFor(bootstrap.role);
+      final policyCustomized = !const SetEquality<ProfileFeature>().equals(
+        bootstrap.policy.enabled,
+        defaultPolicy.enabled,
+      );
+      if (bootstrap.avatarKey != null || policyCustomized) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it carries customized profile settings)',
+        );
+        return;
+      }
+      if (await _bootstrapProfileHasPrivateData()) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it has private files)',
+        );
+        return;
+      }
+      final allResources = await registry.listAllResources();
+      // INCLUDING disabled rows: listAllResources hides them, but the
+      // delete-time owned-resource count does not — so reading the enabled set
+      // here would classify a profile owning a disabled debrid credential as
+      // "only disposable seeds" and then delete that credential unseen.
+      final ownedResources = await registry.listOwnedResourcesIncludingDisabled(
+        bootstrap.id,
+      );
+      // Anything the user configured keeps the profile. Only untouched
+      // essential-addon seeds are disposable — and then they must be, or the
+      // registry's owned-resource check would veto the delete instead.
+      final seedUrls = ownedResources.isEmpty
+          ? const <String>{}
+          : await _ownedSeededAddonUrls(actor, ownedResources);
+      if (seedUrls == null) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it has configured connections)',
+        );
+        return;
+      }
+      // Seed addons are auto-granted to every profile, and only
+      // freshAdminId/migratedAdminId are ever re-seeded — so a LOCAL profile
+      // that predates this import (a member created before the admin was
+      // reset) would lose these addons permanently if they were deleted.
+      // Grants held by anyone outside this import veto the retirement;
+      // grants held by the freshly imported profiles do not — they carry the
+      // sender's own addons and lose nothing real.
+      if (ownedResources.isNotEmpty) {
+        final ownedIds = ownedResources.map((resource) => resource.id).toSet();
+        final expectedBorrowers = <String>{bootstrap.id, ...importedProfileIds};
+        final hasOutsideBorrower = (await registry.listAllResourceGrants()).any(
+          (grant) =>
+              ownedIds.contains(grant['resource_id']) &&
+              !expectedBorrowers.contains(grant['profile_id']),
+        );
+        if (hasOutsideBorrower) {
+          debugPrint(
+            'RemoteCommandRouter: kept the bootstrap setup profile after '
+            'import (its addons are shared with other local profiles)',
+          );
+          return;
+        }
+      }
+      // Deleting a seed is only safe when the imported graph brought its own
+      // copy: only freshAdminId/migratedAdminId are ever re-seeded, so a seed
+      // deleted here is gone from the device for good. A sender on an older
+      // build can predate one of the current essentials (the essential set
+      // grows over time) — its graph then lacks that addon, and this veto
+      // keeps the bootstrap so the imported profiles keep borrowing the
+      // device's only copy. Fires BEFORE the revocation on purpose.
+      if (seedUrls.isNotEmpty) {
+        final uncovered = await _seedUrlsMissingFromImport(
+          actor,
+          allResources: allResources,
+          importedProfileIds: importedProfileIds,
+          seedUrls: seedUrls,
+        );
+        if (uncovered.isNotEmpty) {
+          debugPrint(
+            'RemoteCommandRouter: kept the bootstrap setup profile after '
+            'import (the import lacks essential addons: '
+            '${uncovered.join(', ')})',
+          );
+          return;
+        }
+      }
+      var deleteActor = actor;
+      if (ownedResources.isNotEmpty) {
+        // Seeded resources are auto-granted to every profile — including the
+        // freshly imported ones — and the delete-time shared==0 guard refuses
+        // while any borrower grant stands. Strip them first. The revocation
+        // bumps every borrower's authorization revision, the acting Admin's
+        // own included (it borrows the seeds like everyone else), so the
+        // delete below must run on a re-captured context.
+        //
+        // Accepted residual (reviewed, not worth an atomic disposition): if a
+        // later step still fails, borrowers have lost their grants to seeds
+        // that were about to be deleted anyway — the imported profiles carry
+        // the sender's own addons — and the kept husk stays deletable from
+        // Manage profiles.
+        await registry.revokeGrantsOnOwnedResources(
+          ownerProfileId: bootstrap.id,
+          actingProfileId: actor.profileId,
+          actingAuthorizationRevision: actor.authorizationRevision,
+          actingSessionEpoch: actor.sessionEpoch,
+        );
+        deleteActor = await ProfileAuthorizationContext.capture(registry);
+      }
+
+      await ProfileCleanupLedger.scheduleProfile(bootstrap.id);
+      await registry.deleteProfileWithDisposition(
+        id: bootstrap.id,
+        deleteOwnedResources: ownedResources.isNotEmpty,
+        detachPublicArtifacts: false,
+        actingProfileId: deleteActor.profileId,
+        actingAuthorizationRevision: deleteActor.authorizationRevision,
+        actingSessionEpoch: deleteActor.sessionEpoch,
+      );
+      await ProfileDataGenerationManager.deleteAllProfileData(bootstrap.id);
+      await ProfileCleanupLedger.completeProfile(bootstrap.id);
+      debugPrint(
+        'RemoteCommandRouter: retired the bootstrap setup profile after import',
+      );
+    } catch (e) {
+      // Configured, busy, or otherwise undeletable — keeping it is always the
+      // safe outcome, and the user can still remove it from Manage profiles.
+      debugPrint(
+        'RemoteCommandRouter: kept the bootstrap setup profile after '
+        'import — $e',
+      );
+    }
+  }
+
+  static const Set<String> _essentialManifestUrls = <String>{
+    AppMigrationService.cinemetaManifestUrl,
+    AppMigrationService.openSubtitlesManifestUrl,
+    AppMigrationService.officialOpenSubtitlesManifestUrl,
+    AppMigrationService.watchNextManifestUrl,
+  };
+
+  /// The unsealed manifest URLs of [ownedResources] when EVERY resource is an
+  /// untouched essential-addon seed — type `stremioAddon`, manifest URL in the
+  /// set AppMigrationService seeds on first launch — or null when anything
+  /// else is present. Matching is by the exact URL: a user-added addon, even
+  /// one sharing a seeded addon's name, has a different URL and keeps the
+  /// retention veto. Any unseal failure (rotated key, disabled resource,
+  /// insufficient reveal authority) throws into the caller's catch, which
+  /// keeps the profile — always the safe outcome.
+  Future<Set<String>?> _ownedSeededAddonUrls(
+    ProfileAuthorizationContext actor,
+    List<ConnectionResource> ownedResources,
+  ) async {
+    if (ownedResources.any(
+      (resource) => resource.type != ConnectionResourceType.stremioAddon,
+    )) {
+      return null;
+    }
+    final resources = ConnectionResourceService(
+      registry: ProfileBootstrap.registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    final urls = <String>{};
+    for (final resource in ownedResources) {
+      final manifestUrl = await _unsealManifestUrl(
+        resources,
+        actor,
+        resource.id,
+      );
+      if (manifestUrl == null ||
+          !_essentialManifestUrls.contains(manifestUrl)) {
+        return null;
+      }
+      urls.add(manifestUrl);
+    }
+    return urls;
+  }
+
+  /// Which of [seedUrls] the imported graph did NOT bring its own copy of,
+  /// judged by the unsealed manifest URLs of the imported profiles' addon
+  /// resources. Disabled imported addons don't count as coverage on purpose
+  /// (listAllResources excludes them): an unusable copy is no substitute for
+  /// the seed being deleted, and over-keeping is the safe direction.
+  Future<Set<String>> _seedUrlsMissingFromImport(
+    ProfileAuthorizationContext actor, {
+    required List<ConnectionResource> allResources,
+    required List<String> importedProfileIds,
+    required Set<String> seedUrls,
+  }) async {
+    final importedIds = importedProfileIds.toSet();
+    final resources = ConnectionResourceService(
+      registry: ProfileBootstrap.registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    final missing = Set<String>.of(seedUrls);
+    for (final resource in allResources) {
+      if (missing.isEmpty) break;
+      if (resource.type != ConnectionResourceType.stremioAddon ||
+          !importedIds.contains(resource.ownerProfileId)) {
+        continue;
+      }
+      final manifestUrl = await _unsealManifestUrl(
+        resources,
+        actor,
+        resource.id,
+      );
+      if (manifestUrl != null) missing.remove(manifestUrl);
+    }
+    return missing;
+  }
+
+  static Future<String?> _unsealManifestUrl(
+    ConnectionResourceService resources,
+    ProfileAuthorizationContext actor,
+    String resourceId,
+  ) async {
+    final secret = await resources.revealSecretForDeviceBackup(
+      context: actor,
+      resourceId: resourceId,
+    );
+    return (secret['manifest_url'] ?? secret['manifestUrl'])?.toString();
+  }
+
+  /// Whether the bootstrap profile holds any private file — user work the
+  /// registry's resource/artifact checks cannot see (imported engine YAMLs,
+  /// exports, anything under its documents area, across every generation).
+  ///
+  /// Prefs are deliberately NOT a signal: activation warms and defaults
+  /// migrations stamp preferences on every profile unconditionally, so a
+  /// prefs check would veto the delete for everyone. Only documents files
+  /// require user action to exist. Empty directories don't count — the
+  /// scoped-documents helper creates them on demand.
+  Future<bool> _bootstrapProfileHasPrivateData() async {
+    // All THREE roots the deleter erases (see
+    // ProfileDataGenerationManager.deleteAllProfileData). Scanning only
+    // documents would leave anything written through
+    // ProfileStoragePaths.supportFile/cacheFile invisible to this veto and
+    // silently deleted with the profile — latent today only because nothing
+    // writes user work there yet.
+    for (final root in <Directory>[
+      await AppStorage.documents(),
+      await AppStorage.support(),
+      await AppStorage.cache(),
+    ]) {
+      final tree = Directory(
+        p.join(root.path, 'profiles', ProfileBootstrap.freshAdminId),
+      );
+      if (!await tree.exists()) continue;
+      final hasFile = await tree
+          .list(recursive: true, followLinks: false)
+          .any((entry) => entry is File);
+      if (hasFile) return true;
+    }
+    return false;
   }
 
   @visibleForTesting
@@ -2891,12 +3313,28 @@ class RemoteCommandRouter {
       'RemoteCommandRouter: Config complete during onboarding, restarting app flow...',
     );
 
-    await StorageService.setInitialSetupComplete(true);
+    // Best-effort, and deliberately not fatal: onboarding may already have
+    // been cleared before an authority hand-off (the profile-graph import does
+    // exactly that), in which case the active profile can now be LOCKED and
+    // this write is refused. Losing the restart over a flag that is already
+    // correct would strand the user on the onboarding screen behind a fully
+    // imported device — the exact bug this guard exists to prevent.
+    try {
+      await StorageService.setInitialSetupComplete(true);
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: onboarding flag write skipped — $e');
+    }
     // Registry writes invalidate the native privacy projection before changing
     // authority. This is an in-process route restart, not a cold bootstrap, so
     // publish the now-final active scope explicitly before native readers run.
-    if (ProfileRuntime.isProfileCommitted) {
-      await NativeProfileProjection.publish(ProfileRuntime.capture());
+    try {
+      if (ProfileRuntime.isProfileCommitted) {
+        await NativeProfileProjection.publish(ProfileRuntime.capture());
+      }
+    } catch (e) {
+      debugPrint(
+        'RemoteCommandRouter: privacy projection republish failed — $e',
+      );
     }
     _flushBatch(prefix: 'Setup received — restarting');
 

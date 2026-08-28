@@ -945,12 +945,40 @@ class _DebrifyAppState extends State<DebrifyApp> {
       // Keep the existing root ProfileGate alive. Mounting a replacement
       // before the old route's exit animation disposes can let the old gate
       // revoke the new gate's global lock timer and remote lease.
-      _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      //
+      // Clearing the routes above the gate is normally the GATE's job — only
+      // it can name the route that must survive, and it anchors popUntil on
+      // that route object (see ProfileGate._openPicker). Popping from here by
+      // position instead can empty the navigator and leave nothing to paint.
       unawaited(() async {
-        final profiles = await ProfileBootstrap.registry.listProfiles();
-        if (profiles.length < 2) return;
         await WidgetsBinding.instance.endOfFrame;
-        MainPageBridge.showProfilePicker?.call();
+        // Branch on the RUNTIME MODE, never on whether the callback happens to
+        // be installed: a null callback in committed mode means the gate is
+        // momentarily absent, and falling through to the positional pop would
+        // empty the navigator and blank the screen.
+        if (ProfileRuntime.isProfileCommitted) {
+          // Unconditional, even for a sole profile: a scope change does not
+          // reload the gate (its epoch key remounts only the child), so after
+          // an import hands authority over — possibly retiring the bootstrap
+          // profile down to one imported Admin — the gate still holds
+          // `_entered = true` and a lock controller describing a profile that
+          // no longer exists. _openPicker relocks and reloads; the gate's own
+          // logic then decides whether to ask.
+          MainPageBridge.showProfilePicker?.call();
+          return;
+        }
+        // LEGACY MODE. ProfileGate installs no picker here, so nothing else
+        // dismisses the onboarding route — the flow only flips to its success
+        // panel on `config/complete` and leaves dismissal to this callback.
+        // Without a pop the user is stranded on that panel with a fully
+        // imported device behind it.
+        //
+        // `isFirst` is safe on THIS path specifically: legacy mode never
+        // pushes a gate/picker above the root, so the predicate is guaranteed
+        // to match the home route. Do NOT reach for a canPop loop — pop() only
+        // starts the exit animation and leaves the route in history, so a loop
+        // over-pops and empties the navigator.
+        _navigatorKey.currentState?.popUntil((route) => route.isFirst);
       }());
     });
 

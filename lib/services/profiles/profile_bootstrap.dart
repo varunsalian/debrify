@@ -37,6 +37,12 @@ class ProfileBootstrap {
 
   static const String migratedAdminId = ProfileMigrationService.adminProfileId;
   static const String freshAdminId = 'profile-initial-admin-v1';
+
+  /// The factory name every fresh-admin profile is created with. A different
+  /// stored name proves someone renamed the profile — used by the onboarding
+  /// import to tell a factory scaffold from an established profile that
+  /// re-entered onboarding via ProfileResetService.
+  static const String freshAdminName = 'Admin';
   static const String recoveryAdminId = 'profile-recovery-admin-v1';
 
   /// Why THIS launch is running in legacy mode, or null while committed.
@@ -435,7 +441,7 @@ class ProfileBootstrap {
     var profile = await registry.getProfile(freshAdminId);
     profile ??= await registry.createProfile(
       id: freshAdminId,
-      name: 'Admin',
+      name: freshAdminName,
       role: UserProfileRole.admin,
       setupComplete: false,
       lifecycle: UserProfileLifecycle.staging,
@@ -563,7 +569,7 @@ class ProfileBootstrap {
       var created = await opened.getProfile(freshAdminId);
       created ??= await opened.createProfile(
         id: freshAdminId,
-        name: 'Admin',
+        name: freshAdminName,
         role: UserProfileRole.admin,
         setupComplete: false,
         lifecycle: UserProfileLifecycle.staging,
