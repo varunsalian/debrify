@@ -5,8 +5,8 @@
 <h1 align="center">Debrify</h1>
 
 <p align="center">
-  <strong>Stream & Download — Effortlessly</strong><br>
-  The all-in-one media manager for debrid accounts, WebDAV libraries, and search sources
+  <strong>Your personal media hub</strong><br>
+  One app to browse, stream, and organize media from your own services — with a cinematic player built in
 </p>
 
 <p align="center">
@@ -20,7 +20,6 @@
 <p align="center">
   <a href="https://varunsalian.github.io/debrify/"><strong>Website</strong></a> &bull;
   <a href="https://varunsalian.github.io/debrify/guides/index.html"><strong>Guides</strong></a> &bull;
-  <a href="https://ko-fi.com/debrify"><strong>Support</strong></a> &bull;
   <a href="https://github.com/varunsalian/debrify/releases"><strong>Download</strong></a> &bull;
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
@@ -30,257 +29,88 @@
 
 ---
 
-<p align="center">
-  <img src="docs/assets/screenshots/catalog-search/catalog-grid.png" alt="Catalog Search" width="49%">
-  <img src="docs/assets/screenshots/catalog-search/detail-screen.png" alt="Detail Screen" width="49%">
-</p>
-<p align="center">
-  <img src="docs/assets/screenshots/keyword-search/results.png" alt="Keyword Search Results" width="49%">
-  <img src="docs/assets/screenshots/stremio-tv-guide/cinematic-tuner.png" alt="Stremio TV Cinematic Tuner" width="49%">
-</p>
-<p align="center">
-  <img src="docs/assets/screenshots/trakt-guide/home-surfaces.png" alt="Trakt Home Surfaces" width="49%">
-  <img src="docs/assets/screenshots/catalog-search/episode-guide.png" alt="Episode Guide" width="49%">
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Real--Debrid-Supported-4ade80?style=for-the-badge" alt="Real-Debrid">
-  <img src="https://img.shields.io/badge/Torbox-Supported-8b5cf6?style=for-the-badge" alt="Torbox">
-  <img src="https://img.shields.io/badge/Premiumize-Supported-fb923c?style=for-the-badge" alt="Premiumize">
-  <img src="https://img.shields.io/badge/PikPak-Supported-0ea5e9?style=for-the-badge" alt="PikPak">
-  <img src="https://img.shields.io/badge/AllDebrid-Supported-ec4899?style=for-the-badge" alt="AllDebrid">
-  <img src="https://img.shields.io/badge/WebDAV-Supported-14b8a6?style=for-the-badge" alt="WebDAV">
-  <img src="https://img.shields.io/badge/Stremio_Addons-Supported-f97316?style=for-the-badge" alt="Stremio Addons">
-  <img src="https://img.shields.io/badge/Jackett_%26_Prowlarr-Supported-f43f5e?style=for-the-badge" alt="Jackett and Prowlarr">
-</p>
-
-<p align="center">
-  <a href="https://ko-fi.com/debrify"><img src="https://img.shields.io/badge/Support_on-Ko--fi-ff5f5f?style=for-the-badge" alt="Support on Ko-fi"></a>
-  <a href="https://paypal.me/varunprojects"><img src="https://img.shields.io/badge/Support_via-PayPal-0070ba?style=for-the-badge" alt="Support via PayPal"></a>
-</p>
-
----
-
 ## What is Debrify?
 
-Debrify is a **media manager** that lets you browse, stream, and download content from your debrid accounts and WebDAV servers—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Jackett/Prowlarr indexer support**, **Trakt integration** for sync and discovery, **Stremio Addons support** for discovering content, and a **cinematic UI** inspired by premium streaming services.
+Debrify is an open-source, cross-platform **media hub**. It brings the services you already use — cloud storage accounts, personal WebDAV servers, IPTV playlists, Stremio addon catalogs, YouTube — into one place, with a **built-in player** tuned for movies and TV, a **download manager**, **Trakt/Simkl/MDBList tracking**, and a **cinematic UI** that works just as well on a phone, a desktop, or a TV with a remote.
 
-## Before You Read the Code
-
-A warning: this is not a clean codebase.
-
-Debrify grew rapidly around features rather than a planned architecture. It contains enormous files, god classes, static state, duplicated provider logic, tightly coupled UI and business logic, inconsistent abstractions, legacy implementations, and more special cases than anyone should be proud of.
-
-Some newer subsystems are better structured and heavily tested, but the repository as a whole does not represent Flutter best practices. It represents a product that kept growing while architectural cleanup repeatedly lost to the next feature or platform problem.
-
-The application works and solves difficult problems, but maintaining it can be painful. Refactoring, simplification, and removal of legacy code are welcome.
+You connect your own accounts and sources. Debrify gives them one library, one player, and one interface everywhere.
 
 ## Responsible Use
 
-Debrify does not host, sell, provide, or bundle media content. Search engines, Stremio addons, Jackett/Prowlarr servers, WebDAV servers, IPTV playlists, and debrid accounts are user-configured integrations. Only use Debrify with content, services, and sources that you own, created, licensed, or are otherwise authorized to access.
+Debrify does not host, sell, provide, or bundle media content. Search sources, addons, indexers, WebDAV servers, IPTV playlists, and cloud accounts are user-configured integrations. Only use Debrify with content, services, and sources that you own, created, licensed, or are otherwise authorized to access.
 
-Third-party plugins, addons, indexers, playlists, and services are controlled by their respective providers or users. Debrify does not endorse using any integration to infringe copyright or violate a provider's terms. Do not submit or distribute configurations that are intended to facilitate unauthorized access to copyrighted content.
+Third-party plugins, addons, indexers, playlists, and services are controlled by their respective providers or users. Debrify does not endorse using any integration to infringe copyright or violate a provider's terms. Do not submit or distribute configurations intended to facilitate unauthorized access to copyrighted content.
 
 For more detail, see [Content Responsibility](https://varunsalian.github.io/debrify/content-responsibility.html).
-
-Need help using a feature? Browse the user guides on GitHub Pages: [Debrify Guides](https://varunsalian.github.io/debrify/guides/index.html)
-
-If Debrify has been useful to you, you can support development here:
-- [Ko-fi](https://ko-fi.com/debrify)
-- [PayPal](https://paypal.me/varunprojects)
 
 ---
 
 ## ✨ Features
 
-<table>
-<tr>
-<td width="50%">
+### 🎬 Built-in Player
+A native player (media_kit/libmpv) designed for long-form viewing:
+- Audio and subtitle track switching on the fly
+- Subtitle search, autoload, styling, and a real-time sync slider
+- Resume playback — picks up where you left off, even across sources and devices
+- Episode guides, next-episode navigation, sleep timer, playback speed
+- Gesture controls on mobile; fully remote-driven on TV
 
-### Debrid Management
-- **Multi-provider support** — Real-Debrid, Torbox, Premiumize, PikPak, and AllDebrid
-- **Full feature parity** — Stream, download, and manage files across all providers
-- **Account dashboard** — View status, expiration, and usage at a glance
-- **File browser** — Browse and manage your debrid cloud storage
+### ☁️ Your Cloud Services
+Connect the storage and streaming-cache accounts you already pay for — Real-Debrid, Torbox, Premiumize, PikPak, and AllDebrid are all supported with full parity:
+- Stream or download any file in your account
+- Browse and manage your cloud library
+- Account dashboard with status, expiration, and usage
+- Playlists and episode tracking across every provider
 
-</td>
-<td width="50%">
+### 🏠 Personal Servers
+- **WebDAV** — browse your own server, stream with credentials handled by the app, build playlists, download locally
+- **Remote Setup** — securely send your full configuration between your own devices
+- **Backup & Restore** — export everything to a single file, restore anywhere
 
-### Built-in Player
-- **Native playback** — Powered by media_kit/libmpv
-- **Track selection** — Switch audio and subtitle tracks on the fly
-- **Subtitle sync** — Floating overlay slider to adjust subtitle offset in real time
-- **Manual subtitle search** — Find and load subtitles from within the player
-- **Resume playback** — Picks up where you left off, even across source switches
-- **TV-optimized** — Gesture controls on mobile, remote-friendly on TV
+### 🔎 Discovery & Catalogs
+- **Stremio addons** — install addon catalogs, search across them, and play through your connected accounts
+- **Catalog browsing** — poster grids, detail pages with ratings and Parents Guide, Watch Next recommendations
+- **Quick Play** — long-press any poster to go straight into playback
+- **Optional search plugins** — bring your own sources, including self-hosted Jackett and Prowlarr indexers
 
-</td>
-</tr>
-<tr>
-<td width="50%">
+### 📡 Live & Lean-Back TV
+- **IPTV** — M3U and Xtream playlists with an EPG guide, catchup, DVR recording, favorites, categories, and playlists that scale to tens of thousands of channels
+- **Stremio TV** — browse catalogs as live channels with a cinematic tuner
+- **Debrify TV** — build your own always-on channels from keyword recipes and your connected accounts
 
-### Download Manager
-- **Background downloads** — Queue files and let them download
-- **Pause & resume** — Full control over your download queue
-- **Batch operations** — Select multiple files, download all at once
-- **Cross-platform** — Works on mobile and desktop
+### 📈 Tracking
+- **Trakt** — in-player scrobbling, a live Now Playing card, continue-watching rails, and an upcoming-episodes calendar
+- **Simkl and MDBList** — sync progress and lists across services; local-only tracking works fully offline
 
-</td>
-<td width="50%">
+### ⬇️ Download Manager
+- Background queue with pause/resume and batch operations
+- Save from any connected source — cloud accounts, WebDAV, YouTube
+- Works on mobile and desktop, with scoped-folder support on Android
 
-### Search Plugins *(Optional)*
-- **Engine marketplace** — Import community-built torrent search engines
-- **Multi-engine search** — Query multiple sources simultaneously
-- **Jackett & Prowlarr** — Connect your own indexer managers and use them from the same source picker
-- **RSS support** — Engines can use RSS response format for broader source compatibility
-- **Smart filtering** — Filter by quality, size, seeders, and more
-- **One-click add** — Send results directly to your debrid provider
-- **Build your own** — Follow the [custom engine guide](docs/engines/creating-custom-engines.md)
+### ▶️ YouTube
+- On-device search, no account or proxy required
+- Resolution picker, endless scroll, downloads, and proper audio muxing into the built-in player
 
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Stremio Addons
-- **Easy install** — Paste addon links or install directly from browser
-- **Content discovery** — Search movies and shows across multiple sources
-- **Quick Play** — Long-press any poster to instantly play; seamless full-screen mask through loading with automatic retry on blocked torrents
-- **Watch Next** — Recommendations rail on the detail screen with full metadata
-- **IMDb enrichment** — Detail screen shows IMDb ratings, metadata, and Parents Guide
-- **Seamless integration** — Works with your debrid provider
-- **Stremio importer** — Import your existing Stremio addon collection into Debrify
-
-</td>
-<td width="50%">
-
-### Stremio TV
-- **Cinematic tuner** — Browse addon catalogs as live TV channels, with a premium UI optimized for Android TV
-- **Auto-rotation** — "Now playing" rotates on a configurable schedule
-- **Channel filters** — Filter by addon or content type
-- **Favorites** — Pin channels to home screen
-- **Torrents-first** — Optional setting to prioritize torrent sources
-- **Catalog importer** — Bring in JSON catalogs from files, URLs, repos, or Trakt lists (with one-tap refresh)
-- **Build your own** — Follow the [Stremio catalog guide](docs/stremio/building-local-catalogs.md)
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Debrify TV
-- **Keyword-driven channels** — Combine keyword recipes with Real-Debrid, Torbox, Premiumize, PikPak, and AllDebrid engines to auto-build always-on channels
-- **Quick Play & auto-launch** — Instant channel playback with random starts, resume buttons, and optional auto-launch overlay
-- **Smart filtering** — Automatically skips RD-blocked torrents so playback never stalls
-- **Smart caching & rotation** — Caches torrents per channel and rotates movies/series so the lineup stays fresh all day
-- **Import/Export** — ZIP/YAML packs, community collections, and remote-control export keep channels in sync across devices
-
-</td>
-<td width="50%">
-
-### Trakt Integration
-- **In-player scrobbling** — Debrify's video player reports start/pause/stop heartbeats to Trakt so your progress stays in sync everywhere
-- **Now playing card** — Home screen tile mirrors your live Trakt scrobble and gives you a one-tap resume button
-- **Upcoming calendar** — Dedicated Trakt calendar screen highlights the next episodes on your schedule with quick playback/mark-watched actions
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### IPTV Support
-- **M3U playlists** — Load your IPTV playlists
-- **Live TV** — Watch live channels seamlessly
-- **Channel favorites** — Organize and quick-access your channels
-
-</td>
-<td width="50%">
-
-### External Players
-- **Player choice** — Use your preferred video player app
-- **VR support** — Stream to DeoVR for immersive playback
-- **One-tap handoff** — Send any stream to external apps
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### YouTube
-- **On-device search** — Searches YouTube directly from the app, no proxy or account required
-- **Resolution selector** — Pick your preferred max playback quality (TV-friendly picker)
-- **Endless results** — Paginated search keeps loading more as you scroll
-- **Built-in playback** — Streams straight into Debrify's player, with audio properly muxed
-- **Download support** — Save YouTube videos locally
-
-</td>
-<td width="50%">
-
-### WebDAV support
-- **Connect your server** — Browse personal WebDAV storage directly inside Debrify
-- **Stream with auth** — Play WebDAV files through the built-in player with credentials handled by the app
-- **Playlist support** — Add individual files or folders to playlists and resume them later
-- **Download support** — Save WebDAV files locally through the download manager
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Indexer Managers
-- **Jackett support** — Search Jackett Torznab endpoints directly from torrent search
-- **Prowlarr support** — Search Prowlarr indexers with API-key based configuration
-- **Per-source controls** — Enable, disable, and limit each connected manager like other search sources
-
-</td>
-<td width="50%">
-
-### Backup & Restore
-- **Full export** — Back up all settings, sources, engines, and provider configs in a single file
-- **One-tap restore** — Restore from a backup file to get up and running instantly on any device
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Remote Setup
-- **Bidirectional sync** — Send or receive your full setup between devices
-- **Transfer Everything** — One-click export of all providers, engines, addons, and Trakt
-- **Role picker** — Choose to send or receive when pairing devices
-
-</td>
-<td width="50%">
-
-### Playback Features
-- **Play Random** — Shuffle play from any playlist or home section
-- **Continuous shuffle** — Keep shuffling through content automatically
-- **Startup screen** — Choose what screen to launch into (Trakt, continue watching, and more)
-
-</td>
-</tr>
-</table>
+### 🔌 External Players
+- Hand any stream to your preferred player app, including DeoVR for VR playback
 
 ---
 
-## 📺 Android TV
+## 📺 Android TV & Apple TV
 
-A dedicated lean-back experience for your living room, with a cinematic UI optimized for big screens and low-end hardware.
+A dedicated lean-back experience for the living room:
 
-- **Cinematic UI** — Premium poster grids, detail screens, and episode guides designed for the big screen
-- **Remote-friendly player** — Full playback controls with D-pad navigation
-- **Quick Play** — Long-press any card to start playing immediately
-- **Subtitle sync & search** — Adjust subtitle offset with a floating overlay; search and load subtitles manually
-- **Subtitle customization** — Size, style, color, and background options
-- **Cinematic tuner** — Redesigned Stremio TV with stripped GPU effects for smooth performance on Android TV
-- **Quick channel guide** — Switch channels on the fly
-- **Debrify TV** — Keyword-driven channels with auto-play and RD-blocked torrent filtering
+- **Cinematic UI** — poster grids, detail screens, and episode guides designed for big screens and low-end hardware
+- **Remote-first** — full D-pad navigation everywhere, including an in-app keyboard with voice input
+- **Quick Play** — long-press any card to start watching immediately
+- **Subtitle tools** — search, offset sync, and full styling from the couch
+- **Channel surfing** — IPTV EPG, quick guide, and instant zapping
 
 ---
 
 ## 📱 Supported Platforms
 
-Debrify runs everywhere. One codebase, full feature support across all platforms.
+One codebase, full feature support across all platforms.
 
 | Platform | Download | Notes |
 |:---------|:---------|:------|
@@ -290,6 +120,7 @@ Debrify runs everywhere. One codebase, full feature support across all platforms
 | **macOS** | [DMG](https://github.com/varunsalian/debrify/releases) | Intel and Apple Silicon |
 | **Linux** | [AppImage](https://github.com/varunsalian/debrify/releases) | x86_64 and ARM64. Requires dependencies ([see install notes](#linux)) |
 | **iOS** | [IPA](https://github.com/varunsalian/debrify/releases) | Unsigned — requires sideloading ([guide](docs/iOS-Installation.md)) |
+| **Apple TV** | [IPA](https://github.com/varunsalian/debrify/releases) | Unsigned tvOS build — requires sideloading; ships with alpha releases |
 
 ---
 
@@ -299,7 +130,7 @@ Debrify runs everywhere. One codebase, full feature support across all platforms
 Download the APK from [Releases](https://github.com/varunsalian/debrify/releases) and install. On TV, use a file manager app like Downloader or install via ADB.
 
 ### Windows
-Download the installer, run it, and launch from the Start Menu. First run may trigger SmartScreen—click "More info" → "Run anyway".
+Download the installer, run it, and launch from the Start Menu. First run may trigger SmartScreen — click "More info" → "Run anyway".
 
 ### macOS
 Download the DMG, drag Debrify to Applications. First launch: right-click → Open (app is not notarized).
@@ -331,29 +162,25 @@ Download the unsigned IPA and sideload using **AltStore** or **Sideloadly**. See
 
 ---
 
-## 🔌 Provider Support
-
-| Feature | Real-Debrid | Torbox | Premiumize | PikPak | AllDebrid |
-|:--------|:-----------:|:------:|:----------:|:------:|:---------:|
-| Stream files | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Download files | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Browse cloud storage | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Add magnets/links | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Playlists | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Episode tracking | ✅ | ✅ | ✅ | ✅ | ✅ |
-
----
-
 ## ❤️ Support Debrify
 
-If the app has been useful to you and you want to help fund development:
+Debrify is free, open source, and built by one person. If it has been useful to you, you can help fund development:
 
 - [Support on Ko-fi](https://ko-fi.com/debrify)
-- [Support via PayPal](https://paypal.me/varunprojects)
 
 Every bit helps keep the app improving.
 
 ---
+
+## Before You Read the Code
+
+A warning: this is not a clean codebase.
+
+Debrify grew rapidly around features rather than a planned architecture. It contains enormous files, god classes, static state, duplicated provider logic, tightly coupled UI and business logic, inconsistent abstractions, legacy implementations, and more special cases than anyone should be proud of.
+
+Some newer subsystems are better structured and heavily tested, but the repository as a whole does not represent Flutter best practices. It represents a product that kept growing while architectural cleanup repeatedly lost to the next feature or platform problem.
+
+The application works and solves difficult problems, but maintaining it can be painful. Refactoring, simplification, and removal of legacy code are welcome.
 
 ## 🛠️ Building from Source
 
