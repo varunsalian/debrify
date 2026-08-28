@@ -3479,17 +3479,23 @@ class StorageService {
   static Future<Map<String, dynamic>?> getVideoPlaybackStateByImdbId(
     String imdbId,
   ) async {
+    // A blank id would match every record saved without one and hand back an
+    // unrelated movie's position.
+    final wanted = imdbId.trim();
+    if (wanted.isEmpty) return null;
     // A completion write and the periodic player autosave can overlap by one
     // tick. The finished marker is authoritative for movies, so never expose
     // a stale resume record that slipped back in during that tiny window.
-    if (await isMovieFinished(imdbId)) return null;
+    if (await isMovieFinished(wanted)) return null;
     final map = await _getPlaybackStateMap();
     Map<String, dynamic>? best;
     int bestUpdatedAt = -1;
     for (final entry in map.values) {
-      if (entry is Map<String, dynamic> &&
-          entry['type'] == 'video' &&
-          entry['imdbId'] == imdbId) {
+      if (entry is! Map<String, dynamic> || entry['type'] != 'video') continue;
+      // Pattern-matched, not cast: one malformed legacy record must not throw
+      // out of a scan over every saved video.
+      final recorded = entry['imdbId'];
+      if (recorded is String && recorded.trim() == wanted) {
         final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
         if (updatedAt > bestUpdatedAt) {
           bestUpdatedAt = updatedAt;
