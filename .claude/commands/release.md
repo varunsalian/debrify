@@ -62,6 +62,10 @@ Let `BR` = current branch (`git branch --show-current`).
 3. **Tag on main + push:**
    - `git tag -a "v$2-$1.N" -m "v$2-$1.N"`
    - `git push origin "v$2-$1.N"`
+   - **Refresh the private backup mirror** (`gitlab.com/varunbsalian/debrify-mirror` — code, branches and tags only):
+     `git push mirror --all; git push mirror --tags`
+     Run them as two separate commands, not `&&`: a stale local branch that diverged from the mirror gets rejected, and that must not stop the tags from mirroring. Never pass `--force` — the mirror is a backup, so a rejection is information, not something to overwrite.
+     Wholly non-blocking: if the `mirror` remote is missing (remotes are per-clone) or either push fails, note it in the final report and carry on. A stale mirror never holds up a release.
 4. **Create the GitHub release (publishes → triggers the build):**
    - `gh release create "v$2-$1.N" --title "v$2-$1.N" --notes-file <scratch>/gh-notes.md` — append `--prerelease` **iff** `channel == alpha`.
 
