@@ -267,6 +267,23 @@ void main() {
     expect(cancelled, isTrue);
   });
 
+  testWidgets('marquee plates a poster-only play (the Continue Watching shape)',
+      (tester) async {
+    await showOverlay(
+      tester,
+      style: PlayLoaderStyle.marquee,
+      // No backdrop, no logo — a Continue Watching row after art derivation
+      // failed to find wide art. The plate must still be the poster.
+      art: const PlayLoaderArt(posterUrl: 'https://art.example/poster.jpg'),
+    );
+    final plate = tester.widget<Image>(find.byType(Image));
+    expect(
+      (plate.image as NetworkImage).url,
+      'https://art.example/poster.jpg',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('marquee rail segments actually paint — done fills, active crawls',
       (tester) async {
     tester.view.physicalSize = const Size(1440, 900);

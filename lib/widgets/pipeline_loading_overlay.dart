@@ -311,11 +311,14 @@ class _PlContentState extends State<_PlContent> with TickerProviderStateMixin {
 
   bool get _marquee => widget.style == PlayLoaderStyle.marquee;
 
-  /// The Marquee plate: the backdrop when the caller had one, otherwise the
-  /// poster (blurred, as the classic backdrop always was).
+  /// The Marquee plate: the backdrop when there is one, otherwise a poster —
+  /// the art's own (Continue Watching rows carry a poster and nothing else) or
+  /// the one the play passed.
   String? get _plateUrl {
     final backdrop = widget.art?.backdropUrl;
     if (backdrop != null && backdrop.isNotEmpty) return backdrop;
+    final artPoster = widget.art?.posterUrl;
+    if (artPoster != null && artPoster.isNotEmpty) return artPoster;
     return _hasPoster ? widget.posterUrl : null;
   }
 
@@ -502,7 +505,10 @@ class _PlContentState extends State<_PlContent> with TickerProviderStateMixin {
     Widget image = Image.network(
       url,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => _marqueeGround(),
+      // A backdrop derived from an IMDb id is a guess — plenty of titles have
+      // no wide art on metahub. When it 404s, drop to the poster (blurred, the
+      // classic plate) before giving up on the gradient.
+      errorBuilder: (_, __, ___) => _marqueePosterPlate() ?? _marqueeGround(),
     );
     if (blur) {
       image = ImageFiltered(
@@ -523,6 +529,25 @@ class _PlContentState extends State<_PlContent> with TickerProviderStateMixin {
         );
       },
       child: image,
+    );
+  }
+
+  /// The blurred-poster plate, or null when this play has no poster (and on
+  /// TV, where a full-screen blur is the most expensive effect a weak GPU can
+  /// be asked for). Used as the fallback when a derived backdrop doesn't exist.
+  Widget? _marqueePosterPlate() {
+    if (widget.isTv) return null;
+    final poster = widget.art?.posterUrl?.isNotEmpty == true
+        ? widget.art!.posterUrl!
+        : (_hasPoster ? widget.posterUrl! : null);
+    if (poster == null || poster == _plateUrl) return null;
+    return ImageFiltered(
+      imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+      child: Image.network(
+        poster,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _marqueeGround(),
+      ),
     );
   }
 

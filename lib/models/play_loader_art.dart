@@ -9,8 +9,15 @@ import 'stremio_addon.dart';
 /// it sets the title as type. Nothing here participates in playback, resume or
 /// tracking — it is safe to drop on any path that doesn't have it.
 class PlayLoaderArt {
-  /// Wide backdrop (`StremioMeta.background`). The Marquee plate.
+  /// Wide backdrop (`StremioMeta.background`, or derived from the IMDb id).
+  /// The Marquee plate.
   final String? backdropUrl;
+
+  /// Poster, carried so a poster-only row still counts as artwork. Continue
+  /// Watching rows (local, Trakt, Simkl) are exactly that shape — without this
+  /// they produced an empty art object and the loader fell back to a bare
+  /// gradient.
+  final String? posterUrl;
 
   /// Title-treatment art (`StremioMeta.logo`), painted in place of the title.
   ///
@@ -29,6 +36,7 @@ class PlayLoaderArt {
 
   const PlayLoaderArt({
     this.backdropUrl,
+    this.posterUrl,
     this.logoUrl,
     this.yearLabel,
     this.ratingLabel,
@@ -40,6 +48,7 @@ class PlayLoaderArt {
   /// True when there is nothing worth carrying — callers skip attaching it.
   bool get isEmpty =>
       backdropUrl == null &&
+      posterUrl == null &&
       logoUrl == null &&
       yearLabel == null &&
       ratingLabel == null &&
@@ -53,11 +62,22 @@ class PlayLoaderArt {
   /// Catalog list items usually lack logo/runtime/rating (the addon only
   /// returns them on `/meta`), so this is a best effort by design: the detail
   /// page re-emits a fuller one once its enrichment lands.
+  ///
+  /// Backdrop and logo fall back to the metahub images an IMDb id names
+  /// directly — the same trick `_derivedHeroLogo` uses on Home, and the reason
+  /// Continue Watching plays get a plate at all: those rows carry a poster and
+  /// nothing else. A title with no art there simply 404s and the loader
+  /// degrades exactly as it does for a title with no art at all.
   factory PlayLoaderArt.fromMeta(StremioMeta meta, {String? certificate}) {
     final genres = meta.genres;
+    final imdb =
+        meta.effectiveImdbId ?? (meta.id.startsWith('tt') ? meta.id : null);
+    String? derived(String kind) =>
+        imdb == null ? null : 'https://images.metahub.space/$kind/medium/$imdb/img';
     return PlayLoaderArt(
-      backdropUrl: _clean(meta.background),
-      logoUrl: _clean(meta.logo),
+      backdropUrl: _clean(meta.background) ?? derived('background'),
+      posterUrl: _clean(meta.poster) ?? derived('poster'),
+      logoUrl: _clean(meta.logo) ?? derived('logo'),
       yearLabel: _clean(meta.year),
       ratingLabel: meta.imdbRating == null
           ? null

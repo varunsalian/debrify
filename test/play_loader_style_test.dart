@@ -114,11 +114,46 @@ void main() {
       expect(art.isEmpty, isFalse);
     });
 
-    test('a bare catalog row yields empty art, so the loader stays as it was',
-        () {
-      expect(PlayLoaderArt.fromMeta(meta()).isEmpty, isTrue);
-      // Blank strings are not artwork.
-      expect(PlayLoaderArt.fromMeta(meta(background: '   ')).isEmpty, isTrue);
+    test('real art always wins over the derived URLs', () {
+      final art = PlayLoaderArt.fromMeta(
+        meta(background: 'https://art/bg.jpg', logo: 'https://art/logo.png'),
+      );
+      expect(art.backdropUrl, 'https://art/bg.jpg');
+      expect(art.logoUrl, 'https://art/logo.png');
+      // Nothing supplied a poster, so that one is derived.
+      expect(art.posterUrl, contains('images.metahub.space/poster'));
+    });
+
+    // Continue Watching rows (local, Trakt, Simkl) carry a poster and an IMDb
+    // id and nothing else — the regression that left their loader a bare
+    // gradient. A blank string is not artwork, but the id still is.
+    test('a poster-only Continue Watching row still yields a plate', () {
+      final art = PlayLoaderArt.fromMeta(
+        meta(background: '   ', year: '1994'),
+      );
+      expect(art.isEmpty, isFalse);
+      expect(art.backdropUrl, contains('images.metahub.space/background'));
+      expect(art.posterUrl, contains('images.metahub.space/poster'));
+      expect(art.logoUrl, contains('images.metahub.space/logo'));
+      expect(art.backdropUrl, contains('tt15239678'));
+    });
+
+    test('no IMDb id anywhere derives nothing', () {
+      const bare = StremioMeta(id: 'iptv:channel-7', type: 'tv', name: 'Ch 7');
+      final art = PlayLoaderArt.fromMeta(bare);
+      expect(art.isEmpty, isTrue);
+      expect(art.backdropUrl, isNull);
+      expect(art.posterUrl, isNull);
+    });
+
+    test('a bare id-less row keeps whatever real art it has', () {
+      const withPoster = StremioMeta(
+        id: 'iptv:channel-7',
+        type: 'tv',
+        name: 'Ch 7',
+        poster: 'https://art/p.jpg',
+      );
+      expect(PlayLoaderArt.fromMeta(withPoster).posterUrl, 'https://art/p.jpg');
     });
   });
 }
