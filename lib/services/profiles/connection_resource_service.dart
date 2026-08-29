@@ -240,21 +240,63 @@ class ConnectionResourceService {
       );
     }
     final resource = await registry.getResource(resourceId);
-    if (resource == null || !resource.enabled) {
+    if (resource == null) {
       throw const ResourceAuthorizationException('Resource is unavailable');
     }
-    final secret = await _openSecret(resourceId);
+    final secret = await _openSecret(resourceId, includeDisabled: true);
     final currentActor = await context.validate(registry);
     final currentResource = await registry.getResource(resourceId);
     if (currentActor.role != UserProfileRole.admin ||
         !currentActor.allows(ProfileFeature.manageProfiles) ||
         !currentActor.allows(ProfileFeature.backupRestore) ||
         currentResource == null ||
-        !currentResource.enabled ||
+        currentResource.enabled != resource.enabled ||
         currentResource.authorizationRevision !=
             resource.authorizationRevision) {
       throw const ResourceAuthorizationException(
         'Comprehensive backup authorization changed',
+      );
+    }
+    return secret;
+  }
+
+  /// Exports one profile's own inactive resource without making it usable.
+  /// This is narrower than the Admin graph path: ownership, the ordinary
+  /// reveal grant, role ceiling, and backup policy must all still hold.
+  Future<Map<String, dynamic>> revealOwnedSecretForProfileBackup({
+    required ProfileAuthorizationContext context,
+    required String resourceId,
+  }) async {
+    var actor = await context.validate(registry);
+    var resource = await registry.getResource(resourceId);
+    var grant = await registry.getGrant(actor.id, resourceId);
+    actor = await context.validate(registry);
+    if (resource == null ||
+        resource.ownerProfileId != actor.id ||
+        !actor.allows(ProfileFeature.backupRestore) ||
+        actor.role == UserProfileRole.child ||
+        grant == null ||
+        !grant.allows(ResourcePermission.revealSecret)) {
+      throw const ResourceAuthorizationException(
+        'Profile cannot export this connection',
+      );
+    }
+    final secret = await _openSecret(resourceId, includeDisabled: true);
+    final expectedRevision = resource.authorizationRevision;
+    final expectedEnabled = resource.enabled;
+    actor = await context.validate(registry);
+    resource = await registry.getResource(resourceId);
+    grant = await registry.getGrant(actor.id, resourceId);
+    if (resource == null ||
+        resource.ownerProfileId != actor.id ||
+        resource.authorizationRevision != expectedRevision ||
+        resource.enabled != expectedEnabled ||
+        !actor.allows(ProfileFeature.backupRestore) ||
+        actor.role == UserProfileRole.child ||
+        grant == null ||
+        !grant.allows(ResourcePermission.revealSecret)) {
+      throw const ResourceAuthorizationException(
+        'Profile backup authorization changed',
       );
     }
     return secret;
@@ -333,8 +375,14 @@ class ConnectionResourceService {
     );
   }
 
-  Future<Map<String, dynamic>> _openSecret(String resourceId) async {
-    final sealed = await registry.getSealedResourceSecret(resourceId);
+  Future<Map<String, dynamic>> _openSecret(
+    String resourceId, {
+    bool includeDisabled = false,
+  }) async {
+    final sealed = await registry.getSealedResourceSecret(
+      resourceId,
+      includeDisabled: includeDisabled,
+    );
     if (sealed == null) throw StateError('Resource secret is unavailable');
     final opened = await cipher.open(
       sealed.envelope,

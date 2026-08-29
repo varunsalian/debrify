@@ -11,8 +11,23 @@ import 'profile_avatar_ingest.dart';
 import 'sanitized_profile_preferences.dart';
 import '../../models/profiles/profile_avatar.dart';
 
+const String _profilePackageTooLargeMessage =
+    'Backup is too large to export as one portable package';
+
+/// Typed retry signal for callers that may remove only documented,
+/// rebuildable data and encode the package again.
+///
+/// This remains a [FormatException] for existing UI/error handling, while
+/// avoiding substring-matched control flow that could mistake an unrelated
+/// exception quoting the same sentence for an oversize package.
+final class ProfilePackageTooLargeException extends FormatException {
+  const ProfilePackageTooLargeException()
+    : super(_profilePackageTooLargeMessage);
+}
+
 class PortableProfilePackage {
-  static const int version = 3;
+  static const int version = 4;
+  static const int oldestSupportedVersion = 3;
   static const int maxEnvelopeBytes = 128 * 1024 * 1024;
   static const int maxExpandedBytes = 256 * 1024 * 1024;
   static const int maxProfiles = 64;
@@ -20,9 +35,45 @@ class PortableProfilePackage {
   static const int maxRecords = 250000;
   static const int maxDepth = 32;
   static const int maxStringBytes = 4 * 1024 * 1024;
+  static const int maxResourceContentBytes = 64 * 1024 * 1024;
   static const int maxAttachmentBytes = 64 * 1024 * 1024;
   static const int maxTotalAttachmentBytes = 128 * 1024 * 1024;
+  static const String exportTooLargeMessage = _profilePackageTooLargeMessage;
 
+  /// Expected product exclusions are explained in the surrounding backup
+  /// dialogs and do not need repeating in the completion snackbar. Every
+  /// unknown/future omission is surfaced by default so adding one cannot
+  /// silently hide lost data from the user.
+  static const Set<String> routineOmissionKeys = <String>{
+    'downloadAndRecordingBinaries',
+    'downloadsAndRecordings',
+    'activeJobsAndSchedules',
+    'jobsAndSchedules',
+    'deviceWidePreferencesAndRuntimeState',
+    'devicePathsOsGrantsAndImportedFonts',
+    'devicePathsAndOsGrants',
+    'devicePathsAndGrants',
+    'remoteIdentityAndPeers',
+    'remotePairings',
+    'destinationNameAvatarRolePolicyPinAndEnabledState',
+    'pinAttemptCountersAndLockout',
+    'pinsAndLockout',
+    'pinHashesAndLockout',
+    'pins',
+    'deviceKeysExecutablesCommandsAndCustomSchemes',
+    'deviceKeysAndExecutables',
+    'localFilesystemBindingsAndResolvedPlaybackSources',
+    'transientPreferenceAndFileCaches',
+    'cachesAndTransientEpg',
+    'profiles',
+    'historyAndResume',
+    'localFiles',
+  };
+
+  /// Format version read from the source envelope. Newly created packages use
+  /// [version]; decoded v3 packages retain 3 so restore can apply the narrow
+  /// compatibility policy without weakening validation for current exports.
+  final int sourceVersion;
   final String mode;
   final DateTime createdAt;
   final List<Map<String, dynamic>> profiles;
@@ -31,6 +82,7 @@ class PortableProfilePackage {
   final Map<String, dynamic> omissions;
 
   const PortableProfilePackage({
+    this.sourceVersion = version,
     required this.mode,
     required this.createdAt,
     required this.profiles,
@@ -52,6 +104,18 @@ class PortableProfilePackage {
     };
     return body;
   }
+
+  static Map<String, dynamic> userVisibleOmissions(
+    Map<String, dynamic> omissions,
+  ) => <String, dynamic>{
+    for (final entry in omissions.entries)
+      if (!routineOmissionKeys.contains(entry.key) &&
+          entry.value != null &&
+          entry.value != false &&
+          entry.value != 0 &&
+          entry.value != '')
+        entry.key: entry.value,
+  };
 
   static Future<Map<String, dynamic>> buildSection(
     Map<String, Object?> values, {
@@ -232,16 +296,163 @@ class PortableProfilePackage {
     return Isolate.run(() async => jsonEncode(await withIntegrity(package)));
   }
 
+  /// Compact authenticated transport used only when the ordinary remote JSON
+  /// exceeds its wire budget. Text-heavy local M3U data and SQLite images
+  /// compress well; the receiver still verifies the inner package integrity.
+  static Future<String> encodeCompressedAuthenticatedJson(
+    PortableProfilePackage package, {
+    String? requestId,
+    int maxExpandedPayloadBytes = maxEnvelopeBytes,
+  }) async {
+    return (await encodeAuthenticatedTransport(
+      package,
+      requestId: requestId,
+      maxExpandedPayloadBytes: maxExpandedPayloadBytes,
+    )).payload;
+  }
+
+  /// Builds the preferred raw-or-gzip authenticated transport in one worker
+  /// pass and returns its byte counts. Remote callers can enforce both wire
+  /// and expanded-memory budgets without repeatedly UTF-8 encoding a
+  /// multi-megabyte String on the UI isolate.
+  static Future<
+    ({String payload, int wireBytes, int expandedBytes, bool compressed})
+  >
+  encodeAuthenticatedTransport(
+    PortableProfilePackage package, {
+    String? requestId,
+    int maxExpandedPayloadBytes = maxEnvelopeBytes,
+  }) {
+    if (requestId != null && (requestId.isEmpty || requestId.length > 128)) {
+      throw ArgumentError.value(requestId, 'requestId', 'Invalid request ID');
+    }
+    if (maxExpandedPayloadBytes < 1 ||
+        maxExpandedPayloadBytes > maxEnvelopeBytes) {
+      throw RangeError.range(
+        maxExpandedPayloadBytes,
+        1,
+        maxEnvelopeBytes,
+        'maxExpandedPayloadBytes',
+      );
+    }
+    return Isolate.run(() async {
+      final plain = utf8.encode(jsonEncode(await withIntegrity(package)));
+      if (plain.length > maxExpandedPayloadBytes) {
+        throw const ProfilePackageTooLargeException();
+      }
+      final compressed = gzip.encode(plain);
+      final wrapped = jsonEncode(<String, Object?>{
+        'format': 'debrify-profile-transport',
+        'version': 1,
+        'compression': 'gzip',
+        'expandedBytes': plain.length,
+        'data': base64Encode(compressed),
+        if (requestId != null) 'requestId': requestId,
+      });
+      final wrappedBytes = utf8.encode(wrapped).length;
+      return wrappedBytes < plain.length
+          ? (
+              payload: wrapped,
+              wireBytes: wrappedBytes,
+              expandedBytes: plain.length,
+              compressed: true,
+            )
+          : (
+              payload: utf8.decode(plain),
+              wireBytes: plain.length,
+              expandedBytes: plain.length,
+              compressed: false,
+            );
+    });
+  }
+
   /// Off-main counterpart for the receiving side: parse + validate a
   /// session-authenticated payload without stalling the UI isolate.
-  static Future<PortableProfilePackage> decodeAuthenticatedJson(String json) {
+  static Future<PortableProfilePackage> decodeAuthenticatedJson(
+    String json, {
+    int maxExpandedPayloadBytes = maxEnvelopeBytes,
+  }) {
+    if (maxExpandedPayloadBytes < 1 ||
+        maxExpandedPayloadBytes > maxEnvelopeBytes) {
+      throw RangeError.range(
+        maxExpandedPayloadBytes,
+        1,
+        maxEnvelopeBytes,
+        'maxExpandedPayloadBytes',
+      );
+    }
     return Isolate.run(() async {
-      final decoded = jsonDecode(json);
-      if (decoded is! Map<String, dynamic>) {
+      final outer = jsonDecode(json);
+      if (outer is! Map<String, dynamic>) {
         throw const FormatException('Profile graph must be an object');
+      }
+      Map<String, dynamic> decoded = outer;
+      if (outer['format'] == 'debrify-profile-transport') {
+        if (outer['version'] != 1 ||
+            outer['compression'] != 'gzip' ||
+            outer['expandedBytes'] is! int ||
+            outer['data'] is! String ||
+            (outer['requestId'] != null &&
+                (outer['requestId'] is! String ||
+                    (outer['requestId'] as String).isEmpty ||
+                    (outer['requestId'] as String).length > 128)) ||
+            (outer.length != 5 && outer.length != 6)) {
+          throw const FormatException('Invalid compressed profile graph');
+        }
+        final claimed = outer['expandedBytes'] as int;
+        final encoded = outer['data'] as String;
+        if (claimed < 0 ||
+            claimed > maxExpandedPayloadBytes ||
+            encoded.length > ((maxEnvelopeBytes + 2) ~/ 3) * 4) {
+          throw const FormatException('Compressed profile graph exceeds limit');
+        }
+        late final List<int> compressed;
+        try {
+          compressed = base64Decode(encoded);
+        } on FormatException {
+          throw const FormatException('Compressed profile graph is corrupt');
+        }
+        final expanded = await _gunzipBounded(
+          compressed,
+          maxExpandedPayloadBytes,
+        );
+        if (expanded.length != claimed) {
+          throw const FormatException('Compressed profile graph size mismatch');
+        }
+        final inner = jsonDecode(utf8.decode(expanded));
+        if (inner is! Map<String, dynamic>) {
+          throw const FormatException('Profile graph must be an object');
+        }
+        decoded = inner;
+      } else if (utf8.encode(json).length > maxExpandedPayloadBytes) {
+        throw const FormatException('Profile graph exceeds expanded limit');
       }
       return decodeAuthenticatedMap(decoded);
     });
+  }
+
+  static Future<List<int>> _gunzipBounded(
+    List<int> compressed,
+    int maxBytes,
+  ) async {
+    final output = BytesBuilder(copy: false);
+    var length = 0;
+    try {
+      await for (final chunk in Stream<List<int>>.value(
+        compressed,
+      ).transform(gzip.decoder)) {
+        if (length > maxBytes - chunk.length) {
+          throw const FormatException('Compressed profile graph exceeds limit');
+        }
+        output.add(chunk);
+        length += chunk.length;
+      }
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException('Compressed profile graph is corrupt');
+    }
+    return output.takeBytes();
   }
 
   static Future<PortableProfilePackage> _decodeMap(
@@ -252,7 +463,7 @@ class PortableProfilePackage {
       throw const FormatException('Encrypted package must be unlocked first');
     }
     if (decoded['format'] != 'debrify-profile-package' ||
-        decoded['version'] != version) {
+        !_supportsVersion(decoded['version'])) {
       throw const FormatException('Unsupported profile backup format');
     }
     final integrity = decoded['integrity'];
@@ -298,6 +509,7 @@ class PortableProfilePackage {
     }
     await _verifySections(profileMaps, sections);
     return PortableProfilePackage(
+      sourceVersion: body['version']! as int,
       mode: body['mode'] as String? ?? 'singleProfile',
       createdAt: DateTime.parse(body['createdAt']! as String).toUtc(),
       profiles: profileMaps,
@@ -324,6 +536,15 @@ class PortableProfilePackage {
       );
     }
     final plain = utf8.encode(jsonEncode(await withIntegrity(package)));
+    final aadText = _aadForVersion(version);
+    _ensureEncryptedPayloadFits(
+      plainBytes: plain.length,
+      createdAt: package.createdAt,
+      memory: memory,
+      iterations: iterations,
+      parallelism: parallelism,
+      aadText: aadText,
+    );
     final salt = _randomBytes(16);
     final key = await Argon2id(
       parallelism: parallelism,
@@ -331,7 +552,6 @@ class PortableProfilePackage {
       iterations: iterations,
       hashLength: 32,
     ).deriveKey(secretKey: SecretKey(utf8.encode(passphrase)), nonce: salt);
-    const aadText = 'debrify-profile-backup-v3';
     final box = await AesGcm.with256bits().encrypt(
       plain,
       secretKey: key,
@@ -362,9 +582,46 @@ class PortableProfilePackage {
 
   static void _ensureEnvelopeFits(Map<String, dynamic> envelope) {
     if (utf8.encode(jsonEncode(envelope)).length > maxEnvelopeBytes) {
-      throw const FormatException(
-        'Backup is too large to export as one portable package',
-      );
+      throw const ProfilePackageTooLargeException();
+    }
+  }
+
+  /// True only for the bounded-package error callers may safely retry after
+  /// pruning the documented rebuildable database caches.
+  static bool isExportTooLarge(Object error) =>
+      error is ProfilePackageTooLargeException;
+
+  static void _ensureEncryptedPayloadFits({
+    required int plainBytes,
+    required DateTime createdAt,
+    required int memory,
+    required int iterations,
+    required int parallelism,
+    required String aadText,
+  }) {
+    final shell = <String, dynamic>{
+      'format': 'debrify-profile-package',
+      'version': version,
+      'encrypted': true,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'kdf': <String, dynamic>{
+        'algorithm': 'argon2id',
+        'salt': base64Encode(Uint8List(16)),
+        'memory': memory,
+        'iterations': iterations,
+        'parallelism': parallelism,
+      },
+      'aead': <String, dynamic>{
+        'algorithm': 'aes-256-gcm',
+        'aad': aadText,
+        'nonce': base64Encode(Uint8List(12)),
+        'ciphertext': '',
+      },
+    };
+    final shellBytes = utf8.encode(jsonEncode(shell)).length;
+    final encodedCiphertextBytes = ((plainBytes + 16 + 2) ~/ 3) * 4;
+    if (shellBytes + encodedCiphertextBytes > maxEnvelopeBytes) {
+      throw const ProfilePackageTooLargeException();
     }
   }
 
@@ -374,14 +631,18 @@ class PortableProfilePackage {
   ) async {
     final kdf = envelope['kdf'];
     final aead = envelope['aead'];
+    final envelopeVersion = envelope['version'];
+    final expectedAad = _supportsVersion(envelopeVersion)
+        ? _aadForVersion(envelopeVersion as int)
+        : null;
     if (envelope['format'] != 'debrify-profile-package' ||
-        envelope['version'] != version ||
+        expectedAad == null ||
         envelope['encrypted'] != true ||
         kdf is! Map ||
         aead is! Map ||
         kdf['algorithm'] != 'argon2id' ||
         aead['algorithm'] != 'aes-256-gcm' ||
-        aead['aad'] != 'debrify-profile-backup-v3') {
+        aead['aad'] != expectedAad) {
       throw const FormatException('Unsupported encrypted profile backup');
     }
     int bounded(Object? value, int min, int max) {
@@ -426,11 +687,20 @@ class PortableProfilePackage {
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('Decrypted backup must be an object');
       }
+      if (decoded['version'] != envelopeVersion) {
+        throw const FormatException('Encrypted backup version mismatch');
+      }
       return _decodeMap(decoded, authenticatedEncryption: true);
     } on SecretBoxAuthenticationError {
       throw const FormatException('Wrong passphrase or tampered backup');
     }
   }
+
+  static bool _supportsVersion(Object? value) =>
+      value is int && value >= oldestSupportedVersion && value <= version;
+
+  static String _aadForVersion(int packageVersion) =>
+      'debrify-profile-backup-v$packageVersion';
 
   static void _validateTree(
     Object? value,
@@ -449,7 +719,13 @@ class PortableProfilePackage {
       final bytes = utf8.encode(value).length;
       final attachmentData =
           path.endsWith('.data') && path.contains('.sections.');
-      if ((!attachmentData && bytes > maxStringBytes) ||
+      final largeResourceContent =
+          path.contains('.resources[') &&
+          path.endsWith('.secretConfig.content');
+      if ((!attachmentData &&
+              !largeResourceContent &&
+              bytes > maxStringBytes) ||
+          (largeResourceContent && bytes > maxResourceContentBytes) ||
           (attachmentData && bytes > ((maxAttachmentBytes + 2) ~/ 3) * 4)) {
         throw const FormatException('Backup string exceeds the limit');
       }

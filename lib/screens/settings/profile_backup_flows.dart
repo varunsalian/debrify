@@ -97,21 +97,21 @@ class ProfileBackupFlows {
                       setDialogState(() => allProfiles = value),
                 ),
               TvTextField(
-                  controller: passphrase,
-                  obscureText: true,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  keyboardSubmitLabel: 'Create backup',
-                  decoration: const InputDecoration(
-                    labelText: 'Backup passphrase (minimum 8 characters)',
-                  ),
-                  onChanged: (_) => setDialogState(() {}),
-                  onSubmitted: (_) {
-                    if (passphrase.text.length >= 8) {
-                      Navigator.of(dialogContext).pop(true);
-                    }
-                  },
+                controller: passphrase,
+                obscureText: true,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                keyboardSubmitLabel: 'Create backup',
+                decoration: const InputDecoration(
+                  labelText: 'Backup passphrase (minimum 8 characters)',
                 ),
+                onChanged: (_) => setDialogState(() {}),
+                onSubmitted: (_) {
+                  if (passphrase.text.length >= 8) {
+                    Navigator.of(dialogContext).pop(true);
+                  }
+                },
+              ),
             ],
           ),
           actions: [
@@ -144,24 +144,45 @@ class ProfileBackupFlows {
       registry: registry,
       resources: resourceService,
     );
-    var packageOmissions = const <String, dynamic>{};
+    var databaseCachesCompacted = false;
     final bytes = await _profileBackupProgress<Uint8List>(
       'Packaging profile data…',
       (setStage) async {
-        final package = allProfiles
-            ? await service.exportAllProfiles(
+        Future<PortableProfilePackage> export({required bool compact}) =>
+            allProfiles
+            ? service.exportAllProfiles(
                 context: authorization,
                 includeSecrets: true,
+                compactDatabaseSnapshots: compact,
               )
-            : await service.exportProfile(
+            : service.exportProfile(
                 context: authorization,
                 scope: ProfileRuntime.capture(),
                 includeSecrets: true,
                 sanitized: false,
+                compactDatabaseSnapshots: compact,
               );
-        packageOmissions = package.omissions;
+
+        var package = await export(compact: false);
+        databaseCachesCompacted = package.omissions.containsKey(
+          'rebuildableDatabaseCachesOmitted',
+        );
         setStage('Encrypting backup — this can take a minute…');
-        return PortableProfilePackage.encodeEncryptedBytes(package, password);
+        try {
+          return await PortableProfilePackage.encodeEncryptedBytes(
+            package,
+            password,
+          );
+        } catch (error) {
+          if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
+          setStage('Compacting rebuildable catalog caches…');
+          package = await export(compact: true);
+          databaseCachesCompacted = package.omissions.containsKey(
+            'rebuildableDatabaseCachesOmitted',
+          );
+          setStage('Encrypting compacted backup — this can take a minute…');
+          return PortableProfilePackage.encodeEncryptedBytes(package, password);
+        }
       },
     );
     final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
@@ -173,19 +194,14 @@ class ProfileBackupFlows {
       bytes: bytes,
     );
     if (!context.mounted || saved == null) return;
-    final skippedDatabases = packageOmissions['libraryDatabasesTooLarge'];
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          skippedDatabases is String
-              ? '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved. '
-                    'Too large to include: $skippedDatabases'
-              : allProfiles
-              ? 'All-profile backup saved'
-              : 'Profile backup saved',
+          '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved'
+          '${databaseCachesCompacted ? '. Rebuildable catalog/EPG caches were compacted; user data is included.' : ''}',
         ),
-        duration: skippedDatabases is String
-            ? const Duration(seconds: 8)
+        duration: databaseCachesCompacted
+            ? const Duration(seconds: 7)
             : const Duration(seconds: 4),
       ),
     );
@@ -404,6 +420,16 @@ class ProfileBackupFlows {
     );
     if (profile == null || !context.mounted) return;
     final graphRestore = package.mode == 'deviceGraph';
+    final legacyDatabasesMissing =
+        package.omissions['libraryDatabasesOmitted'] == true ||
+        package.omissions['libraryDatabasesTooLarge'] != null;
+    final databaseNotice = legacyDatabasesMissing
+        ? 'Warning: this older backup omitted one or more library databases; '
+              'those playlists/history rows cannot be recovered from it.'
+        : package.omissions.containsKey('rebuildableDatabaseCachesOmitted')
+        ? 'Rebuildable catalog and EPG caches were compacted; playlists, '
+              'favorites, history, numbering, and settings are included.'
+        : '';
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final actor = await authorization.validate(registry);
     if (graphRestore &&
@@ -421,8 +447,8 @@ class ProfileBackupFlows {
         ),
         content: Text(
           graphRestore
-              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.'
-              : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources; downloads, recordings, jobs, PINs, paths, and pairings are not restored.',
+              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}'
+              : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources. The destination name, role, policy, PIN, and enabled state stay unchanged; downloads, recordings, jobs, paths, and pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}',
         ),
         actions: [
           TextButton(
@@ -465,7 +491,8 @@ class ProfileBackupFlows {
             'Imported ${report.profilesImported} profiles, '
             '${report.resourcesImported} connections and '
             '${report.grantsImported} grants.'
-            '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) require a new PIN.'}',
+            '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) require a new PIN.'}'
+            '${databaseNotice.isEmpty ? '' : ' $databaseNotice'}',
           ),
           duration: const Duration(seconds: 7),
         ),
@@ -482,10 +509,9 @@ class ProfileBackupFlows {
     );
     if (!context.mounted) return;
     await onRestored?.call();
-    final omitted = report.omissions.entries
-        .where((entry) => entry.value != null && entry.value != 0)
-        .map((entry) => '${entry.key}: ${entry.value}')
-        .join(', ');
+    final omitted = PortableProfilePackage.userVisibleOmissions(
+      report.omissions,
+    ).entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

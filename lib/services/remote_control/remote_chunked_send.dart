@@ -105,6 +105,22 @@ String? parseChunkResultRequestId(String? data) {
   }
 }
 
+/// Command named by a chunk-start envelope, used to route an early transport
+/// failure to the result stream the sender is actually awaiting.
+String? parseChunkResultCommand(String? data) {
+  if (data == null) return null;
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final command = map['kind'];
+    if (command is! String || command.isEmpty || command.length > 128) {
+      return null;
+    }
+    return command;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// One chunk packet's body.
 String chunkPieceBody({
   required String transferId,

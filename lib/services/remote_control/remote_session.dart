@@ -72,6 +72,8 @@ class RemoteSessionCrypto {
     required List<int> epkR,
     required List<int> spkR,
     required List<int> nc,
+    int? senderProtocolVersion,
+    int? receiverProtocolVersion,
   }) => sha256Of([
     ...utf8.encode(_transcriptLabel),
     ...sid,
@@ -81,6 +83,16 @@ class RemoteSessionCrypto {
     ...epkR,
     ...spkR,
     ...nc,
+    // v2-v4 did not bind capability versions into the transcript. Preserve
+    // that handshake exactly for older peers; two v5+ peers authenticate both
+    // advertised versions so a LAN attacker cannot upgrade/downgrade the
+    // complete-profile capability independently of the proven device keys.
+    if ((senderProtocolVersion ?? 0) >= 5 &&
+        (receiverProtocolVersion ?? 0) >= 5) ...[
+      ...utf8.encode('capabilities'),
+      ..._nBytes(senderProtocolVersion!),
+      ..._nBytes(receiverProtocolVersion!),
+    ],
   ]);
 
   /// HKDF-SHA256(salt = transcript, ikm = ee ∥ es ∥ se) → the four session
@@ -307,6 +319,11 @@ class RemoteSession {
   final String peerFingerprint;
   final String peerName;
 
+  /// Capability version the peer placed in its handshake message. This lets
+  /// manual-IP/VPN peers report capabilities without a broadcast discovery
+  /// record. Early encrypted peers that omit the field are treated as v2.
+  final int peerProtocolVersion;
+
   /// The 6-digit SAS, derived locally. Displayed on the receiver; compared on
   /// the sender against what the user reads off the TV.
   final String sasCode;
@@ -328,6 +345,7 @@ class RemoteSession {
     required this.peerStaticKey,
     required this.peerFingerprint,
     required this.peerName,
+    this.peerProtocolVersion = kProtoVersion,
     required this.sasCode,
     required this.establishedAt,
   }) : sidB64 = base64Encode(sid),
@@ -443,6 +461,7 @@ class _ReceiverPending {
   /// The sender's display name travels ONLY in hs1 — carried here so the
   /// established session (created on hs3) can name its peer.
   final String senderName;
+  final int senderProtocolVersion;
   final Map<String, dynamic> hs2; // cached: duplicate hs1 → identical hs2
   Map<String, dynamic>? hs4; // cached: duplicate hs3 → identical hs4
 
@@ -453,6 +472,7 @@ class _ReceiverPending {
     required this.epk,
     required this.createdAt,
     required this.senderName,
+    required this.senderProtocolVersion,
     required this.hs2,
   });
 }
@@ -465,6 +485,7 @@ class RemoteSessionManager {
   final String Function() deviceName;
   final DateTime Function() now;
   final List<int> Function(int) randomBytes;
+  final int protocolVersion;
 
   final Map<String, _SenderHandshake> _senderHandshakes = {};
   final Map<String, _ReceiverPending> _receiverPending = {};
@@ -475,7 +496,9 @@ class RemoteSessionManager {
     required this.deviceName,
     DateTime Function()? now,
     List<int> Function(int)? randomBytes,
-  }) : now = now ?? DateTime.now,
+    this.protocolVersion = kProtoVersion,
+  }) : assert(protocolVersion >= 2),
+       now = now ?? DateTime.now,
        randomBytes = randomBytes ?? _secureRandomBytes;
 
   static List<int> _secureRandomBytes(int length) {
@@ -506,7 +529,7 @@ class RemoteSessionManager {
 
   Map<String, dynamic> _hs1For(_SenderHandshake handshake) => {
     'type': RemoteMessageType.hs1,
-    'v': kProtoVersion,
+    'v': protocolVersion,
     'sid': handshake.sidB64,
     'com': base64Encode(handshake.com),
     'name': deviceName(),
@@ -598,6 +621,7 @@ class RemoteSessionManager {
     final epkR = base64Decode(json['epk'] as String);
     final spkR = base64Decode(json['spk'] as String);
     final peerName = (json['name'] as String?) ?? 'TV';
+    final peerProtocolVersion = _readProtocolVersion(json['v']);
 
     final statics = await loadStaticKeyPair();
     final spkS = (await statics.extractPublicKey()).bytes;
@@ -613,6 +637,8 @@ class RemoteSessionManager {
       epkR: epkR,
       spkR: spkR,
       nc: handshake.nc,
+      senderProtocolVersion: protocolVersion,
+      receiverProtocolVersion: peerProtocolVersion,
     );
     final keys = await RemoteSessionCrypto.deriveKeys(
       ikm: [...ee, ...es, ...se],
@@ -637,11 +663,20 @@ class RemoteSessionManager {
       keys: keys,
       peerSpk: spkR,
       peerName: peerName,
+      peerProtocolVersion: peerProtocolVersion,
     );
     result.outgoing.add(handshake.hs3!);
   }
 
-  final Map<String, ({SessionKeys keys, List<int> peerSpk, String peerName})>
+  final Map<
+    String,
+    ({
+      SessionKeys keys,
+      List<int> peerSpk,
+      String peerName,
+      int peerProtocolVersion,
+    })
+  >
   _senderDerived = {};
 
   Future<void> _onHs4(
@@ -668,6 +703,7 @@ class RemoteSessionManager {
       peerStaticKey: derived.peerSpk,
       peerFingerprint: await RemoteSessionCrypto.fingerprint(derived.peerSpk),
       peerName: derived.peerName,
+      peerProtocolVersion: derived.peerProtocolVersion,
       sasCode: await RemoteSessionCrypto.sasCode(derived.keys.sas),
       establishedAt: now(),
     );
@@ -715,9 +751,10 @@ class RemoteSessionManager {
       epk: epkR,
       createdAt: now(),
       senderName: (json['name'] as String?) ?? 'Phone',
+      senderProtocolVersion: _readProtocolVersion(json['v']),
       hs2: {
         'type': RemoteMessageType.hs2,
-        'v': kProtoVersion,
+        'v': protocolVersion,
         'sid': sidB64,
         'epk': base64Encode(epkR),
         'spk': base64Encode(spkR),
@@ -766,6 +803,8 @@ class RemoteSessionManager {
       epkR: pending.epk,
       spkR: spkR,
       nc: nc,
+      senderProtocolVersion: pending.senderProtocolVersion,
+      receiverProtocolVersion: protocolVersion,
     );
     final keys = await RemoteSessionCrypto.deriveKeys(
       ikm: [...ee, ...es, ...se],
@@ -798,6 +837,7 @@ class RemoteSessionManager {
       peerFingerprint: await RemoteSessionCrypto.fingerprint(spkS),
       // hs3 carries no name field — the sender introduced itself in hs1.
       peerName: pending.senderName,
+      peerProtocolVersion: pending.senderProtocolVersion,
       sasCode: await RemoteSessionCrypto.sasCode(keys.sas),
       establishedAt: now(),
     );
@@ -819,6 +859,11 @@ class RemoteSessionManager {
       ),
     );
     return shared.extractBytes();
+  }
+
+  static int _readProtocolVersion(Object? raw) {
+    final value = raw is num ? raw.toInt() : 2;
+    return value >= 2 && value <= 1000 ? value : 2;
   }
 
   // ------------------------------------------------------------ traffic ---

@@ -499,6 +499,7 @@ class RemoteControlState extends ChangeNotifier {
           ? deviceName!.trim()
           : trimmed,
       ip: trimmed,
+      protocolVersionKnown: false,
     );
     await connectToDevice(device);
   }
@@ -1143,6 +1144,15 @@ class RemoteControlState extends ChangeNotifier {
       _sessionByIp[ip] = established;
       _sessionPeers[established.sidB64] = (ip: ip, port: port);
       _pendingHandshakes.remove(established.sidB64)?.complete(established);
+      final connected = _connectedDevice;
+      if (connected != null &&
+          connected.ip == ip &&
+          (!connected.protocolVersionKnown ||
+              connected.protoVersion != established.peerProtocolVersion)) {
+        _connectedDevice = connected.withProtocolVersion(
+          established.peerProtocolVersion,
+        );
+      }
       notifyListeners();
     }
   }

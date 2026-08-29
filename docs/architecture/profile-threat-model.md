@@ -8,6 +8,10 @@ access. Public download and recording files may remain visible to other apps.
 
 - PINs are one-way Argon2id hashes with per-profile salts, persisted lockout,
   and constant-time verification. PIN digits are never logged or backed up.
+  A comprehensive encrypted/authenticated profile-graph package can carry the
+  bounded hash, salt, KDF parameters, and recovery-code verifier so an imported
+  profile keeps its PIN; failed-attempt counters and lockout timestamps never
+  travel. A reset-required profile carries no usable verifier.
 - Resource secrets use versioned authenticated encryption bound to resource ID,
   type, owner profile, public schema, and secret-envelope version. Tampering,
   row swapping, and key loss fail closed.
@@ -29,8 +33,11 @@ access. Public download and recording files may remain visible to other apps.
 
 Automatic OS backup/device transfer excludes registries, device-bound keys,
 native job stores, profile generations, App Group projections, and retained
-legacy secrets. Debrify portable backups never export PIN hashes. Restored
-formerly protected profiles require Admin PIN reassignment before entry.
+legacy secrets. Debrify comprehensive portable backups are passphrase-
+encrypted, and Remote profile graphs ride an authenticated encrypted session.
+If a carried PIN verifier is absent or malformed, the imported protected
+profile requires Admin PIN reassignment before entry. Single-profile merge
+restore never replaces the destination profile's PIN or identity policy.
 
 Legacy v1/v2 backup and remote payloads import through a compatibility adapter
 into a staging generation. Visibility changes only after validation and a

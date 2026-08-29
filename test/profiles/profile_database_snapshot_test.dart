@@ -62,7 +62,6 @@ void main() {
 
       final export = await ProfileDatabaseSnapshot.export(sourceScope);
       expect(export.attachments.keys, contains('debrify_tv.db'));
-      expect(export.skipped, isEmpty);
       expect(
         await ProfileDatabaseSnapshot.restore(
           destinationScope,
@@ -131,13 +130,9 @@ void main() {
     }
   });
 
-  test('skips and names an oversized database instead of failing', () async {
-    // A huge IPTV catalog must not make the whole backup impossible — the
-    // exporter drops what doesn't fit and reports it, keeping the rest.
+  test('never silently skips oversized durable database state', () async {
     ProfileDatabaseSnapshot.debugExportBudgetOverride = 1024;
-    addTearDown(
-      () => ProfileDatabaseSnapshot.debugExportBudgetOverride = null,
-    );
+    addTearDown(() => ProfileDatabaseSnapshot.debugExportBudgetOverride = null);
     final sourceScope = ProfileScope(
       profileId: 'profile-oversized',
       dataGeneration: 1,
@@ -151,11 +146,190 @@ void main() {
     await database.insert('sample', <String, Object?>{'value': 'big'});
     await database.close();
 
-    final export = await ProfileDatabaseSnapshot.export(sourceScope);
-    expect(export.attachments, isEmpty);
-    expect(export.skipped, hasLength(1));
-    expect(export.skipped.single, startsWith('debrify_tv.db ('));
+    await expectLater(
+      ProfileDatabaseSnapshot.export(sourceScope),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('Portable user library data is too large'),
+        ),
+      ),
+    );
   });
+
+  test('compaction drops only named caches and keeps durable rows', () async {
+    ProfileDatabaseSnapshot.debugExportBudgetOverride = 64 * 1024;
+    addTearDown(() => ProfileDatabaseSnapshot.debugExportBudgetOverride = null);
+    final sourceScope = ProfileScope(
+      profileId: 'profile-cache-heavy',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final destinationScope = ProfileScope(
+      profileId: 'profile-cache-restored',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final documents = await AppStorage.documents();
+    final source = sourceScope.fileIn(documents, 'documents', 'debrify_tv.db');
+    await source.parent.create(recursive: true);
+    final database = await openDatabase(source.path, singleInstance: false);
+    await database.execute('CREATE TABLE durable_proof (value TEXT NOT NULL)');
+    await database.execute(
+      'CREATE TABLE tv_cached_torrents (payload TEXT NOT NULL)',
+    );
+    await database.insert('durable_proof', <String, Object?>{
+      'value': 'must-survive',
+    });
+    await database.insert('tv_cached_torrents', <String, Object?>{
+      'payload': List<String>.filled(256 * 1024, 'x').join(),
+    });
+    await database.close();
+
+    final export = await ProfileDatabaseSnapshot.export(sourceScope);
+    expect(export.compacted, contains('debrify_tv.db'));
+    expect(export.attachments, contains('debrify_tv.db'));
+    await ProfileDatabaseSnapshot.restore(destinationScope, export.attachments);
+
+    final restored = await openDatabase(
+      destinationScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
+      readOnly: true,
+      singleInstance: false,
+    );
+    try {
+      expect(await restored.query('durable_proof'), <Map<String, Object?>>[
+        <String, Object?>{'value': 'must-survive'},
+      ]);
+      expect(await restored.query('tv_cached_torrents'), isEmpty);
+    } finally {
+      await restored.close();
+    }
+  });
+
+  test('forced compaction reports only caches that contained rows', () async {
+    final sourceScope = ProfileScope(
+      profileId: 'profile-empty-cache',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final documents = await AppStorage.documents();
+    final source = sourceScope.fileIn(documents, 'documents', 'debrify_tv.db');
+    await source.parent.create(recursive: true);
+    final database = await openDatabase(source.path, singleInstance: false);
+    await database.execute('CREATE TABLE durable_proof (value TEXT NOT NULL)');
+    await database.execute(
+      'CREATE TABLE tv_cached_torrents (payload TEXT NOT NULL)',
+    );
+    await database.insert('durable_proof', <String, Object?>{
+      'value': 'still-present',
+    });
+    await database.close();
+
+    final export = await ProfileDatabaseSnapshot.export(
+      sourceScope,
+      compact: true,
+    );
+    expect(export.compacted, isEmpty);
+    expect(export.attachments, contains('debrify_tv.db'));
+  });
+
+  test(
+    'resource IDs are remapped in every durable database reference',
+    () async {
+      const oldId = 'resource-old';
+      const newId = 'resource-new';
+      final scope = ProfileScope(
+        profileId: 'profile-resource-remap',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      final documents = await AppStorage.documents();
+      final media = scope.fileIn(documents, 'documents', 'debrify_tv.db');
+      await media.parent.create(recursive: true);
+      final mediaDb = await openDatabase(media.path, singleInstance: false);
+      await mediaDb.execute(
+        'CREATE TABLE iptv_list_channels (playlist_id TEXT NOT NULL)',
+      );
+      await mediaDb.execute(
+        'CREATE TABLE iptv_watch_history (playlist_id TEXT NOT NULL)',
+      );
+      await mediaDb.insert('iptv_list_channels', <String, Object?>{
+        'playlist_id': oldId,
+      });
+      await mediaDb.insert('iptv_watch_history', <String, Object?>{
+        'playlist_id': oldId,
+      });
+      await mediaDb.close();
+
+      final catalog = scope.fileIn(documents, 'documents', 'iptv_catalog.db');
+      final catalogDb = await openDatabase(catalog.path, singleInstance: false);
+      await catalogDb.execute(
+        'CREATE TABLE channel_number_aliases '
+        '(source_key TEXT PRIMARY KEY, namespace_id TEXT NOT NULL)',
+      );
+      await catalogDb.execute(
+        'CREATE TABLE channel_number_namespaces '
+        '(namespace_id TEXT PRIMARY KEY, active_source_key TEXT)',
+      );
+      await catalogDb.insert('channel_number_aliases', <String, Object?>{
+        'source_key': oldId,
+        'namespace_id': 'opaque-namespace',
+      });
+      await catalogDb.insert('channel_number_namespaces', <String, Object?>{
+        'namespace_id': 'opaque-namespace',
+        'active_source_key': oldId,
+      });
+      await catalogDb.close();
+
+      await ProfileDatabaseSnapshot.remapResourceReferences(scope, const {
+        oldId: newId,
+      });
+
+      final remappedMedia = await openDatabase(
+        media.path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      try {
+        expect(
+          (await remappedMedia.query(
+            'iptv_list_channels',
+          )).single['playlist_id'],
+          newId,
+        );
+        expect(
+          (await remappedMedia.query(
+            'iptv_watch_history',
+          )).single['playlist_id'],
+          newId,
+        );
+      } finally {
+        await remappedMedia.close();
+      }
+      final remappedCatalog = await openDatabase(
+        catalog.path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      try {
+        expect(
+          (await remappedCatalog.query(
+            'channel_number_aliases',
+          )).single['source_key'],
+          newId,
+        );
+        expect(
+          (await remappedCatalog.query(
+            'channel_number_namespaces',
+          )).single['active_source_key'],
+          newId,
+        );
+      } finally {
+        await remappedCatalog.close();
+      }
+    },
+  );
 
   test('rejects attachment digest tampering before publication', () async {
     final destinationScope = ProfileScope(

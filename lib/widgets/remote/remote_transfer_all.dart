@@ -57,6 +57,8 @@ class _TransferItem {
 }
 
 class _RemoteTransferAllState extends State<RemoteTransferAll> {
+  late final RemoteControlState _remoteState;
+  int _eligibilityCheck = 0;
   bool _loading = true;
   bool _transferring = false;
 
@@ -68,7 +70,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   bool _done = false;
 
   /// Admin-only: send the complete profile graph (profiles, connections,
-  /// PINs) instead of merging items into the TV's current profile.
+  /// PINs, portable files, and durable library state) instead of merging
+  /// items into the TV's current profile.
   bool _canSendProfileGraph = false;
   bool _includeProfiles = false;
 
@@ -92,13 +95,30 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   @override
   void initState() {
     super.initState();
+    _remoteState = RemoteControlState();
+    _remoteState.addListener(_handleRemoteStateChanged);
     _loadBundle();
   }
 
   @override
   void dispose() {
+    _remoteState.removeListener(_handleRemoteStateChanged);
     _pikpakPasswordController.dispose();
     super.dispose();
+  }
+
+  void _handleRemoteStateChanged() {
+    final check = ++_eligibilityCheck;
+    unawaited(() async {
+      final eligible = await _profileGraphEligible();
+      if (!mounted || check != _eligibilityCheck) return;
+      setState(() {
+        _canSendProfileGraph = eligible;
+        if (!eligible && !_connecting && !_transferring) {
+          _includeProfiles = false;
+        }
+      });
+    }());
   }
 
   Future<void> _loadBundle() async {
@@ -420,6 +440,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
 
   Future<bool> _profileGraphEligible() async {
     try {
+      final target = _remoteState.connectedDevice;
+      if (target == null || !target.maySupportComprehensiveProfileGraph) {
+        return false;
+      }
       if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
         return false;
       }
@@ -435,10 +459,21 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   }
 
   Future<void> _start() async {
-    final state = RemoteControlState();
+    final state = _remoteState;
     final target = state.connectedDevice;
     if (target == null) {
       _toast('Not connected to a device', error: true);
+      return;
+    }
+    final sendProfiles = _includeProfiles;
+    if (sendProfiles &&
+        target.protocolVersionKnown &&
+        !target.supportsComprehensiveProfileGraph) {
+      setState(() => _includeProfiles = false);
+      _toast(
+        'Update the receiving TV before sending all profiles',
+        error: true,
+      );
       return;
     }
 
@@ -459,7 +494,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     }
     if (session == null || !mounted) return;
 
-    if (_includeProfiles) {
+    // Manual/VPN targets have no discovery record. The authenticated
+    // handshake carries the peer's real capability version, so gate v5 only
+    // after that probe instead of treating the default v1 placeholder as an
+    // instruction to hide/refuse the feature.
+    if (sendProfiles &&
+        session.peerProtocolVersion <
+            kComprehensiveProfileGraphProtocolVersion) {
+      setState(() => _includeProfiles = false);
+      _toast(
+        'Update the receiving TV before sending all profiles',
+        error: true,
+      );
+      return;
+    }
+
+    if (sendProfiles) {
       await _startProfileGraph(state, target.ip);
       return;
     }
@@ -659,6 +709,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       Future<bool> sendGraph() async {
         PortableProfilePackage tagRequest(PortableProfilePackage package) {
           return PortableProfilePackage(
+            sourceVersion: package.sourceVersion,
             mode: package.mode,
             createdAt: package.createdAt,
             profiles: package.profiles,
@@ -688,34 +739,45 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             includeSecrets: true,
           ),
         );
-        var payload = await PortableProfilePackage.encodeAuthenticatedJson(
-          package,
-        );
-        // Measure WIRE bytes, not UTF-16 units: profile names and settings
-        // can hold non-ASCII that jsonEncode emits unescaped.
-        if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
-          // Library databases can outgrow the receiver's reassembly buffer;
-          // send without them — catalogs rebuild from their restored sources.
+        ({String payload, int wireBytes, int expandedBytes, bool compressed})?
+        encoded;
+        try {
+          encoded = await PortableProfilePackage.encodeAuthenticatedTransport(
+            package,
+            requestId: requestId,
+            maxExpandedPayloadBytes: kMaxProfileGraphExpandedBytes,
+          );
+        } catch (error) {
+          if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
+        }
+        if (encoded == null || encoded.wireBytes > kMaxProfileGraphWireBytes) {
+          // Remove only explicitly rebuildable cache tables. Durable playlist,
+          // favorites, numbering, watch-history, and hidden-channel rows stay
+          // in the snapshots; an oversized durable graph fails instead of
+          // silently becoming an incomplete transfer.
           package = tagRequest(
             await service.exportAllProfiles(
               context: authorization,
               includeSecrets: true,
-              includeDatabaseSnapshots: false,
+              compactDatabaseSnapshots: true,
             ),
           );
-          payload = await PortableProfilePackage.encodeAuthenticatedJson(
+          encoded = await PortableProfilePackage.encodeAuthenticatedTransport(
             package,
+            requestId: requestId,
+            maxExpandedPayloadBytes: kMaxProfileGraphExpandedBytes,
           );
-          if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
-            throw StateError('Profile package too large for remote transfer');
-          }
+        }
+        if (encoded.wireBytes > kMaxProfileGraphWireBytes) {
+          throw const ProfilePackageTooLargeException();
         }
         return sendConfigPayloadToDevice(
           state,
           ConfigCommand.profileGraph,
           targetIp,
-          payload,
+          encoded.payload,
           label: 'All profiles',
+          resultRequestId: requestId,
         );
       }
 
@@ -1139,9 +1201,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             : (value) => setState(() => _includeProfiles = value),
         title: const Text('Include all profiles'),
         subtitle: Text(
-          'Recreates every profile on the TV — settings, connections, and '
-          'PINs — instead of merging into its signed-in profile. The TV '
-          'asks before importing.',
+          'Recreates every profile on the TV — settings, connections, PINs, '
+          'playlists, favorites, and library state — instead of merging into '
+          'its signed-in profile. The TV asks before importing.',
           style: TextStyle(
             fontSize: 12,
             color: Colors.white.withValues(alpha: 0.6),

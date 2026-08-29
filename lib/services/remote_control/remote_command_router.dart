@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
@@ -483,7 +484,24 @@ class RemoteCommandRouter {
       final startRequestId = command == ConfigCommand.remoteTransferStart
           ? parseRemoteTransferRequestBody(data)?.requestId
           : null;
-      if (action == RemoteAction.config && completeRequestId != null) {
+      final profileGraphRequestId = command == ConfigCommand.profileGraph
+          ? data == null
+                ? null
+                : await Isolate.run(() => _profileGraphRequestId(data))
+          : command == ConfigCommand.debrifyChannelStart &&
+                parseChunkResultCommand(data) == ConfigCommand.profileGraph
+          ? parseChunkResultRequestId(data)
+          : null;
+      if (action == RemoteAction.config && profileGraphRequestId != null) {
+        unawaited(
+          _reportProfileGraphResultBestEffort(
+            context,
+            requestId: profileGraphRequestId,
+            ok: false,
+            message: 'TV profile authorization is required',
+          ),
+        );
+      } else if (action == RemoteAction.config && completeRequestId != null) {
         unawaited(
           _reportCompleteTransferResultBestEffort(
             context,
@@ -1278,10 +1296,18 @@ class RemoteCommandRouter {
     );
   }
 
-  String? _profileGraphRequestId(String data) {
+  static String? _profileGraphRequestId(String data) {
     try {
       final decoded = jsonDecode(data);
       if (decoded is! Map) return null;
+      if (decoded['format'] == 'debrify-profile-transport') {
+        final requestId = decoded['requestId'];
+        return requestId is String &&
+                requestId.isNotEmpty &&
+                requestId.length <= 128
+            ? requestId
+            : null;
+      }
       final omissions = decoded['omissions'];
       if (omissions is! Map) return null;
       final requestId = omissions[kProfileGraphRequestIdOmission];
@@ -1298,7 +1324,10 @@ class RemoteCommandRouter {
     String data,
     RemoteCommandContext remoteContext,
   ) async {
-    final requestId = _profileGraphRequestId(data);
+    // A graph may be ten megabytes. Correlation must not perform a full JSON
+    // parse on the TV's UI isolate before the package decoder gets its own
+    // worker-isolate pass below.
+    final requestId = await Isolate.run(() => _profileGraphRequestId(data));
     if (!remoteContext.encrypted || !remoteContext.authorized) {
       debugPrint(
         'RemoteCommandRouter: profile graph requires an authorized session',
@@ -1353,7 +1382,10 @@ class RemoteCommandRouter {
     try {
       // Off-main: a 10 MB parse + digest would freeze TV hardware for
       // seconds on the UI isolate.
-      package = await PortableProfilePackage.decodeAuthenticatedJson(data);
+      package = await PortableProfilePackage.decodeAuthenticatedJson(
+        data,
+        maxExpandedPayloadBytes: kMaxProfileGraphExpandedBytes,
+      );
       if (package.mode != 'deviceGraph') {
         throw const FormatException('Not a profile graph package');
       }
@@ -1415,8 +1447,9 @@ class RemoteCommandRouter {
     }
     final sender =
         remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
-    final librariesOmitted =
-        package.omissions['libraryDatabasesOmitted'] == true;
+    final rebuildableCachesOmitted = package.omissions.containsKey(
+      'rebuildableDatabaseCachesOmitted',
+    );
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -1430,9 +1463,10 @@ class RemoteCommandRouter {
               'not overwritten; only the unused automatic setup profile is '
               'removed. Profiles keep their PINs when the transfer '
               'carries them.'
-              '${librariesOmitted ? '\n\nLarge library databases were left '
-                        'out of this transfer; catalogs rebuild from their '
-                        'sources.' : ''}',
+              '${rebuildableCachesOmitted ? '\n\nRebuildable catalog and EPG '
+                        'caches were compacted for transport. Playlists, '
+                        'favorites, history, numbering, and settings are '
+                        'included.' : ''}',
             ),
             actions: <Widget>[
               TextButton(
@@ -4141,16 +4175,25 @@ class RemoteCommandRouter {
     if (session == null || !session.authorized) {
       return Future<bool>.value(false);
     }
+    final context = RemoteCommandContext(
+      encrypted: true,
+      authorized: true,
+      remembered: buffer.remembered,
+      sidB64: session.sidB64,
+      peerFingerprint: session.peerFingerprint,
+      peerName: session.peerName,
+      sourceIp: buffer.sourceIp,
+    );
+    if (buffer.kind == ConfigCommand.profileGraph) {
+      return _reportProfileGraphResultBestEffort(
+        context,
+        requestId: requestId,
+        ok: false,
+        message: message,
+      );
+    }
     return _reportRemoteTransferResultBestEffort(
-      RemoteCommandContext(
-        encrypted: true,
-        authorized: true,
-        remembered: buffer.remembered,
-        sidB64: session.sidB64,
-        peerFingerprint: session.peerFingerprint,
-        peerName: session.peerName,
-        sourceIp: buffer.sourceIp,
-      ),
+      context,
       requestId: requestId,
       ok: false,
       message: message,

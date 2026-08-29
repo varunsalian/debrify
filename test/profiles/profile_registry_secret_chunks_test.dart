@@ -34,9 +34,7 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
   setUp(() async {
-    temporaryDirectory = await Directory.systemTemp.createTemp(
-      'chunk-test-',
-    );
+    temporaryDirectory = await Directory.systemTemp.createTemp('chunk-test-');
     registry = await ProfileRegistry.open(
       path: p.join(temporaryDirectory.path, 'profiles.db'),
     );
@@ -136,8 +134,8 @@ void main() {
     var db = await raw();
     expect(
       (await db.rawQuery(
-            'SELECT COUNT(*) AS n FROM resource_secret_chunks',
-          )).single['n'],
+        'SELECT COUNT(*) AS n FROM resource_secret_chunks',
+      )).single['n'],
       0,
     );
     await db.close();
@@ -174,73 +172,142 @@ void main() {
     await db.delete('connection_resources', where: "id = 'res-cascade'");
     expect(
       (await db.rawQuery(
-            'SELECT COUNT(*) AS n FROM resource_secret_chunks',
-          )).single['n'],
+        'SELECT COUNT(*) AS n FROM resource_secret_chunks',
+      )).single['n'],
       0,
     );
     await db.close();
   });
 
-  test('listing survives and excludes nothing while a big envelope exists', () async {
-    await insert('res-list-big', bigEnvelope);
-    await insert('res-list-small', 'tiny');
+  test(
+    'listing survives and excludes nothing while a big envelope exists',
+    () async {
+      await insert('res-list-big', bigEnvelope);
+      await insert('res-list-small', 'tiny');
 
-    final listed = await registry.listGrantedResources(adminId);
-    expect(listed.map((r) => r.id).toSet(), {'res-list-big', 'res-list-small'});
-  });
+      final listed = await registry.listGrantedResources(adminId);
+      expect(listed.map((r) => r.id).toSet(), {
+        'res-list-big',
+        'res-list-small',
+      });
+    },
+  );
 
-  test('v4 database upgrades: tables appear and oversized rows are repaired', () async {
-    // Build a v4-shaped database by hand: no chunk tables, one oversized
-    // INLINE envelope — exactly what a 0.8.2 install that file-imported a
-    // big playlist is sitting on.
+  test(
+    'v4 database upgrades: tables appear and oversized rows are repaired',
+    () async {
+      // Build a v4-shaped database by hand: no chunk tables, one oversized
+      // INLINE envelope — exactly what a 0.8.2 install that file-imported a
+      // big playlist is sitting on.
+      await registry.close();
+      final dbPath = p.join(temporaryDirectory.path, 'v4.db');
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      for (final statement in ProfileRegistry.debugSchemaStatements) {
+        // v4 predates the chunk tables — build everything except them.
+        if (statement.contains('_secret_chunks')) continue;
+        await db.execute(statement);
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.insert('user_profiles', <String, Object?>{
+        'id': 'admin-v4',
+        'name': 'Admin',
+        'role': 'admin',
+        'policy_json': '{}',
+        'policy_schema_version': 1,
+        'created_at_ms': now,
+        'updated_at_ms': now,
+      });
+      await db.insert('connection_resources', <String, Object?>{
+        'id': 'res-v4-big',
+        'type': ConnectionResourceType.iptvM3u.name,
+        'label': 'Old playlist',
+        'owner_profile_id': 'admin-v4',
+        'public_config_json': '{"schemaVersion":1}',
+        'sealed_secret_payload': bigEnvelope,
+        'secret_payload_version': 1,
+        'authorization_revision': 1,
+        'created_at_ms': now,
+        'updated_at_ms': now,
+      });
+      // The staging table can hold oversized inline envelopes too (a restore
+      // captured on v4); the repair must cover it as well.
+      await db.insert('profile_restore_resources', <String, Object?>{
+        'restore_id': 'restore-v4',
+        'resource_id': 'res-v4-staged',
+        'backup_id': 'backup-v4',
+        'type': ConnectionResourceType.iptvM3u.name,
+        'label': 'Staged playlist',
+        'owner_profile_id': 'admin-v4',
+        'public_config_json': '{"schemaVersion":1}',
+        'sealed_secret_payload': bigEnvelope,
+        'secret_payload_version': 1,
+        'permissions': 1,
+      });
+      await db.execute('PRAGMA user_version = 4');
+      await db.close();
+
+      registry = await ProfileRegistry.open(path: dbPath);
+      final reopened = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      final column =
+          (await reopened.rawQuery(
+                'SELECT sealed_secret_payload AS v FROM connection_resources '
+                "WHERE id = 'res-v4-big'",
+              )).single['v']!
+              as String;
+      expect(
+        column,
+        startsWith('@chunks:v1:'),
+        reason: 'the upgrade must have moved the body out of the row',
+      );
+      final stagedColumn =
+          (await reopened.rawQuery(
+                'SELECT sealed_secret_payload AS v FROM profile_restore_resources '
+                "WHERE restore_id = 'restore-v4'",
+              )).single['v']!
+              as String;
+      expect(stagedColumn, startsWith('@chunks:v1:'));
+      final stagedChunks =
+          (await reopened.rawQuery(
+                'SELECT COUNT(*) AS n FROM restore_secret_chunks '
+                "WHERE restore_id = 'restore-v4' AND backup_id = 'backup-v4'",
+              )).single['n']!
+              as int;
+      expect(stagedChunks, greaterThan(1));
+      await reopened.close();
+
+      expect(
+        (await registry.getSealedResourceSecret('res-v4-big'))!.envelope,
+        bigEnvelope,
+      );
+    },
+  );
+
+  test('v5 database upgrades restore-resource settings columns', () async {
     await registry.close();
-    final dbPath = p.join(temporaryDirectory.path, 'v4.db');
+    final dbPath = p.join(temporaryDirectory.path, 'v5.db');
     final db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(singleInstance: false),
     );
     for (final statement in ProfileRegistry.debugSchemaStatements) {
-      // v4 predates the chunk tables — build everything except them.
-      if (statement.contains('_secret_chunks')) continue;
-      await db.execute(statement);
+      final v5Statement =
+          statement.contains('CREATE TABLE profile_restore_resources')
+          ? statement.replaceAll(
+              '      profile_enabled INTEGER,\n'
+                  '      profile_settings_json TEXT,\n'
+                  '      resource_enabled INTEGER NOT NULL DEFAULT 1,\n',
+              '',
+            )
+          : statement;
+      await db.execute(v5Statement);
     }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await db.insert('user_profiles', <String, Object?>{
-      'id': 'admin-v4',
-      'name': 'Admin',
-      'role': 'admin',
-      'policy_json': '{}',
-      'policy_schema_version': 1,
-      'created_at_ms': now,
-      'updated_at_ms': now,
-    });
-    await db.insert('connection_resources', <String, Object?>{
-      'id': 'res-v4-big',
-      'type': ConnectionResourceType.iptvM3u.name,
-      'label': 'Old playlist',
-      'owner_profile_id': 'admin-v4',
-      'public_config_json': '{"schemaVersion":1}',
-      'sealed_secret_payload': bigEnvelope,
-      'secret_payload_version': 1,
-      'authorization_revision': 1,
-      'created_at_ms': now,
-      'updated_at_ms': now,
-    });
-    // The staging table can hold oversized inline envelopes too (a restore
-    // captured on v4); the repair must cover it as well.
-    await db.insert('profile_restore_resources', <String, Object?>{
-      'restore_id': 'restore-v4',
-      'resource_id': 'res-v4-staged',
-      'backup_id': 'backup-v4',
-      'type': ConnectionResourceType.iptvM3u.name,
-      'label': 'Staged playlist',
-      'owner_profile_id': 'admin-v4',
-      'public_config_json': '{"schemaVersion":1}',
-      'sealed_secret_payload': bigEnvelope,
-      'secret_payload_version': 1,
-      'permissions': 1,
-    });
-    await db.execute('PRAGMA user_version = 4');
+    await db.execute('PRAGMA user_version = 5');
     await db.close();
 
     registry = await ProfileRegistry.open(path: dbPath);
@@ -248,95 +315,89 @@ void main() {
       dbPath,
       options: OpenDatabaseOptions(singleInstance: false),
     );
-    final column =
-        (await reopened.rawQuery(
-              'SELECT sealed_secret_payload AS v FROM connection_resources '
-              "WHERE id = 'res-v4-big'",
-            )).single['v']!
-            as String;
+    final columns = (await reopened.rawQuery(
+      'PRAGMA table_info(profile_restore_resources)',
+    )).map((row) => row['name']).toSet();
     expect(
-      column,
-      startsWith('@chunks:v1:'),
-      reason: 'the upgrade must have moved the body out of the row',
+      columns,
+      containsAll(<String>{
+        'profile_enabled',
+        'profile_settings_json',
+        'resource_enabled',
+      }),
     );
-    final stagedColumn =
-        (await reopened.rawQuery(
-              'SELECT sealed_secret_payload AS v FROM profile_restore_resources '
-              "WHERE restore_id = 'restore-v4'",
-            )).single['v']!
-            as String;
-    expect(stagedColumn, startsWith('@chunks:v1:'));
-    final stagedChunks =
-        (await reopened.rawQuery(
-              'SELECT COUNT(*) AS n FROM restore_secret_chunks '
-              "WHERE restore_id = 'restore-v4' AND backup_id = 'backup-v4'",
-            )).single['n']!
-            as int;
-    expect(stagedChunks, greaterThan(1));
+    expect(
+      (await reopened.rawQuery('PRAGMA user_version')).single['user_version'],
+      ProfileRegistry.schemaVersion,
+    );
     await reopened.close();
-
-    expect(
-      (await registry.getSealedResourceSecret('res-v4-big'))!.envelope,
-      bigEnvelope,
-    );
   });
 
-  test('a rejected rotation leaves the old chunks and old secret intact', () async {
-    await insert('res-guarded', bigEnvelope);
+  test(
+    'a rejected rotation leaves the old chunks and old secret intact',
+    () async {
+      await insert('res-guarded', bigEnvelope);
 
-    await expectLater(
-      () => registry.updateResourceSecret(
-        resourceId: 'res-guarded',
-        sealedSecretPayload: 'would-be-new',
-        secretPayloadVersion: 2,
-        actingProfileId: adminId,
-        actingAuthorizationRevision: 999999,
-        expectedResourceAuthorizationRevision: 999999,
-      ),
-      throwsA(anything),
-    );
+      await expectLater(
+        () => registry.updateResourceSecret(
+          resourceId: 'res-guarded',
+          sealedSecretPayload: 'would-be-new',
+          secretPayloadVersion: 2,
+          actingProfileId: adminId,
+          actingAuthorizationRevision: 999999,
+          expectedResourceAuthorizationRevision: 999999,
+        ),
+        throwsA(anything),
+      );
 
-    expect(
-      (await registry.getSealedResourceSecret('res-guarded'))!.envelope,
-      bigEnvelope,
-      reason: 'a refused write must not have touched the chunk rows',
-    );
-  });
+      expect(
+        (await registry.getSealedResourceSecret('res-guarded'))!.envelope,
+        bigEnvelope,
+        reason: 'a refused write must not have touched the chunk rows',
+      );
+    },
+  );
 
-  test('a zero-count marker is refused, never served as an empty secret', () async {
-    await insert('res-corrupt', 'legit-envelope');
-    final db = await raw();
-    await db.rawUpdate(
-      "UPDATE connection_resources SET sealed_secret_payload = '@chunks:v1:0' "
-      "WHERE id = 'res-corrupt'",
-    );
-    await db.close();
+  test(
+    'a zero-count marker is refused, never served as an empty secret',
+    () async {
+      await insert('res-corrupt', 'legit-envelope');
+      final db = await raw();
+      await db.rawUpdate(
+        "UPDATE connection_resources SET sealed_secret_payload = '@chunks:v1:0' "
+        "WHERE id = 'res-corrupt'",
+      );
+      await db.close();
 
-    await expectLater(
-      () => registry.getSealedResourceSecret('res-corrupt'),
-      throwsA(isA<StateError>()),
-    );
-  });
+      await expectLater(
+        () => registry.getSealedResourceSecret('res-corrupt'),
+        throwsA(isA<StateError>()),
+      );
+    },
+  );
 
-  test('an envelope that LOOKS like a marker is spilled, not misparsed', () async {
-    const impostor = '@chunks:v1:9999-actually-payload-bytes';
-    await insert('res-impostor', impostor);
+  test(
+    'an envelope that LOOKS like a marker is spilled, not misparsed',
+    () async {
+      const impostor = '@chunks:v1:9999-actually-payload-bytes';
+      await insert('res-impostor', impostor);
 
-    final db = await raw();
-    final column =
-        (await db.rawQuery(
-              'SELECT sealed_secret_payload AS v FROM connection_resources '
-              "WHERE id = 'res-impostor'",
-            )).single['v']!
-            as String;
-    expect(column, '@chunks:v1:1', reason: 'forced spill of the lookalike');
-    await db.close();
+      final db = await raw();
+      final column =
+          (await db.rawQuery(
+                'SELECT sealed_secret_payload AS v FROM connection_resources '
+                "WHERE id = 'res-impostor'",
+              )).single['v']!
+              as String;
+      expect(column, '@chunks:v1:1', reason: 'forced spill of the lookalike');
+      await db.close();
 
-    expect(
-      (await registry.getSealedResourceSecret('res-impostor'))!.envelope,
-      impostor,
-    );
-  });
+      expect(
+        (await registry.getSealedResourceSecret('res-impostor'))!.envelope,
+        impostor,
+      );
+    },
+  );
 
   test('the recovery snapshot round-trips chunked secrets', () async {
     await insert('res-snap', bigEnvelope);
@@ -350,39 +411,42 @@ void main() {
     );
   });
 
-  test('a v4 snapshot still imports — and its inline envelope gets chunked', () async {
-    // The boot-brick case: the Keychain snapshot on an updated device was
-    // written by the previous build. It says schemaVersion 4, has no chunk
-    // tables, and can carry the envelope INLINE — the import must accept it
-    // and normalize it, not throw out of bootstrap forever.
-    await insert('res-v4snap', 'placeholder');
-    final snapshot =
-        jsonDecode(await registry.exportRecoverySnapshot())
-            as Map<String, dynamic>;
-    snapshot['schemaVersion'] = 4;
-    final tables = snapshot['tables'] as Map<String, dynamic>;
-    tables.remove('resource_secret_chunks');
-    tables.remove('restore_secret_chunks');
-    final resources = tables['connection_resources'] as List;
-    (resources.single as Map<String, dynamic>)['sealed_secret_payload'] =
-        bigEnvelope;
+  test(
+    'a v4 snapshot still imports — and its inline envelope gets chunked',
+    () async {
+      // The boot-brick case: the Keychain snapshot on an updated device was
+      // written by the previous build. It says schemaVersion 4, has no chunk
+      // tables, and can carry the envelope INLINE — the import must accept it
+      // and normalize it, not throw out of bootstrap forever.
+      await insert('res-v4snap', 'placeholder');
+      final snapshot =
+          jsonDecode(await registry.exportRecoverySnapshot())
+              as Map<String, dynamic>;
+      snapshot['schemaVersion'] = 4;
+      final tables = snapshot['tables'] as Map<String, dynamic>;
+      tables.remove('resource_secret_chunks');
+      tables.remove('restore_secret_chunks');
+      final resources = tables['connection_resources'] as List;
+      (resources.single as Map<String, dynamic>)['sealed_secret_payload'] =
+          bigEnvelope;
 
-    await registry.importRecoverySnapshot(jsonEncode(snapshot));
+      await registry.importRecoverySnapshot(jsonEncode(snapshot));
 
-    final db = await raw();
-    final column =
-        (await db.rawQuery(
-              'SELECT sealed_secret_payload AS v FROM connection_resources '
-              "WHERE id = 'res-v4snap'",
-            )).single['v']!
-            as String;
-    expect(column, startsWith('@chunks:v1:'));
-    await db.close();
-    expect(
-      (await registry.getSealedResourceSecret('res-v4snap'))!.envelope,
-      bigEnvelope,
-    );
-  });
+      final db = await raw();
+      final column =
+          (await db.rawQuery(
+                'SELECT sealed_secret_payload AS v FROM connection_resources '
+                "WHERE id = 'res-v4snap'",
+              )).single['v']!
+              as String;
+      expect(column, startsWith('@chunks:v1:'));
+      await db.close();
+      expect(
+        (await registry.getSealedResourceSecret('res-v4snap'))!.envelope,
+        bigEnvelope,
+      );
+    },
+  );
 
   test('a snapshot newer than this build is still refused', () async {
     await insert('res-future', 'x');

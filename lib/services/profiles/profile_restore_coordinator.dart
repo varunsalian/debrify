@@ -8,6 +8,8 @@ import '../../models/profiles/user_profile.dart';
 import '../../services/backup_restore_service.dart';
 import '../../services/iptv_transfer_payload.dart';
 import '../../services/storage_service.dart';
+import '../../utils/stremio_url.dart';
+import 'connection_resource_service.dart';
 import 'device_key_provider.dart';
 import 'native_profile_projection.dart';
 import 'portable_profile_package.dart';
@@ -19,6 +21,7 @@ import 'profile_database_snapshot.dart';
 import 'profile_lifecycle.dart';
 import 'profile_pin_service.dart';
 import 'profile_portable_files.dart';
+import 'profile_preference_portability.dart';
 import 'profile_preferences.dart';
 import 'profile_registry.dart';
 import 'profile_runtime.dart';
@@ -90,6 +93,11 @@ class ProfileRestoreCoordinator {
       throw const FormatException('Invalid device profile graph');
     }
 
+    final restoreResourceIds = _allocateResourceIds(
+      package.resources,
+      include: (_) => true,
+    );
+
     final operationId = _newId('graph-restore');
     final profileIds = <String, String>{};
     final parsedProfiles = <_ImportedProfile>[];
@@ -119,8 +127,14 @@ class ProfileRestoreCoordinator {
       if (section is! Map || section['values'] is! Map) {
         throw const FormatException('Imported profile settings are missing');
       }
-      final values = _normalizePreferenceValues(section['values'] as Map);
-      _validatePreferenceOverlay(values);
+      final values = _normalizePreferenceValues(
+        section['values'] as Map,
+        resourceIds: restoreResourceIds.bySourceId,
+        includeCredentialEngineSettings: true,
+        rejectDisallowedKeys:
+            package.sourceVersion >= PortableProfilePackage.version,
+      );
+      _validatePreferenceOverlay(values, includeCredentialEngineSettings: true);
       StorageService.rearmGhostPurgeForImportedPlayback(values);
       final id = _newId('profile');
       if (profileIds.putIfAbsent(backupId, () => id) != id) {
@@ -133,9 +147,11 @@ class ProfileRestoreCoordinator {
           avatarKey: record['avatarKey'] as String?,
           role: role,
           policy: ProfilePolicy.decode(policySource, role),
-          setupComplete: record['setupComplete'] == true,
-          disabled: record['disabled'] == true,
-          wasPinProtected: record['wasPinProtected'] == true,
+          setupComplete: _optionalBool(record, 'setupComplete') ?? false,
+          disabled: _optionalBool(record, 'disabled') ?? false,
+          wasPinProtected: _optionalBool(record, 'wasPinProtected') ?? false,
+          lockOnResume: _optionalBool(record, 'lockOnResume') ?? false,
+          inactivityTimeoutMinutes: _optionalInactivityTimeout(record),
           preferences: values,
         ),
       );
@@ -159,7 +175,12 @@ class ProfileRestoreCoordinator {
           role: profile.role,
           policy: profile.policy,
           setupComplete: profile.setupComplete,
-          disabled: profile.disabled,
+          // Keep the hidden staging row enabled just long enough to install a
+          // carried PIN through the registry's normal credential boundary.
+          // The requested disabled state is applied below before publication.
+          disabled: false,
+          lockOnResume: profile.lockOnResume,
+          inactivityTimeoutMinutes: profile.inactivityTimeoutMinutes,
           lifecycle: UserProfileLifecycle.staging,
           actingProfileId: authorization.profileId,
           actingAuthorizationRevision: authorization.authorizationRevision,
@@ -189,7 +210,17 @@ class ProfileRestoreCoordinator {
           dataGeneration: 1,
           sessionEpoch: 0,
         );
-        await _restoreDatabaseSection(package, sourceRecord, stagingScope);
+        final databasesRestored = await _restoreDatabaseSection(
+          package,
+          sourceRecord,
+          stagingScope,
+        );
+        if (databasesRestored > 0) {
+          await ProfileDatabaseSnapshot.remapResourceReferences(
+            stagingScope,
+            restoreResourceIds.bySourceId,
+          );
+        }
         await _restoreFilesSection(package, sourceRecord, stagingScope);
         final avatarStage = await ProfilePortableFiles.stageAvatar(
           scope: stagingScope,
@@ -219,11 +250,20 @@ class ProfileRestoreCoordinator {
             actingSessionEpoch: authorization.sessionEpoch,
           );
         }
+        if (profile.disabled) {
+          await registry.disableProfile(
+            profile.id,
+            actingProfileId: authorization.profileId,
+            actingAuthorizationRevision: authorization.authorizationRevision,
+            actingSessionEpoch: authorization.sessionEpoch,
+          );
+        }
       }
 
       var grantCount = 0;
       var bindingCount = 0;
       final stagedResources = <StagedGraphResource>[];
+      final importedAddonIdentitiesByProfile = <String, Set<String>>{};
       for (final record in package.resources) {
         final backupId = record['backupId'];
         final ownerBackupId = record['ownerProfileBackupId'];
@@ -243,10 +283,14 @@ class ProfileRestoreCoordinator {
           throw const FormatException('Imported resource reference is invalid');
         }
         final type = matchingType.first;
-        final resourceId = _newId('resource');
-        final secret = _normalizeSecret(
-          type,
-          Map<String, dynamic>.from(secretRecord),
+        final disabled = _optionalBool(record, 'disabled') ?? false;
+        final resourceId = restoreResourceIds.byBackupId[backupId];
+        if (resourceId == null) {
+          throw const FormatException('Imported resource ID is missing');
+        }
+        final secret = _remapJsonMap(
+          _normalizeSecret(type, Map<String, dynamic>.from(secretRecord)),
+          restoreResourceIds.bySourceId,
         );
         if (_hasNoUsableSecret(secret)) {
           throw const FormatException('Imported resource secret is empty');
@@ -303,6 +347,16 @@ class ProfileRestoreCoordinator {
           );
           grantedProfiles.add(ownerId);
         }
+        final addonIdentity = type == ConnectionResourceType.stremioAddon
+            ? _stremioManifestIdentity(secret)
+            : null;
+        if (addonIdentity != null) {
+          for (final grant in parsedGrants) {
+            importedAddonIdentitiesByProfile
+                .putIfAbsent(grant.profileId, () => <String>{})
+                .add(addonIdentity);
+          }
+        }
         final parsedBindings = <StagedGraphBinding>[];
         final bindingSlots = <String>{};
         final rawBindings = record['bindings'];
@@ -327,6 +381,38 @@ class ProfileRestoreCoordinator {
             StagedGraphBinding(profileId: targetId, slot: slot),
           );
         }
+        final parsedSettings = <StagedGraphSettings>[];
+        final settingsProfiles = <String>{};
+        final rawSettings = record['profileSettings'];
+        if (rawSettings != null && rawSettings is! List) {
+          throw const FormatException('Invalid imported resource settings');
+        }
+        for (final rawSetting in (rawSettings as List?) ?? const <Object?>[]) {
+          if (rawSetting is! Map ||
+              rawSetting['profileBackupId'] is! String ||
+              rawSetting['enabled'] is! bool ||
+              rawSetting['values'] is! Map) {
+            throw const FormatException('Invalid imported resource settings');
+          }
+          final targetId = profileIds[rawSetting['profileBackupId'] as String];
+          if (targetId == null ||
+              !grantedProfiles.contains(targetId) ||
+              !settingsProfiles.add(targetId)) {
+            throw const FormatException(
+              'Imported resource settings reference is invalid',
+            );
+          }
+          parsedSettings.add(
+            StagedGraphSettings(
+              profileId: targetId,
+              enabled: rawSetting['enabled'] as bool,
+              values: _normalizeResourceSettings(
+                rawSetting['values'] as Map,
+                restoreResourceIds.bySourceId,
+              ),
+            ),
+          );
+        }
         grantCount += parsedGrants.length;
         bindingCount += parsedBindings.length;
         stagedResources.add(
@@ -338,11 +424,17 @@ class ProfileRestoreCoordinator {
             publicConfig: publicConfig,
             sealedSecretPayload: sealed,
             secretPayloadVersion: 1,
+            enabled: !disabled,
             grants: parsedGrants,
             bindings: parsedBindings,
+            settings: parsedSettings,
           ),
         );
       }
+      final redundantDefaultAddonGrants = await _redundantDefaultAddonGrants(
+        authorization: authorization,
+        importedIdentitiesByProfile: importedAddonIdentitiesByProfile,
+      );
       final generationManager = ProfileDataGenerationManager(registry);
       for (final profile in parsedProfiles) {
         await generationManager.finalizeGraphProfile(
@@ -376,6 +468,7 @@ class ProfileRestoreCoordinator {
                   .map((profile) => profile.id)
                   .toList(),
               resources: stagedResources,
+              redundantDefaultAddonGrants: redundantDefaultAddonGrants,
             );
           } catch (error, stackTrace) {
             bool committed;
@@ -486,13 +579,36 @@ class ProfileRestoreCoordinator {
     if (package.profiles.length != 1) {
       throw StateError('Single-profile restore requires exactly one profile');
     }
-    final sectionId = package.profiles.single['preferencesSection'];
+    final profileRecord = package.profiles.single;
+    final restoreResourceIds = _allocateResourceIds(
+      package.resources,
+      include: (record) => _importsSingleProfileResource(
+        record,
+        sourceVersion: package.sourceVersion,
+      ),
+    );
+    final sectionId = profileRecord['preferencesSection'];
     final section = package.sections[sectionId];
     if (section is! Map || section['values'] is! Map) {
       throw const FormatException('Profile preference section is missing');
     }
-    final values = _normalizePreferenceValues(section['values'] as Map);
-    _validatePreferenceOverlay(values);
+    final values = _normalizePreferenceValues(
+      section['values'] as Map,
+      resourceIds: restoreResourceIds.bySourceId,
+      includeCredentialEngineSettings: package.mode != 'sanitizedSettings',
+      rejectDisallowedKeys:
+          package.sourceVersion >= PortableProfilePackage.version,
+    );
+    _validatePreferenceOverlay(
+      values,
+      includeCredentialEngineSettings: package.mode != 'sanitizedSettings',
+    );
+    final importedSetupComplete = _optionalBool(profileRecord, 'setupComplete');
+    final importedLockOnResume = _optionalBool(profileRecord, 'lockOnResume');
+    final updateInactivityTimeout = profileRecord.containsKey(
+      'inactivityTimeoutMinutes',
+    );
+    final importedInactivityTimeout = _optionalInactivityTimeout(profileRecord);
     // Merge-mode restore keeps destination keys the package omits, so imported
     // playback must re-arm the purge or its ghosts are stranded behind an
     // already-satisfied generation marker.
@@ -525,17 +641,19 @@ class ProfileRestoreCoordinator {
         dataGeneration: staged.generation,
         sessionEpoch: 0,
       );
-      await _restoreDatabaseSection(
+      final databasesRestored = await _restoreDatabaseSection(
         package,
-        package.profiles.single,
+        profileRecord,
         stagingScope,
       );
-      await _restoreFilesSection(
-        package,
-        package.profiles.single,
-        stagingScope,
-      );
-      final importedAvatarKey = package.profiles.single['avatarKey'];
+      if (databasesRestored > 0) {
+        await ProfileDatabaseSnapshot.remapResourceReferences(
+          stagingScope,
+          restoreResourceIds.bySourceId,
+        );
+      }
+      await _restoreFilesSection(package, profileRecord, stagingScope);
+      final importedAvatarKey = profileRecord['avatarKey'];
       final importedAvatar = importedAvatarKey is String
           ? ProfileAvatar.tryParse(importedAvatarKey)
           : null;
@@ -550,7 +668,7 @@ class ProfileRestoreCoordinator {
       if (avatarStageApplies) {
         avatarStage = await ProfilePortableFiles.stageAvatar(
           scope: stagingScope,
-          record: package.profiles.single['avatarFile'],
+          record: profileRecord['avatarFile'],
           expectedAvatarKey: importedAvatarKey as String,
           operationId: operationId,
         );
@@ -564,6 +682,15 @@ class ProfileRestoreCoordinator {
           borrowedSkipped++;
           continue;
         }
+        // Version 3 single-profile restore deliberately skipped degenerate
+        // owned resources. Keep that compatibility without weakening v4:
+        // current authenticated packages treat an empty resource as corrupt.
+        if (!_importsSingleProfileResource(
+          record,
+          sourceVersion: package.sourceVersion,
+        )) {
+          continue;
+        }
         if (!actor.allows(ProfileFeature.manageConnections)) {
           throw StateError('Destination cannot own imported connections');
         }
@@ -575,12 +702,24 @@ class ProfileRestoreCoordinator {
           throw FormatException('Unknown resource type $typeName');
         }
         final type = matching.first;
-        final resourceId = _newId('resource');
-        final secret = _normalizeSecret(
-          type,
-          Map<String, dynamic>.from(record['secretConfig'] as Map),
+        final backupId = record['backupId'];
+        if (backupId is! String) {
+          throw const FormatException('Invalid imported resource ID');
+        }
+        final resourceId = restoreResourceIds.byBackupId[backupId];
+        if (resourceId == null) {
+          throw const FormatException('Imported resource ID is missing');
+        }
+        final secret = _remapJsonMap(
+          _normalizeSecret(
+            type,
+            Map<String, dynamic>.from(record['secretConfig'] as Map),
+          ),
+          restoreResourceIds.bySourceId,
         );
-        if (_hasNoUsableSecret(secret)) continue;
+        if (_hasNoUsableSecret(secret)) {
+          throw const FormatException('Imported resource secret is empty');
+        }
         if (type == ConnectionResourceType.iptvM3u ||
             type == ConnectionResourceType.iptvXtream) {
           stagedIptvProviders[IptvTransferPayload.providerFingerprintFromJson(
@@ -604,9 +743,13 @@ class ProfileRestoreCoordinator {
           actor.role,
           (record['permissions'] as num?)?.toInt(),
         );
+        final localSettings = _singleResourceSettings(
+          record['profileSettings'],
+          restoreResourceIds.bySourceId,
+        );
         await registry.stageRestoreResource(
           operationId: operationId,
-          backupId: record['backupId']! as String,
+          backupId: backupId,
           resourceId: resourceId,
           type: type,
           label: (record['label'] as String? ?? type.name).trim(),
@@ -615,7 +758,10 @@ class ProfileRestoreCoordinator {
           sealedSecretPayload: sealed,
           secretPayloadVersion: 1,
           permissions: permissions,
-          bindingSlot: _bindingSlot(type, record['backupId']! as String),
+          bindingSlot: _bindingSlot(type, backupId),
+          profileEnabled: localSettings?.enabled,
+          profileSettings: localSettings?.values,
+          resourceEnabled: !(_optionalBool(record, 'disabled') ?? false),
         );
         imported++;
       }
@@ -700,6 +846,10 @@ class ProfileRestoreCoordinator {
               baseGeneration: staged.baseGeneration,
               stagedGeneration: staged.generation,
               operationId: operationId,
+              profileSetupComplete: importedSetupComplete,
+              profileLockOnResume: importedLockOnResume,
+              updateInactivityTimeout: updateInactivityTimeout,
+              profileInactivityTimeoutMinutes: importedInactivityTimeout,
             );
           } catch (error, stackTrace) {
             bool committed;
@@ -867,11 +1017,17 @@ class ProfileRestoreCoordinator {
     }
   }
 
-  static void _validatePreferenceOverlay(Map<String, Object?> values) {
+  static void _validatePreferenceOverlay(
+    Map<String, Object?> values, {
+    required bool includeCredentialEngineSettings,
+  }) {
     for (final entry in values.entries) {
       if (entry.key.isEmpty ||
           entry.key.length > 256 ||
-          _forbiddenPreference.hasMatch(entry.key)) {
+          !ProfilePreferencePortability.allowsKey(
+            entry.key,
+            includeCredentialEngineSettings: includeCredentialEngineSettings,
+          )) {
         throw FormatException('Forbidden restored preference ${entry.key}');
       }
       final value = entry.value;
@@ -979,23 +1135,185 @@ class ProfileRestoreCoordinator {
     );
   }
 
-  static Map<String, Object?> _normalizePreferenceValues(Map source) {
+  static Map<String, Object?> _normalizePreferenceValues(
+    Map source, {
+    Map<String, String> resourceIds = const <String, String>{},
+    required bool includeCredentialEngineSettings,
+    required bool rejectDisallowedKeys,
+  }) {
     final result = <String, Object?>{};
     for (final entry in source.entries) {
       if (entry.key is! String) {
         throw const FormatException('Preference key must be text');
       }
-      final value = entry.value;
+      final key = entry.key as String;
+      if (!ProfilePreferencePortability.allowsKey(
+        key,
+        includeCredentialEngineSettings: includeCredentialEngineSettings,
+      )) {
+        // v3 used a narrower export filter, so authentic legacy packages may
+        // contain cache, superseded resource, or device-local preferences
+        // that v4 no longer permits. Drop those values exactly as a current
+        // exporter would; an unexpected key in v4 remains a hard failure.
+        if (rejectDisallowedKeys) {
+          throw FormatException('Forbidden restored preference $key');
+        }
+        continue;
+      }
+      Object? value = entry.value;
       if (value is List) {
         if (value.any((item) => item is! String)) {
-          throw FormatException('Invalid string list preference ${entry.key}');
+          throw FormatException('Invalid string list preference $key');
         }
-        result[entry.key as String] = value.cast<String>().toList();
-      } else {
-        result[entry.key as String] = value;
+        value = value.cast<String>().toList();
       }
+      final prepared = ProfilePreferencePortability.prepareValue(
+        key,
+        value,
+        includeCredentialEngineSettings: includeCredentialEngineSettings,
+      );
+      if (!prepared.include) continue;
+      result[key] = _remapPreferenceValue(prepared.value, resourceIds);
     }
     return result;
+  }
+
+  static Object? _remapPreferenceValue(
+    Object? value,
+    Map<String, String> resourceIds,
+  ) {
+    if (resourceIds.isEmpty) return value;
+    if (value is List<String>) {
+      return value
+          .map((item) => resourceIds[item] ?? item)
+          .toList(growable: false);
+    }
+    if (value is! String) return value;
+    final direct = resourceIds[value];
+    if (direct != null) return direct;
+    if (!resourceIds.keys.any(value.contains)) return value;
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map || decoded is List) {
+        return jsonEncode(_remapJsonValue(decoded, resourceIds));
+      }
+    } on FormatException {
+      // Not a JSON-backed preference; exact-string replacement above was the
+      // only safe interpretation.
+    }
+    return value;
+  }
+
+  static Object? _remapJsonValue(
+    Object? value,
+    Map<String, String> resourceIds,
+  ) {
+    if (value is String) return resourceIds[value] ?? value;
+    if (value is List) {
+      return value
+          .map((item) => _remapJsonValue(item, resourceIds))
+          .toList(growable: false);
+    }
+    if (value is Map) {
+      final result = <String, Object?>{};
+      for (final entry in value.entries) {
+        final key = entry.key;
+        if (key is! String) {
+          throw const FormatException('JSON key must be text');
+        }
+        result[resourceIds[key] ?? key] = _remapJsonValue(
+          entry.value,
+          resourceIds,
+        );
+      }
+      return result;
+    }
+    return value;
+  }
+
+  static Map<String, dynamic> _remapJsonMap(
+    Map<String, dynamic> value,
+    Map<String, String> resourceIds,
+  ) => Map<String, dynamic>.from(_remapJsonValue(value, resourceIds)! as Map);
+
+  static Map<String, dynamic> _normalizeResourceSettings(
+    Map source,
+    Map<String, String> resourceIds,
+  ) {
+    late final Map<String, dynamic> normalized;
+    try {
+      normalized = Map<String, dynamic>.from(
+        _remapJsonValue(source, resourceIds)! as Map,
+      );
+      if (utf8.encode(jsonEncode(normalized)).length > 64 * 1024) {
+        throw const FormatException('Imported resource settings are too large');
+      }
+    } on JsonUnsupportedObjectError {
+      throw const FormatException('Invalid imported resource settings');
+    }
+    return normalized;
+  }
+
+  static ({bool enabled, Map<String, dynamic> values})? _singleResourceSettings(
+    Object? raw,
+    Map<String, String> resourceIds,
+  ) {
+    if (raw == null) return null;
+    if (raw is! Map || raw['enabled'] is! bool || raw['values'] is! Map) {
+      throw const FormatException('Invalid imported resource settings');
+    }
+    return (
+      enabled: raw['enabled'] as bool,
+      values: _normalizeResourceSettings(raw['values'] as Map, resourceIds),
+    );
+  }
+
+  static ({Map<String, String> byBackupId, Map<String, String> bySourceId})
+  _allocateResourceIds(
+    List<Map<String, dynamic>> records, {
+    required bool Function(Map<String, dynamic>) include,
+  }) {
+    final byBackupId = <String, String>{};
+    final bySourceId = <String, String>{};
+    for (final record in records.where(include)) {
+      final backupId = record['backupId'];
+      if (backupId is! String || backupId.isEmpty) {
+        throw const FormatException('Invalid imported resource ID');
+      }
+      final destinationId = _newId('resource');
+      if (byBackupId.putIfAbsent(backupId, () => destinationId) !=
+          destinationId) {
+        throw const FormatException('Duplicate imported resource ID');
+      }
+      final sourceId = record['sourceResourceId'];
+      if (sourceId == null) continue; // Version-3 packages predating ID remap.
+      if (sourceId is! String ||
+          !ProfileScope.isValidProfileId(sourceId) ||
+          bySourceId.putIfAbsent(sourceId, () => destinationId) !=
+              destinationId) {
+        throw const FormatException('Invalid source resource ID');
+      }
+    }
+    return (byBackupId: byBackupId, bySourceId: bySourceId);
+  }
+
+  static bool? _optionalBool(Map<String, dynamic> record, String key) {
+    if (!record.containsKey(key)) return null;
+    final value = record[key];
+    if (value is! bool) throw FormatException('Invalid imported $key');
+    return value;
+  }
+
+  static int? _optionalInactivityTimeout(Map<String, dynamic> record) {
+    if (!record.containsKey('inactivityTimeoutMinutes') ||
+        record['inactivityTimeoutMinutes'] == null) {
+      return null;
+    }
+    final value = record['inactivityTimeoutMinutes'];
+    if (value is! int || !const <int>{5, 15, 30, 60}.contains(value)) {
+      throw const FormatException('Invalid imported auto-lock interval');
+    }
+    return value;
   }
 
   static Future<bool> _writePreference(
@@ -1040,6 +1358,103 @@ class ProfileRestoreCoordinator {
     return input..removeWhere((_, value) => value == null);
   }
 
+  /// Imported profiles are staged through the ordinary profile-creation API,
+  /// which deliberately shares existing device resources by default. Keep
+  /// that useful fallback for receiver-only addons, but remove an inherited
+  /// default grant when the imported graph gives the same profile the exact
+  /// same configured addon. Matching uses the full normalized manifest URL,
+  /// including configuration/query data; names and manifest IDs are not
+  /// unique enough to revoke a grant safely.
+  Future<List<GraphRestoreDefaultGrantPrune>> _redundantDefaultAddonGrants({
+    required ProfileAuthorizationContext authorization,
+    required Map<String, Set<String>> importedIdentitiesByProfile,
+  }) async {
+    if (importedIdentitiesByProfile.isEmpty) {
+      return const <GraphRestoreDefaultGrantPrune>[];
+    }
+    final defaultBorrowersByResource = <String, Set<String>>{};
+    for (final grant in await registry.listAllResourceGrants()) {
+      final profileId = grant['profile_id'];
+      final resourceId = grant['resource_id'];
+      if (profileId is! String ||
+          resourceId is! String ||
+          !importedIdentitiesByProfile.containsKey(profileId) ||
+          !_isDefaultSeedGrant(grant['grant_origin_json'])) {
+        continue;
+      }
+      defaultBorrowersByResource
+          .putIfAbsent(resourceId, () => <String>{})
+          .add(profileId);
+    }
+    if (defaultBorrowersByResource.isEmpty) {
+      return const <GraphRestoreDefaultGrantPrune>[];
+    }
+
+    final service = ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    );
+    final result = <GraphRestoreDefaultGrantPrune>[];
+    for (final resource in await registry.listAllResourcesIncludingDisabled()) {
+      final borrowers = defaultBorrowersByResource[resource.id];
+      if (borrowers == null ||
+          resource.type != ConnectionResourceType.stremioAddon) {
+        continue;
+      }
+      Map<String, dynamic> secret;
+      try {
+        secret = await service.revealSecretForDeviceBackup(
+          context: authorization,
+          resourceId: resource.id,
+        );
+      } catch (_) {
+        // A malformed local addon must not make an otherwise valid restore
+        // impossible. Revalidate separately so an authority change is never
+        // mistaken for a harmless unreadable resource.
+        await authorization.validate(registry);
+        continue;
+      }
+      final identity = _stremioManifestIdentity(secret);
+      if (identity == null) continue;
+      for (final profileId in borrowers) {
+        if (importedIdentitiesByProfile[profileId]!.contains(identity)) {
+          result.add(
+            GraphRestoreDefaultGrantPrune(
+              profileId: profileId,
+              resourceId: resource.id,
+              expectedResourceAuthorizationRevision:
+                  resource.authorizationRevision,
+            ),
+          );
+        }
+      }
+    }
+    await authorization.validate(registry);
+    return result;
+  }
+
+  static String? _stremioManifestIdentity(Map<String, dynamic> secret) {
+    final raw = secret['manifest_url'] ?? secret['manifestUrl'];
+    if (raw is! String || raw.trim().isEmpty) return null;
+    try {
+      final normalized = normalizeStremioManifestUri(raw);
+      if (!normalized.hasScheme || !normalized.hasAuthority) return null;
+      return normalized.toString();
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static bool _isDefaultSeedGrant(Object? encoded) {
+    if (encoded is! String) return false;
+    try {
+      final value = jsonDecode(encoded);
+      return value is Map && value['origin'] == 'defaultSeed';
+    } on FormatException {
+      return false;
+    }
+  }
+
   /// Whether [secret] carries nothing worth sealing.
   ///
   /// Deliberately not `Map.isEmpty`: the empty-value strip that used to make
@@ -1048,6 +1463,27 @@ class ProfileRestoreCoordinator {
   /// mutating the record to get it.
   static bool _hasNoUsableSecret(Map<String, dynamic> secret) =>
       secret.values.every((value) => value == null || value == '');
+
+  static bool _importsSingleProfileResource(
+    Map<String, dynamic> record, {
+    required int sourceVersion,
+  }) {
+    if (record['owned'] != true || record['secretConfig'] is! Map) {
+      return false;
+    }
+    if (sourceVersion >= PortableProfilePackage.version) return true;
+    final typeName = record['type'];
+    final matching = ConnectionResourceType.values.where(
+      (value) => value.name == typeName,
+    );
+    // Preserve the existing explicit error for unknown resource types.
+    if (matching.isEmpty) return true;
+    final normalized = _normalizeSecret(
+      matching.first,
+      Map<String, dynamic>.from(record['secretConfig'] as Map),
+    );
+    return !_hasNoUsableSecret(normalized);
+  }
 
   static Map<String, dynamic> _publicConfig(
     ConnectionResourceType type,
@@ -1213,12 +1649,6 @@ class ProfileRestoreCoordinator {
     final bytes = List<int>.generate(12, (_) => random.nextInt(256));
     return '$prefix-${base64UrlEncode(bytes).replaceAll('=', '')}';
   }
-
-  static final RegExp _forbiddenPreference = RegExp(
-    r'(api.?key|password|access.?token|refresh.?token|credential|secret|'
-    r'download_tree_uri|download_dir_path|custom_command|initial_setup)',
-    caseSensitive: false,
-  );
 }
 
 class _ImportedProfile {
@@ -1230,6 +1660,8 @@ class _ImportedProfile {
   final bool setupComplete;
   final bool disabled;
   final bool wasPinProtected;
+  final bool lockOnResume;
+  final int? inactivityTimeoutMinutes;
   final Map<String, Object?> preferences;
 
   const _ImportedProfile({
@@ -1241,6 +1673,8 @@ class _ImportedProfile {
     required this.setupComplete,
     required this.disabled,
     required this.wasPinProtected,
+    required this.lockOnResume,
+    required this.inactivityTimeoutMinutes,
     required this.preferences,
   });
 }

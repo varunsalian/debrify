@@ -8,20 +8,25 @@ import 'package:debrify/services/secret_vault.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-RemoteSessionManager _manager(String name, {DateTime Function()? now}) {
+RemoteSessionManager _manager(
+  String name, {
+  DateTime Function()? now,
+  int protocolVersion = kProtoVersion,
+}) {
   Future<SimpleKeyPair>? statics;
   return RemoteSessionManager(
     loadStaticKeyPair: () =>
         statics ??= RemoteSessionCrypto.x25519.newKeyPair(),
     deviceName: () => name,
     now: now,
+    protocolVersion: protocolVersion,
   );
 }
 
 /// Drive a full handshake between [sender] and [receiver], optionally routing
 /// messages through [tamper] (a MITM). Returns both established sessions.
 Future<({RemoteSession? senderSession, RemoteSession? receiverSession})>
-    _bridge(
+_bridge(
   RemoteSessionManager sender,
   RemoteSessionManager receiver, {
   Map<String, dynamic> Function(Map<String, dynamic>)? tamper,
@@ -33,8 +38,7 @@ Future<({RemoteSession? senderSession, RemoteSession? receiverSession})>
   while (toReceiver.isNotEmpty && guard++ < 10) {
     final toSender = <Map<String, dynamic>>[];
     for (final message in toReceiver) {
-      final result =
-          await receiver.handle(tamper?.call(message) ?? message);
+      final result = await receiver.handle(tamper?.call(message) ?? message);
       receiverSession = result.established ?? receiverSession;
       toSender.addAll(result.outgoing);
     }
@@ -67,10 +71,36 @@ void main() {
       expect(s.sasCode, matches(RegExp(r'^\d{6}$')));
       expect(s.peerName, 'TV');
       expect(r.peerName, 'Varun Pixel 9');
+      expect(s.peerProtocolVersion, kProtoVersion);
+      expect(r.peerProtocolVersion, kProtoVersion);
       // Fingerprints cross-match: each side names the OTHER device.
       expect(s.peerFingerprint, isNot(r.peerFingerprint));
       // Sessions are keyed identically on both ends.
       expect(s.sidB64, r.sidB64);
+    });
+
+    test('handshake records the peer capability version', () async {
+      final result = await _bridge(
+        _manager('Phone', protocolVersion: 5),
+        _manager('Older TV', protocolVersion: 4),
+      );
+      expect(result.senderSession?.peerProtocolVersion, 4);
+      expect(result.receiverSession?.peerProtocolVersion, 5);
+    });
+
+    test('v5 capability version is bound to key confirmation', () async {
+      final result = await _bridge(
+        _manager('Phone', protocolVersion: 5),
+        _manager('TV', protocolVersion: 5),
+        tamper: (message) {
+          if (message['type'] == RemoteMessageType.hs2) {
+            return <String, dynamic>{...message, 'v': 4};
+          }
+          return message;
+        },
+      );
+      expect(result.senderSession, isNull);
+      expect(result.receiverSession, isNull);
     });
 
     test('transcript hash is stable against a fixed vector', () async {
@@ -87,8 +117,7 @@ void main() {
       // break even if both ends agree, because deployed builds won't.
       // Value independently verified with Python hashlib over the same
       // concatenation.
-      expect(base64Encode(th),
-          'GZxPHd5EPAStl5oftXMxRtQIIF/RpkYxZqOxuVrzJ3M=');
+      expect(base64Encode(th), 'GZxPHd5EPAStl5oftXMxRtQIIF/RpkYxZqOxuVrzJ3M=');
     });
 
     test('commitment mismatch in hs3 is rejected', () async {
@@ -145,14 +174,17 @@ void main() {
       expect(legB.receiverSession, isNotNull);
       // The user compares the code the TV shows against the code the phone
       // derived — across a MITM they disagree (p = 1e-6 by chance).
-      expect(legA.senderSession!.sasCode,
-          isNot(legB.receiverSession!.sasCode));
+      expect(legA.senderSession!.sasCode, isNot(legB.receiverSession!.sasCode));
       // And a proof generated from the phone-leg session fails against the
       // TV-leg session.
       final proof = await RemoteSessionCrypto.pairProof(
-          legA.senderSession!.keys.conf, legA.senderSession!.sasCode);
+        legA.senderSession!.keys.conf,
+        legA.senderSession!.sasCode,
+      );
       final expected = await RemoteSessionCrypto.pairProof(
-          legB.receiverSession!.keys.conf, legB.receiverSession!.sasCode);
+        legB.receiverSession!.keys.conf,
+        legB.receiverSession!.sasCode,
+      );
       expect(RemoteSessionCrypto.constantTimeEquals(proof, expected), isFalse);
     });
   });
@@ -170,16 +202,22 @@ void main() {
     });
 
     test('round-trips a command', () async {
-      final envelope = await senderManager.sealCommand(
-          sender, {'type': 'command', 'action': 'config', 'command': 'torbox', 'data': 'k'});
+      final envelope = await senderManager.sealCommand(sender, {
+        'type': 'command',
+        'action': 'config',
+        'command': 'torbox',
+        'data': 'k',
+      });
       final opened = await receiverManager.openCommand(envelope);
       expect(opened.command!['command'], 'torbox');
       expect(opened.session!.sidB64, sender.sidB64);
     });
 
     test('mutating sid, n, or ct kills the envelope', () async {
-      final envelope = await senderManager.sealCommand(
-          sender, {'action': 'config', 'command': 'torbox'});
+      final envelope = await senderManager.sealCommand(sender, {
+        'action': 'config',
+        'command': 'torbox',
+      });
       final badN = {...envelope, 'n': (envelope['n'] as int) + 1};
       expect((await receiverManager.openCommand(badN)).command, isNull);
       final ct = envelope['ct'] as String;
@@ -196,19 +234,21 @@ void main() {
       expect((await receiverManager.openCommand(envelope)).command, isNotNull);
     });
 
-    test('replay of the same n is rejected; reorder inside window is fine',
-        () async {
-      final e1 = await senderManager.sealCommand(sender, {'command': 'a'});
-      final e2 = await senderManager.sealCommand(sender, {'command': 'b'});
-      final e3 = await senderManager.sealCommand(sender, {'command': 'c'});
-      // Deliver out of order: 3, 1, 2 — all accepted once.
-      expect((await receiverManager.openCommand(e3)).command, isNotNull);
-      expect((await receiverManager.openCommand(e1)).command, isNotNull);
-      expect((await receiverManager.openCommand(e2)).command, isNotNull);
-      // Replays rejected.
-      expect((await receiverManager.openCommand(e2)).command, isNull);
-      expect((await receiverManager.openCommand(e3)).command, isNull);
-    });
+    test(
+      'replay of the same n is rejected; reorder inside window is fine',
+      () async {
+        final e1 = await senderManager.sealCommand(sender, {'command': 'a'});
+        final e2 = await senderManager.sealCommand(sender, {'command': 'b'});
+        final e3 = await senderManager.sealCommand(sender, {'command': 'c'});
+        // Deliver out of order: 3, 1, 2 — all accepted once.
+        expect((await receiverManager.openCommand(e3)).command, isNotNull);
+        expect((await receiverManager.openCommand(e1)).command, isNotNull);
+        expect((await receiverManager.openCommand(e2)).command, isNotNull);
+        // Replays rejected.
+        expect((await receiverManager.openCommand(e2)).command, isNull);
+        expect((await receiverManager.openCommand(e3)).command, isNull);
+      },
+    );
 
     test('counters below the 64-window are rejected', () {
       final window = ReplayWindow();
@@ -226,21 +266,23 @@ void main() {
       expect(n3, n1 + 2);
     });
 
-    test('blob counters are strictly increasing, independent of the window',
-        () async {
-      final result = await _bridge(_manager('P'), _manager('T'));
-      final r = result.receiverSession!;
-      // Simulate many ecmds advancing the window far past an old blob n.
-      for (var n = 10; n < 90; n++) {
-        r.acceptIncoming(n);
-      }
-      // A blob sealed long ago (n=5) still lands: blobs use their own check.
-      expect(r.acceptBlob(5), isTrue);
-      // But replaying it — or anything older — is rejected.
-      expect(r.acceptBlob(5), isFalse);
-      expect(r.acceptBlob(3), isFalse);
-      expect(r.acceptBlob(6), isTrue);
-    });
+    test(
+      'blob counters are strictly increasing, independent of the window',
+      () async {
+        final result = await _bridge(_manager('P'), _manager('T'));
+        final r = result.receiverSession!;
+        // Simulate many ecmds advancing the window far past an old blob n.
+        for (var n = 10; n < 90; n++) {
+          r.acceptIncoming(n);
+        }
+        // A blob sealed long ago (n=5) still lands: blobs use their own check.
+        expect(r.acceptBlob(5), isTrue);
+        // But replaying it — or anything older — is rejected.
+        expect(r.acceptBlob(5), isFalse);
+        expect(r.acceptBlob(3), isFalse);
+        expect(r.acceptBlob(6), isTrue);
+      },
+    );
   });
 
   group('blob seal/open', () {
@@ -294,10 +336,7 @@ void main() {
       session = result.receiverSession!;
       clock = DateTime(2026, 8, 13, 12);
       remembered = <String>{};
-      gate = PairingGate(
-        isRemembered: remembered.contains,
-        now: () => clock,
-      );
+      gate = PairingGate(isRemembered: remembered.contains, now: () => clock);
     });
 
     Future<List<int>> proofFor(RemoteSession s) =>
@@ -307,8 +346,10 @@ void main() {
       expect(gate.request(session), PairingRequestOutcome.shown);
       expect(gate.current!.code, session.sasCode);
       clock = clock.add(const Duration(seconds: 4));
-      expect(await gate.confirmProof(session, await proofFor(session)),
-          PairProofOutcome.ok);
+      expect(
+        await gate.confirmProof(session, await proofFor(session)),
+        PairProofOutcome.ok,
+      );
       expect(session.authorized, isTrue);
       expect(gate.current, isNull);
     });
@@ -316,8 +357,10 @@ void main() {
     test('proof before the min display window is rejected', () async {
       gate.request(session);
       clock = clock.add(const Duration(seconds: 1));
-      expect(await gate.confirmProof(session, await proofFor(session)),
-          PairProofOutcome.tooEarly);
+      expect(
+        await gate.confirmProof(session, await proofFor(session)),
+        PairProofOutcome.tooEarly,
+      );
       expect(session.authorized, isFalse);
     });
 
@@ -326,19 +369,24 @@ void main() {
       clock = clock.add(const Duration(seconds: 4));
       final wrong = List<int>.filled(16, 0);
       for (var i = 0; i < 3; i++) {
-        expect(await gate.confirmProof(session, wrong),
-            PairProofOutcome.wrong);
+        expect(await gate.confirmProof(session, wrong), PairProofOutcome.wrong);
       }
-      expect(await gate.confirmProof(session, wrong),
-          PairProofOutcome.rateLimited);
+      expect(
+        await gate.confirmProof(session, wrong),
+        PairProofOutcome.rateLimited,
+      );
       // Even the RIGHT proof is refused while rate-limited.
-      expect(await gate.confirmProof(session, await proofFor(session)),
-          PairProofOutcome.rateLimited);
+      expect(
+        await gate.confirmProof(session, await proofFor(session)),
+        PairProofOutcome.rateLimited,
+      );
     });
 
     test('second concurrent request is busy; timeout clears', () async {
-      final other = (await _bridge(_manager('Phone2'), _manager('TV')))
-          .receiverSession!;
+      final other = (await _bridge(
+        _manager('Phone2'),
+        _manager('TV'),
+      )).receiverSession!;
       expect(gate.request(session), PairingRequestOutcome.shown);
       expect(gate.request(other), PairingRequestOutcome.busy);
       clock = clock.add(const Duration(seconds: 121));
@@ -367,8 +415,10 @@ void main() {
       final second = await RemotePairingStore.publicKeyBytes();
       expect(second, first);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('remote_static_keypair_v1'),
-          startsWith(SecretVault.prefix));
+      expect(
+        prefs.getString('remote_static_keypair_v1'),
+        startsWith(SecretVault.prefix),
+      );
     });
 
     test('remember/forget round trip', () async {
@@ -378,8 +428,10 @@ void main() {
         name: 'Varun phone',
       );
       expect(await RemotePairingStore.isRemembered('fp1'), isTrue);
-      expect((await RemotePairingStore.listPaired()).single.name,
-          'Varun phone');
+      expect(
+        (await RemotePairingStore.listPaired()).single.name,
+        'Varun phone',
+      );
       await RemotePairingStore.forget('fp1');
       expect(await RemotePairingStore.isRemembered('fp1'), isFalse);
       await RemotePairingStore.rememberPeer(
@@ -397,8 +449,9 @@ void main() {
         staticKey: List.filled(32, 3),
         name: 'Living Room TV',
       );
-      final pinned =
-          await RemotePairingStore.knownReceiversNamed('Living Room TV');
+      final pinned = await RemotePairingStore.knownReceiversNamed(
+        'Living Room TV',
+      );
       expect(pinned, hasLength(1));
       expect(pinned.single.fingerprint, 'tvfp');
       expect(await RemotePairingStore.isPinnedFingerprint('tvfp'), isTrue);
@@ -423,38 +476,40 @@ void main() {
         staticKey: List.filled(32, 9),
         name: 'Debrify TV',
       );
-      expect(await RemotePairingStore.knownReceiversNamed('Debrify TV'),
-          hasLength(2));
+      expect(
+        await RemotePairingStore.knownReceiversNamed('Debrify TV'),
+        hasLength(2),
+      );
     });
   });
 
   group('legacy interop decision', () {
     test('v2 peer → encrypted; v1 peer under block policy → blocked', () {
       expect(
-        decideLegacyCredentialSend(
-            peerAdvertisesV2: true, peerPinnedV2: false),
+        decideLegacyCredentialSend(peerAdvertisesV2: true, peerPinnedV2: false),
         LegacySendDecision.encrypted,
       );
       expect(
         decideLegacyCredentialSend(
-            peerAdvertisesV2: false,
-            peerPinnedV2: false,
-            policy: LegacySendPolicy.block),
+          peerAdvertisesV2: false,
+          peerPinnedV2: false,
+          policy: LegacySendPolicy.block,
+        ),
         LegacySendDecision.blocked,
       );
       expect(
         decideLegacyCredentialSend(
-            peerAdvertisesV2: false,
-            peerPinnedV2: false,
-            policy: LegacySendPolicy.allowWithOverride),
+          peerAdvertisesV2: false,
+          peerPinnedV2: false,
+          policy: LegacySendPolicy.allowWithOverride,
+        ),
         LegacySendDecision.askOverride,
       );
     });
 
     test('pinned-v2 receiver claiming v1 is a suspected downgrade', () {
       expect(
-        decideLegacyCredentialSend(
-            peerAdvertisesV2: false, peerPinnedV2: true),
+        decideLegacyCredentialSend(peerAdvertisesV2: false, peerPinnedV2: true),
         LegacySendDecision.suspectedDowngrade,
       );
     });

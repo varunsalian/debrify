@@ -16,6 +16,10 @@ class DiscoveredDevice {
   /// predates encrypted sessions).
   final int protoVersion;
 
+  /// False only when the target was entered manually and no discovery or
+  /// handshake has identified its capabilities yet.
+  final bool protocolVersionKnown;
+
   /// The device's static X25519 public key (base64), advertised by v2
   /// receivers so senders can pin identities before any handshake.
   final String? staticKey;
@@ -25,6 +29,7 @@ class DiscoveredDevice {
     required this.ip,
     DateTime? discoveredAt,
     this.protoVersion = 1,
+    this.protocolVersionKnown = true,
     this.staticKey,
   }) : discoveredAt = discoveredAt ?? DateTime.now();
 
@@ -33,12 +38,26 @@ class DiscoveredDevice {
       protoVersion >= kAddonResultProtocolVersion;
   bool get supportsRemoteTransferResult =>
       protoVersion >= kRemoteTransferResultProtocolVersion;
+  bool get supportsComprehensiveProfileGraph =>
+      protoVersion >= kComprehensiveProfileGraphProtocolVersion;
+  bool get maySupportComprehensiveProfileGraph =>
+      !protocolVersionKnown || supportsComprehensiveProfileGraph;
+
+  DiscoveredDevice withProtocolVersion(int value) => DiscoveredDevice(
+    deviceName: deviceName,
+    ip: ip,
+    discoveredAt: discoveredAt,
+    protoVersion: value,
+    protocolVersionKnown: true,
+    staticKey: staticKey,
+  );
 
   Map<String, dynamic> toJson() => {
     'deviceName': deviceName,
     'ip': ip,
     'discoveredAt': discoveredAt.toIso8601String(),
     'proto': protoVersion,
+    'protoKnown': protocolVersionKnown,
     if (staticKey != null) 'spk': staticKey,
   };
 
@@ -50,12 +69,15 @@ class DiscoveredDevice {
           ? DateTime.tryParse(json['discoveredAt'] as String)
           : null,
       protoVersion: (json['proto'] as num?)?.toInt() ?? 1,
+      protocolVersionKnown: json['protoKnown'] as bool? ?? true,
       staticKey: json['spk'] as String?,
     );
   }
 
   @override
-  String toString() => 'DiscoveredDevice($deviceName @ $ip, v$protoVersion)';
+  String toString() =>
+      'DiscoveredDevice($deviceName @ $ip, '
+      '${protocolVersionKnown ? 'v$protoVersion' : 'version unknown'})';
 }
 
 /// Service for UDP-based device discovery

@@ -34,11 +34,14 @@ class RemoteMessageType {
 /// Protocol version advertised in discovery. v1 = plaintext only (implied by
 /// the field's absence), v2 = X25519/AES-GCM sessions + pairing codes, v3 =
 /// correlated receiver outcomes for single-addon transfers, v4 = correlated
-/// outcomes for configuration batches and Debrify TV channels.
-const int kProtoVersion = 4;
+/// outcomes for configuration batches and Debrify TV channels, v5 = complete
+/// profile-graph transfers (including disabled resources, profile-local
+/// settings, lock policy, reference remapping, and bounded compression).
+const int kProtoVersion = 5;
 
 const int kAddonResultProtocolVersion = 3;
 const int kRemoteTransferResultProtocolVersion = 4;
+const int kComprehensiveProfileGraphProtocolVersion = 5;
 
 /// First Debrify release whose RECEIVER speaks [kProtoVersion] 2, quoted to
 /// the user when a send is refused. v2 landed after 0.8.1-alpha.1 shipped, so
@@ -185,7 +188,8 @@ class ConfigCommand {
   // from an Admin phone. Applied atomically through the same
   // restoreDeviceGraph path a file restore uses — it never joins the staged
   // per-command import, and it supersedes the piecemeal send when chosen.
-  // v2-only by construction (rides the sealed chunked transport).
+  // v5 receiver capability required: older receivers can authenticate this
+  // command but do not understand every field in today's complete graph.
   static const String profileGraph = 'profile_graph';
   // Receiver → sender: the real outcome of a profile-graph transfer
   // (delivered is not applied — the TV user confirms, authorization can
@@ -234,12 +238,18 @@ const int kChunkNeedMaxIndices = 100;
 /// How long a sender keeps a finished transfer's chunks for repair.
 const Duration kChunkResendCacheTtl = Duration(seconds: 90);
 
-/// Largest profile-graph payload a sender will put on the wire. The
-/// receiver's chunk reassembly buffer caps at 16 MB and holds the sealed
-/// blob as base64 (x4/3), so ~11.9 MB of plaintext is the true ceiling —
-/// 10 MB leaves headroom. A graph over budget is re-exported without its
-/// library database snapshots (catalogs rebuild from their sources).
+/// Largest profile-graph payload a sender will put on the wire. The receiver's
+/// chunk reassembly buffer caps at 16 MB and holds the sealed blob as base64
+/// (x4/3), so 10 MB leaves transport headroom.
 const int kMaxProfileGraphWireBytes = 10 * 1024 * 1024;
+
+/// Maximum JSON bytes after an authenticated profile-graph gzip wrapper is
+/// expanded. File backups may use the package format's much larger envelope,
+/// but a low-memory TV must hold the reassembled ciphertext, compressed bytes,
+/// expanded UTF-8, parsed JSON, and restored attachments at the same time.
+/// Keep Remote expansion graph-sized; oversized graphs retry after removing
+/// only named rebuildable caches, then fail rather than risking receiver OOM.
+const int kMaxProfileGraphExpandedBytes = 16 * 1024 * 1024;
 
 /// Authenticated package metadata used to correlate a profile-graph result
 /// with the exact send attempt that caused it.
