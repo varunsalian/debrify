@@ -14,6 +14,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
 import '../services/resume_write_guard.dart';
 import '../models/profiles/profile_policy.dart';
@@ -273,6 +274,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final int? contentSeason;
   final int? contentEpisode;
   final String? contentTitle; // Clean display name (IMDB title)
+  final PlaybackResumePolicy resumePolicy;
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
@@ -354,6 +356,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.contentSeason,
     this.contentEpisode,
     this.contentTitle,
+    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
     this.iptvChannels,
     this.iptvStartIndex,
     this.iptvCategories,
@@ -11318,82 +11321,95 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
           if (currentEpisode.seriesInfo.season != null &&
               currentEpisode.seriesInfo.episode != null) {
-            // Only restore position for the exact same episode
-            final playbackState = await StorageService.getSeriesPlaybackState(
+            // Catalog series follow IMDb + S/E across release-title aliases;
+            // generic packs keep their exact title-keyed record.
+            return LocalPlaybackResumeResolver.episode(
               seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
               season: currentEpisode.seriesInfo.season!,
               episode: currentEpisode.seriesInfo.episode!,
+              imdbId: seriesPlaylist.imdbId ?? _effectiveContentImdbId,
+              policy: widget.resumePolicy,
             );
-
-            return playbackState;
           }
         }
-      } else {
-        // For non-series content, check if we have a playlist
-        if (_activePlaylist != null && _activePlaylist!.isNotEmpty) {
-          PlaylistEntry? currentEntry;
-          if (_currentIndex >= 0 && _currentIndex < _activePlaylist!.length) {
-            currentEntry = _activePlaylist![_currentIndex];
-          }
+      }
 
-          if (currentEntry != null) {
-            final resumeId = _resumeIdForEntry(currentEntry);
-            debugPrint('Resume Load: fetching state for resumeId=$resumeId');
-            final videoState = await StorageService.getVideoPlaybackState(
-              videoTitle: resumeId,
-            );
-            if (videoState != null) {
-              debugPrint(
-                'Resume Load: found state for resumeId=$resumeId updatedAt=${videoState['updatedAt']}',
-              );
-              return videoState;
-            }
-          }
+      PlaylistEntry? currentEntry;
+      final activePlaylist = _activePlaylist;
+      if (activePlaylist != null &&
+          _currentIndex >= 0 &&
+          _currentIndex < activePlaylist.length) {
+        currentEntry = activePlaylist[_currentIndex];
+      }
+
+      // A lone series stream has no SeriesPlaylist, but its catalog S/E is
+      // authoritative. Prefer the canonical episode record for catalog play;
+      // generic playback retains its exact video/source lookup first.
+      if (_effectiveContentType == 'series') {
+        if (widget.resumePolicy == PlaybackResumePolicy.sourceSpecific &&
+            currentEntry != null) {
+          final exactVideo = await StorageService.getVideoPlaybackState(
+            videoTitle: _resumeIdForEntry(currentEntry),
+          );
+          if (exactVideo != null) return exactVideo;
         }
 
-        // Single video file (no playlist): if it's a series episode (e.g. a
-        // direct-link/addon stream, or Quick Play next episode), the position
-        // was saved under the season/episode-keyed series store, not here.
-        if (_effectiveContentType == 'series' &&
-            _effectiveContentSeason != null &&
+        if (_effectiveContentSeason != null &&
             _effectiveContentEpisode != null) {
-          final seriesState = await StorageService.getSeriesPlaybackState(
+          final episodeState = await LocalPlaybackResumeResolver.episode(
             seriesTitle: _effectiveContentTitle ?? widget.title,
             season: _effectiveContentSeason!,
             episode: _effectiveContentEpisode!,
+            imdbId: _effectiveContentImdbId,
+            policy: widget.resumePolicy,
           );
-          if (seriesState != null) {
-            return seriesState;
-          }
+          if (episodeState != null) return episodeState;
         }
 
-        // A direct-link/addon movie stream's title varies per search (quality
-        // tag, mirror, reordered results), so the title-keyed lookup below can
-        // miss even though it's the same movie. Prefer the stable
-        // imdbId-keyed record when one exists.
-        final movieImdbId = _effectiveContentImdbId;
-        if (_effectiveContentType != 'series' &&
-            movieImdbId != null &&
-            movieImdbId.isNotEmpty) {
-          final byImdbId = await StorageService.getVideoPlaybackStateByImdbId(
-            movieImdbId,
+        // Legacy single-episode launches may only have the mirrored video row.
+        if (currentEntry != null) {
+          return StorageService.getVideoPlaybackState(
+            videoTitle: _resumeIdForEntry(currentEntry),
           );
-          if (byImdbId != null) {
-            return byImdbId;
-          }
         }
-
-        // Fallback to collection-based state (legacy behavior)
-        final videoTitle = widget.title.isNotEmpty
+        final legacyTitle = widget.title.isNotEmpty
             ? widget.title
             : 'Unknown Video';
-
-        final videoState = await StorageService.getVideoPlaybackState(
-          videoTitle: videoTitle,
-        );
-
-        return videoState;
+        return StorageService.getVideoPlaybackState(videoTitle: legacyTitle);
       }
+
+      final resumeId = currentEntry != null
+          ? _resumeIdForEntry(currentEntry)
+          : ((_currentStremioTvContentTitle ?? widget.title).isNotEmpty
+                ? (_currentStremioTvContentTitle ?? widget.title)
+                : 'Unknown Video');
+      // A multi-file movie/collection must keep an existing per-file bookmark
+      // ahead of the one catalog IMDb bookmark. ExoPlayer already restricts
+      // canonical movie resume to `_PlaybackContentType.single`; mirror that
+      // boundary here while retaining the legacy IMDb fallback for unseen files.
+      final isSingleLogicalMovie =
+          activePlaylist == null || activePlaylist.length <= 1;
+      final moviePolicy =
+          widget.resumePolicy == PlaybackResumePolicy.catalogCanonical &&
+              isSingleLogicalMovie
+          ? PlaybackResumePolicy.catalogCanonical
+          : PlaybackResumePolicy.sourceSpecific;
+      debugPrint(
+        'Resume Load: fetching state for resumeId=$resumeId '
+        'policy=${moviePolicy.name}',
+      );
+      final videoState = await LocalPlaybackResumeResolver.movie(
+        resumeId: resumeId,
+        imdbId: _effectiveContentImdbId,
+        policy: moviePolicy,
+      );
+      if (videoState != null) {
+        debugPrint(
+          'Resume Load: found state for resumeId=$resumeId '
+          'updatedAt=${videoState['updatedAt']}',
+        );
+      }
+      return videoState;
     } catch (e) {}
     return null;
   }

@@ -50,6 +50,8 @@ class DebrifyTvZipImportedChannel {
 }
 
 class DebrifyTvZipImporter {
+  static const int maxPortableFileBytes = 100 * 1024 * 1024;
+
   static DebrifyTvZipImportResult parseZip(Uint8List zipBytes) {
     final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
     final channels = <DebrifyTvZipImportedChannel>[];
@@ -64,10 +66,7 @@ class DebrifyTvZipImporter {
         continue;
       }
       try {
-        final contentBytes = file.content is List<int>
-            ? (file.content as List<int>)
-            : (file.content as Uint8List).toList();
-        final content = utf8.decode(contentBytes);
+        final content = utf8.decode(file.content);
         final channel = _parseChannelYaml(fileName, content);
         channels.add(channel);
       } catch (error) {

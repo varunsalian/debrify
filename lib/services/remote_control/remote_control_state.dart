@@ -12,6 +12,7 @@ import 'remote_constants.dart';
 import 'remote_command_router.dart';
 import 'remote_pairing_store.dart';
 import 'remote_session.dart';
+import 'remote_transfer_diagnostics.dart';
 import 'udp_discovery_service.dart';
 import 'udp_command_service.dart';
 
@@ -499,6 +500,7 @@ class RemoteControlState extends ChangeNotifier {
           ? deviceName!.trim()
           : trimmed,
       ip: trimmed,
+      protocolVersionKnown: false,
     );
     await connectToDevice(device);
   }
@@ -984,7 +986,18 @@ class RemoteControlState extends ChangeNotifier {
         command == ConfigCommand.profileGraphResult) {
       if (data != null && context.encrypted && context.authorized) {
         final result = parseProfileGraphResultBody(data);
-        if (result != null) profileGraphResults.add(result);
+        if (result != null) {
+          RemoteTransferDiagnostics.record(
+            'sender_result_packet_opened',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(result.requestId),
+              'ok': result.ok,
+            },
+          );
+          profileGraphResults.add(result);
+        } else {
+          RemoteTransferDiagnostics.record('sender_result_packet_malformed');
+        }
       }
       return;
     }
@@ -1143,6 +1156,15 @@ class RemoteControlState extends ChangeNotifier {
       _sessionByIp[ip] = established;
       _sessionPeers[established.sidB64] = (ip: ip, port: port);
       _pendingHandshakes.remove(established.sidB64)?.complete(established);
+      final connected = _connectedDevice;
+      if (connected != null &&
+          connected.ip == ip &&
+          (!connected.protocolVersionKnown ||
+              connected.protoVersion != established.peerProtocolVersion)) {
+        _connectedDevice = connected.withProtocolVersion(
+          established.peerProtocolVersion,
+        );
+      }
       notifyListeners();
     }
   }

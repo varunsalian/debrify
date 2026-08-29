@@ -14,17 +14,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The TV rail's contract after the utility move: Search, Add channel,
-/// Import and Settings sit in an icon row pinned directly under Quick Play —
+/// Import, Export and Settings sit in an icon row pinned under Quick Play —
 /// reachable in one DOWN from the top, never behind the channel list.
 void main() {
   testWidgets('TV utilities are one DOWN from Quick Play, ahead of the list', (
     tester,
   ) async {
     var settingsOpened = false;
+    var exportOpened = false;
     final watched = <String>[];
     final entry = await _pumpTv(
       tester,
       onSettings: () => settingsOpened = true,
+      onExport: () => exportOpened = true,
       onWatch: (channel) => watched.add(channel.id),
     );
 
@@ -38,12 +40,18 @@ void main() {
     await tester.pump();
     expect(find.text('Search'), findsOneWidget);
 
-    // RIGHT walks the icons to Settings; OK opens it — three presses where
-    // the old rail needed a walk past every channel.
+    // Export is a first-class DPAD action, immediately before Settings.
     for (var i = 0; i < 3; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
     }
+    expect(find.text('Export'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(exportOpened, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
     expect(find.text('Settings'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
@@ -133,6 +141,7 @@ void main() {
 Future<FocusNode> _pumpTv(
   WidgetTester tester, {
   VoidCallback? onSettings,
+  VoidCallback? onExport,
   ValueChanged<DebrifyTvChannel>? onWatch,
 }) async {
   PlatformUtil.debugSetAndroidTvCached(true);
@@ -175,6 +184,7 @@ Future<FocusNode> _pumpTv(
             onQuickPlay: _noop,
             onAdd: _noop,
             onImport: _noop,
+            onExport: onExport ?? _noop,
             onSettings: onSettings ?? _noop,
             onWatch: onWatch ?? _noopChannel,
             onEdit: _noopChannel,

@@ -50,6 +50,10 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   UserProfile? _pinTarget;
   bool _pinForManagement = false;
   bool _entered = false;
+
+  /// Guards the one retry [_load] gets when it fails before the gate has any
+  /// profiles to paint. Cleared on every success.
+  bool _retriedLoad = false;
   late final ProfileLifecycleCoordinator? _lifecycle;
   late final ProfilePinService? _pins;
 
@@ -123,10 +127,33 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   }
 
   Future<void> _load({required bool allowSingleProfileAutoEnter}) async {
-    await ProfileGateStyle.warm();
-    await ProfileGateAlwaysAsk.warm();
-    final profiles = await ProfileBootstrap.registry.listProfiles();
+    final List<UserProfile> profiles;
+    try {
+      await ProfileGateStyle.warm();
+      await ProfileGateAlwaysAsk.warm();
+      profiles = await ProfileBootstrap.registry.listProfiles();
+    } catch (e) {
+      debugPrint('ProfileGate: profile load failed — $e');
+      // On the FIRST load there is no cached list to fall back on, so giving
+      // up here holds the gate on its spinner forever with nothing to retry —
+      // the dead screen this handling exists to prevent. Anything in the block
+      // above can throw transiently right after an authority hand-off (a
+      // preference bound to a scope that just moved, a registry read racing a
+      // retirement), so try once more before conceding. A later load failing
+      // is harmless: the previous list stays on screen.
+      if (_profiles == null && !_retriedLoad && mounted) {
+        _retriedLoad = true;
+        Future<void>.delayed(const Duration(milliseconds: 400), () {
+          if (!mounted) return;
+          unawaited(
+            _load(allowSingleProfileAutoEnter: allowSingleProfileAutoEnter),
+          );
+        });
+      }
+      return;
+    }
     if (!mounted) return;
+    _retriedLoad = false;
     setState(() {
       _profiles = profiles;
       _entered = shouldAutoEnterSoleProfile(
@@ -182,10 +209,31 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
 
   Future<void> _openPicker() async {
     if (!mounted || !_committed) return;
+    // Nothing may sit above the gate while it asks who is watching. A remote
+    // profile-graph import hands authority over, which remounts AppInitializer
+    // through the gate's epoch key — and the doomed instance's in-flight
+    // `_showOnboarding` can still push its route on top of the picker, which
+    // reads as a blank screen.
+    //
+    // Anchored on the gate's OWN route object so popUntil is certain to stop
+    // here. Popping by position instead (`isFirst`, or a canPop loop) over-
+    // pops: pop() only STARTS the exit animation and leaves the route in
+    // history, so the next check still sees it — and the gate removes itself,
+    // emptying the navigator.
+    final own = ModalRoute.of(context);
+    if (own != null && !own.isCurrent) {
+      Navigator.of(context).popUntil((route) => identical(route, own));
+    }
     setState(() {
       _pinTarget = null;
       _pinForManagement = false;
       _entered = false;
+      // The cached list is deliberately KEPT, even though an import can retire
+      // the profile it holds. Clearing it first means a `_load` failure below
+      // leaves `_profiles == null` with no retry, and build() renders nothing
+      // but a spinner forever — trading a stale tile for a dead screen. A
+      // stale tile is harmless: `_load` replaces it within a frame or two, and
+      // selecting a retired profile just fails the switch.
     });
     ProfileLockController.instance.lock();
     ProfileRemoteLease.instance.revoke();

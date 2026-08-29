@@ -1,15 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+
+import '../../utils/app_storage.dart';
 
 import 'remote_constants.dart';
 import 'remote_control_state.dart';
 import 'remote_pairing_store.dart';
 import 'remote_chunked_send.dart';
 import 'remote_session.dart';
+import 'remote_transfer_diagnostics.dart';
 import 'udp_command_service.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
@@ -43,6 +50,7 @@ import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
 import '../profiles/profile_authorization.dart';
 import '../profiles/profile_bootstrap.dart';
+import '../profiles/profile_database_snapshot.dart';
 import '../profiles/profile_avatar_ingest.dart';
 import '../profiles/profile_avatar_policy.dart';
 import '../profiles/portable_profile_package.dart';
@@ -50,7 +58,12 @@ import '../profiles/profile_app_lifecycle_participant.dart';
 import '../profiles/profile_lifecycle.dart';
 import '../profiles/native_profile_projection.dart';
 import '../profiles/profile_restore_coordinator.dart';
+import '../../models/profiles/connection_resource.dart';
+import '../../services/app_migration_service.dart';
+import '../profiles/connection_resource_service.dart';
 import '../profiles/device_key_provider.dart';
+import '../profiles/profile_cleanup_ledger.dart';
+import '../profiles/profile_data_generation.dart';
 import '../../services/backup_restore_service.dart';
 
 /// Callback type for remote command handlers
@@ -474,7 +487,44 @@ class RemoteCommandRouter {
       final startRequestId = command == ConfigCommand.remoteTransferStart
           ? parseRemoteTransferRequestBody(data)?.requestId
           : null;
-      if (action == RemoteAction.config && completeRequestId != null) {
+      final profileGraphRequestId = command == ConfigCommand.profileGraph
+          ? data == null
+                ? null
+                : await Isolate.run(() => _profileGraphRequestId(data))
+          : command == ConfigCommand.debrifyChannelStart &&
+                parseChunkResultCommand(data) == ConfigCommand.profileGraph
+          ? parseChunkResultRequestId(data)
+          : null;
+      if (action == RemoteAction.config &&
+          (command == ConfigCommand.profileGraph ||
+              (command == ConfigCommand.debrifyChannelStart &&
+                  parseChunkResultCommand(data) ==
+                      ConfigCommand.profileGraph))) {
+        RemoteTransferDiagnostics.record(
+          'receiver_graph_authorization_rejected',
+          fields: <String, Object?>{
+            'trace': RemoteTransferDiagnostics.traceToken(
+              profileGraphRequestId,
+            ),
+            'runtimeCommitted': runtimeCommitted,
+            'scopeCurrent': scopeCurrent,
+            'profilePresent': profilePresent,
+            'featureAllowed': featureAllowed,
+            'peerBound': peerBound,
+            'leaseAllowed': leaseAllowed,
+          },
+        );
+      }
+      if (action == RemoteAction.config && profileGraphRequestId != null) {
+        unawaited(
+          _reportProfileGraphResultBestEffort(
+            context,
+            requestId: profileGraphRequestId,
+            ok: false,
+            message: 'TV profile authorization is required',
+          ),
+        );
+      } else if (action == RemoteAction.config && completeRequestId != null) {
         unawaited(
           _reportCompleteTransferResultBestEffort(
             context,
@@ -1081,11 +1131,27 @@ class RemoteCommandRouter {
     required bool ok,
     required String message,
   }) async {
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
     final sidB64 = remoteContext.sidB64;
-    if (sidB64 == null) return false;
+    if (sidB64 == null) {
+      RemoteTransferDiagnostics.record(
+        'receiver_result_send_unavailable',
+        fields: <String, Object?>{'trace': trace, 'reason': 'missing_sid'},
+      );
+      return false;
+    }
     final state = RemoteControlState();
     final session = state.sessionManager?.sessionBySid(sidB64);
-    if (session == null || !session.authorized) return false;
+    if (session == null || !session.authorized) {
+      RemoteTransferDiagnostics.record(
+        'receiver_result_send_unavailable',
+        fields: <String, Object?>{
+          'trace': trace,
+          'reason': session == null ? 'missing_session' : 'unauthorized',
+        },
+      );
+      return false;
+    }
     var sent = false;
     for (var attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
@@ -1111,6 +1177,10 @@ class RemoteCommandRouter {
         // authorization race that rejected this one settles safely.
       }
     }
+    RemoteTransferDiagnostics.record(
+      'receiver_result_send_finished',
+      fields: <String, Object?>{'trace': trace, 'resultOk': ok, 'sent': sent},
+    );
     return sent;
   }
 
@@ -1269,10 +1339,18 @@ class RemoteCommandRouter {
     );
   }
 
-  String? _profileGraphRequestId(String data) {
+  static String? _profileGraphRequestId(String data) {
     try {
       final decoded = jsonDecode(data);
       if (decoded is! Map) return null;
+      if (decoded['format'] == 'debrify-profile-transport') {
+        final requestId = decoded['requestId'];
+        return requestId is String &&
+                requestId.isNotEmpty &&
+                requestId.length <= 128
+            ? requestId
+            : null;
+      }
       final omissions = decoded['omissions'];
       if (omissions is! Map) return null;
       final requestId = omissions[kProfileGraphRequestIdOmission];
@@ -1289,8 +1367,25 @@ class RemoteCommandRouter {
     String data,
     RemoteCommandContext remoteContext,
   ) async {
-    final requestId = _profileGraphRequestId(data);
+    // A graph may be ten megabytes. Correlation must not perform a full JSON
+    // parse on the TV's UI isolate before the package decoder gets its own
+    // worker-isolate pass below.
+    final requestId = await Isolate.run(() => _profileGraphRequestId(data));
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
+    RemoteTransferDiagnostics.record(
+      'receiver_graph_arrived',
+      fields: <String, Object?>{
+        'trace': trace,
+        'characters': data.length,
+        'encrypted': remoteContext.encrypted,
+        'authorized': remoteContext.authorized,
+      },
+    );
     if (!remoteContext.encrypted || !remoteContext.authorized) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_session_rejected',
+        fields: <String, Object?>{'trace': trace},
+      );
       debugPrint(
         'RemoteCommandRouter: profile graph requires an authorized session',
       );
@@ -1299,6 +1394,10 @@ class RemoteCommandRouter {
     // One import at a time: a phone re-sending while the confirm dialog is
     // still up must not stack a second dialog and duplicate the whole graph.
     if (_profileGraphInFlight) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_already_in_flight',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar('A profile import is already in progress', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
@@ -1315,6 +1414,15 @@ class RemoteCommandRouter {
         remoteContext,
         requestId: requestId,
       );
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_unhandled_exception',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+        },
+      );
+      rethrow;
     } finally {
       _profileGraphInFlight = false;
     }
@@ -1327,7 +1435,12 @@ class RemoteCommandRouter {
     RemoteCommandContext remoteContext, {
     required String? requestId,
   }) async {
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_profiles_unavailable',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar(
         'Profiles are not set up on this device yet — finish setup first',
         isError: true,
@@ -1341,14 +1454,30 @@ class RemoteCommandRouter {
       return;
     }
     final PortableProfilePackage package;
+    final decodeWatch = Stopwatch()..start();
+    RemoteTransferDiagnostics.record(
+      'receiver_decode_start',
+      fields: <String, Object?>{'trace': trace, 'characters': data.length},
+    );
     try {
       // Off-main: a 10 MB parse + digest would freeze TV hardware for
       // seconds on the UI isolate.
-      package = await PortableProfilePackage.decodeAuthenticatedJson(data);
+      package = await PortableProfilePackage.decodeAuthenticatedJson(
+        data,
+        maxExpandedPayloadBytes: kMaxProfileGraphExpandedBytes,
+      );
       if (package.mode != 'deviceGraph') {
         throw const FormatException('Not a profile graph package');
       }
     } on FormatException catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_decode_rejected',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+          'elapsedMs': decodeWatch.elapsedMilliseconds,
+        },
+      );
       _showSnackBar(
         'Profile transfer rejected: ${error.message}',
         isError: true,
@@ -1360,13 +1489,40 @@ class RemoteCommandRouter {
         message: 'The TV rejected the package: ${error.message}',
       );
       return;
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_decode_exception',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+          'elapsedMs': decodeWatch.elapsedMilliseconds,
+        },
+      );
+      rethrow;
     }
+    RemoteTransferDiagnostics.record(
+      'receiver_decode_complete',
+      fields: <String, Object?>{
+        'trace': trace,
+        'profiles': package.profiles.length,
+        'resources': package.resources.length,
+        'sections': package.sections.length,
+        'elapsedMs': decodeWatch.elapsedMilliseconds,
+      },
+    );
     final registry = ProfileBootstrap.registry;
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final UserProfile actor;
     try {
       actor = await authorization.validate(registry);
-    } catch (_) {
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_authorization_expired',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+        },
+      );
       _showSnackBar('Profile import authorization expired', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
@@ -1379,6 +1535,10 @@ class RemoteCommandRouter {
     if (actor.role != UserProfileRole.admin ||
         !actor.allows(ProfileFeature.manageProfiles) ||
         !actor.allows(ProfileFeature.backupRestore)) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_admin_required',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar(
         'Switch this TV to an Admin profile to receive profiles',
         isError: true,
@@ -1395,6 +1555,10 @@ class RemoteCommandRouter {
         !(await StorageService.isInitialSetupComplete());
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_screen_unavailable',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar('Profile import needs the app screen open', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
@@ -1406,8 +1570,22 @@ class RemoteCommandRouter {
     }
     final sender =
         remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
-    final librariesOmitted =
-        package.omissions['libraryDatabasesOmitted'] == true;
+    final rebuildableCachesOmitted = package.omissions.containsKey(
+      'rebuildableDatabaseCachesOmitted',
+    );
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
+      package.omissions,
+    );
+    RemoteTransferDiagnostics.record(
+      'receiver_confirmation_shown',
+      fields: <String, Object?>{
+        'trace': trace,
+        'profiles': package.profiles.length,
+        'cacheCompacted': rebuildableCachesOmitted,
+        'debrifyTvChannelsOmitted': debrifyTvOmission?.channels ?? 0,
+        'debrifyTvHashesOmitted': debrifyTvOmission?.savedHashes ?? 0,
+      },
+    );
     final confirmed =
         await showDialog<bool>(
           context: context,
@@ -1418,11 +1596,20 @@ class RemoteCommandRouter {
               'From: $sender\n\n'
               'The profiles and their shared connections are staged under '
               'new IDs, then made visible together. Existing profiles are '
-              'not overwritten. Profiles keep their PINs when the transfer '
+              'not overwritten; only the unused automatic setup profile is '
+              'removed. Profiles keep their PINs when the transfer '
               'carries them.'
-              '${librariesOmitted ? '\n\nLarge library databases were left '
-                        'out of this transfer; catalogs rebuild from their '
-                        'sources.' : ''}',
+              '${debrifyTvOmission?.isEmpty == false ? '\n\nDebrify TV was '
+                        'excluded when this transfer was compacted '
+                        '(${debrifyTvOmission!.contentsLabel}). No empty '
+                        'channels will be created. After importing, restore '
+                        'a channel ZIP from Debrify TV → Import → From '
+                        'storage, or send them separately with Remote → '
+                        'Debrify TV Channels.' : ''}'
+              '${rebuildableCachesOmitted ? '\n\nRebuildable catalog and EPG '
+                        'caches were compacted for transport. Playlists, '
+                        'favorites, history, numbering, and settings are '
+                        'included.' : ''}',
             ),
             actions: <Widget>[
               TextButton(
@@ -1439,6 +1626,10 @@ class RemoteCommandRouter {
         ) ??
         false;
     if (!confirmed) {
+      RemoteTransferDiagnostics.record(
+        'receiver_confirmation_declined',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar('Profile import declined');
       await _reportProfileGraphResult(
         remoteContext,
@@ -1448,6 +1639,10 @@ class RemoteCommandRouter {
       );
       return;
     }
+    RemoteTransferDiagnostics.record(
+      'receiver_confirmation_accepted',
+      fields: <String, Object?>{'trace': trace},
+    );
     // Busy dialog while the restore stages and verifies. Self-dismissing via
     // its own context — the router must never pop someone else's route.
     final done = ValueNotifier<bool>(false);
@@ -1463,6 +1658,11 @@ class RemoteCommandRouter {
     }
     try {
       final ProfileGraphRestoreReport report;
+      final restoreWatch = Stopwatch()..start();
+      RemoteTransferDiagnostics.record(
+        'receiver_restore_start',
+        fields: <String, Object?>{'trace': trace},
+      );
       try {
         report = await ProfileRestoreCoordinator(
           registry: registry,
@@ -1471,7 +1671,15 @@ class RemoteCommandRouter {
             ProfileAppLifecycleParticipant(),
           ],
         ).restoreDeviceGraph(package: package, authorization: authorization);
-      } catch (_) {
+      } catch (error) {
+        RemoteTransferDiagnostics.record(
+          'receiver_restore_exception',
+          fields: <String, Object?>{
+            'trace': trace,
+            'errorType': error.runtimeType,
+            'elapsedMs': restoreWatch.elapsedMilliseconds,
+          },
+        );
         debugPrint('RemoteCommandRouter: profile graph restore failed');
         _showSnackBar(
           'Profile import failed; existing data is unchanged',
@@ -1485,6 +1693,16 @@ class RemoteCommandRouter {
         );
         return;
       }
+      RemoteTransferDiagnostics.record(
+        'receiver_restore_complete',
+        fields: <String, Object?>{
+          'trace': trace,
+          'profiles': report.profilesImported,
+          'resources': report.resourcesImported,
+          'pinResets': report.pinResetsRequired,
+          'elapsedMs': restoreWatch.elapsedMilliseconds,
+        },
+      );
 
       // The restore is durable at this point. A result-send or onboarding
       // hand-off failure must never fall through to the restore-failed path
@@ -1497,9 +1715,14 @@ class RemoteCommandRouter {
         ok: true,
         message:
             'TV imported ${report.profilesImported} profiles and '
-            '${report.resourcesImported} connections',
+            '${report.resourcesImported} connections'
+            '${debrifyTvOmission?.isEmpty == false ? '; Debrify TV channels were not included' : ''}',
       );
       if (!acknowledged) {
+        RemoteTransferDiagnostics.record(
+          'receiver_restore_ack_missing',
+          fields: <String, Object?>{'trace': trace},
+        );
         debugPrint(
           'RemoteCommandRouter: imported profiles but could not report the result',
         );
@@ -1507,23 +1730,51 @@ class RemoteCommandRouter {
 
       if (receivingDuringOnboarding &&
           actor.id == ProfileBootstrap.freshAdminId) {
-        await _activateImportedAdminForOnboarding(report);
+        // Retire onboarding BEFORE handing authority over. The hand-off makes
+        // this a multi-profile device, so ProfileGate immediately locks the
+        // newly active profile — and a locked profile cannot make the
+        // active-session write that clears onboarding (the registry refuses
+        // it: "Active profile session has ended"). Doing it here, while the
+        // bootstrap Admin is still active and unlocked, is the only moment
+        // this write is legal.
+        try {
+          await StorageService.setInitialSetupComplete(true);
+        } catch (e) {
+          debugPrint(
+            'RemoteCommandRouter: could not pre-clear onboarding — $e',
+          );
+        }
+        await handoffImportedAdminForOnboarding(report);
       }
       _showSnackBar(
         'Imported ${report.profilesImported} profiles and '
         '${report.resourcesImported} connections from $sender.'
-        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}',
+        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}'
+        '${debrifyTvOmission?.isEmpty == false ? ' Debrify TV channels were not included; import a channel ZIP or send them separately from Remote.' : ''}',
       );
       if (receivingDuringOnboarding) {
         try {
           _notifyHandlers(RemoteAction.config, ConfigCommand.complete, null);
-          await _handleConfigComplete(wasOnboardingOverride: true);
-        } catch (_) {
+          // Re-pinned for the same reason as the retirement above: the
+          // onboarding flag and the privacy projection must be written for the
+          // profile the runtime actually published, not the stale captured one.
+          final live = ProfileRuntime.scope.value;
+          await (live == null
+              ? _handleConfigComplete(wasOnboardingOverride: true)
+              : ProfileRuntime.withCapturedScope(
+                  live,
+                  () => _handleConfigComplete(wasOnboardingOverride: true),
+                ));
+        } catch (e, stack) {
           // The graph is already published and the sender has its success
           // result. Never turn a post-import navigation failure into a second,
-          // contradictory "nothing changed" result.
+          // contradictory "nothing changed" result. Log the cause: a silent
+          // throw here strands the user on the onboarding screen with a fully
+          // imported device behind it, which is indistinguishable from the
+          // restart never being wired up.
           debugPrint(
-            'RemoteCommandRouter: imported profiles but could not leave onboarding',
+            'RemoteCommandRouter: imported profiles but could not leave '
+            'onboarding — $e\n$stack',
           );
         }
       }
@@ -1532,10 +1783,15 @@ class RemoteCommandRouter {
     }
   }
 
-  /// Move authority to an imported usable Admin after an onboarding restore.
-  /// The existing setup profile is deliberately retained: users may have
-  /// configured services before navigating back to import, so setup-incomplete
-  /// is not proof that the profile (or its private files) is disposable.
+  /// Move authority to an imported usable Admin after an onboarding restore,
+  /// then retire the bootstrap setup profile it replaced.
+  ///
+  /// The setup profile used to be retained unconditionally, because a user may
+  /// have configured services before navigating back to import and
+  /// setup-incomplete is not proof the profile is disposable. That concern is
+  /// now enforced precisely rather than by blanket retention — see
+  /// [_retireBootstrapProfileAfterImport], which only removes a profile that
+  /// owns nothing.
   Future<void> _activateImportedAdminForOnboarding(
     ProfileGraphRestoreReport report,
   ) async {
@@ -1552,7 +1808,15 @@ class RemoteCommandRouter {
       importedAdmin = profile;
       break;
     }
-    if (importedAdmin == null) return;
+    if (importedAdmin == null) {
+      // Nothing in the graph can take authority (disabled, non-Admin, or every
+      // Admin needs a new PIN). The bootstrap Admin stays active and owns the
+      // device — and is therefore never retired below.
+      debugPrint(
+        'RemoteCommandRouter: no usable imported Admin to hand off to',
+      );
+      return;
+    }
 
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
@@ -1570,19 +1834,410 @@ class RemoteCommandRouter {
     } catch (_) {
       // Publication already succeeded. Keep the bootstrap Admin active so the
       // restored profiles stay manageable instead of claiming the import did
-      // not happen and encouraging a duplicate graph.
+      // not happen and encouraging a duplicate graph. NOTE: switchTo can also
+      // throw AFTER its registry commit (a participant warm failure), in which
+      // case the imported Admin IS authoritative despite the throw — which is
+      // why the retire gate below asks the registry who is active instead of
+      // trusting a success flag here.
       debugPrint(
         'RemoteCommandRouter: onboarding profile hand-off was deferred',
       );
     } finally {
       lifecycle.dispose();
     }
+    // Only ever retire after a hand-off that actually landed: a bootstrap
+    // Admin still active is the sole way into the device. The registry is the
+    // authority on that — not the switchTo return path (see above).
+    final activeAfterHandoff = (await registry.activeProfile())?.id;
+    if (activeAfterHandoff != importedAdmin.id) {
+      debugPrint(
+        'RemoteCommandRouter: hand-off did not land; '
+        'keeping the bootstrap setup profile',
+      );
+      return;
+    }
+    // This handler was entered under the PRE-hand-off scope, and
+    // ProfileRuntime.capture() prefers an inherited zone value over the live
+    // one — so everything below would otherwise still act as the bootstrap
+    // Admin we are trying to retire. Re-pin to what the runtime actually
+    // published so the acting profile matches the registry.
+    final live = ProfileRuntime.scope.value;
+    if (live == null) return;
+    await ProfileRuntime.withCapturedScope(
+      live,
+      () => _retireBootstrapProfileAfterImport(report.importedProfileIds),
+    );
+  }
+
+  /// Hands an onboarding restore to an imported usable Admin and conditionally
+  /// retires the bootstrap profile. The caller must persist onboarding
+  /// completion before invoking this method because switching profiles ends
+  /// the authorizing bootstrap session.
+  Future<void> handoffImportedAdminForOnboarding(
+    ProfileGraphRestoreReport report,
+  ) async {
+    final activeProfileId =
+        (await ProfileBootstrap.registry.activeProfile())?.id;
+    if (activeProfileId != ProfileBootstrap.freshAdminId) {
+      debugPrint(
+        'RemoteCommandRouter: skipped onboarding profile hand-off because '
+        'the bootstrap Admin is not active',
+      );
+      return;
+    }
+    await _activateImportedAdminForOnboarding(report);
+  }
+
+  /// Remove the bootstrap setup profile once an imported Admin owns the device.
+  ///
+  /// A profile the user actually configured before importing survives; only an
+  /// untouched one is removed. That is the same protection the old
+  /// unconditional retention provided, without keeping an empty "Profile 1"
+  /// around forever. "Untouched" is decided in layers — identity first (a PIN
+  /// or a rename proves the profile was somebody's, since ProfileResetService
+  /// can send an established profile back into onboarding with both intact),
+  /// then data:
+  ///
+  /// - Owned connections veto the delete — with ONE carve-out. On an online
+  ///   first launch, AppMigrationService seeds the essential addons before
+  ///   onboarding even starts, and each becomes a `stremioAddon` connection
+  ///   resource owned by the bootstrap Admin — no user action involved. If
+  ///   every owned connection is exactly such a seed (matched by unsealed
+  ///   manifest URL against the essential set), they are deleted along with
+  ///   the profile; anything else — a debrid account, a user-added addon —
+  ///   keeps the veto. Without the carve-out virtually every real device
+  ///   would retain the profile, since import implies being online.
+  /// - Private generation files veto it ([_bootstrapProfileHasPrivateData]).
+  /// - `detachPublicArtifacts: false` lets the registry refuse over public
+  ///   files, and its other invariants (active profile, admin floor, shared
+  ///   grants, live jobs) all still throw into the catch below.
+  ///
+  /// The registry checks cannot see PRIVATE generation files — search engines
+  /// imported during local onboarding are YAMLs in the profile's scoped
+  /// documents tree, not connection resources — so any file there also counts
+  /// as "configured" and vetoes the delete ([_bootstrapProfileHasPrivateData]).
+  ///
+  /// Mirrors the delete sequence in ProfileRowActions — schedule, delete,
+  /// erase data, complete — so a crash mid-way cannot strand generation data.
+  /// A stranded schedule is self-cancelling: [ProfileCleanupLedger.resume]
+  /// drops any pending entry whose profile still exists.
+  Future<void> _retireBootstrapProfileAfterImport(
+    List<String> importedProfileIds,
+  ) async {
+    final registry = ProfileBootstrap.registry;
+    try {
+      final bootstrap = await registry.getProfile(
+        ProfileBootstrap.freshAdminId,
+      );
+      if (bootstrap == null) return;
+      // Re-read authority from the runtime rather than trusting the switch:
+      // deleteProfileWithDisposition compares the acting revision and session
+      // epoch exactly, and refuses to delete the ACTIVE profile anyway.
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      if (actor.profileId == ProfileBootstrap.freshAdminId) {
+        // The registry committed the hand-off but the in-process runtime scope
+        // has not caught up, so this session still acts AS the profile we are
+        // about to delete — which the registry would refuse anyway.
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after import '
+          '(runtime scope is still ${actor.profileId})',
+        );
+        return;
+      }
+      // The bootstrap ID alone does not prove a factory profile:
+      // ProfileResetService sends an ESTABLISHED profile back into onboarding
+      // with its identity, PIN, policy, and connections intact. Connections
+      // and private files are vetoed below; of the rest, a PIN is the one
+      // identity marker whose silent loss hurts — and no factory bootstrap
+      // ever has one — so it is the cheap "was this ever somebody's profile"
+      // test. A reset profile without a PIN is an empty husk its owner chose
+      // to replace; retiring it is the point of this method.
+      if (bootstrap.hasPin) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it is PIN-protected)',
+        );
+        return;
+      }
+      // Same reasoning for a rename: the factory scaffold is always created
+      // as [ProfileBootstrap.freshAdminName], so any other stored name was
+      // chosen by a person — an established profile back in onboarding via
+      // reset, not a disposable husk.
+      if (bootstrap.name != ProfileBootstrap.freshAdminName) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it was renamed)',
+        );
+        return;
+      }
+      // ProfileResetService also preserves presentation and policy. An avatar
+      // is the customization a user would actually miss; a policy differing
+      // from the role's defaults is a deliberate choice. Either proves the row
+      // was somebody's, even with the factory name and no PIN. Deliberately
+      // NOT an exhaustive field sweep — that would silently absorb every
+      // future field and veto far more than it protects.
+      // ProfilePolicy has no value equality, so compare the feature SET —
+      // `policy != defaultsFor(role)` would compare identities, always differ,
+      // and silently veto every retirement.
+      final defaultPolicy = ProfilePolicy.defaultsFor(bootstrap.role);
+      final policyCustomized = !const SetEquality<ProfileFeature>().equals(
+        bootstrap.policy.enabled,
+        defaultPolicy.enabled,
+      );
+      if (bootstrap.avatarKey != null || policyCustomized) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it carries customized profile settings)',
+        );
+        return;
+      }
+      if (await _bootstrapProfileHasPrivateData()) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it has private files)',
+        );
+        return;
+      }
+      final allResources = await registry.listAllResources();
+      // INCLUDING disabled rows: listAllResources hides them, but the
+      // delete-time owned-resource count does not — so reading the enabled set
+      // here would classify a profile owning a disabled debrid credential as
+      // "only disposable seeds" and then delete that credential unseen.
+      final ownedResources = await registry.listOwnedResourcesIncludingDisabled(
+        bootstrap.id,
+      );
+      // Anything the user configured keeps the profile. Only untouched
+      // essential-addon seeds are disposable — and then they must be, or the
+      // registry's owned-resource check would veto the delete instead.
+      final seedUrls = ownedResources.isEmpty
+          ? const <String>{}
+          : await _ownedSeededAddonUrls(actor, ownedResources);
+      if (seedUrls == null) {
+        debugPrint(
+          'RemoteCommandRouter: kept the bootstrap setup profile after '
+          'import (it has configured connections)',
+        );
+        return;
+      }
+      // Seed addons are auto-granted to every profile, and only
+      // freshAdminId/migratedAdminId are ever re-seeded — so a LOCAL profile
+      // that predates this import (a member created before the admin was
+      // reset) would lose these addons permanently if they were deleted.
+      // Grants held by anyone outside this import veto the retirement;
+      // grants held by the freshly imported profiles do not — they carry the
+      // sender's own addons and lose nothing real.
+      if (ownedResources.isNotEmpty) {
+        final ownedIds = ownedResources.map((resource) => resource.id).toSet();
+        final expectedBorrowers = <String>{bootstrap.id, ...importedProfileIds};
+        final hasOutsideBorrower = (await registry.listAllResourceGrants()).any(
+          (grant) =>
+              ownedIds.contains(grant['resource_id']) &&
+              !expectedBorrowers.contains(grant['profile_id']),
+        );
+        if (hasOutsideBorrower) {
+          debugPrint(
+            'RemoteCommandRouter: kept the bootstrap setup profile after '
+            'import (its addons are shared with other local profiles)',
+          );
+          return;
+        }
+      }
+      // Deleting a seed is only safe when the imported graph brought its own
+      // copy: only freshAdminId/migratedAdminId are ever re-seeded, so a seed
+      // deleted here is gone from the device for good. A sender on an older
+      // build can predate one of the current essentials (the essential set
+      // grows over time) — its graph then lacks that addon, and this veto
+      // keeps the bootstrap so the imported profiles keep borrowing the
+      // device's only copy. Fires BEFORE the revocation on purpose.
+      if (seedUrls.isNotEmpty) {
+        final uncovered = await _seedUrlsMissingFromImport(
+          actor,
+          allResources: allResources,
+          importedProfileIds: importedProfileIds,
+          seedUrls: seedUrls,
+        );
+        if (uncovered.isNotEmpty) {
+          debugPrint(
+            'RemoteCommandRouter: kept the bootstrap setup profile after '
+            'import (the import lacks essential addons: '
+            '${uncovered.join(', ')})',
+          );
+          return;
+        }
+      }
+      var deleteActor = actor;
+      if (ownedResources.isNotEmpty) {
+        // Seeded resources are auto-granted to every profile — including the
+        // freshly imported ones — and the delete-time shared==0 guard refuses
+        // while any borrower grant stands. Strip them first. The revocation
+        // bumps every borrower's authorization revision, the acting Admin's
+        // own included (it borrows the seeds like everyone else), so the
+        // delete below must run on a re-captured context.
+        //
+        // Accepted residual (reviewed, not worth an atomic disposition): if a
+        // later step still fails, borrowers have lost their grants to seeds
+        // that were about to be deleted anyway — the imported profiles carry
+        // the sender's own addons — and the kept husk stays deletable from
+        // Manage profiles.
+        await registry.revokeGrantsOnOwnedResources(
+          ownerProfileId: bootstrap.id,
+          actingProfileId: actor.profileId,
+          actingAuthorizationRevision: actor.authorizationRevision,
+          actingSessionEpoch: actor.sessionEpoch,
+        );
+        deleteActor = await ProfileAuthorizationContext.capture(registry);
+      }
+
+      await ProfileCleanupLedger.scheduleProfile(bootstrap.id);
+      await registry.deleteProfileWithDisposition(
+        id: bootstrap.id,
+        deleteOwnedResources: ownedResources.isNotEmpty,
+        detachPublicArtifacts: false,
+        actingProfileId: deleteActor.profileId,
+        actingAuthorizationRevision: deleteActor.authorizationRevision,
+        actingSessionEpoch: deleteActor.sessionEpoch,
+      );
+      await ProfileDataGenerationManager.deleteAllProfileData(bootstrap.id);
+      await ProfileCleanupLedger.completeProfile(bootstrap.id);
+      debugPrint(
+        'RemoteCommandRouter: retired the bootstrap setup profile after import',
+      );
+    } catch (e) {
+      // Configured, busy, or otherwise undeletable — keeping it is always the
+      // safe outcome, and the user can still remove it from Manage profiles.
+      debugPrint(
+        'RemoteCommandRouter: kept the bootstrap setup profile after '
+        'import — $e',
+      );
+    }
+  }
+
+  static const Set<String> _essentialManifestUrls = <String>{
+    AppMigrationService.cinemetaManifestUrl,
+    AppMigrationService.openSubtitlesManifestUrl,
+    AppMigrationService.officialOpenSubtitlesManifestUrl,
+    AppMigrationService.watchNextManifestUrl,
+  };
+
+  /// The unsealed manifest URLs of [ownedResources] when EVERY resource is an
+  /// untouched essential-addon seed — type `stremioAddon`, manifest URL in the
+  /// set AppMigrationService seeds on first launch — or null when anything
+  /// else is present. Matching is by the exact URL: a user-added addon, even
+  /// one sharing a seeded addon's name, has a different URL and keeps the
+  /// retention veto. Any unseal failure (rotated key, disabled resource,
+  /// insufficient reveal authority) throws into the caller's catch, which
+  /// keeps the profile — always the safe outcome.
+  Future<Set<String>?> _ownedSeededAddonUrls(
+    ProfileAuthorizationContext actor,
+    List<ConnectionResource> ownedResources,
+  ) async {
+    if (ownedResources.any(
+      (resource) => resource.type != ConnectionResourceType.stremioAddon,
+    )) {
+      return null;
+    }
+    final resources = ConnectionResourceService(
+      registry: ProfileBootstrap.registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    final urls = <String>{};
+    for (final resource in ownedResources) {
+      final manifestUrl = await _unsealManifestUrl(
+        resources,
+        actor,
+        resource.id,
+      );
+      if (manifestUrl == null ||
+          !_essentialManifestUrls.contains(manifestUrl)) {
+        return null;
+      }
+      urls.add(manifestUrl);
+    }
+    return urls;
+  }
+
+  /// Which of [seedUrls] the imported graph did NOT bring its own copy of,
+  /// judged by the unsealed manifest URLs of the imported profiles' addon
+  /// resources. Disabled imported addons don't count as coverage on purpose
+  /// (listAllResources excludes them): an unusable copy is no substitute for
+  /// the seed being deleted, and over-keeping is the safe direction.
+  Future<Set<String>> _seedUrlsMissingFromImport(
+    ProfileAuthorizationContext actor, {
+    required List<ConnectionResource> allResources,
+    required List<String> importedProfileIds,
+    required Set<String> seedUrls,
+  }) async {
+    final importedIds = importedProfileIds.toSet();
+    final resources = ConnectionResourceService(
+      registry: ProfileBootstrap.registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    final missing = Set<String>.of(seedUrls);
+    for (final resource in allResources) {
+      if (missing.isEmpty) break;
+      if (resource.type != ConnectionResourceType.stremioAddon ||
+          !importedIds.contains(resource.ownerProfileId)) {
+        continue;
+      }
+      final manifestUrl = await _unsealManifestUrl(
+        resources,
+        actor,
+        resource.id,
+      );
+      if (manifestUrl != null) missing.remove(manifestUrl);
+    }
+    return missing;
+  }
+
+  static Future<String?> _unsealManifestUrl(
+    ConnectionResourceService resources,
+    ProfileAuthorizationContext actor,
+    String resourceId,
+  ) async {
+    final secret = await resources.revealSecretForDeviceBackup(
+      context: actor,
+      resourceId: resourceId,
+    );
+    return (secret['manifest_url'] ?? secret['manifestUrl'])?.toString();
+  }
+
+  /// Whether the bootstrap profile holds any private file — user work the
+  /// registry's resource/artifact checks cannot see (imported engine YAMLs,
+  /// exports, anything under its documents area, across every generation).
+  ///
+  /// Prefs are deliberately NOT a signal: activation warms and defaults
+  /// migrations stamp preferences on every profile unconditionally, so a
+  /// prefs check would veto the delete for everyone. Only documents files
+  /// require user action to exist. Empty directories don't count — the
+  /// scoped-documents helper creates them on demand.
+  Future<bool> _bootstrapProfileHasPrivateData() async {
+    // All THREE roots the deleter erases (see
+    // ProfileDataGenerationManager.deleteAllProfileData). Scanning only
+    // documents would leave anything written through
+    // ProfileStoragePaths.supportFile/cacheFile invisible to this veto and
+    // silently deleted with the profile — latent today only because nothing
+    // writes user work there yet.
+    for (final root in <Directory>[
+      await AppStorage.documents(),
+      await AppStorage.support(),
+      await AppStorage.cache(),
+    ]) {
+      final tree = Directory(
+        p.join(root.path, 'profiles', ProfileBootstrap.freshAdminId),
+      );
+      if (!await tree.exists()) continue;
+      final hasFile = await tree
+          .list(recursive: true, followLinks: false)
+          .any((entry) => entry is File);
+      if (hasFile) return true;
+    }
+    return false;
   }
 
   @visibleForTesting
   Future<void> debugActivateImportedAdminForOnboarding(
     ProfileGraphRestoreReport report,
-  ) => _activateImportedAdminForOnboarding(report);
+  ) => handoffImportedAdminForOnboarding(report);
 
   /// A picked image pushed from the paired phone, applied to the ACTIVE
   /// profile. `updateProfile` requires a managing actor, so this works only
@@ -2891,12 +3546,28 @@ class RemoteCommandRouter {
       'RemoteCommandRouter: Config complete during onboarding, restarting app flow...',
     );
 
-    await StorageService.setInitialSetupComplete(true);
+    // Best-effort, and deliberately not fatal: onboarding may already have
+    // been cleared before an authority hand-off (the profile-graph import does
+    // exactly that), in which case the active profile can now be LOCKED and
+    // this write is refused. Losing the restart over a flag that is already
+    // correct would strand the user on the onboarding screen behind a fully
+    // imported device — the exact bug this guard exists to prevent.
+    try {
+      await StorageService.setInitialSetupComplete(true);
+    } catch (e) {
+      debugPrint('RemoteCommandRouter: onboarding flag write skipped — $e');
+    }
     // Registry writes invalidate the native privacy projection before changing
     // authority. This is an in-process route restart, not a cold bootstrap, so
     // publish the now-final active scope explicitly before native readers run.
-    if (ProfileRuntime.isProfileCommitted) {
-      await NativeProfileProjection.publish(ProfileRuntime.capture());
+    try {
+      if (ProfileRuntime.isProfileCommitted) {
+        await NativeProfileProjection.publish(ProfileRuntime.capture());
+      }
+    } catch (e) {
+      debugPrint(
+        'RemoteCommandRouter: privacy projection republish failed — $e',
+      );
     }
     _flushBatch(prefix: 'Setup received — restarting');
 
@@ -3364,15 +4035,19 @@ class RemoteCommandRouter {
     String jsonData,
     RemoteCommandContext context,
   ) {
+    String? diagnosticKind;
+    String? diagnosticTrace;
     try {
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
       final transferId = data['transferId'] as String;
       final label = data['channelName'] as String;
       final totalChunks = data['totalChunks'] as int;
       final kind = (data['kind'] as String?) ?? ConfigCommand.debrifyChannel;
+      diagnosticKind = kind;
       final encrypted = data['enc'] == 1;
       final sid = data['sid'] as String?;
       final resultRequestId = data['resultRequestId'] as String?;
+      diagnosticTrace = RemoteTransferDiagnostics.traceToken(resultRequestId);
       final peer = _profilePeerKey(context);
 
       if (transferId.isEmpty ||
@@ -3402,6 +4077,16 @@ class RemoteCommandRouter {
       debugPrint(
         'RemoteCommandRouter: chunked transfer started ($totalChunks chunks)',
       );
+      if (kind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_start',
+          fields: <String, Object?>{
+            'trace': diagnosticTrace,
+            'chunks': totalChunks,
+            'encrypted': encrypted,
+          },
+        );
+      }
 
       final existing = _chunkBuffers[transferId];
       if (existing != null && existing.peerKey != peer) {
@@ -3419,6 +4104,16 @@ class RemoteCommandRouter {
           existing.totalChunks == totalChunks &&
           existing.kind == kind &&
           existing.receivedCount > 0) {
+        if (kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_start_repeat',
+            fields: <String, Object?>{
+              'trace': diagnosticTrace,
+              'received': existing.receivedCount,
+              'chunks': totalChunks,
+            },
+          );
+        }
         _armChunkTimeout(transferId, existing);
         return;
       }
@@ -3442,7 +4137,16 @@ class RemoteCommandRouter {
       );
       _chunkBuffers[transferId] = buffer;
       _armChunkTimeout(transferId, buffer);
-    } catch (_) {
+    } catch (error) {
+      if (diagnosticKind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_start_rejected',
+          fields: <String, Object?>{
+            'trace': diagnosticTrace,
+            'errorType': error.runtimeType,
+          },
+        );
+      }
       debugPrint('RemoteCommandRouter: invalid chunk start');
       _showSnackBar('Failed to receive transfer', isError: true);
     }
@@ -3459,6 +4163,19 @@ class RemoteCommandRouter {
     buffer.timeout?.cancel();
     if (!buffer.encrypted) {
       buffer.timeout = Timer(kChunkTransferTimeout, () {
+        if (buffer.kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_timeout',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'received': buffer.receivedCount,
+              'chunks': buffer.totalChunks,
+              'encrypted': false,
+            },
+          );
+        }
         debugPrint('RemoteCommandRouter: chunk transfer stalled');
         _chunkBuffers.remove(transferId);
         // A silent drop reads as success from the sender's side, so the
@@ -3483,6 +4200,20 @@ class RemoteCommandRouter {
           ? null
           : state.sessionManager?.sessionBySid(sid);
       if (buffer.repairRounds >= kChunkRepairMaxRounds || session == null) {
+        if (buffer.kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_repair_exhausted',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'received': buffer.receivedCount,
+              'chunks': buffer.totalChunks,
+              'rounds': buffer.repairRounds,
+              'sessionReady': session != null,
+            },
+          );
+        }
         debugPrint('RemoteCommandRouter: chunk transfer stalled beyond repair');
         _chunkBuffers.remove(transferId);
         _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
@@ -3495,6 +4226,18 @@ class RemoteCommandRouter {
         return;
       }
       buffer.repairRounds++;
+      if (buffer.kind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_repair_requested',
+          fields: <String, Object?>{
+            'trace': RemoteTransferDiagnostics.traceToken(
+              buffer.resultRequestId,
+            ),
+            'missing': missing.length,
+            'round': buffer.repairRounds,
+          },
+        );
+      }
       debugPrint(
         'RemoteCommandRouter: requesting ${missing.length} missing chunk(s), '
         'repair round ${buffer.repairRounds}',
@@ -3512,7 +4255,18 @@ class RemoteCommandRouter {
               data: chunkNeedBody(transferId: transferId, missing: missing),
             ),
           );
-        } catch (_) {
+        } catch (error) {
+          if (buffer.kind == ConfigCommand.profileGraph) {
+            RemoteTransferDiagnostics.record(
+              'receiver_chunk_repair_send_exception',
+              fields: <String, Object?>{
+                'trace': RemoteTransferDiagnostics.traceToken(
+                  buffer.resultRequestId,
+                ),
+                'errorType': error.runtimeType,
+              },
+            );
+          }
           debugPrint('RemoteCommandRouter: repair request send failed');
         }
       }());
@@ -3557,6 +4311,32 @@ class RemoteCommandRouter {
         buffer.receivedCount++;
       }
       buffer.chunks[index] = chunkData;
+      if (buffer.kind == ConfigCommand.profileGraph) {
+        final percent = (buffer.receivedCount * 100) ~/ buffer.totalChunks;
+        final bucket = percent >= 100
+            ? 100
+            : percent >= 75
+            ? 75
+            : percent >= 50
+            ? 50
+            : percent >= 25
+            ? 25
+            : 0;
+        if (bucket > buffer.diagnosticProgressBucket) {
+          buffer.diagnosticProgressBucket = bucket;
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_progress',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'percent': bucket,
+              'received': buffer.receivedCount,
+              'chunks': buffer.totalChunks,
+            },
+          );
+        }
+      }
       // Progress means the transfer is alive — push the stall deadline out.
       _armChunkTimeout(transferId, buffer);
 
@@ -3565,16 +4345,26 @@ class RemoteCommandRouter {
         buffer.timeout?.cancel();
         _chunkBuffers.remove(transferId);
 
-        // Reassemble: base64-decode each chunk, concatenate bytes, then UTF-8 decode
-        final byteChunks = <List<int>>[];
-        for (final chunk in buffer.chunks) {
-          byteChunks.add(base64.decode(chunk!));
+        // Decode into one bounded byte buffer and release the base64 chunk
+        // strings before decrypting or expanding a potentially large graph.
+        // Keeping both representations alive through the awaited restore used
+        // to add several megabytes to the receiver's peak memory.
+        final reassembled = _takeReassembledPayload(buffer);
+        final full = reassembled.payload;
+
+        if (buffer.kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunks_complete',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'chunks': buffer.totalChunks,
+              'wireBytes': reassembled.bytes,
+              'characters': full.length,
+            },
+          );
         }
-        final allBytes = byteChunks.expand((b) => b).toList();
-        if (allBytes.length > _maxProfileRemotePayloadBytes) {
-          throw const FormatException('Reassembled transfer is too large');
-        }
-        final full = utf8.decode(allBytes);
 
         debugPrint(
           'RemoteCommandRouter: All chunks received for ${buffer.label}, '
@@ -3599,7 +4389,20 @@ class RemoteCommandRouter {
           ),
         );
       }
-    } catch (_) {
+    } catch (error) {
+      if (failedBuffer?.kind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_exception',
+          fields: <String, Object?>{
+            'trace': RemoteTransferDiagnostics.traceToken(
+              failedBuffer?.resultRequestId,
+            ),
+            'errorType': error.runtimeType,
+            'received': failedBuffer?.receivedCount,
+            'chunks': failedBuffer?.totalChunks,
+          },
+        );
+      }
       debugPrint('RemoteCommandRouter: chunk handling failed');
       final buffer = failedBuffer;
       if (buffer != null) {
@@ -3615,23 +4418,54 @@ class RemoteCommandRouter {
     }
   }
 
+  ({String payload, int bytes}) _takeReassembledPayload(_ChunkBuffer buffer) {
+    final bytes = BytesBuilder(copy: false);
+    try {
+      for (final chunk in buffer.chunks) {
+        final decoded = base64.decode(chunk!);
+        if (bytes.length > _maxProfileRemotePayloadBytes - decoded.length) {
+          throw const FormatException('Reassembled transfer is too large');
+        }
+        bytes.add(decoded);
+      }
+      final allBytes = bytes.takeBytes();
+      return (payload: utf8.decode(allBytes), bytes: allBytes.length);
+    } finally {
+      buffer.chunks.fillRange(0, buffer.chunks.length, null);
+    }
+  }
+
   /// Decrypt and replay a reassembled v2 blob transfer.
   Future<void> _completeEncryptedBlob(
     String transferId,
     _ChunkBuffer buffer,
     String ctB64,
   ) async {
+    final graphDiagnostic = buffer.kind == ConfigCommand.profileGraph;
+    final trace = RemoteTransferDiagnostics.traceToken(buffer.resultRequestId);
     final state = RemoteControlState();
     final manager = state.sessionManager;
     final sidB64 = buffer.sidB64;
     final n = buffer.blobN;
     if (manager == null || sidB64 == null || n == null) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_session_fields_missing',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       debugPrint('RemoteCommandRouter: Encrypted blob missing session fields');
       await _reportChunkFailure(buffer, 'Transfer session data was incomplete');
       return;
     }
     final session = manager.sessionBySid(sidB64);
     if (session == null) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_session_expired',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       // Receiver restarted mid-transfer: the session (and its keys) are gone.
       _showSnackBar(
         'Transfer failed: session expired — send again',
@@ -3641,9 +4475,24 @@ class RemoteCommandRouter {
       return;
     }
     if (!session.authorized) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_session_unauthorized',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       debugPrint('RemoteCommandRouter: Dropping blob on unauthorized session');
       await _reportChunkFailure(buffer, 'Transfer session was not authorized');
       return;
+    }
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_blob_open_start',
+        fields: <String, Object?>{
+          'trace': trace,
+          'wireCharacters': ctB64.length,
+        },
+      );
     }
     final plaintext = await RemoteSessionCrypto.openBlob(
       key: session.recvKey,
@@ -3654,6 +4503,12 @@ class RemoteCommandRouter {
       ctB64: ctB64,
     );
     if (plaintext == null) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_open_rejected',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       _showSnackBar(
         'Transfer failed: could not decrypt ${buffer.label}',
         isError: true,
@@ -3664,9 +4519,30 @@ class RemoteCommandRouter {
       );
       return;
     }
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_blob_open_complete',
+        fields: <String, Object?>{
+          'trace': trace,
+          'characters': plaintext.length,
+        },
+      );
+    }
     if (!session.acceptBlob(n)) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_replay_rejected',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       debugPrint('RemoteCommandRouter: Replayed blob counter $n, dropping');
       return;
+    }
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_dispatch_start',
+        fields: <String, Object?>{'trace': trace},
+      );
     }
     await _dispatchCommandAndWait(
       RemoteAction.config,
@@ -3692,6 +4568,12 @@ class RemoteCommandRouter {
         },
       ),
     );
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_dispatch_complete',
+        fields: <String, Object?>{'trace': trace},
+      );
+    }
   }
 
   Future<bool> _reportChunkFailure(_ChunkBuffer buffer, String message) {
@@ -3703,16 +4585,25 @@ class RemoteCommandRouter {
     if (session == null || !session.authorized) {
       return Future<bool>.value(false);
     }
+    final context = RemoteCommandContext(
+      encrypted: true,
+      authorized: true,
+      remembered: buffer.remembered,
+      sidB64: session.sidB64,
+      peerFingerprint: session.peerFingerprint,
+      peerName: session.peerName,
+      sourceIp: buffer.sourceIp,
+    );
+    if (buffer.kind == ConfigCommand.profileGraph) {
+      return _reportProfileGraphResultBestEffort(
+        context,
+        requestId: requestId,
+        ok: false,
+        message: message,
+      );
+    }
     return _reportRemoteTransferResultBestEffort(
-      RemoteCommandContext(
-        encrypted: true,
-        authorized: true,
-        remembered: buffer.remembered,
-        sidB64: session.sidB64,
-        peerFingerprint: session.peerFingerprint,
-        peerName: session.peerName,
-        sourceIp: buffer.sourceIp,
-      ),
+      context,
       requestId: requestId,
       ok: false,
       message: message,
@@ -4063,6 +4954,9 @@ class _ChunkBuffer {
   Timer? timeout;
 
   int receivedCount = 0;
+
+  /// Last 25% milestone emitted to the retained transfer diagnostics sink.
+  int diagnosticProgressBucket = 0;
 
   /// Gap-repair rounds already spent (v2 transfers only) — bounds the worst
   /// case on a dead link at roughly rounds × [kChunkRepairStall].

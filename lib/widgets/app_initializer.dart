@@ -187,7 +187,24 @@ class _AppInitializerState extends State<AppInitializer>
       debugPrint('AppInitializer: migrations still running, not blocking UI');
     }
 
-    final hasCompleted = await StorageService.isInitialSetupComplete();
+    // NEVER let this read strand the splash. It throws BY DESIGN when the
+    // active profile or its data generation moved under it — which is exactly
+    // what a remote profile-graph import does: it hands authority to an
+    // imported profile mid-onboarding, and the scope change remounts this
+    // widget through ProfileGate's epoch key. Before this guard the throw
+    // escaped an unguarded async init, so `_splashDone` never flipped and the
+    // app rendered NOTHING (the blank screen after an import).
+    //
+    // Defaulting to "complete" is the safe guess: the only way to reach here
+    // with a moved scope is a device that just received a configured profile
+    // graph. A wrong guess costs one trip through Home, not a dead screen.
+    bool hasCompleted;
+    try {
+      hasCompleted = await StorageService.isInitialSetupComplete();
+    } catch (e) {
+      debugPrint('AppInitializer: onboarding state unavailable — $e');
+      hasCompleted = true;
+    }
 
     if (!mounted) return;
 
@@ -296,7 +313,18 @@ class _AppInitializerState extends State<AppInitializer>
 
     if (!mounted) return;
 
-    await StorageService.setInitialSetupComplete(true);
+    // Best-effort. A remote profile-graph import completes onboarding itself
+    // and then hands authority to an imported profile, which ProfileGate
+    // immediately locks — after which this active-session write is refused
+    // ("Active profile session has ended"). Letting that abort the method
+    // skipped the setState below, so _splashDone stayed false and the app
+    // rendered NOTHING: the blank screen after an import-driven restart.
+    try {
+      await StorageService.setInitialSetupComplete(true);
+    } catch (e) {
+      debugPrint('AppInitializer: onboarding flag write skipped — $e');
+    }
+    if (!mounted) return;
 
     if (configured) {
       MainPageBridge.notifyIntegrationChanged();

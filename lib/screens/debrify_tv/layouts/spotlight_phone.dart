@@ -119,6 +119,11 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
     for (final c in ordered) {
       pooled += view.railHealth[c.id]?.pooled ?? 0;
     }
+    final summary = searching
+        ? '${ordered.length} of ${allChannels.length} channels'
+        : pooled > 0
+        ? '${ordered.length} channels · ${_thousands(pooled)} titles cached'
+        : '${ordered.length} ${ordered.length == 1 ? 'channel' : 'channels'}';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -144,29 +149,7 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                 24 + widget.bottomInset,
               ),
               children: [
-                SpotlightKick('Debrify TV', color: tv.accent),
-                const SizedBox(height: 8),
-                Text(
-                  'Channels',
-                  style: TextStyle(
-                    fontSize: 34,
-                    height: 1,
-                    letterSpacing: -1,
-                    fontWeight: FontWeight.w800,
-                    color: app.core.tx,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  searching
-                      ? '${ordered.length} of ${allChannels.length} channels'
-                      : pooled > 0
-                      ? '${ordered.length} channels · '
-                            '${_thousands(pooled)} titles cached'
-                      : '${ordered.length} '
-                            '${ordered.length == 1 ? 'channel' : 'channels'}',
-                  style: TextStyle(fontSize: 13, color: tv.textDim),
-                ),
+                _PhoneHeader(summary: summary, onSettings: view.onSettings),
                 const SizedBox(height: 16),
                 _PhoneButton(
                   icon: Icons.play_arrow_rounded,
@@ -183,7 +166,7 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                 // Management actions live at the TOP, beside search — never
                 // below a list that can be dozens of channels long.
                 const SizedBox(height: 10),
-                _PhoneActionGroup(
+                _PhoneManagementActions(
                   actions: [
                     _PhoneAction(
                       icon: Icons.add_rounded,
@@ -196,9 +179,11 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                       onTap: view.busy ? null : view.onImport,
                     ),
                     _PhoneAction(
-                      icon: Icons.settings_rounded,
-                      label: 'Settings',
-                      onTap: view.onSettings,
+                      icon: Icons.folder_zip_rounded,
+                      label: 'Export',
+                      onTap: view.busy || allChannels.isEmpty
+                          ? null
+                          : view.onExport,
                     ),
                   ],
                 ),
@@ -503,6 +488,162 @@ class _PhoneAction {
     required this.label,
     required this.onTap,
   });
+}
+
+class _PhoneHeader extends StatelessWidget {
+  final String summary;
+  final VoidCallback onSettings;
+
+  const _PhoneHeader({required this.summary, required this.onSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+
+    Widget title() => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FittedBox(
+          alignment: Alignment.centerLeft,
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'Channels',
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 34,
+              height: 1,
+              letterSpacing: -1,
+              fontWeight: FontWeight.w800,
+              color: app.core.tx,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          summary,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 13, color: tv.textDim),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final largeText = MediaQuery.textScalerOf(context).scale(34) > 48;
+        final reflowSettings = largeText && constraints.maxWidth < 420;
+
+        if (reflowSettings) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: SpotlightKick('Debrify TV', color: tv.accent),
+                  ),
+                  const SizedBox(width: 12),
+                  _PhoneSettingsButton(onTap: onSettings),
+                ],
+              ),
+              const SizedBox(height: 8),
+              title(),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SpotlightKick('Debrify TV', color: tv.accent),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: title()),
+                const SizedBox(width: 12),
+                _PhoneSettingsButton(onTap: onSettings),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PhoneSettingsButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _PhoneSettingsButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tv = AppThemeScope.of(context).debrifyTv;
+    return Material(
+      color: tv.fillWeak,
+      shape: CircleBorder(side: BorderSide(color: tv.hairline)),
+      child: IconButton(
+        key: const ValueKey<String>('debrify-tv-phone-settings'),
+        tooltip: 'Settings',
+        onPressed: onTap,
+        icon: const Icon(Icons.settings_rounded),
+        iconSize: 21,
+        color: tv.textDim,
+      ),
+    );
+  }
+}
+
+/// Keeps the primary management actions compact without sacrificing text
+/// scaling. Large labels wrap to a balanced 2 + 1 grid instead of taking over
+/// the screen as three full-width rows.
+class _PhoneManagementActions extends StatelessWidget {
+  final List<_PhoneAction> actions;
+
+  const _PhoneManagementActions({required this.actions});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 8.0;
+        final scaledLabel = MediaQuery.textScalerOf(context).scale(13);
+        final availableForThree = (constraints.maxWidth - gap * 2) / 3;
+        final useTwoColumns = scaledLabel > 17 || availableForThree < 86;
+
+        Widget button(_PhoneAction action) => _PhoneButton(
+          icon: action.icon,
+          label: action.label,
+          compact: true,
+          onTap: action.onTap,
+        );
+
+        if (!useTwoColumns) {
+          return Row(
+            children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(width: gap),
+                Expanded(child: button(actions[i])),
+              ],
+            ],
+          );
+        }
+
+        final itemWidth = (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final action in actions)
+              SizedBox(width: itemWidth, child: button(action)),
+          ],
+        );
+      },
+    );
+  }
 }
 
 /// Keeps short actions in one balanced row, then turns them into full-width

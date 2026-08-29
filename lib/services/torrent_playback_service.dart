@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/alldebrid_file.dart';
+import '../models/play_loader_art.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/premiumize_file.dart';
 import '../models/profiles/profile_policy.dart';
@@ -41,8 +42,10 @@ import 'debrid_service.dart';
 import 'debrify_tv_channel_add_service.dart';
 import 'download_service.dart';
 import 'local_bound_source_service.dart';
+import 'local_playback_resume_resolver.dart';
 import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
+import 'play_loader_style.dart';
 import 'premiumize_service.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
@@ -77,6 +80,16 @@ class PlaybackMeta {
   final bool simklScrobble;
   final double? mdblistProgressPercent;
   final bool mdblistScrobble;
+
+  /// Catalog launches have authoritative content identity, so their local
+  /// resume position follows IMDb (plus S/E for episodes) across sources.
+  /// Generic keyword/debrid playback leaves this source-specific.
+  final PlaybackResumePolicy resumePolicy;
+
+  /// Presentation-only artwork + meta line for the play loader (Marquee).
+  /// Null on every path that doesn't have it — the loader falls back to the
+  /// poster, exactly as it did before this existed.
+  final PlayLoaderArt? art;
   const PlaybackMeta({
     this.imdbId,
     this.contentType,
@@ -92,7 +105,27 @@ class PlaybackMeta {
     this.simklScrobble = false,
     this.mdblistProgressPercent,
     this.mdblistScrobble = false,
+    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
+    this.art,
   });
+
+  const PlaybackMeta.catalog({
+    this.imdbId,
+    this.contentType,
+    this.season,
+    this.episode,
+    this.title,
+    this.posterUrl,
+    this.year,
+    this.addonId,
+    this.traktProgressPercent,
+    this.traktScrobble = false,
+    this.simklProgressPercent,
+    this.simklScrobble = false,
+    this.mdblistProgressPercent,
+    this.mdblistScrobble = false,
+    this.art,
+  }) : resumePolicy = PlaybackResumePolicy.catalogCanonical;
 }
 
 /// Isolated "add a chosen torrent to debrid → do the configured post-torrent
@@ -4225,6 +4258,11 @@ class TorrentPlaybackService {
         traktScrobble: meta.traktScrobble,
         simklScrobble: meta.simklScrobble,
         mdblistScrobble: meta.mdblistScrobble,
+        resumePolicy: meta.resumePolicy,
+        // Show-level artwork, so the loader keeps its backdrop and logo for
+        // every episode of a binge instead of falling back to the poster from
+        // episode 2 onward. Nothing in it is episode-specific.
+        art: meta.art,
       );
       // Defer one frame (matching Home's addPostFrameCallback) so the previous
       // episode's entire play chain unwinds before the next one starts — an
@@ -4346,6 +4384,7 @@ class TorrentPlaybackService {
     simklProgressPercent: meta?.simklProgressPercent,
     mdblistScrobble: meta?.mdblistScrobble ?? false,
     mdblistProgressPercent: meta?.mdblistProgressPercent,
+    resumePolicy: meta?.resumePolicy ?? PlaybackResumePolicy.sourceSpecific,
     // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
     // Playlist-library entry and power the in-player "Fix Metadata" action
     // (matching Home). PikPak is intentionally omitted: the launcher wants a
@@ -4353,6 +4392,10 @@ class TorrentPlaybackService {
     rdTorrentId: rdTorrentId,
     torboxTorrentId: torboxTorrentId?.toString(),
   );
+
+  @visibleForTesting
+  static VideoPlayerLaunchArgs playerArgsForTesting(PlaybackMeta? meta) =>
+      _playerArgs(videoUrl: 'video', title: 'Title', meta: meta);
 
   /// Providers with credentials configured (in this service's precedence
   /// order) plus the user's saved default when it's still configured — the
@@ -6491,6 +6534,14 @@ class TorrentPlaybackService {
       railFar: app.stremioTv.loaderRailFar,
       ink: app.onGlass,
       inkOnFill: app.stremioTv.inkOnFill,
+      // Settings → Appearance → Play Loader. Read from the synchronous mirror:
+      // a play cannot await a preference, and the mirror's default IS the
+      // stored default, so an unwarmed read only ever mis-serves someone who
+      // explicitly chose Classic.
+      style: PlayLoaderStyleController.cached == PlayLoaderStyleController.classic
+          ? PlayLoaderStyle.classic
+          : PlayLoaderStyle.marquee,
+      art: meta?.art,
       onCancel: onCancel,
     );
   }

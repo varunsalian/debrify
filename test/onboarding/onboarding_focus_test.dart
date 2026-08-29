@@ -3,6 +3,7 @@ import 'package:debrify/widgets/onboarding/onboarding_models.dart';
 import 'package:debrify/widgets/onboarding/onboarding_stage.dart';
 import 'package:debrify/widgets/onboarding/onboarding_theme.dart';
 import 'package:debrify/widgets/onboarding/steps/key_step.dart';
+import 'package:debrify/widgets/onboarding/steps/mode_step.dart';
 import 'package:debrify/widgets/onboarding/tv_keyboard_slot.dart';
 import 'package:debrify/widgets/initial_setup_flow.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
@@ -113,6 +114,77 @@ void main() {
     // goBack/browserBack. Escape exercises the same production branch.
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     expect(bubbled, 1);
+  });
+
+  testWidgets('mode focus traverses restore before Skip', (tester) async {
+    final controller = OnboardFocusController();
+    addTearDown(controller.dispose);
+    var restored = false;
+
+    await tester.binding.setSurfaceSize(const Size(960, 540));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      onboardingApp(
+        ModeStep(
+          focusController: controller,
+          onSetupHere: () {},
+          onImport: () {},
+          onRestore: () => restored = true,
+          onSkip: () {},
+        ),
+      ),
+    );
+
+    controller.focusLanding(OnboardStep.mode);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(
+      tester.binding.focusManager.primaryFocus?.debugLabel,
+      'onboarding-2-0',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(restored, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(
+      tester.binding.focusManager.primaryFocus?.debugLabel,
+      'onboarding-3-0',
+    );
+  });
+
+  testWidgets('mode omits file restore when no callback is available', (
+    tester,
+  ) async {
+    final controller = OnboardFocusController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      onboardingApp(
+        ModeStep(
+          focusController: controller,
+          onSetupHere: () {},
+          onImport: () {},
+          onSkip: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Restore from a backup'), findsNothing);
+    controller.focusLanding(OnboardStep.mode);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(
+      tester.binding.focusManager.primaryFocus?.debugLabel,
+      'onboarding-2-0',
+      reason: 'Skip closes the focus gap when restore is unavailable',
+    );
   });
 
   testWidgets('keyboard Back-down and nav-channel pop do not step back twice', (

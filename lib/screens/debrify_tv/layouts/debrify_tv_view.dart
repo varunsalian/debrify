@@ -35,6 +35,7 @@ class DebrifyTvView {
   final VoidCallback onQuickPlay;
   final VoidCallback onAdd;
   final VoidCallback onImport;
+  final VoidCallback onExport;
   final VoidCallback onSettings;
 
   final void Function(DebrifyTvChannel) onWatch;
@@ -63,6 +64,7 @@ class DebrifyTvView {
     required this.onQuickPlay,
     required this.onAdd,
     required this.onImport,
+    required this.onExport,
     required this.onSettings,
     required this.onWatch,
     required this.onEdit,

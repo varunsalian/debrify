@@ -149,7 +149,7 @@ class SupportCampaignConfig {
     id: '',
     title: '',
     message: '',
-    buttonLabel: 'Donate on Ko-fi',
+    buttonLabel: 'Sponsor',
     startUtc: '',
     endUtc: '',
   );

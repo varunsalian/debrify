@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrify — Boot Idents v2</title>
+<style>
+:root{
+  --bg:#07080B;
+  --panel:#0C0E14;
+  --ink:#F3F6FC;
+  --dim:#7C8598;
+  --line:rgba(255,255,255,.08);
+  --accent:#8B9CFF;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font:400 15px/1.55 -apple-system,"SF Pro Text",Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+
+/* ---------- page chrome ---------- */
+.wrap{max-width:1320px;margin:0 auto;padding:44px 28px 90px}
+header h1{font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0 0 8px}
+header p{margin:0;color:var(--dim);max-width:74ch}
+.bar{position:sticky;top:0;z-index:20;margin:26px 0 30px;padding:12px 0;
+  background:linear-gradient(var(--bg) 72%,transparent);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button,label.tog{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  font:inherit;font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;transition:.15s}
+button:hover,label.tog:hover{border-color:rgba(255,255,255,.22);background:#141822}
+button.pri{background:var(--ink);color:#06070A;border-color:transparent;font-weight:550}
+label.tog{display:inline-flex;gap:8px;align-items:center;user-select:none}
+label.tog input{accent-color:var(--accent);margin:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;border-radius:0;background:transparent;padding:8px 13px}
+.seg button[aria-pressed=true]{background:rgba(139,156,255,.16);color:#cfd7ff}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:30px}
+.card{border:1px solid var(--line);border-radius:18px;background:var(--panel);overflow:hidden}
+.stage{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden;cursor:pointer;
+  border-bottom:1px solid var(--line)}
+.stage:fullscreen{aspect-ratio:auto;width:100vw;height:100vh;border:0}
+.meta{padding:16px 18px 18px}
+.meta .row{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.meta h2{font-size:16px;font-weight:600;margin:0;letter-spacing:.01em}
+.meta .no{font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);letter-spacing:.12em}
+.meta p{margin:7px 0 0;color:var(--dim);font-size:13.5px}
+.tags{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-size:11.5px;letter-spacing:.02em;padding:4px 9px;border-radius:999px;
+  border:1px solid var(--line);color:#9aa4b8}
+.tag.ok{color:#8fe3b8;border-color:rgba(143,227,184,.24)}
+.tag.mid{color:#ffcf8f;border-color:rgba(255,207,143,.22)}
+.acts{margin-top:14px;display:flex;gap:8px}
+
+/* ---------- shared stage scaffolding (design space 960x540) ---------- */
+.inner{position:absolute;left:50%;top:50%;width:960px;height:540px;margin:-270px 0 0 -480px;
+  transform:scale(var(--k,1));transform-origin:center center}
+.veil{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.stage.play .veil{animation:veil .55s cubic-bezier(.4,0,1,1) 2.95s forwards}
+@keyframes veil{to{opacity:1}}
+
+.wm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;
+  font:520 54px/1 -apple-system,"SF Pro Display",Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  letter-spacing:.34em;text-indent:.34em;color:var(--ink)}
+.wm span{display:inline-block}
+
+/* =======================================================================
+   01 — APERTURE
+   ======================================================================= */
+.m1 .ring{position:absolute;left:50%;top:50%;width:260px;height:260px;margin:-130px 0 0 -130px;opacity:0}
+.m1 .ring circle{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-linecap:round;
+  stroke-dasharray:660;stroke-dashoffset:660;transform:rotate(-90deg);transform-origin:120px 120px}
+.m1 .revealWrap{position:absolute;inset:0;clip-path:inset(0 50% 0 50%)}
+.m1 .rule{position:absolute;left:50%;top:calc(50% + 58px);width:280px;height:1px;margin-left:-140px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:scaleX(0);opacity:0}
+.stage.play .m1 .ring{animation:m1ringIn .12s linear forwards, m1ringOut .7s cubic-bezier(.3,0,.15,1) .74s forwards}
+.stage.play .m1 .ring circle{animation:m1draw .82s cubic-bezier(.62,0,.3,1) forwards}
+.stage.play .m1 .revealWrap{animation:m1iris .95s cubic-bezier(.16,1,.3,1) .66s forwards}
+.stage.play .m1 .wm{animation:m1track 1.15s cubic-bezier(.16,1,.3,1) .66s both}
+.stage.play .m1 .rule{animation:m1rule .9s cubic-bezier(.16,1,.3,1) 1.35s forwards}
+@keyframes m1ringIn{to{opacity:1}}
+@keyframes m1draw{to{stroke-dashoffset:0}}
+@keyframes m1ringOut{from{transform:scale(1);opacity:1}to{transform:scale(2.15);opacity:0}}
+@keyframes m1iris{from{clip-path:inset(0 50% 0 50%)}to{clip-path:inset(0 -12% 0 -12%)}}
+@keyframes m1track{from{letter-spacing:.56em;text-indent:.56em;opacity:.55}
+                   to{letter-spacing:.34em;text-indent:.34em;opacity:1}}
+@keyframes m1rule{from{transform:scaleX(0);opacity:0}to{transform:scaleX(1);opacity:.5}}
+
+/* =======================================================================
+   02 — TRACE
+   ======================================================================= */
+.m2 .lock{position:absolute;left:50%;top:50%;width:600px;height:160px;margin:-80px 0 0 -300px}
+.m2 .wm{top:56px}
+.m2 .wm span{opacity:0}
+.m2 .line{position:absolute;left:0;top:112px;width:600px;height:2px;overflow:visible;transform-origin:center}
+.m2 .line path{fill:none;stroke:rgba(255,255,255,.42);stroke-width:1.5;
+  stroke-dasharray:600;stroke-dashoffset:600}
+.m2 .dot{position:absolute;left:0;top:112px;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;
+  background:#fff;box-shadow:0 0 12px 3px rgba(139,156,255,.85),0 0 34px 10px rgba(139,156,255,.35);opacity:0}
+.stage.play .m2 .line path{animation:m2draw 1s cubic-bezier(.55,0,.25,1) forwards}
+.stage.play .m2 .line{animation:m2shrink .75s cubic-bezier(.16,1,.3,1) 1.6s forwards}
+.stage.play .m2 .dot{animation:m2run 1s cubic-bezier(.55,0,.25,1) forwards, m2flare .5s ease-out .98s forwards}
+.stage.play .m2 .wm span{animation:m2letter .62s cubic-bezier(.16,1,.3,1) both;
+  animation-delay:calc(.2s + var(--i) * .075s)}
+@keyframes m2draw{to{stroke-dashoffset:0}}
+@keyframes m2run{0%{opacity:0;transform:translateX(0)}8%{opacity:1}100%{opacity:1;transform:translateX(600px)}}
+@keyframes m2flare{from{transform:translateX(600px) scale(1);opacity:1}
+                   to{transform:translateX(600px) scale(3.4);opacity:0}}
+@keyframes m2shrink{to{transform:scaleX(.13);opacity:.75}}
+@keyframes m2letter{from{opacity:0;transform:translateY(9px);filter:blur(7px)}
+                    to{opacity:1;transform:translateY(0);filter:blur(0)}}
+
+/* =======================================================================
+   03 — CHROMA
+   ======================================================================= */
+.m3 .chroma{position:absolute;inset:0;isolation:isolate}
+.m3 .wm{opacity:0}
+.m3 .cy{color:#4CE9FF;mix-blend-mode:screen}
+.m3 .mg{color:#FF4CD8;mix-blend-mode:screen}
+.m3 .wh{color:#fff}
+.m3 .flash{position:absolute;left:50%;top:50%;width:640px;height:150px;margin:-75px 0 0 -320px;
+  background:radial-gradient(ellipse at center,rgba(255,255,255,.85),transparent 70%);opacity:0;pointer-events:none}
+.stage.play .m3 .cy{animation:m3cy 1.15s cubic-bezier(.16,1,.3,1) both}
+.stage.play .m3 .mg{animation:m3mg 1.15s cubic-bezier(.16,1,.3,1) both}
+.stage.play .m3 .wh{animation:m3wh 1.05s cubic-bezier(.16,1,.3,1) .18s both}
+.stage.play .m3 .flash{animation:m3flash .5s ease-out 1.05s forwards}
+@keyframes m3cy{from{opacity:0;transform:translate(-50%,-50%) translateX(-84px) scale(1.05);filter:blur(11px)}
+  35%{opacity:1}to{opacity:1;transform:translate(-50%,-50%) translateX(0) scale(1);filter:blur(0)}}
+@keyframes m3mg{from{opacity:0;transform:translate(-50%,-50%) translateX(84px) scale(1.05);filter:blur(11px)}
+  35%{opacity:1}to{opacity:1;transform:translate(-50%,-50%) translateX(0) scale(1);filter:blur(0)}}
+@keyframes m3wh{from{opacity:0;transform:translate(-50%,-50%) scale(1.06);filter:blur(16px)}
+  to{opacity:1;transform:translate(-50%,-50%) scale(1);filter:blur(0)}}
+@keyframes m3flash{0%{opacity:0}30%{opacity:.55}100%{opacity:0}}
+
+/* =======================================================================
+   04 — FOLD
+   ======================================================================= */
+.m4 .mono{position:absolute;left:50%;top:50%;width:108px;height:108px;margin:-54px 0 0 -54px;
+  perspective:760px;transform-style:preserve-3d}
+.m4 .p{position:absolute;top:0;height:100%;width:36px;opacity:0;
+  background:linear-gradient(160deg,#ffffff,#c9d2ea);transform-origin:left center;
+  transform:perspective(760px) rotateY(-94deg)}
+.m4 .p1{left:0}.m4 .p2{left:36px}.m4 .p3{left:72px}
+.m4 .glyph{position:absolute;inset:0;display:grid;place-items:center;opacity:0;
+  font:700 62px/1 -apple-system,"SF Pro Display",Inter,Segoe UI,Roboto,sans-serif;color:#0A0C12;
+  letter-spacing:-.02em}
+.m4 .sweep{position:absolute;inset:0;overflow:hidden;border-radius:2px;pointer-events:none}
+.m4 .sweep i{position:absolute;top:-40%;left:-60%;width:40%;height:180%;transform:rotate(18deg) translateX(-160px);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent);opacity:0}
+.m4 .wmwrap{position:absolute;inset:0;clip-path:inset(0 100% 0 0)}
+.m4 .wm{font-size:46px;letter-spacing:.3em;text-indent:.3em;margin-left:96px}
+.stage.play .m4 .p{animation:m4fold .68s cubic-bezier(.2,.85,.2,1) both;
+  animation-delay:calc(.08s + var(--i) * .1s)}
+.stage.play .m4 .glyph{animation:m4glyph .45s ease-out .78s both}
+.stage.play .m4 .sweep i{animation:m4sweep .75s cubic-bezier(.4,0,.2,1) .86s both}
+.stage.play .m4 .mono{animation:m4shift .95s cubic-bezier(.16,1,.3,1) 1.2s both}
+.stage.play .m4 .wmwrap{animation:m4unmask .95s cubic-bezier(.16,1,.3,1) 1.3s both}
+@keyframes m4fold{from{opacity:0;transform:perspective(760px) rotateY(-94deg)}
+  to{opacity:1;transform:perspective(760px) rotateY(0deg)}}
+@keyframes m4glyph{from{opacity:0}to{opacity:1}}
+@keyframes m4sweep{0%{opacity:0;transform:rotate(18deg) translateX(-160px)}
+  20%{opacity:1}100%{opacity:0;transform:rotate(18deg) translateX(300px)}}
+@keyframes m4shift{from{transform:translateX(0)}to{transform:translateX(-196px)}}
+@keyframes m4unmask{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 -8% 0 0)}}
+
+/* =======================================================================
+   05 — BLOOM
+   ======================================================================= */
+.m5 .glow{position:absolute;left:50%;top:50%;width:900px;height:520px;margin:-260px 0 0 -450px;opacity:0;
+  background:radial-gradient(ellipse at center,rgba(139,156,255,.30),transparent 62%)}
+.m5 .seed{position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+  background:#fff;box-shadow:0 0 16px 5px rgba(255,255,255,.7);transform:scale(0);opacity:0}
+.m5 .ring{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;
+  border:1px solid rgba(190,203,255,.75);transform:scale(.25);opacity:0}
+.m5 .wm span{opacity:0}
+.stage.play .m5 .glow{animation:m5glow 2.2s ease-out .35s both}
+.stage.play .m5 .seed{animation:m5seed .45s cubic-bezier(.16,1,.3,1) both, m5seedOut .6s ease-in 1.5s forwards}
+.stage.play .m5 .r1{animation:m5ring 1.6s cubic-bezier(.2,.6,.2,1) .28s both}
+.stage.play .m5 .r2{animation:m5ring 1.6s cubic-bezier(.2,.6,.2,1) .55s both}
+.stage.play .m5 .wm span{animation:m5letter .72s cubic-bezier(.16,1,.3,1) both;
+  animation-delay:calc(.42s + var(--c) * .085s)}
+@keyframes m5seed{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes m5seedOut{to{opacity:0;transform:scale(.4)}}
+@keyframes m5ring{from{transform:scale(.25);opacity:.85}to{transform:scale(11);opacity:0}}
+@keyframes m5glow{0%{opacity:0}45%{opacity:1}100%{opacity:.45}}
+@keyframes m5letter{from{opacity:0;transform:translateY(12px) scale(.97);filter:blur(9px)}
+  to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+
+@media (max-width:520px){.wrap{padding:28px 16px 60px}.grid{grid-template-columns:1fr;gap:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Boot idents — v2 concepts</h1>
+  <p>Five fresh directions, built from scratch. Each is ~2.4s of motion plus a 0.5s fade-to-app, sized in a
+     960×540 design space so it scales identically on phone, desktop and 10-foot TV. Click any stage to replay;
+     use the buttons for fullscreen and slow-motion.</p>
+</header>
+
+<div class="bar">
+  <button class="pri" id="playAll">▶ Replay all</button>
+  <label class="tog"><input type="checkbox" id="loop" checked> Loop</label>
+  <span class="seg" id="speed">
+    <button data-r="1" aria-pressed="true">1×</button>
+    <button data-r="0.5" aria-pressed="false">0.5×</button>
+    <button data-r="0.25" aria-pressed="false">0.25×</button>
+  </span>
+</div>
+
+<div class="grid">
+
+  <!-- 01 -->
+  <div class="card">
+    <div class="stage" id="s1">
+      <div class="inner m1">
+        <svg class="ring" viewBox="0 0 240 240"><circle cx="120" cy="120" r="105"/></svg>
+        <div class="revealWrap"><div class="wm" data-word="DEBRIFY"></div></div>
+        <div class="rule"></div>
+      </div>
+      <div class="veil"></div>
+    </div>
+    <div class="meta">
+      <div class="row"><h2>Aperture</h2><span class="no">01</span></div>
+      <p>A single hairline ring draws itself, blooms outward past frame, and its passing opens an iris wipe that
+         reveals the wordmark as the letter-spacing settles. Quiet, optical, camera-shutter confidence.</p>
+      <div class="tags">
+        <span class="tag ok">Cheap on TV</span><span class="tag">ClipRect + stroke tween</span>
+        <span class="tag">No blur</span>
+      </div>
+      <div class="acts"><button data-play="s1">Replay</button><button data-fs="s1">Fullscreen</button></div>
+    </div>
+  </div>
+
+  <!-- 02 -->
+  <div class="card">
+    <div class="stage" id="s2">
+      <div class="inner m2">
+        <div class="lock">
+          <div class="wm" data-word="DEBRIFY"></div>
+          <svg class="line" viewBox="0 0 600 2" preserveAspectRatio="none"><path d="M0 1 H600"/></svg>
+          <span class="dot"></span>
+        </div>
+      </div>
+      <div class="veil"></div>
+    </div>
+    <div class="meta">
+      <div class="row"><h2>Trace</h2><span class="no">02</span></div>
+      <p>One point of light runs the width of the frame drawing a rule beneath the name; letters resolve in its
+         wake, then the rule retracts to a centred tick. Reads as a signal locking on — on brand for a streaming app.</p>
+      <div class="tags">
+        <span class="tag ok">Cheap on TV</span><span class="tag mid">Per-letter blur (drop on low-end)</span>
+        <span class="tag">Translate + dash tween</span>
+      </div>
+      <div class="acts"><button data-play="s2">Replay</button><button data-fs="s2">Fullscreen</button></div>
+    </div>
+  </div>
+
+  <!-- 03 -->
+  <div class="card">
+    <div class="stage" id="s3">
+      <div class="inner m3">
+        <div class="chroma">
+          <div class="wm cy" data-word="DEBRIFY"></div>
+          <div class="wm mg" data-word="DEBRIFY"></div>
+          <div class="wm wh" data-word="DEBRIFY"></div>
+        </div>
+        <div class="flash"></div>
+      </div>
+      <div class="veil"></div>
+    </div>
+    <div class="meta">
+      <div class="row"><h2>Chroma</h2><span class="no">03</span></div>
+      <p>Split colour channels drift in from either side, converge into one perfectly sharp wordmark and release a
+         soft flash. The most "studio ident" of the set — the moment of registration is the whole idea.</p>
+      <div class="tags">
+        <span class="tag mid">3 layers + screen blend</span><span class="tag mid">Blur tween</span>
+        <span class="tag">Colourable per theme</span>
+      </div>
+      <div class="acts"><button data-play="s3">Replay</button><button data-fs="s3">Fullscreen</button></div>
+    </div>
+  </div>
+
+  <!-- 04 -->
+  <div class="card">
+    <div class="stage" id="s4">
+      <div class="inner m4">
+        <div class="mono">
+          <i class="p p1" style="--i:0"></i><i class="p p2" style="--i:1"></i><i class="p p3" style="--i:2"></i>
+          <span class="glyph">D</span>
+          <span class="sweep"><i></i></span>
+        </div>
+        <div class="wmwrap"><div class="wm" data-word="DEBRIFY"></div></div>
+      </div>
+      <div class="veil"></div>
+    </div>
+    <div class="meta">
+      <div class="row"><h2>Fold</h2><span class="no">04</span></div>
+      <p>Three panels hinge in on the Y axis to build a solid monogram, a specular sweep crosses it, then the mark
+         slides left and the wordmark unmasks behind it into a proper lockup. Ends on a reusable app-icon shape.</p>
+      <div class="tags">
+        <span class="tag ok">No blur</span><span class="tag">3D rotate (Transform)</span>
+        <span class="tag">Doubles as app icon</span>
+      </div>
+      <div class="acts"><button data-play="s4">Replay</button><button data-fs="s4">Fullscreen</button></div>
+    </div>
+  </div>
+
+  <!-- 05 -->
+  <div class="card">
+    <div class="stage" id="s5">
+      <div class="inner m5">
+        <div class="glow"></div>
+        <span class="ring r1"></span><span class="ring r2"></span>
+        <span class="seed"></span>
+        <div class="wm" data-word="DEBRIFY"></div>
+      </div>
+      <div class="veil"></div>
+    </div>
+    <div class="meta">
+      <div class="row"><h2>Bloom</h2><span class="no">05</span></div>
+      <p>A seed of light ignites, two rings pulse outward, and the letters rise centre-out as each ring passes
+         through them. Warmest of the five and by far the cheapest to run — the safe default for weak Android TV boxes.</p>
+      <div class="tags">
+        <span class="tag ok">Cheapest on TV</span><span class="tag ok">Scale + opacity only</span>
+        <span class="tag mid">Optional letter blur</span>
+      </div>
+      <div class="acts"><button data-play="s5">Replay</button><button data-fs="s5">Fullscreen</button></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const DW = 960, DH = 540;
+let rate = 1;
+
+/* split wordmarks into per-letter spans with index + centre-distance vars */
+document.querySelectorAll('[data-word]').forEach(el => {
+  const w = el.dataset.word, mid = (w.length - 1) / 2;
+  el.textContent = '';
+  [...w].forEach((ch, i) => {
+    const s = document.createElement('span');
+    s.textContent = ch;
+    s.style.setProperty('--i', i);
+    s.style.setProperty('--c', Math.abs(i - mid).toFixed(2));
+    el.appendChild(s);
+  });
+});
+
+/* scale the fixed design space to whatever the stage is */
+const stages = [...document.querySelectorAll('.stage')];
+function fit(st) {
+  const r = st.getBoundingClientRect();
+  st.style.setProperty('--k', Math.min(r.width / DW, r.height / DH));
+}
+const ro = new ResizeObserver(es => es.forEach(e => fit(e.target)));
+stages.forEach(st => { fit(st); ro.observe(st); });
+
+function play(st) {
+  st.classList.remove('play');
+  void st.offsetWidth;
+  st.classList.add('play');
+  requestAnimationFrame(() => st.getAnimations({ subtree: true }).forEach(a => a.playbackRate = rate));
+}
+const playAll = () => stages.forEach(play);
+
+stages.forEach(st => st.addEventListener('click', () => play(st)));
+document.querySelectorAll('[data-play]').forEach(b =>
+  b.addEventListener('click', () => play(document.getElementById(b.dataset.play))));
+document.querySelectorAll('[data-fs]').forEach(b =>
+  b.addEventListener('click', async () => {
+    const st = document.getElementById(b.dataset.fs);
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else { await st.requestFullscreen(); fit(st); play(st); }
+  }));
+document.addEventListener('fullscreenchange', () => stages.forEach(fit));
+
+document.getElementById('playAll').addEventListener('click', playAll);
+document.getElementById('speed').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  rate = parseFloat(b.dataset.r);
+  [...e.currentTarget.children].forEach(c => c.setAttribute('aria-pressed', c === b));
+  playAll();
+});
+
+/* loop */
+let timer = null;
+const loopBox = document.getElementById('loop');
+function retime() {
+  clearInterval(timer);
+  if (loopBox.checked) timer = setInterval(playAll, 3800 / rate + 700);
+}
+loopBox.addEventListener('change', retime);
+document.getElementById('speed').addEventListener('click', retime);
+
+playAll();
+retime();
+</script>
+</body>
+</html>

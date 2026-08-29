@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
@@ -15,7 +17,9 @@ import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_avatar_ingest.dart';
 import 'package:debrify/services/profiles/profile_avatar_storage.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_database_snapshot.dart';
 import 'package:debrify/services/profiles/profile_data_generation.dart';
+import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_package_service.dart';
 import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -31,6 +35,98 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'avatar_fixtures.dart';
+
+class _SetupCompleteObserver implements ProfileLifecycleParticipant {
+  _SetupCompleteObserver(this.registry, this.profileId);
+
+  final ProfileRegistry registry;
+  final String profileId;
+  bool? setupCompleteDuringCandidateInitialization;
+
+  @override
+  Future<void> prepareDeactivate(ProfileScope current) async {}
+
+  @override
+  Future<void> initializeCandidate(ProfileScope candidate) async {
+    setupCompleteDuringCandidateInitialization = (await registry.getProfile(
+      profileId,
+    ))?.setupComplete;
+  }
+
+  @override
+  Future<void> didActivate(ProfileScope active) async {}
+
+  @override
+  Future<void> rollback(ProfileScope restored) async {}
+}
+
+Future<PortableProfilePackage> _singleProfilePackage({
+  required bool? setupComplete,
+}) async {
+  final section = await PortableProfilePackage.buildSection(
+    const <String, Object?>{'theme_mode': 'restored'},
+  );
+  return PortableProfilePackage(
+    mode: 'singleProfile',
+    createdAt: DateTime.utc(2026, 8, 29),
+    profiles: <Map<String, dynamic>>[
+      <String, dynamic>{
+        'backupId': 'profile-0',
+        if (setupComplete != null) 'setupComplete': setupComplete,
+        'preferencesSection': 'preferences',
+      },
+    ],
+    resources: const <Map<String, dynamic>>[],
+    sections: <String, dynamic>{'preferences': section},
+  );
+}
+
+Future<Map<String, dynamic>> _legacyV3EncryptedEnvelope(
+  PortableProfilePackage source,
+  String passphrase,
+) async {
+  final body = <String, dynamic>{...source.toJson(), 'version': 3};
+  final digest = await Sha256().hash(utf8.encode(jsonEncode(body)));
+  final stamped = <String, dynamic>{
+    ...body,
+    'integrity': <String, dynamic>{
+      'algorithm': 'sha256',
+      'digest': base64UrlEncode(digest.bytes).replaceAll('=', ''),
+    },
+  };
+  final salt = List<int>.generate(16, (index) => index + 1);
+  final key = await Argon2id(
+    parallelism: 1,
+    memory: 8,
+    iterations: 1,
+    hashLength: 32,
+  ).deriveKey(secretKey: SecretKey(utf8.encode(passphrase)), nonce: salt);
+  const aad = 'debrify-profile-backup-v3';
+  final box = await AesGcm.with256bits().encrypt(
+    utf8.encode(jsonEncode(stamped)),
+    secretKey: key,
+    aad: utf8.encode(aad),
+  );
+  return <String, dynamic>{
+    'format': 'debrify-profile-package',
+    'version': 3,
+    'encrypted': true,
+    'createdAt': source.createdAt.toUtc().toIso8601String(),
+    'kdf': <String, dynamic>{
+      'algorithm': 'argon2id',
+      'salt': base64Encode(salt),
+      'memory': 8,
+      'iterations': 1,
+      'parallelism': 1,
+    },
+    'aead': <String, dynamic>{
+      'algorithm': 'aes-256-gcm',
+      'aad': aad,
+      'nonce': base64Encode(box.nonce),
+      'ciphertext': base64Encode(<int>[...box.cipherText, ...box.mac.bytes]),
+    },
+  };
+}
 
 void main() {
   late Directory temporaryDirectory;
@@ -164,6 +260,87 @@ void main() {
     expect(package.omissions, isNot(contains('borrowedConnections')));
   });
 
+  test(
+    'secret-free export omits credential-shaped custom engine settings',
+    () async {
+      final raw = await SharedPreferences.getInstance();
+      final prefix = 'p.$profileId.g.1.';
+      await raw.setString(
+        '${prefix}engine_custom_indexer_api_key',
+        'engine-setting-secret',
+      );
+      await raw.setBool('${prefix}engine_custom_indexer_enabled', true);
+
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportProfile(
+            context: await ProfileAuthorizationContext.capture(registry),
+            scope: ProfileRuntime.capture(),
+            includeSecrets: false,
+            sanitized: false,
+          );
+
+      final values =
+          (package.sections['profile-0-preferences'] as Map)['values'] as Map;
+      expect(values, isNot(contains('engine_custom_indexer_api_key')));
+      expect(values['engine_custom_indexer_enabled'], isTrue);
+    },
+  );
+
+  test(
+    'compact profile package reports complete Debrify TV omission',
+    () async {
+      final scope = ProfileRuntime.capture();
+      final source = scope.fileIn(documents, 'documents', 'debrify_tv.db');
+      await source.parent.create(recursive: true);
+      final database = await openDatabase(source.path, singleInstance: false);
+      await database.execute(
+        'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_cached_torrents '
+        '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL)',
+      );
+      await database.insert('tv_channels', <String, Object?>{
+        'channel_id': 'portable-channel',
+      });
+      await database.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'portable-channel',
+        'infohash': 'portable-hash',
+      });
+      await database.close();
+
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportProfile(
+            context: await ProfileAuthorizationContext.capture(registry),
+            scope: scope,
+            includeSecrets: true,
+            sanitized: false,
+            compactDatabaseSnapshots: true,
+          );
+
+      final omission = DebrifyTvBackupOmission.fromOmissions(package.omissions);
+      expect(omission?.channels, 1);
+      expect(omission?.savedHashes, 1);
+      expect(omission?.profilesAffected, 1);
+      expect(
+        package.omissions,
+        isNot(contains('rebuildableDatabaseCachesOmitted')),
+      );
+    },
+  );
+
   test('publishes only the finalized staged generation', () async {
     final section = await PortableProfilePackage.buildSection(
       const <String, Object?>{'theme_mode': 'restored', 'language': 'en'},
@@ -198,6 +375,207 @@ void main() {
     expect(prefs.getString('p.$profileId.g.1.theme_mode'), 'old');
     expect(prefs.getString('p.$profileId.g.2.theme_mode'), 'restored');
     expect(prefs.getString('p.$profileId.g.2.language'), 'en');
+  });
+
+  for (final importedSetupComplete in <bool?>[null, false]) {
+    final sourceLabel = importedSetupComplete == null
+        ? 'missing setup state'
+        : 'setup incomplete';
+    test('onboarding restore publishes completion with $sourceLabel', () async {
+      expect((await registry.getProfile(profileId))?.setupComplete, isFalse);
+      final observer = _SetupCompleteObserver(registry, profileId);
+
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+        lifecycleParticipants: <ProfileLifecycleParticipant>[observer],
+      ).restore(
+        package: await _singleProfilePackage(
+          setupComplete: importedSetupComplete,
+        ),
+        destinationProfileId: profileId,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+        completeOnboarding: true,
+      );
+
+      expect(
+        observer.setupCompleteDuringCandidateInitialization,
+        isTrue,
+        reason:
+            'completion must be visible when the new epoch remounts the app',
+      );
+      expect((await registry.getProfile(profileId))?.setupComplete, isTrue);
+    });
+  }
+
+  test('ordinary restore still applies the backup setup state', () async {
+    var authorization = await ProfileAuthorizationContext.capture(registry);
+    await registry.setActiveProfileSetupComplete(
+      profileId: profileId,
+      setupComplete: true,
+      actingAuthorizationRevision: authorization.authorizationRevision,
+      actingSessionEpoch: authorization.sessionEpoch,
+    );
+    expect((await registry.getProfile(profileId))?.setupComplete, isTrue);
+    authorization = await ProfileAuthorizationContext.capture(registry);
+    final observer = _SetupCompleteObserver(registry, profileId);
+
+    await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+      lifecycleParticipants: <ProfileLifecycleParticipant>[observer],
+    ).restore(
+      package: await _singleProfilePackage(setupComplete: false),
+      destinationProfileId: profileId,
+      authorization: authorization,
+    );
+
+    expect(observer.setupCompleteDuringCandidateInitialization, isFalse);
+    expect((await registry.getProfile(profileId))?.setupComplete, isFalse);
+  });
+
+  test('v3 restore drops preferences that became non-portable in v4', () async {
+    final section =
+        await PortableProfilePackage.buildSection(const <String, Object?>{
+          'theme_mode': 'restored',
+          'tvmaze_cache_episodes_1139': 'rebuildable-cache',
+          'webdav_username': 'superseded-account-field',
+        });
+    final source = PortableProfilePackage(
+      mode: 'singleProfile',
+      createdAt: DateTime.utc(2026, 8, 13),
+      profiles: const <Map<String, dynamic>>[
+        <String, dynamic>{
+          'backupId': 'profile-0',
+          'preferencesSection': 'preferences',
+        },
+      ],
+      resources: const <Map<String, dynamic>>[],
+      sections: <String, dynamic>{'preferences': section},
+    );
+    final package = await PortableProfilePackage.decrypt(
+      await _legacyV3EncryptedEnvelope(source, 'correct horse'),
+      'correct horse',
+    );
+    expect(package.sourceVersion, 3);
+
+    final report =
+        await ProfileRestoreCoordinator(
+          registry: registry,
+          cipher: cipher,
+        ).restore(
+          package: package,
+          destinationProfileId: profileId,
+          authorization: await ProfileAuthorizationContext.capture(registry),
+        );
+
+    expect(report.preferencesApplied, 1);
+    final raw = await SharedPreferences.getInstance();
+    final prefix = 'p.$profileId.g.${report.publishedGeneration}.';
+    expect(raw.getString('${prefix}theme_mode'), 'restored');
+    expect(raw.containsKey('${prefix}tvmaze_cache_episodes_1139'), isFalse);
+    expect(raw.containsKey('${prefix}webdav_username'), isFalse);
+  });
+
+  test('v4 restore rejects a preference forbidden by current policy', () async {
+    final section = await PortableProfilePackage.buildSection(
+      const <String, Object?>{
+        'theme_mode': 'restored',
+        'tvmaze_cache_episodes_1139': 'unexpected-cache',
+      },
+    );
+    final package = PortableProfilePackage(
+      mode: 'singleProfile',
+      createdAt: DateTime.utc(2026, 8, 29),
+      profiles: const <Map<String, dynamic>>[
+        <String, dynamic>{
+          'backupId': 'profile-0',
+          'preferencesSection': 'preferences',
+        },
+      ],
+      resources: const <Map<String, dynamic>>[],
+      sections: <String, dynamic>{'preferences': section},
+    );
+
+    await expectLater(
+      ProfileRestoreCoordinator(registry: registry, cipher: cipher).restore(
+        package: package,
+        destinationProfileId: profileId,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Forbidden restored preference tvmaze_cache_episodes_1139',
+        ),
+      ),
+    );
+    expect(ProfileRuntime.capture().dataGeneration, 1);
+  });
+
+  test('v3 single-profile restore skips a degenerate owned resource', () async {
+    final section = await PortableProfilePackage.buildSection(
+      const <String, Object?>{'theme_mode': 'restored'},
+    );
+    final package = PortableProfilePackage(
+      sourceVersion: 3,
+      mode: 'singleProfile',
+      createdAt: DateTime.utc(2026, 8, 13),
+      profiles: const <Map<String, dynamic>>[
+        <String, dynamic>{
+          'backupId': 'profile-0',
+          'preferencesSection': 'preferences',
+        },
+      ],
+      resources: <Map<String, dynamic>>[
+        <String, dynamic>{
+          'backupId': 'empty-resource',
+          'type': ConnectionResourceType.realDebrid.name,
+          'label': 'Empty legacy connection',
+          'owned': true,
+          'secretConfig': <String, dynamic>{},
+        },
+      ],
+      sections: <String, dynamic>{'preferences': section},
+    );
+
+    final report =
+        await ProfileRestoreCoordinator(
+          registry: registry,
+          cipher: cipher,
+        ).restore(
+          package: package,
+          destinationProfileId: profileId,
+          authorization: await ProfileAuthorizationContext.capture(registry),
+        );
+
+    expect(report.resourcesImported, 0);
+    expect(await registry.listGrantedResources(profileId), isEmpty);
+    expect(report.publishedGeneration, 2);
+
+    final currentPackage = PortableProfilePackage(
+      mode: package.mode,
+      createdAt: DateTime.utc(2026, 8, 29),
+      profiles: package.profiles,
+      resources: package.resources,
+      sections: package.sections,
+    );
+    await expectLater(
+      ProfileRestoreCoordinator(registry: registry, cipher: cipher).restore(
+        package: currentPackage,
+        destinationProfileId: profileId,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Imported resource secret is empty',
+        ),
+      ),
+    );
+    expect(ProfileRuntime.capture().dataGeneration, 2);
   });
 
   test('an unknown avatar key does not block single-profile restore', () async {
@@ -271,6 +649,63 @@ void main() {
     expect(ProfileRuntime.capture().dataGeneration, 1);
     expect((await registry.getProfile(profileId))?.visibleDataGeneration, 1);
   });
+
+  test(
+    'device-sealed IPTV execution blobs never cross a profile package',
+    () async {
+      final raw = await SharedPreferences.getInstance();
+      final prefix = 'p.$profileId.g.1.';
+      for (final key in const <String>{
+        'iptv_last_live_channel',
+        'startup_iptv_channel',
+      }) {
+        await raw.setString('$prefix$key', 'enc1:source-device-ciphertext');
+      }
+
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+          );
+      final exported =
+          (package.sections['profile-0-preferences'] as Map)['values'] as Map;
+      for (final key in const <String>{
+        'iptv_last_live_channel',
+        'startup_iptv_channel',
+      }) {
+        expect(exported, contains(key));
+        expect(exported[key], isNull);
+      }
+
+      final report =
+          await ProfileRestoreCoordinator(
+            registry: registry,
+            cipher: cipher,
+          ).restore(
+            package: package,
+            destinationProfileId: profileId,
+            authorization: authorization,
+          );
+      for (final key in const <String>{
+        'iptv_last_live_channel',
+        'startup_iptv_channel',
+      }) {
+        expect(
+          raw.containsKey('p.$profileId.g.${report.publishedGeneration}.$key'),
+          isFalse,
+        );
+      }
+    },
+  );
 
   test(
     'legacy IPTV memberships bind to the staged destination provider',
@@ -382,6 +817,167 @@ void main() {
     expect(secret['serverUrl'], 'https://panel.invalid:8080');
   });
 
+  test(
+    'single-profile restore publishes resource-local settings atomically',
+    () async {
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      var authorization = await ProfileAuthorizationContext.capture(registry);
+      final sourceResource = await service.create(
+        context: authorization,
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Locally disabled addon',
+        publicConfig: const <String, dynamic>{
+          'addonName': 'Locally disabled addon',
+          'contentKinds': <String>['series'],
+        },
+        secretConfig: const <String, dynamic>{
+          'id': 'locally-disabled-addon',
+          'name': 'Locally disabled addon',
+          'manifest_url': 'https://disabled.invalid/manifest.json',
+          'base_url': 'https://disabled.invalid',
+          'enabled': true,
+          'types': <String>['series'],
+          'resources': <String>['stream'],
+        },
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.setProfileResourceSettings(
+        profileId: profileId,
+        resourceId: sourceResource.id,
+        enabled: false,
+        settings: const <String, dynamic>{'presentation': 'compact'},
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        expectedResourceAuthorizationRevision:
+            sourceResource.authorizationRevision,
+        feature: ProfileFeature.addonsAndEngines,
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: service,
+          ).exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+          );
+
+      final report =
+          await ProfileRestoreCoordinator(
+            registry: registry,
+            cipher: cipher,
+          ).restore(
+            package: package,
+            destinationProfileId: profileId,
+            authorization: authorization,
+          );
+      expect(report.resourcesImported, 1);
+      final imported = (await registry.listGrantedResources(profileId))
+          .singleWhere(
+            (resource) =>
+                resource.label == 'Locally disabled addon' &&
+                resource.id != sourceResource.id,
+          );
+      final settings = await registry.getProfileResourceSettings(
+        profileId,
+        imported.id,
+      );
+      expect(settings?.enabled, isFalse);
+      expect(settings?.settings, <String, dynamic>{'presentation': 'compact'});
+    },
+  );
+
+  test(
+    'single-profile backup preserves an owned disabled connection',
+    () async {
+      const sourceId = 'disabled-single-profile-resource';
+      const type = ConnectionResourceType.reddit;
+      final sealed = await cipher.seal(
+        utf8.encode(
+          jsonEncode(const <String, Object?>{'accessToken': 'archived-token'}),
+        ),
+        associatedData: utf8.encode(
+          'debrify-resource|id=$sourceId|type=${type.name}|'
+          'owner=$profileId|public=1|secret=1',
+        ),
+      );
+      var authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.insertResource(
+        resource: ConnectionResource(
+          id: sourceId,
+          type: type,
+          label: 'Archived Reddit',
+          ownerProfileId: profileId,
+          publicConfig: const <String, dynamic>{
+            'schemaVersion': 1,
+            'accountLabel': 'Archived Reddit',
+          },
+          authorizationRevision: 1,
+          enabled: false,
+        ),
+        sealedSecretPayload: sealed,
+        secretPayloadVersion: 1,
+        ownerPermissions: ResourcePermission.values.fold<int>(
+          0,
+          (mask, permission) => mask | permission.bit,
+        ),
+        actingProfileId: authorization.profileId,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+      );
+
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: service,
+          ).exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+          );
+      expect(package.resources.single['disabled'], isTrue);
+
+      final report =
+          await ProfileRestoreCoordinator(
+            registry: registry,
+            cipher: cipher,
+          ).restore(
+            package: package,
+            destinationProfileId: profileId,
+            authorization: authorization,
+          );
+      expect(report.resourcesImported, 1);
+      final imported = (await registry.listAllResourcesIncludingDisabled())
+          .singleWhere(
+            (resource) =>
+                resource.label == 'Archived Reddit' && resource.id != sourceId,
+          );
+      expect(imported.enabled, isFalse);
+      expect(
+        (await registry.listGrantedResources(
+          profileId,
+        )).map((resource) => resource.id),
+        isNot(contains(imported.id)),
+      );
+      expect(
+        await service.revealOwnedSecretForProfileBackup(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: imported.id,
+        ),
+        <String, dynamic>{'accessToken': 'archived-token'},
+      );
+    },
+  );
+
   test('graph verification rejects bytes changed after finalization', () async {
     const operationId = 'graph-byte-mutation';
     const stagedProfileId = 'staged-profile';
@@ -468,6 +1064,177 @@ void main() {
       ProfileRecoveryResult.cleared,
     );
   });
+
+  test(
+    'graph restore prunes an inherited duplicate addon but keeps receiver-only addons',
+    () async {
+      const duplicateManifest = 'https://v3-cinemeta.strem.io/manifest.json';
+      const receiverOnlyManifest =
+          'https://receiver-only.invalid/manifest.json';
+      final resourceService = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final originalDuplicate = await resourceService.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Cinemeta',
+        publicConfig: const <String, dynamic>{
+          'addonName': 'Cinemeta',
+          'contentKinds': <String>['movie', 'series'],
+        },
+        secretConfig: const <String, dynamic>{
+          'id': 'com.linvo.cinemeta',
+          'name': 'Cinemeta',
+          'manifest_url': duplicateManifest,
+          'base_url': 'https://v3-cinemeta.strem.io',
+          'enabled': true,
+          'types': <String>['movie', 'series'],
+          'resources': <String>['catalog', 'meta'],
+        },
+      );
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: resourceService,
+          ).exportAllProfiles(
+            context: await ProfileAuthorizationContext.capture(registry),
+            includeSecrets: true,
+          );
+
+      // This resource exists only on the receiver. Imported profiles should
+      // continue to inherit it; only the exact Cinemeta duplicate is removed.
+      final receiverOnly = await resourceService.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Receiver-only addon',
+        publicConfig: const <String, dynamic>{
+          'addonName': 'Receiver-only addon',
+          'contentKinds': <String>['movie'],
+        },
+        secretConfig: const <String, dynamic>{
+          'id': 'receiver-only',
+          'name': 'Receiver-only addon',
+          'manifest_url': receiverOnlyManifest,
+          'base_url': 'https://receiver-only.invalid',
+          'enabled': true,
+          'types': <String>['movie'],
+          'resources': <String>['stream'],
+        },
+      );
+
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(
+        package: package,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      );
+
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final grantedAddons = (await registry.listGrantedResources(imported.id))
+          .where(
+            (resource) => resource.type == ConnectionResourceType.stremioAddon,
+          )
+          .toList();
+      expect(grantedAddons, hasLength(2));
+      expect(
+        grantedAddons.where((resource) => resource.label == 'Cinemeta'),
+        hasLength(1),
+      );
+      expect(
+        grantedAddons
+            .singleWhere((resource) => resource.label == 'Cinemeta')
+            .ownerProfileId,
+        imported.id,
+      );
+      expect(
+        grantedAddons.map((resource) => resource.id),
+        contains(receiverOnly.id),
+      );
+      expect(
+        await registry.getGrant(imported.id, originalDuplicate.id),
+        isNull,
+      );
+      expect(await registry.getGrant(imported.id, receiverOnly.id), isNotNull);
+    },
+  );
+
+  test(
+    'a disabled profile keeps its PIN and recovery code through graph restore',
+    () async {
+      final pins = ProfilePinService(
+        registry: registry,
+        params: const PinKdfParams(memory: 64, iterations: 1),
+      );
+      var authorization = await ProfileAuthorizationContext.capture(registry);
+      final archived = await registry.createProfile(
+        name: 'Archived member',
+        role: UserProfileRole.member,
+        setupComplete: true,
+        actingProfileId: authorization.profileId,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        actingSessionEpoch: authorization.sessionEpoch,
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final recoveryCode = await pins.setPinAsAdmin(
+        actor: authorization,
+        targetProfileId: archived.id,
+        pin: '1957',
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.disableProfile(
+        archived.id,
+        actingProfileId: authorization.profileId,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        actingSessionEpoch: authorization.sessionEpoch,
+      );
+
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final package = await ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ),
+      ).exportAllProfiles(context: authorization, includeSecrets: true);
+      final archivedRecord = package.profiles.singleWhere(
+        (record) => record['name'] == 'Archived member',
+      );
+      expect(archivedRecord['disabled'], isTrue);
+      expect(archivedRecord['pinRecord'], isA<Map>());
+
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+
+      expect(report.pinResetsRequired, 0);
+      final importedArchived =
+          (await registry.listProfiles(includeDisabled: true)).singleWhere(
+            (profile) =>
+                profile.id != archived.id && profile.name == 'Archived member',
+          );
+      expect(importedArchived.isEnabled, isFalse);
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.enableProfile(
+        importedArchived.id,
+        actingProfileId: authorization.profileId,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        actingSessionEpoch: authorization.sessionEpoch,
+      );
+      expect(
+        (await pins.verify(importedArchived.id, '1957')).result,
+        ProfilePinResult.verified,
+      );
+      expect(
+        await pins.verifyRecoveryCode(importedArchived.id, recoveryCode),
+        ProfileRecoveryResult.cleared,
+      );
+    },
+  );
 
   test('a broken carried recovery trio degrades to PIN-only', () async {
     final pins = ProfilePinService(
@@ -625,6 +1392,169 @@ void main() {
           addon.copyWith(connectionResourceId: recreatedResource.id),
         ),
         restoredValue,
+      );
+    },
+  );
+
+  test(
+    'graph preserves lock settings, resource-local state, IDs, and disabled resources',
+    () async {
+      var authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.updateProfile(
+        id: profileId,
+        lockOnResume: true,
+        inactivityTimeoutMinutes: 15,
+        actingProfileId: authorization.profileId,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        actingSessionEpoch: authorization.sessionEpoch,
+      );
+
+      final resourceService = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final enabledResource = await resourceService.create(
+        context: authorization,
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Portable addon',
+        publicConfig: const <String, dynamic>{
+          'addonName': 'Portable addon',
+          'contentKinds': <String>['movie'],
+        },
+        secretConfig: const <String, dynamic>{
+          'id': 'portable-addon',
+          'name': 'Portable addon',
+          'manifest_url': 'https://addon.invalid/manifest.json',
+          'base_url': 'https://addon.invalid',
+          'enabled': true,
+          'types': <String>['movie'],
+          'resources': <String>['stream'],
+        },
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.setProfileResourceSettings(
+        profileId: profileId,
+        resourceId: enabledResource.id,
+        enabled: false,
+        settings: <String, dynamic>{
+          'selectedResource': enabledResource.id,
+          'nested': <String, dynamic>{'source': enabledResource.id},
+        },
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        expectedResourceAuthorizationRevision:
+            enabledResource.authorizationRevision,
+        feature: ProfileFeature.addonsAndEngines,
+      );
+      final preferences = await ProfilePreferences.instance();
+      await preferences.setString('selected_resource', enabledResource.id);
+      await preferences.setString(
+        'resource_layout_v1',
+        jsonEncode(<String, Object?>{
+          'primary': enabledResource.id,
+          'items': <String>[enabledResource.id],
+        }),
+      );
+      await preferences.setString(
+        'engine_custom_indexer_api_key',
+        'engine-setting-sentinel',
+      );
+
+      const disabledId = 'disabled-resource-sentinel';
+      const disabledType = ConnectionResourceType.reddit;
+      final disabledSecret = await cipher.seal(
+        utf8.encode(
+          jsonEncode(const <String, Object?>{'accessToken': 'archived-token'}),
+        ),
+        associatedData: utf8.encode(
+          'debrify-resource|id=$disabledId|type=${disabledType.name}|'
+          'owner=$profileId|public=1|secret=1',
+        ),
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      await registry.insertResource(
+        resource: ConnectionResource(
+          id: disabledId,
+          type: disabledType,
+          label: 'Disabled archive',
+          ownerProfileId: profileId,
+          publicConfig: const <String, dynamic>{
+            'schemaVersion': 1,
+            'accountLabel': 'Disabled archive',
+          },
+          authorizationRevision: 1,
+          enabled: false,
+        ),
+        sealedSecretPayload: disabledSecret,
+        secretPayloadVersion: 1,
+        ownerPermissions: ResourcePermission.values.fold<int>(
+          0,
+          (mask, permission) => mask | permission.bit,
+        ),
+        actingProfileId: authorization.profileId,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+      );
+
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final package = await ProfilePackageService(
+        registry: registry,
+        resources: resourceService,
+      ).exportAllProfiles(context: authorization, includeSecrets: true);
+      expect(
+        package.resources.singleWhere(
+          (record) => record['sourceResourceId'] == disabledId,
+        )['disabled'],
+        isTrue,
+      );
+
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      expect(imported.lockOnResume, isTrue);
+      expect(imported.inactivityTimeoutMinutes, 15);
+      final recreated = (await registry.listAllResourcesIncludingDisabled())
+          .where((resource) => resource.ownerProfileId == imported.id)
+          .toList();
+      final recreatedEnabled = recreated.singleWhere(
+        (resource) => resource.label == 'Portable addon',
+      );
+      final recreatedDisabled = recreated.singleWhere(
+        (resource) => resource.label == 'Disabled archive',
+      );
+      expect(recreatedEnabled.id, isNot(enabledResource.id));
+      expect(recreatedDisabled.enabled, isFalse);
+      expect(
+        (await registry.listGrantedResources(
+          imported.id,
+        )).map((resource) => resource.id),
+        isNot(contains(recreatedDisabled.id)),
+      );
+
+      final localSettings = await registry.getProfileResourceSettings(
+        imported.id,
+        recreatedEnabled.id,
+      );
+      expect(localSettings?.enabled, isFalse);
+      expect(localSettings?.settings['selectedResource'], recreatedEnabled.id);
+      expect(
+        (localSettings?.settings['nested'] as Map?)?['source'],
+        recreatedEnabled.id,
+      );
+
+      final raw = await SharedPreferences.getInstance();
+      final prefix = 'p.${imported.id}.g.${imported.visibleDataGeneration}.';
+      expect(raw.getString('${prefix}selected_resource'), recreatedEnabled.id);
+      final layout = jsonDecode(raw.getString('${prefix}resource_layout_v1')!);
+      expect(layout['primary'], recreatedEnabled.id);
+      expect(layout['items'], <Object?>[recreatedEnabled.id]);
+      expect(
+        raw.getString('${prefix}engine_custom_indexer_api_key'),
+        'engine-setting-sentinel',
       );
     },
   );

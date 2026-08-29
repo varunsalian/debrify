@@ -26,6 +26,7 @@ import '../services/main_page_bridge.dart';
 import '../services/next_episode_service.dart';
 import '../services/analytics_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
+import '../services/local_playback_resume_resolver.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
@@ -232,6 +233,10 @@ class VideoPlayerLaunchArgs {
   final String? contentType; // 'movie' or 'series'
   final int? contentSeason;
   final int? contentEpisode;
+
+  /// Whether local resume follows the exact source or canonical catalog
+  /// identity. Direct/generic launchers default to source-specific behavior.
+  final PlaybackResumePolicy resumePolicy;
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
@@ -352,6 +357,7 @@ class VideoPlayerLaunchArgs {
     this.contentType,
     this.contentSeason,
     this.contentEpisode,
+    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
     this.iptvChannels,
     this.iptvStartIndex,
     this.iptvCategories,
@@ -438,6 +444,7 @@ class VideoPlayerLaunchArgs {
     contentType: contentType,
     contentSeason: contentSeason,
     contentEpisode: contentEpisode,
+    resumePolicy: resumePolicy,
     iptvChannels: iptvChannels,
     iptvStartIndex: iptvStartIndex,
     iptvCategories: iptvCategories,
@@ -511,6 +518,7 @@ class VideoPlayerLaunchArgs {
       contentType: contentType,
       contentSeason: contentSeason,
       contentEpisode: contentEpisode,
+      resumePolicy: resumePolicy,
       contentTitle: contentTitle,
       iptvChannels: iptvChannels,
       iptvStartIndex: iptvStartIndex,
@@ -593,6 +601,36 @@ class VideoPlayerLauncher {
     final name = entry.title.isNotEmpty ? entry.title : fallbackTitle;
     final nameWithoutExt = name.replaceAll(RegExp(r'\.[^.]*$'), '');
     return nameWithoutExt.hashCode.toString();
+  }
+
+  /// Local resume record for a NON-series entry.
+  ///
+  /// [resumeIdForEntry] keys movies by release filename (or by debrid file id),
+  /// so watching via one source and relaunching via another — Quick Play
+  /// auto-picking a different torrent, an unpinned binding, a startup failover
+  /// landing on candidate 3 — misses the record and restarts from zero. The
+  /// Flutter player already recovers from that by scanning for the IMDb id
+  /// (see `_getEnhancedPlaybackState`); this is the native-TV counterpart, so
+  /// both players resolve movie resume the same way.
+  ///
+  /// Generic playback remains exact-source-first. Catalog playback reverses
+  /// that precedence so the newest record for the stable IMDb id wins even
+  /// when the selected source has an older bookmark of its own.
+  static Future<Map<String, dynamic>?> readMovieResumeState({
+    required PlaylistEntry entry,
+    required String? imdbId,
+    String fallbackTitle = '',
+    PlaybackResumePolicy policy = PlaybackResumePolicy.sourceSpecific,
+  }) async {
+    // A canonical record's duration belongs to the source that wrote it and
+    // may differ for another cut. Both players validate the absolute position
+    // against the live duration before seeking, so retain the existing ms-based
+    // behavior rather than guessing a percentage here.
+    return LocalPlaybackResumeResolver.movie(
+      resumeId: resumeIdForEntry(entry, fallbackTitle: fallbackTitle),
+      imdbId: imdbId,
+      policy: policy,
+    );
   }
 
   /// Refresh the replaceable Trakt snapshot used by every guide surface.
@@ -811,6 +849,7 @@ class VideoPlayerLauncher {
           contentType: args.contentType,
           contentSeason: args.contentSeason,
           contentEpisode: args.contentEpisode,
+          resumePolicy: args.resumePolicy,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
           iptvCategories: args.iptvCategories,
@@ -905,6 +944,7 @@ class VideoPlayerLauncher {
           contentType: args.contentType,
           contentSeason: args.contentSeason,
           contentEpisode: args.contentEpisode,
+          resumePolicy: args.resumePolicy,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
           iptvCategories: args.iptvCategories,
@@ -2329,6 +2369,28 @@ class VideoPlayerLauncher {
                   imdbId: sourceImdbId,
                 )
               : const <String, Set<int>>{};
+          // A movie has no episode key, so the loop below finds nothing in
+          // localSeriesProgress and every re-resolved item ships
+          // resumePositionMs: 0 — a source switch or startup failover restarts
+          // the film. Resolve its own record once, the same way the initial
+          // payload does.
+          //
+          // `args.contentType` is redundant against today's `isSeries` (a lone
+          // entry under a series launch always classifies as series above), but
+          // it is stated because the id scan MUST NOT run for episodes: their
+          // progress is mirrored into video records under the series imdbId,
+          // so a scan would return an unrelated episode's position.
+          final sourceMovieState =
+              !isSeries &&
+                  args.contentType != 'series' &&
+                  playlistEntries.length == 1
+              ? await readMovieResumeState(
+                  entry: playlistEntries.first,
+                  imdbId: sourceImdbId,
+                  fallbackTitle: args.title,
+                  policy: args.resumePolicy,
+                )
+              : null;
 
           // Convert PlaylistEntry list to Android TV PlaybackItem maps
           final items = <Map<String, dynamic>>[];
@@ -2360,7 +2422,7 @@ class VideoPlayerLauncher {
                 : null;
             final localState = episodeKey != null
                 ? localSeriesProgress[episodeKey]
-                : null;
+                : sourceMovieState;
             final locallyWatched = season != null && episodeNumber != null
                 ? localFinishedEpisodes[season.toString()]?.contains(
                         episodeNumber,
@@ -5481,23 +5543,51 @@ class _AndroidTvPlaybackPayloadBuilder {
         );
         continue;
       }
+      // A lone single-content entry IS the movie, so an IMDb-keyed record
+      // describes THIS content and recovers a resume the source-specific key
+      // missed. Deliberately narrow:
+      //  - collection (a pack) would seed every file from one id;
+      //  - `contentType == 'series'` is excluded even when the classifier fell
+      //    through to `single` (an episode launched without season/episode).
+      //    Episode progress is ALSO mirrored into a `type: 'video'` record
+      //    carrying the SERIES imdbId (see the series branch of
+      //    `_handleProgressUpdate`), so scanning by id there would hand back
+      //    whichever episode was watched most recently.
+      if (contentType == _PlaybackContentType.single &&
+          args.contentType != 'series' &&
+          entries.length == 1) {
+        result.add(
+          _stateFromRecord(
+            await VideoPlayerLauncher.readMovieResumeState(
+              entry: entry,
+              imdbId: args.contentImdbId,
+              fallbackTitle: args.title,
+              policy: args.resumePolicy,
+            ),
+          ),
+        );
+        continue;
+      }
       final resumeId = _resumeIdForEntry(entry);
       result.add(await _readVideoState(resumeId));
     }
     return result;
   }
 
-  Future<_PerItemState> _readVideoState(String resumeId) async {
-    final data = await StorageService.getVideoPlaybackState(
-      videoTitle: resumeId,
-    );
+  static _PerItemState _stateFromRecord(Map<String, dynamic>? data) {
     if (data == null) {
       return const _PerItemState();
     }
     return _PerItemState(
-      positionMs: (data['positionMs'] ?? 0) as int,
-      durationMs: (data['durationMs'] ?? 0) as int,
-      updatedAt: (data['updatedAt'] ?? 0) as int,
+      positionMs: (data['positionMs'] as num?)?.toInt() ?? 0,
+      durationMs: (data['durationMs'] as num?)?.toInt() ?? 0,
+      updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Future<_PerItemState> _readVideoState(String resumeId) async {
+    return _stateFromRecord(
+      await StorageService.getVideoPlaybackState(videoTitle: resumeId),
     );
   }
 

@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'dart:io' show Directory, File, Platform;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart'
-    show getExternalStorageDirectory;
 
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/backup_restore_service.dart';
+import '../../services/download_service.dart';
 import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/legacy_backup_adapter.dart';
@@ -17,25 +15,45 @@ import '../../services/profiles/portable_profile_package.dart';
 import '../../services/profiles/profile_app_lifecycle_participant.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_database_snapshot.dart';
 import '../../services/profiles/profile_lifecycle.dart';
 import '../../services/profiles/profile_package_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/profiles/profile_runtime.dart';
-import '../../utils/app_storage.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+
+/// Successful profile restore metadata needed by onboarding completion.
+class ProfileBackupRestoreResult {
+  const ProfileBackupRestoreResult.singleProfile({
+    required this.authorizingProfileId,
+  }) : graphReport = null;
+
+  const ProfileBackupRestoreResult.deviceGraph({
+    required this.authorizingProfileId,
+    required this.graphReport,
+  });
+
+  final String authorizingProfileId;
+  final ProfileGraphRestoreReport? graphReport;
+}
 
 /// The profile backup/restore user flows, extracted from the settings screen
 /// so the Profiles hub can offer them at its first level. Behavior is
 /// identical to the settings-screen originals; [onRestored] replaces the
 /// screen-specific refresh the settings page used to run inline.
 class ProfileBackupFlows {
-  const ProfileBackupFlows(this.context, {this.onRestored});
+  const ProfileBackupFlows(
+    this.context, {
+    this.onRestored,
+    this.completingOnboarding = false,
+  });
 
   final BuildContext context;
   final Future<void> Function()? onRestored;
+  final bool completingOnboarding;
 
   Future<void> createProfileBackup() async {
     try {
@@ -68,6 +86,7 @@ class ProfileBackupFlows {
     final canExportAll =
         actor.role == UserProfileRole.admin &&
         actor.allows(ProfileFeature.manageProfiles);
+    if (!context.mounted) return;
     final passphrase = TextEditingController();
     var allProfiles = false;
     final confirmed = await showSettingsDialog<bool>(
@@ -97,21 +116,21 @@ class ProfileBackupFlows {
                       setDialogState(() => allProfiles = value),
                 ),
               TvTextField(
-                  controller: passphrase,
-                  obscureText: true,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  keyboardSubmitLabel: 'Create backup',
-                  decoration: const InputDecoration(
-                    labelText: 'Backup passphrase (minimum 8 characters)',
-                  ),
-                  onChanged: (_) => setDialogState(() {}),
-                  onSubmitted: (_) {
-                    if (passphrase.text.length >= 8) {
-                      Navigator.of(dialogContext).pop(true);
-                    }
-                  },
+                controller: passphrase,
+                obscureText: true,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                keyboardSubmitLabel: 'Create backup',
+                decoration: const InputDecoration(
+                  labelText: 'Backup passphrase (minimum 8 characters)',
                 ),
+                onChanged: (_) => setDialogState(() {}),
+                onSubmitted: (_) {
+                  if (passphrase.text.length >= 8) {
+                    Navigator.of(dialogContext).pop(true);
+                  }
+                },
+              ),
             ],
           ),
           actions: [
@@ -144,147 +163,161 @@ class ProfileBackupFlows {
       registry: registry,
       resources: resourceService,
     );
-    var packageOmissions = const <String, dynamic>{};
-    final bytes = await _profileBackupProgress<Uint8List>(
-      'Packaging profile data…',
-      (setStage) async {
-        final package = allProfiles
-            ? await service.exportAllProfiles(
-                context: authorization,
-                includeSecrets: true,
-              )
-            : await service.exportProfile(
-                context: authorization,
-                scope: ProfileRuntime.capture(),
-                includeSecrets: true,
-                sanitized: false,
-              );
-        packageOmissions = package.omissions;
-        setStage('Encrypting backup — this can take a minute…');
-        return PortableProfilePackage.encodeEncryptedBytes(package, password);
-      },
+    Future<PortableProfilePackage> export({required bool compact}) =>
+        allProfiles
+        ? service.exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            compactDatabaseSnapshots: compact,
+          )
+        : service.exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+            compactDatabaseSnapshots: compact,
+          );
+
+    late PortableProfilePackage package;
+    Uint8List? encodedBytes;
+    var compactRetryRequired = false;
+    await _profileBackupProgress<void>('Packaging profile data…', (
+      setStage,
+    ) async {
+      package = await export(compact: false);
+      // An automatic raw-database compaction can already have produced an
+      // omitted package. Size it here, but obtain consent before saving it.
+      setStage('Encrypting backup — this can take a minute…');
+      try {
+        encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
+          package,
+          password,
+        );
+      } catch (error) {
+        if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
+        compactRetryRequired = true;
+      }
+    });
+    if (compactRetryRequired) {
+      package = await _profileBackupProgress<PortableProfilePackage>(
+        'Compacting the backup…',
+        (setStage) async {
+          final compacted = await export(compact: true);
+          setStage('Encrypting compacted backup — this can take a minute…');
+          encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
+            compacted,
+            password,
+          );
+          return compacted;
+        },
+      );
+    }
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
+      package.omissions,
+    );
+    if (debrifyTvOmission?.isEmpty == false) {
+      final continueWithoutChannels = await _confirmDebrifyTvOmission(
+        debrifyTvOmission!,
+        allProfiles: allProfiles,
+      );
+      if (!continueWithoutChannels) return;
+    }
+    final bytes =
+        encodedBytes ??
+        await _profileBackupProgress<Uint8List>(
+          'Encrypting backup — this can take a minute…',
+          (_) => PortableProfilePackage.encodeEncryptedBytes(package, password),
+        );
+    final databaseCachesCompacted = package.omissions.containsKey(
+      'rebuildableDatabaseCachesOmitted',
     );
     final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     final saved = await saveBackupFile(
-      dialogTitle: 'Save Debrify profile backup',
       fileName: allProfiles
           ? 'debrify-profiles-$stamp.json'
           : 'debrify-profile-$stamp.json',
       bytes: bytes,
     );
     if (!context.mounted || saved == null) return;
-    final skippedDatabases = packageOmissions['libraryDatabasesTooLarge'];
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          skippedDatabases is String
-              ? '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved. '
-                    'Too large to include: $skippedDatabases'
-              : allProfiles
-              ? 'All-profile backup saved'
-              : 'Profile backup saved',
+          '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved'
+          '${debrifyTvOmission?.isEmpty == false
+              ? '. Debrify TV was excluded as confirmed; restore it from a channel ZIP or Remote.'
+              : databaseCachesCompacted
+              ? '. Rebuildable catalog/EPG caches were compacted.'
+              : ''}',
         ),
-        duration: skippedDatabases is String
-            ? const Duration(seconds: 8)
+        duration: debrifyTvOmission?.isEmpty == false || databaseCachesCompacted
+            ? const Duration(seconds: 7)
             : const Duration(seconds: 4),
       ),
     );
   }
 
-  /// Saves backup bytes to a user-chosen location — or the best local one.
-  ///
-  /// Android TV builds ship no ACTION_CREATE_DOCUMENT handler, so the system
-  /// save dialog behind [FilePicker.saveFile] just raises an OS toast
-  /// ("you don't have an app to do this") and nothing is written. On TV —
-  /// or anywhere the dialog errors — the bytes are written to the most
-  /// retrievable writable folder instead (public Download, then the app's
-  /// browsable external dir, then app documents) and the full path is shown
-  /// in a dialog the user can act on.
-  ///
-  /// Returns the saved path, or null when the user cancelled the system
-  /// dialog. Throws [StateError] when no location could be written.
+  Future<bool> _confirmDebrifyTvOmission(
+    DebrifyTvBackupOmission omission, {
+    required bool allProfiles,
+  }) async {
+    if (!context.mounted) return false;
+    return await showSettingsDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Continue without Debrify TV?'),
+            content: Text(
+              'This backup had to be compacted to fit. Debrify TV will not '
+              'be included: ${omission.contentsLabel} will be left out. No '
+              'empty channels will be created when it is restored.\n\n'
+              'Before continuing, you can cancel and open Debrify TV → '
+              'Export to save the channels and their playable pools as a '
+              'ZIP. After restoring, use Debrify TV → Import → From storage. '
+              'Remote → Debrify TV Channels remains available for direct '
+              'device transfer.'
+              '${allProfiles && omission.profilesAffected > 1 ? ' Repeat the ZIP export/import or Remote transfer for each affected profile.' : ''}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel and export ZIP'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Continue without Debrify TV'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  /// Saves portable bytes through the same destination policy as downloads.
+  /// Generated artifacts never enter the download queue or history, but they
+  /// honor Downloads/Debrify, desktop custom folders, and Android SAF.
+  /// Returns a filesystem path or Android content URI.
   Future<String?> saveBackupFile({
-    required String dialogTitle,
     required String fileName,
     required Uint8List bytes,
+    String mimeType = 'application/json',
+    String artifactLabel = 'backup',
   }) async {
-    if (!PlatformUtil.isAndroidTvCached) {
-      try {
-        final savedPath = await FilePicker.platform.saveFile(
-          dialogTitle: dialogTitle,
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: const <String>['json'],
-          bytes: bytes,
-        );
-        if (savedPath == null) return null;
-        // On desktop platforms saveFile returns the chosen path without
-        // writing the bytes itself — write defensively if the file is
-        // missing or empty.
-        try {
-          final file = File(savedPath);
-          if (!await file.exists() || (await file.length()) == 0) {
-            await file.writeAsBytes(bytes, flush: true);
-          }
-        } catch (_) {
-          // saveFile already handled writing on this platform.
-        }
-        return savedPath;
-      } catch (_) {
-        // No usable system dialog here either — fall through to local write.
-      }
-    }
-
-    final candidates = <Directory>[
-      // Public Download first: reachable by every file manager. The write
-      // simply fails without storage permission or under scoped storage,
-      // and the ladder moves on.
-      if (Platform.isAndroid) Directory('/storage/emulated/0/Download'),
-      if (Platform.isAndroid)
-        ...await getExternalStorageDirectory().then(
-          (dir) => [if (dir != null) dir],
-          onError: (_) => const <Directory>[],
-        ),
-      await AppStorage.documents(),
-    ];
-    String? savedPath;
-    for (final dir in candidates) {
-      try {
-        if (!await dir.exists()) continue;
-        var file = File('${dir.path}/$fileName');
-        if (await file.exists()) {
-          // The system dialog would have warned before overwriting; a plain
-          // write won't, so a second same-day backup gets a time suffix.
-          final now = DateTime.now();
-          final suffix = [
-            now.hour,
-            now.minute,
-            now.second,
-          ].map((part) => part.toString().padLeft(2, '0')).join();
-          file = File(
-            '${dir.path}/${fileName.replaceFirst('.json', '-$suffix.json')}',
-          );
-        }
-        await file.writeAsBytes(bytes, flush: true);
-        if (await file.length() == bytes.length) {
-          savedPath = file.path;
-          break;
-        }
-      } catch (_) {
-        // Not writable — try the next candidate.
-      }
-    }
-    if (savedPath == null) {
-      throw StateError('Could not save the backup on this device');
-    }
+    final saved = await DownloadService.instance.saveGeneratedFile(
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+    );
     if (context.mounted) {
+      final titleLabel = artifactLabel.isEmpty
+          ? 'File'
+          : '${artifactLabel[0].toUpperCase()}${artifactLabel.substring(1)}';
       await showSettingsDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Backup saved on this device'),
+          title: Text('$titleLabel saved'),
           content: Text(
-            'The system save dialog is not available here, so the backup '
-            'was written to:\n\n$savedPath\n\nCopy it off with a file '
+            'The $artifactLabel was saved by Debrify’s download service:\n\n'
+            '${saved.displayLocation}\n\nYou can move or copy it with a file '
             'manager, USB, or over the network.',
           ),
           actions: [
@@ -296,7 +329,7 @@ class ProfileBackupFlows {
         ),
       );
     }
-    return savedPath;
+    return saved.reference;
   }
 
   /// Modal stage indicator for backup/restore work. The crypto and
@@ -325,14 +358,15 @@ class ProfileBackupFlows {
     }
   }
 
-  Future<void> restoreProfileBackup() async {
+  Future<ProfileBackupRestoreResult?> restoreProfileBackup() async {
     try {
-      await _restoreProfileBackupUnchecked();
+      return await _restoreProfileBackupUnchecked();
     } catch (error) {
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_profileBackupError(error, creating: false))),
       );
+      return null;
     }
   }
 
@@ -346,7 +380,7 @@ class ProfileBackupFlows {
         : 'Profile restore failed; existing data is unchanged';
   }
 
-  Future<void> _restoreProfileBackupUnchecked() async {
+  Future<ProfileBackupRestoreResult?> _restoreProfileBackupUnchecked() async {
     if (PlatformUtil.isTvOS) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -355,14 +389,14 @@ class ProfileBackupFlows {
           ),
         ),
       );
-      return;
+      return null;
     }
     final pick = await FilePicker.platform.pickFiles(
       dialogTitle: 'Choose a Debrify backup',
       type: FileType.any,
       withData: false,
     );
-    if (pick == null || pick.files.isEmpty) return;
+    if (pick == null || pick.files.isEmpty) return null;
     final file = pick.files.single;
     if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
       throw const FormatException('Backup exceeds the supported size limit');
@@ -380,7 +414,7 @@ class ProfileBackupFlows {
     if (probe.isProfilePackage) {
       if (probe.encrypted) {
         final unlocked = await _promptAndDecryptProfilePackage(path);
-        if (unlocked == null) return;
+        if (unlocked == null) return null;
         package = unlocked;
       } else {
         package = await _profileBackupProgress(
@@ -392,7 +426,7 @@ class ProfileBackupFlows {
       var legacy = BackupRestoreService.parse(probe.legacySource!);
       if (BackupRestoreService.isEncrypted(legacy)) {
         final unlocked = await _promptAndDecryptBackup(legacy);
-        if (unlocked == null) return;
+        if (unlocked == null) return null;
         legacy = unlocked;
       }
       package = LegacyBackupAdapter.adapt(legacy);
@@ -402,8 +436,29 @@ class ProfileBackupFlows {
     final profile = await registry.getProfile(
       ProfileRuntime.capture().profileId,
     );
-    if (profile == null || !context.mounted) return;
+    if (profile == null || !context.mounted) return null;
     final graphRestore = package.mode == 'deviceGraph';
+    final legacyDatabasesMissing =
+        package.omissions['libraryDatabasesOmitted'] == true ||
+        package.omissions['libraryDatabasesTooLarge'] != null;
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
+      package.omissions,
+    );
+    final databaseNotices = <String>[
+      if (legacyDatabasesMissing)
+        'Warning: this older backup omitted one or more library databases; '
+            'those playlists/history rows cannot be recovered from it.',
+      if (debrifyTvOmission?.isEmpty == false)
+        'Debrify TV was excluded when this backup was compacted '
+            '(${debrifyTvOmission!.contentsLabel}). No empty Debrify TV '
+            'channels will be created. Import a previously exported channel '
+            'ZIP from Debrify TV → Import → From storage, or transfer them '
+            'from the source using Remote → Debrify TV Channels.',
+      if (package.omissions.containsKey('rebuildableDatabaseCachesOmitted'))
+        'Rebuildable IPTV catalog and EPG caches were compacted; playlists, '
+            'favorites, history, numbering, and settings are included.',
+    ];
+    final databaseNotice = databaseNotices.join('\n\n');
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final actor = await authorization.validate(registry);
     if (graphRestore &&
@@ -411,6 +466,13 @@ class ProfileBackupFlows {
             !actor.allows(ProfileFeature.manageProfiles))) {
       throw StateError('Only an Admin can restore an all-profile backup');
     }
+    final graphAuthorityNotice =
+        completingOnboarding && actor.id == ProfileBootstrap.freshAdminId
+        ? 'Debrify then switches to a usable imported Admin and removes the '
+              'temporary setup Admin if it is untouched. If no imported '
+              'Admin can take over, the setup Admin remains for recovery.'
+        : 'Your current Admin remains the recovery profile.';
+    if (!context.mounted) return null;
     final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -421,8 +483,8 @@ class ProfileBackupFlows {
         ),
         content: Text(
           graphRestore
-              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.'
-              : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources; downloads, recordings, jobs, PINs, paths, and pairings are not restored.',
+              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. $graphAuthorityNotice Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}'
+              : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources. The destination name, role, policy, PIN, and enabled state stay unchanged; downloads, recordings, jobs, paths, and pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}',
         ),
         actions: [
           TextButton(
@@ -438,8 +500,10 @@ class ProfileBackupFlows {
         ],
       ),
     );
-    if (confirmed != true) return;
-    if (graphRestore && !await reauthenticateSensitiveProfile(actor)) return;
+    if (confirmed != true) return null;
+    if (graphRestore && !await reauthenticateSensitiveProfile(actor)) {
+      return null;
+    }
 
     final coordinator = ProfileRestoreCoordinator(
       registry: registry,
@@ -456,21 +520,26 @@ class ProfileBackupFlows {
           authorization: authorization,
         ),
       );
-      if (!context.mounted) return;
+      final result = ProfileBackupRestoreResult.deviceGraph(
+        authorizingProfileId: actor.id,
+        graphReport: report,
+      );
+      if (!context.mounted) return result;
       await onRestored?.call();
-      if (!context.mounted) return;
+      if (!context.mounted) return result;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Imported ${report.profilesImported} profiles, '
             '${report.resourcesImported} connections and '
             '${report.grantsImported} grants.'
-            '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) require a new PIN.'}',
+            '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) require a new PIN.'}'
+            '${databaseNotice.isEmpty ? '' : ' $databaseNotice'}',
           ),
           duration: const Duration(seconds: 7),
         ),
       );
-      return;
+      return result;
     }
     final report = await _profileBackupProgress(
       'Restoring — verifying and staging data, this can take a few minutes…',
@@ -478,26 +547,32 @@ class ProfileBackupFlows {
         package: package,
         destinationProfileId: profile.id,
         authorization: authorization,
+        completeOnboarding: completingOnboarding,
       ),
     );
-    if (!context.mounted) return;
+    final result = ProfileBackupRestoreResult.singleProfile(
+      authorizingProfileId: actor.id,
+    );
+    if (!context.mounted) return result;
     await onRestored?.call();
-    final omitted = report.omissions.entries
-        .where((entry) => entry.value != null && entry.value != 0)
-        .map((entry) => '${entry.key}: ${entry.value}')
-        .join(', ');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Restored generation ${report.publishedGeneration}: '
-          '${report.preferencesApplied} settings and '
-          '${report.resourcesImported} connections. '
-          '${omitted.isEmpty ? '' : 'Skipped: $omitted. '}'
-          'Media/jobs were not restored.',
+    if (context.mounted) {
+      final omitted = PortableProfilePackage.userVisibleOmissions(
+        report.omissions,
+      ).entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Restored generation ${report.publishedGeneration}: '
+            '${report.preferencesApplied} settings and '
+            '${report.resourcesImported} connections. '
+            '${omitted.isEmpty ? '' : 'Skipped: $omitted. '}'
+            'Media/jobs were not restored.',
+          ),
+          duration: const Duration(seconds: 6),
         ),
-        duration: const Duration(seconds: 6),
-      ),
-    );
+      );
+    }
+    return result;
   }
 
   Future<PortableProfilePackage?> _promptAndDecryptProfilePackage(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/services/debrify_tv_cache_service.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -129,6 +130,48 @@ void main() {
       expect(identical(handles[1], handles[2]), isTrue);
     },
   );
+
+  test('portable export recovers pooled rows without cache state', () async {
+    final db = await DebrifyTvDatabase.instance.database;
+    await db.insert('tv_channels', <String, Object>{
+      'channel_id': 'portable-channel',
+      'name': 'Portable channel',
+      'avoid_nsfw': 1,
+      'channel_number': 1,
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('tv_channel_keywords', <String, Object>{
+      'channel_id': 'portable-channel',
+      'position': 0,
+      'keyword': 'science fiction',
+    });
+    await db.insert('tv_cached_torrents', <String, Object>{
+      'channel_id': 'portable-channel',
+      'infohash': 'preserved-hash',
+      'name': 'Preserved title',
+      'size_bytes': 1000,
+      'created_unix': 10,
+      'seeders': 20,
+      'leechers': 2,
+      'completed': 30,
+      'scraped_date': 40,
+      'keywords_json': '["science fiction"]',
+      'sources_json': '["custom-source"]',
+      'added_at': 50,
+    });
+
+    expect(await DebrifyTvCacheService.getEntry('portable-channel'), isNull);
+    final portable = await DebrifyTvCacheService.getEntryForPortableExport(
+      'portable-channel',
+    );
+
+    expect(portable, isNotNull);
+    expect(portable!.status, 'ready');
+    expect(portable.normalizedKeywords, <String>['science fiction']);
+    expect(portable.torrents.single.infohash, 'preserved-hash');
+    expect(portable.torrents.single.sources, <String>['custom-source']);
+  });
 
   test('profile close waits for an admitted write transaction', () async {
     final transactionStarted = Completer<void>();

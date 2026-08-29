@@ -20,7 +20,7 @@ import 'tvos_profile_recovery_store.dart';
 class ProfileRegistry {
   ProfileRegistry._(this._db);
 
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
   final Database _db;
   Future<void> _recoveryCheckpoint = Future<void>.value();
   Future<void> Function()? authorityWillChangeCallback;
@@ -131,6 +131,9 @@ class ProfileRegistry {
           // source, so the repair reads them out in slices.
           await _repairOversizedInlineEnvelopes(database);
         }
+        if (oldVersion < 6) {
+          await _addRestoreResourceSettingsColumns(database);
+        }
       },
     );
     return ProfileRegistry._(db);
@@ -152,6 +155,32 @@ class ProfileRegistry {
     await db.execute(
       'ALTER TABLE user_profiles ADD COLUMN recovery_params_json TEXT',
     );
+  }
+
+  /// v6: profile-local enablement/presentation staged beside a restored
+  /// connection, so a single-profile restore can publish both atomically.
+  static Future<void> _addRestoreResourceSettingsColumns(
+    DatabaseExecutor db,
+  ) async {
+    final columns = (await db.rawQuery(
+      'PRAGMA table_info(profile_restore_resources)',
+    )).map((row) => row['name']).whereType<String>().toSet();
+    if (!columns.contains('profile_enabled')) {
+      await db.execute(
+        'ALTER TABLE profile_restore_resources ADD COLUMN profile_enabled INTEGER',
+      );
+    }
+    if (!columns.contains('profile_settings_json')) {
+      await db.execute(
+        'ALTER TABLE profile_restore_resources ADD COLUMN profile_settings_json TEXT',
+      );
+    }
+    if (!columns.contains('resource_enabled')) {
+      await db.execute(
+        'ALTER TABLE profile_restore_resources '
+        'ADD COLUMN resource_enabled INTEGER NOT NULL DEFAULT 1',
+      );
+    }
   }
 
   /// Test seam: lets the migration suite build an older-schema database (by
@@ -291,6 +320,9 @@ class ProfileRegistry {
       secret_payload_version INTEGER NOT NULL,
       permissions INTEGER NOT NULL,
       binding_slot TEXT,
+      profile_enabled INTEGER,
+      profile_settings_json TEXT,
+      resource_enabled INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY(restore_id, backup_id),
       UNIQUE(resource_id),
       FOREIGN KEY(restore_id) REFERENCES profile_restore_journal(restore_id)
@@ -805,6 +837,8 @@ class ProfileRegistry {
     String? id,
     bool setupComplete = false,
     bool disabled = false,
+    bool lockOnResume = false,
+    int? inactivityTimeoutMinutes,
     UserProfileLifecycle lifecycle = UserProfileLifecycle.active,
     String? actingProfileId,
     int? actingAuthorizationRevision,
@@ -812,6 +846,7 @@ class ProfileRegistry {
   }) async {
     final normalizedName = name.trim();
     if (normalizedName.isEmpty) throw ArgumentError.value(name, 'name');
+    _validateInactivityTimeout(inactivityTimeoutMinutes);
     final profileId = id ?? _newId();
     if (!ProfileScope.isValidProfileId(profileId)) {
       throw ArgumentError.value(profileId, 'id', 'Unsafe profile ID');
@@ -838,7 +873,9 @@ class ProfileRegistry {
         'visible_data_generation': 1,
         'profile_setup_complete': setupComplete ? 1 : 0,
         'pin_reset_required': 0,
-        'lock_on_resume': 0,
+        'lock_on_resume': lockOnResume ? 1 : 0,
+        if (inactivityTimeoutMinutes != null)
+          'inactivity_timeout_minutes': inactivityTimeoutMinutes,
         'created_at_ms': now,
         'updated_at_ms': now,
         if (disabled) 'disabled_at_ms': now,
@@ -1183,6 +1220,7 @@ class ProfileRegistry {
     if (name != null && name.trim().isEmpty) {
       throw ArgumentError.value(name, 'name');
     }
+    _validateInactivityTimeout(inactivityTimeoutMinutes);
     await authorityWillChangeCallback?.call();
     await _db.transaction((txn) async {
       await _assertManagingActor(
@@ -1223,6 +1261,16 @@ class ProfileRegistry {
     });
     await checkpointTvOsRecovery();
     return (await getProfile(id))!;
+  }
+
+  static void _validateInactivityTimeout(int? minutes) {
+    if (minutes != null && !const <int>{5, 15, 30, 60}.contains(minutes)) {
+      throw ArgumentError.value(
+        minutes,
+        'inactivityTimeoutMinutes',
+        'Unsupported auto-lock interval',
+      );
+    }
   }
 
   Future<UserProfile> completeProfileSetup(
@@ -1840,7 +1888,10 @@ class ProfileRegistry {
     return rows.isEmpty ? null : _decodeResource(rows.single);
   }
 
-  Future<SealedResourceSecretRecord?> getSealedResourceSecret(String id) async {
+  Future<SealedResourceSecretRecord?> getSealedResourceSecret(
+    String id, {
+    bool includeDisabled = false,
+  }) async {
     // One transaction for the marker and its chunks: a rotation landing
     // between two bare reads could pair one secret's marker with another's
     // body. The count check in [_loadEnvelope] catches most torn pairs, but
@@ -1857,7 +1908,7 @@ class ProfileRegistry {
           'sealed_secret_payload',
           'secret_payload_version',
         ],
-        where: 'id = ? AND disabled_at_ms IS NULL',
+        where: includeDisabled ? 'id = ?' : 'id = ? AND disabled_at_ms IS NULL',
         whereArgs: <Object>[id],
         limit: 1,
       );
@@ -2220,6 +2271,23 @@ class ProfileRegistry {
     return rows.map(_decodeResource).toList(growable: false);
   }
 
+  /// Backup inventory for one profile. Disabled resources stay invisible to
+  /// provider/runtime callers but must remain recoverable in an encrypted
+  /// package, with their disabled state preserved.
+  Future<List<ConnectionResource>> listGrantedResourcesIncludingDisabled(
+    String profileId,
+  ) async {
+    final columns = _resourceRowColumns.map((c) => 'r.$c').join(', ');
+    final rows = await _db.rawQuery(
+      '''SELECT $columns FROM connection_resources r
+         INNER JOIN profile_resource_grants g ON g.resource_id = r.id
+         WHERE g.profile_id = ?
+         ORDER BY lower(r.label), r.id''',
+      <Object>[profileId],
+    );
+    return rows.map(_decodeResource).toList(growable: false);
+  }
+
   Future<List<ConnectionResource>> listAllResources() async {
     final rows = await _db.query(
       'connection_resources',
@@ -2230,11 +2298,46 @@ class ProfileRegistry {
     return rows.map(_decodeResource).toList(growable: false);
   }
 
+  /// Complete graph inventory, including disabled/quarantined resources.
+  /// Ordinary provider and settings reads must keep using [listAllResources].
+  Future<List<ConnectionResource>> listAllResourcesIncludingDisabled() async {
+    final rows = await _db.query(
+      'connection_resources',
+      columns: _resourceRowColumns,
+      orderBy: 'created_at_ms, id',
+    );
+    return rows.map(_decodeResource).toList(growable: false);
+  }
+
+  /// Every resource a profile owns, INCLUDING disabled ones.
+  ///
+  /// [listAllResources] hides disabled rows, but the delete-time owned-resource
+  /// count does not — so any caller deciding whether a profile is disposable
+  /// must look through this, or it will classify a profile as owning nothing
+  /// of value and then delete a disabled credential it never saw.
+  Future<List<ConnectionResource>> listOwnedResourcesIncludingDisabled(
+    String ownerProfileId,
+  ) async {
+    final rows = await _db.query(
+      'connection_resources',
+      columns: _resourceRowColumns,
+      where: 'owner_profile_id = ?',
+      whereArgs: <Object>[ownerProfileId],
+      orderBy: 'created_at_ms, id',
+    );
+    return rows.map(_decodeResource).toList(growable: false);
+  }
+
   Future<List<Map<String, Object?>>> listAllResourceGrants() =>
       _db.query('profile_resource_grants', orderBy: 'profile_id, resource_id');
 
   Future<List<Map<String, Object?>>> listAllResourceBindings() =>
       _db.query('profile_connection_bindings', orderBy: 'profile_id, slot');
+
+  Future<List<Map<String, Object?>>> listAllResourceSettings() => _db.query(
+    'profile_resource_settings',
+    orderBy: 'profile_id, resource_id',
+  );
 
   /// Atomically replaces an owner's resources of [types]. This is used by
   /// legacy collection-shaped APIs (WebDAV, IPTV, addons, and indexers) so a
@@ -3204,7 +3307,10 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
-  Future<ProfilePinRecord?> getPinRecord(String profileId) async {
+  Future<ProfilePinRecord?> getPinRecord(
+    String profileId, {
+    bool includeDisabled = false,
+  }) async {
     final rows = await _db.query(
       'user_profiles',
       columns: const <String>[
@@ -3218,7 +3324,7 @@ class ProfileRegistry {
         'recovery_salt',
         'recovery_params_json',
       ],
-      where: 'id = ? AND disabled_at_ms IS NULL',
+      where: includeDisabled ? 'id = ?' : 'id = ? AND disabled_at_ms IS NULL',
       whereArgs: <Object>[profileId],
       limit: 1,
     );
@@ -3806,6 +3912,8 @@ class ProfileRegistry {
     required String operationId,
     required List<String> stagedProfileIds,
     required List<StagedGraphResource> resources,
+    List<GraphRestoreDefaultGrantPrune> redundantDefaultAddonGrants =
+        const <GraphRestoreDefaultGrantPrune>[],
   }) async {
     for (final item in resources) {
       _guardTvOsEnvelopeBound(item.sealedSecretPayload);
@@ -3815,6 +3923,13 @@ class ProfileRegistry {
     final profileIds = stagedProfileIds.toSet();
     if (profileIds.length != stagedProfileIds.length) {
       throw ArgumentError('Duplicate staged profile ID');
+    }
+    final pruneKeys = <String>{};
+    for (final prune in redundantDefaultAddonGrants) {
+      if (!profileIds.contains(prune.profileId) ||
+          !pruneKeys.add('${prune.profileId}\u0000${prune.resourceId}')) {
+        throw ArgumentError('Invalid redundant default addon grant');
+      }
     }
     await _db.transaction((txn) async {
       final journal = await txn.query(
@@ -3850,6 +3965,35 @@ class ProfileRegistry {
       if (stagedRows.length != profileIds.length) {
         throw StateError('One or more imported profiles are unavailable');
       }
+      // Profile staging normally inherits existing shareable resources. When
+      // the imported graph supplies the same configured addon, retaining that
+      // defaultSeed grant exposes two indistinguishable addons to the profile.
+      // Prune only the preflighted default grants, in this publication
+      // transaction; receiver-only resources remain inherited.
+      for (final prune in redundantDefaultAddonGrants) {
+        final rows = await txn.rawQuery(
+          '''SELECT g.grant_origin_json, r.type, r.authorization_revision
+             FROM profile_resource_grants g
+             INNER JOIN connection_resources r ON r.id = g.resource_id
+             WHERE g.profile_id = ? AND g.resource_id = ?''',
+          <Object>[prune.profileId, prune.resourceId],
+        );
+        if (rows.length != 1 ||
+            rows.single['type'] != ConnectionResourceType.stremioAddon.name ||
+            rows.single['authorization_revision'] !=
+                prune.expectedResourceAuthorizationRevision ||
+            !_isDefaultSeedGrantOrigin(rows.single['grant_origin_json'])) {
+          throw StateError('Redundant default addon grant changed');
+        }
+        final deleted = await txn.delete(
+          'profile_resource_grants',
+          where: 'profile_id = ? AND resource_id = ?',
+          whereArgs: <Object>[prune.profileId, prune.resourceId],
+        );
+        if (deleted != 1) {
+          throw StateError('Redundant default addon grant changed');
+        }
+      }
       for (final item in resources) {
         if (!profileIds.contains(item.ownerProfileId)) {
           throw StateError('Imported resource owner is not staged');
@@ -3867,6 +4011,7 @@ class ProfileRegistry {
           'authorization_revision': 1,
           'created_at_ms': now,
           'updated_at_ms': now,
+          'disabled_at_ms': item.enabled ? null : now,
         });
         await _writeEnvelopeChunks(
           txn,
@@ -3888,6 +4033,25 @@ class ProfileRegistry {
               'restoreId': operationId,
             }),
             'created_at_ms': now,
+          });
+        }
+        for (final settings in item.settings) {
+          if (!item.grants.any(
+            (grant) => grant.profileId == settings.profileId,
+          )) {
+            throw StateError(
+              'Imported resource settings have no matching grant',
+            );
+          }
+          final encoded = jsonEncode(settings.values);
+          if (encoded.length > 64 * 1024) {
+            throw StateError('Imported resource settings are too large');
+          }
+          await txn.insert('profile_resource_settings', <String, Object?>{
+            'profile_id': settings.profileId,
+            'resource_id': item.id,
+            'enabled': settings.enabled ? 1 : 0,
+            'settings_json': encoded,
           });
         }
         for (final binding in item.bindings) {
@@ -3923,6 +4087,16 @@ class ProfileRegistry {
       await _assertAdminInvariant(txn);
     });
     await checkpointTvOsRecovery();
+  }
+
+  static bool _isDefaultSeedGrantOrigin(Object? encoded) {
+    if (encoded is! String) return false;
+    try {
+      final value = jsonDecode(encoded);
+      return value is Map && value['origin'] == 'defaultSeed';
+    } on FormatException {
+      return false;
+    }
   }
 
   /// Resolves the commit ambiguity of [publishProfileGraphRestore]. Its journal
@@ -4035,9 +4209,25 @@ class ProfileRegistry {
     required int secretPayloadVersion,
     required int permissions,
     String? bindingSlot,
+    bool? profileEnabled,
+    Map<String, dynamic>? profileSettings,
+    bool resourceEnabled = true,
   }) async {
     if (!ProfileScope.isValidProfileId(resourceId)) {
       throw ArgumentError.value(resourceId, 'resourceId');
+    }
+    if ((profileEnabled == null) != (profileSettings == null)) {
+      throw ArgumentError('Incomplete restored profile resource settings');
+    }
+    final encodedSettings = profileSettings == null
+        ? null
+        : jsonEncode(profileSettings);
+    if (encodedSettings != null && encodedSettings.length > 64 * 1024) {
+      throw ArgumentError.value(
+        profileSettings,
+        'profileSettings',
+        'Settings are too large',
+      );
     }
     _guardTvOsEnvelopeBound(sealedSecretPayload);
     // One transaction: the chunk rows and the marker that promises them must
@@ -4055,6 +4245,11 @@ class ProfileRegistry {
         'secret_payload_version': secretPayloadVersion,
         'permissions': permissions,
         'binding_slot': bindingSlot,
+        'profile_enabled': profileEnabled == null
+            ? null
+            : (profileEnabled ? 1 : 0),
+        'profile_settings_json': encodedSettings,
+        'resource_enabled': resourceEnabled ? 1 : 0,
       });
       await _writeEnvelopeChunks(
         txn,
@@ -4072,7 +4267,13 @@ class ProfileRegistry {
     required int stagedGeneration,
     required String operationId,
     bool? profileSetupComplete,
+    bool? profileLockOnResume,
+    bool updateInactivityTimeout = false,
+    int? profileInactivityTimeoutMinutes,
   }) async {
+    if (updateInactivityTimeout) {
+      _validateInactivityTimeout(profileInactivityTimeoutMinutes);
+    }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
@@ -4126,6 +4327,7 @@ class ProfileRegistry {
           'authorization_revision': 1,
           'created_at_ms': now,
           'updated_at_ms': now,
+          'disabled_at_ms': row['resource_enabled'] == 0 ? now : null,
         });
         await _writeEnvelopeChunks(
           txn,
@@ -4144,6 +4346,19 @@ class ProfileRegistry {
           }),
           'created_at_ms': now,
         });
+        final profileEnabled = row['profile_enabled'];
+        final profileSettingsJson = row['profile_settings_json'];
+        if (profileEnabled != null || profileSettingsJson != null) {
+          if (profileEnabled is! int || profileSettingsJson is! String) {
+            throw StateError('Staged profile resource settings are incomplete');
+          }
+          await txn.insert('profile_resource_settings', <String, Object?>{
+            'profile_id': row['owner_profile_id'],
+            'resource_id': row['resource_id'],
+            'enabled': profileEnabled == 0 ? 0 : 1,
+            'settings_json': profileSettingsJson,
+          });
+        }
         if (row['binding_slot'] != null) {
           await txn.insert(
             'profile_connection_bindings',
@@ -4184,6 +4399,10 @@ class ProfileRegistry {
               (await _profileAuthorizationRevision(txn, profileId)) + 1,
           if (profileSetupComplete != null)
             'profile_setup_complete': profileSetupComplete ? 1 : 0,
+          if (profileLockOnResume != null)
+            'lock_on_resume': profileLockOnResume ? 1 : 0,
+          if (updateInactivityTimeout)
+            'inactivity_timeout_minutes': profileInactivityTimeoutMinutes,
           'updated_at_ms': now,
         },
         where: 'id = ?',
@@ -4969,8 +5188,10 @@ class StagedGraphResource {
   final Map<String, dynamic> publicConfig;
   final String sealedSecretPayload;
   final int secretPayloadVersion;
+  final bool enabled;
   final List<StagedGraphGrant> grants;
   final List<StagedGraphBinding> bindings;
+  final List<StagedGraphSettings> settings;
 
   const StagedGraphResource({
     required this.id,
@@ -4980,8 +5201,26 @@ class StagedGraphResource {
     required this.publicConfig,
     required this.sealedSecretPayload,
     required this.secretPayloadVersion,
+    this.enabled = true,
     required this.grants,
     required this.bindings,
+    this.settings = const <StagedGraphSettings>[],
+  });
+}
+
+/// An existing receiver addon grant inherited while an imported profile was
+/// staged, proven redundant by an exact configured-manifest match in the
+/// imported graph. Publication accepts only grants whose origin is still the
+/// automatic `defaultSeed`; explicit user sharing is never pruned.
+class GraphRestoreDefaultGrantPrune {
+  final String profileId;
+  final String resourceId;
+  final int expectedResourceAuthorizationRevision;
+
+  const GraphRestoreDefaultGrantPrune({
+    required this.profileId,
+    required this.resourceId,
+    required this.expectedResourceAuthorizationRevision,
   });
 }
 
@@ -4997,6 +5236,18 @@ class StagedGraphBinding {
   final String slot;
 
   const StagedGraphBinding({required this.profileId, required this.slot});
+}
+
+class StagedGraphSettings {
+  final String profileId;
+  final bool enabled;
+  final Map<String, dynamic> values;
+
+  const StagedGraphSettings({
+    required this.profileId,
+    required this.enabled,
+    this.values = const <String, dynamic>{},
+  });
 }
 
 class ProfileDeletionDependencies {

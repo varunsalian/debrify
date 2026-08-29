@@ -8,6 +8,16 @@ import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';
 import 'profiles/profile_runtime.dart';
 
+class AndroidSavedLocalFile {
+  final String reference;
+  final String displayName;
+
+  const AndroidSavedLocalFile({
+    required this.reference,
+    required this.displayName,
+  });
+}
+
 /// Result of a native start: either a [taskId] on success, or the reason the
 /// start failed (e.g. `fgs_not_allowed` on Android 12+ background starts).
 class AndroidStartResult {
@@ -149,24 +159,61 @@ class AndroidNativeDownloader {
     }
   }
 
-  /// Copy an on-disk file into the MediaStore (Download/<subDir>) so it becomes
-  /// user-visible, then delete the source. Used to publish an IPTV recording
-  /// that libmpv wrote to app-private storage. Returns the content URI string
-  /// on success, or null on failure.
+  /// Copy an on-disk file into the selected SAF download folder, or MediaStore
+  /// (`Download/<subDir>`) when no [treeUri] is supplied, then delete the
+  /// source. Used for recordings and generated portable files. Returns the
+  /// content URI string on success, or null on failure.
   static Future<String?> saveLocalFile({
     required String path,
     required String fileName,
     String subDir = 'Debrify/Recordings',
     String mimeType = 'video/mp2t',
+    String? treeUri,
+  }) async {
+    final saved = await saveLocalFileDetails(
+      path: path,
+      fileName: fileName,
+      subDir: subDir,
+      mimeType: mimeType,
+      treeUri: treeUri,
+    );
+    return saved?.reference;
+  }
+
+  /// Detailed variant used when the caller must show the provider-assigned
+  /// name. Android storage providers may rename a colliding file.
+  static Future<AndroidSavedLocalFile?> saveLocalFileDetails({
+    required String path,
+    required String fileName,
+    String subDir = 'Debrify/Recordings',
+    String mimeType = 'video/mp2t',
+    String? treeUri,
   }) async {
     if (!Platform.isAndroid) return null;
     try {
-      return await _channel.invokeMethod<String>('saveFileToMediaStore', {
-        'path': path,
-        'fileName': fileName,
-        'subDir': subDir,
-        'mimeType': mimeType,
-      });
+      final value = await _channel
+          .invokeMethod<Object?>('saveFileToMediaStore', {
+            'path': path,
+            'fileName': fileName,
+            'subDir': subDir,
+            'mimeType': mimeType,
+            if (treeUri != null) 'treeUri': treeUri,
+          });
+      // Accept the old string response as well so a hot-restarted Dart
+      // isolate can still talk to a native runner built before this change.
+      if (value is String && value.isNotEmpty) {
+        return AndroidSavedLocalFile(reference: value, displayName: fileName);
+      }
+      if (value is Map) {
+        final reference = value['uri']?.toString() ?? '';
+        if (reference.isEmpty) return null;
+        final actualName = value['displayName']?.toString().trim() ?? '';
+        return AndroidSavedLocalFile(
+          reference: reference,
+          displayName: actualName.isEmpty ? fileName : actualName,
+        );
+      }
+      return null;
     } on PlatformException {
       return null;
     } on MissingPluginException {

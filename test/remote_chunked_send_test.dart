@@ -122,6 +122,36 @@ void main() {
     });
   });
 
+  group('profile graph size policy', () {
+    test('compacts above either soft transport threshold', () {
+      expect(
+        profileGraphTransportNeedsCompaction(
+          wireBytes: kMaxProfileGraphWireBytes,
+          expandedBytes: kProfileGraphCompactionThresholdBytes,
+        ),
+        isFalse,
+      );
+      expect(
+        profileGraphTransportNeedsCompaction(
+          wireBytes: kMaxProfileGraphWireBytes + 1,
+          expandedBytes: kProfileGraphCompactionThresholdBytes,
+        ),
+        isTrue,
+      );
+      expect(
+        profileGraphTransportNeedsCompaction(
+          wireBytes: kMaxProfileGraphWireBytes,
+          expandedBytes: kProfileGraphCompactionThresholdBytes + 1,
+        ),
+        isTrue,
+      );
+      expect(
+        kMaxProfileGraphExpandedBytes,
+        greaterThan(kProfileGraphCompactionThresholdBytes),
+      );
+    });
+  });
+
   group('profile graph result', () {
     test('acknowledgement failure stays a delivery failure', () async {
       final router = RemoteCommandRouter();
@@ -286,6 +316,7 @@ void main() {
         resultRequestId: requestId,
       );
       expect(parseChunkResultRequestId(chunkStart), requestId);
+      expect(parseChunkResultCommand(chunkStart), ConfigCommand.debrifyChannel);
     });
 
     test('malformed and oversized outcome envelopes are rejected', () {
@@ -318,6 +349,7 @@ void main() {
       );
       expect(parseRemoteChannelTransferBody('{"version":1}'), isNull);
       expect(parseChunkResultRequestId('{"resultRequestId":""}'), isNull);
+      expect(parseChunkResultCommand('{"kind":""}'), isNull);
       expect(
         parseRemoteChannelTransferBody(
           remoteChannelTransferBody(requestId: 'ok', uri: 'https://wrong'),
@@ -344,6 +376,51 @@ void main() {
         isTrue,
       );
     });
+
+    test('complete profile graph capability starts at protocol v5', () {
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 4,
+        ).supportsComprehensiveProfileGraph,
+        isFalse,
+      );
+      expect(
+        DiscoveredDevice(
+          deviceName: 'TV',
+          ip: 'local',
+          protoVersion: 5,
+        ).supportsComprehensiveProfileGraph,
+        isTrue,
+      );
+      expect(kProtoVersion, kComprehensiveProfileGraphProtocolVersion);
+    });
+
+    test(
+      'manual-IP capability stays probeable until handshake identifies it',
+      () {
+        final manual = DiscoveredDevice(
+          deviceName: 'VPN TV',
+          ip: '100.64.0.2',
+          protocolVersionKnown: false,
+        );
+        expect(manual.supportsComprehensiveProfileGraph, isFalse);
+        expect(manual.maySupportComprehensiveProfileGraph, isTrue);
+
+        final current = manual.withProtocolVersion(5);
+        expect(current.protocolVersionKnown, isTrue);
+        expect(current.maySupportComprehensiveProfileGraph, isTrue);
+        expect(
+          DiscoveredDevice.fromJson(current.toJson()).protocolVersionKnown,
+          isTrue,
+        );
+
+        final old = manual.withProtocolVersion(4);
+        expect(old.protocolVersionKnown, isTrue);
+        expect(old.maySupportComprehensiveProfileGraph, isFalse);
+      },
+    );
   });
 
   group('round trip', () {

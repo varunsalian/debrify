@@ -24,6 +24,26 @@ abstract final class PrivacyLog {
       RegExp(r'\b(?:\d{1,3}[.]){3}\d{1,3}(?::\d+)?\b'),
       '[private-address]',
     );
+    // Authorization headers commonly separate the scheme and credential with
+    // a space. Redact the pair before the generic key/value rule below, whose
+    // value token intentionally stops at whitespace.
+    result = result.replaceAll(
+      RegExp(r'\bbearer\s+[^,;\s)\]}]+', caseSensitive: false),
+      '[private-value]',
+    );
+    // Desktop stack traces can contain the operating-system account name.
+    result = result.replaceAll(
+      RegExp(r'file:///(?:Users|home)/[^/\s]+', caseSensitive: false),
+      'file:///[private-home]',
+    );
+    result = result.replaceAll(
+      RegExp(r'(?:/Users|/home)/[^/\s]+', caseSensitive: false),
+      '/[private-home]',
+    );
+    result = result.replaceAll(
+      RegExp(r'\b[A-Za-z]:\\Users\\[^\\\s]+', caseSensitive: false),
+      '[private-home]',
+    );
     result = result.replaceAll(
       RegExp(
         r'\b(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|'

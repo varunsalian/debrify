@@ -253,6 +253,12 @@ abstract final class SettingsRows {
     title: 'Debrify TV Player',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen look) — passed per call site.
+  static const playLoaderStyle = SettingsRowContent(
+    icon: Icons.play_circle_outline_rounded,
+    title: 'Play Loader',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const playerGuideStyle = SettingsRowContent(
     icon: Icons.smart_display_rounded,
@@ -329,6 +335,11 @@ abstract final class SettingsRows {
     icon: Icons.restore_rounded,
     title: 'Restore from Backup',
     subtitle: 'Import services and addons from a backup file',
+  );
+  static const exportDiagnosticLogs = SettingsRowContent(
+    icon: Icons.bug_report_outlined,
+    title: 'Export Diagnostic Logs',
+    subtitle: 'Save privacy-filtered logs from the last 2 hours',
   );
   static const resetDebrify = SettingsRowContent(
     icon: Icons.warning_rounded,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../models/tracking_source.dart';
 import 'simkl_service.dart';
 import '../watched_action_coordinator.dart';
 
@@ -134,12 +135,15 @@ Future<void> handleSimklMenuAction(
     case SimklItemMenuAction.moveToCompleted:
       actionLabel = 'Marked Completed';
       // The coordinator owns the Simkl history write AND the paused-session
-      // clear (both behind the Scrobble gate) — no direct Simkl write here,
-      // or an unticked Simkl would still lose its paused session.
+      // clear — no direct Simkl write here, or the two would race. This is a
+      // Simkl-branded surface, so it forces the Simkl target: "Mark Completed"
+      // under a Simkl heading must land on Simkl even when Simkl is unticked
+      // in Scrobble.
       success = (await WatchedActionCoordinator.setTitleWatched(
         imdbId: imdbId,
         contentType: type,
         watched: true,
+        forceTargets: const {TrackingSource.simkl},
       )).success;
     case SimklItemMenuAction.moveToDropped:
       actionLabel = 'Marked Dropped on Simkl';

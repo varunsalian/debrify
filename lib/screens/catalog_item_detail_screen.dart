@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_theme_scope.dart';
 import '../theme/artwork_accent.dart';
+import '../models/play_loader_art.dart';
 import '../models/stremio_addon.dart';
 import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
@@ -36,6 +37,13 @@ class CatalogItemDetailScreen extends StatefulWidget {
 
   /// Triggers the primary play action.
   final VoidCallback onPlay;
+
+  /// Hands the host this title's loader artwork (backdrop, logo, meta line) as
+  /// it resolves, so a Play pressed from here opens the Marquee loader with the
+  /// enriched art rather than the sparse catalog row. Fires on mount and again
+  /// after each enrichment lands; the host keeps the latest. Presentation only
+  /// — a host that ignores it just gets the plain loader.
+  final ValueChanged<PlayLoaderArt>? onLoaderArt;
 
   /// Resolves whether the title has prior progress and, for a series, the
   /// season/episode [onPlay] would land on — so the button can read
@@ -87,6 +95,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
     required this.item,
     required this.onPlay,
     required this.onBrowse,
+    this.onLoaderArt,
     this.resumeInfoLoader,
     this.isTelevision = false,
     this.showQuickPlay = true,
@@ -196,6 +205,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.isTelevision) _revealCtrl.value = 1.0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // What we know before enrichment — usually just the backdrop. Emitted
+      // now so a Play pressed in the first second still gets a plate.
+      _emitLoaderArt();
       if (!widget.isTelevision) _revealCtrl.forward();
       // Land focus on Play (or Sources when Play is hidden, e.g. PikPak) so
       // the remote has a starting point. TV only — on mobile/desktop an
@@ -426,9 +438,22 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           logo: full.logo ?? item.logo,
         );
       });
+      _emitLoaderArt();
     } catch (_) {
       // Non-critical enrichment — swallow and keep the original item.
     }
+  }
+
+  /// Publishes the current best artwork for the play loader. Cheap and
+  /// idempotent — the host just keeps the latest.
+  void _emitLoaderArt() {
+    final sink = widget.onLoaderArt;
+    if (sink == null) return;
+    final art = PlayLoaderArt.fromMeta(
+      _item,
+      certificate: _imdbExtra?.certificate,
+    );
+    if (!art.isEmpty) sink(art);
   }
 
   Future<void> _loadImdbEnrichment() async {
@@ -444,6 +469,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           _imdbExtra = extra;
           _imdbLoaded = true;
         });
+        // Adds the certificate to the loader's meta line.
+        _emitLoaderArt();
       }
     } catch (_) {
       if (mounted) setState(() => _imdbLoaded = true);

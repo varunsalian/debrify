@@ -32,6 +32,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.util.ArrayList
 import org.json.JSONObject
 import org.json.JSONArray
+import com.debrify.app.diagnostics.DiagnosticFileLog
 
 class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
@@ -50,6 +51,8 @@ class MainActivity : FlutterActivity() {
 	private val VOICE_CHANNEL = "debrify/tv_voice"
 	private val VOICE_EVENTS = "debrify/tv_voice_events"
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
+	private val REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL = "debrify/remote_transfer_diagnostics"
+	private val NATIVE_DIAGNOSTICS_CHANNEL = "debrify/native_diagnostics"
 	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
 	// signing key + user since Android 8, stable across OTAs) — unlike the
 	// build/model fields device_info_plus exposes, which every unit of the
@@ -223,6 +226,54 @@ class MainActivity : FlutterActivity() {
             uri.toString()
         } catch (e: Exception) {
             created?.let { runCatching { contentResolver.delete(it, null, null) } }
+            null
+        }
+    }
+
+    /** Copy a generated local file into the exact SAF folder selected for
+     * downloads. The "Debrify" wrapper is removed just like regular download
+     * tasks because the user has already chosen the destination root. */
+    private fun saveLocalFileToSaf(
+        path: String,
+        fileName: String,
+        subDir: String,
+        mimeType: String,
+        treeUri: String,
+    ): String? {
+        val source = java.io.File(path)
+        if (!source.exists()) return null
+        var created: androidx.documentfile.provider.DocumentFile? = null
+        return try {
+            val tree = Uri.parse(treeUri)
+            val held = contentResolver.persistedUriPermissions.any {
+                it.uri == tree && it.isWritePermission
+            }
+            if (!held) return null
+            var parent = androidx.documentfile.provider.DocumentFile.fromTreeUri(this, tree)
+                ?: return null
+            val segments = subDir.split('/').filter { it.isNotBlank() }
+                .let { if (it.firstOrNull() == "Debrify") it.drop(1) else it }
+            for (segment in segments) {
+                parent = parent.findFile(segment)?.takeIf { it.isDirectory }
+                    ?: parent.createDirectory(segment)
+                    ?: return null
+            }
+            val document = parent.createFile(mimeType, fileName) ?: return null
+            created = document
+            val wrote = contentResolver.openOutputStream(document.uri, "w")?.use { output ->
+                java.io.FileInputStream(source).use { input -> input.copyTo(output) }
+                true
+            } ?: false
+            if (!wrote) {
+                runCatching { document.delete() }
+                created = null
+                return null
+            }
+            created = null
+            runCatching { source.delete() }
+            document.uri.toString()
+        } catch (_: Exception) {
+            created?.let { runCatching { it.delete() } }
             null
         }
     }
@@ -921,6 +972,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        DiagnosticFileLog.initialize(this)
+        DiagnosticFileLog.recordPreviousProcessExit(this)
         // A lock-on-resume profile must be protected BEFORE Flutter starts and
         // before Android can take a task snapshot. Dart later clears the flag
         // only after it has published an unlocked active profile.
@@ -1285,6 +1338,26 @@ class MainActivity : FlutterActivity() {
 		}
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,
+			NATIVE_DIAGNOSTICS_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"flush" -> DiagnosticFileLog.flush { result.success(null) }
+				"clearForDeviceReset" -> DiagnosticFileLog.clearForDeviceReset { cleared ->
+					if (cleared) {
+						result.success(null)
+					} else {
+						result.error(
+							"diagnostic_clear_failed",
+							"Could not clear native diagnostic state",
+							null,
+						)
+					}
+				}
+				else -> result.notImplemented()
+			}
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
 			PLAYER_DIAGNOSTICS_CHANNEL,
 		).setMethodCallHandler { call, result ->
 			if (call.method != "logDecoder") {
@@ -1299,7 +1372,32 @@ class MainActivity : FlutterActivity() {
 				result.error("bad_args", "message is required", null)
 				return@setMethodCallHandler
 			}
+			DiagnosticFileLog.record(
+				source = "flutter_player",
+				event = "decoder_status",
+				message = message,
+			)
 			android.util.Log.i("DEBRIFY_PLAYER_DECODER", message)
+			result.success(null)
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			if (call.method != "write") {
+				result.notImplemented()
+				return@setMethodCallHandler
+			}
+			val message = call.argument<String>("message")
+				?.replace('\n', ' ')
+				?.replace('\r', ' ')
+				?.take(1_024)
+			if (message.isNullOrBlank() || !message.startsWith("DEBRIFY_TRANSFER ")) {
+				result.error("bad_args", "structured transfer message is required", null)
+				return@setMethodCallHandler
+			}
+			// proguard-rules.pro strips Log.d/v/i in release; warning is retained.
+			android.util.Log.w("DEBRIFY_TRANSFER", message)
 			result.success(null)
 		}
 		MethodChannel(
@@ -1459,6 +1557,7 @@ class MainActivity : FlutterActivity() {
 						val fileName = call.argument<String>("fileName") ?: "recording.ts"
 						val subDir = call.argument<String>("subDir") ?: "Debrify/Recordings"
 						val mimeType = call.argument<String>("mimeType") ?: "video/mp2t"
+						val treeUri = call.argument<String>("treeUri")
 						if (path.isNullOrEmpty()) {
 							result.error("bad_args", "path is required", null)
 							return@setMethodCallHandler
@@ -1468,11 +1567,35 @@ class MainActivity : FlutterActivity() {
 						// SUCCESS clears the registry entry — a failed or killed
 						// copy leaves it for the next-launch retry sweep.
 						Thread {
-							val savedUri = saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+							val savedUri = if (!treeUri.isNullOrEmpty()) {
+								saveLocalFileToSaf(path, fileName, subDir, mimeType, treeUri)
+							} else {
+								saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+							}
+							val savedName = if (savedUri != null) {
+								runCatching {
+									contentResolver.query(
+										Uri.parse(savedUri),
+										arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+										null,
+										null,
+										null,
+									)?.use { cursor ->
+										if (cursor.moveToFirst()) cursor.getString(0) else null
+									}
+								}.getOrNull().orEmpty().ifEmpty { fileName }
+							} else {
+								fileName
+							}
 							if (savedUri != null) forgetPendingRecording(path)
 							runOnUiThread {
-								if (savedUri != null) result.success(savedUri)
-								else result.error("save_failed", "could not save file", null)
+								if (savedUri != null) {
+									result.success(
+										mapOf("uri" to savedUri, "displayName" to savedName),
+									)
+								} else {
+									result.error("save_failed", "could not save file", null)
+								}
 							}
 						}.start()
 					}
@@ -2651,6 +2774,13 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        DiagnosticFileLog.record(
+            source = "android_tv_launcher",
+            event = "torrent_launch_requested",
+            message = "items=${(payload["items"] as? List<*>)?.size ?: -1} " +
+                "startIndex=${(payload["startIndex"] as? Number)?.toInt() ?: -1}",
+        )
+
         try {
             val payloadJson = mapToJson(payload).toString()
 
@@ -2658,6 +2788,11 @@ class MainActivity : FlutterActivity() {
             // This allows playlists with 500+ items without TransactionTooLargeException
             val tempFile = java.io.File(cacheDir, "torrent_payload_${System.currentTimeMillis()}.json")
             tempFile.writeText(payloadJson)
+            DiagnosticFileLog.record(
+                source = "android_tv_launcher",
+                event = "torrent_payload_staged",
+                message = "bytes=${payloadJson.length}",
+            )
             android.util.Log.d("DebrifyTV", "MainActivity: Wrote payload to temp file: ${tempFile.absolutePath} (${payloadJson.length} bytes)")
 
             val intent = Intent().apply {
@@ -2668,8 +2803,17 @@ class MainActivity : FlutterActivity() {
                 putExtra("payloadPath", tempFile.absolutePath)
             }
             startActivity(intent)
+            DiagnosticFileLog.record(
+                source = "android_tv_launcher",
+                event = "torrent_activity_started",
+            )
             result.success(true)
         } catch (e: Exception) {
+            DiagnosticFileLog.recordError(
+                source = "android_tv_launcher",
+                event = "torrent_launch_failed",
+                throwable = e,
+            )
             android.util.Log.e("DebrifyTV", "MainActivity: Failed to launch torrent playback", e)
             result.error("launch_failed", e.message, null)
         }

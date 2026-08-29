@@ -50,10 +50,12 @@ import 'services/profiles/profile_lock_controller.dart';
 import 'services/profiles/profile_runtime.dart';
 import 'services/profiles/privacy_log.dart';
 import 'services/profiles/desktop_single_instance.dart';
+import 'services/diagnostic_log.dart';
 import 'models/profiles/profile_policy.dart';
 import 'models/profiles/user_profile.dart';
 import 'models/sidebar_configuration.dart';
 import 'services/secret_vault.dart';
+import 'services/play_loader_style.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/tvos_top_shelf_service.dart';
@@ -162,6 +164,19 @@ Future<void> main(List<String> launchArguments) async {
     await _mainUnchecked(launchArguments);
   } catch (error, stackTrace) {
     WidgetsFlutterBinding.ensureInitialized();
+    // Best effort only: diagnostics must never turn an existing startup
+    // failure into a second failure or delay the fallback screen indefinitely.
+    try {
+      await DiagnosticLog.instance.initialize();
+      DiagnosticLog.instance.recordError(
+        source: 'app',
+        event: 'bootstrap_failure',
+        error: error,
+        stackTrace: stackTrace,
+        flushImmediately: false,
+      );
+      await DiagnosticLog.instance.flush();
+    } catch (_) {}
     debugPrint('Application bootstrap failed (${error.runtimeType})');
     debugPrint('$stackTrace');
     // Describing the failure must never become a second failure: an
@@ -215,15 +230,7 @@ String _describeStartupFailure(Object error, StackTrace stackTrace) {
 
 Future<void> _mainUnchecked(List<String> launchArguments) async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Backstop for async errors nothing awaited (fire-and-forget loads,
-  // .then chains without onError). Without a handler these are only printed
-  // by the default dispatcher — with one, they're logged consistently AND
-  // any future crash-reporting hook has a single place to attach. Returning
-  // true marks the error handled so it never doubles up in the console.
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Unhandled async error (${error.runtimeType})');
-    return true;
-  };
+  await DiagnosticLog.instance.initialize();
   // On a release tvOS build, Dart's print() lands on stdout, which the device
   // console does not carry — so Flutter errors, and anything we log while
   // bringing the port up, are simply invisible on real hardware. Forward
@@ -248,6 +255,42 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   // Install after the optional tvOS sink so that both the Dart console and
   // native device console receive only the redacted form.
   PrivacyLog.install();
+  final priorFlutterErrorHandler = FlutterError.onError;
+  FlutterError.onError = (details) {
+    DiagnosticLog.instance.recordFlutterError(details);
+    if (priorFlutterErrorHandler != null) {
+      priorFlutterErrorHandler(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+  // Backstop for async errors nothing awaited (fire-and-forget loads,
+  // .then chains without onError). Keep only the stable type and bounded
+  // stack in the private rolling log; exception bodies stay console-only.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    DiagnosticLog.instance.recordError(
+      source: 'dart',
+      event: 'unhandled_async_error',
+      error: error,
+      stackTrace: stack,
+    );
+    debugPrint('Unhandled async error (${error.runtimeType})');
+    return true;
+  };
+  DiagnosticLog.instance.recordEvent(
+    source: 'app',
+    event: 'session_start',
+    fields: <String, Object?>{
+      'platform': DiagnosticLabel(kIsWeb ? 'web' : Platform.operatingSystem),
+      'buildMode': DiagnosticLabel(
+        kReleaseMode
+            ? 'release'
+            : kProfileMode
+            ? 'profile'
+            : 'debug',
+      ),
+    },
+  );
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
   }
@@ -546,6 +589,14 @@ Future<void> _continueApplicationStartup() async {
     'playback-completion-migration',
     StorageService.migrateExistingPlaybackCompletionThresholds,
   );
+  // Drop the zero-position rows older builds left behind when unwatching an
+  // episode; they outrank real progress and pin Continue Watching to an
+  // episode the user already declared unwatched. Also profile-scoped and
+  // one-shot, and best-effort for the same reason as the step above.
+  await _bestEffortStartupStep(
+    'resume-ghost-purge',
+    StorageService.purgeUnwatchedResumeGhosts,
+  );
   // Warm the layout prefs the shell reads through field initializers —
   // without this the first frame paints canvas/ghost/rail and then snaps
   // to the stored (possibly just-migrated) look. A warm that fails costs
@@ -565,6 +616,13 @@ Future<void> _continueApplicationStartup() async {
   await _bestEffortStartupStep(
     'text-brightness-warm',
     TextBrightnessController.warm,
+  );
+  // Warms Appearance → Play Loader. The play path reads it synchronously (a
+  // play cannot await a preference), so an unwarmed session would show Marquee
+  // to someone who chose Classic.
+  await _bestEffortStartupStep(
+    'play-loader-style-warm',
+    PlayLoaderStyleController.warm,
   );
   // Warms the app theme AFTER the preset (it is an input), for the same
   // reason: the controller's memoized ThemeData is read in the first build.
@@ -929,12 +987,40 @@ class _DebrifyAppState extends State<DebrifyApp> {
       // Keep the existing root ProfileGate alive. Mounting a replacement
       // before the old route's exit animation disposes can let the old gate
       // revoke the new gate's global lock timer and remote lease.
-      _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      //
+      // Clearing the routes above the gate is normally the GATE's job — only
+      // it can name the route that must survive, and it anchors popUntil on
+      // that route object (see ProfileGate._openPicker). Popping from here by
+      // position instead can empty the navigator and leave nothing to paint.
       unawaited(() async {
-        final profiles = await ProfileBootstrap.registry.listProfiles();
-        if (profiles.length < 2) return;
         await WidgetsBinding.instance.endOfFrame;
-        MainPageBridge.showProfilePicker?.call();
+        // Branch on the RUNTIME MODE, never on whether the callback happens to
+        // be installed: a null callback in committed mode means the gate is
+        // momentarily absent, and falling through to the positional pop would
+        // empty the navigator and blank the screen.
+        if (ProfileRuntime.isProfileCommitted) {
+          // Unconditional, even for a sole profile: a scope change does not
+          // reload the gate (its epoch key remounts only the child), so after
+          // an import hands authority over — possibly retiring the bootstrap
+          // profile down to one imported Admin — the gate still holds
+          // `_entered = true` and a lock controller describing a profile that
+          // no longer exists. _openPicker relocks and reloads; the gate's own
+          // logic then decides whether to ask.
+          MainPageBridge.showProfilePicker?.call();
+          return;
+        }
+        // LEGACY MODE. ProfileGate installs no picker here, so nothing else
+        // dismisses the onboarding route — the flow only flips to its success
+        // panel on `config/complete` and leaves dismissal to this callback.
+        // Without a pop the user is stranded on that panel with a fully
+        // imported device behind it.
+        //
+        // `isFirst` is safe on THIS path specifically: legacy mode never
+        // pushes a gate/picker above the root, so the predicate is guaranteed
+        // to match the home route. Do NOT reach for a canPop loop — pop() only
+        // starts the exit animation and leaves the route in history, so a loop
+        // over-pops and empties the navigator.
+        _navigatorKey.currentState?.popUntil((route) => route.isFirst);
       }());
     });
 

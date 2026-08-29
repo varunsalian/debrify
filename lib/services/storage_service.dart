@@ -383,6 +383,9 @@ class StorageService {
   static const String _playbackCompletionMigrationGenerationKey =
       'playback_completion_migration_generation';
   static const int _currentPlaybackCompletionMigrationGeneration = 1;
+  static const String _resumeGhostPurgeGenerationKey =
+      'resume_ghost_purge_generation';
+  static const int _currentResumeGhostPurgeGeneration = 1;
   static const String _androidVideoRendererModeKey =
       'android_video_renderer_mode';
   static const String _androidVideoRendererGpuMigrationKey =
@@ -1491,6 +1494,31 @@ class StorageService {
     );
   }
 
+  static const String _playLoaderStyleKey = 'play_loader_style';
+  static const Set<String> _playLoaderStyles = {'marquee', 'classic'};
+
+  /// The look of the play → resolve loader: 'marquee' (the default — backdrop,
+  /// logo art and a segmented stage rail) or 'classic' (the poster-and-
+  /// checklist card this overlay shipped with). Unknown or unset coerces to
+  /// 'marquee' on BOTH read and write, so a value written by a newer build can
+  /// never pin a look this one cannot render.
+  ///
+  /// The play path reads it synchronously through
+  /// [PlayLoaderStyleController.cached]; this getter is the warm source.
+  static Future<String> getPlayLoaderStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_playLoaderStyleKey);
+    return _playLoaderStyles.contains(raw) ? raw! : 'marquee';
+  }
+
+  static Future<void> setPlayLoaderStyle(String style) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _playLoaderStyleKey,
+      _playLoaderStyles.contains(style) ? style : 'marquee',
+    );
+  }
+
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
   static const Set<String> _tvPlayerControlsStyles = {
     'classic',
@@ -1668,6 +1696,7 @@ class StorageService {
     'rackfocus',
     'imprint',
     'frost',
+    'trace',
   };
 
   /// Exposed so a test can assert this set and `kLaunchIdents` agree in BOTH
@@ -1676,9 +1705,9 @@ class StorageService {
   static Set<String> get launchAnimationValues => _launchAnimationValues;
 
   /// Which launch ident the splash plays (Appearance → Launch Animation).
-  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'collider'
-  /// (Collider) is the default, 'horizon' is the ident it replaced as such,
-  /// and 'drop' is the original splash.
+  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'trace' (Trace)
+  /// is the default, 'collider' and before it 'horizon' are the idents it
+  /// replaced as such, and 'drop' is the original splash.
   ///
   /// [launchAnimationCached] mirrors it for SYNCHRONOUS reads: AppInitializer
   /// builds its splash in initState, before any async pref read could land.
@@ -1686,16 +1715,16 @@ class StorageService {
   ///
   /// Normalizes toward the default on BOTH sides — an unrecognized value has
   /// to mean the default for the reader and the writer alike. Only installs
-  /// that never CHOSE move when this changes: an explicit 'horizon' is a
-  /// stored value and keeps playing Horizon.
-  static String launchAnimationCached = 'collider';
+  /// that never CHOSE move when this changes: an explicit 'collider' is a
+  /// stored value and keeps playing Collider.
+  static String launchAnimationCached = 'trace';
 
   static Future<String> getLaunchAnimation() async {
     final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchAnimationKey);
     launchAnimationCached = _launchAnimationValues.contains(value)
         ? value!
-        : 'collider';
+        : 'trace';
     return launchAnimationCached;
   }
 
@@ -1703,7 +1732,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     final normalized = _launchAnimationValues.contains(value)
         ? value
-        : 'collider';
+        : 'trace';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -2785,7 +2814,6 @@ class StorageService {
     final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
         ? null
         : normalizedImdbId;
-    final now = DateTime.now().millisecondsSinceEpoch;
     var changed = false;
     var aliasesChanged = 0;
 
@@ -2808,7 +2836,6 @@ class StorageService {
         seriesData: seriesData,
         season: season,
         episode: episode,
-        updatedAt: now,
       )) {
         changed = true;
         aliasesChanged++;
@@ -2839,7 +2866,6 @@ class StorageService {
     if (normalized.isEmpty) return;
     final normalizedTitle = seriesTitle?.trim().toLowerCase();
     final map = await _getPlaybackStateMap();
-    final now = DateTime.now().millisecondsSinceEpoch;
     var changed = false;
 
     for (final raw in map.values) {
@@ -2876,7 +2902,6 @@ class StorageService {
           seriesData: raw,
           season: coordinate.season,
           episode: coordinate.episode,
-          updatedAt: now,
         )) {
           changed = true;
         }
@@ -2896,7 +2921,6 @@ class StorageService {
     required Map<String, dynamic> seriesData,
     required int season,
     required int episode,
-    required int updatedAt,
   }) {
     final seasonKey = season.toString();
     final episodeKey = episode.toString();
@@ -2923,16 +2947,21 @@ class StorageService {
     final durationMs = (episodeData['durationMs'] as num?)?.toInt() ?? 0;
     final isDummy = positionMs == 0 && durationMs == 1;
     final isCompleted = durationMs > 0 && positionMs >= durationMs;
-    if (isDummy) {
+    // Unwatching a fully-watched episode DROPS its row. Zeroing the offset
+    // instead used to leave a "played, 0% in, not finished" ghost carrying a
+    // fresh updatedAt, which then won `getLastPlayedEpisode*` and pinned
+    // Continue Watching to an episode the user had just declared unwatched —
+    // and every repeat of mark→unmark re-stamped it fresher.
+    if (isDummy || isCompleted) {
       seasonData.remove(episodeKey);
       if (seasonData.isEmpty) seasons.remove(seasonKey);
       return true;
     }
-    if (isCompleted) {
-      episodeData['positionMs'] = 0;
-      episodeData['updatedAt'] = updatedAt;
-      return true;
-    }
+    // Reached only for rows that were never marked watched through
+    // [markEpisodeAsFinished] (it overwrites positionMs with durationMs, so a
+    // marked row always lands in the branch above). A genuine partial — e.g. a
+    // rewatch in progress under another title alias, swept by
+    // [unmarkSeriesAsFinished] — keeps its offset.
     return changed;
   }
 
@@ -3479,17 +3508,23 @@ class StorageService {
   static Future<Map<String, dynamic>?> getVideoPlaybackStateByImdbId(
     String imdbId,
   ) async {
+    // A blank id would match every record saved without one and hand back an
+    // unrelated movie's position.
+    final wanted = imdbId.trim();
+    if (wanted.isEmpty) return null;
     // A completion write and the periodic player autosave can overlap by one
     // tick. The finished marker is authoritative for movies, so never expose
     // a stale resume record that slipped back in during that tiny window.
-    if (await isMovieFinished(imdbId)) return null;
+    if (await isMovieFinished(wanted)) return null;
     final map = await _getPlaybackStateMap();
     Map<String, dynamic>? best;
     int bestUpdatedAt = -1;
     for (final entry in map.values) {
-      if (entry is Map<String, dynamic> &&
-          entry['type'] == 'video' &&
-          entry['imdbId'] == imdbId) {
+      if (entry is! Map<String, dynamic> || entry['type'] != 'video') continue;
+      // Pattern-matched, not cast: one malformed legacy record must not throw
+      // out of a scan over every saved video.
+      final recorded = entry['imdbId'];
+      if (recorded is String && recorded.trim() == wanted) {
         final updatedAt = (entry['updatedAt'] as num?)?.toInt() ?? 0;
         if (updatedAt > bestUpdatedAt) {
           bestUpdatedAt = updatedAt;
@@ -6537,6 +6572,104 @@ class StorageService {
     await prefs.setInt(
       _episodeCompletionThresholdKey,
       _normalizeLocalCompletionThreshold(value),
+    );
+  }
+
+  /// Re-arms the resume-ghost purge for a restore/transfer preference overlay.
+  ///
+  /// A restore applies the package key-by-key over the destination profile, so
+  /// a key the package does NOT carry keeps its destination value. A backup or
+  /// device transfer taken on a pre-purge build carries `playback_state_v1`
+  /// (ghosts and all) but no purge marker — so a destination that already ran
+  /// the purge would keep `generation = 1` and never inspect the playback state
+  /// it just imported, stranding those ghosts forever. Resetting the marker
+  /// alongside imported playback lets the one-shot purge run once more against
+  /// the new data.
+  ///
+  /// A package that DOES carry a marker came from a build that already purged
+  /// at the source, so its value is honoured untouched.
+  static void rearmGhostPurgeForImportedPlayback(
+    Map<String, Object?> preferences,
+  ) {
+    if (!preferences.containsKey(_playbackStateKey)) return;
+    if (preferences.containsKey(_resumeGhostPurgeGenerationKey)) return;
+    preferences[_resumeGhostPurgeGenerationKey] = 0;
+  }
+
+  /// One-time, per-profile purge of the resume "ghosts" older builds minted
+  /// when an episode was unwatched.
+  ///
+  /// Until [_clearEpisodeCompletion] learned to drop the row, unwatching a
+  /// fully-watched episode zeroed its `positionMs` and stamped `updatedAt` to
+  /// now. The leftover row reads as "played, 0% in, not finished", which is the
+  /// newest thing in the series — so it won `getLastPlayedEpisode*` and pinned
+  /// Continue Watching (home card, detail pill, and Play alike) to an episode
+  /// the user had just declared unwatched. Repeating mark→unmark to shake it
+  /// loose only re-stamped it fresher.
+  ///
+  /// This runs ONCE rather than filtering on every read. A zero-position row is
+  /// indistinguishable from an episode legitimately opened and closed before
+  /// the first autosave tick, and permanently ignoring that shape would make a
+  /// pack reopen the previous (already-watched) episode. Bounding the cleanup
+  /// to one pass fixes the installs carrying a ghost — including ones that
+  /// received it over a device transfer — while leaving normal playback
+  /// bookkeeping exactly as it was.
+  ///
+  /// Rows marked in `finishedEpisodes` are kept: a mark-only watch stores the
+  /// dummy 0ms/1ms shape and still means "watched".
+  static Future<void> purgeUnwatchedResumeGhosts() async {
+    final prefs = await ProfilePreferences.instance();
+    final generation = prefs.getInt(_resumeGhostPurgeGenerationKey) ?? 0;
+    if (generation >= _currentResumeGhostPurgeGeneration) return;
+
+    final playback = await _getPlaybackStateMap();
+    var purged = 0;
+
+    for (final stateEntry in playback.values) {
+      if (stateEntry is! Map<String, dynamic> ||
+          stateEntry['type'] != 'series') {
+        continue;
+      }
+      final seasons = stateEntry['seasons'];
+      if (seasons is! Map) continue;
+      final finishedEpisodes = stateEntry['finishedEpisodes'];
+
+      for (final seasonKey in seasons.keys.toList()) {
+        final episodes = seasons[seasonKey];
+        if (episodes is! Map) continue;
+        final seasonFinished = finishedEpisodes is Map
+            ? finishedEpisodes[seasonKey]
+            : null;
+
+        for (final episodeKey in episodes.keys.toList()) {
+          final episodeData = episodes[episodeKey];
+          if (episodeData is! Map) continue;
+          if (seasonFinished is Map && seasonFinished.containsKey(episodeKey)) {
+            continue;
+          }
+          final positionMs = (episodeData['positionMs'] as num?)?.toInt() ?? 0;
+          final durationMs = (episodeData['durationMs'] as num?)?.toInt() ?? 0;
+          // durationMs > 1 skips the mark-only dummy shape, which is already
+          // excluded above whenever its completion record survived.
+          if (positionMs == 0 && durationMs > 1) {
+            episodes.remove(episodeKey);
+            purged++;
+          }
+        }
+        if (episodes.isEmpty) seasons.remove(seasonKey);
+      }
+    }
+
+    if (purged > 0) {
+      await _savePlaybackStateMap(playback);
+      localCompletionRevision.value++;
+      debugPrint(
+        'StorageService: purged $purged unwatched resume ghost(s) from playback state',
+      );
+    }
+    await prefs.setInt(
+      _resumeGhostPurgeGenerationKey,
+      _currentResumeGhostPurgeGeneration,
     );
   }
 
@@ -9756,7 +9889,7 @@ class StorageService {
     parentsGuideStyleCached = 'compass';
     iptvStyleCached = 'command';
     discoverLayoutCached = 'stage';
-    launchAnimationCached = 'collider';
+    launchAnimationCached = 'trace';
     launchIdentPaletteCached = 'ident';
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';

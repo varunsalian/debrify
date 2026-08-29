@@ -4,6 +4,9 @@ This manifest is the compatibility contract for the profiles rollout. Unless a
 key or path is explicitly device/job-owned below, existing Debrify state is
 profile-owned and migrates to the initial Admin.
 
+Portable backup/restore coverage, transformations, and intentional exclusions
+are specified separately in [Profile backup coverage](profile-backup-coverage.md).
+
 ## Preference ownership
 
 | Owner | Keys / prefixes | Notes |

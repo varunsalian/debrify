@@ -52,8 +52,10 @@ class SettingsSearchEntry {
   bool get isToggle => onToggle != null;
 
   /// Lowercase haystack of everything a query can match against.
+  /// Every destination implicitly includes "settings" so an exact page name
+  /// such as "Torbox Settings" still matches an entry titled "Torbox".
   String get _haystack =>
-      '$title $subtitle $category ${keywords.join(' ')}'.toLowerCase();
+      '$title $subtitle $category ${keywords.join(' ')} settings'.toLowerCase();
 
   /// AND semantics: every whitespace-separated term must appear somewhere in
   /// the haystack, so "download sd" narrows rather than widens.

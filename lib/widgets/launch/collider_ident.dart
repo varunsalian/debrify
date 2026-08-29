@@ -710,10 +710,15 @@ class _ColliderPainter extends CustomPainter {
           lightweight: false,
         );
       }
-      canvas.drawPath(
-        _mark,
-        Paint()..shader = ma >= 1 ? _markShader : _markRamp.at(ma)!,
-      );
+      // `_Ladder.at` returns null BELOW its faintest step by design, while the
+      // guard above is only `ma > 0` — so force-unwrapping threw out of
+      // paint() on any frame sampling (0, 0.1]. A throwing CustomPainter takes
+      // its whole subtree's paint with it, which on the default ident is the
+      // screen. Skip the draw, as the remnant and bloom steps above already do.
+      final ms = ma >= 1 ? _markShader : _markRamp.at(ma);
+      if (ms != null) {
+        canvas.drawPath(_mark, Paint()..shader = ms);
+      }
       canvas.drawPath(
         _markInner,
         Paint()..color = Colors.white.withValues(alpha: 0.18 * ma),
