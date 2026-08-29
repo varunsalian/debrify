@@ -50,6 +50,7 @@ import 'services/profiles/profile_lock_controller.dart';
 import 'services/profiles/profile_runtime.dart';
 import 'services/profiles/privacy_log.dart';
 import 'services/profiles/desktop_single_instance.dart';
+import 'services/diagnostic_log.dart';
 import 'models/profiles/profile_policy.dart';
 import 'models/profiles/user_profile.dart';
 import 'models/sidebar_configuration.dart';
@@ -163,6 +164,19 @@ Future<void> main(List<String> launchArguments) async {
     await _mainUnchecked(launchArguments);
   } catch (error, stackTrace) {
     WidgetsFlutterBinding.ensureInitialized();
+    // Best effort only: diagnostics must never turn an existing startup
+    // failure into a second failure or delay the fallback screen indefinitely.
+    try {
+      await DiagnosticLog.instance.initialize();
+      DiagnosticLog.instance.recordError(
+        source: 'app',
+        event: 'bootstrap_failure',
+        error: error,
+        stackTrace: stackTrace,
+        flushImmediately: false,
+      );
+      await DiagnosticLog.instance.flush();
+    } catch (_) {}
     debugPrint('Application bootstrap failed (${error.runtimeType})');
     debugPrint('$stackTrace');
     // Describing the failure must never become a second failure: an
@@ -216,15 +230,7 @@ String _describeStartupFailure(Object error, StackTrace stackTrace) {
 
 Future<void> _mainUnchecked(List<String> launchArguments) async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Backstop for async errors nothing awaited (fire-and-forget loads,
-  // .then chains without onError). Without a handler these are only printed
-  // by the default dispatcher — with one, they're logged consistently AND
-  // any future crash-reporting hook has a single place to attach. Returning
-  // true marks the error handled so it never doubles up in the console.
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Unhandled async error (${error.runtimeType})');
-    return true;
-  };
+  await DiagnosticLog.instance.initialize();
   // On a release tvOS build, Dart's print() lands on stdout, which the device
   // console does not carry — so Flutter errors, and anything we log while
   // bringing the port up, are simply invisible on real hardware. Forward
@@ -249,6 +255,42 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   // Install after the optional tvOS sink so that both the Dart console and
   // native device console receive only the redacted form.
   PrivacyLog.install();
+  final priorFlutterErrorHandler = FlutterError.onError;
+  FlutterError.onError = (details) {
+    DiagnosticLog.instance.recordFlutterError(details);
+    if (priorFlutterErrorHandler != null) {
+      priorFlutterErrorHandler(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+  // Backstop for async errors nothing awaited (fire-and-forget loads,
+  // .then chains without onError). Keep only the stable type and bounded
+  // stack in the private rolling log; exception bodies stay console-only.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    DiagnosticLog.instance.recordError(
+      source: 'dart',
+      event: 'unhandled_async_error',
+      error: error,
+      stackTrace: stack,
+    );
+    debugPrint('Unhandled async error (${error.runtimeType})');
+    return true;
+  };
+  DiagnosticLog.instance.recordEvent(
+    source: 'app',
+    event: 'session_start',
+    fields: <String, Object?>{
+      'platform': DiagnosticLabel(kIsWeb ? 'web' : Platform.operatingSystem),
+      'buildMode': DiagnosticLabel(
+        kReleaseMode
+            ? 'release'
+            : kProfileMode
+            ? 'profile'
+            : 'debug',
+      ),
+    },
+  );
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
   }

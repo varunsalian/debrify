@@ -294,9 +294,73 @@ void main() {
     final main = File('lib/main.dart').readAsStringSync();
     expect(main, contains('PrivacyLog.install();'));
     expect(
+      main,
+      isNot(contains('attachDiagnosticSink')),
+      reason: 'General debugPrint output must never enter support exports.',
+    );
+    final diagnostics = File(
+      'lib/services/diagnostic_log.dart',
+    ).readAsStringSync();
+    expect(diagnostics, isNot(contains('recordConsole')));
+    expect(diagnostics, isNot(contains('error.toString()')));
+    expect(diagnostics, isNot(contains('details.context')));
+    expect(
       'debugPrint ='.allMatches(main).length,
       1,
       reason: 'Do not replace the installed process-wide privacy sink.',
+    );
+  });
+
+  test('device reset stops and deletes Dart and native diagnostics', () {
+    final reset = File(
+      'lib/services/profiles/profile_device_reset_service.dart',
+    ).readAsStringSync();
+    expect(
+      'DiagnosticLog.instance.clearForDeviceReset'.allMatches(reset).length,
+      greaterThanOrEqualTo(2),
+      reason:
+          'The drain and final cleanup must both handle journal resumption.',
+    );
+    expect(reset, contains("'diagnostics',"));
+
+    final nativeLog = File(
+      'android/app/src/main/kotlin/com/debrify/app/diagnostics/'
+      'DiagnosticFileLog.kt',
+    ).readAsStringSync();
+    final nativeClear = nativeLog.substring(
+      nativeLog.indexOf('fun clearForDeviceReset'),
+      nativeLog.indexOf('fun recordPreviousProcessExit'),
+    );
+    expect(nativeClear, contains('accepting = false'));
+    expect(nativeClear, contains('directory.deleteRecursively()'));
+    expect(nativeClear, contains('.clear()'));
+    final nativeAppend = nativeLog.substring(
+      nativeLog.indexOf('private fun append('),
+      nativeLog.indexOf('private fun trimSegment('),
+    );
+    expect(
+      nativeAppend.indexOf('if (!accepting) return'),
+      greaterThan(nativeAppend.indexOf('synchronized(fileLock)')),
+      reason: 'Reset must win against the crash-handler write race.',
+    );
+
+    final activity = File(
+      'android/app/src/main/kotlin/com/debrify/app/MainActivity.kt',
+    ).readAsStringSync();
+    expect(activity, contains('"clearForDeviceReset" ->'));
+  });
+
+  test('diagnostic export is hidden on tvOS until Remote transfer owns it', () {
+    final settings = File(
+      'lib/screens/settings_screen.dart',
+    ).readAsStringSync();
+    final authorizationCheck = settings.substring(
+      settings.indexOf('Future<bool> _activeProfileMayExportDiagnostics()'),
+      settings.indexOf('Future<void> _loadSummariesForCurrentProfile()'),
+    );
+    expect(
+      authorizationCheck,
+      contains('if (PlatformUtil.isTvOS) return false;'),
     );
   });
 

@@ -28,6 +28,12 @@ void main() {
   });
 
   test('native transfer sink accepts only structured bounded messages', () {
+    final dartSink = File(
+      'lib/services/remote_control/remote_transfer_diagnostics.dart',
+    ).readAsStringSync();
+    expect(dartSink, contains('DiagnosticLog.instance.recordEvent('));
+    expect(dartSink, contains("source: 'remote_transfer'"));
+
     final activity = File(
       'android/app/src/main/kotlin/com/debrify/app/MainActivity.kt',
     ).readAsStringSync();

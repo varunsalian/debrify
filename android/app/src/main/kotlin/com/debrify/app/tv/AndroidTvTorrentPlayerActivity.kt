@@ -40,6 +40,7 @@ import com.debrify.app.recording.RecordingAlarmReceiver
 import com.debrify.app.recording.RecordingRegistry
 import com.debrify.app.recording.RecordingSchedule
 import com.debrify.app.recording.RecordingScheduleStore
+import com.debrify.app.diagnostics.DiagnosticFileLog
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -276,14 +277,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         ) {
             val format = player?.videoFormat ?: inputFormat
             val generation = eventTime.mediaPeriodId?.windowSequenceNumber ?: -1L
-            Log.i(
-                DECODER_LOG_TAG,
+            val message =
                 "generation=$generation phase=stable " +
                     "status=${androidDecoderStatus(decoderName)} " +
                     "platform=android_tv backend=media3 " +
                     "codec=${format?.sampleMimeType ?: "unknown"} " +
                     "decoder=$decoderName output=surface_view " +
-                    "resolution=${format?.width ?: 0}x${format?.height ?: 0}",
+                    "resolution=${format?.width ?: 0}x${format?.height ?: 0}"
+            DiagnosticFileLog.record(
+                source = "android_tv_player",
+                event = "decoder_initialized",
+                message = message,
+            )
+            Log.i(
+                DECODER_LOG_TAG,
+                message,
             )
         }
     }
@@ -1825,6 +1833,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return
             }
             android.util.Log.e("AndroidTvPlayer", "Player error: ${error.errorCodeName}")
+            DiagnosticFileLog.record(
+                source = "android_tv_player",
+                event = "player_error",
+                message = "code=${error.errorCodeName}",
+                level = "error",
+            )
             reportDecoderFailure(error)
         }
 
@@ -1889,6 +1903,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        DiagnosticFileLog.initialize(this)
+        DiagnosticFileLog.record(
+            source = "android_tv_player",
+            event = "activity_create",
+            message = "hasPayloadFile=${intent.hasExtra("payloadPath")}",
+        )
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_android_tv_torrent_player)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1907,9 +1927,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val file = java.io.File(payloadPath)
                 val content = file.readText()
                 file.delete() // Clean up temp file after reading
+                DiagnosticFileLog.record(
+                    source = "android_tv_player",
+                    event = "payload_read",
+                    message = "ok=true bytes=${content.length}",
+                )
                 android.util.Log.d("AndroidTvPlayer", "Read payload from file: $payloadPath (${content.length} bytes)")
                 content
             } catch (e: Exception) {
+                DiagnosticFileLog.recordError(
+                    source = "android_tv_player",
+                    event = "payload_read_failed",
+                    throwable = e,
+                )
                 android.util.Log.e("AndroidTvPlayer", "Failed to read payload file: $payloadPath", e)
                 null
             }
@@ -1918,6 +1948,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             intent.getStringExtra(PAYLOAD_KEY)
         }
         if (rawPayload.isNullOrEmpty()) {
+            DiagnosticFileLog.record(
+                source = "android_tv_player",
+                event = "payload_missing",
+                level = "warning",
+            )
             finish()
             return
         }
@@ -1940,10 +1975,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         payload = parsePayload(rawPayload)
         if (payload == null || payload!!.items.isEmpty()) {
+            DiagnosticFileLog.record(
+                source = "android_tv_player",
+                event = "payload_invalid",
+                level = "warning",
+            )
             finish()
             return
         }
         currentIndex = payload!!.startIndex.coerceIn(0, payload!!.items.lastIndex)
+        DiagnosticFileLog.record(
+            source = "android_tv_player",
+            event = "payload_ready",
+            message = "items=${payload!!.items.size} startIndex=$currentIndex " +
+                "sources=${stremioSources.size} " +
+                "provider=${diagnosticProvider(payload!!.items[currentIndex].provider)}",
+        )
 
         // Apply custom font from Flutter settings if provided in payload
         try {
@@ -1959,7 +2006,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         bindViews()
+        startupLog("event=player_setup_begin")
         setupPlayer()
+        startupLog("event=player_setup_complete")
         setupSeekbar()
         setupPlaylist()
         setupControls()
@@ -16702,15 +16751,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun startupSourceFields(index: Int): String {
         val source = stremioSources.getOrNull(index)
-        fun safe(value: String?): String {
-            if (value.isNullOrBlank()) return "-"
-            return value.replace(Regex("\\s+"), " ").take(64)
-        }
-        return "sourceIndex=$index type=${safe(source?.streamType)} " +
-            "addon=${safe(source?.addonId)} source=${safe(source?.source)}"
+        val sourceType = source?.streamType
+            ?.lowercase(Locale.US)
+            ?.replace(Regex("[^a-z0-9_.-]"), "_")
+            ?.take(32)
+            ?.ifBlank { "-" }
+            ?: "-"
+        return "sourceIndex=$index type=$sourceType " +
+            "addonPresent=${!source?.addonId.isNullOrBlank()} " +
+            "sourcePresent=${!source?.source.isNullOrBlank()}"
+    }
+
+    private fun diagnosticProvider(value: String?): String {
+        if (value.isNullOrBlank()) return "-"
+        return value
+            .lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9_.-]"), "_")
+            .take(32)
+            .ifBlank { "-" }
     }
 
     private fun startupLog(message: String, warning: Boolean = false) {
+        DiagnosticFileLog.record(
+            source = "android_tv_player",
+            event = "startup_gate",
+            message = message,
+            level = if (warning) "warning" else "info",
+        )
         if (warning) android.util.Log.w(STARTUP_FAILOVER_LOG_TAG, message)
         else android.util.Log.d(STARTUP_FAILOVER_LOG_TAG, message)
     }

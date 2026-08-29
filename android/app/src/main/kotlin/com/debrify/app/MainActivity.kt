@@ -32,6 +32,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.util.ArrayList
 import org.json.JSONObject
 import org.json.JSONArray
+import com.debrify.app.diagnostics.DiagnosticFileLog
 
 class MainActivity : FlutterActivity() {
 	private val CHANNEL = "com.debrify.app/downloader"
@@ -51,6 +52,7 @@ class MainActivity : FlutterActivity() {
 	private val VOICE_EVENTS = "debrify/tv_voice_events"
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
 	private val REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL = "debrify/remote_transfer_diagnostics"
+	private val NATIVE_DIAGNOSTICS_CHANNEL = "debrify/native_diagnostics"
 	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
 	// signing key + user since Android 8, stable across OTAs) — unlike the
 	// build/model fields device_info_plus exposes, which every unit of the
@@ -970,6 +972,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        DiagnosticFileLog.initialize(this)
+        DiagnosticFileLog.recordPreviousProcessExit(this)
         // A lock-on-resume profile must be protected BEFORE Flutter starts and
         // before Android can take a task snapshot. Dart later clears the flag
         // only after it has published an unlocked active profile.
@@ -1334,6 +1338,26 @@ class MainActivity : FlutterActivity() {
 		}
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,
+			NATIVE_DIAGNOSTICS_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"flush" -> DiagnosticFileLog.flush { result.success(null) }
+				"clearForDeviceReset" -> DiagnosticFileLog.clearForDeviceReset { cleared ->
+					if (cleared) {
+						result.success(null)
+					} else {
+						result.error(
+							"diagnostic_clear_failed",
+							"Could not clear native diagnostic state",
+							null,
+						)
+					}
+				}
+				else -> result.notImplemented()
+			}
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
 			PLAYER_DIAGNOSTICS_CHANNEL,
 		).setMethodCallHandler { call, result ->
 			if (call.method != "logDecoder") {
@@ -1348,6 +1372,11 @@ class MainActivity : FlutterActivity() {
 				result.error("bad_args", "message is required", null)
 				return@setMethodCallHandler
 			}
+			DiagnosticFileLog.record(
+				source = "flutter_player",
+				event = "decoder_status",
+				message = message,
+			)
 			android.util.Log.i("DEBRIFY_PLAYER_DECODER", message)
 			result.success(null)
 		}
@@ -2745,6 +2774,13 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        DiagnosticFileLog.record(
+            source = "android_tv_launcher",
+            event = "torrent_launch_requested",
+            message = "items=${(payload["items"] as? List<*>)?.size ?: -1} " +
+                "startIndex=${(payload["startIndex"] as? Number)?.toInt() ?: -1}",
+        )
+
         try {
             val payloadJson = mapToJson(payload).toString()
 
@@ -2752,6 +2788,11 @@ class MainActivity : FlutterActivity() {
             // This allows playlists with 500+ items without TransactionTooLargeException
             val tempFile = java.io.File(cacheDir, "torrent_payload_${System.currentTimeMillis()}.json")
             tempFile.writeText(payloadJson)
+            DiagnosticFileLog.record(
+                source = "android_tv_launcher",
+                event = "torrent_payload_staged",
+                message = "bytes=${payloadJson.length}",
+            )
             android.util.Log.d("DebrifyTV", "MainActivity: Wrote payload to temp file: ${tempFile.absolutePath} (${payloadJson.length} bytes)")
 
             val intent = Intent().apply {
@@ -2762,8 +2803,17 @@ class MainActivity : FlutterActivity() {
                 putExtra("payloadPath", tempFile.absolutePath)
             }
             startActivity(intent)
+            DiagnosticFileLog.record(
+                source = "android_tv_launcher",
+                event = "torrent_activity_started",
+            )
             result.success(true)
         } catch (e: Exception) {
+            DiagnosticFileLog.recordError(
+                source = "android_tv_launcher",
+                event = "torrent_launch_failed",
+                throwable = e,
+            )
             android.util.Log.e("DebrifyTV", "MainActivity: Failed to launch torrent playback", e)
             result.error("launch_failed", e.message, null)
         }

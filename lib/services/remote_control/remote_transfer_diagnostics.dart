@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../diagnostic_log.dart';
 import '../profiles/privacy_log.dart';
 
 /// Privacy-safe milestones for diagnosing an all-profile remote transfer.
@@ -32,6 +33,7 @@ abstract final class RemoteTransferDiagnostics {
     Map<String, Object?> fields = const <String, Object?>{},
   }) {
     final parts = <String>['DEBRIFY_TRANSFER', 'event=$event'];
+    final diagnosticFields = <String, Object?>{};
     for (final entry in fields.entries) {
       if (!_fieldKey.hasMatch(entry.key) || entry.value == null) continue;
       final raw = entry.value
@@ -40,7 +42,20 @@ abstract final class RemoteTransferDiagnostics {
           .replaceAll('\r', ' ');
       final bounded = raw.length <= 80 ? raw : raw.substring(0, 80);
       parts.add('${entry.key}=$bounded');
+      final value = entry.value;
+      if (value is String) {
+        diagnosticFields[entry.key] = DiagnosticLabel(bounded);
+      } else if (value is num || value is bool || value is Type) {
+        diagnosticFields[entry.key] = value;
+      }
     }
+    // This is an explicit structural producer, unlike the process console.
+    // DiagnosticLog independently rejects malformed diagnostic labels.
+    DiagnosticLog.instance.recordEvent(
+      source: 'remote_transfer',
+      event: event,
+      fields: diagnosticFields,
+    );
     final message = PrivacyLog.redact(parts.join(' '));
     debugPrint(message);
     if (!kIsWeb && Platform.isAndroid) {

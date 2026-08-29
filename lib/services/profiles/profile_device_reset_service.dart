@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../utils/app_storage.dart';
 import '../android_native_downloader.dart';
+import '../diagnostic_log.dart';
 import '../desktop_recording_service.dart';
 import '../desktop_schedule_service.dart';
 import '../download_service.dart';
@@ -196,9 +197,14 @@ class ProfileDeviceResetService {
         }
       });
     }
+    // Stop both Dart and native writers before any private filesystem cleanup.
+    // The final cleanup repeats this idempotently so a resumed journal cannot
+    // trust a drain marker written by a previous process.
+    await drain('diagnostics', DiagnosticLog.instance.clearForDeviceReset);
   }
 
   static Future<void> _clearProfileFilesAndPreferences() async {
+    await DiagnosticLog.instance.clearForDeviceReset();
     final prefs = await SharedPreferences.getInstance();
     if (!await prefs.clear()) {
       throw StateError('Could not clear application preferences');
@@ -210,9 +216,17 @@ class ProfileDeviceResetService {
     ];
     final seen = <String>{};
     for (final root in roots) {
-      final profiles = Directory(p.join(root.absolute.path, 'profiles'));
-      if (seen.add(profiles.path) && await profiles.exists()) {
-        await profiles.delete(recursive: true);
+      for (final privateDirectoryName in const <String>[
+        'profiles',
+        'diagnostics',
+      ]) {
+        final privateDirectory = Directory(
+          p.join(root.absolute.path, privateDirectoryName),
+        );
+        if (seen.add(privateDirectory.path) &&
+            await privateDirectory.exists()) {
+          await privateDirectory.delete(recursive: true);
+        }
       }
     }
     final support = await AppStorage.support();

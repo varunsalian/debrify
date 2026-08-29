@@ -336,6 +336,11 @@ abstract final class SettingsRows {
     title: 'Restore from Backup',
     subtitle: 'Import services and addons from a backup file',
   );
+  static const exportDiagnosticLogs = SettingsRowContent(
+    icon: Icons.bug_report_outlined,
+    title: 'Export Diagnostic Logs',
+    subtitle: 'Save privacy-filtered logs from the last 2 hours',
+  );
   static const resetDebrify = SettingsRowContent(
     icon: Icons.warning_rounded,
     title: 'Reset Debrify',

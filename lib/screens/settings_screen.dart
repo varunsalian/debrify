@@ -37,6 +37,7 @@ import '../utils/platform_util.dart';
 import '../utils/deovr_utils.dart' as deovr;
 
 import '../services/analytics_service.dart';
+import '../services/diagnostic_log.dart';
 import '../services/account_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/iptv_transfer_payload.dart';
@@ -235,6 +236,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
+  bool _diagnosticExportVisible = false;
+  bool _exportingDiagnostics = false;
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
   TvRenderQuality _tvRenderQuality = TvRenderQuality.auto;
@@ -322,6 +325,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<bool> _activeProfileMayExportDiagnostics() async {
+    // saveBackupFile has no user-retrievable destination on physical tvOS.
+    // Keep this hidden until diagnostics use the authenticated Remote
+    // transfer flow, as profile backups already do on Apple TV.
+    if (PlatformUtil.isTvOS) return false;
+    try {
+      if (ProfileRuntime.mode == ProfileRuntimeMode.legacyCompatibility) {
+        // A legacy install has one implicit device owner/admin.
+        return true;
+      }
+      final registry = ProfileBootstrap.registry;
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final actor = await authorization.validate(registry);
+      return actor.role == UserProfileRole.admin;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _loadSummariesForCurrentProfile() async {
     // Phase 1: Load cached/local state instantly (no network)
     final results = await Future.wait([
@@ -366,6 +388,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTvPlayerControlsStyle(),
       StorageService.getDebrifyTvPlayerStyle(),
       StorageService.getPlayLoaderStyle(),
+      _activeProfileMayExportDiagnostics(),
     ]);
 
     if (!mounted) return;
@@ -413,6 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvPlayerControlsStyle = results[38] as String;
     final debrifyTvPlayerStyle = results[39] as String;
     final playLoaderStyle = results[40] as String;
+    final diagnosticExportVisible = results[41] as bool;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -536,6 +560,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
     _currentVersionName = packageInfo.version;
     _isAndroidTv = isAndroidTv;
+    DiagnosticLog.instance.recordEvent(
+      source: 'app',
+      event: 'app_metadata',
+      fields: <String, Object?>{
+        'version': DiagnosticLabel(packageInfo.version),
+        'build': DiagnosticLabel(packageInfo.buildNumber),
+        'androidTv': isAndroidTv,
+      },
+    );
     _loading = false;
     _autoUpdateChecksEnabled = autoCheckEnabled;
     _tvKeyboardEnabled = tvKeyboardEnabled;
@@ -561,6 +594,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _detailTheme = detailTheme;
     _parentsGuideStyle = parentsGuideStyle;
     _tvHeroArtworkQuality = tvHeroArtworkQuality;
+    _diagnosticExportVisible = diagnosticExportVisible;
 
     setState(() {});
 
@@ -851,6 +885,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       downloadLocationSubtitle: _downloadLocationSubtitle,
       onCreateBackup: _createBackup,
       onRestoreBackup: _restoreBackup,
+      onExportDiagnosticLogs: _diagnosticExportVisible
+          ? _exportDiagnosticLogs
+          : null,
       onDangerAction: _resetAppData,
       appVersion: _appVersion,
       onCheckForUpdates: _checkForAppUpdates,
@@ -964,6 +1001,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       downloadLocationSubtitle: _downloadLocationSubtitle,
       onCreateBackup: _createBackup,
       onRestoreBackup: _restoreBackup,
+      onExportDiagnosticLogs: _diagnosticExportVisible
+          ? _exportDiagnosticLogs
+          : null,
       onDangerAction: _resetAppData,
       appVersion: _appVersion,
       onCheckForUpdates: _checkForAppUpdates,
@@ -2250,6 +2290,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'connections',
         ],
       ),
+      if (_diagnosticExportVisible)
+        nav(
+          SettingsRows.exportDiagnosticLogs,
+          'Data & Backup',
+          _exportDiagnosticLogs,
+          keywords: const [
+            'logs',
+            'diagnostics',
+            'debug',
+            'crash',
+            'support',
+            'android tv',
+            'last two hours',
+          ],
+        ),
 
       // Updates
       SettingsSearchEntry(
@@ -4494,7 +4549,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _switchProfile() async {
     await pushSettingsPage(context, const ProfilesSettingsPage());
     if (!mounted) return;
-    setState(() {});
+    final diagnosticExportVisible = await _activeProfileMayExportDiagnostics();
+    if (!mounted) return;
+    setState(() => _diagnosticExportVisible = diagnosticExportVisible);
   }
 
   /// The admin check the hub applies before its Create/Manage rows — the
@@ -4949,6 +5006,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to save the backup')),
       );
+    }
+  }
+
+  Future<void> _exportDiagnosticLogs() async {
+    if (_exportingDiagnostics) return;
+    if (!await _activeProfileMayExportDiagnostics()) {
+      if (!mounted) return;
+      setState(() => _diagnosticExportVisible = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only an admin can export diagnostic logs.'),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _exportingDiagnostics = true);
+
+    try {
+      DiagnosticLog.instance.recordEvent(
+        source: 'settings',
+        event: 'diagnostic_export_requested',
+      );
+      final exported = await DiagnosticLog.instance.exportLastWindow();
+      if (!mounted) return;
+
+      if (kIsWeb) {
+        final savedReference = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save diagnostic logs',
+          fileName: exported.fileName,
+          type: FileType.custom,
+          allowedExtensions: const <String>['jsonl'],
+          bytes: exported.bytes,
+        );
+        if (!mounted || savedReference == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Saved ${exported.entryCount} privacy-filtered diagnostic entries.',
+            ),
+          ),
+        );
+      } else {
+        await ProfileBackupFlows(context).saveBackupFile(
+          fileName: exported.fileName,
+          bytes: exported.bytes,
+          mimeType: 'application/x-ndjson',
+          artifactLabel: 'diagnostic log',
+        );
+      }
+      DiagnosticLog.instance.recordEvent(
+        source: 'settings',
+        event: 'diagnostic_export_saved',
+        fields: <String, Object?>{'entries': exported.entryCount},
+      );
+    } catch (error, stackTrace) {
+      DiagnosticLog.instance.recordError(
+        source: 'settings',
+        event: 'diagnostic_export_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to export diagnostic logs.')),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingDiagnostics = false);
     }
   }
 
@@ -6701,6 +6826,7 @@ class _SettingsLayout extends StatelessWidget {
   final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
+  final Future<void> Function()? onExportDiagnosticLogs;
   final Future<void> Function() onDangerAction;
   final String appVersion;
   final Future<void> Function() onCheckForUpdates;
@@ -6790,6 +6916,7 @@ class _SettingsLayout extends StatelessWidget {
     this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
+    this.onExportDiagnosticLogs,
     required this.onDangerAction,
     required this.appVersion,
     required this.onCheckForUpdates,
@@ -7183,6 +7310,18 @@ class _SettingsLayout extends StatelessWidget {
                 ),
               ],
             ),
+            if (onExportDiagnosticLogs != null) ...[
+              const SizedBox(height: 18),
+              SettingsSection(
+                title: 'Diagnostics',
+                children: [
+                  SettingsTile.spec(
+                    SettingsRows.exportDiagnosticLogs,
+                    onTap: onExportDiagnosticLogs!,
+                  ),
+                ],
+              ),
+            ],
           ],
         );
       case 11:
@@ -7534,6 +7673,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.restoreBackup,
                       onTap: onRestoreBackup,
                     ),
+                    if (onExportDiagnosticLogs != null)
+                      SettingsTile.spec(
+                        SettingsRows.exportDiagnosticLogs,
+                        onTap: onExportDiagnosticLogs!,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),
