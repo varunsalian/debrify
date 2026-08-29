@@ -1696,6 +1696,7 @@ class StorageService {
     'rackfocus',
     'imprint',
     'frost',
+    'trace',
   };
 
   /// Exposed so a test can assert this set and `kLaunchIdents` agree in BOTH

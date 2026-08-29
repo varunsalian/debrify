@@ -260,6 +260,7 @@ abstract final class SanitizedProfilePreferences {
     'rackfocus',
     'imprint',
     'frost',
+    'trace',
   };
 
   static const Set<String> _iptvPlayerGuideStyles = <String>{

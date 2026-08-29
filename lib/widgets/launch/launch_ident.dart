@@ -25,6 +25,7 @@ import 'rack_focus_ident.dart';
 import 'ripple_ident.dart';
 import 'silk_ident.dart';
 import 'swiss_ident.dart';
+import 'trace_ident.dart';
 
 /// One selectable launch ident: a full art direction for the splash — its own
 /// typography, material and light — not just a motion variant of one lockup.
@@ -220,6 +221,9 @@ const List<LaunchIdent> kLaunchIdents = [
   // light: it is pressed into the stock, or cut out of the frost.
   ImprintIdent(),
   FrostIdent(),
+  // Round 7 — the reveal is a single travelling light, and the cadence is
+  // normalised against the wordmark so it holds on every aspect ratio.
+  TraceIdent(),
 ];
 
 LaunchIdent launchIdentFor(String? id) {

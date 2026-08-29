@@ -76,6 +76,7 @@ void main() {
       'rackfocus',
       'imprint',
       'frost',
+      'trace',
     ]);
   });
 
