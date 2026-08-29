@@ -195,9 +195,15 @@ class IdentPalette {
 /// Registry, in picker order. Ids are stable — they are the stored pref —
 /// and the FIRST entry is the default (what unknown/unset prefs resolve to).
 const List<LaunchIdent> kLaunchIdents = [
+  // Round 7 — the reveal is a single travelling light, and the cadence is
+  // normalised against the wordmark so it holds on every aspect ratio.
+  // Promoted to first — and therefore to the default — by user call, replacing
+  // Collider. Only installs that never CHOSE move: an explicitly stored
+  // 'collider' is a value and keeps playing Collider.
+  TraceIdent(),
   // Horizon's premise, built out: the collapse becomes a merger, and the
   // wordmark takes its cadence from the blast front instead of a stagger.
-  // Promoted to first — and therefore to the default — by user call.
+  // Was the default from 2026-08-17 until Trace replaced it.
   ColliderIdent(),
   HorizonIdent(),
   DropBounceIdent(),
@@ -221,9 +227,6 @@ const List<LaunchIdent> kLaunchIdents = [
   // light: it is pressed into the stock, or cut out of the frost.
   ImprintIdent(),
   FrostIdent(),
-  // Round 7 — the reveal is a single travelling light, and the cadence is
-  // normalised against the wordmark so it holds on every aspect ratio.
-  TraceIdent(),
 ];
 
 LaunchIdent launchIdentFor(String? id) {

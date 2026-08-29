@@ -259,7 +259,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _phoneNavStyle = 'classic';
   String _desktopSidebarStyle = 'rail';
   String _textBrightness = 'bright';
-  String _launchAnimation = 'collider';
+  String _launchAnimation = 'trace';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';

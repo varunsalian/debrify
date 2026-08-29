@@ -1705,9 +1705,9 @@ class StorageService {
   static Set<String> get launchAnimationValues => _launchAnimationValues;
 
   /// Which launch ident the splash plays (Appearance → Launch Animation).
-  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'collider'
-  /// (Collider) is the default, 'horizon' is the ident it replaced as such,
-  /// and 'drop' is the original splash.
+  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'trace' (Trace)
+  /// is the default, 'collider' and before it 'horizon' are the idents it
+  /// replaced as such, and 'drop' is the original splash.
   ///
   /// [launchAnimationCached] mirrors it for SYNCHRONOUS reads: AppInitializer
   /// builds its splash in initState, before any async pref read could land.
@@ -1715,16 +1715,16 @@ class StorageService {
   ///
   /// Normalizes toward the default on BOTH sides — an unrecognized value has
   /// to mean the default for the reader and the writer alike. Only installs
-  /// that never CHOSE move when this changes: an explicit 'horizon' is a
-  /// stored value and keeps playing Horizon.
-  static String launchAnimationCached = 'collider';
+  /// that never CHOSE move when this changes: an explicit 'collider' is a
+  /// stored value and keeps playing Collider.
+  static String launchAnimationCached = 'trace';
 
   static Future<String> getLaunchAnimation() async {
     final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchAnimationKey);
     launchAnimationCached = _launchAnimationValues.contains(value)
         ? value!
-        : 'collider';
+        : 'trace';
     return launchAnimationCached;
   }
 
@@ -1732,7 +1732,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     final normalized = _launchAnimationValues.contains(value)
         ? value
-        : 'collider';
+        : 'trace';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -9889,7 +9889,7 @@ class StorageService {
     parentsGuideStyleCached = 'compass';
     iptvStyleCached = 'command';
     discoverLayoutCached = 'stage';
-    launchAnimationCached = 'collider';
+    launchAnimationCached = 'trace';
     launchIdentPaletteCached = 'ident';
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';

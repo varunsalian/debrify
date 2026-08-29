@@ -35,7 +35,7 @@ void main() {
   test('ids are unique and stable-looking', () {
     final ids = kLaunchIdents.map((i) => i.id).toList();
     expect(ids.toSet().length, ids.length, reason: 'duplicate ident id');
-    expect(kLaunchIdents.first.id, 'collider',
+    expect(kLaunchIdents.first.id, 'trace',
         reason: 'the first entry is the default; changing it moves every '
             'unset/unknown pref onto a different splash');
   });
@@ -56,6 +56,7 @@ void main() {
     // which no other assertion here would catch. Add to this list when you
     // add an ident; only edit an existing entry with a migration.
     expect(kLaunchIdents.map((i) => i.id).toList(), [
+      'trace',
       'collider',
       'horizon',
       'drop',
@@ -76,7 +77,6 @@ void main() {
       'rackfocus',
       'imprint',
       'frost',
-      'trace',
     ]);
   });
 
