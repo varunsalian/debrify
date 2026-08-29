@@ -76,6 +76,27 @@ void main() {
     );
   }
 
+  for (final surface in <({String name, Size size})>[
+    (name: 'mobile', size: const Size(390, 844)),
+    (name: 'desktop', size: const Size(1440, 900)),
+  ]) {
+    testWidgets('${surface.name} Export action invokes channel export', (
+      tester,
+    ) async {
+      var exportOpened = false;
+      await _pumpPhone(
+        tester,
+        size: surface.size,
+        onExport: () => exportOpened = true,
+      );
+
+      await tester.tap(find.text('Export'));
+      await tester.pump();
+
+      expect(exportOpened, isTrue);
+    });
+  }
+
   testWidgets('large text reflows footer and sheet actions vertically', (
     tester,
   ) async {
@@ -90,11 +111,14 @@ void main() {
 
     final add = tester.getCenter(find.text('Add'));
     final import = tester.getCenter(find.text('Import'));
+    final export = tester.getCenter(find.text('Export'));
     final settings = tester.getCenter(find.text('Settings'));
     expect(add.dx, closeTo(import.dx, 0.5));
-    expect(import.dx, closeTo(settings.dx, 0.5));
+    expect(import.dx, closeTo(export.dx, 0.5));
+    expect(export.dx, closeTo(settings.dx, 0.5));
     expect(add.dy, lessThan(import.dy));
-    expect(import.dy, lessThan(settings.dy));
+    expect(import.dy, lessThan(export.dy));
+    expect(export.dy, lessThan(settings.dy));
 
     await tester.scrollUntilVisible(
       find.text('Space Night'),
@@ -217,6 +241,7 @@ Future<void> _pumpPhone(
   Size size = const Size(390, 844),
   double textScale = 1,
   ValueChanged<DebrifyTvChannel>? onWatch,
+  VoidCallback? onExport,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -248,6 +273,7 @@ Future<void> _pumpPhone(
             onQuickPlay: _noop,
             onAdd: _noop,
             onImport: _noop,
+            onExport: onExport ?? _noop,
             onSettings: _noop,
             onWatch: onWatch ?? _noopChannel,
             onEdit: _noopChannel,

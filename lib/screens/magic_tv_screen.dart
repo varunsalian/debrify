@@ -30,6 +30,7 @@ import '../services/pikpak_api_service.dart';
 import '../services/pikpak_tv_service.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
+import '../services/debrify_tv_channel_archive_service.dart';
 import '../services/debrify_tv_cache_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../models/premiumize_file.dart';
@@ -47,11 +48,13 @@ import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
+import '../services/profiles/profile_async_authorization.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
+import '../utils/platform_util.dart';
 import '../utils/rd_blocked_filter.dart';
 import '../utils/debrify_tv_filters.dart';
 import '../utils/series_parser.dart';
@@ -68,8 +71,10 @@ import 'debrify_tv/dialogs/cached_loading_dialog.dart';
 import 'debrify_tv/dialogs/channel_creation_dialog.dart';
 import 'debrify_tv/dialogs/community_channels_dialog.dart';
 import 'debrify_tv/dialogs/external_player_notice_dialog.dart';
+import 'debrify_tv/dialogs/export_channels_dialog.dart';
 import 'debrify_tv/dialogs/import_channels_dialog.dart';
 import 'debrify_tv/dialogs/spotlight_dialog.dart';
+import 'settings/profile_backup_flows.dart';
 
 const int _randomStartPercentDefault = 20;
 const int _randomStartPercentMin = 10;
@@ -104,7 +109,7 @@ int _parseRandomStartPercent(dynamic value) {
 
 enum _SettingsScope { quickPlay, channels }
 
-enum _DebrifyTvTopMenuAction { import, add, deleteAll, settings }
+enum _DebrifyTvTopMenuAction { import, export, add, deleteAll, settings }
 
 enum _ChannelImportOrigin { device, url }
 
@@ -2371,6 +2376,198 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
+  Future<T> _runChannelExportProgress<T>(
+    Future<T> Function(void Function(String) setStage) run,
+  ) async {
+    if (!mounted) {
+      throw StateError('Channel export screen is no longer available');
+    }
+    final stage = ValueNotifier<String>('Reading selected channel pools…');
+    final done = ValueNotifier<bool>(false);
+    final dialog = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: .72),
+      builder: (_) => ChannelExportProgressDialog(stage: stage, done: done),
+    );
+    try {
+      return await run((value) => stage.value = value);
+    } finally {
+      done.value = true;
+      await dialog;
+      stage.dispose();
+      done.dispose();
+    }
+  }
+
+  Future<void> _showChannelExportUnavailableOnAppleTv() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: .72),
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) Navigator.of(dialogContext).pop();
+        },
+        child: DebrifyTvSpotlightDialog(
+          eyebrow: 'Channel export · Apple TV',
+          title: 'Export from another device',
+          subtitle:
+              'Apple TV does not expose a location where Debrify can save a '
+              'portable ZIP. Export the channels from Debrify on a phone or '
+              'computer, or send them through Remote.',
+          icon: Icons.tv_rounded,
+          maxWidth: 580,
+          actions: <Widget>[
+            DebrifyTvDialogButton(
+              autofocus: true,
+              label: 'Close',
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
+          child: const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleExportChannels() async {
+    if (_isBusy || !mounted) return;
+    if (PlatformUtil.isTvOS) {
+      await _showChannelExportUnavailableOnAppleTv();
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _status = 'Loading channels for export…';
+    });
+
+    try {
+      final capability = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.debrifyTv,
+      );
+      Future<T> runCaptured<T>(Future<T> Function() body) =>
+          capability == null ? body() : capability.runIfCurrent(body);
+
+      final channels = await runCaptured(
+        DebrifyTvRepository.instance.fetchAllChannels,
+      );
+      final health = await runCaptured(DebrifyTvCacheService.loadRailHealth);
+      if (!mounted) return;
+      if (channels.isEmpty) {
+        _showSnack('There are no channels to export.', color: Colors.orange);
+        return;
+      }
+
+      final selectedIds = await showDialog<Set<String>>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withValues(alpha: .72),
+        builder: (_) => ExportChannelsDialog(
+          channels: channels,
+          savedHashCounts: <String, int>{
+            for (final entry in health.entries) entry.key: entry.value.pooled,
+          },
+        ),
+      );
+      if (!mounted || selectedIds == null || selectedIds.isEmpty) return;
+
+      setState(() => _status = 'Preparing channel archive…');
+      late List<DebrifyTvChannelArchiveSource> sources;
+      final bytes = await _runChannelExportProgress<Uint8List>((
+        setStage,
+      ) async {
+        sources = await runCaptured(() async {
+          // Re-read after the selection dialog: a channel can be edited or
+          // removed while an overlay is open, and the archive must reflect
+          // the rows that actually exist at export time.
+          final current = await DebrifyTvRepository.instance.fetchAllChannels();
+          final selected = current
+              .where((channel) => selectedIds.contains(channel.channelId))
+              .toList(growable: false);
+          final result = <DebrifyTvChannelArchiveSource>[];
+          for (var index = 0; index < selected.length; index++) {
+            final channel = selected[index];
+            setStage(
+              'Reading channel ${index + 1} of ${selected.length}: '
+              '${channel.name}',
+            );
+            result.add(
+              DebrifyTvChannelArchiveSource(
+                channel: channel,
+                cacheEntry:
+                    await DebrifyTvCacheService.getEntryForPortableExport(
+                      channel.channelId,
+                    ),
+              ),
+            );
+          }
+          return result;
+        });
+        if (sources.isEmpty) {
+          throw StateError('The selected channels are no longer available');
+        }
+        setStage('Compressing ${sources.length} channels into one ZIP…');
+        return DebrifyTvChannelArchiveService.buildZip(sources);
+      });
+      if (!mounted) return;
+      if (bytes.length > DebrifyTvZipImporter.maxPortableFileBytes) {
+        _showSnack(
+          'The ZIP is over 100 MB. Export fewer channels at a time.',
+          color: Colors.orange,
+        );
+        return;
+      }
+
+      if (capability != null) {
+        await capability.runIfCurrent(() async {});
+      }
+      if (!mounted) return;
+      final now = DateTime.now();
+      final stamp = <int>[
+        now.year,
+        now.month,
+        now.day,
+        now.hour,
+        now.minute,
+      ].map((part) => part.toString().padLeft(2, '0')).join();
+      final savedPath = await ProfileBackupFlows(context).saveBackupFile(
+        dialogTitle: 'Save Debrify TV channels',
+        fileName: 'debrify-tv-channels-$stamp.zip',
+        bytes: bytes,
+        allowedExtensions: const <String>['zip'],
+        artifactLabel: 'channel archive',
+      );
+      if (!mounted || savedPath == null) return;
+      final hashes = sources.fold<int>(
+        0,
+        (sum, source) => sum + source.savedHashCount,
+      );
+      _showSnack(
+        'Exported ${sources.length} channel${sources.length == 1 ? '' : 's'} '
+        'with $hashes saved hash${hashes == 1 ? '' : 'es'}.',
+        color: Colors.green,
+      );
+    } catch (error) {
+      debugPrint(
+        'DebrifyTV: channel archive export failed (${error.runtimeType})',
+      );
+      if (mounted) {
+        _showSnack('Failed to export channels.', color: Colors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _status = '';
+        });
+      }
+    }
+  }
+
   Future<void> _handleAddChannel() async {
     await _syncProviderAvailability();
     final channel = await _openChannelDialog();
@@ -2397,7 +2594,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final pickedFile = selection.files.first;
 
     // Reject an implausibly large pick before reading it into memory.
-    if (pickedFile.size > 100 * 1024 * 1024) {
+    if (pickedFile.size > DebrifyTvZipImporter.maxPortableFileBytes) {
       _showSnack('Selected file is too large to import.', color: Colors.orange);
       return;
     }
@@ -7717,6 +7914,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       onQuickPlay: _showQuickPlayDialog,
       onAdd: _handleAddChannel,
       onImport: _handleImportChannels,
+      onExport: _handleExportChannels,
       onSettings: _showGlobalSettingsDialog,
       onWatch: _watchChannel,
       onEdit: _handleEditChannel,
@@ -7861,6 +8059,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     switch (action) {
       case _DebrifyTvTopMenuAction.import:
         _handleImportChannels();
+        break;
+      case _DebrifyTvTopMenuAction.export:
+        _handleExportChannels();
         break;
       case _DebrifyTvTopMenuAction.add:
         _handleAddChannel();
@@ -8056,6 +8257,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   ? null
                   : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.import),
               child: const Text('Import'),
+            ),
+            MenuItemButton(
+              style: itemStyle,
+              leadingIcon: const Icon(Icons.folder_zip_rounded),
+              onPressed: _isBusy || _channels.isEmpty
+                  ? null
+                  : () => _handleTopMenuAction(_DebrifyTvTopMenuAction.export),
+              child: const Text('Export Channels'),
             ),
             MenuItemButton(
               style: itemStyle,

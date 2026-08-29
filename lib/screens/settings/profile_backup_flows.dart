@@ -248,7 +248,7 @@ class ProfileBackupFlows {
         content: Text(
           '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved'
           '${debrifyTvOmission?.isEmpty == false
-              ? '. Debrify TV was excluded as confirmed; send those channels through Remote.'
+              ? '. Debrify TV was excluded as confirmed; restore it from a channel ZIP or Remote.'
               : databaseCachesCompacted
               ? '. Rebuildable catalog/EPG caches were compacted.'
               : ''}',
@@ -274,15 +274,17 @@ class ProfileBackupFlows {
               'This backup had to be compacted to fit. Debrify TV will not '
               'be included: ${omission.contentsLabel} will be left out. No '
               'empty channels will be created when it is restored.\n\n'
-              'To transfer those channels with their playable pools, use '
-              'Remote → Debrify TV Channels from the source device after '
-              'restoring this backup.'
-              '${allProfiles && omission.profilesAffected > 1 ? ' Repeat the channel transfer for each affected profile.' : ''}',
+              'Before continuing, you can cancel and open Debrify TV → '
+              'Export to save the channels and their playable pools as a '
+              'ZIP. After restoring, use Debrify TV → Import → From storage. '
+              'Remote → Debrify TV Channels remains available for direct '
+              'device transfer.'
+              '${allProfiles && omission.profilesAffected > 1 ? ' Repeat the ZIP export/import or Remote transfer for each affected profile.' : ''}',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
+                child: const Text('Cancel and export ZIP'),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -294,7 +296,7 @@ class ProfileBackupFlows {
         false;
   }
 
-  /// Saves backup bytes to a user-chosen location — or the best local one.
+  /// Saves portable bytes to a user-chosen location — or the best local one.
   ///
   /// Android TV builds ship no ACTION_CREATE_DOCUMENT handler, so the system
   /// save dialog behind [FilePicker.saveFile] just raises an OS toast
@@ -310,6 +312,8 @@ class ProfileBackupFlows {
     required String dialogTitle,
     required String fileName,
     required Uint8List bytes,
+    List<String> allowedExtensions = const <String>['json'],
+    String artifactLabel = 'backup',
   }) async {
     if (!PlatformUtil.isAndroidTvCached) {
       try {
@@ -317,7 +321,7 @@ class ProfileBackupFlows {
           dialogTitle: dialogTitle,
           fileName: fileName,
           type: FileType.custom,
-          allowedExtensions: const <String>['json'],
+          allowedExtensions: allowedExtensions,
           bytes: bytes,
         );
         if (savedPath == null) return null;
@@ -364,9 +368,10 @@ class ProfileBackupFlows {
             now.minute,
             now.second,
           ].map((part) => part.toString().padLeft(2, '0')).join();
-          file = File(
-            '${dir.path}/${fileName.replaceFirst('.json', '-$suffix.json')}',
-          );
+          final dot = fileName.lastIndexOf('.');
+          final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
+          final extension = dot > 0 ? fileName.substring(dot) : '';
+          file = File('${dir.path}/$stem-$suffix$extension');
         }
         await file.writeAsBytes(bytes, flush: true);
         if (await file.length() == bytes.length) {
@@ -378,15 +383,19 @@ class ProfileBackupFlows {
       }
     }
     if (savedPath == null) {
-      throw StateError('Could not save the backup on this device');
+      throw StateError('Could not save the $artifactLabel on this device');
     }
     if (context.mounted) {
+      final titleLabel = artifactLabel.isEmpty
+          ? 'File'
+          : '${artifactLabel[0].toUpperCase()}${artifactLabel.substring(1)}';
       await showSettingsDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Backup saved on this device'),
+          title: Text('$titleLabel saved on this device'),
           content: Text(
-            'The system save dialog is not available here, so the backup '
+            'The system save dialog is not available here, so the '
+            '$artifactLabel '
             'was written to:\n\n$savedPath\n\nCopy it off with a file '
             'manager, USB, or over the network.',
           ),
@@ -521,8 +530,9 @@ class ProfileBackupFlows {
       if (debrifyTvOmission?.isEmpty == false)
         'Debrify TV was excluded when this backup was compacted '
             '(${debrifyTvOmission!.contentsLabel}). No empty Debrify TV '
-            'channels will be created. Transfer them with their saved pools '
-            'using Remote → Debrify TV Channels from the source device.',
+            'channels will be created. Import a previously exported channel '
+            'ZIP from Debrify TV → Import → From storage, or transfer them '
+            'from the source using Remote → Debrify TV Channels.',
       if (package.omissions.containsKey('rebuildableDatabaseCachesOmitted'))
         'Rebuildable IPTV catalog and EPG caches were compacted; playlists, '
             'favorites, history, numbering, and settings are included.',

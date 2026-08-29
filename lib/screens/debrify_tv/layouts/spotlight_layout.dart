@@ -84,11 +84,18 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
   static const _kFind = 'find';
   static const _kAdd = 'add';
   static const _kImport = 'import';
+  static const _kExport = 'export';
   static const _kSettings = 'settings';
   static const _kSearch = 'search';
 
   /// The utility icon row under Quick Play, left to right.
-  static const List<String> _utilRun = [_kFind, _kAdd, _kImport, _kSettings];
+  static const List<String> _utilRun = [
+    _kFind,
+    _kAdd,
+    _kImport,
+    _kExport,
+    _kSettings,
+  ];
   static const _kPlay = 'act:play';
   static const _kPin = 'act:pin';
   static const _kEdit = 'act:edit';
@@ -376,6 +383,8 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
         if (!view.busy) view.onAdd();
       case _kImport:
         if (!view.busy) view.onImport();
+      case _kExport:
+        if (!view.busy && view.channels.isNotEmpty) view.onExport();
       case _kSettings:
         view.onSettings();
     }
@@ -818,6 +827,13 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
           view.busy ? null : view.onImport,
         ),
         const SizedBox(width: 7),
+        button(
+          _kExport,
+          Icons.folder_zip_rounded,
+          'Export',
+          view.busy || view.channels.isEmpty ? null : view.onExport,
+        ),
+        const SizedBox(width: 7),
         button(_kSettings, Icons.settings_rounded, 'Settings', view.onSettings),
         const SizedBox(width: 9),
         Expanded(
@@ -828,6 +844,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                 _kFind: 'Search',
                 _kAdd: 'Add channel',
                 _kImport: 'Import',
+                _kExport: 'Export',
                 _kSettings: 'Settings',
               };
               String caption = '';

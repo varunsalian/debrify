@@ -196,6 +196,13 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                       onTap: view.busy ? null : view.onImport,
                     ),
                     _PhoneAction(
+                      icon: Icons.folder_zip_rounded,
+                      label: 'Export',
+                      onTap: view.busy || allChannels.isEmpty
+                          ? null
+                          : view.onExport,
+                    ),
+                    _PhoneAction(
                       icon: Icons.settings_rounded,
                       label: 'Settings',
                       onTap: view.onSettings,

@@ -84,10 +84,22 @@ class DebrifyTvCacheService {
     );
   }
 
+  /// Reads a complete portable snapshot, including legacy/recoverable child
+  /// rows whose cache-state parent is missing. Normal cache consumers retain
+  /// [getEntry]'s existing null-on-missing-state behavior.
+  static Future<DebrifyTvChannelCacheEntry?> getEntryForPortableExport(
+    String channelId,
+  ) {
+    return DebrifyTvDatabase.instance.runScoped(
+      (db) => _getEntry(db, channelId, includeRowsWithoutState: true),
+    );
+  }
+
   static Future<DebrifyTvChannelCacheEntry?> _getEntry(
     DatabaseExecutor db,
-    String channelId,
-  ) async {
+    String channelId, {
+    bool includeRowsWithoutState = false,
+  }) async {
     final stateRows = await db.query(
       'tv_channel_cache_state',
       where: 'channel_id = ?',
@@ -95,14 +107,11 @@ class DebrifyTvCacheService {
       limit: 1,
     );
 
-    if (stateRows.isEmpty) {
+    if (stateRows.isEmpty && !includeRowsWithoutState) {
       return null;
     }
 
-    final state = stateRows.first;
-    final status = (state['status'] as String?) ?? DebrifyTvCacheStatus.warming;
-    final errorMessage = state['error_message'] as String?;
-    final fetchedAt = state['fetched_at'] as int? ?? 0;
+    final state = stateRows.isEmpty ? null : stateRows.first;
 
     final keywordRows = await db.query(
       'tv_channel_keywords',
@@ -136,6 +145,21 @@ class DebrifyTvCacheService {
           pirateBayHits: row['pirate_bay_hits'] as int? ?? 0,
         ),
     };
+
+    if (state == null &&
+        keywordRows.isEmpty &&
+        torrentRows.isEmpty &&
+        statsRows.isEmpty) {
+      return null;
+    }
+
+    final status =
+        (state?['status'] as String?) ??
+        (torrents.isNotEmpty
+            ? DebrifyTvCacheStatus.ready
+            : DebrifyTvCacheStatus.warming);
+    final errorMessage = state?['error_message'] as String?;
+    final fetchedAt = state?['fetched_at'] as int? ?? 0;
 
     return DebrifyTvChannelCacheEntry(
       version: 1,

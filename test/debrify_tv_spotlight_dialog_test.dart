@@ -1,5 +1,7 @@
+import 'package:debrify/models/debrify_tv_channel_record.dart';
 import 'package:debrify/screens/debrify_tv/dialogs/cached_loading_dialog.dart';
 import 'package:debrify/screens/debrify_tv/dialogs/channel_creation_dialog.dart';
+import 'package:debrify/screens/debrify_tv/dialogs/export_channels_dialog.dart';
 import 'package:debrify/screens/debrify_tv/dialogs/external_player_notice_dialog.dart';
 import 'package:debrify/screens/debrify_tv/dialogs/import_channels_dialog.dart';
 import 'package:debrify/services/text_brightness.dart';
@@ -11,6 +13,67 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('channel export selects all and follows a linear DPAD run', (
+    tester,
+  ) async {
+    final channels = _exportChannels(12);
+    await _pumpAtSize(
+      tester,
+      const Size(960, 540),
+      ExportChannelsDialog(
+        channels: channels,
+        savedHashCounts: <String, int>{
+          for (var index = 0; index < channels.length; index++)
+            'export-$index': (index + 1) * 12,
+        },
+      ),
+    );
+
+    expect(_hasFocus(tester, 'Select all channels'), isTrue);
+    expect(find.text('Export 12 channels'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(_hasFocus(tester, 'Export Channel 1'), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(find.text('Export 11 channels'), findsOneWidget);
+
+    // Walk through rows that begin well below the viewport. None may be
+    // skipped when the scroll surface advances to keep focus visible.
+    for (var channelNumber = 2; channelNumber <= 12; channelNumber++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    expect(_hasFocus(tester, 'Export Channel 12'), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(_hasFocus(tester, 'Cancel'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('channel export stays usable on a narrow phone', (tester) async {
+    await _pumpAtSize(
+      tester,
+      const Size(320, 568),
+      ExportChannelsDialog(
+        channels: _exportChannels(12),
+        savedHashCounts: const <String, int>{'export-0': 99},
+      ),
+      textScale: 2,
+    );
+
+    expect(find.text('Export'), findsOneWidget);
+    expect(find.text('Export 12'), findsOneWidget);
+    expect(find.text('99 hashes · 1 keyword'), findsOneWidget);
+    await tester.ensureVisible(find.text('Export Channel 1'));
+    await tester.pump();
+    await tester.tap(find.text('Export Channel 1'));
+    await tester.pump();
+    expect(find.text('Export 11'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('import dialog follows a deterministic linear DPAD run', (
     tester,
   ) async {
@@ -116,6 +179,20 @@ void main() {
   });
 }
 
+List<DebrifyTvChannelRecord> _exportChannels(int count) =>
+    List<DebrifyTvChannelRecord>.generate(
+      count,
+      (index) => DebrifyTvChannelRecord(
+        channelId: 'export-$index',
+        name: 'Export Channel ${index + 1}',
+        keywords: <String>['keyword-$index'],
+        avoidNsfw: true,
+        channelNumber: index + 1,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
 bool _hasFocus(WidgetTester tester, String text) =>
     Focus.of(tester.element(find.text(text))).hasFocus;
 
@@ -127,7 +204,12 @@ Future<void> _pumpImportDialog(WidgetTester tester, Size size) async {
   );
 }
 
-Future<void> _pumpAtSize(WidgetTester tester, Size size, Widget child) async {
+Future<void> _pumpAtSize(
+  WidgetTester tester,
+  Size size,
+  Widget child, {
+  double textScale = 1,
+}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -137,7 +219,12 @@ Future<void> _pumpAtSize(WidgetTester tester, Size size, Widget child) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: AppThemeAdapter.themed(theme, TextBrightness.bright),
-      builder: (context, child) => AppThemeScope(theme: theme, child: child!),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: AppThemeScope(theme: theme, child: child!),
+      ),
       home: Scaffold(body: child),
     ),
   );

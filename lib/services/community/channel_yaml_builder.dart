@@ -19,7 +19,8 @@ class ChannelYamlBuilder {
     buffer.writeln('keywords:');
 
     final cachedTorrents = cacheEntry?.torrents ?? const <CachedTorrent>[];
-    final keywordStats = cacheEntry?.keywordStats ?? const <String, KeywordStat>{};
+    final keywordStats =
+        cacheEntry?.keywordStats ?? const <String, KeywordStat>{};
 
     for (final keyword in channel.keywords) {
       buffer.writeln('  "${escapeYamlString(keyword)}":');
@@ -37,10 +38,11 @@ class ChannelYamlBuilder {
       final matchingTorrents = cachedTorrents
           .where((t) => t.keywords.contains(keywordLower))
           .where((t) {
-        if (seen.contains(t.infohash)) return false;
-        seen.add(t.infohash);
-        return true;
-      }).toList();
+            if (seen.contains(t.infohash)) return false;
+            seen.add(t.infohash);
+            return true;
+          })
+          .toList();
 
       if (matchingTorrents.isEmpty) {
         buffer.writeln('    torrents: []');
@@ -57,7 +59,8 @@ class ChannelYamlBuilder {
           buffer.writeln('        scraped_date: ${torrent.scrapedDate}');
           if (torrent.sources.isNotEmpty) {
             buffer.writeln(
-                '        sources: [${torrent.sources.map((s) => '"$s"').join(', ')}]');
+              '        sources: [${torrent.sources.map((source) => '"${escapeYamlString(source)}"').join(', ')}]',
+            );
           }
         }
       }

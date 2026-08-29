@@ -84,8 +84,11 @@ TV's complete saved hash pools. If size requires compaction—or Remote
 explicitly retries compacted—Debrify TV is omitted as one coherent feature
 rather than restoring unusable channel shells. The user must confirm this
 before the compacted package is saved or sent and is directed to the dedicated
-**Remote → Debrify TV Channels** transfer, which carries each channel with its
-saved pool.
+Debrify TV **Export** action. That action creates a selected-channel ZIP (all
+channels selected by default) with one YAML member per channel and the complete
+saved pool. The existing **Import → From storage** flow restores the ZIP after
+the profile restore. **Remote → Debrify TV Channels** remains the direct-device
+convenience path.
 
 | Database | Durable user state that remains | Tables omitted during compaction |
 |---|---|---|

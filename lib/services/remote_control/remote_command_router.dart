@@ -1602,8 +1602,10 @@ class RemoteCommandRouter {
               '${debrifyTvOmission?.isEmpty == false ? '\n\nDebrify TV was '
                         'excluded when this transfer was compacted '
                         '(${debrifyTvOmission!.contentsLabel}). No empty '
-                        'channels will be created. After importing, send '
-                        'them separately with Remote → Debrify TV Channels.' : ''}'
+                        'channels will be created. After importing, restore '
+                        'a channel ZIP from Debrify TV → Import → From '
+                        'storage, or send them separately with Remote → '
+                        'Debrify TV Channels.' : ''}'
               '${rebuildableCachesOmitted ? '\n\nRebuildable catalog and EPG '
                         'caches were compacted for transport. Playlists, '
                         'favorites, history, numbering, and settings are '
@@ -1748,7 +1750,7 @@ class RemoteCommandRouter {
         'Imported ${report.profilesImported} profiles and '
         '${report.resourcesImported} connections from $sender.'
         '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}'
-        '${debrifyTvOmission?.isEmpty == false ? ' Debrify TV channels were not included; send them separately from Remote.' : ''}',
+        '${debrifyTvOmission?.isEmpty == false ? ' Debrify TV channels were not included; import a channel ZIP or send them separately from Remote.' : ''}',
       );
       if (receivingDuringOnboarding) {
         try {
