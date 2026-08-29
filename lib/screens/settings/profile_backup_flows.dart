@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'dart:io' show Directory, File, Platform;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart'
-    show getExternalStorageDirectory;
 
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/backup_restore_service.dart';
+import '../../services/download_service.dart';
 import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/legacy_backup_adapter.dart';
@@ -23,7 +21,6 @@ import '../../services/profiles/profile_package_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/profiles/profile_runtime.dart';
-import '../../utils/app_storage.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
@@ -236,7 +233,6 @@ class ProfileBackupFlows {
     );
     final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     final saved = await saveBackupFile(
-      dialogTitle: 'Save Debrify profile backup',
       fileName: allProfiles
           ? 'debrify-profiles-$stamp.json'
           : 'debrify-profile-$stamp.json',
@@ -296,95 +292,21 @@ class ProfileBackupFlows {
         false;
   }
 
-  /// Saves portable bytes to a user-chosen location — or the best local one.
-  ///
-  /// Android TV builds ship no ACTION_CREATE_DOCUMENT handler, so the system
-  /// save dialog behind [FilePicker.saveFile] just raises an OS toast
-  /// ("you don't have an app to do this") and nothing is written. On TV —
-  /// or anywhere the dialog errors — the bytes are written to the most
-  /// retrievable writable folder instead (public Download, then the app's
-  /// browsable external dir, then app documents) and the full path is shown
-  /// in a dialog the user can act on.
-  ///
-  /// Returns the saved path, or null when the user cancelled the system
-  /// dialog. Throws [StateError] when no location could be written.
+  /// Saves portable bytes through the same destination policy as downloads.
+  /// Generated artifacts never enter the download queue or history, but they
+  /// honor Downloads/Debrify, desktop custom folders, and Android SAF.
+  /// Returns a filesystem path or Android content URI.
   Future<String?> saveBackupFile({
-    required String dialogTitle,
     required String fileName,
     required Uint8List bytes,
-    List<String> allowedExtensions = const <String>['json'],
+    String mimeType = 'application/json',
     String artifactLabel = 'backup',
   }) async {
-    if (!PlatformUtil.isAndroidTvCached) {
-      try {
-        final savedPath = await FilePicker.platform.saveFile(
-          dialogTitle: dialogTitle,
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: allowedExtensions,
-          bytes: bytes,
-        );
-        if (savedPath == null) return null;
-        // On desktop platforms saveFile returns the chosen path without
-        // writing the bytes itself — write defensively if the file is
-        // missing or empty.
-        try {
-          final file = File(savedPath);
-          if (!await file.exists() || (await file.length()) == 0) {
-            await file.writeAsBytes(bytes, flush: true);
-          }
-        } catch (_) {
-          // saveFile already handled writing on this platform.
-        }
-        return savedPath;
-      } catch (_) {
-        // No usable system dialog here either — fall through to local write.
-      }
-    }
-
-    final candidates = <Directory>[
-      // Public Download first: reachable by every file manager. The write
-      // simply fails without storage permission or under scoped storage,
-      // and the ladder moves on.
-      if (Platform.isAndroid) Directory('/storage/emulated/0/Download'),
-      if (Platform.isAndroid)
-        ...await getExternalStorageDirectory().then(
-          (dir) => [if (dir != null) dir],
-          onError: (_) => const <Directory>[],
-        ),
-      await AppStorage.documents(),
-    ];
-    String? savedPath;
-    for (final dir in candidates) {
-      try {
-        if (!await dir.exists()) continue;
-        var file = File('${dir.path}/$fileName');
-        if (await file.exists()) {
-          // The system dialog would have warned before overwriting; a plain
-          // write won't, so a second same-day backup gets a time suffix.
-          final now = DateTime.now();
-          final suffix = [
-            now.hour,
-            now.minute,
-            now.second,
-          ].map((part) => part.toString().padLeft(2, '0')).join();
-          final dot = fileName.lastIndexOf('.');
-          final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
-          final extension = dot > 0 ? fileName.substring(dot) : '';
-          file = File('${dir.path}/$stem-$suffix$extension');
-        }
-        await file.writeAsBytes(bytes, flush: true);
-        if (await file.length() == bytes.length) {
-          savedPath = file.path;
-          break;
-        }
-      } catch (_) {
-        // Not writable — try the next candidate.
-      }
-    }
-    if (savedPath == null) {
-      throw StateError('Could not save the $artifactLabel on this device');
-    }
+    final saved = await DownloadService.instance.saveGeneratedFile(
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+    );
     if (context.mounted) {
       final titleLabel = artifactLabel.isEmpty
           ? 'File'
@@ -392,11 +314,10 @@ class ProfileBackupFlows {
       await showSettingsDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text('$titleLabel saved on this device'),
+          title: Text('$titleLabel saved'),
           content: Text(
-            'The system save dialog is not available here, so the '
-            '$artifactLabel '
-            'was written to:\n\n$savedPath\n\nCopy it off with a file '
+            'The $artifactLabel was saved by Debrify’s download service:\n\n'
+            '${saved.displayLocation}\n\nYou can move or copy it with a file '
             'manager, USB, or over the network.',
           ),
           actions: [
@@ -408,7 +329,7 @@ class ProfileBackupFlows {
         ),
       );
     }
-    return savedPath;
+    return saved.reference;
   }
 
   /// Modal stage indicator for backup/restore work. The crypto and

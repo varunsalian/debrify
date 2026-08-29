@@ -2535,10 +2535,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         now.minute,
       ].map((part) => part.toString().padLeft(2, '0')).join();
       final savedPath = await ProfileBackupFlows(context).saveBackupFile(
-        dialogTitle: 'Save Debrify TV channels',
         fileName: 'debrify-tv-channels-$stamp.zip',
         bytes: bytes,
-        allowedExtensions: const <String>['zip'],
+        mimeType: 'application/zip',
         artifactLabel: 'channel archive',
       );
       if (!mounted || savedPath == null) return;

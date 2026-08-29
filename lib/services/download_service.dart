@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'debrid_service.dart';
 import 'torbox_service.dart';
@@ -62,6 +63,22 @@ class AndroidBytesProgress {
   });
 }
 
+/// A generated file written beside the user's normal Debrify downloads.
+///
+/// [reference] is the filesystem path on desktop/iOS, or a content URI when
+/// Android published through MediaStore/SAF. [displayLocation] is the
+/// user-facing breadcrumb; callers should not expose a content URI as though
+/// it were a useful path in a file manager.
+class GeneratedFileSaveResult {
+  final String reference;
+  final String displayLocation;
+
+  const GeneratedFileSaveResult({
+    required this.reference,
+    required this.displayLocation,
+  });
+}
+
 class DownloadService {
   DownloadService._internal();
   static final DownloadService _instance = DownloadService._internal();
@@ -77,12 +94,18 @@ class DownloadService {
       StreamController.broadcast();
   final Map<String, (String contentUri, String mimeType)?> _lastFileByTaskId =
       {};
+  Directory? _generatedFileDirectoryOverride;
 
   Stream<TaskProgressUpdate> get progressStream => _progressController.stream;
   Stream<TaskStatusUpdate> get statusStream => _statusController.stream;
   Stream<MoveProgressUpdate> get moveProgressStream => _moveController.stream;
   Stream<AndroidBytesProgress> get bytesProgressStream =>
       _bytesController.stream;
+
+  @visibleForTesting
+  void debugOverrideGeneratedFileDirectory(Directory? directory) {
+    _generatedFileDirectoryOverride = directory;
+  }
 
   bool _started = false;
   bool _initializing = false;
@@ -2672,6 +2695,189 @@ class DownloadService {
       }
     }
     return Directory((await AppStorage.documents()).path);
+  }
+
+  /// Saves bytes produced by Debrify itself beside normal downloads without
+  /// creating a queue/history entry. This is for portable artifacts such as
+  /// profile backups and Debrify TV channel archives, not remote URLs.
+  Future<GeneratedFileSaveResult> saveGeneratedFile({
+    required String fileName,
+    required Uint8List bytes,
+    String mimeType = 'application/octet-stream',
+  }) async {
+    final safeFileName = _sanitizeName(fileName);
+    final override = _generatedFileDirectoryOverride;
+    if (override != null) {
+      return _writeGeneratedFile(
+        directory: override,
+        fileName: safeFileName,
+        bytes: bytes,
+      );
+    }
+
+    if (Platform.isAndroid) {
+      final published = await _publishGeneratedFileOnAndroid(
+        fileName: safeFileName,
+        bytes: bytes,
+        mimeType: mimeType,
+      );
+      if (published != null) return published;
+
+      // MediaStore.Downloads is unavailable before Android 10. Preserve the
+      // legacy TV path when its storage grant is present, then try the app's
+      // external directory before falling back to local documents below.
+      final external = await getExternalStorageDirectory().catchError(
+        (_) => null,
+      );
+      final legacy = await _writeGeneratedFileToFirstWritable(
+        directories: <Directory>[
+          Directory('/storage/emulated/0/Download/Debrify'),
+          if (external != null) external,
+        ],
+        fileName: safeFileName,
+        bytes: bytes,
+      );
+      if (legacy != null) return legacy;
+    }
+
+    final directory = Directory(await _appDownloadsSubdir());
+    return _writeGeneratedFile(
+      directory: directory,
+      fileName: safeFileName,
+      bytes: bytes,
+    );
+  }
+
+  Future<GeneratedFileSaveResult?> _publishGeneratedFileOnAndroid({
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    final stagingDirectory = Directory(
+      path.join((await AppStorage.cache()).path, 'generated_downloads'),
+    );
+    await stagingDirectory.create(recursive: true);
+    final stagedFile = File(
+      path.join(
+        stagingDirectory.path,
+        '${DateTime.now().microsecondsSinceEpoch}-$fileName',
+      ),
+    );
+
+    String? treeUri;
+    String? treeName;
+    try {
+      await stagedFile.writeAsBytes(bytes, flush: true);
+      final savedTreeUri = await StorageService.getDownloadTreeUri();
+      if (savedTreeUri != null && savedTreeUri.isNotEmpty) {
+        if (await _validateTreeUriCached(savedTreeUri)) {
+          treeUri = savedTreeUri;
+          treeName = await StorageService.getDownloadTreeDisplayName();
+        } else {
+          await StorageService.clearDownloadTreeUri();
+        }
+      }
+
+      var usedTreeUri = treeUri;
+      var saved = await AndroidNativeDownloader.saveLocalFileDetails(
+        path: stagedFile.path,
+        fileName: fileName,
+        subDir: 'Debrify',
+        mimeType: mimeType,
+        treeUri: treeUri,
+      );
+      if (saved == null && treeUri != null) {
+        // A cached-positive SAF check can race an ejected SD card or a lost
+        // provider. The staged file is retained on failure, so retry through
+        // public MediaStore Downloads before considering legacy local paths.
+        _validatedTreeUri = null;
+        _validatedTreeUriAt = null;
+        usedTreeUri = null;
+        saved = await AndroidNativeDownloader.saveLocalFileDetails(
+          path: stagedFile.path,
+          fileName: fileName,
+          subDir: 'Debrify',
+          mimeType: mimeType,
+        );
+      }
+      if (saved == null) return null;
+      final parent = usedTreeUri == null
+          ? 'Downloads/Debrify'
+          : (treeName?.trim().isNotEmpty ?? false)
+          ? treeName!.trim()
+          : 'Selected download folder';
+      return GeneratedFileSaveResult(
+        reference: saved.reference,
+        displayLocation: '$parent/${saved.displayName}',
+      );
+    } finally {
+      try {
+        if (await stagedFile.exists()) await stagedFile.delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<GeneratedFileSaveResult> _writeGeneratedFile({
+    required Directory directory,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    final target = await _availableGeneratedFile(directory, fileName);
+    try {
+      await target.writeAsBytes(bytes, flush: true);
+      if (!await target.exists() || await target.length() != bytes.length) {
+        throw StateError('Generated download could not be written completely');
+      }
+    } catch (_) {
+      try {
+        if (await target.exists()) await target.delete();
+      } catch (_) {}
+      rethrow;
+    }
+    return GeneratedFileSaveResult(
+      reference: target.path,
+      displayLocation: target.path,
+    );
+  }
+
+  Future<GeneratedFileSaveResult?> _writeGeneratedFileToFirstWritable({
+    required List<Directory> directories,
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    for (final directory in directories) {
+      try {
+        return await _writeGeneratedFile(
+          directory: directory,
+          fileName: fileName,
+          bytes: bytes,
+        );
+      } catch (_) {
+        // Try the next download-service destination.
+      }
+    }
+    return null;
+  }
+
+  Future<File> _availableGeneratedFile(
+    Directory directory,
+    String fileName,
+  ) async {
+    var candidate = File(path.join(directory.path, fileName));
+    if (!await candidate.exists()) return candidate;
+
+    final extension = path.extension(fileName);
+    final stem = extension.isEmpty
+        ? fileName
+        : fileName.substring(0, fileName.length - extension.length);
+    for (var suffix = 1; suffix < 10000; suffix++) {
+      candidate = File(path.join(directory.path, '$stem ($suffix)$extension'));
+      if (!await candidate.exists()) return candidate;
+    }
+    throw StateError('Could not allocate a unique generated download name');
   }
 
   Future<String> _appDownloadsSubdir() async {

@@ -228,6 +228,54 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** Copy a generated local file into the exact SAF folder selected for
+     * downloads. The "Debrify" wrapper is removed just like regular download
+     * tasks because the user has already chosen the destination root. */
+    private fun saveLocalFileToSaf(
+        path: String,
+        fileName: String,
+        subDir: String,
+        mimeType: String,
+        treeUri: String,
+    ): String? {
+        val source = java.io.File(path)
+        if (!source.exists()) return null
+        var created: androidx.documentfile.provider.DocumentFile? = null
+        return try {
+            val tree = Uri.parse(treeUri)
+            val held = contentResolver.persistedUriPermissions.any {
+                it.uri == tree && it.isWritePermission
+            }
+            if (!held) return null
+            var parent = androidx.documentfile.provider.DocumentFile.fromTreeUri(this, tree)
+                ?: return null
+            val segments = subDir.split('/').filter { it.isNotBlank() }
+                .let { if (it.firstOrNull() == "Debrify") it.drop(1) else it }
+            for (segment in segments) {
+                parent = parent.findFile(segment)?.takeIf { it.isDirectory }
+                    ?: parent.createDirectory(segment)
+                    ?: return null
+            }
+            val document = parent.createFile(mimeType, fileName) ?: return null
+            created = document
+            val wrote = contentResolver.openOutputStream(document.uri, "w")?.use { output ->
+                java.io.FileInputStream(source).use { input -> input.copyTo(output) }
+                true
+            } ?: false
+            if (!wrote) {
+                runCatching { document.delete() }
+                created = null
+                return null
+            }
+            created = null
+            runCatching { source.delete() }
+            document.uri.toString()
+        } catch (_: Exception) {
+            created?.let { runCatching { it.delete() } }
+            null
+        }
+    }
+
     /** The MethodChannel result awaiting the legacy-storage permission dialog
      *  (pre-Q recording destination). One at a time; resolved in
      *  [onRequestPermissionsResult]. */
@@ -1480,6 +1528,7 @@ class MainActivity : FlutterActivity() {
 						val fileName = call.argument<String>("fileName") ?: "recording.ts"
 						val subDir = call.argument<String>("subDir") ?: "Debrify/Recordings"
 						val mimeType = call.argument<String>("mimeType") ?: "video/mp2t"
+						val treeUri = call.argument<String>("treeUri")
 						if (path.isNullOrEmpty()) {
 							result.error("bad_args", "path is required", null)
 							return@setMethodCallHandler
@@ -1489,11 +1538,35 @@ class MainActivity : FlutterActivity() {
 						// SUCCESS clears the registry entry — a failed or killed
 						// copy leaves it for the next-launch retry sweep.
 						Thread {
-							val savedUri = saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+							val savedUri = if (!treeUri.isNullOrEmpty()) {
+								saveLocalFileToSaf(path, fileName, subDir, mimeType, treeUri)
+							} else {
+								saveRecordingToMediaStore(path, fileName, subDir, mimeType)
+							}
+							val savedName = if (savedUri != null) {
+								runCatching {
+									contentResolver.query(
+										Uri.parse(savedUri),
+										arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+										null,
+										null,
+										null,
+									)?.use { cursor ->
+										if (cursor.moveToFirst()) cursor.getString(0) else null
+									}
+								}.getOrNull().orEmpty().ifEmpty { fileName }
+							} else {
+								fileName
+							}
 							if (savedUri != null) forgetPendingRecording(path)
 							runOnUiThread {
-								if (savedUri != null) result.success(savedUri)
-								else result.error("save_failed", "could not save file", null)
+								if (savedUri != null) {
+									result.success(
+										mapOf("uri" to savedUri, "displayName" to savedName),
+									)
+								} else {
+									result.error("save_failed", "could not save file", null)
+								}
 							}
 						}.start()
 					}

@@ -4931,11 +4931,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'debrify-backup-${ts.year.toString().padLeft(4, '0')}${ts.month.toString().padLeft(2, '0')}${ts.day.toString().padLeft(2, '0')}-${ts.hour.toString().padLeft(2, '0')}${ts.minute.toString().padLeft(2, '0')}.json';
 
     try {
-      final savedPath = await ProfileBackupFlows(context).saveBackupFile(
-        dialogTitle: 'Save Debrify backup',
-        fileName: fileName,
-        bytes: bytes,
-      );
+      final savedPath = await ProfileBackupFlows(
+        context,
+      ).saveBackupFile(fileName: fileName, bytes: bytes);
       if (!mounted || savedPath == null) return;
       // On Android, savedPath may be a content:// URI from the Storage
       // Access Framework — show it raw so the user has at least a
