@@ -1,4 +1,5 @@
 import 'package:debrify/screens/video_player/models/playlist_entry.dart';
+import 'package:debrify/services/local_playback_resume_resolver.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,28 +25,41 @@ void main() {
         torboxFileId: torboxFileId,
       );
 
-  Future<void> saveFor(PlaylistEntry e, {required String imdbId, required int positionMs}) {
+  Future<void> saveFor(
+    PlaylistEntry e, {
+    required String imdbId,
+    required int positionMs,
+    double speed = 1,
+    String aspect = 'contain',
+  }) {
     return StorageService.saveVideoPlaybackState(
       videoTitle: VideoPlayerLauncher.resumeIdForEntry(e),
       videoUrl: e.url,
       positionMs: positionMs,
       durationMs: 7200000,
+      speed: speed,
+      aspect: aspect,
       imdbId: imdbId,
     );
   }
 
-  test('a different release of the same movie resumes where the last one stopped', () async {
-    final watched = entry('Some.Movie.2019.1080p.BluRay.x264-GROUP');
-    await saveFor(watched, imdbId: 'tt1234567', positionMs: 3600000);
+  test(
+    'a different release of the same movie resumes where the last one stopped',
+    () async {
+      final watched = entry('Some.Movie.2019.1080p.BluRay.x264-GROUP');
+      await saveFor(watched, imdbId: 'tt1234567', positionMs: 3600000);
 
-    final replacement = entry('Some Movie 2019 2160p WEB-DL DDP5.1 HDR-OTHER');
-    final state = await VideoPlayerLauncher.readMovieResumeState(
-      entry: replacement,
-      imdbId: 'tt1234567',
-    );
+      final replacement = entry(
+        'Some Movie 2019 2160p WEB-DL DDP5.1 HDR-OTHER',
+      );
+      final state = await VideoPlayerLauncher.readMovieResumeState(
+        entry: replacement,
+        imdbId: 'tt1234567',
+      );
 
-    expect(state?['positionMs'], 3600000);
-  });
+      expect(state?['positionMs'], 3600000);
+    },
+  );
 
   test('the source-specific record still wins over the IMDb scan', () async {
     final current = entry('Some.Movie.2019.1080p.BluRay.x264-GROUP');
@@ -65,6 +79,74 @@ void main() {
     expect(state?['positionMs'], 600000);
   });
 
+  test(
+    'catalog playback uses the newest IMDb record over an older exact source',
+    () async {
+      final current = entry('Some.Movie.2019.1080p.BluRay.x264-GROUP');
+      await saveFor(
+        current,
+        imdbId: 'tt1234567',
+        positionMs: 600000,
+        speed: 1.25,
+        aspect: 'cover',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      await saveFor(
+        entry('Some Movie 2019 2160p WEB-DL-OTHER'),
+        imdbId: 'tt1234567',
+        positionMs: 5400000,
+        speed: 2,
+        aspect: 'contain',
+      );
+
+      final state = await VideoPlayerLauncher.readMovieResumeState(
+        entry: current,
+        imdbId: 'tt1234567',
+        policy: PlaybackResumePolicy.catalogCanonical,
+      );
+
+      expect(state?['positionMs'], 5400000);
+      // The behavior change is deliberately position-only: returning to an
+      // exact source retains that source's presentation preferences.
+      expect(state?['speed'], 1.25);
+      expect(state?['aspect'], 'cover');
+    },
+  );
+
+  test('catalog playback falls back to a pre-IMDb exact record', () async {
+    final current = entry('Legacy.Movie.2018.1080p');
+    await StorageService.saveVideoPlaybackState(
+      videoTitle: VideoPlayerLauncher.resumeIdForEntry(current),
+      videoUrl: current.url,
+      positionMs: 1200000,
+      durationMs: 6000000,
+    );
+
+    final state = await VideoPlayerLauncher.readMovieResumeState(
+      entry: current,
+      imdbId: 'tt7654321',
+      policy: PlaybackResumePolicy.catalogCanonical,
+    );
+
+    expect(state?['positionMs'], 1200000);
+  });
+
+  test(
+    'catalog playback rejects an exact key tagged to another IMDb id',
+    () async {
+      final current = entry('Colliding.Release.Name');
+      await saveFor(current, imdbId: 'tt0000001', positionMs: 1200000);
+
+      final state = await VideoPlayerLauncher.readMovieResumeState(
+        entry: current,
+        imdbId: 'tt0000002',
+        policy: PlaybackResumePolicy.catalogCanonical,
+      );
+
+      expect(state, isNull);
+    },
+  );
+
   test('a finished movie is not resurrected through the fallback', () async {
     await saveFor(
       entry('Some.Movie.2019.1080p.BluRay.x264-GROUP'),
@@ -76,6 +158,7 @@ void main() {
     final state = await VideoPlayerLauncher.readMovieResumeState(
       entry: entry('Some Movie 2019 2160p WEB-DL-OTHER'),
       imdbId: 'tt1234567',
+      policy: PlaybackResumePolicy.catalogCanonical,
     );
 
     expect(state, isNull);
@@ -108,7 +191,11 @@ void main() {
   });
 
   test('debrid file-id keys recover across providers too', () async {
-    final onTorbox = entry('Some.Movie.2019', provider: 'torbox', torboxFileId: 7);
+    final onTorbox = entry(
+      'Some.Movie.2019',
+      provider: 'torbox',
+      torboxFileId: 7,
+    );
     await saveFor(onTorbox, imdbId: 'tt1234567', positionMs: 2400000);
 
     // Same film re-resolved through a plain link: a wholly different key space.

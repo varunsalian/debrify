@@ -26,6 +26,7 @@ import '../services/main_page_bridge.dart';
 import '../services/next_episode_service.dart';
 import '../services/analytics_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
+import '../services/local_playback_resume_resolver.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
@@ -232,6 +233,10 @@ class VideoPlayerLaunchArgs {
   final String? contentType; // 'movie' or 'series'
   final int? contentSeason;
   final int? contentEpisode;
+
+  /// Whether local resume follows the exact source or canonical catalog
+  /// identity. Direct/generic launchers default to source-specific behavior.
+  final PlaybackResumePolicy resumePolicy;
   // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
   final int? iptvStartIndex;
@@ -352,6 +357,7 @@ class VideoPlayerLaunchArgs {
     this.contentType,
     this.contentSeason,
     this.contentEpisode,
+    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
     this.iptvChannels,
     this.iptvStartIndex,
     this.iptvCategories,
@@ -438,6 +444,7 @@ class VideoPlayerLaunchArgs {
     contentType: contentType,
     contentSeason: contentSeason,
     contentEpisode: contentEpisode,
+    resumePolicy: resumePolicy,
     iptvChannels: iptvChannels,
     iptvStartIndex: iptvStartIndex,
     iptvCategories: iptvCategories,
@@ -511,6 +518,7 @@ class VideoPlayerLaunchArgs {
       contentType: contentType,
       contentSeason: contentSeason,
       contentEpisode: contentEpisode,
+      resumePolicy: resumePolicy,
       contentTitle: contentTitle,
       iptvChannels: iptvChannels,
       iptvStartIndex: iptvStartIndex,
@@ -595,7 +603,7 @@ class VideoPlayerLauncher {
     return nameWithoutExt.hashCode.toString();
   }
 
-  /// Local resume record for a NON-series entry, source-independent.
+  /// Local resume record for a NON-series entry.
   ///
   /// [resumeIdForEntry] keys movies by release filename (or by debrid file id),
   /// so watching via one source and relaunching via another — Quick Play
@@ -605,28 +613,24 @@ class VideoPlayerLauncher {
   /// (see `_getEnhancedPlaybackState`); this is the native-TV counterpart, so
   /// both players resolve movie resume the same way.
   ///
-  /// Fallback only: an exact source-specific hit always wins, and a miss on
-  /// both leaves callers exactly where they were before.
+  /// Generic playback remains exact-source-first. Catalog playback reverses
+  /// that precedence so the newest record for the stable IMDb id wins even
+  /// when the selected source has an older bookmark of its own.
   static Future<Map<String, dynamic>?> readMovieResumeState({
     required PlaylistEntry entry,
     required String? imdbId,
     String fallbackTitle = '',
+    PlaybackResumePolicy policy = PlaybackResumePolicy.sourceSpecific,
   }) async {
-    final exact = await StorageService.getVideoPlaybackState(
-      videoTitle: resumeIdForEntry(entry, fallbackTitle: fallbackTitle),
+    // A canonical record's duration belongs to the source that wrote it and
+    // may differ for another cut. Both players validate the absolute position
+    // against the live duration before seeking, so retain the existing ms-based
+    // behavior rather than guessing a percentage here.
+    return LocalPlaybackResumeResolver.movie(
+      resumeId: resumeIdForEntry(entry, fallbackTitle: fallbackTitle),
+      imdbId: imdbId,
+      policy: policy,
     );
-    if (exact != null) {
-      return exact;
-    }
-    final trimmed = imdbId?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return null;
-    }
-    // The recovered record's durationMs belongs to whatever release wrote it,
-    // so the position can overshoot a shorter cut. The native player already
-    // drops any seek target that lands outside the real duration once it
-    // resolves, so pass it through rather than guessing here.
-    return StorageService.getVideoPlaybackStateByImdbId(trimmed);
   }
 
   /// Refresh the replaceable Trakt snapshot used by every guide surface.
@@ -845,6 +849,7 @@ class VideoPlayerLauncher {
           contentType: args.contentType,
           contentSeason: args.contentSeason,
           contentEpisode: args.contentEpisode,
+          resumePolicy: args.resumePolicy,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
           iptvCategories: args.iptvCategories,
@@ -939,6 +944,7 @@ class VideoPlayerLauncher {
           contentType: args.contentType,
           contentSeason: args.contentSeason,
           contentEpisode: args.contentEpisode,
+          resumePolicy: args.resumePolicy,
           iptvChannels: args.iptvChannels,
           iptvStartIndex: args.iptvStartIndex,
           iptvCategories: args.iptvCategories,
@@ -2382,6 +2388,7 @@ class VideoPlayerLauncher {
                   entry: playlistEntries.first,
                   imdbId: sourceImdbId,
                   fallbackTitle: args.title,
+                  policy: args.resumePolicy,
                 )
               : null;
 
@@ -5555,6 +5562,7 @@ class _AndroidTvPlaybackPayloadBuilder {
               entry: entry,
               imdbId: args.contentImdbId,
               fallbackTitle: args.title,
+              policy: args.resumePolicy,
             ),
           ),
         );

@@ -12924,7 +12924,7 @@ class _SearchScreenState extends State<SearchScreen>
     final resolving = preferTraktResume
         ? TorrentPlaybackService.showResolvingOverlay(
             context,
-            meta: PlaybackMeta(
+            meta: PlaybackMeta.catalog(
               imdbId: item.effectiveImdbId,
               contentType: item.type,
               title: item.name,
@@ -14207,7 +14207,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Auto-best in-tab play: search torrents for the selection, pick the best
   /// instantly-playable source, and play — never leaving the Search tab.
-  PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta(
+  PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta.catalog(
     // Only a real IMDb id here — the launcher's Trakt auto-sync + local
     // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
     // even though the search itself still uses sel.imdbId (the addon id).

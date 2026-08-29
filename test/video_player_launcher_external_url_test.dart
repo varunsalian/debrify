@@ -1,4 +1,6 @@
 import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/services/local_playback_resume_resolver.dart';
+import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,11 +97,52 @@ void main() {
       expect(widget.onStartupSourcesExhausted, same(recover));
     });
 
+    test('copyWith and widget preserve catalog resume identity', () {
+      const original = VideoPlayerLaunchArgs(
+        videoUrl: 'video',
+        title: 'Catalog movie',
+        contentImdbId: 'tt1234567',
+        contentType: 'movie',
+        resumePolicy: PlaybackResumePolicy.catalogCanonical,
+      );
+
+      final copy = original.copyWith(traktScrobble: true);
+      expect(copy.resumePolicy, PlaybackResumePolicy.catalogCanonical);
+      expect(
+        copy.toWidget().resumePolicy,
+        PlaybackResumePolicy.catalogCanonical,
+      );
+    });
+
+    test(
+      'catalog metadata opts in while generic metadata stays source-specific',
+      () {
+        const catalog = PlaybackMeta.catalog(
+          imdbId: 'tt1234567',
+          contentType: 'movie',
+        );
+        const generic = PlaybackMeta(imdbId: 'tt1234567', contentType: 'movie');
+
+        expect(catalog.resumePolicy, PlaybackResumePolicy.catalogCanonical);
+        expect(generic.resumePolicy, PlaybackResumePolicy.sourceSpecific);
+        expect(
+          TorrentPlaybackService.playerArgsForTesting(catalog).resumePolicy,
+          PlaybackResumePolicy.catalogCanonical,
+        );
+        expect(
+          TorrentPlaybackService.playerArgsForTesting(null).resumePolicy,
+          PlaybackResumePolicy.sourceSpecific,
+        );
+      },
+    );
+
     test('explicit launches do not opt into automatic startup failover', () {
       const args = VideoPlayerLaunchArgs(videoUrl: 'video', title: 'Title');
 
       expect(args.startupFailoverEnabled, isFalse);
       expect(args.toWidget().startupFailoverEnabled, isFalse);
+      expect(args.resumePolicy, PlaybackResumePolicy.sourceSpecific);
+      expect(args.toWidget().resumePolicy, PlaybackResumePolicy.sourceSpecific);
     });
   });
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:debrify/services/local_playback_resume_resolver.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -130,6 +131,85 @@ void main() {
       );
 
       expect(progress['1_1']?['positionMs'], 8000);
+    },
+  );
+
+  test(
+    'resume policy keeps generic exact-first and makes catalog IMDb-first',
+    () async {
+      await StorageService.saveSeriesPlaybackState(
+        seriesTitle: 'Current Source Pack',
+        season: 2,
+        episode: 4,
+        positionMs: 2000,
+        durationMs: 10000,
+        speed: 1.25,
+        aspect: 'cover',
+        imdbId: 'tt-policy-show',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      await StorageService.saveSeriesPlaybackState(
+        seriesTitle: 'Newer Source Pack',
+        season: 2,
+        episode: 4,
+        positionMs: 8000,
+        durationMs: 10000,
+        speed: 2,
+        aspect: 'contain',
+        imdbId: 'tt-policy-show',
+      );
+
+      final generic = await LocalPlaybackResumeResolver.episode(
+        seriesTitle: 'Current Source Pack',
+        season: 2,
+        episode: 4,
+        imdbId: 'tt-policy-show',
+      );
+      final catalog = await LocalPlaybackResumeResolver.episode(
+        seriesTitle: 'Current Source Pack',
+        season: 2,
+        episode: 4,
+        imdbId: 'tt-policy-show',
+        policy: PlaybackResumePolicy.catalogCanonical,
+      );
+
+      expect(generic?['positionMs'], 2000);
+      expect(catalog?['positionMs'], 8000);
+      expect(catalog?['speed'], 1.25);
+      expect(catalog?['aspect'], 'cover');
+    },
+  );
+
+  test(
+    'catalog episode resume never crosses season/episode coordinates',
+    () async {
+      await StorageService.saveSeriesPlaybackState(
+        seriesTitle: 'Source A',
+        season: 1,
+        episode: 1,
+        positionMs: 3000,
+        durationMs: 10000,
+        imdbId: 'tt-episode-isolation',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      await StorageService.saveSeriesPlaybackState(
+        seriesTitle: 'Source B',
+        season: 1,
+        episode: 2,
+        positionMs: 9000,
+        durationMs: 10000,
+        imdbId: 'tt-episode-isolation',
+      );
+
+      final state = await LocalPlaybackResumeResolver.episode(
+        seriesTitle: 'Source B',
+        season: 1,
+        episode: 1,
+        imdbId: 'tt-episode-isolation',
+        policy: PlaybackResumePolicy.catalogCanonical,
+      );
+
+      expect(state?['positionMs'], 3000);
     },
   );
 
