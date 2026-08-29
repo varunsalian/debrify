@@ -4313,15 +4313,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
         // payload field is the furthest of Trakt + Simkl + MDBList); STATE_READY resumes
-        // the FURTHER of the two (never backward). Suppress trackers during
-        // auto-advance (binge starts the next episode fresh) and during a source
-        // switch on the same content (must honour the captured live position).
+        // the FURTHER of the two (never backward). Suppress every saved position
+        // during auto-advance (binge starts the next episode fresh), and suppress
+        // trackers during a source switch on the same content (which must honour
+        // the captured live position).
         val autoAdvance = isAutoAdvancing
         isAutoAdvancing = false
         // A new item starts: any hold belongs to the outgoing one. (A
         // suppressed resume then simply never re-arms — pendingSeekMs stays 0.)
         releaseResumeHold()
-        pendingSeekMs = if (suppressResume) 0L else item.resumePositionMs
+        pendingSeekMs =
+            if (autoAdvance || suppressResume) 0L else item.resumePositionMs
         pendingItemTraktPercent =
             if (autoAdvance || suppressTrakt || suppressResume) 0.0 else (item.traktProgressPercent ?: 0.0)
 
@@ -8259,6 +8261,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // playItem() hides the card (and cancels the ticker) as part of its
         // per-item reset, so no explicit hide is needed here.
         val target = upNextTargetIndex ?: return
+        isAutoAdvancing = true
         playItem(target)
     }
 
