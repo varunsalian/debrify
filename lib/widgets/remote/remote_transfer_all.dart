@@ -12,6 +12,7 @@ import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/remote_session.dart';
+import '../../services/remote_control/remote_transfer_diagnostics.dart';
 import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
 import '../../services/mdblist/mdblist_service.dart';
@@ -466,9 +467,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       return;
     }
     final sendProfiles = _includeProfiles;
+    if (sendProfiles) {
+      RemoteTransferDiagnostics.record(
+        'sender_gate_start',
+        fields: <String, Object?>{
+          'advertisedKnown': target.protocolVersionKnown,
+          'advertisedProtocol': target.protoVersion,
+        },
+      );
+    }
     if (sendProfiles &&
         target.protocolVersionKnown &&
         !target.supportsComprehensiveProfileGraph) {
+      RemoteTransferDiagnostics.record(
+        'sender_gate_rejected_advertised_protocol',
+        fields: <String, Object?>{'protocol': target.protoVersion},
+      );
       setState(() => _includeProfiles = false);
       _toast(
         'Update the receiving TV before sending all profiles',
@@ -489,10 +503,38 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     final RemoteSession? session;
     try {
       session = await ensureAuthorizedSession(context, state, target);
+    } catch (error) {
+      if (sendProfiles) {
+        RemoteTransferDiagnostics.record(
+          'sender_gate_exception',
+          fields: <String, Object?>{'errorType': error.runtimeType},
+        );
+      }
+      rethrow;
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
-    if (session == null || !mounted) return;
+    if (session == null || !mounted) {
+      if (sendProfiles) {
+        RemoteTransferDiagnostics.record(
+          'sender_gate_stopped',
+          fields: <String, Object?>{
+            'sessionReady': session != null,
+            'screenMounted': mounted,
+          },
+        );
+      }
+      return;
+    }
+    if (sendProfiles) {
+      RemoteTransferDiagnostics.record(
+        'sender_gate_ready',
+        fields: <String, Object?>{
+          'peerProtocol': session.peerProtocolVersion,
+          'authorized': session.authorized,
+        },
+      );
+    }
 
     // Manual/VPN targets have no discovery record. The authenticated
     // handshake carries the peer's real capability version, so gate v5 only
@@ -501,6 +543,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     if (sendProfiles &&
         session.peerProtocolVersion <
             kComprehensiveProfileGraphProtocolVersion) {
+      RemoteTransferDiagnostics.record(
+        'sender_gate_rejected_peer_protocol',
+        fields: <String, Object?>{'peerProtocol': session.peerProtocolVersion},
+      );
       setState(() => _includeProfiles = false);
       _toast(
         'Update the receiving TV before sending all profiles',
@@ -688,6 +734,13 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     final requestId = base64UrlEncode(
       List<int>.generate(18, (_) => random.nextInt(256)),
     ).replaceAll('=', '');
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
+    final startedAt = Stopwatch()..start();
+    var phase = 'initialize';
+    RemoteTransferDiagnostics.record(
+      'sender_graph_start',
+      fields: <String, Object?>{'trace': trace},
+    );
     // Listen before the first byte is sent. An onboarding receiver can reject
     // or finish immediately after the final UDP chunk, and this is a broadcast
     // stream: subscribing after sendConfigPayloadToDevice returns loses that
@@ -701,6 +754,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             resultRequestId: result.requestId,
           ) &&
           !resultCompleter.isCompleted) {
+        RemoteTransferDiagnostics.record(
+          'sender_result_received',
+          fields: <String, Object?>{'trace': trace, 'ok': result.ok},
+        );
         resultCompleter.complete((ok: result.ok, message: result.message));
       }
     });
@@ -733,14 +790,30 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             cipher: DeviceKeyProvider.cipher,
           ),
         );
+        phase = 'export_full';
+        RemoteTransferDiagnostics.record(
+          'sender_export_start',
+          fields: <String, Object?>{'trace': trace, 'compacted': false},
+        );
         var package = tagRequest(
           await service.exportAllProfiles(
             context: authorization,
             includeSecrets: true,
           ),
         );
+        RemoteTransferDiagnostics.record(
+          'sender_export_complete',
+          fields: <String, Object?>{
+            'trace': trace,
+            'compacted': false,
+            'profiles': package.profiles.length,
+            'resources': package.resources.length,
+            'sections': package.sections.length,
+          },
+        );
         ({String payload, int wireBytes, int expandedBytes, bool compressed})?
         encoded;
+        phase = 'encode_full';
         try {
           encoded = await PortableProfilePackage.encodeAuthenticatedTransport(
             package,
@@ -749,12 +822,40 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           );
         } catch (error) {
           if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
+          RemoteTransferDiagnostics.record(
+            'sender_encode_requires_compaction',
+            fields: <String, Object?>{
+              'trace': trace,
+              'errorType': error.runtimeType,
+            },
+          );
         }
-        if (encoded == null || encoded.wireBytes > kMaxProfileGraphWireBytes) {
+        if (encoded != null) {
+          RemoteTransferDiagnostics.record(
+            'sender_encode_complete',
+            fields: <String, Object?>{
+              'trace': trace,
+              'compacted': false,
+              'compressed': encoded.compressed,
+              'wireBytes': encoded.wireBytes,
+              'expandedBytes': encoded.expandedBytes,
+            },
+          );
+        }
+        if (encoded == null ||
+            profileGraphTransportNeedsCompaction(
+              wireBytes: encoded.wireBytes,
+              expandedBytes: encoded.expandedBytes,
+            )) {
           // Remove only explicitly rebuildable cache tables. Durable playlist,
           // favorites, numbering, watch-history, and hidden-channel rows stay
           // in the snapshots; an oversized durable graph fails instead of
           // silently becoming an incomplete transfer.
+          phase = 'export_compacted';
+          RemoteTransferDiagnostics.record(
+            'sender_export_start',
+            fields: <String, Object?>{'trace': trace, 'compacted': true},
+          );
           package = tagRequest(
             await service.exportAllProfiles(
               context: authorization,
@@ -762,15 +863,52 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               compactDatabaseSnapshots: true,
             ),
           );
+          RemoteTransferDiagnostics.record(
+            'sender_export_complete',
+            fields: <String, Object?>{
+              'trace': trace,
+              'compacted': true,
+              'profiles': package.profiles.length,
+              'resources': package.resources.length,
+              'sections': package.sections.length,
+            },
+          );
+          phase = 'encode_compacted';
           encoded = await PortableProfilePackage.encodeAuthenticatedTransport(
             package,
             requestId: requestId,
             maxExpandedPayloadBytes: kMaxProfileGraphExpandedBytes,
           );
+          RemoteTransferDiagnostics.record(
+            'sender_encode_complete',
+            fields: <String, Object?>{
+              'trace': trace,
+              'compacted': true,
+              'compressed': encoded.compressed,
+              'wireBytes': encoded.wireBytes,
+              'expandedBytes': encoded.expandedBytes,
+            },
+          );
         }
         if (encoded.wireBytes > kMaxProfileGraphWireBytes) {
+          RemoteTransferDiagnostics.record(
+            'sender_wire_limit_exceeded',
+            fields: <String, Object?>{
+              'trace': trace,
+              'wireBytes': encoded.wireBytes,
+              'limitBytes': kMaxProfileGraphWireBytes,
+            },
+          );
           throw const ProfilePackageTooLargeException();
         }
+        phase = 'wire_send';
+        RemoteTransferDiagnostics.record(
+          'sender_wire_start',
+          fields: <String, Object?>{
+            'trace': trace,
+            'wireBytes': encoded.wireBytes,
+          },
+        );
         return sendConfigPayloadToDevice(
           state,
           ConfigCommand.profileGraph,
@@ -788,7 +926,24 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       ok = outbound == null
           ? await sendGraph()
           : await outbound.runIfCurrentAsOutbound(sendGraph);
-    } catch (_) {
+      RemoteTransferDiagnostics.record(
+        'sender_wire_finished',
+        fields: <String, Object?>{
+          'trace': trace,
+          'ok': ok,
+          'elapsedMs': startedAt.elapsedMilliseconds,
+        },
+      );
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'sender_graph_exception',
+        fields: <String, Object?>{
+          'trace': trace,
+          'phase': phase,
+          'errorType': error.runtimeType,
+          'elapsedMs': startedAt.elapsedMilliseconds,
+        },
+      );
       debugPrint('RemoteTransferAll: profile graph send failed');
       ok = false;
     }
@@ -797,6 +952,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       return;
     }
     if (!ok) {
+      RemoteTransferDiagnostics.record(
+        'sender_graph_stopped',
+        fields: <String, Object?>{
+          'trace': trace,
+          'phase': phase,
+          'elapsedMs': startedAt.elapsedMilliseconds,
+        },
+      );
       await resultSubscription.cancel();
       setState(() => _transferring = false);
       _toast('Profile transfer failed', error: true);
@@ -815,8 +978,23 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         _transferring = false;
         _done = result.ok;
       });
+      RemoteTransferDiagnostics.record(
+        'sender_graph_result',
+        fields: <String, Object?>{
+          'trace': trace,
+          'ok': result.ok,
+          'elapsedMs': startedAt.elapsedMilliseconds,
+        },
+      );
       _toast(result.message, error: !result.ok);
     } on TimeoutException {
+      RemoteTransferDiagnostics.record(
+        'sender_result_timeout',
+        fields: <String, Object?>{
+          'trace': trace,
+          'elapsedMs': startedAt.elapsedMilliseconds,
+        },
+      );
       if (!mounted) return;
       setState(() => _transferring = false);
       _toast(

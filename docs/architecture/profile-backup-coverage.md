@@ -125,10 +125,11 @@ advertise comprehensive graph protocol v5; a manual-IP/VPN target remains
 eligible until its authenticated handshake reports and cryptographically binds
 the actual peer version. The sender uses
 `exportAllProfiles(includeSecrets: true)`—not the older piecemeal configuration
-builder—and chooses raw JSON or gzip in one worker-isolate pass. If the graph
-does not fit, it retries after compacting only named caches. It never removes
-durable rows to fit the 10 MiB wire budget, and compressed JSON may expand to at
-most 16 MiB on the receiver; a still-oversized graph fails visibly. The
-receiver verifies authentication, package integrity, bounds, local Admin
-authority, and user confirmation before the atomic graph restore, then reports
-the actual import result to the sender.
+builder—and chooses raw JSON or gzip in one worker-isolate pass. A graph above
+the 32 MiB soft expansion threshold, above the 10 MiB wire budget, or above the
+hard limit on its first pass is retried after compacting only named caches. It
+never removes durable rows to fit; compacted JSON may expand to at most 48 MiB
+on the receiver, and a still-oversized graph fails visibly. The receiver
+verifies authentication, package integrity, bounds, local Admin authority, and
+user confirmation before the atomic graph restore, then reports the actual
+import result to the sender.

@@ -243,13 +243,30 @@ const Duration kChunkResendCacheTtl = Duration(seconds: 90);
 /// (x4/3), so 10 MB leaves transport headroom.
 const int kMaxProfileGraphWireBytes = 10 * 1024 * 1024;
 
-/// Maximum JSON bytes after an authenticated profile-graph gzip wrapper is
-/// expanded. File backups may use the package format's much larger envelope,
-/// but a low-memory TV must hold the reassembled ciphertext, compressed bytes,
-/// expanded UTF-8, parsed JSON, and restored attachments at the same time.
-/// Keep Remote expansion graph-sized; oversized graphs retry after removing
-/// only named rebuildable caches, then fail rather than risking receiver OOM.
-const int kMaxProfileGraphExpandedBytes = 16 * 1024 * 1024;
+/// Soft expanded-JSON threshold for a full profile graph. Above this size the
+/// sender re-exports after removing only explicitly rebuildable database
+/// caches, keeping the receiver's usual working set near 32 MB.
+const int kProfileGraphCompactionThresholdBytes = 32 * 1024 * 1024;
+
+/// Hard JSON limit after an authenticated profile-graph gzip wrapper is
+/// expanded, including after the cache-compaction retry. File backups may use
+/// the package format's much larger envelope, but a low-memory TV must hold the
+/// compressed transport, expanded UTF-8, parsed JSON, and restored attachments
+/// at the same time.
+///
+/// SQLite snapshots expand by another 4/3 when embedded as base64. A 48 MB
+/// ceiling therefore admits roughly 36 MB of compact durable database data
+/// while remaining far below the 128 MB file-package envelope. The receiver
+/// releases its chunk reassembly storage before expansion to keep that budget
+/// bounded.
+const int kMaxProfileGraphExpandedBytes = 48 * 1024 * 1024;
+
+bool profileGraphTransportNeedsCompaction({
+  required int wireBytes,
+  required int expandedBytes,
+}) =>
+    wireBytes > kMaxProfileGraphWireBytes ||
+    expandedBytes > kProfileGraphCompactionThresholdBytes;
 
 /// Authenticated package metadata used to correlate a profile-graph result
 /// with the exact send attempt that caused it.

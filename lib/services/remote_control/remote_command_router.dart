@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
@@ -15,6 +16,7 @@ import 'remote_control_state.dart';
 import 'remote_pairing_store.dart';
 import 'remote_chunked_send.dart';
 import 'remote_session.dart';
+import 'remote_transfer_diagnostics.dart';
 import 'udp_command_service.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
@@ -492,6 +494,26 @@ class RemoteCommandRouter {
                 parseChunkResultCommand(data) == ConfigCommand.profileGraph
           ? parseChunkResultRequestId(data)
           : null;
+      if (action == RemoteAction.config &&
+          (command == ConfigCommand.profileGraph ||
+              (command == ConfigCommand.debrifyChannelStart &&
+                  parseChunkResultCommand(data) ==
+                      ConfigCommand.profileGraph))) {
+        RemoteTransferDiagnostics.record(
+          'receiver_graph_authorization_rejected',
+          fields: <String, Object?>{
+            'trace': RemoteTransferDiagnostics.traceToken(
+              profileGraphRequestId,
+            ),
+            'runtimeCommitted': runtimeCommitted,
+            'scopeCurrent': scopeCurrent,
+            'profilePresent': profilePresent,
+            'featureAllowed': featureAllowed,
+            'peerBound': peerBound,
+            'leaseAllowed': leaseAllowed,
+          },
+        );
+      }
       if (action == RemoteAction.config && profileGraphRequestId != null) {
         unawaited(
           _reportProfileGraphResultBestEffort(
@@ -1108,11 +1130,27 @@ class RemoteCommandRouter {
     required bool ok,
     required String message,
   }) async {
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
     final sidB64 = remoteContext.sidB64;
-    if (sidB64 == null) return false;
+    if (sidB64 == null) {
+      RemoteTransferDiagnostics.record(
+        'receiver_result_send_unavailable',
+        fields: <String, Object?>{'trace': trace, 'reason': 'missing_sid'},
+      );
+      return false;
+    }
     final state = RemoteControlState();
     final session = state.sessionManager?.sessionBySid(sidB64);
-    if (session == null || !session.authorized) return false;
+    if (session == null || !session.authorized) {
+      RemoteTransferDiagnostics.record(
+        'receiver_result_send_unavailable',
+        fields: <String, Object?>{
+          'trace': trace,
+          'reason': session == null ? 'missing_session' : 'unauthorized',
+        },
+      );
+      return false;
+    }
     var sent = false;
     for (var attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
@@ -1138,6 +1176,10 @@ class RemoteCommandRouter {
         // authorization race that rejected this one settles safely.
       }
     }
+    RemoteTransferDiagnostics.record(
+      'receiver_result_send_finished',
+      fields: <String, Object?>{'trace': trace, 'resultOk': ok, 'sent': sent},
+    );
     return sent;
   }
 
@@ -1328,7 +1370,21 @@ class RemoteCommandRouter {
     // parse on the TV's UI isolate before the package decoder gets its own
     // worker-isolate pass below.
     final requestId = await Isolate.run(() => _profileGraphRequestId(data));
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
+    RemoteTransferDiagnostics.record(
+      'receiver_graph_arrived',
+      fields: <String, Object?>{
+        'trace': trace,
+        'characters': data.length,
+        'encrypted': remoteContext.encrypted,
+        'authorized': remoteContext.authorized,
+      },
+    );
     if (!remoteContext.encrypted || !remoteContext.authorized) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_session_rejected',
+        fields: <String, Object?>{'trace': trace},
+      );
       debugPrint(
         'RemoteCommandRouter: profile graph requires an authorized session',
       );
@@ -1337,6 +1393,10 @@ class RemoteCommandRouter {
     // One import at a time: a phone re-sending while the confirm dialog is
     // still up must not stack a second dialog and duplicate the whole graph.
     if (_profileGraphInFlight) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_already_in_flight',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar('A profile import is already in progress', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
@@ -1353,6 +1413,15 @@ class RemoteCommandRouter {
         remoteContext,
         requestId: requestId,
       );
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_unhandled_exception',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+        },
+      );
+      rethrow;
     } finally {
       _profileGraphInFlight = false;
     }
@@ -1365,7 +1434,12 @@ class RemoteCommandRouter {
     RemoteCommandContext remoteContext, {
     required String? requestId,
   }) async {
+    final trace = RemoteTransferDiagnostics.traceToken(requestId);
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_profiles_unavailable',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar(
         'Profiles are not set up on this device yet — finish setup first',
         isError: true,
@@ -1379,6 +1453,11 @@ class RemoteCommandRouter {
       return;
     }
     final PortableProfilePackage package;
+    final decodeWatch = Stopwatch()..start();
+    RemoteTransferDiagnostics.record(
+      'receiver_decode_start',
+      fields: <String, Object?>{'trace': trace, 'characters': data.length},
+    );
     try {
       // Off-main: a 10 MB parse + digest would freeze TV hardware for
       // seconds on the UI isolate.
@@ -1390,6 +1469,14 @@ class RemoteCommandRouter {
         throw const FormatException('Not a profile graph package');
       }
     } on FormatException catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_decode_rejected',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+          'elapsedMs': decodeWatch.elapsedMilliseconds,
+        },
+      );
       _showSnackBar(
         'Profile transfer rejected: ${error.message}',
         isError: true,
@@ -1401,13 +1488,40 @@ class RemoteCommandRouter {
         message: 'The TV rejected the package: ${error.message}',
       );
       return;
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_decode_exception',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+          'elapsedMs': decodeWatch.elapsedMilliseconds,
+        },
+      );
+      rethrow;
     }
+    RemoteTransferDiagnostics.record(
+      'receiver_decode_complete',
+      fields: <String, Object?>{
+        'trace': trace,
+        'profiles': package.profiles.length,
+        'resources': package.resources.length,
+        'sections': package.sections.length,
+        'elapsedMs': decodeWatch.elapsedMilliseconds,
+      },
+    );
     final registry = ProfileBootstrap.registry;
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final UserProfile actor;
     try {
       actor = await authorization.validate(registry);
-    } catch (_) {
+    } catch (error) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_authorization_expired',
+        fields: <String, Object?>{
+          'trace': trace,
+          'errorType': error.runtimeType,
+        },
+      );
       _showSnackBar('Profile import authorization expired', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
@@ -1420,6 +1534,10 @@ class RemoteCommandRouter {
     if (actor.role != UserProfileRole.admin ||
         !actor.allows(ProfileFeature.manageProfiles) ||
         !actor.allows(ProfileFeature.backupRestore)) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_admin_required',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar(
         'Switch this TV to an Admin profile to receive profiles',
         isError: true,
@@ -1436,6 +1554,10 @@ class RemoteCommandRouter {
         !(await StorageService.isInitialSetupComplete());
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_screen_unavailable',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar('Profile import needs the app screen open', isError: true);
       await _reportProfileGraphResult(
         remoteContext,
@@ -1449,6 +1571,14 @@ class RemoteCommandRouter {
         remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
     final rebuildableCachesOmitted = package.omissions.containsKey(
       'rebuildableDatabaseCachesOmitted',
+    );
+    RemoteTransferDiagnostics.record(
+      'receiver_confirmation_shown',
+      fields: <String, Object?>{
+        'trace': trace,
+        'profiles': package.profiles.length,
+        'cacheCompacted': rebuildableCachesOmitted,
+      },
     );
     final confirmed =
         await showDialog<bool>(
@@ -1483,6 +1613,10 @@ class RemoteCommandRouter {
         ) ??
         false;
     if (!confirmed) {
+      RemoteTransferDiagnostics.record(
+        'receiver_confirmation_declined',
+        fields: <String, Object?>{'trace': trace},
+      );
       _showSnackBar('Profile import declined');
       await _reportProfileGraphResult(
         remoteContext,
@@ -1492,6 +1626,10 @@ class RemoteCommandRouter {
       );
       return;
     }
+    RemoteTransferDiagnostics.record(
+      'receiver_confirmation_accepted',
+      fields: <String, Object?>{'trace': trace},
+    );
     // Busy dialog while the restore stages and verifies. Self-dismissing via
     // its own context — the router must never pop someone else's route.
     final done = ValueNotifier<bool>(false);
@@ -1507,6 +1645,11 @@ class RemoteCommandRouter {
     }
     try {
       final ProfileGraphRestoreReport report;
+      final restoreWatch = Stopwatch()..start();
+      RemoteTransferDiagnostics.record(
+        'receiver_restore_start',
+        fields: <String, Object?>{'trace': trace},
+      );
       try {
         report = await ProfileRestoreCoordinator(
           registry: registry,
@@ -1515,7 +1658,15 @@ class RemoteCommandRouter {
             ProfileAppLifecycleParticipant(),
           ],
         ).restoreDeviceGraph(package: package, authorization: authorization);
-      } catch (_) {
+      } catch (error) {
+        RemoteTransferDiagnostics.record(
+          'receiver_restore_exception',
+          fields: <String, Object?>{
+            'trace': trace,
+            'errorType': error.runtimeType,
+            'elapsedMs': restoreWatch.elapsedMilliseconds,
+          },
+        );
         debugPrint('RemoteCommandRouter: profile graph restore failed');
         _showSnackBar(
           'Profile import failed; existing data is unchanged',
@@ -1529,6 +1680,16 @@ class RemoteCommandRouter {
         );
         return;
       }
+      RemoteTransferDiagnostics.record(
+        'receiver_restore_complete',
+        fields: <String, Object?>{
+          'trace': trace,
+          'profiles': report.profilesImported,
+          'resources': report.resourcesImported,
+          'pinResets': report.pinResetsRequired,
+          'elapsedMs': restoreWatch.elapsedMilliseconds,
+        },
+      );
 
       // The restore is durable at this point. A result-send or onboarding
       // hand-off failure must never fall through to the restore-failed path
@@ -1544,6 +1705,10 @@ class RemoteCommandRouter {
             '${report.resourcesImported} connections',
       );
       if (!acknowledged) {
+        RemoteTransferDiagnostics.record(
+          'receiver_restore_ack_missing',
+          fields: <String, Object?>{'trace': trace},
+        );
         debugPrint(
           'RemoteCommandRouter: imported profiles but could not report the result',
         );
@@ -3836,15 +4001,19 @@ class RemoteCommandRouter {
     String jsonData,
     RemoteCommandContext context,
   ) {
+    String? diagnosticKind;
+    String? diagnosticTrace;
     try {
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
       final transferId = data['transferId'] as String;
       final label = data['channelName'] as String;
       final totalChunks = data['totalChunks'] as int;
       final kind = (data['kind'] as String?) ?? ConfigCommand.debrifyChannel;
+      diagnosticKind = kind;
       final encrypted = data['enc'] == 1;
       final sid = data['sid'] as String?;
       final resultRequestId = data['resultRequestId'] as String?;
+      diagnosticTrace = RemoteTransferDiagnostics.traceToken(resultRequestId);
       final peer = _profilePeerKey(context);
 
       if (transferId.isEmpty ||
@@ -3874,6 +4043,16 @@ class RemoteCommandRouter {
       debugPrint(
         'RemoteCommandRouter: chunked transfer started ($totalChunks chunks)',
       );
+      if (kind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_start',
+          fields: <String, Object?>{
+            'trace': diagnosticTrace,
+            'chunks': totalChunks,
+            'encrypted': encrypted,
+          },
+        );
+      }
 
       final existing = _chunkBuffers[transferId];
       if (existing != null && existing.peerKey != peer) {
@@ -3891,6 +4070,16 @@ class RemoteCommandRouter {
           existing.totalChunks == totalChunks &&
           existing.kind == kind &&
           existing.receivedCount > 0) {
+        if (kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_start_repeat',
+            fields: <String, Object?>{
+              'trace': diagnosticTrace,
+              'received': existing.receivedCount,
+              'chunks': totalChunks,
+            },
+          );
+        }
         _armChunkTimeout(transferId, existing);
         return;
       }
@@ -3914,7 +4103,16 @@ class RemoteCommandRouter {
       );
       _chunkBuffers[transferId] = buffer;
       _armChunkTimeout(transferId, buffer);
-    } catch (_) {
+    } catch (error) {
+      if (diagnosticKind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_start_rejected',
+          fields: <String, Object?>{
+            'trace': diagnosticTrace,
+            'errorType': error.runtimeType,
+          },
+        );
+      }
       debugPrint('RemoteCommandRouter: invalid chunk start');
       _showSnackBar('Failed to receive transfer', isError: true);
     }
@@ -3931,6 +4129,19 @@ class RemoteCommandRouter {
     buffer.timeout?.cancel();
     if (!buffer.encrypted) {
       buffer.timeout = Timer(kChunkTransferTimeout, () {
+        if (buffer.kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_timeout',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'received': buffer.receivedCount,
+              'chunks': buffer.totalChunks,
+              'encrypted': false,
+            },
+          );
+        }
         debugPrint('RemoteCommandRouter: chunk transfer stalled');
         _chunkBuffers.remove(transferId);
         // A silent drop reads as success from the sender's side, so the
@@ -3955,6 +4166,20 @@ class RemoteCommandRouter {
           ? null
           : state.sessionManager?.sessionBySid(sid);
       if (buffer.repairRounds >= kChunkRepairMaxRounds || session == null) {
+        if (buffer.kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_repair_exhausted',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'received': buffer.receivedCount,
+              'chunks': buffer.totalChunks,
+              'rounds': buffer.repairRounds,
+              'sessionReady': session != null,
+            },
+          );
+        }
         debugPrint('RemoteCommandRouter: chunk transfer stalled beyond repair');
         _chunkBuffers.remove(transferId);
         _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
@@ -3967,6 +4192,18 @@ class RemoteCommandRouter {
         return;
       }
       buffer.repairRounds++;
+      if (buffer.kind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_repair_requested',
+          fields: <String, Object?>{
+            'trace': RemoteTransferDiagnostics.traceToken(
+              buffer.resultRequestId,
+            ),
+            'missing': missing.length,
+            'round': buffer.repairRounds,
+          },
+        );
+      }
       debugPrint(
         'RemoteCommandRouter: requesting ${missing.length} missing chunk(s), '
         'repair round ${buffer.repairRounds}',
@@ -3984,7 +4221,18 @@ class RemoteCommandRouter {
               data: chunkNeedBody(transferId: transferId, missing: missing),
             ),
           );
-        } catch (_) {
+        } catch (error) {
+          if (buffer.kind == ConfigCommand.profileGraph) {
+            RemoteTransferDiagnostics.record(
+              'receiver_chunk_repair_send_exception',
+              fields: <String, Object?>{
+                'trace': RemoteTransferDiagnostics.traceToken(
+                  buffer.resultRequestId,
+                ),
+                'errorType': error.runtimeType,
+              },
+            );
+          }
           debugPrint('RemoteCommandRouter: repair request send failed');
         }
       }());
@@ -4029,6 +4277,32 @@ class RemoteCommandRouter {
         buffer.receivedCount++;
       }
       buffer.chunks[index] = chunkData;
+      if (buffer.kind == ConfigCommand.profileGraph) {
+        final percent = (buffer.receivedCount * 100) ~/ buffer.totalChunks;
+        final bucket = percent >= 100
+            ? 100
+            : percent >= 75
+            ? 75
+            : percent >= 50
+            ? 50
+            : percent >= 25
+            ? 25
+            : 0;
+        if (bucket > buffer.diagnosticProgressBucket) {
+          buffer.diagnosticProgressBucket = bucket;
+          RemoteTransferDiagnostics.record(
+            'receiver_chunk_progress',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'percent': bucket,
+              'received': buffer.receivedCount,
+              'chunks': buffer.totalChunks,
+            },
+          );
+        }
+      }
       // Progress means the transfer is alive — push the stall deadline out.
       _armChunkTimeout(transferId, buffer);
 
@@ -4037,16 +4311,26 @@ class RemoteCommandRouter {
         buffer.timeout?.cancel();
         _chunkBuffers.remove(transferId);
 
-        // Reassemble: base64-decode each chunk, concatenate bytes, then UTF-8 decode
-        final byteChunks = <List<int>>[];
-        for (final chunk in buffer.chunks) {
-          byteChunks.add(base64.decode(chunk!));
+        // Decode into one bounded byte buffer and release the base64 chunk
+        // strings before decrypting or expanding a potentially large graph.
+        // Keeping both representations alive through the awaited restore used
+        // to add several megabytes to the receiver's peak memory.
+        final reassembled = _takeReassembledPayload(buffer);
+        final full = reassembled.payload;
+
+        if (buffer.kind == ConfigCommand.profileGraph) {
+          RemoteTransferDiagnostics.record(
+            'receiver_chunks_complete',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(
+                buffer.resultRequestId,
+              ),
+              'chunks': buffer.totalChunks,
+              'wireBytes': reassembled.bytes,
+              'characters': full.length,
+            },
+          );
         }
-        final allBytes = byteChunks.expand((b) => b).toList();
-        if (allBytes.length > _maxProfileRemotePayloadBytes) {
-          throw const FormatException('Reassembled transfer is too large');
-        }
-        final full = utf8.decode(allBytes);
 
         debugPrint(
           'RemoteCommandRouter: All chunks received for ${buffer.label}, '
@@ -4071,7 +4355,20 @@ class RemoteCommandRouter {
           ),
         );
       }
-    } catch (_) {
+    } catch (error) {
+      if (failedBuffer?.kind == ConfigCommand.profileGraph) {
+        RemoteTransferDiagnostics.record(
+          'receiver_chunk_exception',
+          fields: <String, Object?>{
+            'trace': RemoteTransferDiagnostics.traceToken(
+              failedBuffer?.resultRequestId,
+            ),
+            'errorType': error.runtimeType,
+            'received': failedBuffer?.receivedCount,
+            'chunks': failedBuffer?.totalChunks,
+          },
+        );
+      }
       debugPrint('RemoteCommandRouter: chunk handling failed');
       final buffer = failedBuffer;
       if (buffer != null) {
@@ -4087,23 +4384,54 @@ class RemoteCommandRouter {
     }
   }
 
+  ({String payload, int bytes}) _takeReassembledPayload(_ChunkBuffer buffer) {
+    final bytes = BytesBuilder(copy: false);
+    try {
+      for (final chunk in buffer.chunks) {
+        final decoded = base64.decode(chunk!);
+        if (bytes.length > _maxProfileRemotePayloadBytes - decoded.length) {
+          throw const FormatException('Reassembled transfer is too large');
+        }
+        bytes.add(decoded);
+      }
+      final allBytes = bytes.takeBytes();
+      return (payload: utf8.decode(allBytes), bytes: allBytes.length);
+    } finally {
+      buffer.chunks.fillRange(0, buffer.chunks.length, null);
+    }
+  }
+
   /// Decrypt and replay a reassembled v2 blob transfer.
   Future<void> _completeEncryptedBlob(
     String transferId,
     _ChunkBuffer buffer,
     String ctB64,
   ) async {
+    final graphDiagnostic = buffer.kind == ConfigCommand.profileGraph;
+    final trace = RemoteTransferDiagnostics.traceToken(buffer.resultRequestId);
     final state = RemoteControlState();
     final manager = state.sessionManager;
     final sidB64 = buffer.sidB64;
     final n = buffer.blobN;
     if (manager == null || sidB64 == null || n == null) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_session_fields_missing',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       debugPrint('RemoteCommandRouter: Encrypted blob missing session fields');
       await _reportChunkFailure(buffer, 'Transfer session data was incomplete');
       return;
     }
     final session = manager.sessionBySid(sidB64);
     if (session == null) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_session_expired',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       // Receiver restarted mid-transfer: the session (and its keys) are gone.
       _showSnackBar(
         'Transfer failed: session expired — send again',
@@ -4113,9 +4441,24 @@ class RemoteCommandRouter {
       return;
     }
     if (!session.authorized) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_session_unauthorized',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       debugPrint('RemoteCommandRouter: Dropping blob on unauthorized session');
       await _reportChunkFailure(buffer, 'Transfer session was not authorized');
       return;
+    }
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_blob_open_start',
+        fields: <String, Object?>{
+          'trace': trace,
+          'wireCharacters': ctB64.length,
+        },
+      );
     }
     final plaintext = await RemoteSessionCrypto.openBlob(
       key: session.recvKey,
@@ -4126,6 +4469,12 @@ class RemoteCommandRouter {
       ctB64: ctB64,
     );
     if (plaintext == null) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_open_rejected',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       _showSnackBar(
         'Transfer failed: could not decrypt ${buffer.label}',
         isError: true,
@@ -4136,9 +4485,30 @@ class RemoteCommandRouter {
       );
       return;
     }
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_blob_open_complete',
+        fields: <String, Object?>{
+          'trace': trace,
+          'characters': plaintext.length,
+        },
+      );
+    }
     if (!session.acceptBlob(n)) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'receiver_blob_replay_rejected',
+          fields: <String, Object?>{'trace': trace},
+        );
+      }
       debugPrint('RemoteCommandRouter: Replayed blob counter $n, dropping');
       return;
+    }
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_dispatch_start',
+        fields: <String, Object?>{'trace': trace},
+      );
     }
     await _dispatchCommandAndWait(
       RemoteAction.config,
@@ -4164,6 +4534,12 @@ class RemoteCommandRouter {
         },
       ),
     );
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_dispatch_complete',
+        fields: <String, Object?>{'trace': trace},
+      );
+    }
   }
 
   Future<bool> _reportChunkFailure(_ChunkBuffer buffer, String message) {
@@ -4544,6 +4920,9 @@ class _ChunkBuffer {
   Timer? timeout;
 
   int receivedCount = 0;
+
+  /// Last 25% milestone emitted to the retained transfer diagnostics sink.
+  int diagnosticProgressBucket = 0;
 
   /// Gap-repair rounds already spent (v2 transfers only) — bounds the worst
   /// case on a dead link at roughly rounds × [kChunkRepairStall].

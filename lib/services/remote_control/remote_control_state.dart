@@ -12,6 +12,7 @@ import 'remote_constants.dart';
 import 'remote_command_router.dart';
 import 'remote_pairing_store.dart';
 import 'remote_session.dart';
+import 'remote_transfer_diagnostics.dart';
 import 'udp_discovery_service.dart';
 import 'udp_command_service.dart';
 
@@ -985,7 +986,18 @@ class RemoteControlState extends ChangeNotifier {
         command == ConfigCommand.profileGraphResult) {
       if (data != null && context.encrypted && context.authorized) {
         final result = parseProfileGraphResultBody(data);
-        if (result != null) profileGraphResults.add(result);
+        if (result != null) {
+          RemoteTransferDiagnostics.record(
+            'sender_result_packet_opened',
+            fields: <String, Object?>{
+              'trace': RemoteTransferDiagnostics.traceToken(result.requestId),
+              'ok': result.ok,
+            },
+          );
+          profileGraphResults.add(result);
+        } else {
+          RemoteTransferDiagnostics.record('sender_result_packet_malformed');
+        }
       }
       return;
     }

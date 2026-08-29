@@ -122,6 +122,36 @@ void main() {
     });
   });
 
+  group('profile graph size policy', () {
+    test('compacts above either soft transport threshold', () {
+      expect(
+        profileGraphTransportNeedsCompaction(
+          wireBytes: kMaxProfileGraphWireBytes,
+          expandedBytes: kProfileGraphCompactionThresholdBytes,
+        ),
+        isFalse,
+      );
+      expect(
+        profileGraphTransportNeedsCompaction(
+          wireBytes: kMaxProfileGraphWireBytes + 1,
+          expandedBytes: kProfileGraphCompactionThresholdBytes,
+        ),
+        isTrue,
+      );
+      expect(
+        profileGraphTransportNeedsCompaction(
+          wireBytes: kMaxProfileGraphWireBytes,
+          expandedBytes: kProfileGraphCompactionThresholdBytes + 1,
+        ),
+        isTrue,
+      );
+      expect(
+        kMaxProfileGraphExpandedBytes,
+        greaterThan(kProfileGraphCompactionThresholdBytes),
+      );
+    });
+  });
+
   group('profile graph result', () {
     test('acknowledgement failure stays a delivery failure', () async {
       final router = RemoteCommandRouter();

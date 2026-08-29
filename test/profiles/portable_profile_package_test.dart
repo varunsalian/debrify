@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/legacy_backup_adapter.dart';
+import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'avatar_fixtures.dart';
@@ -379,6 +380,46 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'remote budget admits a compressible graph above the old ceiling',
+    () async {
+      const oldExpandedLimit = 16 * 1024 * 1024;
+      expect(kProfileGraphCompactionThresholdBytes, 32 * 1024 * 1024);
+      expect(kMaxProfileGraphExpandedBytes, 48 * 1024 * 1024);
+      final content = '#EXTM3U\n'.padRight(oldExpandedLimit + 1024, 'x');
+      final source = await package(
+        resources: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'backupId': 'resource-0',
+            'type': 'iptvM3u',
+            'label': 'Large local playlist',
+            'owned': true,
+            'publicConfig': <String, dynamic>{'schemaVersion': 1},
+            'permissions': 63,
+            'secretConfig': <String, dynamic>{
+              'id': 'large-local-playlist',
+              'name': 'Large local playlist',
+              'url': '',
+              'content': content,
+              'addedAt': '2026-08-29T00:00:00.000Z',
+            },
+          },
+        ],
+      );
+
+      final transport =
+          await PortableProfilePackage.encodeAuthenticatedTransport(
+            source,
+            maxExpandedPayloadBytes: kMaxProfileGraphExpandedBytes,
+          );
+
+      expect(transport.expandedBytes, greaterThan(oldExpandedLimit));
+      expect(transport.expandedBytes, lessThan(kMaxProfileGraphExpandedBytes));
+      expect(transport.wireBytes, lessThan(kMaxProfileGraphWireBytes));
+      expect(transport.compressed, isTrue);
+    },
+  );
 
   test('future omissions surface unless explicitly routine', () {
     expect(

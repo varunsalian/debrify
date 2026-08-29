@@ -50,6 +50,7 @@ class MainActivity : FlutterActivity() {
 	private val VOICE_CHANNEL = "debrify/tv_voice"
 	private val VOICE_EVENTS = "debrify/tv_voice_events"
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
+	private val REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL = "debrify/remote_transfer_diagnostics"
 	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
 	// signing key + user since Android 8, stable across OTAs) — unlike the
 	// build/model fields device_info_plus exposes, which every unit of the
@@ -1300,6 +1301,26 @@ class MainActivity : FlutterActivity() {
 				return@setMethodCallHandler
 			}
 			android.util.Log.i("DEBRIFY_PLAYER_DECODER", message)
+			result.success(null)
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			if (call.method != "write") {
+				result.notImplemented()
+				return@setMethodCallHandler
+			}
+			val message = call.argument<String>("message")
+				?.replace('\n', ' ')
+				?.replace('\r', ' ')
+				?.take(1_024)
+			if (message.isNullOrBlank() || !message.startsWith("DEBRIFY_TRANSFER ")) {
+				result.error("bad_args", "structured transfer message is required", null)
+				return@setMethodCallHandler
+			}
+			// proguard-rules.pro strips Log.d/v/i in release; warning is retained.
+			android.util.Log.w("DEBRIFY_TRANSFER", message)
 			result.success(null)
 		}
 		MethodChannel(

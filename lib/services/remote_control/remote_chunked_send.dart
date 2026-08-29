@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'remote_constants.dart';
 import 'remote_control_state.dart';
 import 'remote_session.dart';
+import 'remote_transfer_diagnostics.dart';
 
 /// Whether [payload] can ride in one datagram as a plain `configData` string.
 ///
@@ -536,6 +537,8 @@ Future<bool> sendConfigPayloadToDevice(
   String? resultRequestId,
   String? transferRequestId,
 }) async {
+  final graphDiagnostic = command == ConfigCommand.profileGraph;
+  final trace = RemoteTransferDiagnostics.traceToken(resultRequestId);
   final transferPayload = transferRequestId == null
       ? payload
       : remoteTransferItemBody(requestId: transferRequestId, payload: payload);
@@ -546,11 +549,22 @@ Future<bool> sendConfigPayloadToDevice(
       : fitsSinglePacketEncrypted(transferPayload)) {
     // Small payloads ride the command envelope directly — which is itself
     // sealed end-to-end when a session exists.
-    return state.sendConfigCommandToDevice(
+    final sent = await state.sendConfigCommandToDevice(
       command,
       targetIp,
       configData: transferPayload,
     );
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'sender_direct_packet_finished',
+        fields: <String, Object?>{
+          'trace': trace,
+          'ok': sent,
+          'characters': transferPayload.length,
+        },
+      );
+    }
+    return sent;
   }
 
   final transferId =
@@ -562,6 +576,12 @@ Future<bool> sendConfigPayloadToDevice(
     // chunk pieces ride plaintextTransport and would otherwise carry the raw
     // credential payload past the state-level refusal.
     debugPrint('RemoteChunkedSend: refusing transfer without a session');
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'sender_chunk_session_missing',
+        fields: <String, Object?>{'trace': trace},
+      );
+    }
     return false;
   }
 
@@ -571,6 +591,15 @@ Future<bool> sendConfigPayloadToDevice(
   // inflating ecmd envelope would blow the single-fragment UDP budget.
   final encN = session.nextN();
   final encSidB64 = session.sidB64;
+  if (graphDiagnostic) {
+    RemoteTransferDiagnostics.record(
+      'sender_blob_seal_start',
+      fields: <String, Object?>{
+        'trace': trace,
+        'characters': transferPayload.length,
+      },
+    );
+  }
   final wirePayload = await RemoteSessionCrypto.sealBlob(
     key: session.sendKey,
     sid: session.sid,
@@ -581,6 +610,17 @@ Future<bool> sendConfigPayloadToDevice(
   );
 
   final chunks = encodePayloadChunks(wirePayload);
+
+  if (graphDiagnostic) {
+    RemoteTransferDiagnostics.record(
+      'sender_blob_sealed',
+      fields: <String, Object?>{
+        'trace': trace,
+        'wireCharacters': wirePayload.length,
+        'chunks': chunks.length,
+      },
+    );
+  }
 
   debugPrint('RemoteChunkedSend: sending sealed chunked transfer');
 
@@ -603,19 +643,32 @@ Future<bool> sendConfigPayloadToDevice(
     configData: startBody,
     plaintextTransport: true,
   );
+  if (graphDiagnostic) {
+    RemoteTransferDiagnostics.record(
+      'sender_chunk_start_packet',
+      fields: <String, Object?>{'trace': trace, 'ok': startOk},
+    );
+  }
   if (!startOk) return false;
   // A lost START is the one packet repair cannot recover (the receiver has
   // no buffer to notice gaps in), so send it twice. Duplicates are safe
   // ONLY here: the receiver rebuilds the buffer on a repeated start, which
   // is a no-op before any chunk has landed and destructive after.
   await Future.delayed(chunkPace);
-  await state.sendConfigCommandToDevice(
+  final duplicateStartOk = await state.sendConfigCommandToDevice(
     ConfigCommand.debrifyChannelStart,
     targetIp,
     configData: startBody,
     plaintextTransport: true,
   );
+  if (graphDiagnostic) {
+    RemoteTransferDiagnostics.record(
+      'sender_chunk_start_repeat',
+      fields: <String, Object?>{'trace': trace, 'ok': duplicateStartOk},
+    );
+  }
 
+  var loggedProgressBucket = 0;
   for (var i = 0; i < chunks.length; i++) {
     // Pace the send: a burst of hundreds of datagrams overruns the receiver's
     // socket buffer, and a chunk dropped there costs the whole transfer.
@@ -630,8 +683,50 @@ Future<bool> sendConfigPayloadToDevice(
       ),
       plaintextTransport: true,
     );
-    if (!ok) return false;
+    if (!ok) {
+      if (graphDiagnostic) {
+        RemoteTransferDiagnostics.record(
+          'sender_chunk_send_stopped',
+          fields: <String, Object?>{
+            'trace': trace,
+            'chunk': i + 1,
+            'chunks': chunks.length,
+          },
+        );
+      }
+      return false;
+    }
+    if (graphDiagnostic) {
+      final percent = ((i + 1) * 100) ~/ chunks.length;
+      final bucket = percent >= 100
+          ? 100
+          : percent >= 75
+          ? 75
+          : percent >= 50
+          ? 50
+          : percent >= 25
+          ? 25
+          : 0;
+      if (bucket > loggedProgressBucket) {
+        loggedProgressBucket = bucket;
+        RemoteTransferDiagnostics.record(
+          'sender_chunk_progress',
+          fields: <String, Object?>{
+            'trace': trace,
+            'percent': bucket,
+            'sent': i + 1,
+            'chunks': chunks.length,
+          },
+        );
+      }
+    }
   }
 
+  if (graphDiagnostic) {
+    RemoteTransferDiagnostics.record(
+      'sender_chunks_complete',
+      fields: <String, Object?>{'trace': trace, 'chunks': chunks.length},
+    );
+  }
   return true;
 }
