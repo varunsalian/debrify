@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../screens/settings/profile_backup_flows.dart';
 import '../../services/account_service.dart';
 import '../../services/alldebrid_account_service.dart';
 import '../../services/analytics_service.dart';
@@ -15,6 +16,8 @@ import '../../services/engine/remote_engine_manager.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/premiumize_account_service.dart';
+import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
@@ -48,17 +51,27 @@ typedef OnboardingValidationOverride =
 typedef OnboardingEngineImportOverride =
     Future<bool> Function(RemoteEngineInfo engine, String yaml);
 
+typedef OnboardingBackupRestoreOverride =
+    Future<ProfileBackupRestoreResult?> Function();
+
+typedef OnboardingBackupHandoffOverride =
+    Future<void> Function(ProfileGraphRestoreReport report);
+
 class InitialSetupFlow extends StatefulWidget {
   const InitialSetupFlow({
     super.key,
     this.engineManager,
     this.engineImportOverride,
+    this.backupRestoreOverride,
+    this.backupHandoffOverride,
     this.validationOverride,
     this.isTelevisionOverride,
   });
 
   final RemoteEngineManager? engineManager;
   final OnboardingEngineImportOverride? engineImportOverride;
+  final OnboardingBackupRestoreOverride? backupRestoreOverride;
+  final OnboardingBackupHandoffOverride? backupHandoffOverride;
   final OnboardingValidationOverride? validationOverride;
   final bool? isTelevisionOverride;
 
@@ -143,6 +156,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   final List<String> _connectedServices = <String>[];
   bool _hasConfigured = false;
   bool _finishing = false;
+  bool _restoringBackup = false;
 
   ReceiverLease? _importLease;
   int _importAttempt = 0;
@@ -619,6 +633,55 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     unawaited(_initializeTrackers());
   }
 
+  Future<void> _restoreBackup() async {
+    if (_restoringBackup || _finishing) return;
+    _restoringBackup = true;
+    try {
+      final ProfileBackupRestoreResult? result;
+      if (widget.backupRestoreOverride != null) {
+        result = await widget.backupRestoreOverride!();
+      } else {
+        result = await ProfileBackupFlows(
+          context,
+          completingOnboarding: true,
+        ).restoreProfileBackup();
+      }
+      if (!mounted || result == null) return;
+      _hasConfigured = true;
+      MainPageBridge.notifyIntegrationChanged();
+      final graphReport = result.graphReport;
+      final shouldHandoff =
+          graphReport != null &&
+          result.authorizingProfileId == ProfileBootstrap.freshAdminId;
+      await _finish(
+        afterSetupComplete: shouldHandoff
+            ? () => _handoffRestoredGraph(graphReport)
+            : null,
+      );
+    } finally {
+      _restoringBackup = false;
+    }
+  }
+
+  Future<void> _handoffRestoredGraph(ProfileGraphRestoreReport report) async {
+    try {
+      final override = widget.backupHandoffOverride;
+      if (override != null) {
+        await override(report);
+      } else {
+        await RemoteCommandRouter().handoffImportedAdminForOnboarding(report);
+      }
+    } catch (error, stack) {
+      // The graph is already durable. A failed handoff keeps the bootstrap
+      // recovery Admin active; it must not make the completed restore look as
+      // though nothing was imported or invite a duplicate restore.
+      debugPrint(
+        'InitialSetupFlow: imported profiles but could not hand off '
+        'authority — $error\n$stack',
+      );
+    }
+  }
+
   Future<void> _enterImport() async {
     final attempt = ++_importAttempt;
     _transferComplete = false;
@@ -765,10 +828,11 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     Navigator.of(context).pop(false);
   }
 
-  Future<void> _finish() async {
+  Future<void> _finish({Future<void> Function()? afterSetupComplete}) async {
     if (_finishing) return;
     _finishing = true;
     await StorageService.setInitialSetupComplete(true);
+    await afterSetupComplete?.call();
     if (!mounted) return;
     Navigator.of(context).pop(_hasConfigured);
   }
@@ -824,6 +888,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           focusController: _focus,
           onSetupHere: _chooseSetupHere,
           onImport: () => unawaited(_enterImport()),
+          onRestore: PlatformUtil.isTvOS
+              ? null
+              : () => unawaited(_restoreBackup()),
           onSkip: () => unawaited(_leave()),
         );
       case OnboardStep.services:

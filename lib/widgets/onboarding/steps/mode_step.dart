@@ -10,12 +10,14 @@ class ModeStep extends StatelessWidget {
     required this.focusController,
     required this.onSetupHere,
     required this.onImport,
+    this.onRestore,
     required this.onSkip,
   });
 
   final OnboardFocusController focusController;
   final VoidCallback onSetupHere;
   final VoidCallback onImport;
+  final VoidCallback? onRestore;
   final VoidCallback onSkip;
 
   @override
@@ -43,12 +45,24 @@ class ModeStep extends StatelessWidget {
           footnote: 'Both devices need to be on the same Wi-Fi.',
           onPressed: onImport,
         ),
+        if (onRestore != null) ...[
+          const SizedBox(height: 12),
+          _ModeRow(
+            controller: focusController,
+            cell: const OnboardCell(2, 0),
+            icon: Icons.restore_rounded,
+            title: 'Restore from a backup',
+            subtitle:
+                'Choose a Debrify backup file to restore profiles, services, addons, channels, and preferences.',
+            onPressed: onRestore!,
+          ),
+        ],
         const SizedBox(height: 14),
         Align(
           alignment: Alignment.centerLeft,
           child: OnboardFocusable(
             controller: focusController,
-            cell: const OnboardCell(2, 0),
+            cell: OnboardCell(onRestore == null ? 2 : 3, 0),
             onActivate: onSkip,
             shape: ParallaxShape.pill,
             radius: BorderRadius.circular(18),

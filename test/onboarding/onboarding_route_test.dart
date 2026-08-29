@@ -41,6 +41,11 @@ void main() {
     expect(route, isA<PageRouteBuilder<bool>>());
     expect(route!.opaque, isTrue);
     expect(parentFocus.canRequestFocus, isFalse);
+    await tester.scrollUntilVisible(
+      find.text("Skip — I'll do this later"),
+      100,
+      scrollable: find.byType(Scrollable),
+    );
     await tester.tap(find.text("Skip — I'll do this later"));
     await tester.pumpAndSettle();
     expect(result, isFalse);

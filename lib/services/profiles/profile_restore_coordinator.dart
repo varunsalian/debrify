@@ -563,11 +563,16 @@ class ProfileRestoreCoordinator {
     }
   }
 
+  /// Restores one package into its authorizing profile.
+  ///
+  /// [completeOnboarding] is reserved for the first-run restore entry point;
+  /// it makes setup completion part of the generation publication transaction.
   Future<ProfileRestoreReport> restore({
     required PortableProfilePackage package,
     required String destinationProfileId,
     required ProfileAuthorizationContext authorization,
     bool replacePreferences = false,
+    bool completeOnboarding = false,
   }) async {
     final actor = await authorization.validate(registry);
     if (actor.id != destinationProfileId) {
@@ -846,7 +851,14 @@ class ProfileRestoreCoordinator {
               baseGeneration: staged.baseGeneration,
               stagedGeneration: staged.generation,
               operationId: operationId,
-              profileSetupComplete: importedSetupComplete,
+              // Publishing a new active generation changes the session epoch
+              // and remounts AppInitializer immediately. An onboarding caller
+              // must make completion visible in this same transaction so that
+              // remounted initializer cannot observe `false` and push a second
+              // onboarding route while restore follow-up work is still running.
+              profileSetupComplete: completeOnboarding
+                  ? true
+                  : importedSetupComplete,
               profileLockOnResume: importedLockOnResume,
               updateInactivityTimeout: updateInactivityTimeout,
               profileInactivityTimeoutMinutes: importedInactivityTimeout,

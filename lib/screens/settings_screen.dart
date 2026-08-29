@@ -4676,13 +4676,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _createProfileBackup() =>
       ProfileBackupFlows(context).createProfileBackup();
 
-  Future<void> _restoreProfileBackup() => ProfileBackupFlows(
-    context,
-    onRestored: () async {
-      await _loadSummaries();
-      MainPageBridge.notifyIntegrationChanged();
-    },
-  ).restoreProfileBackup();
+  Future<void> _restoreProfileBackup() async {
+    await ProfileBackupFlows(
+      context,
+      onRestored: () async {
+        await _loadSummaries();
+        MainPageBridge.notifyIntegrationChanged();
+      },
+    ).restoreProfileBackup();
+  }
 
   Future<void> _createBackup() async {
     if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {

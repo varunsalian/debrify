@@ -18,6 +18,7 @@ import 'package:debrify/services/profiles/profile_avatar_ingest.dart';
 import 'package:debrify/services/profiles/profile_avatar_storage.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_data_generation.dart';
+import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_package_service.dart';
 import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -33,6 +34,51 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'avatar_fixtures.dart';
+
+class _SetupCompleteObserver implements ProfileLifecycleParticipant {
+  _SetupCompleteObserver(this.registry, this.profileId);
+
+  final ProfileRegistry registry;
+  final String profileId;
+  bool? setupCompleteDuringCandidateInitialization;
+
+  @override
+  Future<void> prepareDeactivate(ProfileScope current) async {}
+
+  @override
+  Future<void> initializeCandidate(ProfileScope candidate) async {
+    setupCompleteDuringCandidateInitialization = (await registry.getProfile(
+      profileId,
+    ))?.setupComplete;
+  }
+
+  @override
+  Future<void> didActivate(ProfileScope active) async {}
+
+  @override
+  Future<void> rollback(ProfileScope restored) async {}
+}
+
+Future<PortableProfilePackage> _singleProfilePackage({
+  required bool? setupComplete,
+}) async {
+  final section = await PortableProfilePackage.buildSection(
+    const <String, Object?>{'theme_mode': 'restored'},
+  );
+  return PortableProfilePackage(
+    mode: 'singleProfile',
+    createdAt: DateTime.utc(2026, 8, 29),
+    profiles: <Map<String, dynamic>>[
+      <String, dynamic>{
+        'backupId': 'profile-0',
+        if (setupComplete != null) 'setupComplete': setupComplete,
+        'preferencesSection': 'preferences',
+      },
+    ],
+    resources: const <Map<String, dynamic>>[],
+    sections: <String, dynamic>{'preferences': section},
+  );
+}
 
 Future<Map<String, dynamic>> _legacyV3EncryptedEnvelope(
   PortableProfilePackage source,
@@ -279,6 +325,63 @@ void main() {
     expect(prefs.getString('p.$profileId.g.1.theme_mode'), 'old');
     expect(prefs.getString('p.$profileId.g.2.theme_mode'), 'restored');
     expect(prefs.getString('p.$profileId.g.2.language'), 'en');
+  });
+
+  for (final importedSetupComplete in <bool?>[null, false]) {
+    final sourceLabel = importedSetupComplete == null
+        ? 'missing setup state'
+        : 'setup incomplete';
+    test('onboarding restore publishes completion with $sourceLabel', () async {
+      expect((await registry.getProfile(profileId))?.setupComplete, isFalse);
+      final observer = _SetupCompleteObserver(registry, profileId);
+
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+        lifecycleParticipants: <ProfileLifecycleParticipant>[observer],
+      ).restore(
+        package: await _singleProfilePackage(
+          setupComplete: importedSetupComplete,
+        ),
+        destinationProfileId: profileId,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+        completeOnboarding: true,
+      );
+
+      expect(
+        observer.setupCompleteDuringCandidateInitialization,
+        isTrue,
+        reason:
+            'completion must be visible when the new epoch remounts the app',
+      );
+      expect((await registry.getProfile(profileId))?.setupComplete, isTrue);
+    });
+  }
+
+  test('ordinary restore still applies the backup setup state', () async {
+    var authorization = await ProfileAuthorizationContext.capture(registry);
+    await registry.setActiveProfileSetupComplete(
+      profileId: profileId,
+      setupComplete: true,
+      actingAuthorizationRevision: authorization.authorizationRevision,
+      actingSessionEpoch: authorization.sessionEpoch,
+    );
+    expect((await registry.getProfile(profileId))?.setupComplete, isTrue);
+    authorization = await ProfileAuthorizationContext.capture(registry);
+    final observer = _SetupCompleteObserver(registry, profileId);
+
+    await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+      lifecycleParticipants: <ProfileLifecycleParticipant>[observer],
+    ).restore(
+      package: await _singleProfilePackage(setupComplete: false),
+      destinationProfileId: profileId,
+      authorization: authorization,
+    );
+
+    expect(observer.setupCompleteDuringCandidateInitialization, isFalse);
+    expect((await registry.getProfile(profileId))?.setupComplete, isFalse);
   });
 
   test('v3 restore drops preferences that became non-portable in v4', () async {

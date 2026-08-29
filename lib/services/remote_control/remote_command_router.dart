@@ -1730,7 +1730,7 @@ class RemoteCommandRouter {
             'RemoteCommandRouter: could not pre-clear onboarding — $e',
           );
         }
-        await _activateImportedAdminForOnboarding(report);
+        await handoffImportedAdminForOnboarding(report);
       }
       _showSnackBar(
         'Imported ${report.profilesImported} profiles and '
@@ -1852,6 +1852,25 @@ class RemoteCommandRouter {
       live,
       () => _retireBootstrapProfileAfterImport(report.importedProfileIds),
     );
+  }
+
+  /// Hands an onboarding restore to an imported usable Admin and conditionally
+  /// retires the bootstrap profile. The caller must persist onboarding
+  /// completion before invoking this method because switching profiles ends
+  /// the authorizing bootstrap session.
+  Future<void> handoffImportedAdminForOnboarding(
+    ProfileGraphRestoreReport report,
+  ) async {
+    final activeProfileId =
+        (await ProfileBootstrap.registry.activeProfile())?.id;
+    if (activeProfileId != ProfileBootstrap.freshAdminId) {
+      debugPrint(
+        'RemoteCommandRouter: skipped onboarding profile hand-off because '
+        'the bootstrap Admin is not active',
+      );
+      return;
+    }
+    await _activateImportedAdminForOnboarding(report);
   }
 
   /// Remove the bootstrap setup profile once an imported Admin owns the device.
@@ -2203,7 +2222,7 @@ class RemoteCommandRouter {
   @visibleForTesting
   Future<void> debugActivateImportedAdminForOnboarding(
     ProfileGraphRestoreReport report,
-  ) => _activateImportedAdminForOnboarding(report);
+  ) => handoffImportedAdminForOnboarding(report);
 
   /// A picked image pushed from the paired phone, applied to the ACTIVE
   /// profile. `updateProfile` requires a managing actor, so this works only

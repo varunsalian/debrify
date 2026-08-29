@@ -27,15 +27,35 @@ import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 
+/// Successful profile restore metadata needed by onboarding completion.
+class ProfileBackupRestoreResult {
+  const ProfileBackupRestoreResult.singleProfile({
+    required this.authorizingProfileId,
+  }) : graphReport = null;
+
+  const ProfileBackupRestoreResult.deviceGraph({
+    required this.authorizingProfileId,
+    required this.graphReport,
+  });
+
+  final String authorizingProfileId;
+  final ProfileGraphRestoreReport? graphReport;
+}
+
 /// The profile backup/restore user flows, extracted from the settings screen
 /// so the Profiles hub can offer them at its first level. Behavior is
 /// identical to the settings-screen originals; [onRestored] replaces the
 /// screen-specific refresh the settings page used to run inline.
 class ProfileBackupFlows {
-  const ProfileBackupFlows(this.context, {this.onRestored});
+  const ProfileBackupFlows(
+    this.context, {
+    this.onRestored,
+    this.completingOnboarding = false,
+  });
 
   final BuildContext context;
   final Future<void> Function()? onRestored;
+  final bool completingOnboarding;
 
   Future<void> createProfileBackup() async {
     try {
@@ -341,14 +361,15 @@ class ProfileBackupFlows {
     }
   }
 
-  Future<void> restoreProfileBackup() async {
+  Future<ProfileBackupRestoreResult?> restoreProfileBackup() async {
     try {
-      await _restoreProfileBackupUnchecked();
+      return await _restoreProfileBackupUnchecked();
     } catch (error) {
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_profileBackupError(error, creating: false))),
       );
+      return null;
     }
   }
 
@@ -362,7 +383,7 @@ class ProfileBackupFlows {
         : 'Profile restore failed; existing data is unchanged';
   }
 
-  Future<void> _restoreProfileBackupUnchecked() async {
+  Future<ProfileBackupRestoreResult?> _restoreProfileBackupUnchecked() async {
     if (PlatformUtil.isTvOS) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -371,14 +392,14 @@ class ProfileBackupFlows {
           ),
         ),
       );
-      return;
+      return null;
     }
     final pick = await FilePicker.platform.pickFiles(
       dialogTitle: 'Choose a Debrify backup',
       type: FileType.any,
       withData: false,
     );
-    if (pick == null || pick.files.isEmpty) return;
+    if (pick == null || pick.files.isEmpty) return null;
     final file = pick.files.single;
     if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
       throw const FormatException('Backup exceeds the supported size limit');
@@ -396,7 +417,7 @@ class ProfileBackupFlows {
     if (probe.isProfilePackage) {
       if (probe.encrypted) {
         final unlocked = await _promptAndDecryptProfilePackage(path);
-        if (unlocked == null) return;
+        if (unlocked == null) return null;
         package = unlocked;
       } else {
         package = await _profileBackupProgress(
@@ -408,7 +429,7 @@ class ProfileBackupFlows {
       var legacy = BackupRestoreService.parse(probe.legacySource!);
       if (BackupRestoreService.isEncrypted(legacy)) {
         final unlocked = await _promptAndDecryptBackup(legacy);
-        if (unlocked == null) return;
+        if (unlocked == null) return null;
         legacy = unlocked;
       }
       package = LegacyBackupAdapter.adapt(legacy);
@@ -418,7 +439,7 @@ class ProfileBackupFlows {
     final profile = await registry.getProfile(
       ProfileRuntime.capture().profileId,
     );
-    if (profile == null || !context.mounted) return;
+    if (profile == null || !context.mounted) return null;
     final graphRestore = package.mode == 'deviceGraph';
     final legacyDatabasesMissing =
         package.omissions['libraryDatabasesOmitted'] == true ||
@@ -437,6 +458,12 @@ class ProfileBackupFlows {
             !actor.allows(ProfileFeature.manageProfiles))) {
       throw StateError('Only an Admin can restore an all-profile backup');
     }
+    final graphAuthorityNotice =
+        completingOnboarding && actor.id == ProfileBootstrap.freshAdminId
+        ? 'Debrify then switches to a usable imported Admin and removes the '
+              'temporary setup Admin if it is untouched. If no imported '
+              'Admin can take over, the setup Admin remains for recovery.'
+        : 'Your current Admin remains the recovery profile.';
     final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -447,7 +474,7 @@ class ProfileBackupFlows {
         ),
         content: Text(
           graphRestore
-              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}'
+              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. $graphAuthorityNotice Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}'
               : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources. The destination name, role, policy, PIN, and enabled state stay unchanged; downloads, recordings, jobs, paths, and pairings are not restored.${databaseNotice.isEmpty ? '' : '\n\n$databaseNotice'}',
         ),
         actions: [
@@ -464,8 +491,10 @@ class ProfileBackupFlows {
         ],
       ),
     );
-    if (confirmed != true) return;
-    if (graphRestore && !await reauthenticateSensitiveProfile(actor)) return;
+    if (confirmed != true) return null;
+    if (graphRestore && !await reauthenticateSensitiveProfile(actor)) {
+      return null;
+    }
 
     final coordinator = ProfileRestoreCoordinator(
       registry: registry,
@@ -482,9 +511,13 @@ class ProfileBackupFlows {
           authorization: authorization,
         ),
       );
-      if (!context.mounted) return;
+      final result = ProfileBackupRestoreResult.deviceGraph(
+        authorizingProfileId: actor.id,
+        graphReport: report,
+      );
+      if (!context.mounted) return result;
       await onRestored?.call();
-      if (!context.mounted) return;
+      if (!context.mounted) return result;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -497,7 +530,7 @@ class ProfileBackupFlows {
           duration: const Duration(seconds: 7),
         ),
       );
-      return;
+      return result;
     }
     final report = await _profileBackupProgress(
       'Restoring — verifying and staging data, this can take a few minutes…',
@@ -505,25 +538,32 @@ class ProfileBackupFlows {
         package: package,
         destinationProfileId: profile.id,
         authorization: authorization,
+        completeOnboarding: completingOnboarding,
       ),
     );
-    if (!context.mounted) return;
+    final result = ProfileBackupRestoreResult.singleProfile(
+      authorizingProfileId: actor.id,
+    );
+    if (!context.mounted) return result;
     await onRestored?.call();
-    final omitted = PortableProfilePackage.userVisibleOmissions(
-      report.omissions,
-    ).entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Restored generation ${report.publishedGeneration}: '
-          '${report.preferencesApplied} settings and '
-          '${report.resourcesImported} connections. '
-          '${omitted.isEmpty ? '' : 'Skipped: $omitted. '}'
-          'Media/jobs were not restored.',
+    if (context.mounted) {
+      final omitted = PortableProfilePackage.userVisibleOmissions(
+        report.omissions,
+      ).entries.map((entry) => '${entry.key}: ${entry.value}').join(', ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Restored generation ${report.publishedGeneration}: '
+            '${report.preferencesApplied} settings and '
+            '${report.resourcesImported} connections. '
+            '${omitted.isEmpty ? '' : 'Skipped: $omitted. '}'
+            'Media/jobs were not restored.',
+          ),
+          duration: const Duration(seconds: 6),
         ),
-        duration: const Duration(seconds: 6),
-      ),
-    );
+      );
+    }
+    return result;
   }
 
   Future<PortableProfilePackage?> _promptAndDecryptProfilePackage(
