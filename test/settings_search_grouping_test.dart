@@ -16,6 +16,13 @@ void main() {
   Finder headings(String label) =>
       find.widgetWithText(SettingsSectionLabel, label.toUpperCase());
 
+  test('an exact page name may include the generic settings suffix', () {
+    expect(
+      entry('Torbox', 'Connections').matches(['torbox', 'settings']),
+      isTrue,
+    );
+  });
+
   testWidgets('a category that reappears later renders one heading, not two', (
     tester,
   ) async {

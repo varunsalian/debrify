@@ -15,10 +15,14 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/webdav_item.dart';
+import '../models/android_video_renderer_mode.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/profiles/user_profile.dart';
 import '../services/main_page_bridge.dart';
+import '../services/external_player_service.dart';
 import '../services/play_loader_style.dart';
+import '../services/subtitle_font_service.dart';
+import '../services/text_brightness.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/profiles/connection_resource_service.dart';
 import '../services/profiles/portable_profile_package.dart';
@@ -30,6 +34,7 @@ import '../services/profiles/profile_bootstrap.dart';
 import '../services/profiles/profile_device_reset_service.dart';
 import '../services/profiles/profile_reset_service.dart';
 import '../utils/platform_util.dart';
+import '../utils/deovr_utils.dart' as deovr;
 
 import '../services/analytics_service.dart';
 import '../services/account_service.dart';
@@ -84,6 +89,7 @@ import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
 import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
+import 'settings/sidebar_customization_page.dart';
 import 'settings/profile_backup_flows.dart';
 import 'settings/profile_appearance_page.dart';
 import 'settings/widgets/settings_widgets.dart';
@@ -100,6 +106,8 @@ import 'settings/indexer_managers_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
+import 'video_player/services/subtitle_settings_service.dart';
+import 'video_player/services/network_tuning.dart';
 import 'settings/profiles_settings_page.dart';
 import 'profiles/profile_setup_flow.dart';
 import 'profiles/profile_wall_screen.dart';
@@ -156,6 +164,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Android's external-player branch offers neither — it only explains the
   /// system app chooser. See ExternalPlayerSettingsPage's platform branches.
   bool get _customPlayerCommandSupported =>
+      !kIsWeb &&
+      (Platform.isMacOS ||
+          Platform.isLinux ||
+          Platform.isWindows ||
+          Platform.isIOS);
+
+  /// A named preferred-player picker exists on Apple platforms and desktop.
+  /// Android delegates this choice to the system app chooser instead.
+  bool get _preferredExternalPlayerSupported =>
       !kIsWeb &&
       (Platform.isMacOS ||
           Platform.isLinux ||
@@ -1041,7 +1058,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: info.title,
       subtitle: info.caption,
       category: category,
-      keywords: keywords,
+      keywords: ['integration', ...keywords],
       onTap: info.onTap,
     );
 
@@ -1062,6 +1079,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onTap: onTap,
     );
 
+    List<String> labels(Iterable<String> values) => [
+      for (final value in values) value.toLowerCase(),
+    ];
+
     return [
       if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) ...[
         nav(
@@ -1072,6 +1093,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'profile',
             'profiles',
             'switch',
+            'switch to this profile',
             'who is watching',
             'avatar',
             'pin',
@@ -1099,6 +1121,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'kid',
             'member',
             'admin',
+            'start from my settings',
+            'copy appearance and playback defaults',
+            'search by title',
+            'keyword search',
+            'debrify tv',
+            'stremio tv',
+            'live tv',
+            'youtube',
+            'download and record',
+            'remote',
+            'manage own sources',
+            'cloud files',
           ],
         ),
         nav(
@@ -1112,16 +1146,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'access',
             'permissions',
             'edit user',
+            'save name and avatar',
+            'choose image',
+            'gif',
+            'set pin',
+            'change pin',
+            'remove pin',
+            'pin protection',
+            'lock when the app resumes',
+            'auto-lock',
+            'after 5 minutes',
+            'after 15 minutes',
+            'after 30 minutes',
+            'after 1 hour',
+            'copy appearance and playback defaults',
+            'role',
+            'admin',
+            'member',
+            'kid',
+            'pages and abilities',
+            'keyword search',
+            'live tv',
+            'youtube',
+            'download and record',
+            'manage own sources',
+            'cloud files',
+            'torrent engines',
+            'debrid and cloud',
+            'addons',
+            'trackers and lists',
+            'live tv and indexers',
+            'transfer ownership',
+            'diagnostics',
+            're-run the questions',
+            'full editor',
           ],
         ),
       ],
       // Connections
-      conn(_rdInfo, const ['debrid', 'real-debrid', 'rd', 'premium']),
-      conn(_torboxInfo, const ['debrid', 'premium']),
-      conn(_premiumizeInfo, const ['debrid', 'premium']),
-      conn(_allDebridInfo, const ['debrid', 'ad', 'premium']),
-      conn(_pikpakInfo, const ['cloud', 'storage']),
-      conn(_webDavInfo, const ['cloud', 'nas', 'server']),
+      conn(_rdInfo, const [
+        'debrid',
+        'real-debrid',
+        'rd',
+        'premium',
+        'api key',
+        'add api key',
+        'logout',
+        'login',
+        'account',
+      ]),
+      conn(_torboxInfo, const [
+        'debrid',
+        'premium',
+        'api key',
+        'add api key',
+        'logout',
+        'login',
+        'account',
+      ]),
+      conn(_premiumizeInfo, const [
+        'debrid',
+        'premium',
+        'api key',
+        'add api key',
+        'logout',
+        'login',
+        'account',
+      ]),
+      conn(_allDebridInfo, const [
+        'debrid',
+        'ad',
+        'premium',
+        'api key',
+        'add api key',
+        'logout',
+        'login',
+        'account',
+      ]),
+      conn(_pikpakInfo, const [
+        'cloud',
+        'storage',
+        'login',
+        'account',
+        'email',
+        'password',
+        'logout',
+        'change account',
+        'remove account',
+      ]),
+      conn(_webDavInfo, const [
+        'cloud',
+        'nas',
+        'server',
+        'seedbox',
+        'url',
+        'username',
+        'password',
+        'app token',
+      ]),
       conn(_iptvInfo, const [
         'live tv',
         'm3u',
@@ -1202,6 +1324,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'sync',
         'watch history',
         'watchlist',
+        'login',
+        'activate',
+        'device code',
+        'logout',
       ], category: 'Trackers'),
       conn(_trackingInfo, const [
         'scrobble',
@@ -1214,6 +1340,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'scrobble',
         'sync',
         'watch history',
+        'login',
+        'pin',
+        'device code',
+        'logout',
       ], category: 'Trackers'),
       if (kMdblistEnabled)
         conn(_mdblistInfo, const ['lists', 'ratings'], category: 'Trackers'),
@@ -1223,7 +1353,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SettingsRows.homePage,
         'Home & Display',
         _openHomePageSettings,
-        keywords: const ['default view', 'startup', 'landing', 'tab'],
+        keywords: const [
+          'home page',
+          'default view',
+          'startup',
+          'landing',
+          'tab',
+        ],
       ),
 
       // Appearance — one contiguous block so the category groups directly
@@ -1238,7 +1374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openTextBrightnessPage,
         subtitle: textBrightnessLabel(_textBrightness),
-        keywords: const [
+        keywords: [
           'text',
           'font',
           'color',
@@ -1255,6 +1391,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'contrast',
           'glare',
           'display',
+          ...labels(TextBrightness.values.map((choice) => choice.label)),
         ],
       ),
       // Ungated — every platform plays the splash. Lands on the picker.
@@ -1263,7 +1400,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openLaunchAnimationPage,
         subtitle: launchIdentLabel(_launchAnimation),
-        keywords: const [
+        keywords: [
           'launch',
           'splash',
           'intro',
@@ -1279,6 +1416,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'marquee',
           'prism',
           'monogram',
+          'match app theme',
+          'ident colour',
+          'ident color',
+          ...labels(kLaunchIdents.map((ident) => ident.label)),
         ],
       ),
       // Android TV only — the size factor is applied natively in
@@ -1289,7 +1430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openTvScreenSize,
           subtitle: tvUiScaleLabel(_tvUiScalePercent),
-          keywords: const [
+          keywords: [
             'zoom',
             'zoomed in',
             'scale',
@@ -1305,6 +1446,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'fit more',
             'display',
             'home & display',
+            ...labels(kTvUiScaleChoices.map((choice) => choice.label)),
           ],
         ),
       // Android TV only — the render scale is applied natively in
@@ -1316,7 +1458,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openTvRenderQuality,
           subtitle: tvRenderQualityLabel(_tvRenderQuality),
-          keywords: const [
+          keywords: [
             'stutter',
             'stuttering',
             'lag',
@@ -1346,6 +1488,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'graphics',
             'display',
             'home & display',
+            ...labels(kTvRenderQualityChoices.map((choice) => choice.label)),
           ],
         ),
       // Android TV + tvOS: this controls Flutter image decode bounds, so it is
@@ -1356,7 +1499,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openTvHeroArtworkQuality,
           subtitle: tvHeroArtworkQualityLabel(_tvHeroArtworkQuality),
-          keywords: const [
+          keywords: [
             'hero',
             'artwork',
             'image',
@@ -1372,6 +1515,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'performance',
             'home',
             'tv',
+            ...labels(
+              kTvHeroArtworkQualityChoices.map((choice) => choice.label),
+            ),
           ],
         ),
       // Every platform now: TV picks among the eight layouts, phones and
@@ -1383,7 +1529,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: tvHomeStyleLabel(
           _isAndroidTv ? _tvHomeStyle : effectiveOffTvHomeStyle(_tvHomeStyle),
         ),
-        keywords: const [
+        keywords: [
           'home',
           'layout',
           'home screen',
@@ -1396,6 +1542,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'view',
           'display',
           'home & display',
+          ...labels(
+            (_isTelevision ? kTvHomeStyleChoices : kOffTvHomeStyleChoices).map(
+              (choice) => choice.label,
+            ),
+          ),
         ],
       ),
       nav(
@@ -1403,7 +1554,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openProfileAppearance,
         subtitle: ProfileGateStyle.labelFor(ProfileGateStyle.cached),
-        keywords: const [
+        keywords: [
           'profile',
           'picker',
           'who is watching',
@@ -1412,7 +1563,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'theater',
           'portrait wall',
           'top shelf',
+          'personalized top shelf',
           'apple tv',
+          ...labels(ProfileGateStyle.options.map((option) => option.label)),
         ],
       ),
       // Android TV only — the stage layout is a TV-canvas design; phones and
@@ -1423,7 +1576,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openDiscoverLayout,
           subtitle: discoverLayoutLabel(_discoverLayout),
-          keywords: const [
+          keywords: [
             'discover',
             'layout',
             'stage',
@@ -1435,6 +1588,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'posters',
             'display',
             'home & display',
+            ...labels(kDiscoverLayoutChoices.map((choice) => choice.label)),
           ],
         ),
       // Android TV only — the rail is TV chrome.
@@ -1444,7 +1598,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openTvSidebarStyle,
           subtitle: tvSidebarStyleLabel(_tvSidebarStyle),
-          keywords: const [
+          keywords: [
             'sidebar',
             'nav',
             'navigation',
@@ -1457,6 +1611,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'dock',
             'display',
             'home & display',
+            'order and names',
+            'rename sidebar',
+            ...labels(kTvSidebarStyleChoices.map((choice) => choice.label)),
           ],
         ),
       // Desktop/tablet — the wide-window rail's own picker.
@@ -1466,7 +1623,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openDesktopSidebarStyle,
           subtitle: desktopSidebarStyleLabel(_desktopSidebarStyle),
-          keywords: const [
+          keywords: [
             'sidebar',
             'nav',
             'navigation',
@@ -1478,6 +1635,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'ipad',
             'display',
             'home & display',
+            'order and names',
+            'rename sidebar',
+            ...labels(
+              kDesktopSidebarStyleChoices.map((choice) => choice.label),
+            ),
           ],
         ),
       // Gated like the IPTV section itself: the picker only matters where
@@ -1488,7 +1650,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openIptvStylePage,
           subtitle: iptvStyleLabel(_iptvStyle),
-          keywords: const [
+          keywords: [
             'iptv',
             'style',
             'theme',
@@ -1503,6 +1665,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'live tv',
             'dvr',
             'live tv & dvr',
+            ...labels(kIptvStyleChoices.map((choice) => choice.label)),
           ],
         ),
       // Ungated: the pref covers every device class — the Spotlight arm has
@@ -1512,7 +1675,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openDebrifyTvStylePage,
         subtitle: debrifyTvStyleLabel(_debrifyTvStyle),
-        keywords: const [
+        keywords: [
           'debrify tv',
           'channels',
           'channel grid',
@@ -1523,6 +1686,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'layout',
           'look',
           'appearance',
+          ...labels(kDebrifyTvStyleChoices.map((choice) => choice.label)),
         ],
       ),
       // Ungated: every platform has a player — phones use the Dart player,
@@ -1533,7 +1697,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openPlayerGuideStylePage,
         subtitle: playerGuideStyleLabel(_playerGuideStyle),
-        keywords: const [
+        keywords: [
           'iptv',
           'player',
           'guide',
@@ -1550,6 +1714,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv',
           'dvr',
           'live tv & dvr',
+          ...labels(
+            playerGuideStyleChoicesForPlatform().map((choice) => choice.label),
+          ),
         ],
       ),
       // Ungated — every platform shows a loader between Play and the
@@ -1559,7 +1726,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openPlayLoaderStylePage,
         subtitle: playLoaderStyleLabel(_playLoaderStyle),
-        keywords: const [
+        keywords: [
           'play',
           'loading',
           'loader',
@@ -1572,6 +1739,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'logo',
           'stages',
           'pipeline',
+          ...labels(
+            PlayLoaderStyleController.options.map((choice) => choice.label),
+          ),
         ],
       ),
       // Android TV only: the skin picker for the NATIVE player's controls.
@@ -1584,7 +1754,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openTvPlayerControlsStylePage,
           subtitle: tvPlayerControlsStyleLabel(_tvPlayerControlsStyle),
-          keywords: const [
+          keywords: [
             'player',
             'controls',
             'dock',
@@ -1598,6 +1768,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'style',
             'look',
             'skin',
+            ...labels(
+              kTvPlayerControlsStyleChoices.map((choice) => choice.label),
+            ),
           ],
         ),
       // Android TV only: the Debrify TV playback-screen style (native
@@ -1608,7 +1781,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Appearance',
           _openDebrifyTvPlayerStylePage,
           subtitle: debrifyTvPlayerStyleLabel(_debrifyTvPlayerStyle),
-          keywords: const [
+          keywords: [
             'debrify tv',
             'magic tv',
             'channel',
@@ -1623,6 +1796,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'style',
             'look',
             'skin',
+            ...labels(
+              kDebrifyTvPlayerStyleChoices.map((choice) => choice.label),
+            ),
           ],
         ),
       if (!PlatformUtil.isTelevision)
@@ -1635,7 +1811,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _playerDockPalette,
             _playerDockSize,
           ),
-          keywords: const [
+          keywords: [
             'player',
             'controls',
             'dock',
@@ -1652,6 +1828,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'small',
             'layout',
             'accent',
+            ...labels(kPlayerDockStyleChoices.map((choice) => choice.label)),
+            ...labels(kPlayerDockPaletteChoices.map((choice) => choice.label)),
+            ...labels(kPlayerDockSizeChoices.map((choice) => choice.label)),
           ],
         ),
       // Settings SEARCH still finds it, deliberately.
@@ -1697,6 +1876,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'light',
           'legacy',
           'classic',
+          ...labels(AppLooks.all.map((look) => look.label)),
           'experimental',
           // Every theme by NAME, derived rather than typed out. The names used
           // to live on the Details Theme entry; withholding that row would
@@ -1711,7 +1891,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openParentsGuideStylePage,
         subtitle: parentsGuideStyleLabel(_parentsGuideStyle),
-        keywords: const [
+        keywords: [
           'parents',
           'parental',
           'guide',
@@ -1721,6 +1901,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'compass',
           'classic',
           'family',
+          ...labels(kParentsGuideStyleChoices.map((choice) => choice.label)),
         ],
       ),
       // Ungated: the details page opens on every platform.
@@ -1729,7 +1910,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openDetailPageStylePage,
         subtitle: detailPageStyleLabel(_detailPageStyle),
-        keywords: const [
+        keywords: [
           'details',
           'detail',
           'page',
@@ -1749,6 +1930,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'filmstrip',
           'console',
           'classic',
+          ...labels(kDetailPageStyleChoices.map((choice) => choice.label)),
         ],
       ),
       if (!PlatformUtil.isTelevision)
@@ -1773,12 +1955,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SettingsRows.player,
         'Playback',
         _openExternalPlayerSettings,
-        keywords: const [
+        keywords: [
           'external player',
-          'vlc',
-          'mpv',
-          'mx player',
           'video player',
+          if (_isAndroid) ...['system app chooser', 'vlc', 'mx player'],
           'subtitle',
           'subtitles',
           'audio track',
@@ -1831,13 +2011,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'language',
           'codec',
           'hevc',
+          'sdr',
+          'dolby vision',
+          'dynamic range',
         ],
       ),
       nav(
         SettingsRows.providerSettings,
         'Search',
         _openProviderSettings,
-        keywords: const ['default provider', 'add torrent', 'debrid'],
+        keywords: const [
+          'default provider',
+          'add torrent',
+          'debrid',
+          'ask every time',
+          'show provider selection dialog',
+          'torbox',
+          'real-debrid',
+          'premiumize',
+          'alldebrid',
+          'pikpak',
+        ],
       ),
       nav(
         SettingsRows.quickPlay,
@@ -1885,6 +2079,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'import',
           'yaml',
           'add engine',
+          'import from file',
+          'remove addon',
+          'delete all addons',
+          'view details',
+          'resources',
+          'id prefixes',
+          'last checked',
         ],
         onTap: () async => MainPageBridge.switchTab?.call(MainTab.addons),
       ),
@@ -1938,6 +2139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'channel',
           'channels',
           'rotation',
+          'series rotation',
           'random',
           'episodes',
           'quality',
@@ -1987,6 +2189,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'path',
             'directory',
             'sd',
+            'choose folder',
+            'reset to default',
+            'another drive',
           ],
         ),
 
@@ -2014,13 +2219,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SettingsRows.createBackup,
         'Data & Backup',
         _createBackup,
-        keywords: const ['export', 'save', 'addons'],
+        keywords: const [
+          'export',
+          'save',
+          'addons',
+          'search engines',
+          'all profiles',
+          'shared connections',
+          'encrypted',
+          'password',
+          'passphrase',
+          'minimum 8 characters',
+          'recovery code',
+        ],
       ),
       nav(
         SettingsRows.restoreBackup,
         'Data & Backup',
         _restoreBackup,
-        keywords: const ['import', 'load'],
+        keywords: const [
+          'import',
+          'load',
+          'encrypted',
+          'password',
+          'passphrase',
+          'unlock backup',
+          'admin pin',
+          'confirm admin pin',
+          'profiles',
+          'connections',
+        ],
       ),
 
       // Updates
@@ -2097,11 +2325,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Real Debrid': Icons.link_rounded,
       'AllDebrid': Icons.link_rounded,
       'PikPak': Icons.link_rounded,
+      'WebDAV': Icons.cloud_rounded,
+      'Indexer Managers': Icons.manage_search_rounded,
       'Engines': Icons.search_rounded,
       'Filters': Icons.filter_list_rounded,
       'Default Provider': Icons.cloud_sync_rounded,
       'Quick Play': Icons.bolt_rounded,
       'Home Screen': Icons.home_rounded,
+      'Launch Animation': Icons.animation_rounded,
+      'Advanced': Icons.tune_rounded,
+      'Sidebar': Icons.view_sidebar_rounded,
+      'Profile Picker': Icons.switch_account_rounded,
       'Playback': Icons.open_in_new_rounded,
       'Debrify TV': Icons.live_tv_rounded,
       'Stremio TV': Icons.smart_display_rounded,
@@ -2111,6 +2345,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Tracking': Icons.sync_alt_rounded,
       'Simkl': Icons.sync_rounded,
       'MDBList': Icons.list_alt_rounded,
+      'Profiles': Icons.people_alt_rounded,
       'Remote': Icons.phonelink_rounded,
     };
     final pageOpeners = <String, Future<void> Function()>{
@@ -2119,11 +2354,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Real Debrid': _openRealDebridSettings,
       'AllDebrid': _openAllDebridSettings,
       'PikPak': _openPikPakSettings,
+      'WebDAV': _openWebDavSettings,
+      'Indexer Managers': _openIndexerManagersSettings,
       'Engines': _openTorrentSettings,
       'Filters': _openFilterSettings,
       'Default Provider': _openProviderSettings,
       'Quick Play': _openQuickPlaySettings,
       'Home Screen': _openHomePageSettings,
+      'Launch Animation': _openLaunchAnimationPage,
+      'Advanced': _openThemeTokensPage,
+      'Sidebar': _openSidebarCustomization,
+      'Profile Picker': _openProfileAppearance,
       'Playback': _openExternalPlayerSettings,
       'Debrify TV': _openDebrifyTvSettings,
       'Stremio TV': _openStremioTvSettings,
@@ -2133,6 +2374,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Tracking': _openTrackingSettings,
       'Simkl': _openSimklSettings,
       'MDBList': _openMdblistSettings,
+      'Profiles': _switchProfile,
       'Remote': _openRemoteControl,
     };
 
@@ -2153,6 +2395,242 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onTap: onTap ?? pageOpeners[page]!,
     );
 
+    List<String> optionLabels(Iterable<String> values) => [
+      for (final value in values) value.toLowerCase(),
+    ];
+
+    List<String> externalPlayerLabels() {
+      if (kIsWeb) return const [];
+      if (Platform.isMacOS) {
+        return optionLabels(
+          ExternalPlayer.values.map((player) => player.displayName),
+        );
+      }
+      if (Platform.isLinux) {
+        return optionLabels(
+          LinuxExternalPlayer.values.map((player) => player.displayName),
+        );
+      }
+      if (Platform.isWindows) {
+        return optionLabels(
+          WindowsExternalPlayer.values.map((player) => player.displayName),
+        );
+      }
+      if (Platform.isIOS) {
+        return optionLabels(
+          iOSExternalPlayer.values
+              .where((player) => !PlatformUtil.isTvOS || player.availableOnTvos)
+              .map((player) => player.displayName),
+        );
+      }
+      return const [];
+    }
+
+    const audioLanguageLabels = [
+      'no preference',
+      'english',
+      'spanish',
+      'french',
+      'german',
+      'italian',
+      'portuguese',
+      'russian',
+      'japanese',
+      'korean',
+      'chinese',
+      'arabic',
+      'hindi',
+      'telugu',
+      'dutch',
+      'polish',
+      'turkish',
+      'swedish',
+      'danish',
+      'norwegian',
+      'finnish',
+    ];
+
+    const subtitleLanguageLabels = [
+      ...audioLanguageLabels,
+      'off',
+      'estonian',
+      'croatian',
+      'serbian',
+      'bosnian',
+      'macedonian',
+      'slovenian',
+      'czech',
+      'slovak',
+      'hungarian',
+      'romanian',
+      'bulgarian',
+      'ukrainian',
+      'greek',
+      'latvian',
+      'lithuanian',
+      'hebrew',
+      'persian',
+      'thai',
+      'vietnamese',
+      'indonesian',
+      'malay',
+      'bengali',
+      'tamil',
+      'marathi',
+      'gujarati',
+      'kannada',
+      'malayalam',
+      'punjabi',
+    ];
+
+    const advancedAppearanceOptions =
+        <({String title, String subtitle, List<String> keywords})>[
+          (
+            title: 'Accent',
+            subtitle: 'The colour used to mean “this one”',
+            keywords: ['color', 'colour', 'theme', 'selected'],
+          ),
+          (
+            title: 'Focus',
+            subtitle: 'The colour of the cursor',
+            keywords: ['cursor', 'focus color', 'focus colour', 'dpad'],
+          ),
+          (
+            title: 'Progress',
+            subtitle: 'Progress bars and watched marks',
+            keywords: ['watched', 'marks', 'bar', 'state', 'colour', 'color'],
+          ),
+          (
+            title: 'Callout',
+            subtitle: 'Badges and highlights',
+            keywords: ['badge', 'highlight', 'colour', 'color'],
+          ),
+          (
+            title: 'Background',
+            subtitle: 'The page behind everything',
+            keywords: ['ground', 'surface', 'page', 'colour', 'color'],
+          ),
+          (
+            title: 'Text',
+            subtitle: 'The ink drawn over the background',
+            keywords: ['ink', 'foreground', 'readability', 'colour', 'color'],
+          ),
+          (
+            title: 'Corners',
+            subtitle: 'How round cards are',
+            keywords: ['radius', 'round', 'square', 'shape', 'cards'],
+          ),
+          (
+            title: 'Buttons',
+            subtitle: 'How round buttons and pills are',
+            keywords: ['pill radius', 'round', 'square', 'shape'],
+          ),
+          (
+            title: 'Titles',
+            subtitle: 'The font used for display titles',
+            keywords: ['display font', 'typeface', 'typography'],
+          ),
+          (
+            title: 'Body',
+            subtitle: 'The font used for everything else',
+            keywords: ['body font', 'typeface', 'typography'],
+          ),
+          (
+            title: 'Cursor',
+            subtitle: 'How a focused item is expressed',
+            keywords: [
+              'focus expression',
+              'ring',
+              'scale',
+              'lift',
+              'invert',
+              'flood',
+              'parallax',
+            ],
+          ),
+          (
+            title: 'Character',
+            subtitle: 'The tempo of app motion',
+            keywords: ['motion', 'animation', 'standard', 'snap', 'glide'],
+          ),
+          (
+            title: 'Entrances',
+            subtitle: 'How new content arrives',
+            keywords: ['motion', 'animation', 'transition'],
+          ),
+          (
+            title: 'When idle',
+            subtitle: 'What happens when interaction stops',
+            keywords: ['idle policy', 'motion', 'animation'],
+          ),
+          (
+            title: 'Separation',
+            subtitle: 'How one surface is distinguished from another',
+            keywords: ['space', 'rule', 'glass', 'fill', 'panel', 'surface'],
+          ),
+          (
+            title: 'Scrims',
+            subtitle: 'The fade behind text on artwork',
+            keywords: ['scrim', 'gradient', 'artwork', 'readability'],
+          ),
+          (
+            title: 'Frames',
+            subtitle: 'How posters are edged',
+            keywords: ['artwork', 'poster', 'border', 'frame'],
+          ),
+          (
+            title: 'Grade',
+            subtitle: 'Colour treatment over artwork',
+            keywords: ['artwork', 'color grade', 'colour grade', 'filter'],
+          ),
+          (
+            title: 'Room colour',
+            subtitle: 'How much the page borrows from selected artwork',
+            keywords: [
+              'reactive room',
+              'artwork',
+              'ambient',
+              'color',
+              'colour',
+            ],
+          ),
+          (
+            title: 'Accent from artwork',
+            subtitle: 'Let poster colour replace the app accent',
+            keywords: ['artwork accent', 'poster', 'dynamic color', 'colour'],
+          ),
+          (
+            title: 'Film grain',
+            subtitle: 'Texture layered over the interface',
+            keywords: ['grain', 'noise', 'texture', 'cinema'],
+          ),
+          (
+            title: 'Sheen',
+            subtitle: 'Highlight along the top of a surface',
+            keywords: ['texture', 'highlight', 'surface'],
+          ),
+          (
+            title: 'Vignette',
+            subtitle: 'Darkening toward the screen edges',
+            keywords: ['texture', 'dark edges', 'artwork'],
+          ),
+          (
+            title: 'Focus glow',
+            subtitle: 'Halo around the cursor',
+            keywords: ['bloom', 'glow', 'focus', 'cursor', 'halo'],
+          ),
+          (
+            title: 'Sound and haptics',
+            subtitle: 'What a press feels and sounds like',
+            keywords: ['feedback', 'sound', 'haptic', 'vibration'],
+          ),
+          (
+            title: 'While loading',
+            subtitle: 'How not-yet-arrived content appears',
+            keywords: ['skeleton', 'loading', 'placeholder', 'shimmer'],
+          ),
+        ];
+
     return [
       // Debrid providers — cache checks, post-torrent action, file handling.
       leaf(
@@ -2165,7 +2643,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Torbox',
         'Post-Torrent Action',
         'What happens after adding a torrent to Torbox',
-        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+        const [
+          'after adding',
+          'post torrent',
+          'none',
+          'let me choose',
+          'play video',
+          'download to device',
+          'open in torbox',
+          'add to playlist',
+          'add to channel',
+          'debrify tv',
+        ],
       ),
       leaf(
         'Torbox',
@@ -2189,7 +2678,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Premiumize',
         'Post-Torrent Action',
         'What happens after adding a torrent to Premiumize',
-        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+        const [
+          'after adding',
+          'post torrent',
+          'none',
+          'let me choose',
+          'play video',
+          'download to device',
+          'open in premiumize',
+          'add to channel',
+          'debrify tv',
+        ],
       ),
       leaf(
         'Premiumize',
@@ -2219,7 +2718,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Real Debrid',
         'Post-Torrent Action',
         'What happens after adding a torrent to Real-Debrid',
-        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+        const [
+          'after adding',
+          'post torrent',
+          'none',
+          'let me choose',
+          'play video',
+          'download to device',
+          'open in real-debrid',
+          'add to playlist',
+          'add to channel',
+          'debrify tv',
+        ],
       ),
       leaf(
         'Real Debrid',
@@ -2250,7 +2760,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'AllDebrid',
         'Post-Torrent Action',
         'What happens after adding a torrent to AllDebrid',
-        const ['after adding', 'post torrent', 'play', 'download'],
+        const [
+          'after adding',
+          'post torrent',
+          'none',
+          'let me choose',
+          'play video',
+          'download to device',
+        ],
       ),
       leaf(
         'AllDebrid',
@@ -2280,13 +2797,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'PikPak',
         'Post-Torrent Action',
         'What happens after adding a torrent to PikPak',
-        const ['after adding', 'post torrent', 'play', 'download', 'open'],
+        const [
+          'after adding',
+          'post torrent',
+          'none',
+          'let me choose',
+          'play video',
+          'download to device',
+          'open in pikpak',
+          'add to playlist',
+          'add to channel',
+          'debrify tv',
+        ],
       ),
       leaf(
         'PikPak',
         'Restrict Access to Folder',
         'Limit PikPak access to a single folder',
-        const ['restrict', 'folder', 'access', 'security'],
+        const [
+          'restrict',
+          'folder',
+          'access',
+          'security',
+          'select folder',
+          'change folder',
+          'remove restriction',
+        ],
       ),
       leaf(
         'PikPak',
@@ -2308,6 +2844,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Reset Device ID',
         'On the PikPak login screen — issue a fresh device ID if sign-in fails',
         const ['device id', 'reset', 'login problem', 'captcha', 'sign in'],
+      ),
+
+      // WebDAV — server editor plus the three persistent switches.
+      leaf(
+        'WebDAV',
+        'WebDAV server',
+        'Add, edit, test or disconnect a WebDAV server',
+        const [
+          'add server',
+          'another server',
+          'server name',
+          'server url',
+          'seedbox',
+          'nas',
+          'username',
+          'password',
+          'app token',
+          'save and test',
+          'disconnect',
+        ],
+      ),
+      leaf('WebDAV', 'Enable WebDAV', 'Show WebDAV features in the app', const [
+        'enable',
+        'disable',
+        'integration',
+        'cloud',
+        'server',
+      ]),
+      leaf(
+        'WebDAV',
+        'Hide from navigation',
+        'Keep WebDAV configured but remove its tab',
+        const ['hide', 'navigation', 'nav', 'tab', 'sidebar'],
+      ),
+      leaf(
+        'WebDAV',
+        'Show videos only',
+        'Hide non-video files while browsing WebDAV',
+        const ['video files', 'filter', 'hide files', 'folders'],
+      ),
+
+      // Jackett / Prowlarr editor. These controls live one dialog below the
+      // manager page, but the manager is the stable deep-link destination.
+      leaf(
+        'Indexer Managers',
+        'Add or edit an indexer manager',
+        'Connect a Jackett or Prowlarr server',
+        const [
+          'add engine',
+          'edit engine',
+          'type',
+          'name',
+          'base url',
+          'api key',
+          'jackett indexer id',
+          'prowlarr',
+          'torznab',
+          'delete engine',
+          'remove manager',
+        ],
+      ),
+      leaf(
+        'Indexer Managers',
+        'Categories',
+        'Limit a manager to Torznab category IDs',
+        const ['category', 'categories', '2000', '5000', 'movies', 'series'],
+      ),
+      leaf(
+        'Indexer Managers',
+        'Max results',
+        'Maximum results returned by this manager',
+        const ['result limit', '25', '50', '100', '200'],
+      ),
+      leaf(
+        'Indexer Managers',
+        'Timeout seconds',
+        'How long to wait for Jackett or Prowlarr',
+        const ['timeout', 'connection', 'slow', '5', '600'],
+      ),
+      leaf(
+        'Indexer Managers',
+        'Enabled',
+        'Include or exclude this manager from torrent searches',
+        const ['enable', 'disable', 'search source', 'engine'],
+      ),
+      leaf(
+        'Indexer Managers',
+        'Test connection',
+        'Check that an indexer manager is reachable',
+        const ['test', 'network', 'reachable', 'jackett', 'prowlarr'],
       ),
 
       // Search / Filter / Provider
@@ -2338,35 +2964,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'source',
           'web-dl',
           'bluray',
+          'remux',
           'brrip',
+          'bdrip',
           'hdrip',
+          'hdtv',
           'cam',
+          'hdcam',
+          'telesync',
           'dvdrip',
+          'scene',
+          'other',
         ],
       ),
       leaf(
         'Filters',
         'Language filter',
         'Default audio-language filter',
-        const ['language', 'audio', 'english', 'hindi', 'multi-audio'],
+        const [
+          'language',
+          'audio',
+          'english',
+          'hindi',
+          'spanish',
+          'french',
+          'german',
+          'russian',
+          'chinese',
+          'japanese',
+          'korean',
+          'italian',
+          'portuguese',
+          'arabic',
+          'multi-audio',
+        ],
+      ),
+      leaf(
+        'Filters',
+        'Dynamic range',
+        'Choose SDR and/or HDR torrent results',
+        const [
+          'sdr',
+          'hdr',
+          'hdr10',
+          'hdr10+',
+          'dolby vision',
+          'dv',
+          'hlg',
+          'exclude hdr',
+          'display',
+        ],
       ),
       leaf('Filters', 'Size filter', 'Default file/pack size filter', const [
         'size',
         'gb',
         'mb',
         'file size',
+        'tiny',
+        'small',
+        'high bitrate',
+        'very large',
+        'remux',
+        'huge',
+        'under 500 mb',
+        'over 40 gb',
       ]),
       leaf(
         'Filters',
-        'Apply filters to Quick Play',
-        'Quick Play prefers filtered sources',
-        const ['quick play', 'apply filters', 'honor', 'sources'],
+        'Clear All',
+        'Remove every saved torrent-search filter',
+        const ['clear filters', 'reset filters', 'remove filters', 'defaults'],
       ),
       leaf(
         'Default Provider',
         'Default Torrent Provider',
         'Which service torrents are added to',
-        const ['default provider', 'ask every time', 'torbox', 'real-debrid'],
+        const [
+          'default provider',
+          'ask every time',
+          'torbox',
+          'real-debrid',
+          'premiumize',
+          'alldebrid',
+          'pikpak',
+        ],
       ),
 
       // Quick Play
@@ -2384,6 +3065,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'choose source',
           'pick source',
           'source list',
+          'always show sources',
           'always ask',
           'smart',
         ],
@@ -2421,13 +3103,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Grab whole seasons, or fetch one episode',
         const ['series', 'packs', 'season pack', 'episode'],
       ),
+      leaf(
+        'Quick Play',
+        'Restore defaults',
+        'Reset movie and series rules, switches and priority order',
+        const ['reset', 'restore', 'default', 'undo', 'priority'],
+      ),
 
       // Home Page
       leaf(
         'Home Screen',
         'Home Rows',
         'Choose which rows appear on Home',
-        const ['home rows', 'rows', 'catalogs', 'customize'],
+        const [
+          'home rows',
+          'rows',
+          'catalogs',
+          'customize',
+          'show',
+          'hide',
+          'arrange',
+          'reorder',
+          'all on',
+          'all off',
+          'invert',
+          'continue watching',
+          'trakt',
+          'simkl',
+          'mdblist',
+          'iptv lists',
+          'watchlist',
+          'favorites',
+          'favourites',
+        ],
+      ),
+      leaf(
+        'Home Screen',
+        'Hero Source',
+        'Choose which catalogs feed the Spotlight hero',
+        const [
+          'spotlight',
+          'hero',
+          'first row',
+          'surprise me',
+          'random',
+          'my picks',
+          'custom',
+          'catalog',
+          'reel',
+        ],
+      ),
+      leaf(
+        'Home Screen',
+        'Landscape Cards',
+        'Use wide 16:9 artwork instead of portrait posters',
+        const [
+          'landscape',
+          'wide',
+          '16:9',
+          'poster',
+          'portrait',
+          'card orientation',
+          'artwork',
+        ],
       ),
       leaf(
         'Home Screen',
@@ -2461,13 +3199,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Home Screen',
-        'Home trailer & sound',
-        'Ambient trailer playback and volume',
-        const ['trailer', 'spotlight', 'hero', 'sound', 'volume', 'autoplay'],
+        'Hide Catalog Add-on Names',
+        'Remove source labels beside Home row headings',
+        const [
+          'hide',
+          'catalog',
+          'addon',
+          'add-on',
+          'source label',
+          'row heading',
+          'home cards',
+        ],
       ),
       // Not on TV: TV has separate Home and Search tabs, so the page hides the
-      // selector there (home_page_settings_page's !isAndroidTvCached block).
-      if (!_isAndroidTv)
+      // selector there (home_page_settings_page's !isTelevision block).
+      if (!_isTelevision)
         leaf(
           'Home Screen',
           'Default view',
@@ -2481,25 +3227,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'startup',
           ],
         ),
-      // Exactly ONE ambient-trailer surface is offered per platform (see
-      // home_page_settings_page): the Home spotlight on TV, the detail-page
-      // backdrop everywhere else. Index each where its row actually exists.
-      if (!_isAndroidTv)
-        leaf(
-          'Home Screen',
-          'Trailer on Detail Page',
-          'Play a trailer behind the movie/series detail page',
-          const ['trailer', 'detail page', 'preview', 'backdrop', 'autoplay'],
-        ),
-      if (_isAndroidTv)
-        leaf(
-          'Home Screen',
-          'Trailer on Home Spotlight',
-          'Play a trailer in the Home and Discover hero',
-          const ['trailer', 'spotlight', 'hero', 'ambient', 'autoplay'],
-        ),
+      // Both ambient-trailer surfaces now exist on every platform.
+      leaf(
+        'Home Screen',
+        'Trailer on Home Spotlight',
+        'Play a trailer in the Home and Discover hero',
+        const ['trailer', 'spotlight', 'hero', 'ambient', 'autoplay'],
+      ),
+      leaf(
+        'Home Screen',
+        'Trailer on Detail Page',
+        'Play a trailer behind the movie/series detail page',
+        const ['trailer', 'detail page', 'preview', 'backdrop', 'autoplay'],
+      ),
+      leaf(
+        'Home Screen',
+        'Trailer Sound',
+        'Play ambient Home and detail-page trailers with audio',
+        const ['trailer', 'sound', 'audio', 'mute', 'silent', 'ambient'],
+      ),
+      leaf(
+        'Home Screen',
+        'Trailer volume',
+        'Set the volume used by ambient trailers',
+        const ['trailer', 'volume', 'sound', 'audio', 'percent', 'ambient'],
+      ),
       // TV only: the native hardware-plane renderer for those trailers.
-      if (_isAndroidTv)
+      if (_isTelevision)
         leaf(
           'Home Screen',
           'Native Trailer Surface',
@@ -2516,30 +3270,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
 
+      // Nested appearance controls that are not represented by their picker
+      // choice alone.
+      leaf(
+        'Launch Animation',
+        'Match the app theme',
+        'Use the active Look\'s accent colour for the launch ident',
+        const [
+          'launch',
+          'animation',
+          'ident',
+          'colour',
+          'color',
+          'accent',
+          'look',
+          'theme',
+        ],
+      ),
+      leaf(
+        'Sidebar',
+        'Order & Names',
+        'Reorder and rename navigation destinations',
+        const [
+          'sidebar items',
+          'navigation',
+          'reorder',
+          'arrange',
+          'rename',
+          'labels',
+          'restore default order and names',
+          'reset sidebar',
+        ],
+      ),
+      for (final option in advancedAppearanceOptions)
+        leaf('Advanced', option.title, option.subtitle, option.keywords),
+      leaf(
+        'Advanced',
+        'Reset appearance overrides',
+        'Return all or one section of advanced tokens to the active Look',
+        const [
+          'reset',
+          'restore',
+          'clear changes',
+          'follow the look',
+          'reset colour',
+          'reset ground',
+          'reset shape',
+          'reset type',
+          'reset focus',
+          'reset motion',
+          'reset surfaces',
+          'reset artwork',
+          'reset texture',
+          'reset feedback',
+        ],
+      ),
+      if (PlatformUtil.isTvOS)
+        leaf(
+          'Profile Picker',
+          'Personalized Top Shelf',
+          'Show the unlocked active profile on the Apple TV Home Screen',
+          const [
+            'apple tv',
+            'tvos',
+            'top shelf',
+            'profile',
+            'home screen',
+            'personalization',
+          ],
+        ),
+
       // Player Settings
       leaf('Playback', 'Default Player', 'Which player plays videos', const [
         'default player',
         'debrify player',
         'external',
+        'external player',
+        'built-in',
+        'system app chooser',
         'deovr',
       ]),
       leaf(
         'Playback',
         'Default Subtitle language',
         'Preferred subtitle language',
-        const ['subtitle', 'subtitles', 'language', 'captions'],
+        const [
+          'subtitle',
+          'subtitles',
+          'language',
+          'captions',
+          ...subtitleLanguageLabels,
+        ],
       ),
       leaf(
         'Playback',
         'Default Audio language',
         'Preferred audio language / track',
-        const ['audio', 'language', 'track', 'dub'],
+        const ['audio', 'language', 'track', 'dub', ...audioLanguageLabels],
       ),
       leaf(
         'Playback',
         'Subtitle Appearance',
         'Subtitle size, style, color, background & font',
-        const [
+        [
           'subtitle',
           'size',
           'style',
@@ -2549,13 +3382,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'bold',
           'outline',
           'captions',
+          ...optionLabels(SubtitleSize.options.map((option) => option.label)),
+          ...optionLabels(SubtitleStyle.options.map((option) => option.label)),
+          ...optionLabels(SubtitleColor.options.map((option) => option.label)),
+          ...optionLabels(
+            SubtitleBackground.options.map((option) => option.label),
+          ),
+          ...optionLabels(
+            SubtitleFont.builtInOptions.map((option) => option.label),
+          ),
         ],
       ),
       leaf(
         'Playback',
         'Default Aspect Ratio',
         'Default video aspect / zoom',
-        const ['aspect', 'ratio', 'zoom', 'fit', 'fill'],
+        const [
+          'aspect',
+          'ratio',
+          'zoom',
+          'cinema zoom',
+          'fit',
+          'fill',
+          'contain',
+          'cover',
+          'fit width',
+          'fit height',
+          '16:9',
+          '4:3',
+          '21:9',
+          '1:1',
+          '3:2',
+          '5:4',
+        ],
       ),
       leaf(
         'Playback',
@@ -2605,7 +3464,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Playback',
         'Network & Buffering',
         'Connection patience & stream buffer for slow sources',
-        const [
+        [
           'network',
           'buffer',
           'buffering',
@@ -2615,14 +3474,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'slow',
           'stall',
           'patience',
+          'auto-retry',
+          'read-ahead',
+          ...optionLabels(NetworkTuning.patienceOptions.values),
+          ...optionLabels(NetworkTuning.bufferOptions.values),
         ],
       ),
-      leaf(
-        'Playback',
-        'Allow system audio effects',
-        'Let equalizer apps process audio (Android)',
-        const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
-      ),
+      if (_isAndroid)
+        leaf(
+          'Playback',
+          'Allow system audio effects',
+          'Let equalizer apps process audio (Android)',
+          const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
+        ),
       if (_isAndroid)
         leaf(
           'Playback',
@@ -2666,6 +3530,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '10-bit',
           ],
         ),
+      if (PlatformUtil.isTvOS)
+        leaf(
+          'Playback',
+          'Force stereo audio',
+          'Always downmix Apple TV playback to two channels',
+          const [
+            'stereo',
+            'downmix',
+            '2 channels',
+            'surround',
+            'noisy',
+            'distorted',
+            'receiver',
+            'tvos',
+          ],
+        ),
+      if (PlatformUtil.isTvOS)
+        leaf(
+          'Playback',
+          'Use the previous audio engine',
+          'Apple TV audio compatibility option',
+          const [
+            'legacy audio',
+            'old audio engine',
+            'audio output',
+            'compatibility',
+            'atmos',
+            'no sound',
+            'tvos',
+          ],
+        ),
       if (_isAndroid && PlatformUtil.isAndroidTvCached)
         leaf(
           'Playback',
@@ -2687,13 +3582,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Playback',
           'Video renderer',
           'Choose the Android phone/tablet video output path',
-          const [
+          [
             'renderer',
             'mediacodec',
             'direct surface',
             'battery',
             'performance',
             'hardware decoding',
+            ...optionLabels(
+              AndroidVideoRendererMode.values.map((mode) => mode.label),
+            ),
+          ],
+        ),
+      if (_isAndroid && PlatformUtil.isAndroidTvCached)
+        leaf(
+          'Playback',
+          'Night Mode',
+          'Boost quiet sounds for late-night viewing',
+          const [
+            'night',
+            'quiet',
+            'volume',
+            'dynamic range compression',
+            'sleeping baby',
+            'low',
+            'medium',
+            'high',
+            'higher',
+            'extreme',
+            'max',
+            'off',
           ],
         ),
       if (PlatformUtil.supportsSubtitleAutoSync)
@@ -2701,7 +3619,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Playback',
           'Auto-sync addon subtitles',
           'Align downloaded subtitles to the audio automatically',
-          const ['subtitle', 'sync', 'auto', 'align', 'timing', 'offset'],
+          const [
+            'subtitle',
+            'sync',
+            'auto',
+            'align',
+            'timing',
+            'offset',
+            'experimental',
+          ],
         ),
       if (_isPhone)
         leaf(
@@ -2718,12 +3644,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'horizontal',
           ],
         ),
-      leaf(
-        'Playback',
-        'Preferred external player',
-        'Choose the external player app',
-        const ['external', 'vlc', 'mpv', 'mx player', 'custom command'],
-      ),
+      if (_preferredExternalPlayerSupported)
+        leaf(
+          'Playback',
+          'Preferred external player',
+          'Choose the external player app',
+          [
+            'external',
+            'player app',
+            'system default',
+            'custom command',
+            'custom url scheme',
+            ...externalPlayerLabels(),
+          ],
+        ),
       if (_customPlayerCommandSupported)
         leaf(
           'Playback',
@@ -2735,13 +3669,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'launch',
             'arguments',
             'external',
+            'save command',
+            'command template',
           ],
         ),
       leaf(
         'Playback',
         'Import Custom Font',
         'Add your own TTF/OTF font for subtitles',
-        const ['font', 'ttf', 'otf', 'import font', 'custom font', 'subtitle'],
+        const [
+          'font',
+          'ttf',
+          'otf',
+          'import font',
+          'custom font',
+          'remove font',
+          'delete font',
+          'subtitle',
+        ],
       ),
       // Android only: the page disables the DeoVR mode off Android and builds
       // its format controls under `Platform.isAndroid`.
@@ -2750,7 +3695,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Playback',
           'VR / DeoVR format',
           'Screen type, stereo mode and format detection for DeoVR',
-          const [
+          [
             'vr',
             'deovr',
             'stereo',
@@ -2761,15 +3706,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'side by side',
             'over under',
             'format',
+            'auto-detect format from filename',
+            'show format selection dialog',
+            ...optionLabels(deovr.screenTypeLabels.values),
+            ...optionLabels(deovr.stereoModeLabels.values),
           ],
         ),
 
       // Debrify TV
       leaf(
         'Debrify TV',
-        'Channel result limits',
-        'Per-engine channel size & result caps',
-        const ['limits', 'result limit', 'channel max', 'engines', 'nsfw'],
+        'Keyword Threshold',
+        'Choose when Debrify TV fetches more or fewer results per keyword',
+        const ['keyword', 'threshold', 'results', 'fetch', 'global tv mode'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Batch Size',
+        'Number of keywords processed in each batch',
+        const ['batch', 'keywords', 'performance', 'global tv mode'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Min Torrents Per Keyword',
+        'Skip keywords with fewer torrent results',
+        const ['minimum', 'torrents', 'keyword', 'skip', 'result count'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Max Keywords (Quick Play)',
+        'Limit the keywords used in Quick Play mode',
+        const ['maximum', 'keyword limit', 'quick play', 'performance'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Avoid NSFW Content',
+        'Filter adult content out of Debrify TV results',
+        const ['nsfw', 'adult', 'safe', 'filter', 'content'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Prepare Torrents in Background',
+        'Pre-add upcoming Real-Debrid and AllDebrid torrents',
+        const [
+          'background',
+          'prefetch',
+          'pre-fetch',
+          'prepare',
+          'faster playback',
+          'real-debrid',
+          'alldebrid',
+        ],
+      ),
+      leaf(
+        'Debrify TV',
+        'Engine TV Mode',
+        'Enable or disable each search engine for Debrify TV',
+        const ['engine', 'tv mode enabled', 'tv mode disabled', 'toggle'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Small Channel Limit',
+        'Maximum results for each engine in small channel mode',
+        const ['small channel', 'result limit', 'max results', 'engine'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Large Channel Limit',
+        'Maximum results for each engine in large channel mode',
+        const ['large channel', 'result limit', 'max results', 'engine'],
+      ),
+      leaf(
+        'Debrify TV',
+        'Quick Play Limit',
+        'Maximum results for each engine in Quick Play mode',
+        const ['quick play', 'result limit', 'max results', 'engine'],
       ),
       leaf(
         'Debrify TV',
@@ -2782,8 +3793,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       leaf(
         'Stremio TV',
         'Rotation Interval',
-        'How often the channel changes (movies and series)',
-        const ['rotation', 'interval', 'minutes', 'change', 'shuffle'],
+        'How often the now-playing item changes on movie channels',
+        const ['rotation', 'interval', 'minutes', 'movie', 'change', 'shuffle'],
+      ),
+      leaf(
+        'Stremio TV',
+        'Series Rotation Interval',
+        'How often the episode changes on series channels',
+        const [
+          'series',
+          'episode',
+          'rotation',
+          'interval',
+          'minutes',
+          'change',
+          'schedule',
+        ],
       ),
       leaf(
         'Stremio TV',
@@ -2795,7 +3820,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Stremio TV',
         'Debrid Provider',
         'Which provider resolves Stremio TV torrent streams',
-        const ['debrid', 'provider', 'real-debrid', 'torbox', 'pikpak'],
+        const ['debrid', 'provider', 'auto', 'real-debrid', 'torbox', 'pikpak'],
       ),
       leaf(
         'Stremio TV',
@@ -2844,8 +3869,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'url',
           'file',
           'import',
+          'from url',
+          'from file',
+          'browse files',
+          'name your playlist',
         ],
         onTap: _openIptvAddSource,
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Edit source',
+        'Change a playlist name, URL, guide or Xtream credentials',
+        const [
+          'edit playlist',
+          'rename source',
+          'm3u url',
+          'server',
+          'username',
+          'password',
+          'xtream',
+          'xmltv',
+          'epg',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Remove source',
+        'Delete an IPTV source while keeping lists and watch history',
+        const [
+          'remove playlist',
+          'delete source',
+          'disconnect',
+          'shared source',
+          'keep lists',
+          'watch history',
+        ],
       ),
       leaf(
         'IPTV Playlists',
@@ -2874,6 +3932,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'categories',
           'adult',
           'restore',
+          'show all',
+          'hide all',
+          'filter categories',
+          'live tv',
+          'movies',
+          'series',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Create list',
+        'Make a custom list for saved IPTV channels',
+        const [
+          'channel lists',
+          'new list',
+          'saved channels',
+          'favorites',
+          'favourites',
+          'collection',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Manage channel lists',
+        'Rename, reorder or delete a custom IPTV list',
+        const [
+          'rename list',
+          'move up',
+          'move down',
+          'reorder',
+          'delete list',
+          'remove list',
+          'channels are kept',
         ],
       ),
       leaf(
@@ -2884,16 +3975,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'IPTV Playlists',
-        'Refresh playlist',
+        'Refresh now',
         'Re-fetch channels and rebuild the catalog',
         const [
           'refresh',
+          'refresh playlist',
           'reload',
           'update',
           'rebuild',
           'catalog',
           're-fetch',
           'missing channels',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Start on a channel',
+        'Open straight into live TV when Debrify starts',
+        const [
+          'startup channel',
+          'startup',
+          'boot',
+          'launch',
+          'autoplay',
+          'live tv',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Startup channel choice',
+        'Start on the last watched channel or a specific channel',
+        const [
+          'last watched channel',
+          'specific channel',
+          'choose channel',
+          'change channel',
+          'pinned channel',
+          'startup mode',
+        ],
+      ),
+      leaf(
+        'IPTV Playlists',
+        'Track movies and series',
+        'Add IPTV on-demand playback to Continue Watching',
+        const [
+          'continue watching',
+          'iptv history',
+          'resume',
+          'vod',
+          'movies',
+          'series',
+          'shelf',
         ],
       ),
       // The recording switches live on the IPTV page, but only where the
@@ -2974,6 +4106,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ],
 
+      if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) ...[
+        leaf(
+          'Profiles',
+          'Ask who\'s watching at startup',
+          'Show the profile picker whenever Debrify opens',
+          const [
+            'always ask',
+            'profile behavior',
+            'profile picker',
+            'startup',
+            'launch',
+            'who is watching',
+          ],
+        ),
+        leaf(
+          'Profiles',
+          'Send profiles to TV',
+          'Transfer profiles, connections and PINs to another device',
+          const [
+            'household',
+            'transfer',
+            'pair',
+            'remote',
+            'connections',
+            'pins',
+            'setup',
+          ],
+        ),
+        leaf(
+          'Profiles',
+          'Manage profiles',
+          'Create, edit, switch, enable, disable or delete a profile',
+          const [
+            'current profile',
+            'other profiles',
+            'create profile',
+            'edit profile',
+            'switch profile',
+            'delete profile',
+            'disable profile',
+            'enable profile',
+            'name',
+            'avatar',
+            'save name and avatar',
+            'choose image or gif',
+            'pin',
+            'pin protection',
+            'set pin',
+            'change pin',
+            'remove pin',
+            'access',
+            'admin',
+            'member',
+            'kid',
+            'profile diagnostics',
+          ],
+        ),
+      ],
+
       // Trackers — the pages behind the connection cards.
       leaf(
         'Tracking',
@@ -3014,7 +4205,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'MDBList',
           'MDBList API Key',
           'Connect MDBList and browse your lists',
-          const ['api key', 'lists', 'liked', 'supporter', 'usage'],
+          const [
+            'api key',
+            'add api key',
+            'logout',
+            'lists',
+            'liked',
+            'supporter',
+            'usage',
+            'mdblist preferences',
+            'open mdblist.com/preferences',
+          ],
         ),
 
       // Remote
@@ -3031,6 +4232,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'push addons',
           'handoff',
           'd-pad',
+          'paired remote devices',
+          'manage pairing',
         ],
       ),
       leaf(
@@ -3045,6 +4248,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'addons',
           'channels',
           'sessions',
+          'paired remote devices',
+          'manage pairing',
         ],
       ),
     ];
@@ -4964,6 +6169,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _desktopSidebarStyle = style;
     });
+  }
+
+  Future<void> _openSidebarCustomization() async {
+    await pushSettingsPage(context, const SidebarCustomizationPage());
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _openProfileAppearance() async {
