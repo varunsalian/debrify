@@ -50,6 +50,7 @@ import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
 import '../profiles/profile_authorization.dart';
 import '../profiles/profile_bootstrap.dart';
+import '../profiles/profile_database_snapshot.dart';
 import '../profiles/profile_avatar_ingest.dart';
 import '../profiles/profile_avatar_policy.dart';
 import '../profiles/portable_profile_package.dart';
@@ -1572,12 +1573,17 @@ class RemoteCommandRouter {
     final rebuildableCachesOmitted = package.omissions.containsKey(
       'rebuildableDatabaseCachesOmitted',
     );
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
+      package.omissions,
+    );
     RemoteTransferDiagnostics.record(
       'receiver_confirmation_shown',
       fields: <String, Object?>{
         'trace': trace,
         'profiles': package.profiles.length,
         'cacheCompacted': rebuildableCachesOmitted,
+        'debrifyTvChannelsOmitted': debrifyTvOmission?.channels ?? 0,
+        'debrifyTvHashesOmitted': debrifyTvOmission?.savedHashes ?? 0,
       },
     );
     final confirmed =
@@ -1593,6 +1599,11 @@ class RemoteCommandRouter {
               'not overwritten; only the unused automatic setup profile is '
               'removed. Profiles keep their PINs when the transfer '
               'carries them.'
+              '${debrifyTvOmission?.isEmpty == false ? '\n\nDebrify TV was '
+                        'excluded when this transfer was compacted '
+                        '(${debrifyTvOmission!.contentsLabel}). No empty '
+                        'channels will be created. After importing, send '
+                        'them separately with Remote → Debrify TV Channels.' : ''}'
               '${rebuildableCachesOmitted ? '\n\nRebuildable catalog and EPG '
                         'caches were compacted for transport. Playlists, '
                         'favorites, history, numbering, and settings are '
@@ -1702,7 +1713,8 @@ class RemoteCommandRouter {
         ok: true,
         message:
             'TV imported ${report.profilesImported} profiles and '
-            '${report.resourcesImported} connections',
+            '${report.resourcesImported} connections'
+            '${debrifyTvOmission?.isEmpty == false ? '; Debrify TV channels were not included' : ''}',
       );
       if (!acknowledged) {
         RemoteTransferDiagnostics.record(
@@ -1735,7 +1747,8 @@ class RemoteCommandRouter {
       _showSnackBar(
         'Imported ${report.profilesImported} profiles and '
         '${report.resourcesImported} connections from $sender.'
-        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}',
+        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}'
+        '${debrifyTvOmission?.isEmpty == false ? ' Debrify TV channels were not included; send them separately from Remote.' : ''}',
       );
       if (receivingDuringOnboarding) {
         try {

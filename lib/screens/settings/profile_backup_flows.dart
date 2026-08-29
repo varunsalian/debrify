@@ -17,6 +17,7 @@ import '../../services/profiles/portable_profile_package.dart';
 import '../../services/profiles/profile_app_lifecycle_participant.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_database_snapshot.dart';
 import '../../services/profiles/profile_lifecycle.dart';
 import '../../services/profiles/profile_package_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
@@ -88,6 +89,7 @@ class ProfileBackupFlows {
     final canExportAll =
         actor.role == UserProfileRole.admin &&
         actor.allows(ProfileFeature.manageProfiles);
+    if (!context.mounted) return;
     final passphrase = TextEditingController();
     var allProfiles = false;
     final confirmed = await showSettingsDialog<bool>(
@@ -164,46 +166,73 @@ class ProfileBackupFlows {
       registry: registry,
       resources: resourceService,
     );
-    var databaseCachesCompacted = false;
-    final bytes = await _profileBackupProgress<Uint8List>(
-      'Packaging profile data…',
-      (setStage) async {
-        Future<PortableProfilePackage> export({required bool compact}) =>
-            allProfiles
-            ? service.exportAllProfiles(
-                context: authorization,
-                includeSecrets: true,
-                compactDatabaseSnapshots: compact,
-              )
-            : service.exportProfile(
-                context: authorization,
-                scope: ProfileRuntime.capture(),
-                includeSecrets: true,
-                sanitized: false,
-                compactDatabaseSnapshots: compact,
-              );
+    Future<PortableProfilePackage> export({required bool compact}) =>
+        allProfiles
+        ? service.exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            compactDatabaseSnapshots: compact,
+          )
+        : service.exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+            compactDatabaseSnapshots: compact,
+          );
 
-        var package = await export(compact: false);
-        databaseCachesCompacted = package.omissions.containsKey(
-          'rebuildableDatabaseCachesOmitted',
+    late PortableProfilePackage package;
+    Uint8List? encodedBytes;
+    var compactRetryRequired = false;
+    await _profileBackupProgress<void>('Packaging profile data…', (
+      setStage,
+    ) async {
+      package = await export(compact: false);
+      // An automatic raw-database compaction can already have produced an
+      // omitted package. Size it here, but obtain consent before saving it.
+      setStage('Encrypting backup — this can take a minute…');
+      try {
+        encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
+          package,
+          password,
         );
-        setStage('Encrypting backup — this can take a minute…');
-        try {
-          return await PortableProfilePackage.encodeEncryptedBytes(
-            package,
+      } catch (error) {
+        if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
+        compactRetryRequired = true;
+      }
+    });
+    if (compactRetryRequired) {
+      package = await _profileBackupProgress<PortableProfilePackage>(
+        'Compacting the backup…',
+        (setStage) async {
+          final compacted = await export(compact: true);
+          setStage('Encrypting compacted backup — this can take a minute…');
+          encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
+            compacted,
             password,
           );
-        } catch (error) {
-          if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
-          setStage('Compacting rebuildable catalog caches…');
-          package = await export(compact: true);
-          databaseCachesCompacted = package.omissions.containsKey(
-            'rebuildableDatabaseCachesOmitted',
-          );
-          setStage('Encrypting compacted backup — this can take a minute…');
-          return PortableProfilePackage.encodeEncryptedBytes(package, password);
-        }
-      },
+          return compacted;
+        },
+      );
+    }
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
+      package.omissions,
+    );
+    if (debrifyTvOmission?.isEmpty == false) {
+      final continueWithoutChannels = await _confirmDebrifyTvOmission(
+        debrifyTvOmission!,
+        allProfiles: allProfiles,
+      );
+      if (!continueWithoutChannels) return;
+    }
+    final bytes =
+        encodedBytes ??
+        await _profileBackupProgress<Uint8List>(
+          'Encrypting backup — this can take a minute…',
+          (_) => PortableProfilePackage.encodeEncryptedBytes(package, password),
+        );
+    final databaseCachesCompacted = package.omissions.containsKey(
+      'rebuildableDatabaseCachesOmitted',
     );
     final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     final saved = await saveBackupFile(
@@ -218,13 +247,51 @@ class ProfileBackupFlows {
       SnackBar(
         content: Text(
           '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved'
-          '${databaseCachesCompacted ? '. Rebuildable catalog/EPG caches were compacted; user data is included.' : ''}',
+          '${debrifyTvOmission?.isEmpty == false
+              ? '. Debrify TV was excluded as confirmed; send those channels through Remote.'
+              : databaseCachesCompacted
+              ? '. Rebuildable catalog/EPG caches were compacted.'
+              : ''}',
         ),
-        duration: databaseCachesCompacted
+        duration: debrifyTvOmission?.isEmpty == false || databaseCachesCompacted
             ? const Duration(seconds: 7)
             : const Duration(seconds: 4),
       ),
     );
+  }
+
+  Future<bool> _confirmDebrifyTvOmission(
+    DebrifyTvBackupOmission omission, {
+    required bool allProfiles,
+  }) async {
+    if (!context.mounted) return false;
+    return await showSettingsDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Continue without Debrify TV?'),
+            content: Text(
+              'This backup had to be compacted to fit. Debrify TV will not '
+              'be included: ${omission.contentsLabel} will be left out. No '
+              'empty channels will be created when it is restored.\n\n'
+              'To transfer those channels with their playable pools, use '
+              'Remote → Debrify TV Channels from the source device after '
+              'restoring this backup.'
+              '${allProfiles && omission.profilesAffected > 1 ? ' Repeat the channel transfer for each affected profile.' : ''}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Continue without Debrify TV'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   /// Saves backup bytes to a user-chosen location — or the best local one.
@@ -444,13 +511,23 @@ class ProfileBackupFlows {
     final legacyDatabasesMissing =
         package.omissions['libraryDatabasesOmitted'] == true ||
         package.omissions['libraryDatabasesTooLarge'] != null;
-    final databaseNotice = legacyDatabasesMissing
-        ? 'Warning: this older backup omitted one or more library databases; '
-              'those playlists/history rows cannot be recovered from it.'
-        : package.omissions.containsKey('rebuildableDatabaseCachesOmitted')
-        ? 'Rebuildable catalog and EPG caches were compacted; playlists, '
-              'favorites, history, numbering, and settings are included.'
-        : '';
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
+      package.omissions,
+    );
+    final databaseNotices = <String>[
+      if (legacyDatabasesMissing)
+        'Warning: this older backup omitted one or more library databases; '
+            'those playlists/history rows cannot be recovered from it.',
+      if (debrifyTvOmission?.isEmpty == false)
+        'Debrify TV was excluded when this backup was compacted '
+            '(${debrifyTvOmission!.contentsLabel}). No empty Debrify TV '
+            'channels will be created. Transfer them with their saved pools '
+            'using Remote → Debrify TV Channels from the source device.',
+      if (package.omissions.containsKey('rebuildableDatabaseCachesOmitted'))
+        'Rebuildable IPTV catalog and EPG caches were compacted; playlists, '
+            'favorites, history, numbering, and settings are included.',
+    ];
+    final databaseNotice = databaseNotices.join('\n\n');
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final actor = await authorization.validate(registry);
     if (graphRestore &&
@@ -464,6 +541,7 @@ class ProfileBackupFlows {
               'temporary setup Admin if it is untouched. If no imported '
               'Admin can take over, the setup Admin remains for recovery.'
         : 'Your current Admin remains the recovery profile.';
+    if (!context.mounted) return null;
     final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

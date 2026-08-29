@@ -244,8 +244,9 @@ const Duration kChunkResendCacheTtl = Duration(seconds: 90);
 const int kMaxProfileGraphWireBytes = 10 * 1024 * 1024;
 
 /// Soft expanded-JSON threshold for a full profile graph. Above this size the
-/// sender re-exports after removing only explicitly rebuildable database
-/// caches, keeping the receiver's usual working set near 32 MB.
+/// sender offers a compact re-export: rebuildable IPTV caches are removed and
+/// Debrify TV channels are omitted together with their saved hash pools after
+/// explicit user confirmation, keeping the receiver's working set near 32 MB.
 const int kProfileGraphCompactionThresholdBytes = 32 * 1024 * 1024;
 
 /// Hard JSON limit after an authenticated profile-graph gzip wrapper is

@@ -68,6 +68,7 @@ class PortableProfilePackage {
     'profiles',
     'historyAndResume',
     'localFiles',
+    DebrifyTvBackupOmission.key,
   };
 
   /// Format version read from the source envelope. Newly created packages use
@@ -486,6 +487,15 @@ class PortableProfilePackage {
       );
     }
     _validateTree(body, 0, _Counter(), path: r'$');
+    final omissions = body['omissions'];
+    if (omissions is Map &&
+        omissions.containsKey(DebrifyTvBackupOmission.key) &&
+        DebrifyTvBackupOmission.fromOmissions(
+              Map<String, dynamic>.from(omissions),
+            ) ==
+            null) {
+      throw const FormatException('Invalid Debrify TV backup omission');
+    }
     final profiles = body['profiles'];
     final resources = body['resources'];
     final sections = body['sections'];
@@ -586,8 +596,9 @@ class PortableProfilePackage {
     }
   }
 
-  /// True only for the bounded-package error callers may safely retry after
-  /// pruning the documented rebuildable database caches.
+  /// True only for the bounded-package error callers may retry in compact
+  /// mode. Compact mode can omit Debrify TV, so callers must obtain explicit
+  /// user consent before saving or sending the resulting package.
   static bool isExportTooLarge(Object error) =>
       error is ProfilePackageTooLargeException;
 

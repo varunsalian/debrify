@@ -20,6 +20,7 @@ import '../../services/stremio_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_database_snapshot.dart';
 import '../../services/profiles/profile_package_service.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/connection_resource_service.dart';
@@ -737,6 +738,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     final trace = RemoteTransferDiagnostics.traceToken(requestId);
     final startedAt = Stopwatch()..start();
     var phase = 'initialize';
+    var cancelled = false;
     RemoteTransferDiagnostics.record(
       'sender_graph_start',
       fields: <String, Object?>{'trace': trace},
@@ -790,6 +792,39 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             cipher: DeviceKeyProvider.cipher,
           ),
         );
+        Future<bool> confirmDebrifyTvOmission(
+          PortableProfilePackage candidate,
+        ) async {
+          final omission = DebrifyTvBackupOmission.fromOmissions(
+            candidate.omissions,
+          );
+          if (omission == null || omission.isEmpty) {
+            return true;
+          }
+          phase = 'confirm_debrify_tv_omission';
+          RemoteTransferDiagnostics.record(
+            'sender_compaction_confirmation_shown',
+            fields: <String, Object?>{
+              'trace': trace,
+              'channels': omission.channels,
+              'savedHashes': omission.savedHashes,
+              'profiles': omission.profilesAffected,
+            },
+          );
+          final accepted = await _confirmProfileGraphDebrifyTvOmission(
+            omission,
+          );
+          if (!accepted) {
+            cancelled = true;
+            RemoteTransferDiagnostics.record(
+              'sender_compaction_confirmation_declined',
+              fields: <String, Object?>{'trace': trace},
+            );
+            return false;
+          }
+          return true;
+        }
+
         phase = 'export_full';
         RemoteTransferDiagnostics.record(
           'sender_export_start',
@@ -847,10 +882,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               wireBytes: encoded.wireBytes,
               expandedBytes: encoded.expandedBytes,
             )) {
-          // Remove only explicitly rebuildable cache tables. Durable playlist,
-          // favorites, numbering, watch-history, and hidden-channel rows stay
-          // in the snapshots; an oversized durable graph fails instead of
-          // silently becoming an incomplete transfer.
+          // Keep durable IPTV/history rows, but omit Debrify TV as a complete
+          // feature. A channel definition without its saved hashes is not a
+          // usable restore, so the user must explicitly accept this package.
           phase = 'export_compacted';
           RemoteTransferDiagnostics.record(
             'sender_export_start',
@@ -901,6 +935,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           );
           throw const ProfilePackageTooLargeException();
         }
+        if (!await confirmDebrifyTvOmission(package)) return false;
         phase = 'wire_send';
         RemoteTransferDiagnostics.record(
           'sender_wire_start',
@@ -962,7 +997,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       );
       await resultSubscription.cancel();
       setState(() => _transferring = false);
-      _toast('Profile transfer failed', error: true);
+      if (cancelled) {
+        _toast('Profile transfer cancelled');
+      } else {
+        _toast('Profile transfer failed', error: true);
+      }
       return;
     }
     // Delivered is not applied: the TV user still confirms, authorization
@@ -1004,6 +1043,38 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     } finally {
       await resultSubscription.cancel();
     }
+  }
+
+  Future<bool> _confirmProfileGraphDebrifyTvOmission(
+    DebrifyTvBackupOmission omission,
+  ) async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Continue without Debrify TV?'),
+            content: Text(
+              'This profile transfer had to be compacted to fit on the TV. '
+              'Debrify TV will not be included: ${omission.contentsLabel} '
+              'will be left out. No empty channels will be created.\n\n'
+              'After the profile transfer, use Remote → Debrify TV Channels '
+              'to send those channels with their playable pools.'
+              '${omission.profilesAffected > 1 ? ' Repeat the channel transfer for each affected profile.' : ''}',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Continue without Debrify TV'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<bool> _sendConfigItem(

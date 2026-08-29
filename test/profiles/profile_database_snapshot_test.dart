@@ -130,6 +130,61 @@ void main() {
     }
   });
 
+  test('full snapshot keeps Debrify TV channels and saved hashes', () async {
+    final sourceScope = ProfileScope(
+      profileId: 'profile-full-tv-source',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final destinationScope = ProfileScope(
+      profileId: 'profile-full-tv-destination',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final documents = await AppStorage.documents();
+    final source = sourceScope.fileIn(documents, 'documents', 'debrify_tv.db');
+    await source.parent.create(recursive: true);
+    final database = await openDatabase(source.path, singleInstance: false);
+    await database.execute(
+      'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+    );
+    await database.execute(
+      'CREATE TABLE tv_cached_torrents '
+      '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL)',
+    );
+    await database.insert('tv_channels', <String, Object?>{
+      'channel_id': 'channel-full',
+    });
+    await database.insert('tv_cached_torrents', <String, Object?>{
+      'channel_id': 'channel-full',
+      'infohash': 'hash-full',
+    });
+    await database.close();
+
+    final export = await ProfileDatabaseSnapshot.export(sourceScope);
+    expect(export.compacted, isEmpty);
+    expect(export.debrifyTvOmission.isEmpty, isTrue);
+    await ProfileDatabaseSnapshot.restore(destinationScope, export.attachments);
+
+    final restored = await openDatabase(
+      destinationScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
+      readOnly: true,
+      singleInstance: false,
+    );
+    try {
+      expect(
+        (await restored.query('tv_channels')).single['channel_id'],
+        'channel-full',
+      );
+      expect(
+        (await restored.query('tv_cached_torrents')).single['infohash'],
+        'hash-full',
+      );
+    } finally {
+      await restored.close();
+    }
+  });
+
   test('never silently skips oversized durable database state', () async {
     ProfileDatabaseSnapshot.debugExportBudgetOverride = 1024;
     addTearDown(() => ProfileDatabaseSnapshot.debugExportBudgetOverride = null);
@@ -158,54 +213,159 @@ void main() {
     );
   });
 
-  test('compaction drops only named caches and keeps durable rows', () async {
-    ProfileDatabaseSnapshot.debugExportBudgetOverride = 64 * 1024;
-    addTearDown(() => ProfileDatabaseSnapshot.debugExportBudgetOverride = null);
-    final sourceScope = ProfileScope(
-      profileId: 'profile-cache-heavy',
-      dataGeneration: 1,
-      sessionEpoch: 1,
-    );
-    final destinationScope = ProfileScope(
-      profileId: 'profile-cache-restored',
-      dataGeneration: 1,
-      sessionEpoch: 1,
-    );
-    final documents = await AppStorage.documents();
-    final source = sourceScope.fileIn(documents, 'documents', 'debrify_tv.db');
-    await source.parent.create(recursive: true);
-    final database = await openDatabase(source.path, singleInstance: false);
-    await database.execute('CREATE TABLE durable_proof (value TEXT NOT NULL)');
-    await database.execute(
-      'CREATE TABLE tv_cached_torrents (payload TEXT NOT NULL)',
-    );
-    await database.insert('durable_proof', <String, Object?>{
-      'value': 'must-survive',
-    });
-    await database.insert('tv_cached_torrents', <String, Object?>{
-      'payload': List<String>.filled(256 * 1024, 'x').join(),
-    });
-    await database.close();
+  test(
+    'compaction omits complete Debrify TV channels and keeps IPTV rows',
+    () async {
+      ProfileDatabaseSnapshot.debugExportBudgetOverride = 64 * 1024;
+      addTearDown(
+        () => ProfileDatabaseSnapshot.debugExportBudgetOverride = null,
+      );
+      final sourceScope = ProfileScope(
+        profileId: 'profile-cache-heavy',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      final destinationScope = ProfileScope(
+        profileId: 'profile-cache-restored',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      final documents = await AppStorage.documents();
+      final source = sourceScope.fileIn(
+        documents,
+        'documents',
+        'debrify_tv.db',
+      );
+      await source.parent.create(recursive: true);
+      final database = await openDatabase(source.path, singleInstance: false);
+      await database.execute(
+        'CREATE TABLE durable_proof (value TEXT NOT NULL)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_channel_keywords '
+        '(channel_id TEXT NOT NULL, keyword TEXT NOT NULL)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_channel_cache_state (channel_id TEXT PRIMARY KEY)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_cached_torrents '
+        '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL, payload TEXT NOT NULL)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_keyword_stats '
+        '(channel_id TEXT NOT NULL, keyword TEXT NOT NULL)',
+      );
+      await database.execute(
+        'CREATE TABLE iptv_watch_history (playlist_id TEXT NOT NULL)',
+      );
+      await database.insert('durable_proof', <String, Object?>{
+        'value': 'must-survive',
+      });
+      await database.insert('iptv_watch_history', <String, Object?>{
+        'playlist_id': 'iptv-provider',
+      });
+      for (final channelId in const <String>['channel-a', 'channel-b']) {
+        await database.insert('tv_channels', <String, Object?>{
+          'channel_id': channelId,
+        });
+        await database.insert('tv_channel_keywords', <String, Object?>{
+          'channel_id': channelId,
+          'keyword': 'keyword-$channelId',
+        });
+        await database.insert('tv_channel_cache_state', <String, Object?>{
+          'channel_id': channelId,
+        });
+        await database.insert('tv_keyword_stats', <String, Object?>{
+          'channel_id': channelId,
+          'keyword': 'keyword-$channelId',
+        });
+      }
+      await database.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'channel-a',
+        'infohash': 'hash-a',
+        'payload': List<String>.filled(256 * 1024, 'x').join(),
+      });
+      await database.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'channel-b',
+        'infohash': 'hash-b',
+        'payload': 'small',
+      });
+      await database.close();
 
-    final export = await ProfileDatabaseSnapshot.export(sourceScope);
-    expect(export.compacted, contains('debrify_tv.db'));
-    expect(export.attachments, contains('debrify_tv.db'));
-    await ProfileDatabaseSnapshot.restore(destinationScope, export.attachments);
+      final export = await ProfileDatabaseSnapshot.export(sourceScope);
+      expect(export.compacted, contains('debrify_tv.db'));
+      expect(export.debrifyTvOmission.channels, 2);
+      expect(export.debrifyTvOmission.savedHashes, 2);
+      expect(export.debrifyTvOmission.profilesAffected, 1);
+      expect(export.attachments, contains('debrify_tv.db'));
 
-    final restored = await openDatabase(
-      destinationScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
-      readOnly: true,
-      singleInstance: false,
-    );
-    try {
-      expect(await restored.query('durable_proof'), <Map<String, Object?>>[
-        <String, Object?>{'value': 'must-survive'},
-      ]);
-      expect(await restored.query('tv_cached_torrents'), isEmpty);
-    } finally {
-      await restored.close();
-    }
-  });
+      // Restore is replacement semantics. A compact backup must not preserve
+      // destination channels, because a later dedicated Remote transfer owns
+      // adding the complete channel and hash pool back.
+      final destination = destinationScope.fileIn(
+        documents,
+        'documents',
+        'debrify_tv.db',
+      );
+      await destination.parent.create(recursive: true);
+      final destinationDatabase = await openDatabase(
+        destination.path,
+        singleInstance: false,
+      );
+      await destinationDatabase.execute(
+        'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+      );
+      await destinationDatabase.execute(
+        'CREATE TABLE tv_cached_torrents '
+        '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL)',
+      );
+      await destinationDatabase.insert('tv_channels', <String, Object?>{
+        'channel_id': 'destination-channel',
+      });
+      await destinationDatabase.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'destination-channel',
+        'infohash': 'destination-hash',
+      });
+      await destinationDatabase.close();
+
+      await ProfileDatabaseSnapshot.restore(
+        destinationScope,
+        export.attachments,
+      );
+
+      final restored = await openDatabase(
+        destinationScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      try {
+        expect(await restored.query('durable_proof'), <Map<String, Object?>>[
+          <String, Object?>{'value': 'must-survive'},
+        ]);
+        expect(
+          await restored.query('iptv_watch_history'),
+          <Map<String, Object?>>[
+            <String, Object?>{'playlist_id': 'iptv-provider'},
+          ],
+        );
+        for (final table in const <String>[
+          'tv_channels',
+          'tv_channel_keywords',
+          'tv_channel_cache_state',
+          'tv_cached_torrents',
+          'tv_keyword_stats',
+        ]) {
+          expect(await restored.query(table), isEmpty, reason: table);
+        }
+      } finally {
+        await restored.close();
+      }
+    },
+  );
 
   test('forced compaction reports only caches that contained rows', () async {
     final sourceScope = ProfileScope(
@@ -231,6 +391,7 @@ void main() {
       compact: true,
     );
     expect(export.compacted, isEmpty);
+    expect(export.debrifyTvOmission.isEmpty, isTrue);
     expect(export.attachments, contains('debrify_tv.db'));
   });
 

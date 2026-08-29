@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/legacy_backup_adapter.dart';
+import 'package:debrify/services/profiles/profile_database_snapshot.dart';
 import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,6 +18,7 @@ void main() {
     },
     Map<String, Object?>? files,
     List<Map<String, dynamic>> resources = const <Map<String, dynamic>>[],
+    Map<String, dynamic> omissions = const <String, dynamic>{},
   }) async {
     final sections = <String, dynamic>{
       'preferences': await PortableProfilePackage.buildSection(preferences),
@@ -36,6 +38,7 @@ void main() {
       ],
       resources: resources,
       sections: sections,
+      omissions: omissions,
     );
   }
 
@@ -428,11 +431,69 @@ void main() {
         'borrowedConnections': 2,
         'futureDurableCategory': 'not exported',
         'futureInactiveCategory': 0,
+        DebrifyTvBackupOmission.key: const DebrifyTvBackupOmission(
+          channels: 2,
+          savedHashes: 40,
+          profilesAffected: 1,
+        ).toJson(),
       }),
       <String, dynamic>{
         'borrowedConnections': 2,
         'futureDurableCategory': 'not exported',
       },
+    );
+  });
+
+  test('Debrify TV omission metadata round-trips and is validated', () async {
+    const omission = DebrifyTvBackupOmission(
+      channels: 3,
+      savedHashes: 120,
+      profilesAffected: 2,
+    );
+    final source = await package(
+      omissions: <String, dynamic>{
+        DebrifyTvBackupOmission.key: omission.toJson(),
+      },
+    );
+    final encrypted = await PortableProfilePackage.encrypt(
+      source,
+      'correct horse',
+      memory: 8,
+      iterations: 1,
+    );
+    final restored = await PortableProfilePackage.decrypt(
+      encrypted,
+      'correct horse',
+    );
+    final decoded = DebrifyTvBackupOmission.fromOmissions(restored.omissions);
+    expect(decoded?.channels, 3);
+    expect(decoded?.savedHashes, 120);
+    expect(decoded?.profilesAffected, 2);
+
+    final malformed = await package(
+      omissions: <String, dynamic>{
+        DebrifyTvBackupOmission.key: <String, Object?>{
+          'channels': 'three',
+          'savedHashes': 120,
+          'profilesAffected': 2,
+        },
+      },
+    );
+    final malformedEnvelope = await PortableProfilePackage.encrypt(
+      malformed,
+      'correct horse',
+      memory: 8,
+      iterations: 1,
+    );
+    await expectLater(
+      PortableProfilePackage.decrypt(malformedEnvelope, 'correct horse'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Invalid Debrify TV backup omission',
+        ),
+      ),
     );
   });
 

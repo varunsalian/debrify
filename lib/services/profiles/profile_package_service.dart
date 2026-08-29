@@ -49,6 +49,10 @@ class ProfilePackageService {
             compact: compactDatabaseSnapshots,
           );
     final databaseSnapshots = databaseExport?.attachments ?? const {};
+    final rebuildableCachesCompacted = databaseExport?.compacted
+        .where((name) => name != ProfileDatabaseSnapshot.debrifyTvDatabaseName)
+        .toList(growable: false);
+    final debrifyTvOmission = databaseExport?.debrifyTvOmission;
     final portableFiles = sanitized
         ? const <String, Object?>{}
         : await ProfilePortableFiles.export(scope);
@@ -158,19 +162,22 @@ class ProfilePackageService {
         'transientPreferenceAndFileCaches': true,
         if (borrowedResourcesOmitted > 0)
           'borrowedConnections': borrowedResourcesOmitted,
-        if (databaseExport != null && databaseExport.compacted.isNotEmpty)
-          'rebuildableDatabaseCachesOmitted': databaseExport.compacted.join(
+        if (rebuildableCachesCompacted?.isNotEmpty == true)
+          'rebuildableDatabaseCachesOmitted': rebuildableCachesCompacted!.join(
             ', ',
           ),
+        if (debrifyTvOmission?.isEmpty == false)
+          DebrifyTvBackupOmission.key: debrifyTvOmission!.toJson(),
       },
     );
     await context.validate(registry);
     return package;
   }
 
-  /// [compactDatabaseSnapshots] removes only rebuildable caches while retaining
-  /// every durable library row. It is used when a remote graph would otherwise
-  /// exceed the transport budget.
+  /// [compactDatabaseSnapshots] removes rebuildable IPTV catalog caches and
+  /// omits Debrify TV channels together with their saved hash pools. It is used
+  /// when a remote graph would otherwise exceed the transport budget; callers
+  /// must obtain explicit user consent before saving or sending that package.
   Future<PortableProfilePackage> exportAllProfiles({
     required ProfileAuthorizationContext context,
     required bool includeSecrets,
@@ -190,6 +197,7 @@ class ProfilePackageService {
     final profileRecords = <Map<String, dynamic>>[];
     final sections = <String, dynamic>{};
     final compactedDatabases = <String>[];
+    var debrifyTvOmission = const DebrifyTvBackupOmission.none();
     for (var index = 0; index < profiles.length; index++) {
       final profile = profiles[index];
       final backupId = 'profile-$index';
@@ -230,8 +238,13 @@ class ProfilePackageService {
         compact: compactDatabaseSnapshots,
       );
       compactedDatabases.addAll(
-        databaseExport.compacted.map((entry) => '${profile.name}: $entry'),
+        databaseExport.compacted
+            .where(
+              (entry) => entry != ProfileDatabaseSnapshot.debrifyTvDatabaseName,
+            )
+            .map((entry) => '${profile.name}: $entry'),
       );
+      debrifyTvOmission += databaseExport.debrifyTvOmission;
       if (databaseExport.attachments.isNotEmpty) {
         final databaseSectionId = '$backupId-databases';
         profileRecords.last['databasesSection'] = databaseSectionId;
@@ -328,6 +341,8 @@ class ProfilePackageService {
         'transientPreferenceAndFileCaches': true,
         if (compactedDatabases.isNotEmpty)
           'rebuildableDatabaseCachesOmitted': compactedDatabases.join(', '),
+        if (!debrifyTvOmission.isEmpty)
+          DebrifyTvBackupOmission.key: debrifyTvOmission.toJson(),
       },
     );
     await context.validate(registry);

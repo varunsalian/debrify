@@ -10,6 +10,100 @@ import 'package:sqflite/sqflite.dart';
 import '../../utils/app_storage.dart';
 import 'profile_scope.dart';
 
+class DebrifyTvBackupOmission {
+  static const String key = 'debrifyTvChannelsOmitted';
+
+  final int channels;
+  final int savedHashes;
+  final int profilesAffected;
+
+  const DebrifyTvBackupOmission({
+    required this.channels,
+    required this.savedHashes,
+    required this.profilesAffected,
+  });
+
+  const DebrifyTvBackupOmission.none()
+    : channels = 0,
+      savedHashes = 0,
+      profilesAffected = 0;
+
+  bool get isEmpty => channels == 0 && savedHashes == 0;
+
+  String get contentsLabel {
+    final channelLabel = channels == 1 ? '1 channel' : '$channels channels';
+    final hashLabel = savedHashes == 1
+        ? '1 saved torrent hash'
+        : '$savedHashes saved torrent hashes';
+    return '$channelLabel containing $hashLabel';
+  }
+
+  DebrifyTvBackupOmission operator +(DebrifyTvBackupOmission other) =>
+      DebrifyTvBackupOmission(
+        channels: channels + other.channels,
+        savedHashes: savedHashes + other.savedHashes,
+        profilesAffected: profilesAffected + other.profilesAffected,
+      );
+
+  Map<String, int> toJson() => <String, int>{
+    'channels': channels,
+    'savedHashes': savedHashes,
+    'profilesAffected': profilesAffected,
+  };
+
+  static DebrifyTvBackupOmission? fromOmissions(
+    Map<String, dynamic> omissions,
+  ) {
+    final value = omissions[key];
+    if (value is! Map) return null;
+    final channels = value['channels'];
+    final savedHashes = value['savedHashes'];
+    final profilesAffected = value['profilesAffected'];
+    if (channels is! num || savedHashes is! num || profilesAffected is! num) {
+      return null;
+    }
+    if (channels != channels.toInt() ||
+        savedHashes != savedHashes.toInt() ||
+        profilesAffected != profilesAffected.toInt()) {
+      return null;
+    }
+    final result = DebrifyTvBackupOmission(
+      channels: channels.toInt(),
+      savedHashes: savedHashes.toInt(),
+      profilesAffected: profilesAffected.toInt(),
+    );
+    if (result.isEmpty ||
+        result.channels < 0 ||
+        result.savedHashes < 0 ||
+        result.profilesAffected <= 0) {
+      return null;
+    }
+    return result;
+  }
+}
+
+class ProfileDatabaseSnapshotExport {
+  final Map<String, Object?> attachments;
+  final List<String> compacted;
+  final DebrifyTvBackupOmission debrifyTvOmission;
+
+  const ProfileDatabaseSnapshotExport({
+    required this.attachments,
+    required this.compacted,
+    required this.debrifyTvOmission,
+  });
+}
+
+class _DatabaseCompactionResult {
+  final int removedRows;
+  final DebrifyTvBackupOmission debrifyTvOmission;
+
+  const _DatabaseCompactionResult({
+    required this.removedRows,
+    this.debrifyTvOmission = const DebrifyTvBackupOmission.none(),
+  });
+}
+
 /// Consistent, bounded SQLite snapshots used by profile backup/restore.
 /// Imported SQL is never executed: only complete SQLite images for known
 /// profile database filenames are accepted, then integrity-checked while the
@@ -17,6 +111,7 @@ import 'profile_scope.dart';
 class ProfileDatabaseSnapshot {
   ProfileDatabaseSnapshot._();
 
+  static const String debrifyTvDatabaseName = 'debrify_tv.db';
   static const int maxAttachmentBytes = 64 * 1024 * 1024;
   static const int maxTotalBytes = 128 * 1024 * 1024;
 
@@ -33,7 +128,7 @@ class ProfileDatabaseSnapshot {
   @visibleForTesting
   static int? debugExportBudgetOverride;
   static const Set<String> databaseNames = <String>{
-    'debrify_tv.db',
+    debrifyTvDatabaseName,
     'iptv_catalog.db',
   };
 
@@ -47,12 +142,15 @@ class ProfileDatabaseSnapshot {
   /// Snapshots every profile database that exists into base64 attachments.
   ///
   /// Full images are preferred. If the images do not fit the package budget,
-  /// only explicitly rebuildable cache tables are pruned and all images are
-  /// measured again. Durable channels, playlists, favorites, watch history,
-  /// resume state, hidden groups, and channel numbering are never silently
-  /// skipped: if that compact set still cannot fit, the export fails visibly.
-  static Future<({Map<String, Object?> attachments, List<String> compacted})>
-  export(ProfileScope scope, {bool compact = false}) async {
+  /// IPTV catalog caches are pruned and Debrify TV is omitted as a complete
+  /// feature: channel definitions never travel without their saved hashes.
+  /// Durable IPTV playlists, favorites, watch history, resume state, hidden
+  /// groups, and channel numbering are never silently skipped. If that compact
+  /// set still cannot fit, the export fails visibly.
+  static Future<ProfileDatabaseSnapshotExport> export(
+    ProfileScope scope, {
+    bool compact = false,
+  }) async {
     final attachmentCap = debugExportBudgetOverride ?? maxAttachmentBytes;
     final budget = debugExportBudgetOverride ?? maxExportRawBytes;
     final documents = await AppStorage.documents();
@@ -61,6 +159,7 @@ class ProfileDatabaseSnapshot {
     await scratch.create(recursive: true);
     final snapshots = <String, File>{};
     final compacted = <String>[];
+    var debrifyTvOmission = const DebrifyTvBackupOmission.none();
     try {
       for (final name in databaseNames) {
         final source = scope.fileIn(documents, 'documents', name);
@@ -74,9 +173,11 @@ class ProfileDatabaseSnapshot {
       final fullFits = _fitsBudget(lengths, attachmentCap, budget);
       if (compact || !fullFits) {
         for (final entry in snapshots.entries) {
-          if (await _compactSnapshot(entry.key, entry.value)) {
+          final result = await _compactSnapshot(entry.key, entry.value);
+          if (result.removedRows > 0) {
             compacted.add(entry.key);
           }
+          debrifyTvOmission += result.debrifyTvOmission;
         }
         lengths = await _snapshotLengths(snapshots);
       }
@@ -98,9 +199,10 @@ class ProfileDatabaseSnapshot {
           'data': base64Encode(bytes),
         };
       }
-      return (
+      return ProfileDatabaseSnapshotExport(
         attachments: result,
         compacted: List<String>.unmodifiable(compacted),
+        debrifyTvOmission: debrifyTvOmission,
       );
     } finally {
       for (final snapshot in snapshots.values) {
@@ -167,24 +269,32 @@ class ProfileDatabaseSnapshot {
       lengths.values.every((length) => length <= attachmentCap) &&
       lengths.values.fold<int>(0, (sum, length) => sum + length) <= totalBudget;
 
-  static Future<bool> _compactSnapshot(String name, File snapshot) async {
-    final cacheTables = switch (name) {
-      'debrify_tv.db' => const <String>{
-        'tv_channel_cache_state',
+  static Future<_DatabaseCompactionResult> _compactSnapshot(
+    String name,
+    File snapshot,
+  ) async {
+    final compactedTables = switch (name) {
+      // The pool contains the hashes that make a Debrify TV channel usable.
+      // Omit the complete feature rather than restoring empty channel shells.
+      debrifyTvDatabaseName => const <String>[
         'tv_cached_torrents',
         'tv_keyword_stats',
-      },
-      'iptv_catalog.db' => const <String>{
+        'tv_channel_cache_state',
+        'tv_channel_keywords',
+        'tv_channels',
+      ],
+      'iptv_catalog.db' => const <String>[
         'meta',
         'catalogs',
         'channels',
         'epg_programmes',
         'epg_guides',
-      },
-      _ => const <String>{},
+      ],
+      _ => const <String>[],
     };
     final db = await openDatabase(snapshot.path, singleInstance: false);
     var removedRows = 0;
+    var omission = const DebrifyTvBackupOmission.none();
     try {
       final rows = await db.query(
         'sqlite_master',
@@ -195,8 +305,23 @@ class ProfileDatabaseSnapshot {
           .map((row) => row['name'])
           .whereType<String>()
           .toSet();
+      if (name == debrifyTvDatabaseName) {
+        final channels = existing.contains('tv_channels')
+            ? await _tableCount(db, 'tv_channels')
+            : 0;
+        final savedHashes = existing.contains('tv_cached_torrents')
+            ? await _tableCount(db, 'tv_cached_torrents')
+            : 0;
+        if (channels > 0 || savedHashes > 0) {
+          omission = DebrifyTvBackupOmission(
+            channels: channels,
+            savedHashes: savedHashes,
+            profilesAffected: 1,
+          );
+        }
+      }
       await db.transaction((txn) async {
-        for (final table in cacheTables.where(existing.contains)) {
+        for (final table in compactedTables.where(existing.contains)) {
           removedRows += await txn.delete(table);
         }
       });
@@ -209,7 +334,15 @@ class ProfileDatabaseSnapshot {
       await db.close();
       await _removeCompanions(snapshot);
     }
-    return removedRows > 0;
+    return _DatabaseCompactionResult(
+      removedRows: removedRows,
+      debrifyTvOmission: omission,
+    );
+  }
+
+  static Future<int> _tableCount(Database db, String table) async {
+    final rows = await db.rawQuery('SELECT COUNT(*) AS row_count FROM $table');
+    return (rows.single['row_count'] as int?) ?? 0;
   }
 
   static Future<int> restore(
@@ -301,7 +434,7 @@ class ProfileDatabaseSnapshot {
         )).map((row) => row['name']).whereType<String>().toSet();
         await db.transaction((txn) async {
           for (final entry in resourceIds.entries) {
-            if (name == 'debrify_tv.db') {
+            if (name == debrifyTvDatabaseName) {
               for (final table in const <String>{
                 'iptv_list_channels',
                 'iptv_watch_history',

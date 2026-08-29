@@ -17,6 +17,7 @@ import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_avatar_ingest.dart';
 import 'package:debrify/services/profiles/profile_avatar_storage.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_database_snapshot.dart';
 import 'package:debrify/services/profiles/profile_data_generation.dart';
 import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_package_service.dart';
@@ -288,6 +289,55 @@ void main() {
           (package.sections['profile-0-preferences'] as Map)['values'] as Map;
       expect(values, isNot(contains('engine_custom_indexer_api_key')));
       expect(values['engine_custom_indexer_enabled'], isTrue);
+    },
+  );
+
+  test(
+    'compact profile package reports complete Debrify TV omission',
+    () async {
+      final scope = ProfileRuntime.capture();
+      final source = scope.fileIn(documents, 'documents', 'debrify_tv.db');
+      await source.parent.create(recursive: true);
+      final database = await openDatabase(source.path, singleInstance: false);
+      await database.execute(
+        'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_cached_torrents '
+        '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL)',
+      );
+      await database.insert('tv_channels', <String, Object?>{
+        'channel_id': 'portable-channel',
+      });
+      await database.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'portable-channel',
+        'infohash': 'portable-hash',
+      });
+      await database.close();
+
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportProfile(
+            context: await ProfileAuthorizationContext.capture(registry),
+            scope: scope,
+            includeSecrets: true,
+            sanitized: false,
+            compactDatabaseSnapshots: true,
+          );
+
+      final omission = DebrifyTvBackupOmission.fromOmissions(package.omissions);
+      expect(omission?.channels, 1);
+      expect(omission?.savedHashes, 1);
+      expect(omission?.profilesAffected, 1);
+      expect(
+        package.omissions,
+        isNot(contains('rebuildableDatabaseCachesOmitted')),
+      );
     },
   );
 

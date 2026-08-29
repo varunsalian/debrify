@@ -79,13 +79,17 @@ envelopes, generations, and journals are newly created.
 ## Databases and files
 
 Both known profile databases are exported as consistent, integrity-checked
-SQLite images. The normal file backup includes every table, including caches.
-If size requires compaction—or Remote explicitly retries compacted—only these
-named rebuildable tables may be emptied:
+SQLite images. The normal file backup includes every table, including Debrify
+TV's complete saved hash pools. If size requires compaction—or Remote
+explicitly retries compacted—Debrify TV is omitted as one coherent feature
+rather than restoring unusable channel shells. The user must confirm this
+before the compacted package is saved or sent and is directed to the dedicated
+**Remote → Debrify TV Channels** transfer, which carries each channel with its
+saved pool.
 
-| Database | Durable user state that remains | Only tables eligible for cache compaction |
+| Database | Durable user state that remains | Tables omitted during compaction |
 |---|---|---|
-| `debrify_tv.db` | `tv_channels`, `tv_channel_keywords`, `iptv_lists`, `iptv_list_channels`, `iptv_watch_history`, `video_resume`, and any other non-cache table | `tv_channel_cache_state`, `tv_cached_torrents`, `tv_keyword_stats` |
+| `debrify_tv.db` | `iptv_lists`, `iptv_list_channels`, `iptv_watch_history`, `video_resume`, and any other non-Debrify-TV table | The complete Debrify TV feature: `tv_channels`, `tv_channel_keywords`, `tv_channel_cache_state`, `tv_cached_torrents`, `tv_keyword_stats` |
 | `iptv_catalog.db` | `hidden_groups`, `channel_number_namespaces`, `channel_number_aliases`, `channel_number_assignments`, and any other non-cache table | `meta`, `catalogs`, `channels`, `epg_programmes`, `epg_guides` |
 
 If the durable compacted images still exceed the package budget, export fails
@@ -127,9 +131,10 @@ the actual peer version. The sender uses
 `exportAllProfiles(includeSecrets: true)`—not the older piecemeal configuration
 builder—and chooses raw JSON or gzip in one worker-isolate pass. A graph above
 the 32 MiB soft expansion threshold, above the 10 MiB wire budget, or above the
-hard limit on its first pass is retried after compacting only named caches. It
-never removes durable rows to fit; compacted JSON may expand to at most 48 MiB
-on the receiver, and a still-oversized graph fails visibly. The receiver
+hard limit on its first pass is retried in compact mode. Compact mode keeps
+durable IPTV/history rows but omits Debrify TV channels and pools together,
+after explicit sender confirmation. Compacted JSON may expand to at most 48
+MiB on the receiver, and a still-oversized graph fails visibly. The receiver
 verifies authentication, package integrity, bounds, local Admin authority, and
 user confirmation before the atomic graph restore, then reports the actual
 import result to the sender.
