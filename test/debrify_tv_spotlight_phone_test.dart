@@ -8,6 +8,7 @@ import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _space = DebrifyTvChannel(
@@ -63,18 +64,43 @@ void main() {
         expect(searchRect.width, lessThanOrEqualTo(712.1));
         expect(tester.takeException(), isNull);
 
-        await tester.scrollUntilVisible(
-          find.text('Settings'),
-          180,
-          scrollable: _touchScrollable,
+        final heading = tester.renderObject<RenderParagraph>(
+          find.text('Channels'),
         );
-        await tester.pumpAndSettle();
-
-        expect(find.text('Settings').hitTestable(), findsOneWidget);
+        expect(heading.didExceedMaxLines, isFalse);
+        expect(find.byTooltip('Settings').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
   }
+
+  testWidgets('compact phone keeps management actions in one row', (
+    tester,
+  ) async {
+    var settingsOpened = false;
+    await _pumpPhone(
+      tester,
+      size: const Size(320, 700),
+      onSettings: () => settingsOpened = true,
+    );
+
+    final add = tester.getCenter(find.text('Add'));
+    final import = tester.getCenter(find.text('Import'));
+    final export = tester.getCenter(find.text('Export'));
+    final settings = find.byKey(
+      const ValueKey<String>('debrify-tv-phone-settings'),
+    );
+
+    expect(add.dy, closeTo(import.dy, 0.5));
+    expect(import.dy, closeTo(export.dy, 0.5));
+    expect(add.dx, lessThan(import.dx));
+    expect(import.dx, lessThan(export.dx));
+    expect(tester.getCenter(settings).dy, lessThan(add.dy));
+
+    await tester.tap(settings);
+    await tester.pump();
+    expect(settingsOpened, isTrue);
+  });
 
   for (final surface in <({String name, Size size})>[
     (name: 'mobile', size: const Size(390, 844)),
@@ -97,28 +123,21 @@ void main() {
     });
   }
 
-  testWidgets('large text reflows footer and sheet actions vertically', (
+  testWidgets('large text reflows management and sheet actions', (
     tester,
   ) async {
     await _pumpPhone(tester, size: const Size(320, 700), textScale: 2);
 
-    await tester.scrollUntilVisible(
-      find.text('Settings'),
-      180,
-      scrollable: _touchScrollable,
-    );
-    await tester.pumpAndSettle();
-
     final add = tester.getCenter(find.text('Add'));
     final import = tester.getCenter(find.text('Import'));
     final export = tester.getCenter(find.text('Export'));
-    final settings = tester.getCenter(find.text('Settings'));
-    expect(add.dx, closeTo(import.dx, 0.5));
-    expect(import.dx, closeTo(export.dx, 0.5));
-    expect(export.dx, closeTo(settings.dx, 0.5));
-    expect(add.dy, lessThan(import.dy));
-    expect(import.dy, lessThan(export.dy));
-    expect(export.dy, lessThan(settings.dy));
+    final settings = tester.getCenter(
+      find.byKey(const ValueKey<String>('debrify-tv-phone-settings')),
+    );
+    expect(add.dy, closeTo(import.dy, 0.5));
+    expect(add.dx, lessThan(import.dx));
+    expect(export.dy, greaterThan(add.dy));
+    expect(settings.dy, lessThan(add.dy));
 
     await tester.scrollUntilVisible(
       find.text('Space Night'),
@@ -242,6 +261,7 @@ Future<void> _pumpPhone(
   double textScale = 1,
   ValueChanged<DebrifyTvChannel>? onWatch,
   VoidCallback? onExport,
+  VoidCallback? onSettings,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -274,7 +294,7 @@ Future<void> _pumpPhone(
             onAdd: _noop,
             onImport: _noop,
             onExport: onExport ?? _noop,
-            onSettings: _noop,
+            onSettings: onSettings ?? _noop,
             onWatch: onWatch ?? _noopChannel,
             onEdit: _noopChannel,
             onShare: _noopChannel,
