@@ -702,18 +702,18 @@ class ProfileRegistry {
     final allowedPrefixes = profiles
         .map((row) => 'p.${row['id']}.g.${row['visible_data_generation']}.')
         .toSet();
-    final result = <String, Object?>{};
-    final watchlistKeys = <String>[];
-    var encodedBytes = 0;
+    // Everything eligible is gathered first, then packed smallest-first, so
+    // scalar settings and credentials always fit and only the largest
+    // collections fall out of a full envelope. Nothing throws here: every
+    // checkpoint runs inside a preference write, so a thrown bound would fail
+    // every subsequent save — and the import spares live keys the export had
+    // to drop, so a skip is never a deletion, only "not checkpointed yet".
+    final candidates = <({String key, Object? value, int bytes})>[];
     for (final key in prefs.getKeys()) {
       final match = _scopedPreferencePattern.firstMatch(key);
       if (match == null ||
           !allowedPrefixes.any(key.startsWith) ||
           !_recoverablePreference(match.group(1)!)) {
-        continue;
-      }
-      if (match.group(1) == TvOsRecoveryLimits.myWatchlistPreferenceKey) {
-        watchlistKeys.add(key);
         continue;
       }
       final value = prefs.get(key);
@@ -724,34 +724,34 @@ class ProfileRegistry {
           value is! List<String>) {
         continue;
       }
-      final bytes = utf8.encode(jsonEncode(value)).length;
-      if (bytes > TvOsRecoveryLimits.envelopeValueBytes) continue;
-      encodedBytes += utf8.encode(key).length + bytes;
-      if (result.length >= TvOsRecoveryLimits.envelopeMaxEntries ||
-          encodedBytes > TvOsRecoveryLimits.envelopeTotalBytes) {
-        throw StateError('tvOS recoverable preferences exceed the bound');
-      }
-      result[key] = value;
+      final bytes =
+          utf8.encode(key).length + utf8.encode(jsonEncode(value)).length;
+      candidates.add((key: key, value: value, bytes: bytes));
     }
-    // My Watchlist goes in last and is the one key allowed to fall out of a
-    // full envelope. Every checkpoint runs inside a preference write, so a
-    // thrown bound here would fail every subsequent save — dropping the shelf
-    // is strictly better than that.
-    for (final key in watchlistKeys) {
-      final value = prefs.get(key);
-      if (value is! String) continue;
-      final bytes = utf8.encode(jsonEncode(value)).length;
-      if (bytes > TvOsRecoveryLimits.envelopeValueBytes) continue;
-      if (result.length >= TvOsRecoveryLimits.envelopeMaxEntries ||
-          encodedBytes + utf8.encode(key).length + bytes >
+    candidates.sort(
+      (a, b) => a.bytes != b.bytes
+          ? a.bytes.compareTo(b.bytes)
+          : a.key.compareTo(b.key),
+    );
+    final result = <String, Object?>{};
+    var encodedBytes = 0;
+    var skipped = 0;
+    for (final candidate in candidates) {
+      if (candidate.bytes > TvOsRecoveryLimits.envelopeValueBytes ||
+          result.length >= TvOsRecoveryLimits.envelopeMaxEntries ||
+          encodedBytes + candidate.bytes >
               TvOsRecoveryLimits.envelopeTotalBytes) {
-        debugPrint(
-          'tvOS recovery envelope is full; My Watchlist was not checkpointed',
-        );
+        skipped++;
         continue;
       }
-      encodedBytes += utf8.encode(key).length + bytes;
-      result[key] = value;
+      encodedBytes += candidate.bytes;
+      result[candidate.key] = candidate.value;
+    }
+    if (skipped > 0) {
+      debugPrint(
+        'tvOS recovery envelope: $skipped preference value(s) too large to '
+        'checkpoint; they stay local and are spared by the launch rebuild.',
+      );
     }
     return result;
   }
@@ -811,16 +811,13 @@ class ProfileRegistry {
     for (final key in prefs.getKeys().where(
       (key) => _scopedPreferencePattern.hasMatch(key),
     )) {
-      // A live watchlist the export had to drop (oversized value, full
-      // envelope) must not be deleted by the rebuild — an export skip must
-      // never become an import deletion. Only current-generation keys are
-      // spared; stale-generation ones still clear.
-      final logicalKey = _scopedPreferencePattern.firstMatch(key)!.group(1);
-      if (logicalKey == TvOsRecoveryLimits.myWatchlistPreferenceKey &&
-          allowedPrefixes.any(key.startsWith) &&
-          !normalized.containsKey(key)) {
-        continue;
-      }
+      // Live current-generation keys are never cleared: a key absent from the
+      // envelope is either a droppable cache or something the export had to
+      // skip (oversized value, full envelope), and an export skip must never
+      // become an import deletion. Envelope keys are overwritten below
+      // anyway. Only stale-generation keys — deleted profiles, superseded
+      // generations — still clear.
+      if (allowedPrefixes.any(key.startsWith)) continue;
       if (!await prefs.remove(key)) {
         throw StateError('Could not clear stale tvOS preference projection');
       }
@@ -838,19 +835,21 @@ class ProfileRegistry {
     }
   }
 
-  /// The built-in My Watchlist is user-authored data, not a re-fetchable
-  /// tracker cache, so the `watchlist` pattern below must not drop it from
-  /// the envelope — losing it wipes the shelf on every tvOS launch.
+  /// Durable by default. Only explicitly named re-fetchable caches are kept
+  /// out of the envelope — the previous name-pattern blocklist made
+  /// durability an accident of naming and silently wiped user-authored data
+  /// (My Watchlist, channel favorites, settings toggles whose names happened
+  /// to contain `history`/`favorite`/`continue_watching`) on every tvOS
+  /// launch. Over-including is safe: the size-ordered export skips the
+  /// largest values when full, and the import never deletes a live key.
   static bool _recoverablePreference(String logicalKey) =>
-      logicalKey == TvOsRecoveryLimits.myWatchlistPreferenceKey ||
-      !_nonRecoverablePreference.hasMatch(logicalKey);
+      !_droppableCachePreference.hasMatch(logicalKey);
 
   static final RegExp _scopedPreferencePattern = RegExp(
     r'^p\.[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.g\.[1-9][0-9]*\.(.+)$',
   );
-  static final RegExp _nonRecoverablePreference = RegExp(
-    r'(history|resume|cache|recent|continue.?watching|watchlist|favorite|'
-    r'playback.?position|epg|tvmaze|download|recording)',
+  static final RegExp _droppableCachePreference = RegExp(
+    r'(cache|^tvmaze_|^epg_|^trakt_continue_watching_)',
     caseSensitive: false,
   );
 

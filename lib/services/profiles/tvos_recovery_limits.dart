@@ -5,10 +5,9 @@
 class TvOsRecoveryLimits {
   const TvOsRecoveryLimits._();
 
-  /// Logical preference key of the built-in My Watchlist. Exempted from the
-  /// envelope's non-recoverable filter (it is user-authored data, not a
-  /// re-fetchable tracker cache) and size-capped at write time so it stays
-  /// under [envelopeValueBytes].
+  /// Logical preference key of the built-in My Watchlist. Size-capped at
+  /// write time so it stays under [envelopeValueBytes] and is never dropped
+  /// from a checkpoint for size.
   static const String myWatchlistPreferenceKey = 'my_watchlist_v1';
 
   /// A single envelope value larger than this is skipped at export and
