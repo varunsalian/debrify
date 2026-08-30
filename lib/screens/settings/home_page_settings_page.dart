@@ -4,6 +4,7 @@ import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
+import '../../services/simkl/simkl_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/trakt/trakt_list_source.dart';
@@ -32,6 +33,15 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _hideProviderCards = false;
   bool _continueWatchingEnabled = true;
   bool _holdToQuickPlay = false;
+  // Per-provider "one Continue Watching row" toggles. Tracker rows only show
+  // their toggle when that account is connected, so the section stays short.
+  bool _cwMergeLocal = false;
+  bool _cwMergeTrakt = false;
+  bool _cwMergeSimkl = false;
+  bool _cwMergeMdblist = false;
+  bool _traktConnected = false;
+  bool _simklConnected = false;
+  bool _mdblistConnected = false;
   bool _trailerAutoplayEnabled = false;
   bool _heroTrailerEnabled = true;
   bool _ambientTrailerAudioEnabled = true;
@@ -125,6 +135,39 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
     );
   }
 
+  /// A "combine Movies + Shows into one row" toggle for one Continue Watching
+  /// provider. Persists, mirrors into local state, and pokes Home so the board
+  /// re-slots its rows immediately.
+  Widget _mergeCwTile({
+    required String title,
+    required String subtitle,
+    required String provider,
+    required bool value,
+    required void Function(bool) apply,
+  }) {
+    return SettingsToggleTile(
+      icon: Icons.table_rows_rounded,
+      title: title,
+      subtitle: subtitle,
+      subtitleMaxLines: 2,
+      value: value,
+      onChanged: (v) async {
+        try {
+          await StorageService.setHomeCwMergedRows(provider, v);
+          if (!mounted) return;
+          setState(() => apply(v));
+          MainPageBridge.notifyHomeSettingsChanged();
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to save setting: $e')),
+            );
+          }
+        }
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -148,6 +191,33 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final continueWatchingEnabled =
           await StorageService.getHomeContinueWatchingEnabled();
       final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
+      final cwMergeLocal = await StorageService.getHomeCwMergedRows('local');
+      final cwMergeTrakt = await StorageService.getHomeCwMergedRows('trakt');
+      final cwMergeSimkl = await StorageService.getHomeCwMergedRows('simkl');
+      final cwMergeMdblist = await StorageService.getHomeCwMergedRows(
+        'mdblist',
+      );
+      // Connectivity gates the tracker merge toggles. A tracker probe failing
+      // must not take the whole settings page down with it — treat a throw as
+      // "not connected" and move on. Deliberately NOT
+      // TraktService.isAuthenticated(): that refreshes an expired token over
+      // the network (up to its 10s timeout) and would hold the page on its
+      // loading spinner; a stored token is enough to show a layout toggle.
+      Future<bool> probe(Future<bool> Function() check) async {
+        try {
+          return await check();
+        } catch (_) {
+          return false;
+        }
+      }
+
+      final traktConnected = await probe(StorageService.hasTraktCredential);
+      final simklConnected = await probe(
+        () => SimklService.instance.isAuthenticated(),
+      );
+      final mdblistConnected =
+          kMdblistEnabled &&
+          await probe(() => MdblistService.instance.isAuthenticated());
       final trailerAutoplayEnabled =
           await StorageService.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
@@ -198,6 +268,13 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _hideProviderCards = hideProviderCards;
         _continueWatchingEnabled = continueWatchingEnabled;
         _holdToQuickPlay = holdToQuickPlay;
+        _cwMergeLocal = cwMergeLocal;
+        _cwMergeTrakt = cwMergeTrakt;
+        _cwMergeSimkl = cwMergeSimkl;
+        _cwMergeMdblist = cwMergeMdblist;
+        _traktConnected = traktConnected;
+        _simklConnected = simklConnected;
+        _mdblistConnected = mdblistConnected;
         _trailerAutoplayEnabled = trailerAutoplayEnabled;
         _heroTrailerEnabled = heroTrailerEnabled;
         _ambientTrailerAudioEnabled = ambientTrailerAudioEnabled;
@@ -613,6 +690,49 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         }
                       },
                     ),
+                    // Per-provider "one row" merges. The local one rides the
+                    // master Continue Watching toggle; tracker ones appear
+                    // only for connected accounts, keeping the section short.
+                    if (_continueWatchingEnabled)
+                      _mergeCwTile(
+                        title: 'One Continue Watching Row',
+                        subtitle:
+                            'Combine the Movies and Series rows into a '
+                            'single row, newest first',
+                        provider: 'local',
+                        value: _cwMergeLocal,
+                        apply: (v) => _cwMergeLocal = v,
+                      ),
+                    if (_traktConnected)
+                      _mergeCwTile(
+                        title: 'One Trakt Row',
+                        subtitle:
+                            'Combine Trakt Continue Watching Movies and '
+                            'Shows into a single row',
+                        provider: 'trakt',
+                        value: _cwMergeTrakt,
+                        apply: (v) => _cwMergeTrakt = v,
+                      ),
+                    if (_simklConnected)
+                      _mergeCwTile(
+                        title: 'One Simkl Row',
+                        subtitle:
+                            'Combine Simkl Continue Watching Movies and '
+                            'Shows into a single row',
+                        provider: 'simkl',
+                        value: _cwMergeSimkl,
+                        apply: (v) => _cwMergeSimkl = v,
+                      ),
+                    if (_mdblistConnected)
+                      _mergeCwTile(
+                        title: 'One MDBList Row',
+                        subtitle:
+                            'Combine MDBList Continue Watching Movies and '
+                            'Shows into a single row',
+                        provider: 'mdblist',
+                        value: _cwMergeMdblist,
+                        apply: (v) => _cwMergeMdblist = v,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),

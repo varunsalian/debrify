@@ -289,6 +289,7 @@ class StorageService {
   static const String _homeContinueWatchingEnabledKey =
       'home_continue_watching_enabled';
   static const String _homeCwHoldToQuickPlayKey = 'home_cw_hold_to_quick_play';
+  static const String _homeCwMergedRowsKeyPrefix = 'home_cw_merge_';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
@@ -6003,6 +6004,20 @@ class StorageService {
     await prefs.setBool(_homeCwHoldToQuickPlayKey, value);
   }
 
+  /// Whether [provider]'s home Continue Watching shelf combines Movies and
+  /// Shows into ONE recency-ordered row instead of two. [provider] is one of
+  /// 'local', 'trakt', 'simkl', 'mdblist'. Off by default (two rows, the
+  /// original layout).
+  static Future<bool> getHomeCwMergedRows(String provider) async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('$_homeCwMergedRowsKeyPrefix$provider') ?? false;
+  }
+
+  static Future<void> setHomeCwMergedRows(String provider, bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('$_homeCwMergedRowsKeyPrefix$provider', value);
+  }
+
   static Future<String> getHomeFavoritesTapAction() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'choose';
@@ -6062,6 +6077,10 @@ class StorageService {
     await prefs.remove(_homeHideProviderCardsKey);
     await prefs.remove(_homeContinueWatchingEnabledKey);
     await prefs.remove(_homeCwHoldToQuickPlayKey);
+    await prefs.remove('${_homeCwMergedRowsKeyPrefix}local');
+    await prefs.remove('${_homeCwMergedRowsKeyPrefix}trakt');
+    await prefs.remove('${_homeCwMergedRowsKeyPrefix}simkl');
+    await prefs.remove('${_homeCwMergedRowsKeyPrefix}mdblist');
     await prefs.remove(_homeFavoritesOpenFolderKey);
     await prefs.remove(_homeCardOrientationKey);
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);

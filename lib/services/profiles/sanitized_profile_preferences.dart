@@ -19,6 +19,10 @@ abstract final class SanitizedProfilePreferences {
       case 'recording_engine_enabled':
       case 'home_hero_trailer_enabled':
       case 'home_cw_hold_to_quick_play':
+      case 'home_cw_merge_local':
+      case 'home_cw_merge_trakt':
+      case 'home_cw_merge_simkl':
+      case 'home_cw_merge_mdblist':
       case 'home_hide_card_titles_and_ratings':
       case 'home_hide_catalog_addon_names':
       case 'detail_trailer_autoplay_enabled':
