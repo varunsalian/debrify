@@ -8,6 +8,7 @@ import '../models/iptv_playlist.dart';
 import '../utils/json_isolate.dart';
 import 'debrify_tv_database.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_channel_order.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
 
@@ -146,6 +147,9 @@ class IptvMediaStore {
   /// never remounts.
   static final ValueNotifier<int> listsRevision = ValueNotifier<int>(0);
 
+  /// ValueNotifier listeners run synchronously and may start detached reads.
+  /// Call only after the mutation's outer [_runScoped] has completed so those
+  /// reads cannot inherit its captured database handle and bypass admission.
   static void _bumpListsRevision() => listsRevision.value++;
 
   static const String _legacyFavoritesKey = 'iptv_favorite_channels_v1';
@@ -345,8 +349,8 @@ class IptvMediaStore {
   /// Create a list and return its id. Names are not unique-enforced here —
   /// the picker validates before calling, and a duplicate name is a display
   /// annoyance rather than a data problem.
-  static Future<String> createList(String name) {
-    return _runScoped((_) async {
+  static Future<String> createList(String name) async {
+    final id = await _runScoped((_) async {
       final trimmed = name.trim();
       final now = DateTime.now().millisecondsSinceEpoch;
       final id = 'list_${now}_${math.Random().nextInt(1 << 20)}';
@@ -364,15 +368,16 @@ class IptvMediaStore {
           'updated_at': now,
         });
       });
-      _bumpListsRevision();
       return id;
     });
+    _bumpListsRevision();
+    return id;
   }
 
   /// Rename a custom list. The built-in Favorites list is not renameable.
-  static Future<void> renameList(String listId, String name) {
-    if (listId == favoritesListId) return Future<void>.value();
-    return _runScoped((_) async {
+  static Future<void> renameList(String listId, String name) async {
+    if (listId == favoritesListId) return;
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         await txn.update(
           'iptv_lists',
@@ -384,15 +389,15 @@ class IptvMediaStore {
           whereArgs: [listId],
         );
       });
-      _bumpListsRevision();
     });
+    _bumpListsRevision();
   }
 
   /// Delete a custom list. Memberships go with it via ON DELETE CASCADE —
   /// the channels themselves are untouched, they just stop being in a list.
-  static Future<void> deleteList(String listId) {
-    if (listId == favoritesListId) return Future<void>.value();
-    return _runScoped((_) async {
+  static Future<void> deleteList(String listId) async {
+    if (listId == favoritesListId) return;
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         await txn.delete(
           'iptv_lists',
@@ -400,14 +405,14 @@ class IptvMediaStore {
           whereArgs: [listId],
         );
       });
-      _bumpListsRevision();
     });
+    _bumpListsRevision();
   }
 
   /// Reorder custom lists. Favorites is pinned at position 0 and ignored
   /// here; everything named in [orderedIds] takes 1..n in that order.
-  static Future<void> reorderLists(List<String> orderedIds) {
-    return _runScoped((_) async {
+  static Future<void> reorderLists(List<String> orderedIds) async {
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         var position = 1;
         for (final id in orderedIds) {
@@ -421,8 +426,8 @@ class IptvMediaStore {
           position += 1;
         }
       });
-      _bumpListsRevision();
     });
+    _bumpListsRevision();
   }
 
   // ── Membership ────────────────────────────────────────────────────────────
@@ -436,12 +441,12 @@ class IptvMediaStore {
   /// catalogs — the only reconcile path those sources ever take, so the
   /// backfill has to live here too or their migrated VOD favorites would
   /// present as live forever.
-  static Future<void> reconcileFavoriteUrls(List<IptvChannel> channels) {
-    return _runScoped((db) async {
+  static Future<void> reconcileFavoriteUrls(List<IptvChannel> channels) async {
+    final changed = await _runScoped((db) async {
       final urlRows = await db.rawQuery(
         'SELECT DISTINCT url FROM iptv_list_channels',
       );
-      if (urlRows.isEmpty) return;
+      if (urlRows.isEmpty) return false;
       final storedUrls = [for (final row in urlRows) row['url'] as String];
       final needsMeta = await _urlsNeedingPresentation(db);
 
@@ -493,21 +498,22 @@ class IptvMediaStore {
           }
         }
       }
-      await _applyReconcile(renames, meta);
+      return _applyReconcile(renames, meta);
     });
+    if (changed) _bumpListsRevision();
   }
 
   /// DB-catalog variant of [reconcileFavoriteUrls]: the fresh rows are read
   /// straight from the catalog on a WORKER isolate — walking a paging
   /// facade here would keep the scan's cost on the UI isolate, which is
   /// tens of near-saturated seconds on a big playlist.
-  static Future<void> reconcileFavoriteUrlsForCatalog(String catalogKey) {
-    return _runScoped((db) async {
-      if (!IptvCatalogDb.isOpen) return;
+  static Future<void> reconcileFavoriteUrlsForCatalog(String catalogKey) async {
+    final changed = await _runScoped((db) async {
+      if (!IptvCatalogDb.isOpen) return false;
       final urlRows = await db.rawQuery(
         'SELECT DISTINCT url FROM iptv_list_channels',
       );
-      if (urlRows.isEmpty) return;
+      if (urlRows.isEmpty) return false;
       final needsMeta = await _urlsNeedingPresentation(db);
 
       final result = await compute(
@@ -519,9 +525,10 @@ class IptvMediaStore {
           urlsNeedingMeta: needsMeta.toList(),
         ),
       );
-      if (result.isEmpty) return;
-      await _applyReconcile(result.renames, result.meta);
+      if (result.isEmpty) return false;
+      return _applyReconcile(result.renames, result.meta);
     });
+    if (changed) _bumpListsRevision();
   }
 
   /// Stored URLs whose presentation metadata is still unknown — rows carried
@@ -541,13 +548,13 @@ class IptvMediaStore {
   /// scan ran stays gone instead of being resurrected. A renamed URL can
   /// appear in several lists, so every matching row moves, each keeping its
   /// own list_id.
-  static Future<void> _applyReconcile(
+  static Future<bool> _applyReconcile(
     Map<String, String> renames,
     Map<String, ChannelPresentation> meta,
   ) async {
     // The empty short-circuit doubles as the revision guard: a reconcile
     // that changed nothing must not trigger list-row reloads elsewhere.
-    if (renames.isEmpty && meta.isEmpty) return;
+    if (renames.isEmpty && meta.isEmpty) return false;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       for (final entry in renames.entries) {
         final rows = await txn.query(
@@ -590,7 +597,7 @@ class IptvMediaStore {
         );
       }
     });
-    _bumpListsRevision();
+    return true;
   }
 
   /// Add or remove [channelUrl] in [listId].
@@ -606,8 +613,8 @@ class IptvMediaStore {
     String? contentType,
     int? duration,
     Map<String, String>? httpHeaders,
-  }) {
-    return _runScoped((_) async {
+  }) async {
+    await _runScoped((_) async {
       final canonical = canonicalChannelKey(channelUrl);
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         // Match older stored URL formats too, so toggling can't leave stale
@@ -616,13 +623,18 @@ class IptvMediaStore {
         // scanning its URLs inside the transaction is cheap.
         final rows = await txn.query(
           'iptv_list_channels',
-          columns: ['url'],
+          columns: ['url', 'position', 'added_at'],
           where: 'list_id = ?',
           whereArgs: [listId],
+          orderBy: 'position ASC, added_at ASC, url ASC',
         );
+        int? retainedPosition;
+        int? retainedAddedAt;
         for (final row in rows) {
           final url = row['url'] as String;
           if (canonicalChannelKey(url) == canonical) {
+            retainedPosition ??= (row['position'] as num?)?.toInt();
+            retainedAddedAt ??= (row['added_at'] as num?)?.toInt();
             await txn.delete(
               'iptv_list_channels',
               where: 'list_id = ? AND url = ?',
@@ -631,6 +643,15 @@ class IptvMediaStore {
           }
         }
         if (inList) {
+          if (retainedPosition == null) {
+            final maxRows = await txn.rawQuery(
+              'SELECT MAX(position) AS p FROM iptv_list_channels '
+              'WHERE list_id = ?',
+              [listId],
+            );
+            retainedPosition =
+                ((maxRows.first['p'] as num?)?.toInt() ?? -1) + 1;
+          }
           await txn.insert('iptv_list_channels', {
             'list_id': listId,
             'url': channelUrl,
@@ -650,12 +671,14 @@ class IptvMediaStore {
             'http_headers_json': (httpHeaders != null && httpHeaders.isNotEmpty)
                 ? jsonEncode(httpHeaders)
                 : null,
-            'added_at': DateTime.now().millisecondsSinceEpoch,
+            'added_at':
+                retainedAddedAt ?? DateTime.now().millisecondsSinceEpoch,
+            'position': retainedPosition,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
-      _bumpListsRevision();
     });
+    _bumpListsRevision();
   }
 
   /// Which lists each stored channel belongs to, url → list ids.
@@ -713,8 +736,8 @@ class IptvMediaStore {
 
   /// Drop every membership belonging to [playlistId], across ALL lists —
   /// the provider is gone, so its channels can't play from anywhere.
-  static Future<void> removeListChannelsByPlaylistId(String playlistId) {
-    return _runScoped((_) async {
+  static Future<void> removeListChannelsByPlaylistId(String playlistId) async {
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         await txn.delete(
           'iptv_list_channels',
@@ -722,22 +745,210 @@ class IptvMediaStore {
           whereArgs: [playlistId],
         );
       });
-      _bumpListsRevision();
     });
+    _bumpListsRevision();
   }
 
   /// One list's channels, url → metadata, in the same map shape the prefs
   /// store used ('name'/'logoUrl'/'group'/'playlistId'/'httpHeaders'/
-  /// 'addedAt', plus 'contentType'/'duration'), oldest-added first.
+  /// 'addedAt', plus 'contentType'/'duration'), in the user's saved order.
   static Future<Map<String, Map<String, dynamic>>> listChannels(String listId) {
     return _runScoped((db) async {
       final rows = await db.query(
         'iptv_list_channels',
         where: 'list_id = ?',
         whereArgs: [listId],
-        orderBy: 'added_at ASC, url ASC',
+        orderBy: 'position ASC, added_at ASC, url ASC',
       );
       return {for (final row in rows) row['url'] as String: _favoriteMeta(row)};
+    });
+  }
+
+  /// Reorder one list's channels. Rows added after the editor opened are
+  /// appended, rows removed meanwhile are ignored, and duplicates in the
+  /// request are collapsed — the save can never resurrect stale membership.
+  static Future<void> reorderListChannels(
+    String listId,
+    Iterable<String> orderedUrls,
+  ) async {
+    await _runScoped((_) async {
+      await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final rows = await txn.query(
+          'iptv_list_channels',
+          columns: ['url'],
+          where: 'list_id = ?',
+          whereArgs: [listId],
+          orderBy: 'position ASC, added_at ASC, url ASC',
+        );
+        final current = [for (final row in rows) row['url'] as String];
+        final currentSet = current.toSet();
+        final seen = <String>{};
+        final resolved = <String>[
+          for (final url in orderedUrls)
+            if (currentSet.contains(url) && seen.add(url)) url,
+          for (final url in current)
+            if (seen.add(url)) url,
+        ];
+        for (var position = 0; position < resolved.length; position++) {
+          await txn.update(
+            'iptv_list_channels',
+            {'position': position},
+            where: 'list_id = ? AND url = ?',
+            whereArgs: [listId, resolved[position]],
+          );
+        }
+      });
+    });
+    _bumpListsRevision();
+    IptvChannelOrderSignal.notifyListChanged(listId);
+  }
+
+  /// Imported-file category rows in their saved order. The parsed provider
+  /// list remains the baseline, so rows unknown to an older saved order append
+  /// deterministically after the ranked rows.
+  static Future<List<IptvChannelOrderEntry>> categoryOrderEntries(
+    String sourceId,
+    Iterable<IptvChannel> channels,
+    String group,
+  ) {
+    return _runScoped((db) async {
+      final entries = iptvCategoryOrderEntries(channels, group);
+      final rows = await db.query(
+        'iptv_category_channel_orders',
+        columns: ['url', 'name', 'occurrence', 'position'],
+        where: 'source_id = ? AND channel_group = ?',
+        whereArgs: [sourceId, group],
+      );
+      final ranks = <IptvChannelOrderIdentity, int>{
+        for (final row in rows)
+          IptvChannelOrderIdentity(
+            url: row['url'] as String,
+            name: row['name'] as String,
+            occurrence: (row['occurrence'] as num).toInt(),
+          ): (row['position'] as num)
+              .toInt(),
+      };
+      final baseline = <IptvChannelOrderIdentity, int>{
+        for (var i = 0; i < entries.length; i++) entries[i].identity: i,
+      };
+      entries.sort((a, b) {
+        final ar = ranks[a.identity];
+        final br = ranks[b.identity];
+        if (ar != null && br != null) return ar.compareTo(br);
+        if (ar != null) return -1;
+        if (br != null) return 1;
+        return baseline[a.identity]!.compareTo(baseline[b.identity]!);
+      });
+      return entries;
+    });
+  }
+
+  static Future<void> setCategoryChannelOrder(
+    String sourceId,
+    String group,
+    Iterable<IptvChannelOrderIdentity> ordered,
+  ) async {
+    await _runScoped((_) async {
+      await DebrifyTvDatabase.instance.runTxn((txn) async {
+        await txn.delete(
+          'iptv_category_channel_orders',
+          where: 'source_id = ? AND channel_group = ?',
+          whereArgs: [sourceId, group],
+        );
+        var position = 0;
+        for (final identity in ordered) {
+          await txn.insert('iptv_category_channel_orders', {
+            'source_id': sourceId,
+            'channel_group': group,
+            'url': identity.url,
+            'name': identity.name,
+            'occurrence': identity.occurrence,
+            'position': position++,
+          });
+        }
+      });
+    });
+    IptvChannelOrderSignal.notifySourceChanged(sourceId);
+  }
+
+  /// Apply every saved per-category order without moving category slots in
+  /// the provider's overall sequence. This makes both All and category-filter
+  /// views agree while leaving ungrouped channels untouched.
+  static Future<List<IptvChannel>> applyCategoryChannelOrders(
+    String sourceId,
+    List<IptvChannel> channels,
+  ) {
+    return _runScoped((db) async {
+      final rows = await db.query(
+        'iptv_category_channel_orders',
+        columns: ['channel_group', 'url', 'name', 'occurrence', 'position'],
+        where: 'source_id = ?',
+        whereArgs: [sourceId],
+      );
+      if (rows.isEmpty) return channels;
+      final ranks = <(String, String, String, int), int>{
+        for (final row in rows)
+          (
+            row['channel_group'] as String,
+            row['url'] as String,
+            row['name'] as String,
+            (row['occurrence'] as num).toInt(),
+          ): (row['position'] as num)
+              .toInt(),
+      };
+      final orderedGroups = <String>{
+        for (final row in rows) row['channel_group'] as String,
+      };
+      final occurrences = <(String, String, String), int>{};
+      final baseline = <IptvChannel, int>{};
+      final rankByChannel = <IptvChannel, int>{};
+      final orderedByGroup = <String, List<IptvChannel>>{};
+      for (var index = 0; index < channels.length; index++) {
+        final channel = channels[index];
+        final group = channel.group;
+        if (group == null || !orderedGroups.contains(group)) continue;
+        final base = iptvChannelOrderIdentityBaseFor(channel);
+        final occurrenceKey = (group, base.url, base.name);
+        final occurrence = occurrences[occurrenceKey] ?? 0;
+        occurrences[occurrenceKey] = occurrence + 1;
+        final rank = ranks[(group, base.url, base.name, occurrence)];
+        baseline[channel] = index;
+        if (rank != null) rankByChannel[channel] = rank;
+        orderedByGroup.putIfAbsent(group, () => <IptvChannel>[]).add(channel);
+      }
+      for (final groupChannels in orderedByGroup.values) {
+        groupChannels.sort((a, b) {
+          final ar = rankByChannel[a];
+          final br = rankByChannel[b];
+          if (ar != null && br != null) return ar.compareTo(br);
+          if (ar != null) return -1;
+          if (br != null) return 1;
+          return baseline[a]!.compareTo(baseline[b]!);
+        });
+      }
+      final offsets = <String, int>{};
+      return [
+        for (final channel in channels)
+          if (channel.group == null ||
+              !orderedByGroup.containsKey(channel.group))
+            channel
+          else
+            orderedByGroup[channel.group!]![offsets.update(
+              channel.group!,
+              (value) => value + 1,
+              ifAbsent: () => 0,
+            )],
+      ];
+    });
+  }
+
+  static Future<void> removeCategoryOrdersForSource(String sourceId) {
+    return _runScoped((db) async {
+      await db.delete(
+        'iptv_category_channel_orders',
+        where: 'source_id = ?',
+        whereArgs: [sourceId],
+      );
     });
   }
 

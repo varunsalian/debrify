@@ -54,6 +54,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onCreateList,
+    required this.onManageChannelOrder,
+    this.onManageCategoryOrder,
     this.onManageHidden,
     this.hiddenCounts = const {},
     required this.onFocusFirstFormField,
@@ -142,6 +144,11 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final ValueChanged<IptvPlaylist> onEdit;
   final ValueChanged<IptvPlaylist> onDelete;
   final VoidCallback onCreateList;
+  final VoidCallback onManageChannelOrder;
+
+  /// Opens a source's category-list reorder screen. Imported files use their
+  /// stable saved-playlist id while remote sources use catalog identity.
+  final ValueChanged<IptvPlaylist>? onManageCategoryOrder;
 
   /// Opens a source's hidden-categories manager. Null on sources that store
   /// no catalog (imported files), which is also what keeps the row off them.
@@ -862,6 +869,16 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onTap: () => widget.onManageHidden!(playlist),
                 onLeft: _returnToRail,
               ),
+            if (widget.onManageCategoryOrder != null)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.swap_vert_rounded,
+                title: 'Category order',
+                subtitle: 'Arrange categories in this source',
+                trailing: _chevron,
+                onTap: () => widget.onManageCategoryOrder!(playlist),
+                onLeft: _returnToRail,
+              ),
             if (!playlist.connectionReadOnly)
               _PaneRow(
                 focusNode: _paneNode(row++),
@@ -1006,6 +1023,15 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               subtitle: 'Built in · always available',
               trailing: null,
               onTap: null,
+              onLeft: _returnToRail,
+            ),
+            _PaneRow(
+              focusNode: _paneNode(row++),
+              icon: Icons.reorder_rounded,
+              title: 'Channel order',
+              subtitle: 'Arrange Favorites and saved lists',
+              trailing: _chevron,
+              onTap: widget.onManageChannelOrder,
               onLeft: _returnToRail,
             ),
             for (var i = 0; i < lists.length; i++)

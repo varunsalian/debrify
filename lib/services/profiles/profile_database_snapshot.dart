@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../utils/app_storage.dart';
+import '../iptv_catalog_key.dart';
 import 'profile_scope.dart';
 
 class DebrifyTvBackupOmission {
@@ -145,8 +146,8 @@ class ProfileDatabaseSnapshot {
   /// IPTV catalog caches are pruned and Debrify TV is omitted as a complete
   /// feature: channel definitions never travel without their saved hashes.
   /// Durable IPTV playlists, favorites, watch history, resume state, hidden
-  /// groups, and channel numbering are never silently skipped. If that compact
-  /// set still cannot fit, the export fails visibly.
+  /// groups, manual category order, and channel numbering are never silently
+  /// skipped. If that compact set still cannot fit, the export fails visibly.
   static Future<ProfileDatabaseSnapshotExport> export(
     ProfileScope scope, {
     bool compact = false,
@@ -446,7 +447,29 @@ class ProfileDatabaseSnapshot {
                   whereArgs: <Object>[entry.key],
                 );
               }
+              if (tables.contains('iptv_category_channel_orders')) {
+                await txn.update(
+                  'iptv_category_channel_orders',
+                  <String, Object?>{'source_id': entry.value},
+                  where: 'source_id = ?',
+                  whereArgs: <Object>[entry.key],
+                );
+              }
             } else if (name == 'iptv_catalog.db') {
+              if (tables.contains('category_manual_orders')) {
+                await txn.update(
+                  'category_manual_orders',
+                  <String, Object?>{
+                    'catalog_key': IptvCatalogKey.forLocalCategoryOrder(
+                      entry.value,
+                    ),
+                  },
+                  where: 'catalog_key = ?',
+                  whereArgs: <Object>[
+                    IptvCatalogKey.forLocalCategoryOrder(entry.key),
+                  ],
+                );
+              }
               if (tables.contains('channel_number_aliases')) {
                 await txn.update(
                   'channel_number_aliases',

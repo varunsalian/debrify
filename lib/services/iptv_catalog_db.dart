@@ -12,6 +12,7 @@ import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../models/iptv_playlist.dart';
+import 'iptv_channel_order.dart';
 
 /// Worker entry for cold catalog initialization. The native handle is opened
 /// with FULLMUTEX because ownership moves to Flutter's isolate after this job;
@@ -33,10 +34,60 @@ void _closeTransferredCatalogDb(int handleAddress) {
 /// Worker entry for catalog deletion. `args[0]` is the database path, the rest
 /// are catalog keys. Mass deletes belong off the UI isolate — see
 /// [IptvCatalogDb.removeCatalogsByKeys].
-void _removeCatalogsJob(List<String> args) {
-  final db = IptvCatalogDb._openConnection(args.first);
+void _removeCatalogsJob(
+  ({String dbPath, List<String> keys, bool forgetChannelOrders}) job,
+) {
+  final db = IptvCatalogDb._openConnection(job.dbPath);
   try {
-    IptvCatalogDb.removeCatalogsOn(db, args.skip(1));
+    IptvCatalogDb.removeCatalogsOn(
+      db,
+      job.keys,
+      forgetChannelOrders: job.forgetChannelOrders,
+    );
+  } finally {
+    db.dispose();
+  }
+}
+
+/// Worker entry for saving one catalog's category-list order. Providers can
+/// expose close to a thousand categories, so replacing the rank table belongs
+/// off the UI isolate just like channel-order projection does.
+bool _setCategoryOrderJob(
+  ({String dbPath, String catalogKey, List<String> ordered}) job,
+) {
+  final db = IptvCatalogDb._openConnection(job.dbPath);
+  try {
+    IptvCatalogDb.setCategoryOrderOn(
+      db,
+      catalogKey: job.catalogKey,
+      ordered: job.ordered,
+    );
+    return true;
+  } finally {
+    db.dispose();
+  }
+}
+
+/// Worker entry for saving a category's complete manual order. A provider can
+/// put tens of thousands of channels in one category, so both the row scan and
+/// the per-row rank projection belong off the UI isolate.
+bool _setGroupChannelOrderJob(
+  ({
+    String dbPath,
+    String catalogKey,
+    String group,
+    List<IptvChannelOrderIdentity> ordered,
+  })
+  job,
+) {
+  final db = IptvCatalogDb._openConnection(job.dbPath);
+  try {
+    return IptvCatalogDb.setGroupChannelOrderOn(
+      db,
+      catalogKey: job.catalogKey,
+      group: job.group,
+      ordered: job.ordered,
+    );
   } finally {
     db.dispose();
   }
@@ -195,6 +246,9 @@ class _NativeSqliteApi {
           // "the column exists".
         }
       }
+      for (final sql in IptvCatalogDb._postColumnSchemaSql) {
+        _execute(handle, sql);
+      }
       transferred = true;
       return handle.address;
     } finally {
@@ -310,7 +364,8 @@ class IptvCatalogDb {
         attributes_json TEXT,
         http_headers_json TEXT,
         search_key TEXT NOT NULL,
-        channel_number INTEGER
+        channel_number INTEGER,
+        manual_position INTEGER
       )
     ''',
     '''
@@ -348,6 +403,31 @@ class IptvCatalogDb {
         catalog_key TEXT NOT NULL,
         grp TEXT NOT NULL,
         hidden_at INTEGER NOT NULL,
+        PRIMARY KEY (catalog_key, grp)
+      )
+    ''',
+    // Manual order of CHANNELS inside a category is keyed by provider
+    // identity, not generation, so it survives the whole-generation
+    // replacement performed by ingest.
+    '''
+      CREATE TABLE IF NOT EXISTS channel_manual_orders (
+        catalog_key TEXT NOT NULL,
+        grp TEXT NOT NULL,
+        url TEXT NOT NULL,
+        name TEXT NOT NULL,
+        occurrence INTEGER NOT NULL,
+        manual_position INTEGER NOT NULL,
+        PRIMARY KEY (catalog_key, grp, url, name, occurrence)
+      )
+    ''',
+    // Manual order of the CATEGORY LIST itself. Category name is already the
+    // durable identity used by hidden_groups; keeping these ranks outside the
+    // generation-scoped catalog rows makes refresh a no-op for user order.
+    '''
+      CREATE TABLE IF NOT EXISTS category_manual_orders (
+        catalog_key TEXT NOT NULL,
+        grp TEXT NOT NULL,
+        manual_position INTEGER NOT NULL,
         PRIMARY KEY (catalog_key, grp)
       )
     ''',
@@ -411,6 +491,19 @@ class IptvCatalogDb {
   /// reads or writes rows belongs in [_runPendingMigrations] instead.
   static const _columnMigrationSql = [
     'ALTER TABLE channels ADD COLUMN channel_number INTEGER',
+    'ALTER TABLE channels ADD COLUMN manual_position INTEGER',
+  ];
+
+  /// Index DDL that depends on metadata-only columns must run after the
+  /// guarded ALTERs above. On an existing database CREATE TABLE IF NOT EXISTS
+  /// leaves the old channels shape untouched.
+  static const _postColumnSchemaSql = [
+    'CREATE INDEX IF NOT EXISTS idx_channels_grp_manual '
+        'ON channels(catalog_key, generation, grp, manual_position, position)',
+    'CREATE INDEX IF NOT EXISTS idx_channel_manual_orders_group '
+        'ON channel_manual_orders(catalog_key, grp, manual_position)',
+    'CREATE INDEX IF NOT EXISTS idx_category_manual_orders_catalog '
+        'ON category_manual_orders(catalog_key, manual_position)',
   ];
 
   /// The v2 backfill: give every pre-numbering live row a provisional number
@@ -769,6 +862,9 @@ class IptvCatalogDb {
         // expected result after the first successful v2 migration.
       }
     }
+    for (final sql in _postColumnSchemaSql) {
+      db.execute(sql);
+    }
     // Deliberately NOT _runPendingMigrations: this runs before EVERY ingest,
     // and an ordinary background refresh has no business carrying a one-time
     // upgrade of unrelated catalogs. Schema shape is all ingest needs; the
@@ -810,6 +906,26 @@ class IptvCatalogDb {
       // leftovers.
       final generation = _nextGeneration(db, catalogKey);
 
+      // Resolve saved ranks before rows are inserted. Occurrence is counted
+      // in provider order among duplicate stable identities, matching the
+      // editor's identity model. Unknown/new rows keep NULL and append after
+      // ranked rows in category-scoped queries.
+      final manualOrderRows = db.select(
+        'SELECT grp, url, name, occurrence, manual_position '
+        'FROM channel_manual_orders WHERE catalog_key = ?',
+        [catalogKey],
+      );
+      final manualRanks = <(String, String, String, int), int>{
+        for (final row in manualOrderRows)
+          (
+            row['grp'] as String,
+            row['url'] as String,
+            row['name'] as String,
+            row['occurrence'] as int,
+          ): row['manual_position'] as int,
+      };
+      final occurrences = <(String, String, String), int>{};
+
       // Chunked, never one giant transaction. A 50k ingest used to run ~150k
       // statements under a single BEGIN IMMEDIATE: the write lock was held
       // for the entire run (every UI-side write then blocked into its 5s
@@ -842,8 +958,8 @@ class IptvCatalogDb {
         INSERT INTO channels(
           catalog_key, generation, position, name, url, logo_url, grp,
           duration, content_type, attributes_json, http_headers_json,
-          search_key, channel_number
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          search_key, channel_number, manual_position
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ''');
       try {
         var i = 0;
@@ -854,6 +970,16 @@ class IptvCatalogDb {
           try {
             for (; i < end; i++) {
               final c = channels[i];
+              int? manualPosition;
+              final group = c.group;
+              if (group != null) {
+                final base = iptvChannelOrderIdentityBaseFor(c);
+                final occurrenceKey = (group, base.url, base.name);
+                final occurrence = occurrences[occurrenceKey] ?? 0;
+                occurrences[occurrenceKey] = occurrence + 1;
+                manualPosition =
+                    manualRanks[(group, base.url, base.name, occurrence)];
+              }
               insert.execute([
                 catalogKey,
                 generation,
@@ -870,6 +996,7 @@ class IptvCatalogDb {
                 // behavior must not change when the query moves into SQL.
                 '${c.name.toLowerCase()}\n${c.group?.toLowerCase() ?? ''}',
                 channelNumbers[i],
+                manualPosition,
               ]);
             }
             db.execute('COMMIT');
@@ -988,6 +1115,45 @@ class IptvCatalogDb {
         for (final row in rows)
           CatalogGroup(row['grp'] as String?, row['c'] as int),
       ];
+    } finally {
+      db.dispose();
+    }
+  }
+
+  /// The reorder editor materializes a complete category. Run that scan and
+  /// row decoding on a worker so even a pathological 50k-row category cannot
+  /// stall DPAD or its route transition on a low-end television.
+  static Future<List<IptvChannelOrderEntry>> groupOrderEntriesAsync(
+    CatalogSnapshot snap,
+    String group,
+  ) {
+    // This complete scan becomes durable state if the editor saves it. Keep
+    // the worker inside the same gate as refresh deletion/ingest so it can
+    // never observe a generation while that generation is being replaced.
+    return runExclusive(() {
+      if (!isOpen) {
+        throw StateError('IPTV catalog closed while loading channel order');
+      }
+      return compute(_readGroupOrderEntriesJob, (
+        dbPath: path,
+        catalogKey: snap.catalogKey,
+        generation: snap.generation,
+        group: group,
+      ), debugLabel: 'iptv-category-channel-order');
+    });
+  }
+
+  static List<IptvChannelOrderEntry> _readGroupOrderEntriesJob(
+    ({String dbPath, String catalogKey, int generation, String group}) job,
+  ) {
+    final db = _openConnection(job.dbPath);
+    try {
+      final rows = db.select(
+        'SELECT * FROM channels WHERE catalog_key = ? AND generation = ? '
+        'AND grp = ? ORDER BY position',
+        [job.catalogKey, job.generation, job.group],
+      );
+      return CatalogSnapshot._orderEntriesFromRows(rows);
     } finally {
       db.dispose();
     }
@@ -1649,11 +1815,20 @@ class IptvCatalogDb {
   /// it took, because it ran synchronously on the UI isolate. It is also
   /// whole-catalog write work, so it queues with migration, adoption, ingest
   /// and refresh rather than racing whatever the IPTV page left running.
-  static Future<void> removeCatalogsByKeys(Iterable<String> keys) async {
+  static Future<void> removeCatalogsByKeys(
+    Iterable<String> keys, {
+    bool forgetChannelOrders = false,
+  }) async {
     final list = keys.toList(growable: false);
     if (list.isEmpty) return;
     await open();
-    await runExclusive(() => compute(_removeCatalogsJob, [path, ...list]));
+    await runExclusive(
+      () => compute(_removeCatalogsJob, (
+        dbPath: path,
+        keys: list,
+        forgetChannelOrders: forgetChannelOrders,
+      ), debugLabel: 'iptv-catalog-delete'),
+    );
   }
 
   /// Marks a removed playlist's numbering namespace as eligible for a future
@@ -1811,12 +1986,26 @@ class IptvCatalogDb {
   /// Synchronous deletion against the caller's own connection. Worker-side
   /// entry point for [removeCatalogsByKeys]; UI callers must use that instead,
   /// so a 50k-row delete never lands on this isolate.
-  static void removeCatalogsOn(Database db, Iterable<String> keys) {
+  static void removeCatalogsOn(
+    Database db,
+    Iterable<String> keys, {
+    bool forgetChannelOrders = false,
+  }) {
     db.execute('BEGIN');
     try {
       for (final key in keys) {
         db.execute('DELETE FROM channels WHERE catalog_key = ?', [key]);
         db.execute('DELETE FROM catalogs WHERE catalog_key = ?', [key]);
+        if (forgetChannelOrders) {
+          db.execute(
+            'DELETE FROM channel_manual_orders WHERE catalog_key = ?',
+            [key],
+          );
+          db.execute(
+            'DELETE FROM category_manual_orders WHERE catalog_key = ?',
+            [key],
+          );
+        }
         // The catalog's bookkeeping goes with it. Narrow but real: a delete
         // and re-add inside the backoff window would otherwise inherit the old
         // entry's suppressed refresh.
@@ -1829,6 +2018,309 @@ class IptvCatalogDb {
       _rollbackQuietly(db);
       rethrow;
     }
+  }
+
+  // ── Manual channel order ─────────────────────────────────────────────────
+
+  // Category-list order.
+  /// Apply the saved category ranks to [categories]. Categories a provider
+  /// added since the order was saved append in their provider order; saved
+  /// names no longer present are ignored without losing their durable rank.
+  static List<String> applyCategoryOrder(
+    String catalogKey,
+    Iterable<String> categories,
+  ) {
+    final baseline = categories.toList(growable: false);
+    if (!isOpen || baseline.length < 2) return baseline;
+    final saved = savedCategoryOrder(catalogKey);
+    if (saved.isEmpty) return baseline;
+    final rankByName = <String, int>{
+      for (var i = 0; i < saved.length; i++) saved[i]: i,
+    };
+    final providerPosition = <String, int>{};
+    for (var i = 0; i < baseline.length; i++) {
+      providerPosition.putIfAbsent(baseline[i], () => i);
+    }
+    final ordered = List<String>.of(baseline);
+    ordered.sort((a, b) {
+      final ar = rankByName[a];
+      final br = rankByName[b];
+      if (ar != null && br != null) return ar.compareTo(br);
+      if (ar != null) return -1;
+      if (br != null) return 1;
+      return providerPosition[a]!.compareTo(providerPosition[b]!);
+    });
+    return ordered;
+  }
+
+  /// The saved names in display order. A saved order does not require a
+  /// published catalog: restore can install ranks before first source load.
+  static List<String> savedCategoryOrder(String catalogKey) {
+    if (!isOpen) return const [];
+    final rows = _requireDb().select(
+      'SELECT grp FROM category_manual_orders WHERE catalog_key = ? '
+      'ORDER BY manual_position, grp',
+      [catalogKey],
+    );
+    return [for (final row in rows) row['grp'] as String];
+  }
+
+  /// Drops category-list order for sources that are being removed. Local-file
+  /// keys have no catalog rows, so they cannot use [removeCatalogsByKeys].
+  static Future<void> forgetCategoryOrders(Iterable<String> orderKeys) async {
+    final keys = orderKeys.toList(growable: false);
+    if (keys.isEmpty) return;
+    await open();
+    await runExclusive(() async {
+      if (!isOpen) {
+        throw StateError('IPTV catalog closed while deleting category order');
+      }
+      final placeholders = List.filled(keys.length, '?').join(', ');
+      _requireDb().execute(
+        'DELETE FROM category_manual_orders '
+        'WHERE catalog_key IN ($placeholders)',
+        keys,
+      );
+    });
+  }
+
+  /// Replace one catalog's complete category order. An empty iterable resets
+  /// it to provider order. Notification happens after the maintenance Zone is
+  /// left so a mounted IPTV page cannot start a reload that escapes the gate.
+  static Future<void> setCategoryOrder(
+    String catalogKey,
+    Iterable<String> ordered,
+  ) async {
+    await open();
+    final names = <String>[];
+    final seen = <String>{};
+    for (final raw in ordered) {
+      if (raw.trim().isNotEmpty && seen.add(raw)) names.add(raw);
+    }
+    final saved = await runExclusive(() {
+      if (!isOpen) return Future<bool>.value(false);
+      return compute(_setCategoryOrderJob, (
+        dbPath: path,
+        catalogKey: catalogKey,
+        ordered: names,
+      ), debugLabel: 'iptv-category-order-save');
+    });
+    if (saved) IptvChannelOrderSignal.notifyCatalogChanged(catalogKey);
+  }
+
+  /// Synchronous worker-side implementation of [setCategoryOrder].
+  static void setCategoryOrderOn(
+    Database db, {
+    required String catalogKey,
+    required Iterable<String> ordered,
+  }) {
+    db.execute('BEGIN IMMEDIATE');
+    PreparedStatement? insert;
+    try {
+      db.execute('DELETE FROM category_manual_orders WHERE catalog_key = ?', [
+        catalogKey,
+      ]);
+      insert = db.prepare(
+        'INSERT INTO category_manual_orders '
+        '(catalog_key, grp, manual_position) VALUES (?, ?, ?)',
+      );
+      final seen = <String>{};
+      var position = 0;
+      for (final raw in ordered) {
+        if (raw.trim().isEmpty || !seen.add(raw)) continue;
+        insert.execute([catalogKey, raw, position++]);
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    } finally {
+      insert?.dispose();
+    }
+  }
+
+  // ── Manual channel order ────────────────────────────────────────────────
+
+  /// Save one category's complete order against durable channel identities,
+  /// then project those ranks onto the currently published generation.
+  /// Returns false when the catalog no longer exists.
+  static Future<bool> setGroupChannelOrder(
+    String catalogKey,
+    String group,
+    Iterable<IptvChannelOrderIdentity> ordered,
+  ) async {
+    if (group.isEmpty) return false;
+    await open();
+    final orderedList = ordered.toList(growable: false);
+    final saved = await runExclusive(() {
+      if (!isOpen) return Future<bool>.value(false);
+      return compute(_setGroupChannelOrderJob, (
+        dbPath: path,
+        catalogKey: catalogKey,
+        group: group,
+        ordered: orderedList,
+      ), debugLabel: 'iptv-category-channel-order-save');
+    });
+    // Notify after leaving the maintenance Zone. A listener may launch its
+    // own gated refresh; notifying inside would make that detached work look
+    // re-entrant forever and let it bypass serialization.
+    if (saved) IptvChannelOrderSignal.notifyCatalogChanged(catalogKey);
+    return saved;
+  }
+
+  /// Synchronous worker-side implementation of [setGroupChannelOrder].
+  /// Kept public only to the library so the top-level compute entry can call
+  /// it with the worker's connection.
+  static bool setGroupChannelOrderOn(
+    Database db, {
+    required String catalogKey,
+    required String group,
+    required Iterable<IptvChannelOrderIdentity> ordered,
+  }) {
+    final catalog = db.select(
+      'SELECT generation FROM catalogs WHERE catalog_key = ?',
+      [catalogKey],
+    );
+    if (catalog.isEmpty) return false;
+    final generation = catalog.first['generation'] as int;
+
+    final ranks = <IptvChannelOrderIdentity, int>{};
+    for (final identity in ordered) {
+      ranks.putIfAbsent(identity, () => ranks.length);
+    }
+
+    db.execute('BEGIN IMMEDIATE');
+    PreparedStatement? insert;
+    PreparedStatement? update;
+    try {
+      db.execute(
+        'DELETE FROM channel_manual_orders '
+        'WHERE catalog_key = ? AND grp = ?',
+        [catalogKey, group],
+      );
+      insert = db.prepare(
+        'INSERT INTO channel_manual_orders '
+        '(catalog_key, grp, url, name, occurrence, manual_position) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+      );
+      for (final entry in ranks.entries) {
+        insert.execute([
+          catalogKey,
+          group,
+          entry.key.url,
+          entry.key.name,
+          entry.key.occurrence,
+          entry.value,
+        ]);
+      }
+
+      db.execute(
+        'UPDATE channels SET manual_position = NULL '
+        'WHERE catalog_key = ? AND generation = ? AND grp = ?',
+        [catalogKey, generation, group],
+      );
+      final rows = db.select(
+        'SELECT id, url, name, content_type, attributes_json FROM channels '
+        'WHERE catalog_key = ? AND generation = ? AND grp = ? '
+        'ORDER BY position',
+        [catalogKey, generation, group],
+      );
+      final occurrences = <(String, String), int>{};
+      update = db.prepare(
+        'UPDATE channels SET manual_position = ? WHERE id = ?',
+      );
+      for (final row in rows) {
+        final base = iptvChannelOrderIdentityBase(
+          url: row['url'] as String,
+          name: row['name'] as String,
+          contentType: row['content_type'] as String?,
+          attributes: CatalogSnapshot._decodeStringMap(row['attributes_json']),
+        );
+        final key = (base.url, base.name);
+        final occurrence = occurrences[key] ?? 0;
+        occurrences[key] = occurrence + 1;
+        final rank =
+            ranks[IptvChannelOrderIdentity(
+              url: key.$1,
+              name: key.$2,
+              occurrence: occurrence,
+            )];
+        if (rank != null) update.execute([rank, row['id']]);
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    } finally {
+      insert?.dispose();
+      update?.dispose();
+    }
+    return true;
+  }
+
+  /// Apply saved category ranks to a materialized fallback catalog while
+  /// preserving the provider's category slots in the overall sequence.
+  static List<IptvChannel> applyCategoryChannelOrders(
+    String catalogKey,
+    List<IptvChannel> channels,
+  ) {
+    if (!isOpen || channels.isEmpty) return channels;
+    final rows = _requireDb().select(
+      'SELECT grp, url, name, occurrence, manual_position '
+      'FROM channel_manual_orders WHERE catalog_key = ?',
+      [catalogKey],
+    );
+    if (rows.isEmpty) return channels;
+    final ranks = <(String, String, String, int), int>{
+      for (final row in rows)
+        (
+          row['grp'] as String,
+          row['url'] as String,
+          row['name'] as String,
+          row['occurrence'] as int,
+        ): row['manual_position'] as int,
+    };
+    final orderedGroups = {for (final row in rows) row['grp'] as String};
+    final occurrences = <(String, String, String), int>{};
+    final baseline = <IptvChannel, int>{};
+    final rankByChannel = <IptvChannel, int>{};
+    final byGroup = <String, List<IptvChannel>>{};
+    for (var i = 0; i < channels.length; i++) {
+      final channel = channels[i];
+      final group = channel.group;
+      if (group == null) continue;
+      final base = iptvChannelOrderIdentityBaseFor(channel);
+      final key = (group, base.url, base.name);
+      final occurrence = occurrences[key] ?? 0;
+      occurrences[key] = occurrence + 1;
+      final rank = ranks[(group, base.url, base.name, occurrence)];
+      if (rank == null && !orderedGroups.contains(group)) continue;
+      baseline[channel] = i;
+      if (rank != null) rankByChannel[channel] = rank;
+      byGroup.putIfAbsent(group, () => <IptvChannel>[]).add(channel);
+    }
+    for (final groupChannels in byGroup.values) {
+      groupChannels.sort((a, b) {
+        final ar = rankByChannel[a];
+        final br = rankByChannel[b];
+        if (ar != null && br != null) return ar.compareTo(br);
+        if (ar != null) return -1;
+        if (br != null) return 1;
+        return baseline[a]!.compareTo(baseline[b]!);
+      });
+    }
+    final offsets = <String, int>{};
+    return [
+      for (final channel in channels)
+        if (channel.group == null || !byGroup.containsKey(channel.group))
+          channel
+        else
+          byGroup[channel.group!]![offsets.update(
+            channel.group!,
+            (value) => value + 1,
+            ifAbsent: () => 0,
+          )],
+    ];
   }
 
   // ── Hidden categories ────────────────────────────────────────────────────
@@ -2078,7 +2570,39 @@ class CatalogSnapshot {
       .replaceAll('%', r'\%')
       .replaceAll('_', r'\_');
 
+  bool _hasManualOrder(String group) => _db.select(
+    'SELECT 1 $_base AND grp = ? AND manual_position IS NOT NULL LIMIT 1',
+    [catalogKey, generation, group],
+  ).isNotEmpty;
+
   int count({String? group, String? search, bool? live, int? beforePosition}) {
+    // A catalog position remains the stable row identity, but once a category
+    // is manually ordered it is no longer the display index. Compare the
+    // target's display tuple so startup, numeric tuning, and zap paging land
+    // on the same row [pageEntries] will return.
+    if (group != null && beforePosition != null && _hasManualOrder(group)) {
+      final target = _db.select(
+        'SELECT manual_position $_base AND position = ? LIMIT 1',
+        [catalogKey, generation, beforePosition],
+      );
+      if (target.isEmpty) return 0;
+      final manual = target.first['manual_position'] as int?;
+      final prefix =
+          'SELECT COUNT(*) AS c '
+          '${_where(group: group, search: search, live: live)}';
+      final rows = manual == null
+          ? _db.select(
+              '$prefix AND (manual_position IS NOT NULL OR '
+              '(manual_position IS NULL AND position < ?))',
+              [..._args(group: group, search: search), beforePosition],
+            )
+          : _db.select(
+              '$prefix AND manual_position IS NOT NULL '
+              'AND manual_position < ?',
+              [..._args(group: group, search: search), manual],
+            );
+      return rows.first['c'] as int;
+    }
     final rows = _db.select(
       'SELECT COUNT(*) AS c ${_where(group: group, search: search, live: live, beforePosition: beforePosition)}',
       _args(group: group, search: search, beforePosition: beforePosition),
@@ -2218,14 +2742,75 @@ class CatalogSnapshot {
     bool? live,
   }) {
     final rows = _db.select(
-      'SELECT * ${_where(group: group, search: search, live: live)} '
-      'ORDER BY position LIMIT ? OFFSET ?',
+      _pageSql(group: group, search: search, live: live),
       [..._args(group: group, search: search), limit, offset],
     );
     return [
       for (final row in rows)
         (position: row['position'] as int, channel: _channelFromRow(row)),
     ];
+  }
+
+  String _pageSql({String? group, String? search, bool? live}) {
+    final manuallyOrdered = group != null && _hasManualOrder(group);
+    return 'SELECT * ${_where(group: group, search: search, live: live)} '
+        'ORDER BY ${manuallyOrdered ? 'manual_position NULLS LAST, position' : 'position'} '
+        'LIMIT ? OFFSET ?';
+  }
+
+  @visibleForTesting
+  List<String> debugPageQueryPlan({String? group, String? search, bool? live}) {
+    final rows = _db.select(
+      'EXPLAIN QUERY PLAN ${_pageSql(group: group, search: search, live: live)}',
+      [..._args(group: group, search: search), 50, 0],
+    );
+    return [for (final row in rows) row['detail'] as String];
+  }
+
+  /// Every row in one category, carrying the refresh-stable identity the
+  /// settings editor must persist. Hidden categories are intentionally
+  /// included: hiding controls visibility, not whether their order is kept.
+  List<IptvChannelOrderEntry> groupOrderEntries(String group) {
+    final rows = _db.select('SELECT * $_base AND grp = ? ORDER BY position', [
+      catalogKey,
+      generation,
+      group,
+    ]);
+    return _orderEntriesFromRows(rows);
+  }
+
+  static List<IptvChannelOrderEntry> _orderEntriesFromRows(Iterable<Row> rows) {
+    final materialized = rows.toList(growable: false);
+    final occurrences = <(String, String), int>{};
+    final baseline = <IptvChannelOrderIdentity, int>{};
+    final ranks = <IptvChannelOrderIdentity, int>{};
+    final entries = <IptvChannelOrderEntry>[];
+    for (var i = 0; i < materialized.length; i++) {
+      final row = materialized[i];
+      final channel = _channelFromRow(row);
+      final base = iptvChannelOrderIdentityBaseFor(channel);
+      final key = (base.url, base.name);
+      final occurrence = occurrences[key] ?? 0;
+      occurrences[key] = occurrence + 1;
+      final identity = IptvChannelOrderIdentity(
+        url: base.url,
+        name: base.name,
+        occurrence: occurrence,
+      );
+      baseline[identity] = i;
+      final rank = row['manual_position'] as int?;
+      if (rank != null) ranks[identity] = rank;
+      entries.add(IptvChannelOrderEntry(identity: identity, channel: channel));
+    }
+    entries.sort((a, b) {
+      final ar = ranks[a.identity];
+      final br = ranks[b.identity];
+      if (ar != null && br != null) return ar.compareTo(br);
+      if (ar != null) return -1;
+      if (br != null) return 1;
+      return baseline[a.identity]!.compareTo(baseline[b.identity]!);
+    });
+    return entries;
   }
 
   /// Distinct groups with counts, in first-appearance (catalog) order — the

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
+import 'iptv_channel_order.dart';
 import 'iptv_media_store.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_credential_facade.dart';
@@ -5269,6 +5270,41 @@ class StorageService {
     String listId,
   ) {
     return IptvMediaStore.listChannels(listId);
+  }
+
+  /// Persist the display order of channels inside Favorites or a custom list.
+  static Future<void> reorderIptvListChannels(
+    String listId,
+    Iterable<String> orderedUrls,
+  ) {
+    return IptvMediaStore.reorderListChannels(listId, orderedUrls);
+  }
+
+  static Future<List<IptvChannelOrderEntry>> getIptvCategoryOrderEntries(
+    String sourceId,
+    Iterable<IptvChannel> channels,
+    String group,
+  ) {
+    return IptvMediaStore.categoryOrderEntries(sourceId, channels, group);
+  }
+
+  static Future<void> setIptvCategoryChannelOrder(
+    String sourceId,
+    String group,
+    Iterable<IptvChannelOrderIdentity> ordered,
+  ) {
+    return IptvMediaStore.setCategoryChannelOrder(sourceId, group, ordered);
+  }
+
+  static Future<List<IptvChannel>> applyIptvCategoryChannelOrders(
+    String sourceId,
+    List<IptvChannel> channels,
+  ) {
+    return IptvMediaStore.applyCategoryChannelOrders(sourceId, channels);
+  }
+
+  static Future<void> removeIptvCategoryOrdersForSource(String sourceId) {
+    return IptvMediaStore.removeCategoryOrdersForSource(sourceId);
   }
 
   /// Which lists each stored channel belongs to, url → list ids.

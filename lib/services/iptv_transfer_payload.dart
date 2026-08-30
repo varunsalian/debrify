@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/iptv_playlist.dart';
+import 'iptv_catalog_db.dart';
+import 'iptv_catalog_key.dart';
 import 'iptv_media_store.dart';
 import 'storage_service.dart';
 
-/// Serializes the IPTV side of a user's setup — providers, Favorites, and
-/// custom channel lists — into plain JSON, and merges that JSON back into a
-/// device.
+/// Serializes the IPTV side of a user's setup — providers (including category
+/// order), Favorites, and custom channel lists — into plain JSON, and merges
+/// that JSON back into a device.
 ///
 /// Shared by the two transports that move a setup between devices: the backup
 /// file ([BackupRestoreService]) and the phone→TV Remote transfer. Keeping one
@@ -40,7 +42,8 @@ abstract final class IptvTransferPayload {
       _fingerprint(IptvPlaylist.fromJson(json));
   // ── Providers ────────────────────────────────────────────────────────────
 
-  /// The user's transferable IPTV providers, as `IptvPlaylist.toJson()` maps.
+  /// The user's transferable IPTV providers, as `IptvPlaylist.toJson()` maps
+  /// plus each catalog's category order.
   ///
   /// Two kinds are left out:
   ///
@@ -55,15 +58,43 @@ abstract final class IptvTransferPayload {
   static Future<List<Map<String, dynamic>>> buildPlaylists({
     bool forRemoteTransfer = false,
   }) async {
+    final catalogAvailable = await _openCatalogForOptionalOrders('export');
     final playlists = await StorageService.getIptvPlaylists(
       forSettings: !forRemoteTransfer,
       forRemoteTransfer: forRemoteTransfer,
     );
-    return [
-      for (final playlist in playlists)
-        if (!playlist.isVirtual && !playlist.isLocalFile)
-          playlist.toTransferJson(),
-    ];
+    final out = <Map<String, dynamic>>[];
+    for (final playlist in playlists) {
+      if (playlist.isVirtual || playlist.isLocalFile) continue;
+      final json = playlist.toTransferJson();
+      final types = playlist.isXtreamCodes
+          ? IptvCatalogKey.xtreamContentTypes
+          : const ['live'];
+      if (catalogAvailable) {
+        try {
+          final orders = <String, List<String>>{};
+          for (final type in types) {
+            final key = IptvCatalogKey.forPlaylist(playlist, type);
+            if (key == null) continue;
+            final order = IptvCatalogDb.savedCategoryOrder(key);
+            // No rows cannot distinguish "never customized" from an explicit
+            // provider-order reset. Omitting it is the non-destructive wire
+            // representation: an uncustomized sender must not wipe an existing
+            // receiver's order for the same provider.
+            if (order.isNotEmpty) orders[type] = order;
+          }
+          if (orders.isNotEmpty) json['categoryOrders'] = orders;
+        } catch (error) {
+          // The catalog remains a cache. A broken optional order table cannot
+          // be allowed to make an otherwise valid provider unexportable.
+          debugPrint(
+            'IptvTransferPayload: category order export skipped ($error)',
+          );
+        }
+      }
+      out.add(json);
+    }
+    return out;
   }
 
   /// How many providers are configured, split into the ones [buildPlaylists]
@@ -91,10 +122,15 @@ abstract final class IptvTransferPayload {
   static Future<IptvImportCounts> applyPlaylists(List<dynamic> entries) async {
     final counts = IptvImportCounts();
     try {
+      final catalogAvailable = await _openCatalogForOptionalOrders('import');
       final existing = await StorageService.getIptvPlaylists();
-      final existingKeys = <String>{for (final p in existing) _fingerprint(p)};
+      final existingByKey = <String, IptvPlaylist>{
+        for (final p in existing) _fingerprint(p): p,
+      };
       final existingIds = <String>{for (final p in existing) p.id};
       final merged = List<IptvPlaylist>.from(existing);
+      final categoryOrders =
+          <({IptvPlaylist playlist, Map<String, List<String>> orders})>[];
 
       for (final raw in entries) {
         if (raw is! Map) {
@@ -115,8 +151,14 @@ abstract final class IptvTransferPayload {
             counts.failed++;
             continue;
           }
-          if (existingKeys.contains(_fingerprint(playlist))) {
+          final fingerprint = _fingerprint(playlist);
+          final present = existingByKey[fingerprint];
+          if (present != null) {
             counts.alreadyPresent++;
+            final orders = catalogAvailable ? _categoryOrdersFrom(raw) : null;
+            if (orders != null) {
+              categoryOrders.add((playlist: present, orders: orders));
+            }
             continue;
           }
           // An id collision with a *different* provider would make one of them
@@ -127,8 +169,12 @@ abstract final class IptvTransferPayload {
             continue;
           }
           merged.add(playlist);
-          existingKeys.add(_fingerprint(playlist));
+          existingByKey[fingerprint] = playlist;
           existingIds.add(playlist.id);
+          final orders = catalogAvailable ? _categoryOrdersFrom(raw) : null;
+          if (orders != null) {
+            categoryOrders.add((playlist: playlist, orders: orders));
+          }
           counts.imported++;
         } catch (_) {
           debugPrint('IptvTransferPayload: playlist entry failed');
@@ -139,10 +185,68 @@ abstract final class IptvTransferPayload {
       if (counts.imported > 0) {
         await StorageService.setIptvPlaylists(merged);
       }
+      for (final entry in categoryOrders) {
+        final allowedTypes = entry.playlist.isXtreamCodes
+            ? IptvCatalogKey.xtreamContentTypes
+            : const <String>['live'];
+        for (final type in allowedTypes) {
+          final order = entry.orders[type];
+          if (order == null) continue;
+          final key = IptvCatalogKey.forPlaylist(entry.playlist, type);
+          if (key != null) {
+            try {
+              await IptvCatalogDb.setCategoryOrder(key, order);
+            } catch (error) {
+              // Provider import predates the optional catalog database. A
+              // damaged cache may cost this order, never the whole provider.
+              debugPrint(
+                'IptvTransferPayload: category order import skipped ($error)',
+              );
+            }
+          }
+        }
+      }
     } catch (_) {
       counts.error = 'IPTV playlist import failed';
     }
     return counts;
+  }
+
+  /// Null means an older payload that said nothing about category order;
+  /// preserve the receiver's current choice. An explicit empty list for one
+  /// content type is a provider-order reset and must not collapse to null.
+  static Map<String, List<String>>? _categoryOrdersFrom(Map raw) {
+    final value = raw['categoryOrders'];
+    if (value is! Map) return null;
+    final out = <String, List<String>>{};
+    for (final type in IptvCatalogKey.xtreamContentTypes) {
+      final names = value[type];
+      if (names is! List) continue;
+      final seen = <String>{};
+      final parsed = <String>[];
+      for (final rawName in names) {
+        if (rawName is String &&
+            rawName.trim().isNotEmpty &&
+            seen.add(rawName)) {
+          parsed.add(rawName);
+        }
+      }
+      out[type] = parsed;
+    }
+    return out;
+  }
+
+  static Future<bool> _openCatalogForOptionalOrders(String operation) async {
+    try {
+      await IptvCatalogDb.open();
+      return true;
+    } catch (error) {
+      debugPrint(
+        'IptvTransferPayload: catalog unavailable during $operation; '
+        'continuing without category order ($error)',
+      );
+      return false;
+    }
   }
 
   /// What identifies a provider to its panel: the Xtream server + account for

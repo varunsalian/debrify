@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/iptv_transfer_payload.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -15,25 +19,33 @@ import 'package:debrify/services/storage_service.dart';
 /// run twice, and memberships that have to keep pointing at the provider they
 /// came from.
 void main() {
+  late Directory catalogDir;
+
   setUpAll(() {
     sqfliteFfiInit();
   });
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    catalogDir = await Directory.systemTemp.createTemp('iptv_transfer_test');
+    IptvCatalogDb.debugDirectoryOverride = catalogDir.path;
+    await IptvCatalogDb.open();
     IptvMediaStore.debugResetMigration();
-    DebrifyTvDatabase.debugDatabaseOverride =
-        await databaseFactoryFfiNoIsolate.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: 1,
-        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
-      ),
-    );
+    DebrifyTvDatabase.debugDatabaseOverride = await databaseFactoryFfiNoIsolate
+        .openDatabase(
+          inMemoryDatabasePath,
+          options: OpenDatabaseOptions(
+            version: 1,
+            onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+            onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+          ),
+        );
   });
 
   tearDown(() async {
+    IptvCatalogDb.debugClose();
+    IptvCatalogDb.debugDirectoryOverride = null;
+    await catalogDir.delete(recursive: true);
     await DebrifyTvDatabase.debugDatabaseOverride?.close();
     DebrifyTvDatabase.debugDatabaseOverride = null;
     IptvMediaStore.debugResetMigration();
@@ -76,6 +88,126 @@ void main() {
       expect(restored.single.password, 'pw');
     });
 
+    test('round-trips each catalog category order with its provider', () async {
+      final provider = xtream(id: 'p1');
+      await StorageService.setIptvPlaylists([provider]);
+      final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
+      final vodKey = IptvCatalogKey.forPlaylist(provider, 'vod')!;
+      await IptvCatalogDb.setCategoryOrder(liveKey, const ['News', 'Sports']);
+      await IptvCatalogDb.setCategoryOrder(vodKey, const ['Drama', 'Comedy']);
+
+      final payload = await IptvTransferPayload.buildPlaylists();
+      expect(payload.single['categoryOrders'], {
+        'live': ['News', 'Sports'],
+        'vod': ['Drama', 'Comedy'],
+      });
+
+      await StorageService.setIptvPlaylists(const []);
+      await IptvCatalogDb.setCategoryOrder(liveKey, const []);
+      await IptvCatalogDb.setCategoryOrder(vodKey, const []);
+      final counts = await IptvTransferPayload.applyPlaylists(payload);
+
+      expect(counts.imported, 1);
+      expect(IptvCatalogDb.savedCategoryOrder(liveKey), ['News', 'Sports']);
+      expect(IptvCatalogDb.savedCategoryOrder(vodKey), ['Drama', 'Comedy']);
+      expect(
+        IptvCatalogDb.savedCategoryOrder(
+          IptvCatalogKey.forPlaylist(provider, 'series')!,
+        ),
+        isEmpty,
+      );
+    });
+
+    test(
+      'an uncustomized sender preserves an existing receiver order',
+      () async {
+        final provider = xtream(id: 'same-provider');
+        await StorageService.setIptvPlaylists([provider]);
+
+        final payload = await IptvTransferPayload.buildPlaylists();
+        expect(payload.single, isNot(contains('categoryOrders')));
+
+        final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
+        await IptvCatalogDb.setCategoryOrder(liveKey, const [
+          'Receiver News',
+          'Receiver Sports',
+        ]);
+        final counts = await IptvTransferPayload.applyPlaylists(payload);
+
+        expect(counts.alreadyPresent, 1);
+        expect(IptvCatalogDb.savedCategoryOrder(liveKey), [
+          'Receiver News',
+          'Receiver Sports',
+        ]);
+      },
+    );
+
+    test(
+      'an explicit incoming empty order still resets the receiver',
+      () async {
+        final provider = xtream(id: 'local-id');
+        await StorageService.setIptvPlaylists([provider]);
+        final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
+        await IptvCatalogDb.setCategoryOrder(liveKey, const ['News', 'Sports']);
+
+        final incoming = xtream(id: 'phone-id').toTransferJson()
+          ..['categoryOrders'] = {'live': <String>[]};
+        final counts = await IptvTransferPayload.applyPlaylists([incoming]);
+
+        expect(counts.alreadyPresent, 1);
+        expect(IptvCatalogDb.savedCategoryOrder(liveKey), isEmpty);
+      },
+    );
+
+    test(
+      'category order updates an already-present matching provider',
+      () async {
+        final provider = xtream(id: 'local-id');
+        await StorageService.setIptvPlaylists([provider]);
+        final key = IptvCatalogKey.forPlaylist(provider, 'live')!;
+
+        final incoming = xtream(id: 'phone-id').toTransferJson()
+          ..['categoryOrders'] = {
+            'live': ['Kids', 'News'],
+            'vod': <String>[],
+            'series': <String>[],
+          };
+        final counts = await IptvTransferPayload.applyPlaylists([incoming]);
+
+        expect(counts.alreadyPresent, 1);
+        expect(counts.imported, 0);
+        expect(IptvCatalogDb.savedCategoryOrder(key), ['Kids', 'News']);
+        expect(await StorageService.getIptvPlaylists(), hasLength(1));
+      },
+    );
+
+    test('M3U imports only its live category order', () async {
+      final provider = IptvPlaylist(
+        id: 'm3u-local',
+        name: 'M3U',
+        url: 'https://example.com/list.m3u',
+        addedAt: DateTime(2026, 1, 1),
+      );
+      await StorageService.setIptvPlaylists([provider]);
+      final incoming = provider.toTransferJson()
+        ..['id'] = 'm3u-phone'
+        ..['categoryOrders'] = {
+          'live': ['News', 'Sports'],
+          // A malformed/future payload must not overwrite the one M3U key
+          // repeatedly with Xtream-only content types.
+          'vod': ['Wrong'],
+          'series': ['Also wrong'],
+        };
+
+      final counts = await IptvTransferPayload.applyPlaylists([incoming]);
+
+      expect(counts.alreadyPresent, 1);
+      expect(
+        IptvCatalogDb.savedCategoryOrder(IptvCatalogKey.forUrl(provider.url)),
+        ['News', 'Sports'],
+      );
+    });
+
     test('applying the same payload twice adds nothing', () async {
       await StorageService.setIptvPlaylists([xtream(id: 'p1')]);
       final payload = await IptvTransferPayload.buildPlaylists();
@@ -98,17 +230,21 @@ void main() {
       expect(await StorageService.getIptvPlaylists(), hasLength(1));
     });
 
-    test('a different account on the same server is a separate provider',
-        () async {
-      await StorageService.setIptvPlaylists([xtream(id: 'p1', user: 'alice')]);
+    test(
+      'a different account on the same server is a separate provider',
+      () async {
+        await StorageService.setIptvPlaylists([
+          xtream(id: 'p1', user: 'alice'),
+        ]);
 
-      final counts = await IptvTransferPayload.applyPlaylists([
-        xtream(id: 'p2', user: 'bob').toJson(),
-      ]);
+        final counts = await IptvTransferPayload.applyPlaylists([
+          xtream(id: 'p2', user: 'bob').toJson(),
+        ]);
 
-      expect(counts.imported, 1);
-      expect(await StorageService.getIptvPlaylists(), hasLength(2));
-    });
+        expect(counts.imported, 1);
+        expect(await StorageService.getIptvPlaylists(), hasLength(2));
+      },
+    );
 
     test('an id collision with a different provider is refused', () async {
       await StorageService.setIptvPlaylists([xtream(id: 'shared')]);
@@ -176,6 +312,40 @@ void main() {
       expect(await StorageService.getIptvPlaylists(), isEmpty);
     });
 
+    test('a malformed empty-url provider cannot abort export', () async {
+      await StorageService.setIptvPlaylists([
+        IptvPlaylist(
+          id: 'legacy-bad-row',
+          name: 'Legacy bad row',
+          url: '',
+          addedAt: DateTime(2020, 1, 1),
+        ),
+        xtream(id: 'valid'),
+      ]);
+
+      final payload = await IptvTransferPayload.buildPlaylists();
+
+      expect(payload.map((entry) => entry['id']), ['legacy-bad-row', 'valid']);
+      expect(payload.first, isNot(contains('categoryOrders')));
+    });
+
+    test('catalog open failure does not abort provider export', () async {
+      await StorageService.setIptvPlaylists([xtream(id: 'p1')]);
+      await IptvCatalogDb.closeScope();
+      final notDirectory = File('${catalogDir.path}/not-a-directory');
+      await notDirectory.writeAsString('x');
+      IptvCatalogDb.debugDirectoryOverride = notDirectory.path;
+      try {
+        final payload = await IptvTransferPayload.buildPlaylists();
+
+        expect(payload, hasLength(1));
+        expect(payload.single['id'], 'p1');
+        expect(payload.single, isNot(contains('categoryOrders')));
+      } finally {
+        IptvCatalogDb.debugDirectoryOverride = catalogDir.path;
+      }
+    });
+
     test('file-imported playlists are left out, and are counted so the UI '
         'can say so', () async {
       await StorageService.setIptvPlaylists([
@@ -198,8 +368,7 @@ void main() {
       expect(counts.fileImported, 1);
     });
 
-    test('a file-imported playlist\'s starred channels still travel',
-        () async {
+    test('a file-imported playlist\'s starred channels still travel', () async {
       // The provider stays behind, but a membership carries its own playable
       // URL and headers — those channels keep working on the other device.
       await IptvMediaStore.setChannelFavorited(
@@ -278,22 +447,27 @@ void main() {
       expect(restored.values.single['playlistId'], 'tv-id');
     });
 
-    test('a channel from a panel this device lacks keeps its origin id',
-        () async {
-      await IptvMediaStore.setChannelFavorited(
-        'http://elsewhere/1.ts',
-        true,
-        channelName: 'Elsewhere',
-        playlistId: 'unknown-provider',
-      );
-      final payload = await IptvTransferPayload.buildFavorites();
-      await IptvMediaStore.setChannelFavorited('http://elsewhere/1.ts', false);
+    test(
+      'a channel from a panel this device lacks keeps its origin id',
+      () async {
+        await IptvMediaStore.setChannelFavorited(
+          'http://elsewhere/1.ts',
+          true,
+          channelName: 'Elsewhere',
+          playlistId: 'unknown-provider',
+        );
+        final payload = await IptvTransferPayload.buildFavorites();
+        await IptvMediaStore.setChannelFavorited(
+          'http://elsewhere/1.ts',
+          false,
+        );
 
-      await IptvTransferPayload.applyFavorites(payload);
+        await IptvTransferPayload.applyFavorites(payload);
 
-      final restored = await IptvMediaStore.favoriteChannels();
-      expect(restored.values.single['playlistId'], 'unknown-provider');
-    });
+        final restored = await IptvMediaStore.favoriteChannels();
+        expect(restored.values.single['playlistId'], 'unknown-provider');
+      },
+    );
 
     test('re-applying favorites does not duplicate them', () async {
       await IptvMediaStore.setChannelFavorited(
@@ -333,45 +507,50 @@ void main() {
       expect(lists.where((l) => !l.isBuiltin).single.name, 'Sports');
     });
 
-    test('an existing list of the same name is topped up, not duplicated',
-        () async {
-      final sports = await IptvMediaStore.createList('Sports');
-      await IptvMediaStore.setChannelInList(sports, 'http://a/1.ts', true);
+    test(
+      'an existing list of the same name is topped up, not duplicated',
+      () async {
+        final sports = await IptvMediaStore.createList('Sports');
+        await IptvMediaStore.setChannelInList(sports, 'http://a/1.ts', true);
 
-      final counts = await IptvTransferPayload.applyCustomLists([
-        {
-          'name': 'sports',
-          'channels': [
-            {'url': 'http://a/1.ts', 'name': 'Already here'},
-            {'url': 'http://a/2.ts', 'name': 'New'},
-          ],
-        },
-      ]);
+        final counts = await IptvTransferPayload.applyCustomLists([
+          {
+            'name': 'sports',
+            'channels': [
+              {'url': 'http://a/1.ts', 'name': 'Already here'},
+              {'url': 'http://a/2.ts', 'name': 'New'},
+            ],
+          },
+        ]);
 
-      expect(counts.imported, 0);
-      expect(counts.alreadyPresent, 1);
-      expect(counts.channelsImported, 1);
-      expect(counts.channelsAlreadyPresent, 1);
+        expect(counts.imported, 0);
+        expect(counts.alreadyPresent, 1);
+        expect(counts.channelsImported, 1);
+        expect(counts.channelsAlreadyPresent, 1);
 
-      final custom =
-          (await IptvMediaStore.lists()).where((l) => !l.isBuiltin).toList();
-      expect(custom, hasLength(1));
-      expect(custom.single.channelCount, 2);
-    });
+        final custom = (await IptvMediaStore.lists())
+            .where((l) => !l.isBuiltin)
+            .toList();
+        expect(custom, hasLength(1));
+        expect(custom.single.channelCount, 2);
+      },
+    );
 
     test('Favorites is never exported as a custom list', () async {
       await IptvMediaStore.setChannelFavorited('http://a/1.ts', true);
       expect(await IptvTransferPayload.buildCustomLists(), isEmpty);
     });
 
-    test('a nameless entry is counted as failed, not silently dropped',
-        () async {
-      final counts = await IptvTransferPayload.applyCustomLists([
-        {'name': '   ', 'channels': const []},
-      ]);
+    test(
+      'a nameless entry is counted as failed, not silently dropped',
+      () async {
+        final counts = await IptvTransferPayload.applyCustomLists([
+          {'name': '   ', 'channels': const []},
+        ]);
 
-      expect(counts.failed, 1);
-      expect(counts.imported, 0);
-    });
+        expect(counts.failed, 1);
+        expect(counts.imported, 0);
+      },
+    );
   });
 }

@@ -28,6 +28,7 @@ void main() {
     List<IptvListMeta> lists = const [],
     bool startupEnabled = false,
     GlobalKey<IptvSettingsTwoPaneState>? key,
+    ValueChanged<IptvPlaylist>? onManageCategoryOrder,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -57,6 +58,8 @@ void main() {
           onEdit: (_) {},
           onDelete: (p) => deleted.add(p.id),
           onCreateList: () {},
+          onManageChannelOrder: () {},
+          onManageCategoryOrder: onManageCategoryOrder,
           onListActions: (_) {},
           onToggleStartup: startupToggles.add,
           onStartupModeChanged: (_) {},
@@ -117,6 +120,22 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonA);
     await tester.pumpAndSettle();
     expect(result, isTrue);
+  });
+
+  testWidgets('source pane exposes category ordering', (tester) async {
+    final opened = <String>[];
+    await tester.pumpWidget(
+      harness(
+        playlists: [_m3u('a', 'A')],
+        onManageCategoryOrder: (playlist) => opened.add(playlist.id),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Category order'), findsOneWidget);
+    expect(find.text('Arrange categories in this source'), findsOneWidget);
+    await tester.tap(find.text('Category order'));
+    expect(opened, ['a']);
   });
 
   testWidgets('opens on the default source, not on Add', (tester) async {
@@ -293,6 +312,7 @@ void main() {
               onEdit: (_) {},
               onDelete: (_) {},
               onCreateList: () => actioned.add('create'),
+              onManageChannelOrder: () => actioned.add('order'),
               onListActions: (l) => actioned.add('actions:${l.id}'),
               onToggleStartup: (_) {},
               onStartupModeChanged: (_) {},
@@ -319,9 +339,9 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
 
-      // If entering the pane landed on the non-actionable Favorites row,
-      // nothing fires and DPAD is stranded.
-      expect(actioned, isNotEmpty);
+      // The first actionable row is the order manager; Favorites itself is a
+      // non-actionable structural row and must not strand DPAD focus.
+      expect(actioned, ['order']);
     },
   );
 

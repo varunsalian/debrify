@@ -20,6 +20,7 @@ import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_catalog_key.dart';
+import '../../services/iptv_channel_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/iptv_load_phase.dart';
 import '../../services/iptv_catalog_db.dart';
@@ -562,6 +563,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // Virtual Stremio playlists come and go with the installed addon set.
     StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
+    IptvChannelOrderSignal.revision.addListener(_onChannelOrderChanged);
     // Chained, not fire-and-forget: the startup launch needs the playlist list
     // to exist before it can pick the target's provider.
     // Guarded on the error too, not just mounted: _loadSettings now SWALLOWS
@@ -608,6 +610,23 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   void _onStremioAddonsChanged() {
     if (mounted) _loadSettings();
+  }
+
+  void _onChannelOrderChanged() {
+    final playlist = _selectedPlaylist;
+    final change = IptvChannelOrderSignal.latest;
+    if (!mounted || playlist == null || change == null) return;
+    final affected = switch (change.scope) {
+      IptvChannelOrderScope.list =>
+        (playlist.isFavorites &&
+                change.target == StorageService.iptvFavoritesListId) ||
+            playlist.customListId == change.target,
+      IptvChannelOrderScope.source => playlist.id == change.target,
+      IptvChannelOrderScope.catalog =>
+        IptvCatalogKey.forCategoryOrder(playlist, _selectedContentType) ==
+            change.target,
+    };
+    if (affected) unawaited(_loadPlaylist(playlist));
   }
 
   Future<void> _loadFavorites() async {
@@ -1002,6 +1021,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance.removeAddonsChangedListener(
       _onStremioAddonsChanged,
     );
+    IptvChannelOrderSignal.revision.removeListener(_onChannelOrderChanged);
     _searchDebounce?.cancel();
     _contentTypeDebounce?.cancel();
     _loadTicker?.cancel();
@@ -1361,11 +1381,25 @@ class IptvResultsViewState extends State<IptvResultsView>
     // itself stays unfiltered: the favorites reconcile above and the EPG
     // context below scan hidden rows in DB mode too.
     var channels = result.channels;
+    if (playlist.isLocalFile) {
+      channels = await StorageService.applyIptvCategoryChannelOrders(
+        playlist.id,
+        channels,
+      );
+      if (!mounted || ticket != _loadTicket) return;
+    } else if (cacheKey != null) {
+      channels = IptvCatalogDb.applyCategoryChannelOrders(cacheKey, channels);
+    }
     var categories = result.categories;
-    if (cacheKey == null) {
-      // Virtual/local/addon sources have no catalog key, so no rules exist.
+    if (playlist.isLocalFile) {
+      categories = await applyStoredLocalCategoryOrder(playlist.id, categories);
+      if (!mounted || ticket != _loadTicket) return;
+      _hiddenCategories = const {};
+    } else if (cacheKey == null) {
+      // Virtual/addon sources have no durable order or hidden-category rules.
       _hiddenCategories = const {};
     } else {
+      categories = IptvCatalogDb.applyCategoryOrder(cacheKey, categories);
       categories = _withoutHidden(cacheKey, categories);
       if (_hiddenCategories.isNotEmpty) {
         channels = [
@@ -1418,6 +1452,32 @@ class IptvResultsViewState extends State<IptvResultsView>
     _lastLoadResult = result;
     _updateEpgContext(playlist, result, ticket);
     _consumeContentFocusRequest();
+  }
+
+  /// Local files bypass the catalog-backed load path, but their category-list
+  /// order intentionally lives in the same profile-scoped database. Opening it
+  /// here makes cold loads and the first load after a profile switch reliable.
+  /// The database is optional for playback: if its cache cannot be opened, the
+  /// provider order is returned and the local playlist still renders.
+  @visibleForTesting
+  static Future<List<String>> applyStoredLocalCategoryOrder(
+    String playlistId,
+    Iterable<String> categories,
+  ) async {
+    final baseline = categories.toList(growable: false);
+    try {
+      await IptvCatalogDb.open();
+    } catch (error) {
+      debugPrint(
+        'IPTV: local category-order database unavailable; using provider '
+        'order ($error)',
+      );
+      return baseline;
+    }
+    return IptvCatalogDb.applyCategoryOrder(
+      IptvCatalogKey.forLocalCategoryOrder(playlistId),
+      baseline,
+    );
   }
 
   /// Bind a DB-backed catalog to the view: [_allChannels] and
@@ -1512,12 +1572,12 @@ class IptvResultsViewState extends State<IptvResultsView>
   ) {
     final categories = _withoutHidden(snap.catalogKey, snap.categories);
     if (snap.categories.isEmpty) {
-      return [
+      return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, [
         for (final g in groups)
           if (g.name != null && g.name!.isNotEmpty) g.name!,
-      ];
+      ]);
     }
-    return categories;
+    return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, categories);
   }
 
   DbChannelList _makeDbList(
@@ -2689,33 +2749,30 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// like anywhere else.
   Future<IptvParseResult> _buildListResult(String listId) async {
     final stored = await StorageService.getIptvListChannels(listId);
-    final channels =
-        stored.entries.map((entry) {
-          final meta = entry.value;
-          final name = (meta['name'] as String?) ?? '';
-          final logoUrl = (meta['logoUrl'] as String?) ?? '';
-          final group = (meta['group'] as String?) ?? '';
-          return IptvChannel(
-            channelNumber: (meta['channelNumber'] as num?)?.toInt(),
-            name: name.isEmpty ? 'Unknown Channel' : name,
-            url: entry.key,
-            logoUrl: logoUrl.isEmpty ? null : logoUrl,
-            group: group.isEmpty ? null : group,
-            // Rows added before these were stored (and every row migrated
-            // from the pre-v5 favorites table) fall back to live, which is
-            // how they presented then; the reconcile pass backfills them the
-            // first time their provider is opened.
-            duration: (meta['duration'] as num?)?.toInt() ?? -1,
-            contentType: meta['contentType'] as String?,
-            attributes: {
-              if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
-                _kListOriginAttribute: meta['playlistId'] as String,
-            },
-            httpHeaders: StorageService.iptvFavoriteHeaders(meta),
-          );
-        }).toList()..sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+    final channels = stored.entries.map((entry) {
+      final meta = entry.value;
+      final name = (meta['name'] as String?) ?? '';
+      final logoUrl = (meta['logoUrl'] as String?) ?? '';
+      final group = (meta['group'] as String?) ?? '';
+      return IptvChannel(
+        channelNumber: (meta['channelNumber'] as num?)?.toInt(),
+        name: name.isEmpty ? 'Unknown Channel' : name,
+        url: entry.key,
+        logoUrl: logoUrl.isEmpty ? null : logoUrl,
+        group: group.isEmpty ? null : group,
+        // Rows added before these were stored (and every row migrated
+        // from the pre-v5 favorites table) fall back to live, which is
+        // how they presented then; the reconcile pass backfills them the
+        // first time their provider is opened.
+        duration: (meta['duration'] as num?)?.toInt() ?? -1,
+        contentType: meta['contentType'] as String?,
+        attributes: {
+          if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
+            _kListOriginAttribute: meta['playlistId'] as String,
+        },
+        httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+      );
+    }).toList();
     final categories = <String>{
       for (final channel in channels)
         if (channel.group != null) channel.group!,
@@ -3109,12 +3166,15 @@ class IptvResultsViewState extends State<IptvResultsView>
       // in-player picker can't offer a category the page doesn't. groups()
       // is already filtered in SQL; the provider list is not.
       if (snap.categories.isNotEmpty) {
-        return _withoutHidden(snap.catalogKey, snap.categories);
+        return IptvCatalogDb.applyCategoryOrder(
+          snap.catalogKey,
+          _withoutHidden(snap.catalogKey, snap.categories),
+        );
       }
-      return [
+      return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, [
         for (final group in snap.groups())
           if (group.name?.isNotEmpty == true) group.name!,
-      ];
+      ]);
     }
     return <String>{
       for (final channel in _allChannels)

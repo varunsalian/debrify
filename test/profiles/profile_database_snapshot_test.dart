@@ -395,6 +395,68 @@ void main() {
     expect(export.attachments, contains('debrify_tv.db'));
   });
 
+  test('catalog compaction keeps manual category order', () async {
+    final sourceScope = ProfileScope(
+      profileId: 'profile-category-order',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final destinationScope = ProfileScope(
+      profileId: 'profile-category-order-restored',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final documents = await AppStorage.documents();
+    final source = sourceScope.fileIn(
+      documents,
+      'documents',
+      'iptv_catalog.db',
+    );
+    await source.parent.create(recursive: true);
+    final database = await openDatabase(source.path, singleInstance: false);
+    await database.execute('CREATE TABLE channels (payload TEXT NOT NULL)');
+    await database.execute(
+      'CREATE TABLE category_manual_orders ('
+      'catalog_key TEXT NOT NULL, grp TEXT NOT NULL, '
+      'manual_position INTEGER NOT NULL)',
+    );
+    await database.insert('channels', <String, Object?>{'payload': 'cache'});
+    await database.insert('category_manual_orders', <String, Object?>{
+      'catalog_key': 'm3u|https://example/list.m3u',
+      'grp': 'News',
+      'manual_position': 0,
+    });
+    await database.close();
+
+    final export = await ProfileDatabaseSnapshot.export(
+      sourceScope,
+      compact: true,
+    );
+    expect(export.compacted, contains('iptv_catalog.db'));
+    await ProfileDatabaseSnapshot.restore(destinationScope, export.attachments);
+
+    final restored = await openDatabase(
+      destinationScope.fileIn(documents, 'documents', 'iptv_catalog.db').path,
+      readOnly: true,
+      singleInstance: false,
+    );
+    try {
+      expect(await restored.query('channels'), isEmpty);
+      expect(
+        await restored.query('category_manual_orders'),
+        <Map<String, Object?>>[
+          <String, Object?>{
+            'catalog_key': 'm3u|https://example/list.m3u',
+            'grp': 'News',
+            'manual_position': 0,
+          },
+        ],
+      );
+    } finally {
+      await restored.close();
+    }
+  });
+
   test(
     'resource IDs are remapped in every durable database reference',
     () async {
@@ -415,11 +477,18 @@ void main() {
       await mediaDb.execute(
         'CREATE TABLE iptv_watch_history (playlist_id TEXT NOT NULL)',
       );
+      await mediaDb.execute(
+        'CREATE TABLE iptv_category_channel_orders '
+        '(source_id TEXT NOT NULL)',
+      );
       await mediaDb.insert('iptv_list_channels', <String, Object?>{
         'playlist_id': oldId,
       });
       await mediaDb.insert('iptv_watch_history', <String, Object?>{
         'playlist_id': oldId,
+      });
+      await mediaDb.insert('iptv_category_channel_orders', <String, Object?>{
+        'source_id': oldId,
       });
       await mediaDb.close();
 
@@ -433,6 +502,12 @@ void main() {
         'CREATE TABLE channel_number_namespaces '
         '(namespace_id TEXT PRIMARY KEY, active_source_key TEXT)',
       );
+      await catalogDb.execute(
+        'CREATE TABLE category_manual_orders '
+        '(catalog_key TEXT NOT NULL, grp TEXT NOT NULL, '
+        'manual_position INTEGER NOT NULL, '
+        'PRIMARY KEY (catalog_key, grp))',
+      );
       await catalogDb.insert('channel_number_aliases', <String, Object?>{
         'source_key': oldId,
         'namespace_id': 'opaque-namespace',
@@ -440,6 +515,11 @@ void main() {
       await catalogDb.insert('channel_number_namespaces', <String, Object?>{
         'namespace_id': 'opaque-namespace',
         'active_source_key': oldId,
+      });
+      await catalogDb.insert('category_manual_orders', <String, Object?>{
+        'catalog_key': 'local-category-order|$oldId',
+        'grp': 'News',
+        'manual_position': 0,
       });
       await catalogDb.close();
 
@@ -465,6 +545,12 @@ void main() {
           )).single['playlist_id'],
           newId,
         );
+        expect(
+          (await remappedMedia.query(
+            'iptv_category_channel_orders',
+          )).single['source_id'],
+          newId,
+        );
       } finally {
         await remappedMedia.close();
       }
@@ -485,6 +571,12 @@ void main() {
             'channel_number_namespaces',
           )).single['active_source_key'],
           newId,
+        );
+        expect(
+          (await remappedCatalog.query(
+            'category_manual_orders',
+          )).single['catalog_key'],
+          'local-category-order|$newId',
         );
       } finally {
         await remappedCatalog.close();

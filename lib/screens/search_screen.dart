@@ -870,7 +870,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   // IPTV favourites — a leading row of the user's starred live IPTV channels.
   // Cards show the channel logo (glyph fallback); tapping plays the stream
-  // directly via VideoPlayerLauncher (no tab switch). Loaded once on init.
+  // directly via VideoPlayerLauncher (no tab switch). Reloaded whenever list
+  // membership or manual order changes.
   List<IptvChannel> _iptvFavChannels = [];
   final List<FocusNode> _iptvFavNodes = [];
 
@@ -3390,7 +3391,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Load the user's starred IPTV channels for the leading favourites row.
   /// Favourites are stored as a url → {name, logoUrl, group} map, so rebuild
-  /// [IptvChannel] objects from it (mirroring the Home section). Sorted by name.
+  /// [IptvChannel] objects from it in the store's user-defined order.
   Future<void> _loadIptvFavorites() async {
     try {
       final map = await StorageService.getIptvFavoriteChannels();
@@ -3400,21 +3401,18 @@ class _SearchScreenState extends State<SearchScreen>
         _syncIptvFavNodes();
         return;
       }
-      final favs =
-          map.entries.map((e) {
-            final meta = e.value;
-            return IptvChannel(
-              name: meta['name'] as String? ?? 'Unknown Channel',
-              url: e.key,
-              logoUrl: meta['logoUrl'] as String?,
-              group: meta['group'] as String?,
-              duration: -1, // live stream
-              attributes: const {},
-              httpHeaders: StorageService.iptvFavoriteHeaders(meta),
-            );
-          }).toList()..sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-          );
+      final favs = map.entries.map((e) {
+        final meta = e.value;
+        return IptvChannel(
+          name: meta['name'] as String? ?? 'Unknown Channel',
+          url: e.key,
+          logoUrl: meta['logoUrl'] as String?,
+          group: meta['group'] as String?,
+          duration: -1, // live stream
+          attributes: const {},
+          httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+        );
+      }).toList();
       if (!mounted) return;
       setState(() => _iptvFavChannels = favs);
       _syncIptvFavNodes();
@@ -3440,8 +3438,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// Channels are rebuilt from the stored list metadata alone (no provider
   /// fetch), keeping ALL presentation fields — content type and duration
   /// drive play routing and the live-preview gate, so the favourites row's
-  /// lossy live-only mapping must not be copied here. Order is the list's own
-  /// (added_at), the user's curation.
+  /// lossy live-only mapping must not be copied here. Order is the list's
+  /// explicit saved channel position.
   ///
   /// Token-guarded: the list picker queues several immediate mutations, each
   /// bumping [IptvMediaStore.listsRevision] — an older multi-list read must
@@ -3545,7 +3543,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// the app (picker, IPTV settings, provider deletion, reconcile, import).
   void _onIptvListsRevision() {
     if (!mounted) return;
-    _loadIptvListRows();
+    unawaited(_loadIptvFavorites());
+    unawaited(_loadIptvListRows());
   }
 
   /// Play an IPTV custom-list entry by CONTENT TYPE — a list can hold VOD and
