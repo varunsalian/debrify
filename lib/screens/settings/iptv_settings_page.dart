@@ -50,6 +50,7 @@ enum _PhoneSection {
   categoryOrder,
   hidden,
   startup,
+  channelPreview,
   continueWatching,
   recording,
 }
@@ -182,6 +183,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   // Continue watching
   bool _trackContinueWatching = true;
+
+  // Embedded side preview while browsing channels. Providers count this as a
+  // real stream, so users with tight connection limits can keep the stage's
+  // artwork/details while preventing it from tuning.
+  bool _channelPreviewEnabled = true;
 
   Future<void> _runProfileAction(Future<void> Function() body) async {
     final authorization = await ProfileAsyncAuthorization.capture(
@@ -525,6 +531,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (mounted) setState(() => _trackContinueWatching = value);
   }
 
+  Future<void> _setChannelPreviewEnabled(bool value) =>
+      _runProfileAction(() => _setChannelPreviewEnabledForProfile(value));
+
+  Future<void> _setChannelPreviewEnabledForProfile(bool value) async {
+    await StorageService.setIptvChannelPreviewEnabled(value);
+    if (mounted) setState(() => _channelPreviewEnabled = value);
+  }
+
   Future<void> _setIptvStyle(String style) =>
       _runProfileAction(() => _setIptvStyleForProfile(style));
 
@@ -581,6 +595,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final startupChannel = await StorageService.getStartupIptvChannel();
     final lastLive = await StorageService.getIptvLastLiveChannel();
     final trackCw = await StorageService.getIptvTrackContinueWatching();
+    final channelPreviewEnabled =
+        await StorageService.getIptvChannelPreviewEnabled();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
     final engineSupported =
@@ -611,6 +627,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _startupChannel = startupChannel;
       _lastLiveChannel = lastLive;
       _trackContinueWatching = trackCw;
+      _channelPreviewEnabled = channelPreviewEnabled;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
       _recordingSectionVisible = engineSupported || desktopSched;
@@ -1960,6 +1977,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           _PhoneSection.categoryOrder => 'Category Order',
           _PhoneSection.hidden => 'Hidden Categories',
           _PhoneSection.startup => 'Startup',
+          _PhoneSection.channelPreview => 'Channel Preview',
           _PhoneSection.continueWatching => 'Continue Watching',
           _PhoneSection.recording => 'Recording',
         },
@@ -2072,6 +2090,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       onToggleStartup: _setStartupEnabled,
       onStartupModeChanged: _setStartupMode,
       onPickStartupChannel: _pickStartupChannel,
+      channelPreviewEnabled: _channelPreviewEnabled,
+      onToggleChannelPreview: _setChannelPreviewEnabled,
       trackContinueWatching: _trackContinueWatching,
       onToggleTrackContinueWatching: _setTrackContinueWatching,
       showAppearanceSection: _appearanceVisible,
@@ -2109,6 +2129,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           _PhoneSection.categoryOrder => _buildCategoryOrderView(),
           _PhoneSection.hidden => _buildHiddenView(),
           _PhoneSection.startup => _buildStartupView(),
+          _PhoneSection.channelPreview => _buildChannelPreviewView(),
           _PhoneSection.continueWatching => _buildContinueWatchingView(),
           _PhoneSection.recording => _buildRecordingView(),
         },
@@ -2193,6 +2214,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ? 'Last watched channel'
                   : _startupChannelLabel,
               onTap: () async => _enterPhoneSection(_PhoneSection.startup),
+            ),
+            SettingsTile(
+              icon: Icons.ondemand_video_rounded,
+              title: 'Channel preview',
+              subtitle: _channelPreviewEnabled
+                  ? 'On · uses a provider stream while browsing'
+                  : 'Off · no stream until you press Watch',
+              onTap: () async =>
+                  _enterPhoneSection(_PhoneSection.channelPreview),
             ),
             SettingsTile(
               icon: Icons.history_toggle_off_rounded,
@@ -2528,6 +2558,28 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             ),
             value: _trackContinueWatching,
             onChanged: _setTrackContinueWatching,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChannelPreviewView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Channel preview'),
+        const SizedBox(height: 6),
+        Card(
+          child: SwitchListTile(
+            title: const Text('Play channel previews'),
+            subtitle: const Text(
+              'Plays the focused channel in the side panel while you browse. '
+              'This opens a provider stream and may count toward your '
+              'connection limit. Fullscreen playback still works when off.',
+            ),
+            value: _channelPreviewEnabled,
+            onChanged: _setChannelPreviewEnabled,
           ),
         ),
       ],

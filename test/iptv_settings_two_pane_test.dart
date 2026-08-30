@@ -20,6 +20,7 @@ void main() {
   final refreshed = <String>[];
   final defaulted = <String>[];
   var startupToggles = <bool>[];
+  var previewToggles = <bool>[];
   var cwToggles = <bool>[];
 
   Widget harness({
@@ -27,6 +28,7 @@ void main() {
     String? defaultId,
     List<IptvListMeta> lists = const [],
     bool startupEnabled = false,
+    bool channelPreviewEnabled = true,
     GlobalKey<IptvSettingsTwoPaneState>? key,
     ValueChanged<IptvPlaylist>? onManageCategoryOrder,
   }) {
@@ -64,6 +66,8 @@ void main() {
           onToggleStartup: startupToggles.add,
           onStartupModeChanged: (_) {},
           onPickStartupChannel: () {},
+          channelPreviewEnabled: channelPreviewEnabled,
+          onToggleChannelPreview: previewToggles.add,
           trackContinueWatching: true,
           onToggleTrackContinueWatching: cwToggles.add,
         ),
@@ -76,6 +80,7 @@ void main() {
     refreshed.clear();
     defaulted.clear();
     startupToggles = [];
+    previewToggles = [];
     cwToggles = [];
   });
 
@@ -270,6 +275,30 @@ void main() {
     expect(find.text('Last watched channel'), findsOneWidget);
   });
 
+  testWidgets('channel preview is on by default and can be disabled', (
+    tester,
+  ) async {
+    final key = GlobalKey<IptvSettingsTwoPaneState>();
+    await tester.pumpWidget(harness(playlists: [_m3u('a', 'A')], key: key));
+    await tester.pump();
+
+    key.currentState!.focusRail();
+    await tester.pump();
+    // Source → Add → Channel lists → Startup → Channel preview.
+    for (var i = 0; i < 4; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+
+    expect(find.text('On · uses a stream while browsing'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(find.text('Play channel previews'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(previewToggles, [false]);
+  });
+
   testWidgets(
     'entering Channel lists lands on a focusable row, not the built-in',
     (tester) async {
@@ -317,6 +346,8 @@ void main() {
               onToggleStartup: (_) {},
               onStartupModeChanged: (_) {},
               onPickStartupChannel: () {},
+              channelPreviewEnabled: true,
+              onToggleChannelPreview: (_) {},
               trackContinueWatching: true,
               onToggleTrackContinueWatching: (_) {},
             ),

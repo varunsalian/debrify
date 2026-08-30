@@ -164,6 +164,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
   IptvStyle _iptvStyle = IptvStyle.command;
 
+  /// Whether focusing a row may open its stream in the embedded side stage.
+  /// The channel identity and stage actions remain available when false; only
+  /// the automatic tune is suppressed so it cannot consume a provider slot.
+  bool _channelPreviewEnabled = true;
+
   /// Desktop gets the full two-pane experience too: source rail, embedded
   /// live preview, quiet filters — hover previews, click plays.
   /// Large touch tablets use the same shell with a fixed center selector;
@@ -833,6 +838,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     // re-enters here) adopts a changed style in the same setState as
     // everything else — no separate listener, no style flash.
     final iptvStyle = IptvStyle.fromPref(await StorageService.getIptvStyle());
+    final channelPreviewEnabled =
+        await StorageService.getIptvChannelPreviewEnabled();
 
     // Seed the starter playlist on first run (if not already initialized).
     // Deliberately NOT marked as the stored default: "Default playlist" is an
@@ -953,8 +960,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       }
     }
 
+    final previewWasEnabled = _channelPreviewEnabled;
     setState(() {
       _iptvStyle = iptvStyle;
+      _channelPreviewEnabled = channelPreviewEnabled;
       _sourceCounts = sourceCounts;
       _playlists = playlists;
       _settingsLoaded = true;
@@ -967,6 +976,16 @@ class IptvResultsViewState extends State<IptvResultsView>
       // a row that no longer exists.
       _lists = lists;
     });
+
+    // Returning from Settings must release an already-open preview
+    // immediately. Re-enabling retunes the still-selected channel so the
+    // setting takes effect without requiring an extra focus move.
+    if (!channelPreviewEnabled) {
+      _stopPreviewPlayback();
+    } else if (!previewWasEnabled) {
+      final shown = _previewShown.value;
+      if (shown != null) _retunePreview(shown);
+    }
 
     // Only reload playlist if it changed or forced, or if we have no channels
     // loaded AND no load is already producing them — "_allChannels.isEmpty"
@@ -5898,7 +5917,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     final shown = _previewShown.value;
     if (identical(shown, channel)) return;
     _previewShown.value = channel;
-    _retunePreview(channel);
+    if (_channelPreviewEnabled) {
+      _retunePreview(channel);
+    } else {
+      _stopPreviewPlayback();
+    }
     // Keep the stage's Record↔Stop honest for whichever channel is focused
     // now (debounced — zapping through rows costs nothing).
     _armAndroidRecStateRefresh();
@@ -5976,14 +5999,21 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
+  /// Release the embedded stream and abandon any in-flight Stremio resolve,
+  /// while leaving the selected channel's artwork, metadata and actions in
+  /// the stage. This is the persistent-setting path.
+  void _stopPreviewPlayback() {
+    _previewResolveTicket++;
+    _previewCandidates = null;
+    _previewStreamUrl.value = null;
+    _previewShowing.value = false;
+  }
+
   /// Empty the stage entirely (playlist switch, sidebar open) and abandon any
   /// in-flight resolve.
   void _clearPreview() {
-    _previewResolveTicket++;
-    _previewCandidates = null;
+    _stopPreviewPlayback();
     _previewShown.value = null;
-    _previewStreamUrl.value = null;
-    _previewShowing.value = false;
   }
 
   Widget _buildPreviewRail({required bool touchSelector}) {
@@ -6054,7 +6084,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                     Padding(
                       padding: const EdgeInsets.only(top: 9),
                       child: Text(
-                        'Scroll channels through the arrow to preview',
+                        _channelPreviewEnabled
+                            ? 'Scroll channels through the arrow to preview'
+                            : 'Preview is off · choose Watch fullscreen',
                         style: TextStyle(
                           color: app.seeAll.accent2.withValues(alpha: 0.66),
                           fontSize: 11.5,
@@ -6067,7 +6099,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
-                        'Hover a channel to preview  ·  Click to watch',
+                        _channelPreviewEnabled
+                            ? 'Hover a channel to preview  ·  Click to watch'
+                            : 'Preview is off  ·  Click to watch',
                         style: TextStyle(
                           color: app.iptv.inkFaint,
                           fontSize: 11.5,
@@ -6130,12 +6164,14 @@ class IptvResultsViewState extends State<IptvResultsView>
             // repainting under a playing video.
             ValueListenableBuilder<bool>(
               valueListenable: _previewShowing,
-              builder: (context, showing, _) =>
-                  _IptvStageFloor(channel: ch, tuning: ch != null && !showing),
+              builder: (context, showing, _) => _IptvStageFloor(
+                channel: ch,
+                tuning: _channelPreviewEnabled && ch != null && !showing,
+              ),
             ),
             // Startup launch owns the screen: the stage's 900ms dwell would
             // otherwise open a SECOND live stream under the launching player.
-            if (ch != null && !_startupLaunchActive)
+            if (ch != null && _channelPreviewEnabled && !_startupLaunchActive)
               ValueListenableBuilder<String?>(
                 valueListenable: _previewStreamUrl,
                 builder: (context, streamUrl, _) {
@@ -6183,8 +6219,11 @@ class IptvResultsViewState extends State<IptvResultsView>
               top: 10,
               child: ValueListenableBuilder<bool>(
                 valueListenable: _previewShowing,
-                builder: (context, showing, _) =>
-                    _IptvStageChip(channel: ch, showing: showing),
+                builder: (context, showing, _) => _IptvStageChip(
+                  channel: ch,
+                  showing: showing,
+                  previewEnabled: _channelPreviewEnabled,
+                ),
               ),
             ),
             // NO styled chrome over the video — final, device-verified rule.
@@ -6868,13 +6907,19 @@ class _TuningWavesPainter extends CustomPainter {
 
 /// Status chip on the stage: LIVE (emerald dot) once the preview has frames,
 /// TUNING (tiny animated amber signal bars) while a channel is selected but
-/// the stream hasn't opened yet, PREVIEW for on-demand items. Conditional
-/// swaps and direct paint only — no fades over the stage, and only the
-/// TUNING state animates so nothing repaints while video is playing.
+/// the stream hasn't opened yet, PREVIEW for on-demand items, or PREVIEW OFF
+/// when automatic tuning is disabled. Conditional swaps and direct paint only
+/// — no fades over the stage, and only the TUNING state animates so nothing
+/// repaints while video is playing.
 class _IptvStageChip extends StatefulWidget {
   final IptvChannel? channel;
   final bool showing;
-  const _IptvStageChip({required this.channel, required this.showing});
+  final bool previewEnabled;
+  const _IptvStageChip({
+    required this.channel,
+    required this.showing,
+    required this.previewEnabled,
+  });
 
   @override
   State<_IptvStageChip> createState() => _IptvStageChipState();
@@ -6889,7 +6934,8 @@ class _IptvStageChipState extends State<_IptvStageChip>
     duration: const Duration(milliseconds: 1100),
   );
 
-  bool get _tuning => widget.channel != null && !widget.showing;
+  bool get _tuning =>
+      widget.previewEnabled && widget.channel != null && !widget.showing;
 
   @override
   void initState() {
@@ -6923,8 +6969,16 @@ class _IptvStageChipState extends State<_IptvStageChip>
     final ch = widget.channel;
     if (ch == null) return const SizedBox.shrink();
     final isLive = ch.isLive;
-    final label = widget.showing ? (isLive ? 'LIVE' : 'PREVIEW') : 'TUNING';
-    final dot = isLive ? app.iptv.liveDot : app.seeAll.accent2;
+    final label = !widget.previewEnabled
+        ? 'PREVIEW OFF'
+        : widget.showing
+        ? (isLive ? 'LIVE' : 'PREVIEW')
+        : 'TUNING';
+    final dot = !widget.previewEnabled
+        ? app.iptv.inkFaint
+        : isLive
+        ? app.iptv.liveDot
+        : app.seeAll.accent2;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
       decoration: BoxDecoration(

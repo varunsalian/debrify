@@ -25,6 +25,7 @@ abstract final class SanitizedProfilePreferences {
       case 'home_hero_trailer_audio_enabled':
       case 'detail_trailer_audio_enabled':
       case 'tv_trailer_underlay_enabled':
+      case 'iptv_channel_preview_enabled':
       case 'subtitle_bold':
       case 'subtitle_extreme_bottom_default_adopted_v1':
         return value is bool;

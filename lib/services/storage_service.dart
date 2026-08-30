@@ -1360,6 +1360,23 @@ class StorageService {
   static const String _iptvStyleKey = 'iptv_style';
   static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
 
+  /// Whether browsing IPTV channels may open the focused channel in the
+  /// embedded side preview. This is on by default to preserve the shipped
+  /// experience; users whose provider enforces a small connection limit can
+  /// turn it off without affecting explicit fullscreen playback.
+  static const String _iptvChannelPreviewEnabledKey =
+      'iptv_channel_preview_enabled';
+
+  static Future<bool> getIptvChannelPreviewEnabled() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_iptvChannelPreviewEnabledKey) ?? true;
+  }
+
+  static Future<void> setIptvChannelPreviewEnabled(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_iptvChannelPreviewEnabledKey, enabled);
+  }
+
   /// IPTV cockpit look: 'command' (the shipped Command Center, the default),
   /// 'edition' (First Edition — editorial ink/serif) or 'console' (Master
   /// Control — black instrument). Only the TV/desktop cockpit reads it; the

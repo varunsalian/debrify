@@ -47,6 +47,7 @@ class ProfileCreationService {
     'player_default_subtitle_language',
     'player_default_audio_language',
     'subtitle_auto_sync_enabled',
+    'iptv_channel_preview_enabled',
     'iptv_player_guide_style',
     'play_loader_style',
     'tv_player_controls_style',

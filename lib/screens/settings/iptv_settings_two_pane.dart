@@ -10,7 +10,8 @@ import '../../theme/app_theme_scope.dart';
 
 /// Two-pane IPTV settings for TV and desktop ("Concept A"): a rail of the
 /// user's actual sources on the left, the selected source's detail on the
-/// right, with Add / Lists / Startup as rail destinations below them.
+/// right, with Add / Lists / Startup / Channel preview as rail destinations
+/// below them.
 ///
 /// Why this shape — the single-column page it replaces put the *rarest*
 /// action (adding a playlist) at the top in a fixed 410px block, buried
@@ -63,6 +64,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.onToggleStartup,
     required this.onStartupModeChanged,
     required this.onPickStartupChannel,
+    required this.channelPreviewEnabled,
+    required this.onToggleChannelPreview,
     required this.trackContinueWatching,
     required this.onToggleTrackContinueWatching,
     this.showAppearanceSection = false,
@@ -171,6 +174,9 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final ValueChanged<String> onStartupModeChanged;
   final VoidCallback onPickStartupChannel;
 
+  final bool channelPreviewEnabled;
+  final ValueChanged<bool> onToggleChannelPreview;
+
   final bool trackContinueWatching;
   final ValueChanged<bool> onToggleTrackContinueWatching;
 
@@ -218,6 +224,10 @@ class _StartupDest extends _Dest {
 
 class _ContinueWatchingDest extends _Dest {
   const _ContinueWatchingDest();
+}
+
+class _ChannelPreviewDest extends _Dest {
+  const _ChannelPreviewDest();
 }
 
 class _AppearanceDest extends _Dest {
@@ -307,23 +317,27 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     return _SourceDest(widget.playlists.first.id);
   }
 
-  /// Rail entries: every source, then Add, Lists, Startup, Continue watching,
-  /// then the optional Appearance (TV/desktop only), the always-present
-  /// Player guide, and the optional Recording entry.
+  /// Rail entries: every source, then Add, Lists, Startup, Channel preview,
+  /// Continue watching, the optional Appearance (TV/desktop only), the
+  /// always-present Player guide, and the optional Recording entry.
   int get _railCount =>
       widget.playlists.length +
-      5 +
+      6 +
       (widget.showAppearanceSection ? 1 : 0) +
       (widget.showRecordingSection ? 1 : 0);
 
+  int get _channelPreviewIndex => widget.playlists.length + 3;
+
+  int get _continueWatchingIndex => widget.playlists.length + 4;
+
   /// Rail index of the Appearance entry — meaningful only while
   /// [IptvSettingsTwoPane.showAppearanceSection] is true.
-  int get _appearanceIndex => widget.playlists.length + 4;
+  int get _appearanceIndex => widget.playlists.length + 5;
 
   /// Rail index of the (always present) Player guide entry — shifts down one
   /// when Appearance is present.
   int get _playerGuideIndex =>
-      widget.playlists.length + 4 + (widget.showAppearanceSection ? 1 : 0);
+      widget.playlists.length + 5 + (widget.showAppearanceSection ? 1 : 0);
 
   /// Rail index of the Recording entry — directly under Player guide.
   /// Meaningful only while showRecordingSection is true.
@@ -419,7 +433,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AddDest() => widget.playlists.length,
       _ListsDest() => widget.playlists.length + 1,
       _StartupDest() => widget.playlists.length + 2,
-      _ContinueWatchingDest() => widget.playlists.length + 3,
+      _ChannelPreviewDest() => _channelPreviewIndex,
+      _ContinueWatchingDest() => _continueWatchingIndex,
       _AppearanceDest() => _appearanceIndex,
       _PlayerGuideDest() => _playerGuideIndex,
       _RecordingDest() => _recordingIndex,
@@ -434,12 +449,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       0 => const _AddDest(),
       1 => const _ListsDest(),
       2 => const _StartupDest(),
-      3 => const _ContinueWatchingDest(),
-      4 =>
+      3 => const _ChannelPreviewDest(),
+      4 => const _ContinueWatchingDest(),
+      5 =>
         widget.showAppearanceSection
             ? const _AppearanceDest()
             : const _PlayerGuideDest(),
-      5 =>
+      6 =>
         widget.showAppearanceSection
             ? const _PlayerGuideDest()
             : widget.showRecordingSection
@@ -596,17 +612,32 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onRight: _enterPane,
               ),
               _RailEntry(
-                focusNode: _railNodes[widget.playlists.length + 3],
+                focusNode: _railNodes[_channelPreviewIndex],
+                icon: Icons.ondemand_video_rounded,
+                title: 'Channel preview',
+                subtitle: widget.channelPreviewEnabled
+                    ? 'On · uses a stream while browsing'
+                    : 'Off · fullscreen playback only',
+                selected: selected == _channelPreviewIndex,
+                chevron: true,
+                onFocused: () => _dest.value = const _ChannelPreviewDest(),
+                onSelect: _enterPane,
+                onUp: () => _focusRail(widget.playlists.length + 2),
+                onDown: () => _focusRail(_continueWatchingIndex),
+                onRight: _enterPane,
+              ),
+              _RailEntry(
+                focusNode: _railNodes[_continueWatchingIndex],
                 icon: Icons.history_toggle_off_rounded,
                 title: 'Continue watching',
                 subtitle: widget.trackContinueWatching
                     ? 'Tracking movies and series'
                     : 'Off',
-                selected: selected == widget.playlists.length + 3,
+                selected: selected == _continueWatchingIndex,
                 chevron: true,
                 onFocused: () => _dest.value = const _ContinueWatchingDest(),
                 onSelect: _enterPane,
-                onUp: () => _focusRail(widget.playlists.length + 2),
+                onUp: () => _focusRail(_channelPreviewIndex),
                 onDown: () => _focusRail(
                   widget.showAppearanceSection
                       ? _appearanceIndex
@@ -628,7 +659,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   chevron: true,
                   onFocused: () => _dest.value = const _AppearanceDest(),
                   onSelect: _enterPane,
-                  onUp: () => _focusRail(widget.playlists.length + 3),
+                  onUp: () => _focusRail(_continueWatchingIndex),
                   onDown: () => _focusRail(_playerGuideIndex),
                   onRight: _enterPane,
                 ),
@@ -649,7 +680,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onUp: () => _focusRail(
                   widget.showAppearanceSection
                       ? _appearanceIndex
-                      : widget.playlists.length + 3,
+                      : _continueWatchingIndex,
                 ),
                 onDown: widget.showRecordingSection
                     ? () => _focusRail(_recordingIndex)
@@ -715,6 +746,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AddDest() => _buildAddPane(),
       _ListsDest() => _buildListsPane(),
       _StartupDest() => _buildStartupPane(),
+      _ChannelPreviewDest() => _buildChannelPreviewPane(),
       _ContinueWatchingDest() => _buildContinueWatchingPane(),
       _AppearanceDest() => _buildAppearancePane(),
       _PlayerGuideDest() => _buildPlayerGuidePane(),
@@ -729,6 +761,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         _AddDest() => 'add',
         _ListsDest() => 'lists',
         _StartupDest() => 'startup',
+        _ChannelPreviewDest() => 'channel-preview',
         _ContinueWatchingDest() => 'continue-watching',
         _AppearanceDest() => 'appearance',
         _PlayerGuideDest() => 'player_guide',
@@ -1181,6 +1214,43 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               onTap: () => widget.onToggleTrackContinueWatching(
                 !widget.trackContinueWatching,
               ),
+              onLeft: _returnToRail,
+              isLast: true,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChannelPreviewPane() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PaneHeader(
+          icon: Icons.ondemand_video_rounded,
+          title: 'Channel preview',
+          meta:
+              'Control whether the side panel tunes the focused channel '
+              'while you browse.',
+          badges: [],
+        ),
+        const SizedBox(height: 20),
+        _RowGroup(
+          children: [
+            _PaneRow(
+              focusNode: _paneNode(0),
+              icon: Icons.play_circle_outline_rounded,
+              title: 'Play channel previews',
+              subtitle:
+                  'Uses a provider stream while browsing. Turn it off to '
+                  'save a connection; fullscreen playback still works',
+              trailing: Switch(
+                value: widget.channelPreviewEnabled,
+                onChanged: widget.onToggleChannelPreview,
+              ),
+              onTap: () =>
+                  widget.onToggleChannelPreview(!widget.channelPreviewEnabled),
               onLeft: _returnToRail,
               isLast: true,
             ),
