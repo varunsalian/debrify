@@ -431,6 +431,19 @@ class IptvCatalogDb {
         PRIMARY KEY (catalog_key, grp)
       )
     ''',
+    // The category a source's channel list lands on when it opens (unset =
+    // first category in display order). Keyed like category_manual_orders so
+    // it survives generation replacement and ordinary removeCatalogsOn calls:
+    // a refresh or same-identity credential re-validation must not forget
+    // where the user chose to land. Destructive source removal opts into
+    // clearing it alongside the source's manual orders.
+    '''
+      CREATE TABLE IF NOT EXISTS category_default_selections (
+        catalog_key TEXT PRIMARY KEY,
+        grp TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''',
     '''
       CREATE TABLE IF NOT EXISTS channel_number_namespaces (
         namespace_id TEXT PRIMARY KEY,
@@ -1815,6 +1828,8 @@ class IptvCatalogDb {
   /// it took, because it ran synchronously on the UI isolate. It is also
   /// whole-catalog write work, so it queues with migration, adoption, ingest
   /// and refresh rather than racing whatever the IPTV page left running.
+  /// [forgetChannelOrders] is reserved for source identities that became
+  /// unreachable; it also forgets their category order and landing default.
   static Future<void> removeCatalogsByKeys(
     Iterable<String> keys, {
     bool forgetChannelOrders = false,
@@ -2005,6 +2020,14 @@ class IptvCatalogDb {
             'DELETE FROM category_manual_orders WHERE catalog_key = ?',
             [key],
           );
+          // This flag marks source-identity removal, not an ordinary catalog
+          // refresh. A default belongs to that identity just like its manual
+          // orders, so it must not reattach if the same endpoint/account is
+          // added again later.
+          db.execute(
+            'DELETE FROM category_default_selections WHERE catalog_key = ?',
+            [key],
+          );
         }
         // The catalog's bookkeeping goes with it. Narrow but real: a delete
         // and re-add inside the backoff window would otherwise inherit the old
@@ -2137,6 +2160,47 @@ class IptvCatalogDb {
     } finally {
       insert?.dispose();
     }
+  }
+
+  // ── Default landing category ─────────────────────────────────────────────
+
+  /// The category [catalogKey]'s channel list should land on when it opens,
+  /// or null when the user never chose one (land on the first category in
+  /// display order). The name may refer to a category the provider has since
+  /// removed or the user has hidden — callers validate against the current
+  /// category list and fall back silently.
+  static String? defaultCategory(String catalogKey) {
+    if (!isOpen) return null;
+    final rows = _requireDb().select(
+      'SELECT grp FROM category_default_selections WHERE catalog_key = ?',
+      [catalogKey],
+    );
+    if (rows.isEmpty) return null;
+    final value = rows.first['grp'] as String?;
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  /// Save (or, with null/empty [group], clear) the default landing category.
+  ///
+  /// Returns false when nothing was written (database not open) so the caller
+  /// can tell the user instead of confirming a choice that was never saved —
+  /// same contract as [setGroupHidden].
+  static bool setDefaultCategory(String catalogKey, String? group) {
+    if (!isOpen) return false;
+    final db = _requireDb();
+    if (group == null || group.isEmpty) {
+      db.execute(
+        'DELETE FROM category_default_selections WHERE catalog_key = ?',
+        [catalogKey],
+      );
+    } else {
+      db.execute(
+        'INSERT OR REPLACE INTO category_default_selections '
+        '(catalog_key, grp, updated_at) VALUES (?, ?, ?)',
+        [catalogKey, group, DateTime.now().millisecondsSinceEpoch],
+      );
+    }
+    return true;
   }
 
   // ── Manual channel order ────────────────────────────────────────────────
@@ -2354,9 +2418,11 @@ class IptvCatalogDb {
     };
   }
 
-  /// Hide or reveal one category. Ungrouped channels can't be hidden (they
-  /// have no name to key on), so an empty [group] is a no-op rather than a
-  /// row that would silently never match.
+  /// Hide or reveal one category. Hiding the current landing default clears
+  /// that choice so revealing the category later cannot resurrect it.
+  /// Ungrouped channels can't be hidden (they have no name to key on), so an
+  /// empty [group] is a no-op rather than a row that would silently never
+  /// match.
   ///
   /// Returns false when nothing was written (empty name, database not open)
   /// so the caller can tell the user instead of confirming a rule that was
@@ -2365,11 +2431,23 @@ class IptvCatalogDb {
     if (group.isEmpty || !isOpen) return false;
     final db = _requireDb();
     if (hidden) {
-      db.execute(
-        'INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at) '
-        'VALUES (?, ?, ?)',
-        [catalogKey, group, DateTime.now().millisecondsSinceEpoch],
-      );
+      db.execute('BEGIN');
+      try {
+        db.execute(
+          'INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at) '
+          'VALUES (?, ?, ?)',
+          [catalogKey, group, DateTime.now().millisecondsSinceEpoch],
+        );
+        db.execute(
+          'DELETE FROM category_default_selections '
+          'WHERE catalog_key = ? AND grp = ?',
+          [catalogKey, group],
+        );
+        db.execute('COMMIT');
+      } catch (_) {
+        _rollbackQuietly(db);
+        rethrow;
+      }
     } else {
       db.execute(
         'DELETE FROM hidden_groups WHERE catalog_key = ? AND grp = ?',
@@ -2379,9 +2457,10 @@ class IptvCatalogDb {
     return true;
   }
 
-  /// Hide several categories in one transaction. The settings page exposes
-  /// this as "Hide all"; a provider can have hundreds of categories, so
-  /// issuing one durable write per row would visibly stall a TV box.
+  /// Hide several categories in one transaction. A landing default included
+  /// in the hidden set is cleared in that same transaction. The settings page
+  /// exposes this as "Hide all"; a provider can have hundreds of categories,
+  /// so issuing one durable write per row would visibly stall a TV box.
   ///
   /// Returns false when the database isn't open (nothing written); an empty
   /// [groups] is vacuous success.
@@ -2404,6 +2483,13 @@ class IptvCatalogDb {
       for (final group in names) {
         insert.execute([catalogKey, group, hiddenAt]);
       }
+      db.execute(
+        'DELETE FROM category_default_selections WHERE catalog_key = ? '
+        'AND grp IN ('
+        'SELECT grp FROM hidden_groups WHERE catalog_key = ?'
+        ')',
+        [catalogKey, catalogKey],
+      );
       db.execute('COMMIT');
     } catch (_) {
       _rollbackQuietly(db);

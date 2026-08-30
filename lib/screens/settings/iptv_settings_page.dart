@@ -2471,9 +2471,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       children: [
         const SettingsSectionLabel('Hidden categories'),
         Text(
-          'Tap the eye (or long-press) on a category in the IPTV page\'s '
-          'category picker to hide it. Nothing is deleted — bring it '
-          'back here any time.',
+          'Open a category\'s menu (or long-press it) in the IPTV page\'s '
+          'category picker, then choose Hide category. Nothing is deleted — '
+          'bring it back here any time.',
           style: TextStyle(fontSize: 12, color: t.dim),
         ),
         const SizedBox(height: 16),

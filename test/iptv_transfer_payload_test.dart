@@ -118,6 +118,79 @@ void main() {
       );
     });
 
+    test('round-trips each default landing category with its provider', () async {
+      final provider = xtream(id: 'p1');
+      await StorageService.setIptvPlaylists([provider]);
+      final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
+      final vodKey = IptvCatalogKey.forPlaylist(provider, 'vod')!;
+      IptvCatalogDb.setDefaultCategory(liveKey, 'Sports');
+      IptvCatalogDb.setDefaultCategory(vodKey, 'Drama');
+
+      final payload = await IptvTransferPayload.buildPlaylists();
+      expect(payload.single['defaultCategories'], {
+        'live': 'Sports',
+        'vod': 'Drama',
+      });
+
+      await StorageService.setIptvPlaylists(const []);
+      IptvCatalogDb.setDefaultCategory(liveKey, null);
+      IptvCatalogDb.setDefaultCategory(vodKey, null);
+      final counts = await IptvTransferPayload.applyPlaylists(payload);
+
+      expect(counts.imported, 1);
+      expect(IptvCatalogDb.defaultCategory(liveKey), 'Sports');
+      expect(IptvCatalogDb.defaultCategory(vodKey), 'Drama');
+      expect(
+        IptvCatalogDb.defaultCategory(
+          IptvCatalogKey.forPlaylist(provider, 'series')!,
+        ),
+        isNull,
+      );
+    });
+
+    test(
+      'a sender without a default preserves the receiver\'s default',
+      () async {
+        final provider = xtream(id: 'same-provider');
+        await StorageService.setIptvPlaylists([provider]);
+
+        final payload = await IptvTransferPayload.buildPlaylists();
+        expect(payload.single, isNot(contains('defaultCategories')));
+
+        final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
+        IptvCatalogDb.setDefaultCategory(liveKey, 'Receiver Sports');
+        final counts = await IptvTransferPayload.applyPlaylists(payload);
+
+        expect(counts.alreadyPresent, 1);
+        expect(IptvCatalogDb.defaultCategory(liveKey), 'Receiver Sports');
+      },
+    );
+
+    test('an M3U provider imports only its live default category', () async {
+      final provider = IptvPlaylist(
+        id: 'm3u-default-local',
+        name: 'M3U',
+        url: 'https://example.com/default.m3u',
+        addedAt: DateTime(2026, 1, 1),
+      );
+      await StorageService.setIptvPlaylists([provider]);
+      final incoming = provider.toTransferJson()
+        ..['id'] = 'm3u-default-phone'
+        ..['defaultCategories'] = {
+          'live': 'News',
+          'vod': 'Wrong',
+          'series': 'Also wrong',
+        };
+
+      final counts = await IptvTransferPayload.applyPlaylists([incoming]);
+
+      expect(counts.alreadyPresent, 1);
+      expect(
+        IptvCatalogDb.defaultCategory(IptvCatalogKey.forUrl(provider.url)),
+        'News',
+      );
+    });
+
     test(
       'an uncustomized sender preserves an existing receiver order',
       () async {

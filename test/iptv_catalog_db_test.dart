@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:debrify/widgets/iptv/iptv_results_view.dart'
+    show IptvResultsViewState;
 import 'package:sqlite3/sqlite3.dart' as raw;
 
 IptvChannel _ch(
@@ -1350,6 +1352,97 @@ void main() {
 
     expect(IptvCatalogDb.isOpen, isTrue);
     expect(IptvCatalogDb.savedCategoryOrder('local|removed'), isEmpty);
+  });
+
+  test('default landing category round-trips, overwrites and clears', () {
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), isNull);
+
+    expect(IptvCatalogDb.setDefaultCategory('m3u|http://a', 'Sports'), isTrue);
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), 'Sports');
+
+    expect(IptvCatalogDb.setDefaultCategory('m3u|http://a', 'News'), isTrue);
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), 'News');
+
+    expect(IptvCatalogDb.setDefaultCategory('m3u|http://a', null), isTrue);
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), isNull);
+  });
+
+  test('default landing category is keyed per catalog', () {
+    IptvCatalogDb.setDefaultCategory('xc|p|u|live', 'Sports');
+    IptvCatalogDb.setDefaultCategory('xc|p|u|vod', 'Movies');
+
+    expect(IptvCatalogDb.defaultCategory('xc|p|u|live'), 'Sports');
+    expect(IptvCatalogDb.defaultCategory('xc|p|u|vod'), 'Movies');
+    expect(IptvCatalogDb.defaultCategory('m3u|http://other'), isNull);
+  });
+
+  test('default landing category survives ordinary catalog refresh', () async {
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'xc|p|u|live',
+      channels: [_ch(1, group: 'Sports')],
+    );
+    IptvCatalogDb.setDefaultCategory('xc|p|u|live', 'Sports');
+
+    await IptvCatalogDb.removeCatalogsByKeys(['xc|p|u|live']);
+
+    expect(IptvCatalogDb.defaultCategory('xc|p|u|live'), 'Sports');
+  });
+
+  test(
+    'default landing category is forgotten with removed source state',
+    () async {
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'xc|p|u|live',
+        channels: [_ch(1, group: 'Sports')],
+      );
+      IptvCatalogDb.setDefaultCategory('xc|p|u|live', 'Sports');
+
+      await IptvCatalogDb.removeCatalogsByKeys([
+        'xc|p|u|live',
+      ], forgetChannelOrders: true);
+
+      expect(IptvCatalogDb.defaultCategory('xc|p|u|live'), isNull);
+    },
+  );
+
+  group('landing category seed', () {
+    const key = 'm3u|http://seed';
+    const categories = ['Kids', 'News', 'Sports'];
+
+    String? seed({
+      String? orderKey = key,
+      List<String> cats = categories,
+      bool manuallyChosen = false,
+      bool searching = false,
+    }) => IptvResultsViewState.landingCategoryFor(
+      orderKey: orderKey,
+      categories: cats,
+      manuallyChosen: manuallyChosen,
+      searching: searching,
+    );
+
+    test('falls back to the first category in display order', () {
+      expect(seed(), 'Kids');
+    });
+
+    test('prefers the stored default while it still exists', () {
+      IptvCatalogDb.setDefaultCategory(key, 'Sports');
+      expect(seed(), 'Sports');
+
+      // A default the provider removed (or the user hid) is skipped, not an
+      // error — the visible list wins.
+      expect(seed(cats: ['Kids', 'News']), 'Kids');
+    });
+
+    test('never overrides an explicit pick, a search, or a keyless source', () {
+      IptvCatalogDb.setDefaultCategory(key, 'Sports');
+      expect(seed(manuallyChosen: true), isNull);
+      expect(seed(searching: true), isNull);
+      expect(seed(orderKey: null), isNull);
+      expect(seed(cats: const []), isNull);
+    });
   });
 
   test('Xtream manual order survives password URL and name changes', () async {

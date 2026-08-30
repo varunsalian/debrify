@@ -84,6 +84,14 @@ abstract final class IptvTransferPayload {
             if (order.isNotEmpty) orders[type] = order;
           }
           if (orders.isNotEmpty) json['categoryOrders'] = orders;
+          final defaults = <String, String>{};
+          for (final type in types) {
+            final key = IptvCatalogKey.forPlaylist(playlist, type);
+            if (key == null) continue;
+            final landing = IptvCatalogDb.defaultCategory(key);
+            if (landing != null) defaults[type] = landing;
+          }
+          if (defaults.isNotEmpty) json['defaultCategories'] = defaults;
         } catch (error) {
           // The catalog remains a cache. A broken optional order table cannot
           // be allowed to make an otherwise valid provider unexportable.
@@ -131,6 +139,8 @@ abstract final class IptvTransferPayload {
       final merged = List<IptvPlaylist>.from(existing);
       final categoryOrders =
           <({IptvPlaylist playlist, Map<String, List<String>> orders})>[];
+      final defaultCategories =
+          <({IptvPlaylist playlist, Map<String, String> defaults})>[];
 
       for (final raw in entries) {
         if (raw is! Map) {
@@ -159,6 +169,12 @@ abstract final class IptvTransferPayload {
             if (orders != null) {
               categoryOrders.add((playlist: present, orders: orders));
             }
+            final defaults = catalogAvailable
+                ? _defaultCategoriesFrom(raw)
+                : null;
+            if (defaults != null) {
+              defaultCategories.add((playlist: present, defaults: defaults));
+            }
             continue;
           }
           // An id collision with a *different* provider would make one of them
@@ -174,6 +190,12 @@ abstract final class IptvTransferPayload {
           final orders = catalogAvailable ? _categoryOrdersFrom(raw) : null;
           if (orders != null) {
             categoryOrders.add((playlist: playlist, orders: orders));
+          }
+          final defaults = catalogAvailable
+              ? _defaultCategoriesFrom(raw)
+              : null;
+          if (defaults != null) {
+            defaultCategories.add((playlist: playlist, defaults: defaults));
           }
           counts.imported++;
         } catch (_) {
@@ -201,6 +223,28 @@ abstract final class IptvTransferPayload {
               // damaged cache may cost this order, never the whole provider.
               debugPrint(
                 'IptvTransferPayload: category order import skipped ($error)',
+              );
+            }
+          }
+        }
+      }
+      for (final entry in defaultCategories) {
+        final allowedTypes = entry.playlist.isXtreamCodes
+            ? IptvCatalogKey.xtreamContentTypes
+            : const <String>['live'];
+        for (final type in allowedTypes) {
+          final landing = entry.defaults[type];
+          if (landing == null) continue;
+          final key = IptvCatalogKey.forPlaylist(entry.playlist, type);
+          if (key != null) {
+            try {
+              IptvCatalogDb.setDefaultCategory(key, landing);
+            } catch (error) {
+              // Same contract as category order: a damaged cache may cost
+              // this default, never the whole provider.
+              debugPrint(
+                'IptvTransferPayload: default category import skipped '
+                '($error)',
               );
             }
           }
@@ -234,6 +278,21 @@ abstract final class IptvTransferPayload {
       out[type] = parsed;
     }
     return out;
+  }
+
+  /// Null means the payload said nothing about default landing categories —
+  /// preserve the receiver's choices. Unlike category order there is no
+  /// reset wire state: a cleared default simply stops being exported, and
+  /// absence never clears the receiver's own choice.
+  static Map<String, String>? _defaultCategoriesFrom(Map raw) {
+    final value = raw['defaultCategories'];
+    if (value is! Map) return null;
+    final out = <String, String>{};
+    for (final type in IptvCatalogKey.xtreamContentTypes) {
+      final name = value[type];
+      if (name is String && name.trim().isNotEmpty) out[type] = name;
+    }
+    return out.isEmpty ? null : out;
   }
 
   static Future<bool> _openCatalogForOptionalOrders(String operation) async {

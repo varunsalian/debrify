@@ -32,6 +32,7 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/iptv_player_paging.dart';
+import '../../utils/tv_keys.dart' show TvHeldKeyGuard;
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
@@ -199,6 +200,21 @@ class IptvResultsViewState extends State<IptvResultsView>
   List<IptvChannel> _filteredChannels = [];
   List<String> _categories = [];
   String? _selectedCategory;
+
+  /// True once the user has picked a category — INCLUDING "All" — for the
+  /// current load. Needed because "All" and "nothing picked yet" are the same
+  /// null [_selectedCategory]: the landing-category seed fills the latter and
+  /// must never override the former (a background revalidate re-presenting
+  /// the catalog would otherwise yank an explicit "All" back to a category).
+  bool _categoryManuallyChosen = false;
+
+  /// Armed by [_loadPlaylistInner]'s clearing setState and consumed by the
+  /// FIRST present of that load. Only that present may seed a landing
+  /// category: the background revalidate re-uses the same present functions
+  /// (including the materialized fallback when the DB flag flips off
+  /// mid-flight), and an unarmed seed there would yank a user who is sitting
+  /// on All mid-browse.
+  bool _landingSeedArmed = false;
 
   /// Non-null exactly while the CURRENT view is DB-backed.
   CatalogSnapshot? _dbSnapshot;
@@ -1151,6 +1167,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       _filteredChannels = [];
       _categories = [];
       _selectedCategory = null;
+      // A fresh load may seed a landing category again; the outgoing
+      // playlist's explicit pick doesn't carry over.
+      _categoryManuallyChosen = false;
+      _landingSeedArmed = true;
       _chipState = _CatalogChipState.hidden;
       _chipOwner = _ChipOwner.none;
       _dbSnapshot = null;
@@ -1441,6 +1461,15 @@ class IptvResultsViewState extends State<IptvResultsView>
           !categories.contains(_selectedCategory)) {
         _selectedCategory = null;
       }
+      _selectedCategory ??= _landingCategory(
+        playlist.isLocalFile
+            ? IptvCatalogKey.forLocalCategoryOrder(playlist.id)
+            : cacheKey,
+        categories,
+      );
+      // Disarmed even when the seed declined (search active, keyless
+      // source): only the load's first present gets the chance.
+      _landingSeedArmed = false;
       // This present is the materialized fallback — if a previous load left a
       // DB snapshot behind (e.g. the fresh fetch's receipt came back empty
       // while an older generation was still pinned), keeping it would split
@@ -1541,6 +1570,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           !categories.contains(_selectedCategory)) {
         _selectedCategory = null;
       }
+      _selectedCategory ??= _landingCategory(snap.catalogKey, categories);
+      _landingSeedArmed = false;
     });
 
     if (warning != null && mounted) {
@@ -2947,18 +2978,153 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   void _onCategoryChanged(String? category) {
+    _categoryManuallyChosen = true;
     setState(() => _selectedCategory = category);
     _applyFilters();
   }
 
-  /// Whether categories can be hidden in the current view.
+  /// The category a fresh load should land on when nothing is picked yet:
+  /// the saved default when it still exists in [categories], else the first
+  /// category in display order — so the list opens on the user's #1 category
+  /// rather than the provider's raw channel order. Null (land on All) when
+  /// the user already picked a chip this load, a search is active (a source
+  /// switch mid-search must keep searching everything), or the source has no
+  /// durable identity to save a choice under ([orderKey] null: virtual
+  /// shelves, Stremio addons).
+  ///
+  /// Only a load's FIRST present may seed ([_landingSeedArmed]); the
+  /// revalidate paths share these present functions and must never re-seed —
+  /// the vanished-category resets (hidden, renamed, removed by the provider)
+  /// keep their fall-back-to-All behavior, because re-seeding mid-browse
+  /// would yank the view.
+  String? _landingCategory(String? orderKey, List<String> categories) =>
+      !_landingSeedArmed
+      ? null
+      : landingCategoryFor(
+          orderKey: orderKey,
+          categories: categories,
+          manuallyChosen: _categoryManuallyChosen,
+          searching: widget.searchQuery.isNotEmpty,
+        );
+
+  /// Pure decision behind [_landingCategory], split out for tests.
+  @visibleForTesting
+  static String? landingCategoryFor({
+    required String? orderKey,
+    required List<String> categories,
+    required bool manuallyChosen,
+    required bool searching,
+  }) {
+    if (manuallyChosen || searching || orderKey == null || categories.isEmpty) {
+      return null;
+    }
+    final stored = IptvCatalogDb.defaultCategory(orderKey);
+    if (stored != null && categories.contains(stored)) return stored;
+    return categories.first;
+  }
+
+  /// Whether categories can be customized in the current view.
   ///
   /// Only catalog-backed sources (M3U / Xtream) qualify: the hidden set is
   /// keyed by catalog, and the virtual shelves (Favorites, custom lists,
   /// Continue watching), Stremio addons and imported files never get one —
   /// they stay materialized in memory. Everything downstream of this getter
   /// can assume [_dbSnapshot] is non-null.
-  bool get _canHideCategories => _dbSnapshot != null;
+  bool get _canShowCategoryOptions => _dbSnapshot != null;
+
+  /// Hold-OK (TV) or long-press (touch) on a category: make it the source's
+  /// default landing category, or hide it. Routed from the same gestures that
+  /// used to jump straight to the hide confirmation; hide still confirms
+  /// through [_promptHideCategory], so its wording and semantics are
+  /// unchanged.
+  Future<void> _promptCategoryOptions(String category) async {
+    final app = AppThemeScope.of(context);
+    final snap = _dbSnapshot;
+    if (snap == null || category.isEmpty) return;
+    final isDefault =
+        IptvCatalogDb.defaultCategory(snap.catalogKey) == category;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => TvHeldKeyGuard(
+        child: SimpleDialog(
+          backgroundColor: app.iptv.modalBg,
+          title: Text(
+            category,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
+          ),
+          children: [
+            ListTile(
+              autofocus: true,
+              leading: Icon(
+                isDefault
+                    ? Icons.bookmark_remove_rounded
+                    : Icons.bookmark_added_rounded,
+                color: app.core.tx,
+              ),
+              title: Text(
+                isDefault ? 'Clear default category' : 'Set as default',
+                style: TextStyle(color: app.core.tx),
+              ),
+              subtitle: Text(
+                isDefault
+                    ? 'This source goes back to opening on its first category'
+                    : 'Open this source on "$category"',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: app.core.tx.withAlpha(0xB3)),
+              ),
+              onTap: () => Navigator.of(
+                dialogContext,
+              ).pop(isDefault ? 'clearDefault' : 'setDefault'),
+            ),
+            ListTile(
+              leading: Icon(Icons.visibility_off_outlined, color: app.core.tx),
+              title: Text(
+                'Hide category…',
+                style: TextStyle(color: app.core.tx),
+              ),
+              onTap: () => Navigator.of(dialogContext).pop('hide'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'setDefault':
+        if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, category)) {
+          _showChip(
+            _CatalogChipState.success,
+            'Opens on "$category" from now on',
+            autoHide: const Duration(milliseconds: 2500),
+          );
+        } else {
+          _showChip(
+            _CatalogChipState.failure,
+            'Couldn\'t save the default — try again',
+            autoHide: const Duration(milliseconds: 3500),
+          );
+        }
+      case 'clearDefault':
+        if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, null)) {
+          _showChip(
+            _CatalogChipState.success,
+            'Default category cleared',
+            autoHide: const Duration(milliseconds: 2500),
+          );
+        } else {
+          _showChip(
+            _CatalogChipState.failure,
+            'Couldn\'t clear the default — try again',
+            autoHide: const Duration(milliseconds: 3500),
+          );
+        }
+      case 'hide':
+        await _promptHideCategory(category);
+    }
+  }
 
   /// Hide [category] from this source, after confirming.
   ///
@@ -5228,7 +5394,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           onDownArrowPressed: _focusFirstChannel,
           onOpenRecordings: _pageCanRecord ? _openScheduledRecordings : null,
           recordingLive: _anyRecordingLive,
-          onHideCategory: _canHideCategories ? _promptHideCategory : null,
+          onCategoryOptions: _canShowCategoryOptions
+              ? _promptCategoryOptions
+              : null,
         ),
 
         // Content
@@ -5779,11 +5947,13 @@ class IptvResultsViewState extends State<IptvResultsView>
                   '$cat · ${_categoryCounts[cat] ?? 0}',
                   // "All" is deliberately not holdable — there is no such
                   // category to hide.
-                  holdable: _canHideCategories,
+                  holdable: _canShowCategoryOptions,
                 ),
             ],
-            holdHint: widget.isTelevision ? 'HOLD OK TO HIDE' : 'HOLD TO HIDE',
-            onOptionHold: _promptHideCategory,
+            holdHint: widget.isTelevision
+                ? 'HOLD OK FOR OPTIONS'
+                : 'HOLD FOR OPTIONS',
+            onOptionHold: _promptCategoryOptions,
             onSelected: (v) => _onCategoryChanged(v.isEmpty ? null : v),
           ),
         // Non-focusable count — DPAD skips straight over it.

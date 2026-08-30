@@ -36,7 +36,7 @@ import 'stremio_service.dart';
 ///   - WebDAV servers (URL + credentials, may be LAN-only)
 ///   - Indexer managers (Jackett / Prowlarr — URL + API key, may be LAN-only)
 ///   - IPTV providers (M3U URLs and Xtream server + credentials), including
-///     their manual category order. Playlists
+///     their manual category order and default landing category. Playlists
 ///     imported from a file are NOT included — their definition is the raw
 ///     M3U text, which would bloat the file past the size restore will read;
 ///     re-import the file on the other device.
