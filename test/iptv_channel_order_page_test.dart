@@ -105,15 +105,17 @@ void main() {
     await tester.pump();
     expect(find.text('Moving…'), findsOneWidget);
 
+    // While placing, ◀▶ page-jumps the highlight (clamped to the list edges)
+    // without dropping the selection.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, firstFocus);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, isNot(firstFocus));
+    expect(find.text('Moving…'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
-    expect(find.text('Moving…'), findsNothing);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, firstFocus);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pump();
+    // BACK cancels the selection without leaving the page.
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(find.text('Moving…'), findsNothing);
@@ -122,16 +124,19 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
 
+    // The list does not reshuffle while choosing a spot: the highlight moves,
+    // the selected row stays put until OK places it.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump(const Duration(milliseconds: 200));
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       startsWith('iptv-channel-order-'),
-      reason: 'focus follows the row being moved',
     );
+    expect(find.text('Moving…'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Moving…'), findsNothing);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
@@ -150,6 +155,105 @@ void main() {
       favorites = await StorageService.getIptvFavoriteChannels();
     });
     expect(favorites.keys, ['http://h/b', 'http://h/a', 'http://h/c']);
+    expect(tester.takeException(), isNull);
+  });
+
+  Future<void> seedManyFavorites() async {
+    for (final entry in const [
+      ('http://h/d', 'Delta'),
+      ('http://h/e', 'Echo'),
+      ('http://h/f', 'Foxtrot'),
+      ('http://h/g', 'Golf'),
+    ]) {
+      await StorageService.setIptvChannelFavorited(
+        entry.$1,
+        true,
+        channelName: entry.$2,
+      );
+    }
+  }
+
+  Future<void> openFavoritesEditor(WidgetTester tester) async {
+    Future<void> drainAsync() async {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 80)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    tester.view.physicalSize = const Size(1280, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppThemeScope(
+          theme: AppThemes.legacy,
+          child: const IptvChannelOrderPage(),
+        ),
+      ),
+    );
+    await drainAsync();
+    await tester.tap(find.text('Favorites'));
+    await drainAsync();
+  }
+
+  testWidgets('search places the selected row on the chosen result', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetAndroidTvCached(false);
+    await tester.runAsync(seedManyFavorites);
+    await openFavoritesEditor(tester);
+    expect(find.byType(TextField), findsOneWidget, reason: '7 rows show search');
+
+    // Select Golf, find Alpha, place Golf on it — a full move with two taps
+    // and a query, no arrows.
+    await tester.tap(find.text('Golf'));
+    await tester.pump();
+    expect(find.textContaining('Moving "Golf"'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Alp');
+    await tester.pump();
+    expect(find.text('Place here'), findsOneWidget);
+    await tester.tap(find.text('Alpha'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('Moving "Golf"'), findsNothing);
+
+    await tester.tap(find.text('Done'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+    );
+    await tester.pump();
+    late Map<String, Map<String, dynamic>> favorites;
+    await tester.runAsync(() async {
+      favorites = await StorageService.getIptvFavoriteChannels();
+    });
+    expect(favorites.keys.first, 'http://h/g');
+    expect(favorites.keys.elementAt(1), 'http://h/a');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quick-moves menu sends a row to the bottom', (tester) async {
+    PlatformUtil.debugSetAndroidTvCached(false);
+    await tester.runAsync(seedManyFavorites);
+    await openFavoritesEditor(tester);
+
+    await tester.tap(find.byTooltip('Quick moves').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move to bottom'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Done'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 80)),
+    );
+    await tester.pump();
+    late Map<String, Map<String, dynamic>> favorites;
+    await tester.runAsync(() async {
+      favorites = await StorageService.getIptvFavoriteChannels();
+    });
+    expect(favorites.keys.last, 'http://h/a');
     expect(tester.takeException(), isNull);
   });
 }
