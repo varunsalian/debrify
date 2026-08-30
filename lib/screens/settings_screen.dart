@@ -97,6 +97,7 @@ import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
 import 'settings/iptv_settings_page.dart';
+import 'settings/iptv_channel_order_page.dart';
 import 'settings/home_page_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/premiumize_settings_page.dart';
@@ -4024,6 +4025,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'IPTV Playlists',
+        'Channel order',
+        'Arrange channels inside Favorites and saved lists',
+        const [
+          'channel order',
+          'manual order',
+          'sort favorites',
+          'sort favourites',
+          'reorder channels',
+          'dpad',
+        ],
+        onTap: _openIptvChannelOrder,
+      ),
+      leaf(
+        'IPTV Playlists',
         'Default playlist',
         'Which source loads when you open IPTV',
         const ['default', 'playlist', 'source', 'opens', 'preferred'],
@@ -4492,6 +4507,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // IPTV settings hosts its own Appearance/Player guide sections — keep
     // the Appearance row captions honest.
     await _reloadAppearanceSummaries();
+  }
+
+  Future<void> _openIptvChannelOrder() async {
+    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
+    if (!mounted) return;
+    await pushSettingsPage(context, const IptvChannelOrderPage());
   }
 
   /// IPTV settings landing on the add-source form — what a search for "add

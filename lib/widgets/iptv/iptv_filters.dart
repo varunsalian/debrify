@@ -65,10 +65,11 @@ class IptvFiltersBar extends StatelessWidget {
   final VoidCallback? onOpenRecordings;
   final bool recordingLive;
 
-  /// Non-null lets a category be hidden by long-pressing (or holding OK on)
-  /// it in the picker. Null on sources that have no stored catalog to hide
-  /// against, which is also what keeps the hint off those pickers.
-  final ValueChanged<String>? onHideCategory;
+  /// Non-null lets long-press (or hold-OK on) a category open its options
+  /// (set as landing default, hide). Null on sources that have no stored
+  /// catalog to key those against, which is also what keeps the hint off
+  /// those pickers.
+  final ValueChanged<String>? onCategoryOptions;
 
   const IptvFiltersBar({
     super.key,
@@ -93,7 +94,7 @@ class IptvFiltersBar extends StatelessWidget {
     this.onDownArrowPressed,
     this.onOpenRecordings,
     this.recordingLive = false,
-    this.onHideCategory,
+    this.onCategoryOptions,
   });
 
   @override
@@ -172,7 +173,7 @@ class IptvFiltersBar extends StatelessWidget {
                     onDownArrowPressed: onDownArrowPressed,
                     onLeftArrowPressed: categoryLeftArrow,
                     onRightArrowPressed: null,
-                    onHideCategory: onHideCategory,
+                    onCategoryOptions: onCategoryOptions,
                   ),
                 ),
 
@@ -425,7 +426,7 @@ class _CategoryDropdown extends StatefulWidget {
   final VoidCallback? onDownArrowPressed;
   final VoidCallback? onLeftArrowPressed;
   final VoidCallback? onRightArrowPressed;
-  final ValueChanged<String>? onHideCategory;
+  final ValueChanged<String>? onCategoryOptions;
 
   const _CategoryDropdown({
     required this.categories,
@@ -437,7 +438,7 @@ class _CategoryDropdown extends StatefulWidget {
     this.onDownArrowPressed,
     this.onLeftArrowPressed,
     this.onRightArrowPressed,
-    this.onHideCategory,
+    this.onCategoryOptions,
   });
 
   @override
@@ -471,15 +472,15 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
         categories: widget.categories,
         categoryCounts: widget.categoryCounts,
         selectedCategory: widget.selectedCategory,
-        canHide: widget.onHideCategory != null,
+        canShowOptions: widget.onCategoryOptions != null,
       ),
     );
 
     if (result == null) return;
-    // The sheet is closed before the hide runs, so its confirmation opens
-    // over the page rather than over a list that is about to change.
-    if (result.hide) {
-      widget.onHideCategory?.call(result.category);
+    // The sheet is closed before the options dialog opens, so it appears over
+    // the page rather than over another modal route.
+    if (result.options) {
+      widget.onCategoryOptions?.call(result.category);
       return;
     }
     widget.onChanged(result.category.isEmpty ? null : result.category);
@@ -969,13 +970,13 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
   }
 }
 
-/// What the category sheet closed with: a category to select, or one to hide.
+/// What the category sheet closed with: a category to select or customize.
 class _CategoryChoice {
-  const _CategoryChoice(this.category, {this.hide = false});
+  const _CategoryChoice(this.category, {this.options = false});
 
-  /// Empty means "All categories" (never valid with [hide]).
+  /// Empty means "All categories" (never valid with [options]).
   final String category;
-  final bool hide;
+  final bool options;
 }
 
 /// Bottom sheet for selecting category with DPAD support
@@ -984,15 +985,15 @@ class _CategoryPickerSheet extends StatefulWidget {
   final Map<String, int>? categoryCounts;
   final String? selectedCategory;
 
-  /// Whether long-press / hold-OK on a category offers to hide it. False on
-  /// sources with no stored catalog to hide against.
-  final bool canHide;
+  /// Whether long-press / hold-OK on a category offers its options (default
+  /// landing, hide). False on sources with no stored catalog to key against.
+  final bool canShowOptions;
 
   const _CategoryPickerSheet({
     required this.categories,
     this.categoryCounts,
     required this.selectedCategory,
-    this.canHide = false,
+    this.canShowOptions = false,
   });
 
   @override
@@ -1110,11 +1111,11 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   ),
                   // Once, in the header — a per-row caption would repeat
                   // itself down a list that can run to hundreds of entries.
-                  if (widget.canHide)
+                  if (widget.canShowOptions)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        'Long-press (or hold OK on) a category to hide it',
+                        'Long-press (or hold OK on) a category for options',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -1153,9 +1154,9 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                   final count = widget.categoryCounts?[category];
                   void pick() =>
                       Navigator.of(context).pop(_CategoryChoice(category));
-                  void hide() => Navigator.of(
+                  void showOptions() => Navigator.of(
                     context,
-                  ).pop(_CategoryChoice(category, hide: true));
+                  ).pop(_CategoryChoice(category, options: true));
                   return _FocusablePickerTile(
                     focusNode: _nodeFor(index),
                     label: count != null ? '$category  ($count)' : category,
@@ -1164,11 +1165,11 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                         : Icons.folder_outlined,
                     isSelected: isSelected,
                     onTap: pick,
-                    onHold: widget.canHide ? hide : null,
-                    // The eye makes hideability visible — the hold gesture
-                    // alone had no affordance on touch.
-                    onTrailingTap: widget.canHide ? hide : null,
-                    trailingTooltip: 'Hide category',
+                    onHold: widget.canShowOptions ? showOptions : null,
+                    // The menu makes the secondary actions visible — the hold
+                    // gesture alone has no affordance on touch.
+                    onTrailingTap: widget.canShowOptions ? showOptions : null,
+                    trailingTooltip: 'Category options',
                     onKeyEvent: (node, event) =>
                         _handleKeyEvent(node, event, index, pick),
                   );
@@ -1176,21 +1177,21 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
               ),
             ),
 
-            if (widget.canHide)
+            if (widget.canShowOptions)
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.visibility_off_outlined,
+                      Icons.more_vert_rounded,
                       size: 14,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        'Tap the eye (or long-press) to hide a category',
+                        'Tap the menu (or long-press) for category options',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1225,11 +1226,10 @@ class _FocusablePickerTile extends StatefulWidget {
   /// from a hold.
   final VoidCallback? onHold;
 
-  /// Explicit tap target for [onHold]'s action (the trailing eye on hideable
-  /// categories). The hold gesture has zero visual affordance on touch, so
-  /// hideability was invisible without it. Excluded from focus traversal —
-  /// DPAD users already have hold-OK, and a second stop per row would double
-  /// the list walk.
+  /// Explicit tap target for [onHold]'s action. The hold gesture has zero
+  /// visual affordance on touch, so the trailing menu exposes the available
+  /// options. Excluded from focus traversal — DPAD users already have hold-OK,
+  /// and a second stop per row would double the list walk.
   final VoidCallback? onTrailingTap;
   final String? trailingTooltip;
 
@@ -1422,7 +1422,7 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
                     child: IconButton(
                       tooltip: widget.trailingTooltip,
                       icon: Icon(
-                        Icons.visibility_off_outlined,
+                        Icons.more_vert_rounded,
                         size: 20,
                         color: _isFocused
                             ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)

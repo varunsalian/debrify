@@ -76,6 +76,8 @@ DetailModel _model({
   List<SeriesSource> sources = const [],
   List<StremioMeta> recs = const [],
   void Function(bool)? onDepth,
+  VoidCallback? onPrimary,
+  VoidCallback? onPrimaryLongPress,
   bool openingDataReady = true,
 }) {
   final item = StremioMeta(
@@ -122,7 +124,8 @@ DetailModel _model({
     mdblistLabel: 'Watchlist',
     mdblistRating: 8,
     showPrimary: true,
-    onPrimary: () {},
+    onPrimary: onPrimary ?? () {},
+    onPrimaryLongPress: onPrimaryLongPress,
     onBrowse: null,
     onTrailer: () {},
     onSelectSource: () {},
@@ -205,6 +208,28 @@ Future<void> _press(WidgetTester t, LogicalKeyboardKey k) async {
 }
 
 void main() {
+  testWidgets('Showcase Play hold invokes sources without also playing', (
+    tester,
+  ) async {
+    _surface(tester, _tv);
+    var plays = 0;
+    var sourceOpens = 0;
+    final model = _model(
+      onPrimary: () => plays++,
+      onPrimaryLongPress: () => sourceOpens++,
+    );
+
+    await tester.pumpWidget(_host(model));
+    await tester.pump(const Duration(milliseconds: 240));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Resume'));
+    await tester.pump();
+
+    expect(sourceOpens, 1);
+    expect(plays, 0);
+  });
+
   testWidgets(
     'TV holds a composed opening skeleton before revealing Showcase',
     (tester) async {

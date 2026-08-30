@@ -25,6 +25,20 @@ class IptvCatalogKey {
 
   static String forUrl(String url) => 'm3u|$url';
 
+  /// Durable presentation-order key for an imported file. Local files never
+  /// have catalog rows, but their category order still needs a profile-scoped
+  /// identity that survives app restarts and cannot collide with a URL/Xtream
+  /// catalog key.
+  static String forLocalCategoryOrder(String playlistId) =>
+      'local-category-order|$playlistId';
+
+  /// Storage target for category-list ordering. Cacheable sources use their
+  /// catalog key; imported files use their stable saved-playlist id.
+  static String? forCategoryOrder(IptvPlaylist playlist, String contentType) =>
+      playlist.isLocalFile
+      ? forLocalCategoryOrder(playlist.id)
+      : forPlaylist(playlist, contentType);
+
   /// Every key an Xtream login can be stored under (one per content type) —
   /// what invalidation has to sweep when the credentials change.
   static List<String> allForXtream(String serverUrl, String username) => [

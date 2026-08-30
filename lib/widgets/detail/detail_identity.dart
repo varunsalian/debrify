@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/debrify_image_cache.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tv_keys.dart';
 import '../tracker_brand_marks.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
@@ -20,6 +21,7 @@ import 'theme/detail_theme.dart';
 class DetailPrimaryButton extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final bool autofocus;
   final Color glow;
@@ -33,6 +35,7 @@ class DetailPrimaryButton extends StatefulWidget {
     required this.label,
     required this.onTap,
     required this.glow,
+    this.onLongPress,
     this.focusNode,
     this.autofocus = false,
     this.busy = false,
@@ -44,12 +47,35 @@ class DetailPrimaryButton extends StatefulWidget {
 
 class _DetailPrimaryButtonState extends State<DetailPrimaryButton> {
   bool _focused = false;
+  late final TvHoldOk _hold;
+
+  @override
+  void initState() {
+    super.initState();
+    _hold = TvHoldOk(
+      onTap: () => widget.onTap(),
+      onHold: () => widget.onLongPress?.call(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hold.reset();
+    super.dispose();
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if (widget.onLongPress == null || !isActivateOrSpaceKey(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
+    return _hold.handle(event);
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = DetailThemeScope.of(context);
     final tv = PlatformUtil.isAndroidTvCached;
-    return DetailFocusRing(
+    final button = DetailFocusRing(
       focused: _focused,
       // The fill can BE the theme's cursor colour — Noir white-on-white,
       // Spectrum's cyan ring over the cyan end of its gradient. Either way the
@@ -85,9 +111,14 @@ class _DetailPrimaryButtonState extends State<DetailPrimaryButton> {
             child: InkWell(
               focusNode: widget.focusNode,
               autofocus: widget.autofocus,
-              onFocusChange: (f) => setState(() => _focused = f),
+              onFocusChange: (f) {
+                setState(() => _focused = f);
+                if (!f) _hold.reset();
+              },
               borderRadius: t.brBtn,
               onTap: widget.onTap,
+              // InkWell supplies the platform long-press feedback itself.
+              onLongPress: widget.onLongPress,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 19,
@@ -135,6 +166,13 @@ class _DetailPrimaryButtonState extends State<DetailPrimaryButton> {
           ),
         ),
       ),
+    );
+    if (widget.onLongPress == null) return button;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) => _onKey(event),
+      child: button,
     );
   }
 }
@@ -687,6 +725,7 @@ class DetailActionRow extends StatelessWidget {
           label: model.primaryLabel,
           busy: model.primaryBusy,
           onTap: model.onPrimary,
+          onLongPress: model.onPrimaryLongPress,
           glow: model.accent,
           focusNode: model.focus.primaryEntry,
           autofocus: model.isTelevision,

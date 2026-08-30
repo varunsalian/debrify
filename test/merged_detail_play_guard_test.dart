@@ -1,16 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/screens/merged_series_detail_screen.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/hero_trailer_backdrop.dart';
+import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,8 +23,20 @@ void main() {
     required Map<String, double> progress,
     void Function(({bool started, int season, int episode})? promised)?
     onPromise,
+    Future<void> Function(({bool started, int season, int episode})? promised)?
+    onBrowsePrimaryEpisodeSources,
+    void Function(TraktItemMenuAction action)? onTraktAction,
+    bool preferSeriesPacks = true,
   }) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    if (!preferSeriesPacks) {
+      await StorageService.setQuickPlayRules(
+        QuickPlayRules.debrifyDefault(
+          isMovie: false,
+        ).copyWith(preferSeriesPacks: false),
+        isMovie: false,
+      );
+    }
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) =>
@@ -39,8 +54,23 @@ void main() {
             baseUrl: '',
           ),
           onResume: (promised) async => onPromise?.call(promised),
+          onBrowsePrimaryEpisodeSources: onBrowsePrimaryEpisodeSources,
           resumeInfoLoader: () async =>
               (started: false, season: null, episode: null),
+          traktMenuOptions: onTraktAction == null
+              ? const []
+              : const [
+                  TraktMenuOption(
+                    action: TraktItemMenuAction.searchPacks,
+                    icon: Icons.inventory_2_rounded,
+                    color: Colors.amber,
+                    label: 'Search Season Packs',
+                    caption: 'Packs',
+                  ),
+                ],
+          onTraktAction: onTraktAction == null
+              ? null
+              : (action) async => onTraktAction(action),
           seasonsLoader: () async => [
             TraktSeason(
               number: 1,
@@ -126,6 +156,179 @@ void main() {
 
     expect(pressed, isTrue);
     expect(captured, isNull);
+  });
+
+  testWidgets('series Play hold offers packs and the promised episode', (
+    tester,
+  ) async {
+    ({bool started, int season, int episode})? captured;
+    var plays = 0;
+    await pumpSeriesDetail(
+      tester,
+      progress: const {'1-1': 25},
+      onPromise: (_) => plays++,
+      onBrowsePrimaryEpisodeSources: (promised) async {
+        captured = promised;
+      },
+      onTraktAction: (_) {},
+    );
+
+    await tester.longPress(find.text('Resume · S1E1'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Season pack sources'), findsOneWidget);
+    expect(find.text('Episode sources'), findsOneWidget);
+    expect(plays, 0, reason: 'a hold must never also activate Play');
+
+    await tester.tap(find.text('Episode sources'));
+    await tester.pumpAndSettle();
+
+    expect(captured, isNotNull);
+    expect(captured!.season, 1);
+    expect(captured!.episode, 1);
+    expect(captured!.started, isTrue);
+    expect(plays, 0);
+  });
+
+  testWidgets('series Play hold reuses the More-menu season-pack action', (
+    tester,
+  ) async {
+    TraktItemMenuAction? captured;
+    var episodeSourceOpens = 0;
+    await pumpSeriesDetail(
+      tester,
+      progress: const {},
+      onBrowsePrimaryEpisodeSources: (_) async => episodeSourceOpens++,
+      onTraktAction: (action) => captured = action,
+    );
+
+    await tester.longPress(find.text('Start Watching'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Season pack sources'));
+    await tester.pumpAndSettle();
+
+    expect(captured, TraktItemMenuAction.searchPacks);
+    expect(episodeSourceOpens, 0);
+  });
+
+  testWidgets(
+    'packs off sends a series Play hold straight to episode sources',
+    (tester) async {
+      var sourceOpens = 0;
+      var plays = 0;
+      await pumpSeriesDetail(
+        tester,
+        progress: const {},
+        preferSeriesPacks: false,
+        onPromise: (_) => plays++,
+        onBrowsePrimaryEpisodeSources: (_) async => sourceOpens++,
+        onTraktAction: (_) {},
+      );
+
+      await tester.longPress(find.text('Start Watching'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose sources'), findsNothing);
+      expect(sourceOpens, 1);
+      expect(plays, 0);
+    },
+  );
+
+  testWidgets('movie Play hold opens the existing movie Sources action', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    var sourceOpens = 0;
+    var plays = 0;
+    var haptics = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') haptics++;
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        builder: (context, child) =>
+            AppThemeScope(theme: AppThemes.legacy, child: child!),
+        home: MergedDetailScreen(
+          item: const StremioMeta(
+            id: 'movie-hold',
+            type: 'movie',
+            name: 'Movie Hold',
+          ),
+          addon: StremioAddon(
+            id: 'test-addon',
+            name: 'Test Addon',
+            manifestUrl: '',
+            baseUrl: '',
+          ),
+          onResume: (_) async => plays++,
+          onBrowse: () => sourceOpens++,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.longPress(find.text('Play'));
+    await tester.pump();
+
+    expect(sourceOpens, 1);
+    expect(plays, 0);
+    expect(haptics, 1, reason: 'InkWell owns the long-press feedback');
+  });
+
+  testWidgets('held TV OK opens Sources without firing Play on release', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    var sourceOpens = 0;
+    var plays = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) =>
+            AppThemeScope(theme: AppThemes.legacy, child: child!),
+        home: MergedDetailScreen(
+          item: const StremioMeta(
+            id: 'movie-tv-hold',
+            type: 'movie',
+            name: 'Movie TV Hold',
+          ),
+          addon: StremioAddon(
+            id: 'test-addon',
+            name: 'Test Addon',
+            manifestUrl: '',
+            baseUrl: '',
+          ),
+          isTelevision: true,
+          onResume: (_) async => plays++,
+          onBrowse: () => sourceOpens++,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await tester.pump(const Duration(milliseconds: 650));
+    expect(sourceOpens, 1);
+    expect(plays, 0);
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(sourceOpens, 1);
+    expect(plays, 0);
   });
 
   testWidgets('merged detail admits only one playback launch at a time', (

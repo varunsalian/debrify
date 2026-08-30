@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/utils/format_tag_detector.dart';
 import 'package:debrify/widgets/format_badge.dart';
@@ -8,6 +9,88 @@ void main() {
   Future<void> pump(WidgetTester tester, Widget child) => tester.pumpWidget(
     MaterialApp(home: Scaffold(body: child)),
   );
+
+  Future<(FocusNode row, FocusNode sibling)> pumpTvRow(
+    WidgetTester tester, {
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+  }) async {
+    final row = FocusNode(debugLabel: 'source-row');
+    final sibling = FocusNode(debugLabel: 'opening-control');
+    addTearDown(row.dispose);
+    addTearDown(sibling.dispose);
+    await pump(
+      tester,
+      Column(
+        children: [
+          Focus(focusNode: sibling, child: const SizedBox(height: 20)),
+          SourceRow(
+            title: 'Source',
+            subtitle: 'metadata',
+            focusNode: row,
+            onTap: onTap,
+            onLongPress: onLongPress,
+            isTelevision: true,
+          ),
+        ],
+      ),
+    );
+    row.requestFocus();
+    await tester.pump();
+    return (row, sibling);
+  }
+
+  testWidgets('an opening OK key-up without a matching down does not play', (
+    tester,
+  ) async {
+    var taps = 0;
+    final (row, sibling) = await pumpTvRow(
+      tester,
+      onTap: () => taps++,
+    );
+
+    sibling.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    row.requestFocus();
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+
+    expect(taps, 0, reason: 'the source row did not begin this press');
+  });
+
+  testWidgets('a genuine TV OK down-up still taps the source', (tester) async {
+    var taps = 0;
+    await pumpTvRow(tester, onTap: () => taps++);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+
+    expect(taps, 1);
+  });
+
+  testWidgets('a held TV OK invokes only the source long-press action', (
+    tester,
+  ) async {
+    var taps = 0;
+    var holds = 0;
+    await pumpTvRow(
+      tester,
+      onTap: () => taps++,
+      onLongPress: () => holds++,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 550));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+
+    expect(holds, 1);
+    expect(taps, 0);
+  });
 
   testWidgets('format row shows title, subtitle, cache pill and logos', (tester) async {
     final node = FocusNode();

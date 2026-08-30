@@ -686,6 +686,14 @@ class TraktResultsViewState extends State<TraktResultsView> {
             _onMenuAction(item, action);
           },
           onPlay: () => _onQuickPlay(item),
+          onBrowsePrimaryEpisodeSources: item.type == 'series'
+              ? () async {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                  await _onQuickPlay(item, browseSourcesOnly: true);
+                }
+              : null,
           // The shared detail screen no longer self-pops on Browse; preserve
           // the prior pop-then-callback behaviour here (Trakt episode mode is
           // still inline — migrated in a later slice).
@@ -852,7 +860,10 @@ class TraktResultsViewState extends State<TraktResultsView> {
     ];
   }
 
-  void _onQuickPlay(StremioMeta item) async {
+  Future<void> _onQuickPlay(
+    StremioMeta item, {
+    bool browseSourcesOnly = false,
+  }) async {
     if (_quickPlayInProgress) return;
     _quickPlayInProgress = true;
 
@@ -894,7 +905,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
         traktProgressPercent: traktProgress,
         traktSource: true,
       );
-      if (widget.onQuickPlay != null) {
+      if (browseSourcesOnly) {
+        widget.onItemSelected(selection);
+      } else if (widget.onQuickPlay != null) {
         widget.onQuickPlay!(selection);
       } else {
         widget.onItemSelected(selection);

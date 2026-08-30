@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -7,6 +9,7 @@ import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
+import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stream_url_validator.dart';
@@ -45,6 +48,136 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Adjacent episode direct-link validation', () {
+    test(
+      'provider-free adjacent fetch queries addons for direct links',
+      () async {
+        late Uri requested;
+        final service = StremioService.instance;
+        service.debugStreamHttpClientFactory = () =>
+            MockClient((request) async {
+              requested = request.url;
+              return http.Response(
+                jsonEncode({
+                  'streams': [
+                    {
+                      'name': 'Direct 1080p',
+                      'description': 'Show.S01E02.1080p.WEB-DL',
+                      'url': 'https://cdn.test/show-s01e02.mkv',
+                    },
+                    {
+                      'name': 'Torrent twin',
+                      'description': 'Show.S01E02.1080p.WEB-DL',
+                      'infoHash': 'a' * 40,
+                    },
+                  ],
+                }),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            });
+        addTearDown(() {
+          service.debugStreamHttpClientFactory = null;
+          service.invalidateCache();
+        });
+
+        const baseUrl = 'https://addon.test/configured';
+        final addon = StremioAddon(
+          id: 'test.direct',
+          name: 'Direct Test',
+          manifestUrl: '$baseUrl/manifest.json',
+          baseUrl: baseUrl,
+          types: const ['series'],
+          resources: const ['stream'],
+        );
+        SharedPreferences.setMockInitialValues({
+          'stremio_addons_v1': jsonEncode([addon.toJson()]),
+        });
+        service.invalidateCache();
+        await StorageService.setQuickPlayRules(
+          QuickPlayRules.debrifyDefault(isMovie: false).copyWith(
+            preset: QuickPlayPreset.custom,
+            sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+            preferSeriesPacks: false,
+          ),
+          isMovie: false,
+        );
+
+        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+          meta: const PlaybackMeta(
+            imdbId: 'tt1234567',
+            contentType: 'series',
+            season: 1,
+            episode: 1,
+            title: 'Show',
+          ),
+          episodesFetched: true,
+        );
+        final fetched = await fetcher!.fetch(
+          SeriesSourceFetcher.modeEpisodes,
+          season: 1,
+          episode: 2,
+        );
+
+        expect(Uri.decodeComponent(requested.path), contains('tt1234567:1:2'));
+        expect(fetched, hasLength(1));
+        expect(fetched!.single.streamType, StreamType.directUrl);
+        expect(fetched.single.directUrl, 'https://cdn.test/show-s01e02.mkv');
+      },
+    );
+
+    test(
+      'provider-free addon failure keeps adjacent fetch retryable',
+      () async {
+        final service = StremioService.instance;
+        service.debugStreamHttpClientFactory = () =>
+            MockClient((_) async => http.Response('unavailable', 503));
+        addTearDown(() {
+          service.debugStreamHttpClientFactory = null;
+          service.invalidateCache();
+        });
+
+        const baseUrl = 'https://addon.test/configured';
+        final addon = StremioAddon(
+          id: 'test.failing',
+          name: 'Failing Test',
+          manifestUrl: '$baseUrl/manifest.json',
+          baseUrl: baseUrl,
+          types: const ['series'],
+          resources: const ['stream'],
+        );
+        SharedPreferences.setMockInitialValues({
+          'stremio_addons_v1': jsonEncode([addon.toJson()]),
+        });
+        service.invalidateCache();
+        await StorageService.setQuickPlayRules(
+          QuickPlayRules.debrifyDefault(isMovie: false).copyWith(
+            preset: QuickPlayPreset.custom,
+            sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+            preferSeriesPacks: false,
+          ),
+          isMovie: false,
+        );
+
+        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+          meta: const PlaybackMeta(
+            imdbId: 'tt1234567',
+            contentType: 'series',
+            season: 1,
+            episode: 1,
+            title: 'Show',
+          ),
+        );
+        final fetched = await fetcher!.fetch(
+          SeriesSourceFetcher.modeEpisodes,
+          season: 1,
+          episode: 2,
+        );
+
+        expect(fetched, isNull);
+        expect(fetcher.episodesFetched, isFalse);
+      },
+    );
+
     test('series fetcher rejects a positively dead direct stream', () async {
       SharedPreferences.setMockInitialValues({});
       final realFactory = StreamUrlValidator.clientFactory;

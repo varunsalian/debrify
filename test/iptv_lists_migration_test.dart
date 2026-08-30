@@ -31,8 +31,7 @@ void main() {
     await dir.delete(recursive: true);
   });
 
-  Future<void> configure(Database db) =>
-      db.execute('PRAGMA foreign_keys = ON');
+  Future<void> configure(Database db) => db.execute('PRAGMA foreign_keys = ON');
 
   /// The v1 shape: Debrify-TV channels only, before channel_number and
   /// before any IPTV table existed.
@@ -95,6 +94,45 @@ void main() {
     ''');
   }
 
+  /// v5 introduced lists, before membership rows had a manual position.
+  Future<void> createV5(Database db, int _) async {
+    await db.execute('''
+      CREATE TABLE iptv_lists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        is_builtin INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE iptv_list_channels (
+        list_id TEXT NOT NULL,
+        url TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        logo_url TEXT NOT NULL DEFAULT '',
+        channel_group TEXT NOT NULL DEFAULT '',
+        playlist_id TEXT NOT NULL DEFAULT '',
+        channel_number INTEGER,
+        content_type TEXT,
+        duration INTEGER,
+        http_headers_json TEXT,
+        added_at INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (list_id, url),
+        FOREIGN KEY (list_id) REFERENCES iptv_lists(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.insert('iptv_lists', {
+      'id': 'favorites',
+      'name': 'Favorites',
+      'position': 0,
+      'is_builtin': 1,
+      'created_at': 0,
+      'updated_at': 0,
+    });
+  }
+
   Future<Database> openAt(
     int version,
     Future<void> Function(Database, int) onCreate,
@@ -121,6 +159,18 @@ void main() {
     );
   }
 
+  Future<Database> upgradeToV6() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
   Future<bool> hasTable(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -139,8 +189,11 @@ void main() {
 
       expect(await hasTable(db, 'iptv_lists'), isTrue);
       expect(await hasTable(db, 'iptv_list_channels'), isTrue);
-      expect(await hasTable(db, 'iptv_favorites'), isFalse,
-          reason: 'v5 never creates the legacy table');
+      expect(
+        await hasTable(db, 'iptv_favorites'),
+        isFalse,
+        reason: 'v5 never creates the legacy table',
+      );
       expect(await db.query('iptv_list_channels'), isEmpty);
 
       final lists = await db.query('iptv_lists');
@@ -192,9 +245,13 @@ void main() {
       expect(row['playlist_id'], 'p1');
       expect(row['http_headers_json'], '{"User-Agent":"TiviMate"}');
       expect(row['added_at'], 111);
-      expect(row['channel_number'], isNull,
-          reason: 'a v3 row never had one; the ALTER only makes the copy '
-              'column-compatible');
+      expect(
+        row['channel_number'],
+        isNull,
+        reason:
+            'a v3 row never had one; the ALTER only makes the copy '
+            'column-compatible',
+      );
       expect(row['content_type'], isNull);
       expect(await hasTable(db, 'iptv_favorites'), isFalse);
     });
@@ -222,8 +279,11 @@ void main() {
         'iptv_list_channels',
         orderBy: 'added_at ASC, url ASC',
       );
-      expect(rows.map((r) => r['name']), ['First', 'Second', 'Third'],
-          reason: 'oldest-starred-first ordering survives the copy');
+      expect(
+        rows.map((r) => r['name']),
+        ['First', 'Second', 'Third'],
+        reason: 'oldest-starred-first ordering survives the copy',
+      );
       expect(rows.map((r) => r['channel_number']), [1, 2, 3]);
       expect(rows.every((r) => r['list_id'] == 'favorites'), isTrue);
       expect(await hasTable(db, 'iptv_favorites'), isFalse);
@@ -251,8 +311,11 @@ void main() {
       await DebrifyTvDatabase.createIptvStoreTables(db);
       await DebrifyTvDatabase.seedBuiltinList(db);
 
-      expect(await db.query('iptv_list_channels'), hasLength(1),
-          reason: 'seeding is INSERT OR IGNORE, never OR REPLACE');
+      expect(
+        await db.query('iptv_list_channels'),
+        hasLength(1),
+        reason: 'seeding is INSERT OR IGNORE, never OR REPLACE',
+      );
       expect(await db.query('iptv_lists'), hasLength(1));
     });
 
@@ -286,8 +349,35 @@ void main() {
 
       final remaining = await db.query('iptv_list_channels');
       expect(remaining, hasLength(1));
-      expect(remaining.single['list_id'], 'favorites',
-          reason: 'only the deleted list loses its rows');
+      expect(
+        remaining.single['list_id'],
+        'favorites',
+        reason: 'only the deleted list loses its rows',
+      );
     });
+  });
+
+  test('v5→v6 backfills the exact former A-Z list order', () async {
+    var db = await openAt(5, createV5);
+    for (final entry in const [
+      ('zulu', 'Zulu', 100),
+      ('alpha', 'alpha', 300),
+      ('mike', 'Mike', 200),
+    ]) {
+      await db.insert('iptv_list_channels', {
+        'list_id': 'favorites',
+        'url': entry.$1,
+        'name': entry.$2,
+        'added_at': entry.$3,
+      });
+    }
+    await db.close();
+
+    db = await upgradeToV6();
+    addTearDown(db.close);
+    final rows = await db.query('iptv_list_channels', orderBy: 'position ASC');
+    expect(rows.map((row) => row['name']), ['alpha', 'Mike', 'Zulu']);
+    expect(rows.map((row) => row['position']), [0, 1, 2]);
+    expect(await hasTable(db, 'iptv_category_channel_orders'), isTrue);
   });
 }

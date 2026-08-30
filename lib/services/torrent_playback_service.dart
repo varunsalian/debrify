@@ -2240,7 +2240,8 @@ class TorrentPlaybackService {
   /// season+episode, non-`tt` ids the torrent engines can't search).
   /// [provider] is the launch's debrid provider; a non-debrid launch (bound
   /// 'local' source, addon 'stream') resolves the default configured provider
-  /// at fetch time instead, and the fetch fails soft (null) when none exists.
+  /// at fetch time instead. Without one, episode fetches can still return
+  /// direct addon links; torrent and pack fetches fail soft.
   static SeriesSourceFetcher? seriesFetcherFor({
     required PlaybackMeta? meta,
     String? provider,
@@ -2309,28 +2310,59 @@ class TorrentPlaybackService {
         );
       },
       searchEpisodes: (s, e) async {
-        final prov = await effectiveProvider();
-        if (prov == null) return null;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
         if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
         final ladder = await loadLadder(includeSize: false, rules: rules);
         try {
-          final list = await searchCuratedSources(
-            imdbId: imdbId,
-            label: label,
-            isMovie: false,
-            season: s,
-            episode: e,
-            provider: prov,
-            rules: rules,
-          );
+          final prov = await effectiveProvider();
+          final List<Torrent> list;
+          if (prov == null) {
+            // A direct-addon episode can launch without a Debrify debrid
+            // provider. Keep that contract when Next crosses a one-entry
+            // playlist: query the episode-scoped addon endpoints and retain
+            // only links this provider-free resolver can actually open.
+            if (!allowsAddonSearch(rules) || !rules.allowDirectLinks) {
+              return const <Torrent>[];
+            }
+            final addonTimeout = rules.addonTimeoutSeconds == 15
+                ? null
+                : Duration(seconds: rules.addonTimeoutSeconds);
+            final result = await TorrentService.searchStremioAddonsOnly(
+              imdbId: imdbId,
+              isMovie: false,
+              season: s,
+              episode: e,
+              timeout: addonTimeout,
+              preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
+            );
+            list = (result['torrents'] as List).cast<Torrent>().where((t) {
+              return t.streamType == StreamType.directUrl &&
+                  (t.directUrl?.isNotEmpty ?? false);
+            }).toList();
+            if (list.isEmpty &&
+                ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)) {
+              // Addon failures are reported in-band. Keep the fetch retryable
+              // when they leave this provider-free path no playable rows.
+              return null;
+            }
+          } else {
+            list = await searchCuratedSources(
+              imdbId: imdbId,
+              label: label,
+              isMovie: false,
+              season: s,
+              episode: e,
+              provider: prov,
+              rules: rules,
+            );
+          }
           return orderCandidatesForRules(
             list,
             rules: rules.copyWith(relaxFilters: true),
             ladder: ladder,
           );
         } catch (_) {
-          // Engine search failed — null keeps the tab's "Load more" for retry.
+          // Source search failed — null keeps the tab's "Load more" for retry.
           return null;
         }
       },

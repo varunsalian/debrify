@@ -283,6 +283,14 @@ class TvTextFieldState extends State<TvTextField> {
   bool _popGuard = false;
   Timer? _popGuardTimer;
 
+  /// True while a route pop belongs to this field's in-app keyboard — editing
+  /// is active, or the guard window after a Back-key close is still armed.
+  ///
+  /// A vetoed pop is broadcast to EVERY PopScope on the route, so a page
+  /// whose own PopScope vetoes pops (save-on-back editors) must consult this
+  /// from its handler and do nothing when the press was the keyboard's.
+  bool get popConsumedByShell => _editing || _popGuard;
+
   void _armPopGuard() {
     _popGuard = true;
     _keyboardSlot?.holdBack();

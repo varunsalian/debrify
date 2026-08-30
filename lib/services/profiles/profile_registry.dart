@@ -16,6 +16,7 @@ import 'profile_lock_controller.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'tvos_profile_recovery_store.dart';
+import 'tvos_recovery_limits.dart';
 
 class ProfileRegistry {
   ProfileRegistry._(this._db);
@@ -701,8 +702,13 @@ class ProfileRegistry {
     final allowedPrefixes = profiles
         .map((row) => 'p.${row['id']}.g.${row['visible_data_generation']}.')
         .toSet();
-    final result = <String, Object?>{};
-    var encodedBytes = 0;
+    // Everything eligible is gathered first, then packed smallest-first, so
+    // scalar settings and credentials always fit and only the largest
+    // collections fall out of a full envelope. Nothing throws here: every
+    // checkpoint runs inside a preference write, so a thrown bound would fail
+    // every subsequent save — and the import spares live keys the export had
+    // to drop, so a skip is never a deletion, only "not checkpointed yet".
+    final candidates = <({String key, Object? value, int bytes})>[];
     for (final key in prefs.getKeys()) {
       final match = _scopedPreferencePattern.firstMatch(key);
       if (match == null ||
@@ -718,13 +724,34 @@ class ProfileRegistry {
           value is! List<String>) {
         continue;
       }
-      final bytes = utf8.encode(jsonEncode(value)).length;
-      if (bytes > 64 * 1024) continue;
-      encodedBytes += utf8.encode(key).length + bytes;
-      if (result.length >= 4096 || encodedBytes > 512 * 1024) {
-        throw StateError('tvOS recoverable preferences exceed the bound');
+      final bytes =
+          utf8.encode(key).length + utf8.encode(jsonEncode(value)).length;
+      candidates.add((key: key, value: value, bytes: bytes));
+    }
+    candidates.sort(
+      (a, b) => a.bytes != b.bytes
+          ? a.bytes.compareTo(b.bytes)
+          : a.key.compareTo(b.key),
+    );
+    final result = <String, Object?>{};
+    var encodedBytes = 0;
+    var skipped = 0;
+    for (final candidate in candidates) {
+      if (candidate.bytes > TvOsRecoveryLimits.envelopeValueBytes ||
+          result.length >= TvOsRecoveryLimits.envelopeMaxEntries ||
+          encodedBytes + candidate.bytes >
+              TvOsRecoveryLimits.envelopeTotalBytes) {
+        skipped++;
+        continue;
       }
-      result[key] = value;
+      encodedBytes += candidate.bytes;
+      result[candidate.key] = candidate.value;
+    }
+    if (skipped > 0) {
+      debugPrint(
+        'tvOS recovery envelope: $skipped preference value(s) too large to '
+        'checkpoint; they stay local and are spared by the launch rebuild.',
+      );
     }
     return result;
   }
@@ -774,7 +801,8 @@ class ProfileRegistry {
       }
       final bytes = utf8.encode(jsonEncode(normalizedValue)).length;
       encodedBytes += utf8.encode(key).length + bytes;
-      if (bytes > 64 * 1024 || encodedBytes > 512 * 1024) {
+      if (bytes > TvOsRecoveryLimits.envelopeValueBytes ||
+          encodedBytes > TvOsRecoveryLimits.envelopeTotalBytes) {
         throw const FormatException('tvOS recovery preferences exceed bounds');
       }
       normalized[key] = normalizedValue;
@@ -783,6 +811,13 @@ class ProfileRegistry {
     for (final key in prefs.getKeys().where(
       (key) => _scopedPreferencePattern.hasMatch(key),
     )) {
+      // Live current-generation keys are never cleared: a key absent from the
+      // envelope is either a droppable cache or something the export had to
+      // skip (oversized value, full envelope), and an export skip must never
+      // become an import deletion. Envelope keys are overwritten below
+      // anyway. Only stale-generation keys — deleted profiles, superseded
+      // generations — still clear.
+      if (allowedPrefixes.any(key.startsWith)) continue;
       if (!await prefs.remove(key)) {
         throw StateError('Could not clear stale tvOS preference projection');
       }
@@ -800,15 +835,21 @@ class ProfileRegistry {
     }
   }
 
+  /// Durable by default. Only explicitly named re-fetchable caches are kept
+  /// out of the envelope — the previous name-pattern blocklist made
+  /// durability an accident of naming and silently wiped user-authored data
+  /// (My Watchlist, channel favorites, settings toggles whose names happened
+  /// to contain `history`/`favorite`/`continue_watching`) on every tvOS
+  /// launch. Over-including is safe: the size-ordered export skips the
+  /// largest values when full, and the import never deletes a live key.
   static bool _recoverablePreference(String logicalKey) =>
-      !_nonRecoverablePreference.hasMatch(logicalKey);
+      !_droppableCachePreference.hasMatch(logicalKey);
 
   static final RegExp _scopedPreferencePattern = RegExp(
     r'^p\.[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.g\.[1-9][0-9]*\.(.+)$',
   );
-  static final RegExp _nonRecoverablePreference = RegExp(
-    r'(history|resume|cache|recent|continue.?watching|watchlist|favorite|'
-    r'playback.?position|epg|tvmaze|download|recording)',
+  static final RegExp _droppableCachePreference = RegExp(
+    r'(cache|^tvmaze_|^epg_|^trakt_continue_watching_)',
     caseSensitive: false,
   );
 

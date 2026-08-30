@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +16,7 @@ import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/detail/theme/detail_theme.dart';
+import '../widgets/detail/detail_primary_sources.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/movie_watched_badge.dart';
 import '../widgets/shimmer.dart';
@@ -53,6 +56,15 @@ class CatalogItemDetailScreen extends StatefulWidget {
 
   /// Opens the sources/episodes flow (was "Sources" / "Episodes" in the list).
   final VoidCallback onBrowse;
+
+  /// Opens manual sources for the same episode the primary Play/Resume action
+  /// would choose. When null, series Play remains tap-only; movies reuse
+  /// [onBrowse] directly because that already is their Sources action.
+  final Future<void> Function()? onBrowsePrimaryEpisodeSources;
+
+  /// False for detail surfaces whose [onBrowse] is not a source browser (for
+  /// example Stremio TV channel details, where both buttons play the channel).
+  final bool enablePrimarySourcesHold;
 
   /// Trakt actions. When non-empty a "More" button appears next to
   /// Play/Browse and opens the cinematic action sheet.
@@ -95,6 +107,8 @@ class CatalogItemDetailScreen extends StatefulWidget {
     required this.item,
     required this.onPlay,
     required this.onBrowse,
+    this.onBrowsePrimaryEpisodeSources,
+    this.enablePrimarySourcesHold = true,
     this.onLoaderArt,
     this.resumeInfoLoader,
     this.isTelevision = false,
@@ -1677,6 +1691,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
         onPlay: widget.onPlay,
+        onPlayLongPress: _canBrowsePrimarySources
+            ? _browsePrimarySources
+            : null,
         // Neither Play nor Browse pop here: the player pushes on top of
         // this detail screen so the user returns here when playback ends.
         // Browse keeps the detail for the same reason (series drill-down
@@ -1686,6 +1703,57 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
       ),
     );
+  }
+
+  bool get _canBrowsePrimarySources =>
+      widget.enablePrimarySourcesHold &&
+      (_item.type != 'series' ||
+          widget.onBrowsePrimaryEpisodeSources != null);
+
+  void _browsePrimarySources() {
+    unawaited(_browsePrimarySourcesAsync());
+  }
+
+  Future<void> _browsePrimarySourcesAsync() async {
+    if (_item.type != 'series') {
+      widget.onBrowse();
+      return;
+    }
+
+    final openEpisode = widget.onBrowsePrimaryEpisodeSources;
+    if (openEpisode == null) return;
+
+    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    if (!mounted) return;
+
+    final canBrowsePacks =
+        widget.onTraktAction != null &&
+        widget.traktMenuOptions.any(
+          (option) => option.action == TraktItemMenuAction.searchPacks,
+        );
+    if (!rules.preferSeriesPacks || !canBrowsePacks) {
+      await openEpisode();
+      return;
+    }
+
+    final choice = await showDetailPrimarySourcesSheet(
+      context,
+      title: _item.name,
+      isTelevision: widget.isTelevision,
+      episodeLabel: _resumeSeason == null || _resumeEpisode == null
+          ? null
+          : 'S${_resumeSeason}E$_resumeEpisode',
+    );
+    if (!mounted || choice == null) return;
+
+    switch (choice) {
+      case DetailPrimarySourceChoice.seasonPacks:
+        widget.onTraktAction?.call(TraktItemMenuAction.searchPacks);
+        return;
+      case DetailPrimarySourceChoice.episode:
+        await openEpisode();
+        return;
+    }
   }
 
   Widget _dot() => Text(
@@ -2376,6 +2444,7 @@ class _ActionRow extends StatelessWidget {
   /// Resume state still resolving — Play shows a spinner instead of a label.
   final bool playBusy;
   final VoidCallback onPlay;
+  final VoidCallback? onPlayLongPress;
   final VoidCallback onBrowse;
   final bool inMyWatchlist;
   final VoidCallback? onToggleMyWatchlist;
@@ -2396,6 +2465,7 @@ class _ActionRow extends StatelessWidget {
     required this.playLabel,
     this.playBusy = false,
     required this.onPlay,
+    this.onPlayLongPress,
     required this.onBrowse,
     required this.inMyWatchlist,
     required this.onToggleMyWatchlist,
@@ -2483,6 +2553,7 @@ class _ActionRow extends StatelessWidget {
       // `inkOn` exists. Legacy keeps its shipped white on the red.
       accentInk: app.isLegacy ? null : app.inkOn(playAccent),
       onTap: onPlay,
+      onLongPress: onPlayLongPress,
       onArrowUp: onArrowUp,
     );
 
@@ -3052,6 +3123,7 @@ class _PrimaryButton extends StatefulWidget {
   /// white on a pale artwork accent is unreadable.
   final Color? accentInk;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   /// D-pad "up" handler (TV). Set on the top action row so "up" reveals the
   /// header rather than dead-ending focus traversal.
@@ -3067,6 +3139,7 @@ class _PrimaryButton extends StatefulWidget {
     required this.label,
     required this.filled,
     required this.onTap,
+    this.onLongPress,
     this.busy = false,
     this.compact = false,
     this.tv = false,
@@ -3082,6 +3155,27 @@ class _PrimaryButton extends StatefulWidget {
 
 class _PrimaryButtonState extends State<_PrimaryButton> {
   bool _focused = false;
+  late final TvHoldOk _hold;
+
+  @override
+  void initState() {
+    super.initState();
+    _hold = TvHoldOk(
+      onTap: () => widget.onTap(),
+      onHold: () => widget.onLongPress?.call(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hold.reset();
+    super.dispose();
+  }
+
+  void _onPointerLongPress() {
+    HapticFeedback.mediumImpact();
+    widget.onLongPress?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3119,8 +3213,15 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 
     return Focus(
       focusNode: widget.focusNode,
-      onFocusChange: (f) => setState(() => _focused = f),
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        if (!f) _hold.reset();
+      },
       onKeyEvent: (node, event) {
+        if (widget.onLongPress != null &&
+            isActivateOrSpaceKey(event.logicalKey)) {
+          return _hold.handle(event);
+        }
         if (event is KeyDownEvent) {
           if (isActivateKey(event.logicalKey) ||
               event.logicalKey == LogicalKeyboardKey.space) {
@@ -3139,6 +3240,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       },
       child: GestureDetector(
         onTap: widget.onTap,
+        onLongPress: widget.onLongPress == null ? null : _onPointerLongPress,
         child: AnimatedScale(
           duration: widget.tv
               ? Duration.zero

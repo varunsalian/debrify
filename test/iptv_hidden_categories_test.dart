@@ -158,11 +158,33 @@ void main() {
     expect(IptvCatalogDb.hiddenGroups(key), isEmpty);
   });
 
+  test(
+    'hiding the landing default clears it without affecting other hides',
+    () {
+      IptvCatalogDb.setDefaultCategory(key, 'Sports');
+
+      IptvCatalogDb.setGroupHidden(key, 'Adult', true);
+      expect(IptvCatalogDb.defaultCategory(key), 'Sports');
+
+      IptvCatalogDb.setGroupHidden(key, 'Sports', true);
+      expect(IptvCatalogDb.defaultCategory(key), isNull);
+
+      IptvCatalogDb.setGroupHidden(key, 'Sports', false);
+      expect(
+        IptvCatalogDb.defaultCategory(key),
+        isNull,
+        reason: 'revealing a category must not resurrect its former default',
+      );
+    },
+  );
+
   test('hide-all batches every named category into one durable update', () {
+    IptvCatalogDb.setDefaultCategory(key, 'News');
     IptvCatalogDb.hideGroups(key, ['Sports', 'News', 'Adult', '']);
 
     expect(IptvCatalogDb.hiddenGroups(key), {'Sports', 'News', 'Adult'});
     expect(IptvCatalogDb.snapshot(key)!.count(), 0);
+    expect(IptvCatalogDb.defaultCategory(key), isNull);
 
     IptvCatalogDb.showAllGroups(key);
     expect(IptvCatalogDb.snapshot(key)!.count(), 6);

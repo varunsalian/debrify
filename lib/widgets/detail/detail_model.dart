@@ -143,6 +143,11 @@ class DetailModel {
   // ── Actions ──────────────────────────────────────────────────────────────
   final bool showPrimary;
   final VoidCallback onPrimary;
+
+  /// Manual source browser opened by holding the primary Play/Resume button.
+  /// Null keeps the button tap-only (for direct-source pages with no picker).
+  final VoidCallback? onPrimaryLongPress;
+
   // Movie: the full browse/search source list. Series: the season-pack
   // search (Showcase mounts it; other layouts still gate on isMovie).
   final VoidCallback? onBrowse;
@@ -226,6 +231,7 @@ class DetailModel {
     this.mdblistRating,
     required this.showPrimary,
     required this.onPrimary,
+    this.onPrimaryLongPress,
     required this.onBrowse,
     required this.onTrailer,
     required this.onSelectSource,

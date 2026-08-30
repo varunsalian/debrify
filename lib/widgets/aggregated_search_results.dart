@@ -430,6 +430,15 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
           onSimklAction: (action) =>
               handleSimklMenuAction(context, item, action),
           onPlay: () => _onQuickPlay(item),
+          onBrowsePrimaryEpisodeSources:
+              item.type == 'series' && widget.onItemSelected != null
+              ? () async {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                  await _onQuickPlay(item, browseSourcesOnly: true);
+                }
+              : null,
           // The shared detail screen no longer self-pops on Browse; preserve
           // the prior pop-then-callback behaviour here (aggregated episode
           // mode is still inline — migrated in a later slice).
@@ -463,7 +472,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     widget.onItemSelected?.call(selection);
   }
 
-  void _onQuickPlay(StremioMeta item) async {
+  Future<void> _onQuickPlay(
+    StremioMeta item, {
+    bool browseSourcesOnly = false,
+  }) async {
     int? season;
     int? episode;
 
@@ -505,8 +517,10 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       contentType: item.type,
       posterUrl: item.poster,
     );
-    // Use onQuickPlay if available, otherwise fallback to onItemSelected
-    if (widget.onQuickPlay != null) {
+    if (browseSourcesOnly) {
+      widget.onItemSelected?.call(selection);
+    } else if (widget.onQuickPlay != null) {
+      // Use onQuickPlay if available, otherwise fallback to onItemSelected.
       widget.onQuickPlay!(selection);
     } else if (widget.onItemSelected != null) {
       widget.onItemSelected!(selection);

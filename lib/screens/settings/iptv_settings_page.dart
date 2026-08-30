@@ -25,7 +25,9 @@ import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_collection_resource_facade.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
+import 'iptv_category_order_page.dart';
 import 'iptv_hidden_categories_page.dart';
+import 'iptv_channel_order_page.dart';
 import 'iptv_style_page.dart';
 import 'player_guide_style_page.dart';
 import 'recordings_page.dart';
@@ -45,8 +47,10 @@ enum _PhoneSection {
   hub,
   sources,
   lists,
+  categoryOrder,
   hidden,
   startup,
+  channelPreview,
   continueWatching,
   recording,
 }
@@ -179,6 +183,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   // Continue watching
   bool _trackContinueWatching = true;
+
+  // Embedded side preview while browsing channels. Providers count this as a
+  // real stream, so users with tight connection limits can keep the stage's
+  // artwork/details while preventing it from tuning.
+  bool _channelPreviewEnabled = true;
 
   Future<void> _runProfileAction(Future<void> Function() body) async {
     final authorization = await ProfileAsyncAuthorization.capture(
@@ -387,6 +396,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       if (!p.isLocalFile) p,
   ];
 
+  /// Category ordering also works for imported files: they have no catalog
+  /// rows, but their saved playlist id is a stable profile-local order key.
+  List<IptvPlaylist> get _categoryOrderSources => List.unmodifiable(_playlists);
+
   /// Every catalog key a source can store under — an Xtream login has one per
   /// content type, everything else exactly one.
   List<String> _catalogKeysFor(IptvPlaylist playlist) {
@@ -412,6 +425,35 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
     if (!mounted) return;
     setState(_reloadHiddenCounts);
+  }
+
+  Future<void> _openCategoryOrder(IptvPlaylist playlist) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.iptv,
+    );
+    if (!mounted) return;
+    try {
+      await authorization?.runIfCurrent(() async {});
+    } on StateError {
+      _showSnackBar(
+        'The active profile changed. Category order was not opened.',
+        isError: true,
+      );
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => IptvCategoryOrderPage(
+          playlist: playlist,
+          authorization: authorization,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openChannelOrder() async {
+    await pushSettingsPage<void>(context, const IptvChannelOrderPage());
   }
 
   /// Re-read how many categories each source hides. One query for every key,
@@ -489,6 +531,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (mounted) setState(() => _trackContinueWatching = value);
   }
 
+  Future<void> _setChannelPreviewEnabled(bool value) =>
+      _runProfileAction(() => _setChannelPreviewEnabledForProfile(value));
+
+  Future<void> _setChannelPreviewEnabledForProfile(bool value) async {
+    await StorageService.setIptvChannelPreviewEnabled(value);
+    if (mounted) setState(() => _channelPreviewEnabled = value);
+  }
+
   Future<void> _setIptvStyle(String style) =>
       _runProfileAction(() => _setIptvStyleForProfile(style));
 
@@ -545,6 +595,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final startupChannel = await StorageService.getStartupIptvChannel();
     final lastLive = await StorageService.getIptvLastLiveChannel();
     final trackCw = await StorageService.getIptvTrackContinueWatching();
+    final channelPreviewEnabled =
+        await StorageService.getIptvChannelPreviewEnabled();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
     final engineSupported =
@@ -575,6 +627,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _startupChannel = startupChannel;
       _lastLiveChannel = lastLive;
       _trackContinueWatching = trackCw;
+      _channelPreviewEnabled = channelPreviewEnabled;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
       _recordingSectionVisible = engineSupported || desktopSched;
@@ -1071,17 +1124,32 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           playlist.serverUrl!,
           playlist.username ?? '',
         ),
+        forgetChannelOrders: true,
       );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
       await IptvCatalogDb.removeCatalogsByKeys([
         IptvCatalogKey.forUrl(playlist.url),
-      ]);
+      ], forgetChannelOrders: true);
     }
     // The source's hidden categories go with it. Deliberately here and not
     // inside the catalog delete: a manual REFRESH also drops and re-ingests
-    // the catalog under the same keys, and hiding rules must survive that.
+    // the catalog under the same keys, and user rules must survive that.
     IptvCatalogDb.forgetHiddenGroups(_catalogKeysFor(playlist));
+    if (playlist.isLocalFile) {
+      try {
+        await IptvCatalogDb.forgetCategoryOrders([
+          IptvCatalogKey.forLocalCategoryOrder(playlist.id),
+        ]);
+      } catch (error) {
+        // Category order is optional catalog metadata. Failure to open a
+        // damaged cache must not prevent the source itself being removed.
+        debugPrint(
+          'IPTV settings: local category-order cleanup skipped ($error)',
+        );
+      }
+    }
+    await StorageService.removeIptvCategoryOrdersForSource(playlist.id);
 
     // Remove list memberships and watch history that belonged to this
     // playlist — both replay from stored metadata, so either would otherwise
@@ -1603,6 +1671,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       credentialsRedacted: playlist.credentialsRedacted,
     );
 
+    final unreachableKeys = _catalogKeysFor(
+      playlist,
+    ).toSet().difference(_catalogKeysFor(updated).toSet());
+
     // Drop the stale caches when the source changed so the next load doesn't
     // serve the old channels — the in-memory fetch cache and the on-disk
     // catalog snapshots (the new source's snapshots rebuild on next load).
@@ -1619,13 +1691,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             playlist.serverUrl!,
             playlist.username ?? '',
           ),
+          forgetChannelOrders: unreachableKeys.isNotEmpty,
         );
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
       await IptvCatalogDb.removeCatalogsByKeys([
         IptvCatalogKey.forUrl(playlist.url),
-      ]);
+      ], forgetChannelOrders: true);
     }
 
     // Hidden-category rules follow the source's IDENTITY, not its catalogs:
@@ -1636,9 +1709,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // deletes and re-ingests the catalogs above, but the key is
     // server+username+type, so its keys are unchanged and its rules must
     // survive. Same for a rename.
-    final unreachableKeys = _catalogKeysFor(
-      playlist,
-    ).toSet().difference(_catalogKeysFor(updated).toSet());
     IptvCatalogDb.forgetHiddenGroups(unreachableKeys);
 
     final newPlaylists = [
@@ -1904,8 +1974,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           _PhoneSection.hub => 'IPTV Playlists',
           _PhoneSection.sources => 'Sources',
           _PhoneSection.lists => 'Channel Lists',
+          _PhoneSection.categoryOrder => 'Category Order',
           _PhoneSection.hidden => 'Hidden Categories',
           _PhoneSection.startup => 'Startup',
+          _PhoneSection.channelPreview => 'Channel Preview',
           _PhoneSection.continueWatching => 'Continue Watching',
           _PhoneSection.recording => 'Recording',
         },
@@ -2003,6 +2075,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       onEdit: _editPlaylist,
       onDelete: _removePlaylist,
       onCreateList: _createList,
+      onManageChannelOrder: () => unawaited(_openChannelOrder()),
+      onManageCategoryOrder: (playlist) =>
+          unawaited(_openCategoryOrder(playlist)),
       onManageHidden: (playlist) => unawaited(_openHiddenCategories(playlist)),
       hiddenCounts: _hiddenCounts,
       onFocusFirstFormField: () =>
@@ -2015,6 +2090,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       onToggleStartup: _setStartupEnabled,
       onStartupModeChanged: _setStartupMode,
       onPickStartupChannel: _pickStartupChannel,
+      channelPreviewEnabled: _channelPreviewEnabled,
+      onToggleChannelPreview: _setChannelPreviewEnabled,
       trackContinueWatching: _trackContinueWatching,
       onToggleTrackContinueWatching: _setTrackContinueWatching,
       showAppearanceSection: _appearanceVisible,
@@ -2049,8 +2126,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           _PhoneSection.hub => _buildPhoneHub(),
           _PhoneSection.sources => _buildSourcesView(),
           _PhoneSection.lists => _buildListsView(),
+          _PhoneSection.categoryOrder => _buildCategoryOrderView(),
           _PhoneSection.hidden => _buildHiddenView(),
           _PhoneSection.startup => _buildStartupView(),
+          _PhoneSection.channelPreview => _buildChannelPreviewView(),
           _PhoneSection.continueWatching => _buildContinueWatchingView(),
           _PhoneSection.recording => _buildRecordingView(),
         },
@@ -2101,6 +2180,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                         '${_customLists.length == 1 ? 'list' : 'lists'}',
               onTap: () async => _enterPhoneSection(_PhoneSection.lists),
             ),
+            SettingsTile(
+              icon: Icons.reorder_rounded,
+              title: 'Channel order',
+              subtitle: 'Arrange Favorites and saved lists',
+              onTap: _openChannelOrder,
+            ),
+            if (_categoryOrderSources.isNotEmpty)
+              SettingsTile(
+                icon: Icons.swap_vert_rounded,
+                title: 'Category order',
+                subtitle: 'Arrange categories by source',
+                onTap: () async =>
+                    _enterPhoneSection(_PhoneSection.categoryOrder),
+              ),
             if (_hideableSources.isNotEmpty)
               SettingsTile(
                 icon: Icons.visibility_off_rounded,
@@ -2121,6 +2214,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ? 'Last watched channel'
                   : _startupChannelLabel,
               onTap: () async => _enterPhoneSection(_PhoneSection.startup),
+            ),
+            SettingsTile(
+              icon: Icons.ondemand_video_rounded,
+              title: 'Channel preview',
+              subtitle: _channelPreviewEnabled
+                  ? 'On · uses a provider stream while browsing'
+                  : 'Off · no stream until you press Watch',
+              onTap: () async =>
+                  _enterPhoneSection(_PhoneSection.channelPreview),
             ),
             SettingsTile(
               icon: Icons.history_toggle_off_rounded,
@@ -2316,6 +2418,50 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
   }
 
+  Widget _buildCategoryOrderView() {
+    final t = AppThemeScope.of(context).settings;
+    final sources = _categoryOrderSources;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Category order'),
+        Text(
+          'Choose a source, then arrange its category chips and guide '
+          'sections. Channels inside each category keep provider order.',
+          style: TextStyle(fontSize: 12, color: t.dim),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            children: [
+              for (final source in sources)
+                ListTile(
+                  leading: Icon(Icons.swap_vert_rounded, color: t.accent),
+                  title: Text(
+                    source.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    source.isXtreamCodes
+                        ? 'Live TV, Movies and Series'
+                        : 'Playlist categories',
+                    style: TextStyle(fontSize: 12, color: t.dim),
+                  ),
+                  trailing: Icon(Icons.chevron_right_rounded, color: t.dim2),
+                  onTap: () => unawaited(_openCategoryOrder(source)),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   // One row per source that stores a catalog. The hub hides its row when no
   // source qualifies, so this view never renders empty.
   Widget _buildHiddenView() {
@@ -2325,9 +2471,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       children: [
         const SettingsSectionLabel('Hidden categories'),
         Text(
-          'Tap the eye (or long-press) on a category in the IPTV page\'s '
-          'category picker to hide it. Nothing is deleted — bring it '
-          'back here any time.',
+          'Open a category\'s menu (or long-press it) in the IPTV page\'s '
+          'category picker, then choose Hide category. Nothing is deleted — '
+          'bring it back here any time.',
           style: TextStyle(fontSize: 12, color: t.dim),
         ),
         const SizedBox(height: 16),
@@ -2412,6 +2558,28 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             ),
             value: _trackContinueWatching,
             onChanged: _setTrackContinueWatching,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChannelPreviewView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SettingsSectionLabel('Channel preview'),
+        const SizedBox(height: 6),
+        Card(
+          child: SwitchListTile(
+            title: const Text('Play channel previews'),
+            subtitle: const Text(
+              'Plays the focused channel in the side panel while you browse. '
+              'This opens a provider stream and may count toward your '
+              'connection limit. Fullscreen playback still works when off.',
+            ),
+            value: _channelPreviewEnabled,
+            onChanged: _setChannelPreviewEnabled,
           ),
         ),
       ],

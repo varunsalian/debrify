@@ -26,6 +26,7 @@ import '../widgets/detail/detail_layout_marquee.dart';
 import '../widgets/detail/detail_layout_premium.dart';
 import '../widgets/detail/detail_layout_showcase.dart';
 import '../widgets/detail/detail_layout_stage.dart';
+import '../widgets/detail/detail_primary_sources.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
 import '../theme/app_theme_scope.dart';
@@ -53,6 +54,7 @@ import '../theme/theme_overrides.dart';
 import '../theme/shipped_themes.dart' show effectiveDetailTheme;
 import '../utils/artwork_url.dart';
 import '../utils/episode_progress_merge.dart';
+import '../utils/tv_keys.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -100,6 +102,14 @@ class MergedDetailScreen extends StatefulWidget {
   /// `EpisodesScreen` today (`_playSelection` / `_browseSelection`).
   final void Function(AdvancedSearchSelection selection)? onItemSelected;
   final Future<void> Function(AdvancedSearchSelection selection)? onQuickPlay;
+
+  /// Opens manual sources for the episode represented by the primary button.
+  /// The optional promise has the same contract as [onResume], keeping a
+  /// watched-frontier target from drifting back to the host's older resolver.
+  final Future<void> Function(
+    ({bool started, int season, int episode})? promised,
+  )?
+  onBrowsePrimaryEpisodeSources;
 
   /// Host-owned source binding.
   final int Function(StremioMeta show)? boundSourceCount;
@@ -179,6 +189,7 @@ class MergedDetailScreen extends StatefulWidget {
     this.isMdblistSource = false,
     this.onItemSelected,
     this.onQuickPlay,
+    this.onBrowsePrimaryEpisodeSources,
     this.boundSourceCount,
     this.onSelectSource,
     this.traktMenuOptions = const [],
@@ -517,7 +528,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
-  void _playPrimary() {
+  /// The engine-only episode promise shared by primary Play and primary hold.
+  /// See [_playPrimary] for why loader-derived coordinates are intentionally
+  /// left for the host to resolve again.
+  ({bool started, int season, int episode})? get _primaryEpisodePromise {
     // Promise ONLY an engine-derived target ([_hasMergedEpisodeTarget]), and
     // only a started one.
     //
@@ -537,14 +551,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // resolves to S01E01 with no evidence behind it, hence the started gate.
     final season = _resumeSeason;
     final episode = _resumeEpisode;
-    final promised =
-        (!_isMovie &&
+    return (!_isMovie &&
             _resumeStarted &&
             _hasMergedEpisodeTarget &&
             season != null &&
             episode != null)
         ? (started: true, season: season, episode: episode)
         : null;
+  }
+
+  void _playPrimary() {
+    final promised = _primaryEpisodePromise;
     debugPrint(
       '[SeriesResume] detail-primary-pressed title="${_item.name}" '
       'label="$_primaryLabel" loaded=$_resumeLoaded started=$_resumeStarted '
@@ -555,6 +572,54 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       'promised=${promised == null ? 'none' : 'S${promised.season}E${promised.episode}'}',
     );
     unawaited(_guardPlay(() => widget.onResume(promised)));
+  }
+
+  void _browsePrimarySources() {
+    unawaited(_browsePrimarySourcesAsync());
+  }
+
+  Future<void> _browsePrimarySourcesAsync() async {
+    if (_isMovie) {
+      widget.onBrowse?.call();
+      return;
+    }
+
+    final openEpisode = widget.onBrowsePrimaryEpisodeSources;
+    if (openEpisode == null) return;
+
+    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    if (!mounted) return;
+
+    final canBrowsePacks =
+        widget.onTraktAction != null &&
+        _appMenuOptions.any(
+          (option) => option.action == TraktItemMenuAction.searchPacks,
+        );
+    if (!rules.preferSeriesPacks || !canBrowsePacks) {
+      await openEpisode(_primaryEpisodePromise);
+      return;
+    }
+
+    final season = _resumeSeason;
+    final episode = _resumeEpisode;
+    final choice = await showDetailPrimarySourcesSheet(
+      context,
+      title: _item.name,
+      isTelevision: widget.isTelevision,
+      episodeLabel: season == null || episode == null
+          ? null
+          : 'S${season}E$episode',
+    );
+    if (!mounted || choice == null) return;
+
+    switch (choice) {
+      case DetailPrimarySourceChoice.seasonPacks:
+        await widget.onTraktAction?.call(TraktItemMenuAction.searchPacks);
+        return;
+      case DetailPrimarySourceChoice.episode:
+        await openEpisode(_primaryEpisodePromise);
+        return;
+    }
   }
 
   void _quickPlayEpisode(AdvancedSearchSelection selection) {
@@ -1554,6 +1619,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       mdblistRating: _mdblistStatus?.rating,
       showPrimary: widget.showQuickPlay,
       onPrimary: _playPrimary,
+      onPrimaryLongPress:
+          ((_isMovie && widget.onBrowse != null) ||
+              (!_isMovie && widget.onBrowsePrimaryEpisodeSources != null))
+          ? _browsePrimarySources
+          : null,
       // A movie browses the full source list the host supplies; a series
       // browses season packs — the same search the More menu's "Search
       // season packs" row opens, promoted to a first-class button. Gated on
@@ -2412,6 +2482,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             busy: _primaryBusy,
             icon: Icons.play_arrow_rounded,
             onTap: _playPrimary,
+            onLongPress:
+                ((_isMovie && widget.onBrowse != null) ||
+                    (!_isMovie && widget.onBrowsePrimaryEpisodeSources != null))
+                ? _browsePrimarySources
+                : null,
             focusNode: _leftEntryFocusNode,
             autofocus: widget.isTelevision && _isMovie,
             glow: _accent,
@@ -3460,6 +3535,7 @@ class _PrimaryButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final bool autofocus;
 
@@ -3475,6 +3551,7 @@ class _PrimaryButton extends StatefulWidget {
     required this.label,
     required this.icon,
     required this.onTap,
+    this.onLongPress,
     this.focusNode,
     this.autofocus = false,
     this.busy = false,
@@ -3487,10 +3564,33 @@ class _PrimaryButton extends StatefulWidget {
 
 class _PrimaryButtonState extends State<_PrimaryButton> {
   bool _focused = false;
+  late final TvHoldOk _hold;
+
+  @override
+  void initState() {
+    super.initState();
+    _hold = TvHoldOk(
+      onTap: () => widget.onTap(),
+      onHold: () => widget.onLongPress?.call(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hold.reset();
+    super.dispose();
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if (widget.onLongPress == null || !isActivateOrSpaceKey(event.logicalKey)) {
+      return KeyEventResult.ignored;
+    }
+    return _hold.handle(event);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedScale(
+    final button = AnimatedScale(
       // Snap on TV: every frame of the scale pop re-rasters the pill AND its
       // blur-18 glow shadow; instant scale keeps the glow a one-time paint.
       duration: PlatformUtil.isTelevision
@@ -3526,9 +3626,14 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
             child: InkWell(
               focusNode: widget.focusNode,
               autofocus: widget.autofocus,
-              onFocusChange: (f) => setState(() => _focused = f),
+              onFocusChange: (f) {
+                setState(() => _focused = f);
+                if (!f) _hold.reset();
+              },
               borderRadius: BorderRadius.circular(999),
               onTap: widget.onTap,
+              // InkWell supplies the platform long-press feedback itself.
+              onLongPress: widget.onLongPress,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
@@ -3573,6 +3678,13 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
           ),
         ),
       ),
+    );
+    if (widget.onLongPress == null) return button;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) => _onKey(event),
+      child: button,
     );
   }
 }

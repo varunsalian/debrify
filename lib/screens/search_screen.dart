@@ -763,6 +763,40 @@ class _SearchScreenState extends State<SearchScreen>
   final List<FocusNode> _cwMovieNodes = [];
   final List<FocusNode> _cwSeriesNodes = [];
 
+  // Per-provider "one Continue Watching row" preferences. When a provider is
+  // merged, its MOVIES slot carries the combined recency-ordered list (the
+  // same `_xxxAll` the See-All grid uses) on the movies node list, and its
+  // Series row is suppressed — so row ids, saved Home order, and the
+  // hide-rows page keep working off the existing `<provider>:movies` id.
+  // Loaded once before the first node sync (each CW loader awaits
+  // [_ensureCwMergeFlags]); [_reloadForHomeSettings] re-reads and re-syncs
+  // node counts when a toggle changes.
+  bool _cwMergeLocal = false;
+  bool _cwMergeTrakt = false;
+  bool _cwMergeSimkl = false;
+  bool _cwMergeMdblist = false;
+  Future<void>? _cwMergeFlagsLoad;
+
+  Future<void> _ensureCwMergeFlags() => _cwMergeFlagsLoad ??= () async {
+    try {
+      final flags = await Future.wait([
+        StorageService.getHomeCwMergedRows('local'),
+        StorageService.getHomeCwMergedRows('trakt'),
+        StorageService.getHomeCwMergedRows('simkl'),
+        StorageService.getHomeCwMergedRows('mdblist'),
+      ]);
+      // Plain assignments: every caller is a CW loader that setStates right
+      // after its node sync, so the flags never render stale.
+      _cwMergeLocal = flags[0];
+      _cwMergeTrakt = flags[1];
+      _cwMergeSimkl = flags[2];
+      _cwMergeMdblist = flags[3];
+    } catch (_) {
+      // Keep the split-rows defaults: a failed pref read must never become a
+      // failed CW load (this memoized future is awaited by every loader).
+    }
+  }();
+
   // IPTV Continue Watching (Xtream VOD movies + series), sourced from the
   // player's own watch history via [IptvCwRouter] — kept separate from the
   // metadata-addon rows above because IPTV items aren't IMDb-keyed, so their
@@ -870,7 +904,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   // IPTV favourites — a leading row of the user's starred live IPTV channels.
   // Cards show the channel logo (glyph fallback); tapping plays the stream
-  // directly via VideoPlayerLauncher (no tab switch). Loaded once on init.
+  // directly via VideoPlayerLauncher (no tab switch). Reloaded whenever list
+  // membership or manual order changes.
   List<IptvChannel> _iptvFavChannels = [];
   final List<FocusNode> _iptvFavNodes = [];
 
@@ -1025,26 +1060,36 @@ class _SearchScreenState extends State<SearchScreen>
   /// non-empty groups are included. Each row carries its own progress lookup
   /// and open / quick-play handlers so local and Trakt sources coexist.
   List<_CwRow> get _cwRows => [
+    // Merged providers ship their combined list through the MOVIES slot (same
+    // row id, same node list — see the merge-pref field comment); the episode
+    // and artwork lookups are imdbId-keyed maps that only hold series entries,
+    // so passing movies through them is a harmless miss.
     if (_cwEnabled &&
-        _cwMovies.isNotEmpty &&
+        (_cwMergeLocal ? _cwAll : _cwMovies).isNotEmpty &&
         !_homeDisabled.contains('cw:movies'))
       _CwRow(
         rowId: 'cw:movies',
         title: 'Continue Watching',
-        tag: 'Movies',
+        tag: _cwMergeLocal ? null : 'Movies',
         kind: _CwKind.local,
-        items: _cwMovies,
+        items: _cwMergeLocal ? _cwAll : _cwMovies,
         nodes: _cwMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.local, m),
-        episodeOf: (_) => null,
+        episodeOf: _cwMergeLocal
+            ? (m) => _cwCardEpisode(_CwKind.local, m)
+            : (_) => null,
         remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
-        episodeArtworkOf: (_) => null,
+        episodeArtworkOf: _cwMergeLocal
+            ? (m) => _cwEpisodeArtwork[m.imdbId]
+            : (_) => null,
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
         onRemove: _removeLocalCwItem,
-        onSeeAll: () => _openContinueWatchingSeeAll('movie'),
+        onSeeAll: () =>
+            _openContinueWatchingSeeAll(_cwMergeLocal ? 'all' : 'movie'),
       ),
-    if (_cwEnabled &&
+    if (!_cwMergeLocal &&
+        _cwEnabled &&
         _cwSeries.isNotEmpty &&
         !_homeDisabled.contains('cw:series'))
       _CwRow(
@@ -1063,24 +1108,31 @@ class _SearchScreenState extends State<SearchScreen>
         onRemove: _removeLocalCwItem,
         onSeeAll: () => _openContinueWatchingSeeAll('series'),
       ),
-    if (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies'))
+    if ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
+        !_homeDisabled.contains('trakt:movies'))
       _CwRow(
         rowId: 'trakt:movies',
         title: 'Trakt Continue Watching',
-        tag: 'Movies',
+        tag: _cwMergeTrakt ? null : 'Movies',
         kind: _CwKind.trakt,
-        items: _traktMovies,
+        items: _cwMergeTrakt ? _traktAll : _traktMovies,
         nodes: _traktMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
-        episodeOf: (_) => null,
+        episodeOf: _cwMergeTrakt
+            ? (m) => _cwCardEpisode(_CwKind.trakt, m)
+            : (_) => null,
         remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
-        episodeArtworkOf: (_) => null,
+        episodeArtworkOf: _cwMergeTrakt
+            ? (m) => _traktEpisodeArtwork[m.imdbId]
+            : (_) => null,
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
         onRemove: _removeTraktCwItem,
-        onSeeAll: () => _openTraktSeeAll('movie'),
+        onSeeAll: () => _openTraktSeeAll(_cwMergeTrakt ? 'all' : 'movie'),
       ),
-    if (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'))
+    if (!_cwMergeTrakt &&
+        _traktSeries.isNotEmpty &&
+        !_homeDisabled.contains('trakt:shows'))
       _CwRow(
         rowId: 'trakt:shows',
         title: 'Trakt Continue Watching',
@@ -1103,24 +1155,31 @@ class _SearchScreenState extends State<SearchScreen>
     // its slot open with skeletons — so when the Simkl rows land they settle in
     // once, like any other content row. (A dedicated Simkl skeleton could make
     // that zero-shift too, but it isn't worth the board index-math complexity.)
-    if (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies'))
+    if ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
+        !_homeDisabled.contains('simkl:movies'))
       _CwRow(
         rowId: 'simkl:movies',
         title: 'Simkl Continue Watching',
-        tag: 'Movies',
+        tag: _cwMergeSimkl ? null : 'Movies',
         kind: _CwKind.simkl,
-        items: _simklMovies,
+        items: _cwMergeSimkl ? _simklAll : _simklMovies,
         nodes: _simklMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
-        episodeOf: (_) => null,
+        episodeOf: _cwMergeSimkl
+            ? (m) => _cwCardEpisode(_CwKind.simkl, m)
+            : (_) => null,
         remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
-        episodeArtworkOf: (_) => null,
+        episodeArtworkOf: _cwMergeSimkl
+            ? (m) => _simklEpisodeArtwork[m.imdbId]
+            : (_) => null,
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
         onRemove: _removeSimklCwItem,
-        onSeeAll: () => _openSimklCwSeeAll('movie'),
+        onSeeAll: () => _openSimklCwSeeAll(_cwMergeSimkl ? 'all' : 'movie'),
       ),
-    if (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows'))
+    if (!_cwMergeSimkl &&
+        _simklSeries.isNotEmpty &&
+        !_homeDisabled.contains('simkl:shows'))
       _CwRow(
         rowId: 'simkl:shows',
         title: 'Simkl Continue Watching',
@@ -1137,25 +1196,30 @@ class _SearchScreenState extends State<SearchScreen>
         onRemove: _removeSimklCwItem,
         onSeeAll: () => _openSimklCwSeeAll('series'),
       ),
-    if (_mdblistMovies.isNotEmpty && !_homeDisabled.contains('mdblist:movies'))
+    if ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
+        !_homeDisabled.contains('mdblist:movies'))
       _CwRow(
         rowId: 'mdblist:movies',
         title: 'MDBList Continue Watching',
-        tag: 'Movies',
+        tag: _cwMergeMdblist ? null : 'Movies',
         kind: _CwKind.mdblist,
-        items: _mdblistMovies,
+        items: _cwMergeMdblist ? _mdblistAll : _mdblistMovies,
         nodes: _mdblistMovieNodes,
         progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
-        episodeOf: (_) => null,
+        episodeOf: _cwMergeMdblist
+            ? (m) => _cwCardEpisode(_CwKind.mdblist, m)
+            : (_) => null,
         remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
         onRemove: _removeMdblistCwItem,
         canRemove: _canRemoveMdblistCwItem,
-        onSeeAll: () => _openMdblistCwSeeAll('movie'),
+        onSeeAll: () => _openMdblistCwSeeAll(_cwMergeMdblist ? 'all' : 'movie'),
       ),
-    if (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows'))
+    if (!_cwMergeMdblist &&
+        _mdblistSeries.isNotEmpty &&
+        !_homeDisabled.contains('mdblist:shows'))
       _CwRow(
         rowId: 'mdblist:shows',
         title: 'MDBList Continue Watching',
@@ -1217,18 +1281,25 @@ class _SearchScreenState extends State<SearchScreen>
   /// keep these conditions in lock-step with the `_cwRows` row gates above.
   bool get _cwVisible =>
       ((_cwEnabled &&
-              ((_cwMovies.isNotEmpty && !_homeDisabled.contains('cw:movies')) ||
-                  (_cwSeries.isNotEmpty &&
+              (((_cwMergeLocal ? _cwAll : _cwMovies).isNotEmpty &&
+                      !_homeDisabled.contains('cw:movies')) ||
+                  (!_cwMergeLocal &&
+                      _cwSeries.isNotEmpty &&
                       !_homeDisabled.contains('cw:series')))) ||
-          (_traktMovies.isNotEmpty &&
+          ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
               !_homeDisabled.contains('trakt:movies')) ||
-          (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows')) ||
-          (_simklMovies.isNotEmpty &&
+          (!_cwMergeTrakt &&
+              _traktSeries.isNotEmpty &&
+              !_homeDisabled.contains('trakt:shows')) ||
+          ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
               !_homeDisabled.contains('simkl:movies')) ||
-          (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')) ||
-          (_mdblistMovies.isNotEmpty &&
+          (!_cwMergeSimkl &&
+              _simklSeries.isNotEmpty &&
+              !_homeDisabled.contains('simkl:shows')) ||
+          ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
               !_homeDisabled.contains('mdblist:movies')) ||
-          (_mdblistSeries.isNotEmpty &&
+          (!_cwMergeMdblist &&
+              _mdblistSeries.isNotEmpty &&
               !_homeDisabled.contains('mdblist:shows')) ||
           (_iptvCwMovies.isNotEmpty &&
               !_homeDisabled.contains('iptv:movies')) ||
@@ -2269,6 +2340,67 @@ class _SearchScreenState extends State<SearchScreen>
         _hideHomeCatalogAddonNames = hideCatalogAddonNames;
       });
     }
+    // Merged-CW toggles: re-read, and on a change re-sync each provider's node
+    // lists against the lists already in memory (no refetch needed — the data
+    // is the same, only which slot renders it changes).
+    final mergeFlags = await Future.wait([
+      StorageService.getHomeCwMergedRows('local'),
+      StorageService.getHomeCwMergedRows('trakt'),
+      StorageService.getHomeCwMergedRows('simkl'),
+      StorageService.getHomeCwMergedRows('mdblist'),
+    ]);
+    if (!mounted) return;
+    if (mergeFlags[0] != _cwMergeLocal ||
+        mergeFlags[1] != _cwMergeTrakt ||
+        mergeFlags[2] != _cwMergeSimkl ||
+        mergeFlags[3] != _cwMergeMdblist) {
+      setState(() {
+        _cwMergeLocal = mergeFlags[0];
+        _cwMergeTrakt = mergeFlags[1];
+        _cwMergeSimkl = mergeFlags[2];
+        _cwMergeMdblist = mergeFlags[3];
+        _syncCwNodes(
+          _cwMovieNodes,
+          _cwMergeLocal ? _cwAll.length : _cwMovies.length,
+          'movie',
+        );
+        _syncCwNodes(
+          _cwSeriesNodes,
+          _cwMergeLocal ? 0 : _cwSeries.length,
+          'series',
+        );
+        _syncCwNodes(
+          _traktMovieNodes,
+          _cwMergeTrakt ? _traktAll.length : _traktMovies.length,
+          'tmovie',
+        );
+        _syncCwNodes(
+          _traktSeriesNodes,
+          _cwMergeTrakt ? 0 : _traktSeries.length,
+          'tseries',
+        );
+        _syncCwNodes(
+          _simklMovieNodes,
+          _cwMergeSimkl ? _simklAll.length : _simklMovies.length,
+          'smovie',
+        );
+        _syncCwNodes(
+          _simklSeriesNodes,
+          _cwMergeSimkl ? 0 : _simklSeries.length,
+          'sseries',
+        );
+        _syncCwNodes(
+          _mdblistMovieNodes,
+          _cwMergeMdblist ? _mdblistAll.length : _mdblistMovies.length,
+          'mdbmovie',
+        );
+        _syncCwNodes(
+          _mdblistSeriesNodes,
+          _cwMergeMdblist ? 0 : _mdblistSeries.length,
+          'mdbseries',
+        );
+      });
+    }
     // Off-TV the hero-trailer prefs ride this same signal — Settings is a
     // pushed route here, so nothing else tells a surviving Home about them.
     if (!widget.isTelevision) {
@@ -2865,6 +2997,7 @@ class _SearchScreenState extends State<SearchScreen>
       if (pct != null) progress[imdbId] = pct / 100.0;
     }
 
+    await _ensureCwMergeFlags();
     // Bail if a newer load superseded this one while we were awaiting — never
     // dispose/replace nodes or state a later run already committed.
     if (!mounted || token != _cwLoadToken) return;
@@ -2874,9 +3007,14 @@ class _SearchScreenState extends State<SearchScreen>
     final series = items.where((m) => m.type == 'series').toList();
     // Keep each row's focus-node list length in sync with its item count. Only
     // rebuild when the count changes (a plain refresh keeps the same nodes so
-    // an active TV focus isn't dropped).
-    _syncCwNodes(_cwMovieNodes, movies.length, 'movie');
-    _syncCwNodes(_cwSeriesNodes, series.length, 'series');
+    // an active TV focus isn't dropped). Merged mode renders the combined list
+    // through the movies slot, so its node count follows `items`.
+    _syncCwNodes(
+      _cwMovieNodes,
+      _cwMergeLocal ? items.length : movies.length,
+      'movie',
+    );
+    _syncCwNodes(_cwSeriesNodes, _cwMergeLocal ? 0 : series.length, 'series');
 
     setState(() {
       _cwEnabled = true;
@@ -3390,7 +3528,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Load the user's starred IPTV channels for the leading favourites row.
   /// Favourites are stored as a url → {name, logoUrl, group} map, so rebuild
-  /// [IptvChannel] objects from it (mirroring the Home section). Sorted by name.
+  /// [IptvChannel] objects from it in the store's user-defined order.
   Future<void> _loadIptvFavorites() async {
     try {
       final map = await StorageService.getIptvFavoriteChannels();
@@ -3400,21 +3538,18 @@ class _SearchScreenState extends State<SearchScreen>
         _syncIptvFavNodes();
         return;
       }
-      final favs =
-          map.entries.map((e) {
-            final meta = e.value;
-            return IptvChannel(
-              name: meta['name'] as String? ?? 'Unknown Channel',
-              url: e.key,
-              logoUrl: meta['logoUrl'] as String?,
-              group: meta['group'] as String?,
-              duration: -1, // live stream
-              attributes: const {},
-              httpHeaders: StorageService.iptvFavoriteHeaders(meta),
-            );
-          }).toList()..sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-          );
+      final favs = map.entries.map((e) {
+        final meta = e.value;
+        return IptvChannel(
+          name: meta['name'] as String? ?? 'Unknown Channel',
+          url: e.key,
+          logoUrl: meta['logoUrl'] as String?,
+          group: meta['group'] as String?,
+          duration: -1, // live stream
+          attributes: const {},
+          httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+        );
+      }).toList();
       if (!mounted) return;
       setState(() => _iptvFavChannels = favs);
       _syncIptvFavNodes();
@@ -3440,8 +3575,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// Channels are rebuilt from the stored list metadata alone (no provider
   /// fetch), keeping ALL presentation fields — content type and duration
   /// drive play routing and the live-preview gate, so the favourites row's
-  /// lossy live-only mapping must not be copied here. Order is the list's own
-  /// (added_at), the user's curation.
+  /// lossy live-only mapping must not be copied here. Order is the list's
+  /// explicit saved channel position.
   ///
   /// Token-guarded: the list picker queues several immediate mutations, each
   /// bumping [IptvMediaStore.listsRevision] — an older multi-list read must
@@ -3545,7 +3680,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// the app (picker, IPTV settings, provider deletion, reconcile, import).
   void _onIptvListsRevision() {
     if (!mounted) return;
-    _loadIptvListRows();
+    unawaited(_loadIptvFavorites());
+    unawaited(_loadIptvListRows());
   }
 
   /// Play an IPTV custom-list entry by CONTENT TYPE — a list can hold VOD and
@@ -4248,6 +4384,7 @@ class _SearchScreenState extends State<SearchScreen>
       }
       return;
     }
+    await _ensureCwMergeFlags();
     if (!mounted || token != _traktCwToken) return;
 
     final movieMetas = <StremioMeta>[];
@@ -4308,8 +4445,16 @@ class _SearchScreenState extends State<SearchScreen>
     // fresh appearance (skeleton → content) announces itself below; a refresh
     // of rows the user can already see stays quiet.
     final hadTraktRows = _traktMovies.isNotEmpty || _traktSeries.isNotEmpty;
-    _syncCwNodes(_traktMovieNodes, movieMetas.length, 'tmovie');
-    _syncCwNodes(_traktSeriesNodes, showMetas.length, 'tseries');
+    _syncCwNodes(
+      _traktMovieNodes,
+      _cwMergeTrakt ? allMetas.length : movieMetas.length,
+      'tmovie',
+    );
+    _syncCwNodes(
+      _traktSeriesNodes,
+      _cwMergeTrakt ? 0 : showMetas.length,
+      'tseries',
+    );
     setState(() {
       _traktCwLoading = false;
       _traktMovies = movieMetas;
@@ -4346,9 +4491,14 @@ class _SearchScreenState extends State<SearchScreen>
   /// IPTV, favourites and catalog rows below.
   void _maybeAnnounceTraktRows() => _maybeAnnounceCwRows(
     label: 'Trakt',
+    // Same merge-aware gates as _cwRows / _cwVisible, so a notice fires
+    // exactly when a row actually rendered.
     visible:
-        (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies')) ||
-        (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows')),
+        ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
+            !_homeDisabled.contains('trakt:movies')) ||
+        (!_cwMergeTrakt &&
+            _traktSeries.isNotEmpty &&
+            !_homeDisabled.contains('trakt:shows')),
     ownNodes: [_traktMovieNodes, _traktSeriesNodes],
     aboveNodes: [_cwMovieNodes, _cwSeriesNodes],
     belowNodes: [
@@ -4367,8 +4517,11 @@ class _SearchScreenState extends State<SearchScreen>
   void _maybeAnnounceSimklRows() => _maybeAnnounceCwRows(
     label: 'Simkl',
     visible:
-        (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies')) ||
-        (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows')),
+        ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
+            !_homeDisabled.contains('simkl:movies')) ||
+        (!_cwMergeSimkl &&
+            _simklSeries.isNotEmpty &&
+            !_homeDisabled.contains('simkl:shows')),
     ownNodes: [_simklMovieNodes, _simklSeriesNodes],
     aboveNodes: [
       _cwMovieNodes,
@@ -4387,9 +4540,11 @@ class _SearchScreenState extends State<SearchScreen>
   void _maybeAnnounceMdblistRows() => _maybeAnnounceCwRows(
     label: 'MDBList',
     visible:
-        (_mdblistMovies.isNotEmpty &&
+        ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
             !_homeDisabled.contains('mdblist:movies')) ||
-        (_mdblistSeries.isNotEmpty && !_homeDisabled.contains('mdblist:shows')),
+        (!_cwMergeMdblist &&
+            _mdblistSeries.isNotEmpty &&
+            !_homeDisabled.contains('mdblist:shows')),
     ownNodes: [_mdblistMovieNodes, _mdblistSeriesNodes],
     aboveNodes: [
       _cwMovieNodes,
@@ -4800,6 +4955,7 @@ class _SearchScreenState extends State<SearchScreen>
   Future<void> _loadSimklContinueWatching({bool refreshBound = true}) async {
     final token = ++_simklCwToken;
     final result = await SimklContinueWatchingService.instance.fetchItems();
+    await _ensureCwMergeFlags();
     if (!mounted || token != _simklCwToken) return;
     // Null = a transient fetch failure — leave any existing rows in place (a
     // real disconnect returns empty lists, which fall through and clear them).
@@ -4857,8 +5013,16 @@ class _SearchScreenState extends State<SearchScreen>
     // fresh appearance announces itself below; a refresh of rows the user can
     // already see stays quiet.
     final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
-    _syncCwNodes(_simklMovieNodes, movieMetas.length, 'smovie');
-    _syncCwNodes(_simklSeriesNodes, showMetas.length, 'sseries');
+    _syncCwNodes(
+      _simklMovieNodes,
+      _cwMergeSimkl ? allMetas.length : movieMetas.length,
+      'smovie',
+    );
+    _syncCwNodes(
+      _simklSeriesNodes,
+      _cwMergeSimkl ? 0 : showMetas.length,
+      'sseries',
+    );
     setState(() {
       _simklMovies = movieMetas;
       _simklSeries = showMetas;
@@ -4959,6 +5123,7 @@ class _SearchScreenState extends State<SearchScreen>
     final result = await MdblistContinueWatchingService.instance.fetch(
       force: force,
     );
+    await _ensureCwMergeFlags();
     if (!mounted || token != _mdblistCwToken || !result.isUsable) {
       debugPrint(
         '[MDBListDiag] Home CW load discarded token=$token mounted=$mounted '
@@ -5017,8 +5182,16 @@ class _SearchScreenState extends State<SearchScreen>
         );
       });
     final hadRows = _mdblistMovies.isNotEmpty || _mdblistSeries.isNotEmpty;
-    _syncCwNodes(_mdblistMovieNodes, movies.length, 'mdbmovie');
-    _syncCwNodes(_mdblistSeriesNodes, shows.length, 'mdbseries');
+    _syncCwNodes(
+      _mdblistMovieNodes,
+      _cwMergeMdblist ? all.length : movies.length,
+      'mdbmovie',
+    );
+    _syncCwNodes(
+      _mdblistSeriesNodes,
+      _cwMergeMdblist ? 0 : shows.length,
+      'mdbseries',
+    );
     setState(() {
       _mdblistMovies = movies;
       _mdblistSeries = shows;
@@ -6982,7 +7155,8 @@ class _SearchScreenState extends State<SearchScreen>
       if (!_homeDisabled.contains('trakt:movies')) {
         skeletons.add(const _CanvasRail(traktSkeletonIndex: 0));
       }
-      if (!_homeDisabled.contains('trakt:shows')) {
+      // Merged Trakt renders one combined row, so reserve one slot, not two.
+      if (!_cwMergeTrakt && !_homeDisabled.contains('trakt:shows')) {
         skeletons.add(const _CanvasRail(traktSkeletonIndex: 1));
       }
       // In the built-in order placeholders belong after the real CW block and
@@ -11967,6 +12141,16 @@ class _SearchScreenState extends State<SearchScreen>
                     : null,
                 onItemSelected: _browseSelection,
                 onQuickPlay: _playSelection,
+                onBrowsePrimaryEpisodeSources: (promised) => _onCatalogPlay(
+                  item,
+                  addon,
+                  isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
+                  skipEpisodeFallback: true,
+                  preferTraktResume: true,
+                  promisedTarget: promised,
+                  browseSourcesOnly: true,
+                ),
                 boundSourceCount: _boundCountFor,
                 onSelectSource: _handleEditOrSelectSource,
                 traktMenuOptions: options,
@@ -12092,6 +12276,17 @@ class _SearchScreenState extends State<SearchScreen>
                 isTraktSource: isTraktSource,
                 isMdblistSource: isMdblistSource,
               ),
+              onBrowsePrimaryEpisodeSources: item.type == 'series'
+                  ? () => _onCatalogPlay(
+                      item,
+                      addon,
+                      isTraktSource: isTraktSource,
+                      isMdblistSource: isMdblistSource,
+                      skipEpisodeFallback: true,
+                      preferTraktResume: true,
+                      browseSourcesOnly: true,
+                    )
+                  : null,
               traktMenuOptions: options,
               onTraktAction: (a) => _handleDetailQuickAction(
                 item,
@@ -12908,6 +13103,11 @@ class _SearchScreenState extends State<SearchScreen>
     // empty-candidates fallback (S01E01) while the label correctly reads S1E2 —
     // and Play would then start the pilot under a "Resume · S1E2" button.
     ({bool started, int season, int episode})? promisedTarget,
+    // Primary-button hold: run the exact same target/scrobble reconciliation,
+    // but hand the resulting selection to the manual Sources page instead of
+    // auto-playing it. Used for series; movies already have a direct Sources
+    // callback and do not need to enter this resolver.
+    bool browseSourcesOnly = false,
   }) async {
     final trackingPolicy = await TrackingSourcePolicy.load();
     debugPrint(
@@ -12939,7 +13139,8 @@ class _SearchScreenState extends State<SearchScreen>
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
       debugPrint(
-        '[SeriesResume] play-launch title="${selection.title}" '
+        '[SeriesResume] ${browseSourcesOnly ? 'sources-open' : 'play-launch'} '
+        'title="${selection.title}" '
         'id=${selection.imdbId} season=${selection.season} '
         'episode=${selection.episode} trakt=${selection.traktSource} '
         'traktPct=${selection.traktProgressPercent} '
@@ -12950,7 +13151,11 @@ class _SearchScreenState extends State<SearchScreen>
       );
       resolving?.dismiss();
       if (cancelled) return;
-      await _playSelection(selection);
+      if (browseSourcesOnly) {
+        _browseSelection(selection);
+      } else {
+        await _playSelection(selection);
+      }
     }
 
     try {
@@ -14351,11 +14556,13 @@ class _SearchScreenState extends State<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => _SourcesScreen(
-              selection: sel,
-              meta: _metaFor(sel),
-              isTelevision: widget.isTelevision,
-              forcePlayOnTap: forcePlayOnTap,
+            builder: (_) => TvHeldKeyGuard(
+              child: _SourcesScreen(
+                selection: sel,
+                meta: _metaFor(sel),
+                isTelevision: widget.isTelevision,
+                forcePlayOnTap: forcePlayOnTap,
+              ),
             ),
           ),
         )
@@ -18212,7 +18419,7 @@ class _SearchScreenState extends State<SearchScreen>
     return _TraktSkeletonRow(
       header: _railHeader(
         title: 'Trakt Continue Watching',
-        tag: idx == 0 ? 'Movies' : 'Shows',
+        tag: idx == 0 ? (_cwMergeTrakt ? null : 'Movies') : 'Shows',
       ),
       posterW: posterW,
       cellH: cellH,

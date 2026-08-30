@@ -20,6 +20,7 @@ import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_catalog_key.dart';
+import '../../services/iptv_channel_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/iptv_load_phase.dart';
 import '../../services/iptv_catalog_db.dart';
@@ -31,6 +32,7 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/iptv_player_paging.dart';
+import '../../utils/tv_keys.dart' show TvHeldKeyGuard;
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
@@ -163,6 +165,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
   IptvStyle _iptvStyle = IptvStyle.command;
 
+  /// Whether focusing a row may open its stream in the embedded side stage.
+  /// The channel identity and stage actions remain available when false; only
+  /// the automatic tune is suppressed so it cannot consume a provider slot.
+  bool _channelPreviewEnabled = true;
+
   /// Desktop gets the full two-pane experience too: source rail, embedded
   /// live preview, quiet filters — hover previews, click plays.
   /// Large touch tablets use the same shell with a fixed center selector;
@@ -193,6 +200,21 @@ class IptvResultsViewState extends State<IptvResultsView>
   List<IptvChannel> _filteredChannels = [];
   List<String> _categories = [];
   String? _selectedCategory;
+
+  /// True once the user has picked a category — INCLUDING "All" — for the
+  /// current load. Needed because "All" and "nothing picked yet" are the same
+  /// null [_selectedCategory]: the landing-category seed fills the latter and
+  /// must never override the former (a background revalidate re-presenting
+  /// the catalog would otherwise yank an explicit "All" back to a category).
+  bool _categoryManuallyChosen = false;
+
+  /// Armed by [_loadPlaylistInner]'s clearing setState and consumed by the
+  /// FIRST present of that load. Only that present may seed a landing
+  /// category: the background revalidate re-uses the same present functions
+  /// (including the materialized fallback when the DB flag flips off
+  /// mid-flight), and an unarmed seed there would yank a user who is sitting
+  /// on All mid-browse.
+  bool _landingSeedArmed = false;
 
   /// Non-null exactly while the CURRENT view is DB-backed.
   CatalogSnapshot? _dbSnapshot;
@@ -562,6 +584,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // Virtual Stremio playlists come and go with the installed addon set.
     StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
+    IptvChannelOrderSignal.revision.addListener(_onChannelOrderChanged);
     // Chained, not fire-and-forget: the startup launch needs the playlist list
     // to exist before it can pick the target's provider.
     // Guarded on the error too, not just mounted: _loadSettings now SWALLOWS
@@ -608,6 +631,23 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   void _onStremioAddonsChanged() {
     if (mounted) _loadSettings();
+  }
+
+  void _onChannelOrderChanged() {
+    final playlist = _selectedPlaylist;
+    final change = IptvChannelOrderSignal.latest;
+    if (!mounted || playlist == null || change == null) return;
+    final affected = switch (change.scope) {
+      IptvChannelOrderScope.list =>
+        (playlist.isFavorites &&
+                change.target == StorageService.iptvFavoritesListId) ||
+            playlist.customListId == change.target,
+      IptvChannelOrderScope.source => playlist.id == change.target,
+      IptvChannelOrderScope.catalog =>
+        IptvCatalogKey.forCategoryOrder(playlist, _selectedContentType) ==
+            change.target,
+    };
+    if (affected) unawaited(_loadPlaylist(playlist));
   }
 
   Future<void> _loadFavorites() async {
@@ -814,6 +854,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     // re-enters here) adopts a changed style in the same setState as
     // everything else — no separate listener, no style flash.
     final iptvStyle = IptvStyle.fromPref(await StorageService.getIptvStyle());
+    final channelPreviewEnabled =
+        await StorageService.getIptvChannelPreviewEnabled();
 
     // Seed the starter playlist on first run (if not already initialized).
     // Deliberately NOT marked as the stored default: "Default playlist" is an
@@ -934,8 +976,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       }
     }
 
+    final previewWasEnabled = _channelPreviewEnabled;
     setState(() {
       _iptvStyle = iptvStyle;
+      _channelPreviewEnabled = channelPreviewEnabled;
       _sourceCounts = sourceCounts;
       _playlists = playlists;
       _settingsLoaded = true;
@@ -948,6 +992,16 @@ class IptvResultsViewState extends State<IptvResultsView>
       // a row that no longer exists.
       _lists = lists;
     });
+
+    // Returning from Settings must release an already-open preview
+    // immediately. Re-enabling retunes the still-selected channel so the
+    // setting takes effect without requiring an extra focus move.
+    if (!channelPreviewEnabled) {
+      _stopPreviewPlayback();
+    } else if (!previewWasEnabled) {
+      final shown = _previewShown.value;
+      if (shown != null) _retunePreview(shown);
+    }
 
     // Only reload playlist if it changed or forced, or if we have no channels
     // loaded AND no load is already producing them — "_allChannels.isEmpty"
@@ -1002,6 +1056,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance.removeAddonsChangedListener(
       _onStremioAddonsChanged,
     );
+    IptvChannelOrderSignal.revision.removeListener(_onChannelOrderChanged);
     _searchDebounce?.cancel();
     _contentTypeDebounce?.cancel();
     _loadTicker?.cancel();
@@ -1112,6 +1167,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       _filteredChannels = [];
       _categories = [];
       _selectedCategory = null;
+      // A fresh load may seed a landing category again; the outgoing
+      // playlist's explicit pick doesn't carry over.
+      _categoryManuallyChosen = false;
+      _landingSeedArmed = true;
       _chipState = _CatalogChipState.hidden;
       _chipOwner = _ChipOwner.none;
       _dbSnapshot = null;
@@ -1361,11 +1420,25 @@ class IptvResultsViewState extends State<IptvResultsView>
     // itself stays unfiltered: the favorites reconcile above and the EPG
     // context below scan hidden rows in DB mode too.
     var channels = result.channels;
+    if (playlist.isLocalFile) {
+      channels = await StorageService.applyIptvCategoryChannelOrders(
+        playlist.id,
+        channels,
+      );
+      if (!mounted || ticket != _loadTicket) return;
+    } else if (cacheKey != null) {
+      channels = IptvCatalogDb.applyCategoryChannelOrders(cacheKey, channels);
+    }
     var categories = result.categories;
-    if (cacheKey == null) {
-      // Virtual/local/addon sources have no catalog key, so no rules exist.
+    if (playlist.isLocalFile) {
+      categories = await applyStoredLocalCategoryOrder(playlist.id, categories);
+      if (!mounted || ticket != _loadTicket) return;
+      _hiddenCategories = const {};
+    } else if (cacheKey == null) {
+      // Virtual/addon sources have no durable order or hidden-category rules.
       _hiddenCategories = const {};
     } else {
+      categories = IptvCatalogDb.applyCategoryOrder(cacheKey, categories);
       categories = _withoutHidden(cacheKey, categories);
       if (_hiddenCategories.isNotEmpty) {
         channels = [
@@ -1388,6 +1461,15 @@ class IptvResultsViewState extends State<IptvResultsView>
           !categories.contains(_selectedCategory)) {
         _selectedCategory = null;
       }
+      _selectedCategory ??= _landingCategory(
+        playlist.isLocalFile
+            ? IptvCatalogKey.forLocalCategoryOrder(playlist.id)
+            : cacheKey,
+        categories,
+      );
+      // Disarmed even when the seed declined (search active, keyless
+      // source): only the load's first present gets the chance.
+      _landingSeedArmed = false;
       // This present is the materialized fallback — if a previous load left a
       // DB snapshot behind (e.g. the fresh fetch's receipt came back empty
       // while an older generation was still pinned), keeping it would split
@@ -1418,6 +1500,32 @@ class IptvResultsViewState extends State<IptvResultsView>
     _lastLoadResult = result;
     _updateEpgContext(playlist, result, ticket);
     _consumeContentFocusRequest();
+  }
+
+  /// Local files bypass the catalog-backed load path, but their category-list
+  /// order intentionally lives in the same profile-scoped database. Opening it
+  /// here makes cold loads and the first load after a profile switch reliable.
+  /// The database is optional for playback: if its cache cannot be opened, the
+  /// provider order is returned and the local playlist still renders.
+  @visibleForTesting
+  static Future<List<String>> applyStoredLocalCategoryOrder(
+    String playlistId,
+    Iterable<String> categories,
+  ) async {
+    final baseline = categories.toList(growable: false);
+    try {
+      await IptvCatalogDb.open();
+    } catch (error) {
+      debugPrint(
+        'IPTV: local category-order database unavailable; using provider '
+        'order ($error)',
+      );
+      return baseline;
+    }
+    return IptvCatalogDb.applyCategoryOrder(
+      IptvCatalogKey.forLocalCategoryOrder(playlistId),
+      baseline,
+    );
   }
 
   /// Bind a DB-backed catalog to the view: [_allChannels] and
@@ -1462,6 +1570,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           !categories.contains(_selectedCategory)) {
         _selectedCategory = null;
       }
+      _selectedCategory ??= _landingCategory(snap.catalogKey, categories);
+      _landingSeedArmed = false;
     });
 
     if (warning != null && mounted) {
@@ -1512,12 +1622,12 @@ class IptvResultsViewState extends State<IptvResultsView>
   ) {
     final categories = _withoutHidden(snap.catalogKey, snap.categories);
     if (snap.categories.isEmpty) {
-      return [
+      return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, [
         for (final g in groups)
           if (g.name != null && g.name!.isNotEmpty) g.name!,
-      ];
+      ]);
     }
-    return categories;
+    return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, categories);
   }
 
   DbChannelList _makeDbList(
@@ -2689,33 +2799,30 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// like anywhere else.
   Future<IptvParseResult> _buildListResult(String listId) async {
     final stored = await StorageService.getIptvListChannels(listId);
-    final channels =
-        stored.entries.map((entry) {
-          final meta = entry.value;
-          final name = (meta['name'] as String?) ?? '';
-          final logoUrl = (meta['logoUrl'] as String?) ?? '';
-          final group = (meta['group'] as String?) ?? '';
-          return IptvChannel(
-            channelNumber: (meta['channelNumber'] as num?)?.toInt(),
-            name: name.isEmpty ? 'Unknown Channel' : name,
-            url: entry.key,
-            logoUrl: logoUrl.isEmpty ? null : logoUrl,
-            group: group.isEmpty ? null : group,
-            // Rows added before these were stored (and every row migrated
-            // from the pre-v5 favorites table) fall back to live, which is
-            // how they presented then; the reconcile pass backfills them the
-            // first time their provider is opened.
-            duration: (meta['duration'] as num?)?.toInt() ?? -1,
-            contentType: meta['contentType'] as String?,
-            attributes: {
-              if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
-                _kListOriginAttribute: meta['playlistId'] as String,
-            },
-            httpHeaders: StorageService.iptvFavoriteHeaders(meta),
-          );
-        }).toList()..sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+    final channels = stored.entries.map((entry) {
+      final meta = entry.value;
+      final name = (meta['name'] as String?) ?? '';
+      final logoUrl = (meta['logoUrl'] as String?) ?? '';
+      final group = (meta['group'] as String?) ?? '';
+      return IptvChannel(
+        channelNumber: (meta['channelNumber'] as num?)?.toInt(),
+        name: name.isEmpty ? 'Unknown Channel' : name,
+        url: entry.key,
+        logoUrl: logoUrl.isEmpty ? null : logoUrl,
+        group: group.isEmpty ? null : group,
+        // Rows added before these were stored (and every row migrated
+        // from the pre-v5 favorites table) fall back to live, which is
+        // how they presented then; the reconcile pass backfills them the
+        // first time their provider is opened.
+        duration: (meta['duration'] as num?)?.toInt() ?? -1,
+        contentType: meta['contentType'] as String?,
+        attributes: {
+          if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
+            _kListOriginAttribute: meta['playlistId'] as String,
+        },
+        httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+      );
+    }).toList();
     final categories = <String>{
       for (final channel in channels)
         if (channel.group != null) channel.group!,
@@ -2871,18 +2978,153 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   void _onCategoryChanged(String? category) {
+    _categoryManuallyChosen = true;
     setState(() => _selectedCategory = category);
     _applyFilters();
   }
 
-  /// Whether categories can be hidden in the current view.
+  /// The category a fresh load should land on when nothing is picked yet:
+  /// the saved default when it still exists in [categories], else the first
+  /// category in display order — so the list opens on the user's #1 category
+  /// rather than the provider's raw channel order. Null (land on All) when
+  /// the user already picked a chip this load, a search is active (a source
+  /// switch mid-search must keep searching everything), or the source has no
+  /// durable identity to save a choice under ([orderKey] null: virtual
+  /// shelves, Stremio addons).
+  ///
+  /// Only a load's FIRST present may seed ([_landingSeedArmed]); the
+  /// revalidate paths share these present functions and must never re-seed —
+  /// the vanished-category resets (hidden, renamed, removed by the provider)
+  /// keep their fall-back-to-All behavior, because re-seeding mid-browse
+  /// would yank the view.
+  String? _landingCategory(String? orderKey, List<String> categories) =>
+      !_landingSeedArmed
+      ? null
+      : landingCategoryFor(
+          orderKey: orderKey,
+          categories: categories,
+          manuallyChosen: _categoryManuallyChosen,
+          searching: widget.searchQuery.isNotEmpty,
+        );
+
+  /// Pure decision behind [_landingCategory], split out for tests.
+  @visibleForTesting
+  static String? landingCategoryFor({
+    required String? orderKey,
+    required List<String> categories,
+    required bool manuallyChosen,
+    required bool searching,
+  }) {
+    if (manuallyChosen || searching || orderKey == null || categories.isEmpty) {
+      return null;
+    }
+    final stored = IptvCatalogDb.defaultCategory(orderKey);
+    if (stored != null && categories.contains(stored)) return stored;
+    return categories.first;
+  }
+
+  /// Whether categories can be customized in the current view.
   ///
   /// Only catalog-backed sources (M3U / Xtream) qualify: the hidden set is
   /// keyed by catalog, and the virtual shelves (Favorites, custom lists,
   /// Continue watching), Stremio addons and imported files never get one —
   /// they stay materialized in memory. Everything downstream of this getter
   /// can assume [_dbSnapshot] is non-null.
-  bool get _canHideCategories => _dbSnapshot != null;
+  bool get _canShowCategoryOptions => _dbSnapshot != null;
+
+  /// Hold-OK (TV) or long-press (touch) on a category: make it the source's
+  /// default landing category, or hide it. Routed from the same gestures that
+  /// used to jump straight to the hide confirmation; hide still confirms
+  /// through [_promptHideCategory], so its wording and semantics are
+  /// unchanged.
+  Future<void> _promptCategoryOptions(String category) async {
+    final app = AppThemeScope.of(context);
+    final snap = _dbSnapshot;
+    if (snap == null || category.isEmpty) return;
+    final isDefault =
+        IptvCatalogDb.defaultCategory(snap.catalogKey) == category;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => TvHeldKeyGuard(
+        child: SimpleDialog(
+          backgroundColor: app.iptv.modalBg,
+          title: Text(
+            category,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
+          ),
+          children: [
+            ListTile(
+              autofocus: true,
+              leading: Icon(
+                isDefault
+                    ? Icons.bookmark_remove_rounded
+                    : Icons.bookmark_added_rounded,
+                color: app.core.tx,
+              ),
+              title: Text(
+                isDefault ? 'Clear default category' : 'Set as default',
+                style: TextStyle(color: app.core.tx),
+              ),
+              subtitle: Text(
+                isDefault
+                    ? 'This source goes back to opening on its first category'
+                    : 'Open this source on "$category"',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: app.core.tx.withAlpha(0xB3)),
+              ),
+              onTap: () => Navigator.of(
+                dialogContext,
+              ).pop(isDefault ? 'clearDefault' : 'setDefault'),
+            ),
+            ListTile(
+              leading: Icon(Icons.visibility_off_outlined, color: app.core.tx),
+              title: Text(
+                'Hide category…',
+                style: TextStyle(color: app.core.tx),
+              ),
+              onTap: () => Navigator.of(dialogContext).pop('hide'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'setDefault':
+        if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, category)) {
+          _showChip(
+            _CatalogChipState.success,
+            'Opens on "$category" from now on',
+            autoHide: const Duration(milliseconds: 2500),
+          );
+        } else {
+          _showChip(
+            _CatalogChipState.failure,
+            'Couldn\'t save the default — try again',
+            autoHide: const Duration(milliseconds: 3500),
+          );
+        }
+      case 'clearDefault':
+        if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, null)) {
+          _showChip(
+            _CatalogChipState.success,
+            'Default category cleared',
+            autoHide: const Duration(milliseconds: 2500),
+          );
+        } else {
+          _showChip(
+            _CatalogChipState.failure,
+            'Couldn\'t clear the default — try again',
+            autoHide: const Duration(milliseconds: 3500),
+          );
+        }
+      case 'hide':
+        await _promptHideCategory(category);
+    }
+  }
 
   /// Hide [category] from this source, after confirming.
   ///
@@ -3109,12 +3351,15 @@ class IptvResultsViewState extends State<IptvResultsView>
       // in-player picker can't offer a category the page doesn't. groups()
       // is already filtered in SQL; the provider list is not.
       if (snap.categories.isNotEmpty) {
-        return _withoutHidden(snap.catalogKey, snap.categories);
+        return IptvCatalogDb.applyCategoryOrder(
+          snap.catalogKey,
+          _withoutHidden(snap.catalogKey, snap.categories),
+        );
       }
-      return [
+      return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, [
         for (final group in snap.groups())
           if (group.name?.isNotEmpty == true) group.name!,
-      ];
+      ]);
     }
     return <String>{
       for (final channel in _allChannels)
@@ -5149,7 +5394,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           onDownArrowPressed: _focusFirstChannel,
           onOpenRecordings: _pageCanRecord ? _openScheduledRecordings : null,
           recordingLive: _anyRecordingLive,
-          onHideCategory: _canHideCategories ? _promptHideCategory : null,
+          onCategoryOptions: _canShowCategoryOptions
+              ? _promptCategoryOptions
+              : null,
         ),
 
         // Content
@@ -5700,11 +5947,13 @@ class IptvResultsViewState extends State<IptvResultsView>
                   '$cat · ${_categoryCounts[cat] ?? 0}',
                   // "All" is deliberately not holdable — there is no such
                   // category to hide.
-                  holdable: _canHideCategories,
+                  holdable: _canShowCategoryOptions,
                 ),
             ],
-            holdHint: widget.isTelevision ? 'HOLD OK TO HIDE' : 'HOLD TO HIDE',
-            onOptionHold: _promptHideCategory,
+            holdHint: widget.isTelevision
+                ? 'HOLD OK FOR OPTIONS'
+                : 'HOLD FOR OPTIONS',
+            onOptionHold: _promptCategoryOptions,
             onSelected: (v) => _onCategoryChanged(v.isEmpty ? null : v),
           ),
         // Non-focusable count — DPAD skips straight over it.
@@ -5838,7 +6087,11 @@ class IptvResultsViewState extends State<IptvResultsView>
     final shown = _previewShown.value;
     if (identical(shown, channel)) return;
     _previewShown.value = channel;
-    _retunePreview(channel);
+    if (_channelPreviewEnabled) {
+      _retunePreview(channel);
+    } else {
+      _stopPreviewPlayback();
+    }
     // Keep the stage's Record↔Stop honest for whichever channel is focused
     // now (debounced — zapping through rows costs nothing).
     _armAndroidRecStateRefresh();
@@ -5916,14 +6169,21 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
+  /// Release the embedded stream and abandon any in-flight Stremio resolve,
+  /// while leaving the selected channel's artwork, metadata and actions in
+  /// the stage. This is the persistent-setting path.
+  void _stopPreviewPlayback() {
+    _previewResolveTicket++;
+    _previewCandidates = null;
+    _previewStreamUrl.value = null;
+    _previewShowing.value = false;
+  }
+
   /// Empty the stage entirely (playlist switch, sidebar open) and abandon any
   /// in-flight resolve.
   void _clearPreview() {
-    _previewResolveTicket++;
-    _previewCandidates = null;
+    _stopPreviewPlayback();
     _previewShown.value = null;
-    _previewStreamUrl.value = null;
-    _previewShowing.value = false;
   }
 
   Widget _buildPreviewRail({required bool touchSelector}) {
@@ -5994,7 +6254,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                     Padding(
                       padding: const EdgeInsets.only(top: 9),
                       child: Text(
-                        'Scroll channels through the arrow to preview',
+                        _channelPreviewEnabled
+                            ? 'Scroll channels through the arrow to preview'
+                            : 'Preview is off · choose Watch fullscreen',
                         style: TextStyle(
                           color: app.seeAll.accent2.withValues(alpha: 0.66),
                           fontSize: 11.5,
@@ -6007,7 +6269,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
-                        'Hover a channel to preview  ·  Click to watch',
+                        _channelPreviewEnabled
+                            ? 'Hover a channel to preview  ·  Click to watch'
+                            : 'Preview is off  ·  Click to watch',
                         style: TextStyle(
                           color: app.iptv.inkFaint,
                           fontSize: 11.5,
@@ -6070,12 +6334,14 @@ class IptvResultsViewState extends State<IptvResultsView>
             // repainting under a playing video.
             ValueListenableBuilder<bool>(
               valueListenable: _previewShowing,
-              builder: (context, showing, _) =>
-                  _IptvStageFloor(channel: ch, tuning: ch != null && !showing),
+              builder: (context, showing, _) => _IptvStageFloor(
+                channel: ch,
+                tuning: _channelPreviewEnabled && ch != null && !showing,
+              ),
             ),
             // Startup launch owns the screen: the stage's 900ms dwell would
             // otherwise open a SECOND live stream under the launching player.
-            if (ch != null && !_startupLaunchActive)
+            if (ch != null && _channelPreviewEnabled && !_startupLaunchActive)
               ValueListenableBuilder<String?>(
                 valueListenable: _previewStreamUrl,
                 builder: (context, streamUrl, _) {
@@ -6123,8 +6389,11 @@ class IptvResultsViewState extends State<IptvResultsView>
               top: 10,
               child: ValueListenableBuilder<bool>(
                 valueListenable: _previewShowing,
-                builder: (context, showing, _) =>
-                    _IptvStageChip(channel: ch, showing: showing),
+                builder: (context, showing, _) => _IptvStageChip(
+                  channel: ch,
+                  showing: showing,
+                  previewEnabled: _channelPreviewEnabled,
+                ),
               ),
             ),
             // NO styled chrome over the video — final, device-verified rule.
@@ -6808,13 +7077,19 @@ class _TuningWavesPainter extends CustomPainter {
 
 /// Status chip on the stage: LIVE (emerald dot) once the preview has frames,
 /// TUNING (tiny animated amber signal bars) while a channel is selected but
-/// the stream hasn't opened yet, PREVIEW for on-demand items. Conditional
-/// swaps and direct paint only — no fades over the stage, and only the
-/// TUNING state animates so nothing repaints while video is playing.
+/// the stream hasn't opened yet, PREVIEW for on-demand items, or PREVIEW OFF
+/// when automatic tuning is disabled. Conditional swaps and direct paint only
+/// — no fades over the stage, and only the TUNING state animates so nothing
+/// repaints while video is playing.
 class _IptvStageChip extends StatefulWidget {
   final IptvChannel? channel;
   final bool showing;
-  const _IptvStageChip({required this.channel, required this.showing});
+  final bool previewEnabled;
+  const _IptvStageChip({
+    required this.channel,
+    required this.showing,
+    required this.previewEnabled,
+  });
 
   @override
   State<_IptvStageChip> createState() => _IptvStageChipState();
@@ -6829,7 +7104,8 @@ class _IptvStageChipState extends State<_IptvStageChip>
     duration: const Duration(milliseconds: 1100),
   );
 
-  bool get _tuning => widget.channel != null && !widget.showing;
+  bool get _tuning =>
+      widget.previewEnabled && widget.channel != null && !widget.showing;
 
   @override
   void initState() {
@@ -6863,8 +7139,16 @@ class _IptvStageChipState extends State<_IptvStageChip>
     final ch = widget.channel;
     if (ch == null) return const SizedBox.shrink();
     final isLive = ch.isLive;
-    final label = widget.showing ? (isLive ? 'LIVE' : 'PREVIEW') : 'TUNING';
-    final dot = isLive ? app.iptv.liveDot : app.seeAll.accent2;
+    final label = !widget.previewEnabled
+        ? 'PREVIEW OFF'
+        : widget.showing
+        ? (isLive ? 'LIVE' : 'PREVIEW')
+        : 'TUNING';
+    final dot = !widget.previewEnabled
+        ? app.iptv.inkFaint
+        : isLive
+        ? app.iptv.liveDot
+        : app.seeAll.accent2;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
       decoration: BoxDecoration(

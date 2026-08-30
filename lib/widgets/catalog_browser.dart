@@ -699,7 +699,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
     widget.onItemSelected!(selection);
   }
 
-  void _onQuickPlay(StremioMeta item) async {
+  Future<void> _onQuickPlay(
+    StremioMeta item, {
+    bool browseSourcesOnly = false,
+  }) async {
     int? season;
     int? episode;
 
@@ -748,8 +751,15 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       fromCatalogItemDetail: true,
     );
 
-    // Use onQuickPlay if available, otherwise fallback to onItemSelected
-    if (widget.onQuickPlay != null) {
+    if (browseSourcesOnly) {
+      // This callback is invoked by the detail route above the catalog. Source
+      // results render in the host, so remove the detail before dispatching.
+      Navigator.of(context).popUntil(
+        (r) => r.settings.name != kCatalogDetailRouteName,
+      );
+      widget.onItemSelected?.call(selection);
+    } else if (widget.onQuickPlay != null) {
+      // Use onQuickPlay if available, otherwise fallback to onItemSelected.
       widget.onQuickPlay!(selection);
     } else if (widget.onItemSelected != null) {
       widget.onItemSelected!(selection);
@@ -2117,6 +2127,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       simklMenuOptions: simklItems,
       onSimklAction: (action) => handleSimklMenuAction(context, item, action),
       onPlay: () => _onQuickPlay(item),
+      onBrowsePrimaryEpisodeSources:
+          item.type == 'series' && widget.onItemSelected != null
+          ? () => _onQuickPlay(item, browseSourcesOnly: true)
+          : null,
       onBrowse: () => _onItemTap(item),
       // "Watch Next" rail: only for IMDb-backed movie/series. Tapping a
       // recommendation reuses _openItemDetail so the new screen gets the

@@ -109,6 +109,11 @@ class _SourceRowState extends State<SourceRow> {
   bool _isFocused = false;
   Timer? _longPressTimer;
   bool _longPressTriggered = false;
+
+  /// A source activates on key-up so a hold can run its secondary action.
+  /// Require the matching down on this row; focus can arrive while the key
+  /// that opened the Sources page is already held, leaving only its release.
+  bool _sawSelectDown = false;
   static const _longPressDuration = Duration(milliseconds: 500);
 
   @override
@@ -124,6 +129,7 @@ class _SourceRowState extends State<SourceRow> {
     // this State is reused by position — migrate the listener to the new node
     // or the focus border / Play pill / auto-scroll silently stop reacting.
     if (oldWidget.focusNode != widget.focusNode) {
+      _cancelSelectPress();
       oldWidget.focusNode.removeListener(_onFocusChange);
       widget.focusNode.addListener(_onFocusChange);
       final focused = widget.focusNode.hasFocus;
@@ -134,13 +140,21 @@ class _SourceRowState extends State<SourceRow> {
   @override
   void dispose() {
     widget.focusNode.removeListener(_onFocusChange);
-    _longPressTimer?.cancel();
+    _cancelSelectPress();
     super.dispose();
+  }
+
+  void _cancelSelectPress() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    _longPressTriggered = false;
+    _sawSelectDown = false;
   }
 
   void _onFocusChange() {
     if (!mounted) return;
     final focused = widget.focusNode.hasFocus;
+    if (!focused) _cancelSelectPress();
     if (_isFocused != focused) {
       setState(() => _isFocused = focused);
       if (focused) {
@@ -157,6 +171,7 @@ class _SourceRowState extends State<SourceRow> {
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (isActivateKey(event.logicalKey)) {
       if (event is KeyDownEvent) {
+        _sawSelectDown = true;
         _longPressTriggered = false;
         _longPressTimer?.cancel();
         _longPressTimer = Timer(_longPressDuration, () {
@@ -168,8 +183,12 @@ class _SourceRowState extends State<SourceRow> {
       } else if (event is KeyUpEvent) {
         _longPressTimer?.cancel();
         _longPressTimer = null;
-        if (!_longPressTriggered) widget.onTap();
+        final wasPress = _sawSelectDown && !_longPressTriggered;
+        _sawSelectDown = false;
         _longPressTriggered = false;
+        if (wasPress) widget.onTap();
+        return KeyEventResult.handled;
+      } else if (event is KeyRepeatEvent) {
         return KeyEventResult.handled;
       }
     }

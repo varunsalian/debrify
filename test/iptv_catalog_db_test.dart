@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:debrify/widgets/iptv/iptv_results_view.dart'
+    show IptvResultsViewState;
 import 'package:sqlite3/sqlite3.dart' as raw;
 
 IptvChannel _ch(
@@ -73,8 +75,13 @@ void _createV1Schema(String path, {required int rows}) {
     try {
       db.execute('BEGIN');
       for (var i = 0; i < rows; i++) {
-        insert.execute([i, 'Channel $i', 'http://h/$i.ts', 'G${i % 400}',
-          'channel $i']);
+        insert.execute([
+          i,
+          'Channel $i',
+          'http://h/$i.ts',
+          'G${i % 400}',
+          'channel $i',
+        ]);
       }
       db.execute('COMMIT');
     } finally {
@@ -155,9 +162,7 @@ void main() {
         search_key TEXT NOT NULL
       )
     ''');
-    db.execute(
-      "INSERT INTO catalogs VALUES ('old', 1, 4, 'd', NULL, NULL, 1)",
-    );
+    db.execute("INSERT INTO catalogs VALUES ('old', 1, 4, 'd', NULL, NULL, 1)");
     db.execute(
       "INSERT INTO channels(catalog_key, generation, position, name, url, "
       "duration, content_type, search_key) VALUES "
@@ -215,60 +220,67 @@ void main() {
     }
   });
 
-  test('an interrupted migration leaves a clean v1 database to retry', () async {
-    IptvCatalogDb.debugClose();
-    final path = '${dir.path}/iptv_catalog.db';
-    for (final suffix in ['', '-wal', '-shm']) {
-      final file = File('$path$suffix');
-      if (await file.exists()) await file.delete();
-    }
-    _createV1Schema(path, rows: 200);
+  test(
+    'an interrupted migration leaves a clean v1 database to retry',
+    () async {
+      IptvCatalogDb.debugClose();
+      final path = '${dir.path}/iptv_catalog.db';
+      for (final suffix in ['', '-wal', '-shm']) {
+        final file = File('$path$suffix');
+        if (await file.exists()) await file.delete();
+      }
+      _createV1Schema(path, rows: 200);
 
-    // Stand in for the device dying mid-upgrade: the migration's transaction
-    // never commits. Everything it touched — rows, index and version stamp —
-    // must come back together, or a retry would resume from a half state.
-    final db = raw.sqlite3.open(path);
-    try {
-      // The column arrives outside the transaction (metadata-only DDL on the
-      // preparation path); only the row work is transactional.
-      db.execute('ALTER TABLE channels ADD COLUMN channel_number INTEGER');
-      db.execute('BEGIN IMMEDIATE');
-      db.execute(IptvCatalogDb.debugNumberBackfillSql);
-      db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_channels_number '
-        'ON channels(catalog_key, generation, channel_number)',
-      );
-      db.execute('PRAGMA user_version = 2');
-      db.execute('ROLLBACK');
+      // Stand in for the device dying mid-upgrade: the migration's transaction
+      // never commits. Everything it touched — rows, index and version stamp —
+      // must come back together, or a retry would resume from a half state.
+      final db = raw.sqlite3.open(path);
+      try {
+        // The column arrives outside the transaction (metadata-only DDL on the
+        // preparation path); only the row work is transactional.
+        db.execute('ALTER TABLE channels ADD COLUMN channel_number INTEGER');
+        db.execute('BEGIN IMMEDIATE');
+        db.execute(IptvCatalogDb.debugNumberBackfillSql);
+        db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_channels_number '
+          'ON channels(catalog_key, generation, channel_number)',
+        );
+        db.execute('PRAGMA user_version = 2');
+        db.execute('ROLLBACK');
 
-      expect(db.select('PRAGMA user_version').first.values.first, 0);
-      expect(
-        db
-            .select('SELECT count(*) AS c FROM channels WHERE channel_number '
-                'IS NOT NULL')
-            .first['c'],
-        0,
-      );
-      expect(
-        db
-            .select("SELECT count(*) AS c FROM sqlite_master "
-                "WHERE name = 'idx_channels_number'")
-            .first['c'],
-        0,
-      );
-    } finally {
-      db.dispose();
-    }
+        expect(db.select('PRAGMA user_version').first.values.first, 0);
+        expect(
+          db
+              .select(
+                'SELECT count(*) AS c FROM channels WHERE channel_number '
+                'IS NOT NULL',
+              )
+              .first['c'],
+          0,
+        );
+        expect(
+          db
+              .select(
+                "SELECT count(*) AS c FROM sqlite_master "
+                "WHERE name = 'idx_channels_number'",
+              )
+              .first['c'],
+          0,
+        );
+      } finally {
+        db.dispose();
+      }
 
-    // The retry then succeeds from an untouched v1 database.
-    await IptvCatalogDb.open();
-    await IptvCatalogDb.ensureMigrations();
-    final numbers = IptvCatalogDb.snapshot('big')!
-        .page(offset: 0, limit: 200)
-        .map((channel) => channel.channelNumber);
-    expect(numbers.first, 1);
-    expect(numbers.last, 200);
-  });
+      // The retry then succeeds from an untouched v1 database.
+      await IptvCatalogDb.open();
+      await IptvCatalogDb.ensureMigrations();
+      final numbers = IptvCatalogDb.snapshot(
+        'big',
+      )!.page(offset: 0, limit: 200).map((channel) => channel.channelNumber);
+      expect(numbers.first, 1);
+      expect(numbers.last, 200);
+    },
+  );
 
   test('a 50k-channel migration stays linear', () async {
     IptvCatalogDb.debugClose();
@@ -339,7 +351,8 @@ void main() {
       expect(
         numbersOf('stored'),
         numbersOf('ingested'),
-        reason: 'adoption must agree with ingest, or numbers shift under the '
+        reason:
+            'adoption must agree with ingest, or numbers shift under the '
             'user on the next refresh',
       );
       // Live rows numbered in catalog order; the VOD row skipped entirely.
@@ -381,63 +394,66 @@ void main() {
       expect(
         second,
         0,
-        reason: 'a settled catalog must not rewrite rows — the caller uses '
+        reason:
+            'a settled catalog must not rewrite rows — the caller uses '
             'this count to decide whether to rebuild the visible list',
       );
     });
 
-    test('existing namespace adopts rows made live by a classification fix',
-        () async {
-      IptvCatalogDb.ingest(
-        dbPath: IptvCatalogDb.path,
-        catalogKey: 'stored',
-        numberingSourceKey: 'provider-a',
-        channels: [
-          _ch(1, attributes: const {'tvg-id': 'existing.live'}),
-          _ch(
-            2,
-            contentType: null,
-            duration: 5400,
-            attributes: const {'tvg-id': 'newly.live'},
-          ),
-        ],
-      );
-      expect(IptvCatalogDb.hasNumberingSource('provider-a'), isTrue);
-
-      // Shape of an already-migrated v2 catalog after EXTINF:0 becomes live:
-      // the provider namespace and its old assignments exist, while this row
-      // was stored as VOD with no number under the previous classifier.
-      final db = raw.sqlite3.open(IptvCatalogDb.path);
-      try {
-        db.execute(
-          'UPDATE channels SET duration = 0 WHERE catalog_key = ? AND url = ?',
-          ['stored', 'http://h/live/u/p/2.ts'],
+    test(
+      'existing namespace adopts rows made live by a classification fix',
+      () async {
+        IptvCatalogDb.ingest(
+          dbPath: IptvCatalogDb.path,
+          catalogKey: 'stored',
+          numberingSourceKey: 'provider-a',
+          channels: [
+            _ch(1, attributes: const {'tvg-id': 'existing.live'}),
+            _ch(
+              2,
+              contentType: null,
+              duration: 5400,
+              attributes: const {'tvg-id': 'newly.live'},
+            ),
+          ],
         );
-      } finally {
-        db.dispose();
-      }
+        expect(IptvCatalogDb.hasNumberingSource('provider-a'), isTrue);
 
-      var snap = IptvCatalogDb.snapshot('stored')!;
-      expect(snap.hasUnnumberedLiveChannels, isTrue);
-      expect(
-        snap.page(offset: 0, limit: 10).map((c) => c.channelNumber),
-        [1, null],
-      );
+        // Shape of an already-migrated v2 catalog after EXTINF:0 becomes live:
+        // the provider namespace and its old assignments exist, while this row
+        // was stored as VOD with no number under the previous classifier.
+        final db = raw.sqlite3.open(IptvCatalogDb.path);
+        try {
+          db.execute(
+            'UPDATE channels SET duration = 0 WHERE catalog_key = ? AND url = ?',
+            ['stored', 'http://h/live/u/p/2.ts'],
+          );
+        } finally {
+          db.dispose();
+        }
 
-      final corrected = await IptvCatalogDb.adoptNumbering(
-        catalogKey: 'stored',
-        sourceKey: 'provider-a',
-      );
+        var snap = IptvCatalogDb.snapshot('stored')!;
+        expect(snap.hasUnnumberedLiveChannels, isTrue);
+        expect(snap.page(offset: 0, limit: 10).map((c) => c.channelNumber), [
+          1,
+          null,
+        ]);
 
-      expect(corrected, 1);
-      snap = IptvCatalogDb.snapshot('stored')!;
-      expect(snap.hasUnnumberedLiveChannels, isFalse);
-      expect(
-        snap.page(offset: 0, limit: 10).map((c) => c.channelNumber),
-        [1, 2],
-        reason: 'the old number stays stable and the newly-live row appends',
-      );
-    });
+        final corrected = await IptvCatalogDb.adoptNumbering(
+          catalogKey: 'stored',
+          sourceKey: 'provider-a',
+        );
+
+        expect(corrected, 1);
+        snap = IptvCatalogDb.snapshot('stored')!;
+        expect(snap.hasUnnumberedLiveChannels, isFalse);
+        expect(
+          snap.page(offset: 0, limit: 10).map((c) => c.channelNumber),
+          [1, 2],
+          reason: 'the old number stays stable and the newly-live row appends',
+        );
+      },
+    );
 
     test('agrees with the v2 backfill, so nothing is rewritten', () async {
       IptvCatalogDb.debugClose();
@@ -458,7 +474,8 @@ void main() {
       expect(
         corrected,
         0,
-        reason: 'the upgrade backfill and adoption both number live rows in '
+        reason:
+            'the upgrade backfill and adoption both number live rows in '
             'catalog order — they must land on the same numbers',
       );
     });
@@ -495,7 +512,8 @@ void main() {
         expect(
           IptvCatalogDb.adoptionRecentlyFailed('provider-a'),
           isFalse,
-          reason: 'the backoff must expire, or a transient failure would '
+          reason:
+              'the backoff must expire, or a transient failure would '
               'strand the catalog unnumbered forever',
         );
       } finally {
@@ -559,7 +577,8 @@ void main() {
       expect(
         IptvCatalogDb.adoptionRecentlyFailed('provider-a'),
         isFalse,
-        reason: 'a re-added playlist must not inherit the backoff of the '
+        reason:
+            'a re-added playlist must not inherit the backoff of the '
             'entry it replaced',
       );
     });
@@ -644,23 +663,25 @@ void main() {
       var maxConcurrent = 0;
       final order = <String>[];
 
-      Future<void> job(String label) =>
-          IptvCatalogDb.runExclusive(() async {
-            running++;
-            maxConcurrent = running > maxConcurrent ? running : maxConcurrent;
-            order.add('start $label');
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-            order.add('end $label');
-            running--;
-          });
+      Future<void> job(String label) => IptvCatalogDb.runExclusive(() async {
+        running++;
+        maxConcurrent = running > maxConcurrent ? running : maxConcurrent;
+        order.add('start $label');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        order.add('end $label');
+        running--;
+      });
 
       await Future.wait([job('a'), job('b'), job('c')]);
 
       expect(maxConcurrent, 1);
       expect(order, [
-        'start a', 'end a',
-        'start b', 'end b',
-        'start c', 'end c',
+        'start a',
+        'end a',
+        'start b',
+        'end b',
+        'start c',
+        'end c',
       ]);
       expect(IptvCatalogDb.debugMaintenanceRunCount, 3);
     });
@@ -678,24 +699,28 @@ void main() {
       expect(inner, isTrue);
     });
 
-    test('deleting catalogs takes the gate and runs off this isolate', () async {
-      IptvCatalogDb.ingest(
-        dbPath: IptvCatalogDb.path,
-        catalogKey: 'doomed',
-        channels: [for (var i = 0; i < 10; i++) _ch(i)],
-      );
-      final before = IptvCatalogDb.debugMaintenanceRunCount;
+    test(
+      'deleting catalogs takes the gate and runs off this isolate',
+      () async {
+        IptvCatalogDb.ingest(
+          dbPath: IptvCatalogDb.path,
+          catalogKey: 'doomed',
+          channels: [for (var i = 0; i < 10; i++) _ch(i)],
+        );
+        final before = IptvCatalogDb.debugMaintenanceRunCount;
 
-      await IptvCatalogDb.removeCatalogsByKeys(['doomed']);
+        await IptvCatalogDb.removeCatalogsByKeys(['doomed']);
 
-      expect(IptvCatalogDb.snapshot('doomed'), isNull);
-      expect(
-        IptvCatalogDb.debugMaintenanceRunCount,
-        before + 1,
-        reason: 'a mass delete is whole-catalog write work and must queue '
-            'with the rest',
-      );
-    });
+        expect(IptvCatalogDb.snapshot('doomed'), isNull);
+        expect(
+          IptvCatalogDb.debugMaintenanceRunCount,
+          before + 1,
+          reason:
+              'a mass delete is whole-catalog write work and must queue '
+              'with the rest',
+        );
+      },
+    );
 
     test('a failed job does not break or poison the queue', () async {
       await expectLater(
@@ -739,7 +764,8 @@ void main() {
       expect(
         corrections.last,
         -1,
-        reason: 'the second pipeline must not re-scan a catalog the first '
+        reason:
+            'the second pipeline must not re-scan a catalog the first '
             'already adopted',
       );
     });
@@ -756,7 +782,8 @@ void main() {
       expect(
         IptvCatalogDb.revalidateInterrupted('xc|s|u|live'),
         isTrue,
-        reason: 'handing the same 50k refresh back on every visit is the loop '
+        reason:
+            'handing the same 50k refresh back on every visit is the loop '
             'that made the page unusable',
       );
     });
@@ -816,8 +843,10 @@ void main() {
       expect(db.select('PRAGMA user_version').first.values.first, 0);
       expect(
         db
-            .select("SELECT count(*) AS c FROM channels "
-                "WHERE catalog_key = 'big' AND channel_number IS NOT NULL")
+            .select(
+              "SELECT count(*) AS c FROM channels "
+              "WHERE catalog_key = 'big' AND channel_number IS NOT NULL",
+            )
             .first['c'],
         0,
       );
@@ -1006,8 +1035,7 @@ void main() {
 
   test('delete and re-add restores an archived matching lineup', () async {
     final original = [
-      for (var i = 0; i < 25; i++)
-        _ch(i, name: 'Station $i', group: 'Live'),
+      for (var i = 0; i < 25; i++) _ch(i, name: 'Station $i', group: 'Live'),
     ];
     IptvCatalogDb.ingest(
       dbPath: IptvCatalogDb.path,
@@ -1101,6 +1129,364 @@ void main() {
       snap.count(group: 'Sports', live: true, beforePosition: position),
       1,
       reason: 'the centered page uses the channel ordinal within its category',
+    );
+  });
+
+  test(
+    'manual category order survives refresh and drives paging arithmetic',
+    () async {
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'ordered',
+        channels: [
+          _ch(1, group: 'Sports', name: 'Alpha'),
+          _ch(9, group: 'News', name: 'News'),
+          _ch(2, group: 'Sports', name: 'Bravo'),
+          _ch(3, group: 'Sports', name: 'Charlie'),
+        ],
+      );
+      final first = IptvCatalogDb.snapshot('ordered')!;
+      final identities = {
+        for (final entry in first.groupOrderEntries('Sports'))
+          entry.channel.name: entry.identity,
+      };
+      expect(
+        await IptvCatalogDb.setGroupChannelOrder('ordered', 'Sports', [
+          identities['Charlie']!,
+          identities['Alpha']!,
+          identities['Bravo']!,
+        ]),
+        isTrue,
+      );
+      expect(
+        IptvCatalogDb.snapshot('ordered')!
+            .page(offset: 0, limit: 10, group: 'Sports')
+            .map((channel) => channel.name),
+        ['Charlie', 'Alpha', 'Bravo'],
+      );
+      final pagePlan = IptvCatalogDb.snapshot(
+        'ordered',
+      )!.debugPageQueryPlan(group: 'Sports').join('\n');
+      expect(pagePlan, contains('idx_channels_grp_manual'));
+      expect(
+        pagePlan,
+        isNot(contains('USE TEMP B-TREE FOR ORDER BY')),
+        reason: 'every page fault must stream the manual-order index',
+      );
+      final beforeRead = IptvCatalogDb.debugMaintenanceRunCount;
+      final orderEntries = await IptvCatalogDb.groupOrderEntriesAsync(
+        IptvCatalogDb.snapshot('ordered')!,
+        'Sports',
+      );
+      expect(
+        orderEntries.map((entry) => entry.channel.name),
+        ['Charlie', 'Alpha', 'Bravo'],
+        reason: 'the settings loader decodes complete categories off-isolate',
+      );
+      expect(
+        IptvCatalogDb.debugMaintenanceRunCount,
+        beforeRead + 1,
+        reason: 'the durable editor scan must share the refresh gate',
+      );
+
+      // Settings refresh deletes the published catalog before ingesting it
+      // again. The identity table intentionally survives that deletion.
+      await IptvCatalogDb.removeCatalogsByKeys(['ordered']);
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'ordered',
+        channels: [
+          _ch(2, group: 'Sports', name: 'Bravo'),
+          _ch(9, group: 'News', name: 'News'),
+          _ch(4, group: 'Sports', name: 'Delta'),
+          _ch(1, group: 'Sports', name: 'Alpha'),
+          _ch(3, group: 'Sports', name: 'Charlie'),
+        ],
+      );
+      final refreshed = IptvCatalogDb.snapshot('ordered')!;
+      expect(
+        refreshed
+            .page(offset: 0, limit: 10, group: 'Sports')
+            .map((channel) => channel.name),
+        ['Charlie', 'Alpha', 'Bravo', 'Delta'],
+        reason: 'known identities retain their ranks and a new row appends',
+      );
+      expect(
+        refreshed.page(offset: 0, limit: 10).map((channel) => channel.name),
+        ['Bravo', 'News', 'Delta', 'Alpha', 'Charlie'],
+        reason: 'the All view keeps the provider baseline',
+      );
+
+      final alphaPosition = refreshed.positionOf(
+        url: 'http://h/live/u/p/1.ts',
+        name: 'Alpha',
+        group: 'Sports',
+      )!;
+      final charliePosition = refreshed.positionOf(
+        url: 'http://h/live/u/p/3.ts',
+        name: 'Charlie',
+        group: 'Sports',
+      )!;
+      expect(
+        refreshed.count(group: 'Sports', beforePosition: charliePosition),
+        0,
+      );
+      expect(
+        refreshed.count(group: 'Sports', beforePosition: alphaPosition),
+        1,
+        reason: 'position→index conversion follows manual display order',
+      );
+
+      await IptvCatalogDb.removeCatalogsByKeys([
+        'ordered',
+      ], forgetChannelOrders: true);
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'ordered',
+        channels: [
+          _ch(2, group: 'Sports', name: 'Bravo'),
+          _ch(9, group: 'News', name: 'News'),
+          _ch(4, group: 'Sports', name: 'Delta'),
+          _ch(1, group: 'Sports', name: 'Alpha'),
+          _ch(3, group: 'Sports', name: 'Charlie'),
+        ],
+      );
+      expect(
+        IptvCatalogDb.snapshot('ordered')!
+            .page(offset: 0, limit: 10, group: 'Sports')
+            .map((channel) => channel.name),
+        ['Bravo', 'Delta', 'Alpha', 'Charlie'],
+        reason: 'source deletion removes ranks instead of preserving refresh',
+      );
+    },
+  );
+
+  test(
+    'category-list order survives refresh and app reopen, then forgets on delete',
+    () async {
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'category-list',
+        channels: [
+          _ch(1, group: 'News'),
+          _ch(2, group: 'Sports'),
+          _ch(3, group: 'Kids'),
+        ],
+        categories: const ['News', 'Sports', 'Kids'],
+      );
+
+      await IptvCatalogDb.setCategoryOrder('category-list', const [
+        'Kids',
+        'News',
+        'Sports',
+      ]);
+      expect(IptvCatalogDb.savedCategoryOrder('category-list'), [
+        'Kids',
+        'News',
+        'Sports',
+      ]);
+      expect(
+        IptvCatalogDb.applyCategoryOrder('category-list', const [
+          'News',
+          'Movies',
+          'Sports',
+          'Kids',
+        ]),
+        ['Kids', 'News', 'Sports', 'Movies'],
+        reason: 'new provider categories append after every saved rank',
+      );
+      expect(
+        IptvCatalogDb.applyCategoryOrder('category-list', const [
+          'News',
+          'Kids',
+        ]),
+        ['Kids', 'News'],
+        reason: 'filtering hidden categories does not disturb saved ranks',
+      );
+
+      await IptvCatalogDb.removeCatalogsByKeys(['category-list']);
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'category-list',
+        channels: [
+          _ch(2, group: 'Sports'),
+          _ch(4, group: 'Movies'),
+          _ch(1, group: 'News'),
+          _ch(3, group: 'Kids'),
+        ],
+        categories: const ['Sports', 'Movies', 'News', 'Kids'],
+      );
+      expect(
+        IptvCatalogDb.applyCategoryOrder(
+          'category-list',
+          IptvCatalogDb.snapshot('category-list')!.categories,
+        ),
+        ['Kids', 'News', 'Sports', 'Movies'],
+        reason: 'ordinary catalog refresh preserves category-list ranks',
+      );
+
+      IptvCatalogDb.debugClose();
+      await IptvCatalogDb.open();
+      expect(IptvCatalogDb.savedCategoryOrder('category-list'), [
+        'Kids',
+        'News',
+        'Sports',
+      ]);
+
+      await IptvCatalogDb.removeCatalogsByKeys([
+        'category-list',
+      ], forgetChannelOrders: true);
+      expect(IptvCatalogDb.savedCategoryOrder('category-list'), isEmpty);
+    },
+  );
+
+  test('forgetting category order reopens a closed catalog', () async {
+    await IptvCatalogDb.setCategoryOrder('local|removed', const [
+      'Kids',
+      'News',
+    ]);
+    await IptvCatalogDb.closeScope();
+    expect(IptvCatalogDb.isOpen, isFalse);
+
+    await IptvCatalogDb.forgetCategoryOrders(['local|removed']);
+
+    expect(IptvCatalogDb.isOpen, isTrue);
+    expect(IptvCatalogDb.savedCategoryOrder('local|removed'), isEmpty);
+  });
+
+  test('default landing category round-trips, overwrites and clears', () {
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), isNull);
+
+    expect(IptvCatalogDb.setDefaultCategory('m3u|http://a', 'Sports'), isTrue);
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), 'Sports');
+
+    expect(IptvCatalogDb.setDefaultCategory('m3u|http://a', 'News'), isTrue);
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), 'News');
+
+    expect(IptvCatalogDb.setDefaultCategory('m3u|http://a', null), isTrue);
+    expect(IptvCatalogDb.defaultCategory('m3u|http://a'), isNull);
+  });
+
+  test('default landing category is keyed per catalog', () {
+    IptvCatalogDb.setDefaultCategory('xc|p|u|live', 'Sports');
+    IptvCatalogDb.setDefaultCategory('xc|p|u|vod', 'Movies');
+
+    expect(IptvCatalogDb.defaultCategory('xc|p|u|live'), 'Sports');
+    expect(IptvCatalogDb.defaultCategory('xc|p|u|vod'), 'Movies');
+    expect(IptvCatalogDb.defaultCategory('m3u|http://other'), isNull);
+  });
+
+  test('default landing category survives ordinary catalog refresh', () async {
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'xc|p|u|live',
+      channels: [_ch(1, group: 'Sports')],
+    );
+    IptvCatalogDb.setDefaultCategory('xc|p|u|live', 'Sports');
+
+    await IptvCatalogDb.removeCatalogsByKeys(['xc|p|u|live']);
+
+    expect(IptvCatalogDb.defaultCategory('xc|p|u|live'), 'Sports');
+  });
+
+  test(
+    'default landing category is forgotten with removed source state',
+    () async {
+      IptvCatalogDb.ingest(
+        dbPath: IptvCatalogDb.path,
+        catalogKey: 'xc|p|u|live',
+        channels: [_ch(1, group: 'Sports')],
+      );
+      IptvCatalogDb.setDefaultCategory('xc|p|u|live', 'Sports');
+
+      await IptvCatalogDb.removeCatalogsByKeys([
+        'xc|p|u|live',
+      ], forgetChannelOrders: true);
+
+      expect(IptvCatalogDb.defaultCategory('xc|p|u|live'), isNull);
+    },
+  );
+
+  group('landing category seed', () {
+    const key = 'm3u|http://seed';
+    const categories = ['Kids', 'News', 'Sports'];
+
+    String? seed({
+      String? orderKey = key,
+      List<String> cats = categories,
+      bool manuallyChosen = false,
+      bool searching = false,
+    }) => IptvResultsViewState.landingCategoryFor(
+      orderKey: orderKey,
+      categories: cats,
+      manuallyChosen: manuallyChosen,
+      searching: searching,
+    );
+
+    test('falls back to the first category in display order', () {
+      expect(seed(), 'Kids');
+    });
+
+    test('prefers the stored default while it still exists', () {
+      IptvCatalogDb.setDefaultCategory(key, 'Sports');
+      expect(seed(), 'Sports');
+
+      // A default the provider removed (or the user hid) is skipped, not an
+      // error — the visible list wins.
+      expect(seed(cats: ['Kids', 'News']), 'Kids');
+    });
+
+    test('never overrides an explicit pick, a search, or a keyless source', () {
+      IptvCatalogDb.setDefaultCategory(key, 'Sports');
+      expect(seed(manuallyChosen: true), isNull);
+      expect(seed(searching: true), isNull);
+      expect(seed(orderKey: null), isNull);
+      expect(seed(cats: const []), isNull);
+    });
+  });
+
+  test('Xtream manual order survives password URL and name changes', () async {
+    IptvChannel xtream(String streamId, String password, String name) =>
+        IptvChannel(
+          name: name,
+          url: 'http://panel/live/user/$password/$streamId.ts',
+          group: 'Live',
+          duration: -1,
+          contentType: 'live',
+          attributes: {'stream_id': streamId},
+        );
+
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'xc|panel|user|live',
+      channels: [
+        xtream('1', 'old-password', 'One'),
+        xtream('2', 'old-password', 'Two'),
+      ],
+    );
+    final entries = IptvCatalogDb.snapshot(
+      'xc|panel|user|live',
+    )!.groupOrderEntries('Live');
+    await IptvCatalogDb.setGroupChannelOrder('xc|panel|user|live', 'Live', [
+      entries[1].identity,
+      entries[0].identity,
+    ]);
+
+    await IptvCatalogDb.removeCatalogsByKeys(['xc|panel|user|live']);
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: 'xc|panel|user|live',
+      channels: [
+        xtream('1', 'new-password', 'One renamed'),
+        xtream('2', 'new-password', 'Two'),
+      ],
+    );
+
+    expect(
+      IptvCatalogDb.snapshot('xc|panel|user|live')!
+          .page(offset: 0, limit: 10, group: 'Live')
+          .map((channel) => channel.name),
+      ['Two', 'One renamed'],
     );
   });
 

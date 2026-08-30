@@ -58,6 +58,9 @@ class DebrifyTvDatabase {
     return _scopeLock.synchronized(() => _databaseLocked(requested));
   }
 
+  @visibleForTesting
+  bool get debugInOperationZone => Zone.current[_operationZoneKey] is Database;
+
   Future<Database> _databaseLocked(_DatabaseScope requested) async {
     if (_deactivatedScopeKeys.contains(requested.key)) {
       throw StateError('Debrify TV database scope changed while opening');
@@ -90,7 +93,7 @@ class DebrifyTvDatabase {
 
     final opened = await openDatabase(
       dbPath,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -357,6 +360,47 @@ class DebrifyTvDatabase {
     if (oldVersion < 5) {
       await migrateFavoritesToLists(db);
     }
+
+    if (oldVersion < 6 && newVersion >= 6) {
+      await migrateIptvChannelOrder(db);
+    }
+  }
+
+  /// v6: channels inside Favorites/custom lists gain an explicit position,
+  /// and imported-file categories gain their durable order table.
+  ///
+  /// Existing list rows are backfilled in their former case-insensitive A-Z
+  /// presentation order so upgrading cannot visibly reshuffle a user's lists.
+  static Future<void> migrateIptvChannelOrder(DatabaseExecutor db) async {
+    await createIptvStoreTables(db);
+    final columns = await db.rawQuery('PRAGMA table_info(iptv_list_channels)');
+    final hasPosition = columns.any((row) => row['name'] == 'position');
+    if (!hasPosition) {
+      await db.execute(
+        'ALTER TABLE iptv_list_channels '
+        'ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
+    final lists = await db.query('iptv_lists', columns: ['id']);
+    for (final list in lists) {
+      final listId = list['id'] as String;
+      final rows = await db.query(
+        'iptv_list_channels',
+        columns: ['url', 'name'],
+        where: 'list_id = ?',
+        whereArgs: [listId],
+        orderBy: 'name COLLATE NOCASE ASC, url ASC',
+      );
+      for (var position = 0; position < rows.length; position++) {
+        await db.update(
+          'iptv_list_channels',
+          {'position': position},
+          where: 'list_id = ? AND url = ?',
+          whereArgs: [listId, rows[position]['url']],
+        );
+      }
+    }
   }
 
   /// v5: favorites stop being their own table and become the built-in list
@@ -399,7 +443,7 @@ class DebrifyTvDatabase {
   /// renamed, never deleted, and the destination of every legacy favorite.
   static const String favoritesListId = 'favorites';
 
-  /// IPTV lists / watch history / video resume tables (schema v5), used by
+  /// IPTV lists / watch history / video resume tables (schema v6), used by
   /// IptvMediaStore. `IF NOT EXISTS` so it's safe from both onCreate and
   /// onUpgrade, and callable directly by tests on an in-memory database.
   static Future<void> createIptvStoreTables(DatabaseExecutor db) async {
@@ -427,10 +471,24 @@ class DebrifyTvDatabase {
         duration INTEGER,
         http_headers_json TEXT,
         added_at INTEGER NOT NULL DEFAULT 0,
+        position INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (list_id, url),
         FOREIGN KEY (list_id) REFERENCES iptv_lists(id) ON DELETE CASCADE
       )
     ''');
+
+    // CREATE TABLE IF NOT EXISTS does not evolve an existing v5 table. Keep
+    // this shape repair next to the table definition so the order index below
+    // is never attempted before its column exists (including v1→v6 jumps).
+    final listChannelColumns = await db.rawQuery(
+      'PRAGMA table_info(iptv_list_channels)',
+    );
+    if (!listChannelColumns.any((row) => row['name'] == 'position')) {
+      await db.execute(
+        'ALTER TABLE iptv_list_channels '
+        'ADD COLUMN position INTEGER NOT NULL DEFAULT 0',
+      );
+    }
 
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_iptv_list_channels_playlist
@@ -440,6 +498,28 @@ class DebrifyTvDatabase {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_iptv_list_channels_url
       ON iptv_list_channels(url)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_iptv_list_channels_order
+      ON iptv_list_channels(list_id, position)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS iptv_category_channel_orders (
+        source_id TEXT NOT NULL,
+        channel_group TEXT NOT NULL,
+        url TEXT NOT NULL,
+        name TEXT NOT NULL,
+        occurrence INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (source_id, channel_group, url, name, occurrence)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_iptv_category_channel_order
+      ON iptv_category_channel_orders(source_id, channel_group, position)
     ''');
 
     await seedBuiltinList(db);
