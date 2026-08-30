@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://varunsalian.github.io/debrify/"><strong>Website</strong></a> &bull;
+  <a href="https://debrify.tv/"><strong>Website</strong></a> &bull;
   <a href="https://github.com/varunsalian/debrify/releases"><strong>Download</strong></a> &bull;
   <a href="#-features">Features</a> &bull;
   <a href="#-supported-platforms">Platforms</a> &bull;
@@ -40,7 +40,7 @@ Debrify does not host, sell, provide, or bundle media content. Search sources, a
 
 Third-party plugins, addons, indexers, playlists, and services are controlled by their respective providers or users. Debrify does not endorse using any integration to infringe copyright or violate a provider's terms. Do not submit or distribute configurations intended to facilitate unauthorized access to copyrighted content.
 
-For more detail, see [Content Responsibility](https://varunsalian.github.io/debrify/content-responsibility.html).
+For more detail, see [Content Responsibility](https://debrify.tv/content-responsibility/).
 
 ---
 
@@ -230,8 +230,8 @@ Third-party components and assets remain under their respective licenses. The AG
 ---
 
 <p align="center">
-  <a href="https://varunsalian.github.io/debrify/">
-    <img src="https://img.shields.io/badge/Visit_Website-varunsalian.github.io/debrify-6366f1?style=for-the-badge" alt="Website">
+  <a href="https://debrify.tv/">
+    <img src="https://img.shields.io/badge/Visit_Website-debrify.tv-6366f1?style=for-the-badge" alt="Website">
   </a>
 </p>
 
