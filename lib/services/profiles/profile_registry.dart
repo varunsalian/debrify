@@ -16,6 +16,7 @@ import 'profile_lock_controller.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'tvos_profile_recovery_store.dart';
+import 'tvos_recovery_limits.dart';
 
 class ProfileRegistry {
   ProfileRegistry._(this._db);
@@ -702,12 +703,17 @@ class ProfileRegistry {
         .map((row) => 'p.${row['id']}.g.${row['visible_data_generation']}.')
         .toSet();
     final result = <String, Object?>{};
+    final watchlistKeys = <String>[];
     var encodedBytes = 0;
     for (final key in prefs.getKeys()) {
       final match = _scopedPreferencePattern.firstMatch(key);
       if (match == null ||
           !allowedPrefixes.any(key.startsWith) ||
           !_recoverablePreference(match.group(1)!)) {
+        continue;
+      }
+      if (match.group(1) == TvOsRecoveryLimits.myWatchlistPreferenceKey) {
+        watchlistKeys.add(key);
         continue;
       }
       final value = prefs.get(key);
@@ -719,11 +725,32 @@ class ProfileRegistry {
         continue;
       }
       final bytes = utf8.encode(jsonEncode(value)).length;
-      if (bytes > 64 * 1024) continue;
+      if (bytes > TvOsRecoveryLimits.envelopeValueBytes) continue;
       encodedBytes += utf8.encode(key).length + bytes;
-      if (result.length >= 4096 || encodedBytes > 512 * 1024) {
+      if (result.length >= TvOsRecoveryLimits.envelopeMaxEntries ||
+          encodedBytes > TvOsRecoveryLimits.envelopeTotalBytes) {
         throw StateError('tvOS recoverable preferences exceed the bound');
       }
+      result[key] = value;
+    }
+    // My Watchlist goes in last and is the one key allowed to fall out of a
+    // full envelope. Every checkpoint runs inside a preference write, so a
+    // thrown bound here would fail every subsequent save — dropping the shelf
+    // is strictly better than that.
+    for (final key in watchlistKeys) {
+      final value = prefs.get(key);
+      if (value is! String) continue;
+      final bytes = utf8.encode(jsonEncode(value)).length;
+      if (bytes > TvOsRecoveryLimits.envelopeValueBytes) continue;
+      if (result.length >= TvOsRecoveryLimits.envelopeMaxEntries ||
+          encodedBytes + utf8.encode(key).length + bytes >
+              TvOsRecoveryLimits.envelopeTotalBytes) {
+        debugPrint(
+          'tvOS recovery envelope is full; My Watchlist was not checkpointed',
+        );
+        continue;
+      }
+      encodedBytes += utf8.encode(key).length + bytes;
       result[key] = value;
     }
     return result;
@@ -774,7 +801,8 @@ class ProfileRegistry {
       }
       final bytes = utf8.encode(jsonEncode(normalizedValue)).length;
       encodedBytes += utf8.encode(key).length + bytes;
-      if (bytes > 64 * 1024 || encodedBytes > 512 * 1024) {
+      if (bytes > TvOsRecoveryLimits.envelopeValueBytes ||
+          encodedBytes > TvOsRecoveryLimits.envelopeTotalBytes) {
         throw const FormatException('tvOS recovery preferences exceed bounds');
       }
       normalized[key] = normalizedValue;
@@ -783,6 +811,16 @@ class ProfileRegistry {
     for (final key in prefs.getKeys().where(
       (key) => _scopedPreferencePattern.hasMatch(key),
     )) {
+      // A live watchlist the export had to drop (oversized value, full
+      // envelope) must not be deleted by the rebuild — an export skip must
+      // never become an import deletion. Only current-generation keys are
+      // spared; stale-generation ones still clear.
+      final logicalKey = _scopedPreferencePattern.firstMatch(key)!.group(1);
+      if (logicalKey == TvOsRecoveryLimits.myWatchlistPreferenceKey &&
+          allowedPrefixes.any(key.startsWith) &&
+          !normalized.containsKey(key)) {
+        continue;
+      }
       if (!await prefs.remove(key)) {
         throw StateError('Could not clear stale tvOS preference projection');
       }
@@ -800,7 +838,11 @@ class ProfileRegistry {
     }
   }
 
+  /// The built-in My Watchlist is user-authored data, not a re-fetchable
+  /// tracker cache, so the `watchlist` pattern below must not drop it from
+  /// the envelope — losing it wipes the shelf on every tvOS launch.
   static bool _recoverablePreference(String logicalKey) =>
+      logicalKey == TvOsRecoveryLimits.myWatchlistPreferenceKey ||
       !_nonRecoverablePreference.hasMatch(logicalKey);
 
   static final RegExp _scopedPreferencePattern = RegExp(

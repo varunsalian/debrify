@@ -14,6 +14,7 @@ import 'profiles/connection_resource_service.dart';
 import 'profiles/profile_authorization.dart';
 import 'profiles/profile_bootstrap.dart';
 import 'profiles/profile_runtime.dart';
+import 'profiles/tvos_recovery_limits.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 import 'secret_vault.dart';
@@ -508,7 +509,8 @@ class StorageService {
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
   static const String _playlistFavoritesKey = 'playlist_favorites_v1';
-  static const String _myWatchlistKey = 'my_watchlist_v1';
+  static const String _myWatchlistKey =
+      TvOsRecoveryLimits.myWatchlistPreferenceKey;
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
 
   // Torrent Search History
@@ -4948,6 +4950,21 @@ class StorageService {
         '${Uri.encodeComponent(item.id)}';
   }
 
+  /// tvOS durability ceiling for the encoded watchlist. The recovery envelope
+  /// silently skips any single value over its per-value limit, which would
+  /// resurrect the wipe-on-restart bug; the 16KiB margin covers the
+  /// JSON-escaping inflation the value picks up inside the envelope.
+  static const int myWatchlistTvOsCapBytes =
+      TvOsRecoveryLimits.envelopeValueBytes - 16 * 1024;
+
+  /// Test seam: `PlatformUtil.isTvOS` is a `static final` and cannot be
+  /// overridden, so tests drive the cap through this instead.
+  @visibleForTesting
+  static bool? debugMyWatchlistTvOsCapOverride;
+
+  static bool get _myWatchlistCapEnforced =>
+      debugMyWatchlistTvOsCapOverride ?? PlatformUtil.isTvOS;
+
   static int _myWatchlistAddedAt(Map<String, dynamic> row) {
     final raw = row['addedAt'];
     if (raw is num) return raw.toInt();
@@ -5051,7 +5068,25 @@ class StorageService {
     if (rows.isEmpty) {
       await prefs.remove(_myWatchlistKey);
     } else {
-      await prefs.setString(_myWatchlistKey, jsonEncode(rows));
+      var encoded = jsonEncode(rows);
+      if (_myWatchlistCapEnforced) {
+        // Oldest rows go first. The scan starts past index 0 because the row
+        // just written sits there — a re-save keeps its original addedAt, so
+        // an oldest-by-timestamp scan could otherwise evict exactly it.
+        while (rows.length > 1 &&
+            utf8.encode(encoded).length > myWatchlistTvOsCapBytes) {
+          var oldest = 1;
+          for (var i = 2; i < rows.length; i++) {
+            if (_myWatchlistAddedAt(rows[i]) <
+                _myWatchlistAddedAt(rows[oldest])) {
+              oldest = i;
+            }
+          }
+          rows.removeAt(oldest);
+          encoded = jsonEncode(rows);
+        }
+      }
+      await prefs.setString(_myWatchlistKey, encoded);
     }
   }
 

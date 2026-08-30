@@ -201,4 +201,79 @@ void main() {
     expect(await StorageService.isInMyWatchlist(movie), isFalse);
     expect(await StorageService.getMyWatchlistItems(), isEmpty);
   });
+
+  test('tvOS cap trims oldest rows and always keeps the newest save', () async {
+    StorageService.debugMyWatchlistTvOsCapOverride = true;
+    addTearDown(() => StorageService.debugMyWatchlistTvOsCapOverride = null);
+
+    // ~5KB per row, so a handful of saves cross the 48KiB ceiling.
+    final filler = 'x' * 5000;
+    for (var i = 0; i < 15; i++) {
+      final imdb = 'tt${i.toString().padLeft(7, '0')}';
+      await StorageService.setMyWatchlistItem(
+        _title(id: imdb, imdbId: imdb, name: 'Movie $i $filler'),
+        true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final storedKey = prefs.getKeys().firstWhere(
+      (key) => key.contains('my_watchlist_v1'),
+    );
+    final encoded = prefs.getString(storedKey)!;
+    expect(
+      utf8.encode(encoded).length,
+      lessThanOrEqualTo(StorageService.myWatchlistTvOsCapBytes),
+    );
+
+    final saved = await StorageService.getMyWatchlistItems();
+    expect(saved.length, lessThan(15), reason: 'the cap must have trimmed');
+    expect(saved.first.name, startsWith('Movie 14 '));
+    expect(
+      saved.any((item) => item.name.startsWith('Movie 0 ')),
+      isFalse,
+      reason: 'the oldest row is the one dropped',
+    );
+  });
+
+  test('re-saving the oldest title over the cap never evicts it', () async {
+    StorageService.debugMyWatchlistTvOsCapOverride = true;
+    addTearDown(() => StorageService.debugMyWatchlistTvOsCapOverride = null);
+
+    final filler = 'x' * 5000;
+    for (var i = 0; i < 15; i++) {
+      final imdb = 'tt${i.toString().padLeft(7, '0')}';
+      await StorageService.setMyWatchlistItem(
+        _title(id: imdb, imdbId: imdb, name: 'Movie $i $filler'),
+        true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+    }
+
+    // Re-save the oldest survivor with bigger metadata, forcing a trim while
+    // it holds the oldest addedAt (re-saves keep the original timestamp).
+    final oldest = (await StorageService.getMyWatchlistItems()).last;
+    final grown = _title(
+      id: oldest.effectiveImdbId!,
+      imdbId: oldest.effectiveImdbId,
+      name: '${oldest.name} ${'y' * 8000}',
+    );
+    await StorageService.setMyWatchlistItem(grown, true);
+
+    expect(await StorageService.isInMyWatchlist(grown), isTrue);
+  });
+
+  test('the cap never drops the sole remaining row', () async {
+    StorageService.debugMyWatchlistTvOsCapOverride = true;
+    addTearDown(() => StorageService.debugMyWatchlistTvOsCapOverride = null);
+
+    final oversized = _title(
+      id: 'tt7654321',
+      imdbId: 'tt7654321',
+      name: 'Huge ${'x' * (StorageService.myWatchlistTvOsCapBytes + 1024)}',
+    );
+    await StorageService.setMyWatchlistItem(oversized, true);
+    expect(await StorageService.getMyWatchlistItems(), hasLength(1));
+  });
 }
