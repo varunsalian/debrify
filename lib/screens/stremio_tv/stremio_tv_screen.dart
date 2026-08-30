@@ -2411,6 +2411,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       isTelevision: widget.isTelevision,
       onPlay: () => _playChannel(channel),
       onBrowse: () => _playChannel(channel),
+      enablePrimarySourcesHold: false,
     );
     await Navigator.of(context).push(
       PageRouteBuilder(

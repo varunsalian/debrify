@@ -11966,6 +11966,16 @@ class _SearchScreenState extends State<SearchScreen>
                     : null,
                 onItemSelected: _browseSelection,
                 onQuickPlay: _playSelection,
+                onBrowsePrimaryEpisodeSources: (promised) => _onCatalogPlay(
+                  item,
+                  addon,
+                  isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
+                  skipEpisodeFallback: true,
+                  preferTraktResume: true,
+                  promisedTarget: promised,
+                  browseSourcesOnly: true,
+                ),
                 boundSourceCount: _boundCountFor,
                 onSelectSource: _handleEditOrSelectSource,
                 traktMenuOptions: options,
@@ -12091,6 +12101,17 @@ class _SearchScreenState extends State<SearchScreen>
                 isTraktSource: isTraktSource,
                 isMdblistSource: isMdblistSource,
               ),
+              onBrowsePrimaryEpisodeSources: item.type == 'series'
+                  ? () => _onCatalogPlay(
+                      item,
+                      addon,
+                      isTraktSource: isTraktSource,
+                      isMdblistSource: isMdblistSource,
+                      skipEpisodeFallback: true,
+                      preferTraktResume: true,
+                      browseSourcesOnly: true,
+                    )
+                  : null,
               traktMenuOptions: options,
               onTraktAction: (a) => _handleDetailQuickAction(
                 item,
@@ -12907,6 +12928,11 @@ class _SearchScreenState extends State<SearchScreen>
     // empty-candidates fallback (S01E01) while the label correctly reads S1E2 —
     // and Play would then start the pilot under a "Resume · S1E2" button.
     ({bool started, int season, int episode})? promisedTarget,
+    // Primary-button hold: run the exact same target/scrobble reconciliation,
+    // but hand the resulting selection to the manual Sources page instead of
+    // auto-playing it. Used for series; movies already have a direct Sources
+    // callback and do not need to enter this resolver.
+    bool browseSourcesOnly = false,
   }) async {
     final trackingPolicy = await TrackingSourcePolicy.load();
     debugPrint(
@@ -12938,7 +12964,8 @@ class _SearchScreenState extends State<SearchScreen>
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
       debugPrint(
-        '[SeriesResume] play-launch title="${selection.title}" '
+        '[SeriesResume] ${browseSourcesOnly ? 'sources-open' : 'play-launch'} '
+        'title="${selection.title}" '
         'id=${selection.imdbId} season=${selection.season} '
         'episode=${selection.episode} trakt=${selection.traktSource} '
         'traktPct=${selection.traktProgressPercent} '
@@ -12949,7 +12976,11 @@ class _SearchScreenState extends State<SearchScreen>
       );
       resolving?.dismiss();
       if (cancelled) return;
-      await _playSelection(selection);
+      if (browseSourcesOnly) {
+        _browseSelection(selection);
+      } else {
+        await _playSelection(selection);
+      }
     }
 
     try {
@@ -14350,11 +14381,13 @@ class _SearchScreenState extends State<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => _SourcesScreen(
-              selection: sel,
-              meta: _metaFor(sel),
-              isTelevision: widget.isTelevision,
-              forcePlayOnTap: forcePlayOnTap,
+            builder: (_) => TvHeldKeyGuard(
+              child: _SourcesScreen(
+                selection: sel,
+                meta: _metaFor(sel),
+                isTelevision: widget.isTelevision,
+                forcePlayOnTap: forcePlayOnTap,
+              ),
             ),
           ),
         )

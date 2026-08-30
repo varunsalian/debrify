@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tv_keys.dart';
 import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
 import '../tracker_brand_marks.dart';
@@ -655,6 +656,7 @@ class ShowcaseIdentity extends StatelessWidget {
                   label: m.primaryLabel,
                   busy: m.primaryBusy,
                   onTap: m.onPrimary,
+                  onLongPress: m.onPrimaryLongPress,
                   onFocused: onFocused,
                 ),
               ...actions,
@@ -711,6 +713,7 @@ class ShowcaseIdentity extends StatelessWidget {
                   label: m.primaryLabel,
                   busy: m.primaryBusy,
                   onTap: m.onPrimary,
+                  onLongPress: m.onPrimaryLongPress,
                   onFocused: onFocused,
                 ),
               for (final a in actions) ...[const SizedBox(width: 7), a],
@@ -1077,6 +1080,7 @@ class _Primary extends StatefulWidget {
   final FocusNode node;
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final VoidCallback onFocused;
 
   /// Resume state still resolving — spinner instead of the label so the pill
@@ -1087,6 +1091,7 @@ class _Primary extends StatefulWidget {
     required this.node,
     required this.label,
     required this.onTap,
+    required this.onLongPress,
     required this.onFocused,
     this.busy = false,
   });
@@ -1097,6 +1102,34 @@ class _Primary extends StatefulWidget {
 
 class _PrimaryState extends State<_Primary> {
   bool _f = false;
+  late final TvHoldOk _hold;
+
+  @override
+  void initState() {
+    super.initState();
+    _hold = TvHoldOk(
+      onTap: () => widget.onTap(),
+      onHold: () => widget.onLongPress?.call(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hold.reset();
+    super.dispose();
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if (widget.onLongPress == null || !isActivateOrSpaceKey(event.logicalKey)) {
+      return _activate(event, widget.onTap);
+    }
+    return _hold.handle(event);
+  }
+
+  void _onPointerLongPress() {
+    HapticFeedback.mediumImpact();
+    widget.onLongPress?.call();
+  }
 
   @override
   Widget build(BuildContext context) => Focus(
@@ -1104,13 +1137,15 @@ class _PrimaryState extends State<_Primary> {
     autofocus: true,
     onFocusChange: (v) {
       setState(() => _f = v);
+      if (!v) _hold.reset();
       if (v) widget.onFocused();
     },
     // By key IDENTITY, not by keyLabel string — a remote's Select has no
     // label to match and would silently never activate.
-    onKeyEvent: (_, e) => _activate(e, widget.onTap),
+    onKeyEvent: (_, e) => _onKey(e),
     child: GestureDetector(
       onTap: widget.onTap,
+      onLongPress: widget.onLongPress == null ? null : _onPointerLongPress,
       child: Builder(
         builder: (context) {
           // TV draws at the mock's 960-canvas numbers (k = 1); a wide touch
