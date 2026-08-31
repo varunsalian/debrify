@@ -391,11 +391,11 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     );
   }
 
-  /// The entry segments: four slots that light up in the profile's colour and
-  /// grow with the entry (PIN is 4–8 digits) instead of parading eight empty
-  /// dots.
+  /// The entry segments. All eight slots are always on stage — a PIN is 4–8
+  /// digits and we only ever hold the hash, so the honest cue is "at least
+  /// these four, up to all eight": the first four at full size, the optional
+  /// tail as quieter ticks that swell to full segments as they fill.
   Widget _indicators({required bool compact, bool centered = false}) {
-    final slots = _digits.length.clamp(4, 8);
     final segWidth = compact ? 26.0 : 34.0;
     final segHeight = compact ? 8.0 : 10.0;
     final gap = compact ? 10.0 : 13.0;
@@ -405,16 +405,19 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
       mainAxisAlignment: centered
           ? MainAxisAlignment.center
           : MainAxisAlignment.start,
-      children: List.generate(slots, (index) {
+      children: List.generate(8, (index) {
         final filled = index < _digits.length;
+        final optional = index >= 4;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          width: segWidth,
+          width: filled || !optional ? segWidth : segWidth * .5,
           height: segHeight,
-          margin: EdgeInsets.only(right: index == slots - 1 ? 0 : gap),
+          margin: EdgeInsets.only(right: index == 7 ? 0 : gap),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(segHeight),
-            color: filled ? null : Colors.white.withValues(alpha: .12),
+            color: filled
+                ? null
+                : Colors.white.withValues(alpha: optional ? .07 : .12),
             gradient: filled
                 ? LinearGradient(
                     colors: [
@@ -579,7 +582,7 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _indicators(compact: false),
+                  _indicators(compact: compactHeight),
                   SizedBox(height: compactHeight ? 12 : 26),
                   GridView.count(
                     shrinkWrap: true,
@@ -957,7 +960,10 @@ class _PinKey extends StatelessWidget {
 }
 
 /// The TV's full-width Unlock light bar, sitting beneath the ladder so Down
-/// always lands on it. Dims while the entry is too short to submit.
+/// always lands on it. Three distinct brightness states so becoming READY is
+/// never mistaken for holding FOCUS: dim while the entry is too short,
+/// half-lit once submittable, and full-bright with the white ring only when
+/// DPAD focus is actually here.
 class _UnlockBar extends StatelessWidget {
   const _UnlockBar({
     super.key,
@@ -979,7 +985,13 @@ class _UnlockBar extends StatelessWidget {
     onPressed: onPressed,
     builder: (context, focused) => AnimatedOpacity(
       duration: const Duration(milliseconds: 140),
-      opacity: enabled || busy ? 1 : .45,
+      opacity: busy
+          ? 1
+          : !enabled
+          ? .4
+          : focused
+          ? 1
+          : .68,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         width: double.infinity,
