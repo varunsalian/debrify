@@ -309,53 +309,96 @@ void main() {
     final tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
     expect(tile.compactBadgeLayout, isTrue);
     expect(
-      tester.getRect(find.text('SERIES')).overlaps(
-        tester.getRect(find.text('7.9')),
-      ),
+      tester
+          .getRect(find.text('SERIES'))
+          .overlaps(tester.getRect(find.text('7.9'))),
       isFalse,
     );
   });
 
-  testWidgets('Discover card settings govern both poster badges', (
+  testWidgets('Discover card settings govern badges and titles', (
     tester,
   ) async {
-    Widget scopedGrid({required bool tags, required bool ratings}) =>
-        DiscoverCardSettingsScope(
-          showTypeTags: tags,
-          showRatings: ratings,
-          child: SeeAllPosterGrid(
-            items: [
-              const StremioMeta(
-                id: 'rated',
-                type: 'movie',
-                name: 'Rated movie',
-                imdbRating: 8.2,
-              ),
-            ],
-            isTelevision: true,
-            loadingMore: false,
-            exhausted: true,
-            onOpen: (_) {},
-            onLoadMore: () {},
+    final titleBand = find.byWidgetPredicate(
+      (widget) =>
+          widget is Text &&
+          widget.data == 'Rated movie' &&
+          widget.style?.fontSize == 13,
+    );
+    Widget scopedGrid({
+      required bool tags,
+      required bool ratings,
+      required bool titles,
+    }) => DiscoverCardSettingsScope(
+      showTypeTags: tags,
+      showRatings: ratings,
+      showTitles: titles,
+      child: SeeAllPosterGrid(
+        items: [
+          const StremioMeta(
+            id: 'rated',
+            type: 'movie',
+            name: 'Rated movie',
+            imdbRating: 8.2,
           ),
-        );
+        ],
+        isTelevision: true,
+        loadingMore: false,
+        exhausted: true,
+        onOpen: (_) {},
+        onLoadMore: () {},
+      ),
+    );
 
     await tester.pumpWidget(
-      harness(scopedGrid(tags: false, ratings: false), shelf: shelf),
+      harness(scopedGrid(tags: false, ratings: false, titles: false)),
     );
     await tester.pump();
     var tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
     expect(tile.showTypeBadge, isFalse);
     expect(tile.showRatingBadge, isFalse);
+    expect(titleBand, findsNothing);
 
     // The harness uses Overlay.initialEntries, which are only consumed on the
     // Overlay's first mount. Remount it before changing the inherited values.
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpWidget(harness(scopedGrid(tags: true, ratings: true)));
+    await tester.pumpWidget(
+      harness(scopedGrid(tags: true, ratings: true, titles: true)),
+    );
     await tester.pump();
     tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
     expect(tile.showTypeBadge, isTrue);
     expect(tile.showRatingBadge, isTrue);
+    expect(titleBand, findsOneWidget);
+  });
+
+  testWidgets('hiding titles removes the wall title band from its geometry', (
+    tester,
+  ) async {
+    late SeeAllGridMetrics shown;
+    late SeeAllGridMetrics hidden;
+    await tester.pumpWidget(
+      harness(
+        Builder(
+          builder: (context) {
+            shown = SeeAllGridMetrics.resolve(context, isTelevision: true);
+            hidden = SeeAllGridMetrics.resolve(
+              context,
+              isTelevision: true,
+              showTitles: false,
+            );
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(hidden.titleHeight, 0);
+    expect(hidden.cellHeight, closeTo(hidden.childWidth * 1.5, 0.01));
+    expect(
+      shown.cellHeight - hidden.cellHeight,
+      closeTo(SeeAllGridMetrics.titleGap + shown.titleHeight, 0.01),
+    );
   });
 
   testWidgets('no scope → the poster wall, unchanged', (tester) async {

@@ -1091,6 +1091,7 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
   // [premiumize,  allDebrid]
   // [pikpak,      webDav]
   // [indexerManagers, iptv]
+  // [tracking policy]      (full width)
   // [trakt,       simkl]
   // [mdblist]     (alone)
   late final FocusNode _torboxFocusNode;
@@ -1156,14 +1157,12 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
             // [Premiumize] [AllDebrid]
             // [PikPak]     [WebDAV]
             // [Indexers]   [IPTV]
-            // ── Trackers ──
+            // ── Tracking ──
+            // [cross-service policy]
+            // ── Tracker services ──
             // [Trakt]       [Simkl]
             // [MDBList]
             //
-            // The heading splits the cards into two Wraps but does NOT change
-            // the column structure, so every hand-wired DPAD neighbour below
-            // stays valid across the boundary: Trakt is still directly under
-            // Indexers, Simkl still directly under IPTV.
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1285,70 +1284,66 @@ class _ConnectionsSummaryState extends State<ConnectionsSummary> {
                         upNeighbor: wide
                             ? _webDavFocusNode
                             : _indexerManagersFocusNode,
-                        downNeighbor: wide
-                            ? _traktFocusNode
-                            : _trackingFocusNode,
+                        downNeighbor: _trackingFocusNode,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 22),
-                const SettingsSectionLabel('Trackers'),
+                const SettingsSectionLabel('Tracking'),
+                SizedBox(
+                  width: constraints.maxWidth,
+                  child: ConnectionCard(
+                    info: widget.tracking,
+                    focusNode: _trackingFocusNode,
+                    isLeftColumn: true,
+                    upNeighbor: wide
+                        ? _indexerManagersFocusNode
+                        : _iptvFocusNode,
+                    downNeighbor: _traktFocusNode,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const SettingsSectionLabel('Tracker services'),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Row 1: Tracking policy (left), Trakt (right)
-                    SizedBox(
-                      width: itemWidth,
-                      child: ConnectionCard(
-                        info: widget.tracking,
-                        focusNode: _trackingFocusNode,
-                        isLeftColumn: true,
-                        rightNeighbor: wide ? _traktFocusNode : null,
-                        upNeighbor: wide
-                            ? _indexerManagersFocusNode
-                            : _iptvFocusNode,
-                        downNeighbor: wide ? _simklFocusNode : _traktFocusNode,
-                      ),
-                    ),
+                    // Row 1: Trakt (left), Simkl (right).
                     SizedBox(
                       width: itemWidth,
                       child: ConnectionCard(
                         info: widget.trakt,
                         focusNode: _traktFocusNode,
-                        isLeftColumn: !wide,
-                        leftNeighbor: wide ? _trackingFocusNode : null,
-                        upNeighbor: wide ? _iptvFocusNode : _trackingFocusNode,
+                        isLeftColumn: true,
+                        rightNeighbor: wide ? _simklFocusNode : null,
+                        upNeighbor: _trackingFocusNode,
                         downNeighbor: wide && widget.mdblist != null
                             ? _mdblistFocusNode
                             : _simklFocusNode,
                       ),
                     ),
-                    // Row 2: Simkl (left), MDBList (right when enabled).
                     SizedBox(
                       width: itemWidth,
                       child: ConnectionCard(
                         info: widget.simkl,
                         focusNode: _simklFocusNode,
-                        isLeftColumn: true,
-                        rightNeighbor: wide && widget.mdblist != null
-                            ? _mdblistFocusNode
-                            : null,
+                        isLeftColumn: !wide,
+                        leftNeighbor: wide ? _traktFocusNode : null,
                         upNeighbor: wide ? _trackingFocusNode : _traktFocusNode,
                         downNeighbor: !wide && widget.mdblist != null
                             ? _mdblistFocusNode
                             : null,
                       ),
                     ),
+                    // Row 2: MDBList (left, when enabled).
                     if (widget.mdblist != null)
                       SizedBox(
                         width: itemWidth,
                         child: ConnectionCard(
                           info: widget.mdblist!,
                           focusNode: _mdblistFocusNode,
-                          isLeftColumn: !wide,
-                          leftNeighbor: wide ? _simklFocusNode : null,
+                          isLeftColumn: true,
                           upNeighbor: wide ? _traktFocusNode : _simklFocusNode,
                         ),
                       ),

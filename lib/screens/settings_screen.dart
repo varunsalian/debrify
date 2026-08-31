@@ -855,8 +855,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
       // Watch history lives on its own rail category — Connections had grown
       // to ten cards covering five unrelated jobs.
+      tracking: _trackingInfo,
       trackers: [
-        _trackingInfo,
         _traktInfo,
         _simklInfo,
         // MDBList hidden for the alpha (unfinished) — see [kMdblistEnabled].
@@ -2094,6 +2094,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'movie tag',
           'series tag',
           'ratings',
+          'poster titles',
+          'hide titles',
         ],
       ),
       // "addon" was a settings search dead end. This is NOT a settings page,
@@ -6709,8 +6711,8 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
     eyebrow: 'Trackers',
     title: 'Keep every watch in sync.',
     description:
-        'Connect watch-history services and see their health without digging '
-        'through account screens.',
+        'Choose how tracking works, then connect each watch-history service '
+        'without digging through account screens.',
   ),
   SettingsCategoryDefinition(
     icon: Icons.home_rounded,
@@ -6755,7 +6757,7 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
   SettingsCategoryDefinition(
     icon: Icons.explore_rounded,
     label: 'Discover',
-    subtitle: 'Default source',
+    subtitle: 'Source & poster cards',
     eyebrow: 'Discover',
     title: 'Open where you want to browse.',
     description:
@@ -7001,8 +7003,7 @@ class _SettingsLayout extends StatelessWidget {
     connections.iptv,
   ];
 
-  List<ConnectionInfo> get _trackerConnections => [
-    connections.tracking,
+  List<ConnectionInfo> get _trackerServices => [
     connections.trakt,
     connections.simkl,
     if (connections.mdblist != null) connections.mdblist!,
@@ -7053,11 +7054,14 @@ class _SettingsLayout extends StatelessWidget {
 
   Widget _buildConnectionGrid(
     BuildContext context,
-    List<ConnectionInfo> items,
-  ) {
+    List<ConnectionInfo> items, {
+    bool singleFullWidth = false,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final twoColumns = constraints.maxWidth >= 680;
+        final twoColumns =
+            constraints.maxWidth >= 680 &&
+            !(singleFullWidth && items.length == 1);
         final width = twoColumns
             ? (constraints.maxWidth - 10) / 2
             : constraints.maxWidth;
@@ -7082,7 +7086,18 @@ class _SettingsLayout extends StatelessWidget {
       case 0:
         return _buildConnectionGrid(context, _providerConnections);
       case 1:
-        return _buildConnectionGrid(context, _trackerConnections);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SettingsSectionLabel('Tracking'),
+            _buildConnectionGrid(context, [
+              connections.tracking,
+            ], singleFullWidth: true),
+            const SizedBox(height: 22),
+            const SettingsSectionLabel('Tracker services'),
+            _buildConnectionGrid(context, _trackerServices),
+          ],
+        );
       case 2:
         return SettingsSection(
           title: '',

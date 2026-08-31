@@ -28,6 +28,7 @@ SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
     _connection('Premiumize', connected: false),
     _connection('AllDebrid'),
   ],
+  tracking: _connection('Tracking'),
   trackers: [_connection('Trakt'), _connection('Simkl', connected: false)],
   firstFocusNode: entry,
   onOpenSearch: _voidNoop,
@@ -205,6 +206,43 @@ void main() {
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'settings-tv-pane-1',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Tracker policy and services are separate DPAD sections', (
+    tester,
+  ) async {
+    final entry = FocusNode(debugLabel: 'settings-test-entry-trackers');
+    addTearDown(entry.dispose);
+    await _pumpTv(tester, const Size(960, 540), entry);
+
+    entry.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+
+    expect(find.text('TRACKING'), findsOneWidget);
+    expect(find.text('TRACKER SERVICES'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-pane-0',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-pane-1',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-pane-2',
     );
     expect(tester.takeException(), isNull);
   });

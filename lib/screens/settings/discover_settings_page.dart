@@ -31,6 +31,7 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
   String _defaultSource = StorageService.discoverDefaultRememberLast;
   bool _showTypeTags = true;
   bool _showRatings = true;
+  bool _showTitles = true;
   List<SettingsSelectOption> _options = const [];
   final FocusNode _dropdownNode = FocusNode(
     debugLabel: 'discover-default-source',
@@ -136,6 +137,7 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
       _defaultSource = defaultSource;
       _showTypeTags = DiscoverPrefs.showTypeTags;
       _showRatings = DiscoverPrefs.showRatings;
+      _showTitles = DiscoverPrefs.showTitles;
       _options = options;
       _loading = false;
     });
@@ -164,6 +166,12 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
   Future<void> _setShowRatings(bool value) async {
     setState(() => _showRatings = value);
     await DiscoverPrefs.setShowRatings(value);
+    MainPageBridge.discoverCardSettingsChanged?.call();
+  }
+
+  Future<void> _setShowTitles(bool value) async {
+    setState(() => _showTitles = value);
+    await DiscoverPrefs.setShowTitles(value);
     MainPageBridge.discoverCardSettingsChanged?.call();
   }
 
@@ -225,6 +233,15 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
                       subtitle: 'Display available ratings on posters',
                       value: _showRatings,
                       onChanged: _setShowRatings,
+                    ),
+                    SettingsToggleTile(
+                      key: const ValueKey('discover-show-titles'),
+                      icon: Icons.title_rounded,
+                      title: 'Show titles',
+                      subtitle:
+                          'Display titles below posters in Discover and Home row expansions',
+                      value: _showTitles,
+                      onChanged: _setShowTitles,
                     ),
                   ],
                 ),

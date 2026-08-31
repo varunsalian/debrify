@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'see_all/discover_shelf_scope.dart';
+import 'see_all/discover_card_settings_scope.dart';
 import 'see_all/see_all_poster_grid.dart';
 
 /// Keeps its child perfectly still for [delay], then starts a slow whole-layer
@@ -115,7 +116,13 @@ class SkeletonPosterGrid extends StatelessWidget {
     // in for THAT, or the load state announces a grid that never arrives.
     final shelf = DiscoverShelfScope.of(context);
     if (shelf != null) return _buildShelfSkeleton(shelf);
-    final m = SeeAllGridMetrics.resolve(context, isTelevision: isTelevision);
+    final showTitles =
+        DiscoverCardSettingsScope.maybeOf(context)?.showTitles ?? true;
+    final m = SeeAllGridMetrics.resolve(
+      context,
+      isTelevision: isTelevision,
+      showTitles: showTitles,
+    );
     return DelayedPulse(
       child: GridView.builder(
         padding: SeeAllGridMetrics.padding,
@@ -136,26 +143,28 @@ class SkeletonPosterGrid extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Expanded(child: ShimmerBox()),
-              const SizedBox(height: SeeAllGridMetrics.titleGap),
-              // Two-line title placeholder. Expanded bars flex to fill exactly
-              // [titleHeight], so they can never overflow the band at small text
-              // scales (unlike fixed-height bars).
-              SizedBox(
-                height: m.titleHeight,
-                child: const Column(
-                  children: [
-                    Expanded(child: ShimmerBox(radius: 4)),
-                    SizedBox(height: 6),
-                    Expanded(
-                      child: FractionallySizedBox(
-                        widthFactor: 0.6,
-                        alignment: Alignment.centerLeft,
-                        child: ShimmerBox(radius: 4),
+              if (showTitles) ...[
+                const SizedBox(height: SeeAllGridMetrics.titleGap),
+                // Two-line title placeholder. Expanded bars flex to fill
+                // exactly [titleHeight], so they can never overflow the band
+                // at small text scales (unlike fixed-height bars).
+                SizedBox(
+                  height: m.titleHeight,
+                  child: const Column(
+                    children: [
+                      Expanded(child: ShimmerBox(radius: 4)),
+                      SizedBox(height: 6),
+                      Expanded(
+                        child: FractionallySizedBox(
+                          widthFactor: 0.6,
+                          alignment: Alignment.centerLeft,
+                          child: ShimmerBox(radius: 4),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           );
         },

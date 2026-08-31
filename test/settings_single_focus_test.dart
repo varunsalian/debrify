@@ -135,4 +135,50 @@ void main() {
 
     expect(litRows(tester), 1);
   });
+
+  testWidgets('wide Connections routes IPTV down through Tracking', (
+    tester,
+  ) async {
+    ConnectionInfo connection(String title) => ConnectionInfo(
+      title: title,
+      connected: true,
+      status: 'Active',
+      caption: 'Ready',
+      onTap: () async {},
+    );
+
+    await pump(
+      tester,
+      SingleChildScrollView(
+        child: SizedBox(
+          width: 800,
+          child: ConnectionsSummary(
+            realDebrid: connection('Real Debrid'),
+            torbox: connection('Torbox'),
+            premiumize: connection('Premiumize'),
+            allDebrid: connection('AllDebrid'),
+            pikpak: connection('PikPak'),
+            webDav: connection('WebDAV'),
+            indexerManagers: connection('Indexer Managers'),
+            iptv: connection('IPTV'),
+            tracking: connection('Tracking'),
+            trakt: connection('Trakt'),
+            simkl: connection('Simkl'),
+            mdblist: connection('MDBList'),
+          ),
+        ),
+      ),
+    );
+
+    final iptv = tester
+        .widgetList<ConnectionCard>(find.byType(ConnectionCard))
+        .singleWhere((card) => card.info.title == 'IPTV');
+    iptv.focusNode!.requestFocus();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, same(iptv.focusNode));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-tracking');
+  });
 }

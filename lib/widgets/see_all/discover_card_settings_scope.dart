@@ -2,17 +2,20 @@ import 'package:flutter/widgets.dart';
 
 /// Card-detail preferences published by the Discover host.
 ///
-/// Every Discover source renders through the shared poster grid, so one scope
-/// keeps add-on catalogs and tracker/library sources in lock-step while leaving
-/// standalone See-All and Search grids unchanged.
+/// Every Discover source renders through the shared poster grid, and Home row
+/// expansions opt into the same scope. This keeps add-on catalogs and
+/// tracker/library sources in lock-step while leaving Search and unrelated
+/// standalone See-All grids unchanged.
 class DiscoverCardSettingsScope extends InheritedWidget {
   final bool showTypeTags;
   final bool showRatings;
+  final bool showTitles;
 
   const DiscoverCardSettingsScope({
     super.key,
     required this.showTypeTags,
     required this.showRatings,
+    required this.showTitles,
     required super.child,
   });
 
@@ -22,5 +25,6 @@ class DiscoverCardSettingsScope extends InheritedWidget {
   @override
   bool updateShouldNotify(DiscoverCardSettingsScope oldWidget) =>
       showTypeTags != oldWidget.showTypeTags ||
-      showRatings != oldWidget.showRatings;
+      showRatings != oldWidget.showRatings ||
+      showTitles != oldWidget.showTitles;
 }
