@@ -1,5 +1,6 @@
 import 'package:debrify/screens/settings/discover_settings_page.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
+import 'package:debrify/services/discover_prefs.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -15,9 +16,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
+    DiscoverPrefs.debugReset();
   });
 
-  tearDown(ProfileRuntime.debugReset);
+  tearDown(() {
+    DiscoverPrefs.debugReset();
+    ProfileRuntime.debugReset();
+  });
 
   Future<SettingsSelectDropdown> pumpPage(
     WidgetTester tester, {
@@ -48,6 +53,38 @@ void main() {
     final dropdown = await pumpPage(tester, mdblistAuthenticated: true);
 
     expect(dropdown.options.map((option) => option.value), contains('mdblist'));
+  });
+
+  testWidgets('poster tags and ratings are both on by default', (tester) async {
+    await pumpPage(tester, mdblistAuthenticated: false);
+
+    final typeTags = tester.widget<SettingsToggleTile>(
+      find.byKey(const ValueKey('discover-show-type-tags')),
+    );
+    final ratings = tester.widget<SettingsToggleTile>(
+      find.byKey(const ValueKey('discover-show-ratings')),
+    );
+    expect(typeTags.value, isTrue);
+    expect(ratings.value, isTrue);
+  });
+
+  testWidgets('poster detail toggles persist their choices', (tester) async {
+    await pumpPage(tester, mdblistAuthenticated: false);
+
+    final typeTags = tester.widget<SettingsToggleTile>(
+      find.byKey(const ValueKey('discover-show-type-tags')),
+    );
+    final ratings = tester.widget<SettingsToggleTile>(
+      find.byKey(const ValueKey('discover-show-ratings')),
+    );
+    typeTags.onChanged(false);
+    ratings.onChanged(false);
+    await tester.pump();
+
+    DiscoverPrefs.debugReset();
+    await DiscoverPrefs.warmUp();
+    expect(DiscoverPrefs.showTypeTags, isFalse);
+    expect(DiscoverPrefs.showRatings, isFalse);
   });
 
   testWidgets('keeps a restored MDBList default selectable when disconnected', (

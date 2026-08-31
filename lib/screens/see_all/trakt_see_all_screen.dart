@@ -94,8 +94,9 @@ class TraktSeeAllScreen extends StatefulWidget {
 class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   final GlobalKey<SeeAllPosterGridState> _gridKey = GlobalKey();
 
-  TraktListChoice _list =
-      const TraktListChoice.builtin(TraktSeeAllList.continueWatching);
+  TraktListChoice _list = const TraktListChoice.builtin(
+    TraktSeeAllList.continueWatching,
+  );
 
   // The user's own custom + liked lists, loaded lazily and offered under the
   // "Custom Lists" / "Liked Lists" groups (a secondary dropdown), so they never
@@ -186,9 +187,9 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   /// untouched so it comes back when the user returns to a dated list.
   _Sort get _effectiveSort =>
       (!_showAdded &&
-              (_sort == _Sort.addedNewest || _sort == _Sort.addedOldest))
-          ? _Sort.natural
-          : _sort;
+          (_sort == _Sort.addedNewest || _sort == _Sort.addedOldest))
+      ? _Sort.natural
+      : _sort;
 
   /// Global (non-personal) built-in lists — used to phrase the empty state
   /// correctly ("No Trending titles" vs "Nothing in your Watchlist").
@@ -200,14 +201,14 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   /// Filter-bar focus order, recomputed because the group + State controls come
   /// and go with the selected list.
   List<FocusNode> get _filterNodes => [
-        if (widget.leadingNode != null) widget.leadingNode!,
-        _listNode,
-        if (_group != null) _groupNode,
-        _catNode,
-        _sortNode,
-        if (_showState) _watchNode,
-        if (_showRandom) _randomNode,
-      ];
+    if (widget.leadingNode != null) widget.leadingNode!,
+    _listNode,
+    if (_group != null) _groupNode,
+    _catNode,
+    _sortNode,
+    if (_showState) _watchNode,
+    if (_showRandom) _randomNode,
+  ];
 
   @override
   void initState() {
@@ -218,8 +219,10 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     // Discover only: reopen on the order the user last picked for this source.
     // Read before the first _recompute so the grid paints already sorted.
     if (widget.embedded) {
-      final saved =
-          DiscoverPrefs.enumSortFor(DiscoverPrefs.trakt, _Sort.values);
+      final saved = DiscoverPrefs.enumSortFor(
+        DiscoverPrefs.trakt,
+        _Sort.values,
+      );
       if (saved != null) {
         _sort = saved;
         // A remembered DATE sort can't take effect here: Discover always opens
@@ -308,13 +311,21 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     final lists = await TraktListSource.instance.loadUserLists();
     if (!mounted || lists.isEmpty) return;
     setState(() {
-      _customLists = [for (final c in lists) if (!c.liked) c];
-      _likedLists = [for (final c in lists) if (c.liked) c];
+      _customLists = [
+        for (final c in lists)
+          if (!c.liked) c,
+      ];
+      _likedLists = [
+        for (final c in lists)
+          if (c.liked) c,
+      ];
       // The active selection must stay representable: if the refresh no
       // longer contains the seeded initial list (deleted/unliked upstream,
       // or a partial response), keep it as a leading entry rather than
       // handing the group dropdown a value absent from its options.
-      if (_group == 'custom' && !_list.isBuiltin && !_customLists.contains(_list)) {
+      if (_group == 'custom' &&
+          !_list.isBuiltin &&
+          !_customLists.contains(_list)) {
         _customLists = [_list, ..._customLists];
       } else if (_group == 'liked' &&
           !_list.isBuiltin &&
@@ -385,11 +396,13 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
         break; // items already arrive in the list's natural order
       case _Sort.az:
         list.sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         break;
       case _Sort.za:
         list.sort(
-            (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
         break;
       case _Sort.imdbDesc:
       case _Sort.imdbAsc:
@@ -442,8 +455,9 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
   void _playRandom() {
     final play = widget.onQuickPlay;
     if (play == null || _visible.isEmpty) return;
-    AnalyticsService.trackInBackground(
-        'discover_random_play', {'source': 'trakt_cw'});
+    AnalyticsService.trackInBackground('discover_random_play', {
+      'source': 'trakt_cw',
+    });
     play(_visible[_random.nextInt(_visible.length)]);
   }
 
@@ -556,7 +570,9 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
         if (!widget.embedded) _backNode.requestFocus();
       },
       // Embedded: Left off the leading Source dropdown escapes to the TV sidebar.
-      onLeftEdge: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onLeftEdge: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 
@@ -611,8 +627,8 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
     return n;
   }
 
-  /// Discover TV styling: quiet text-segment filters on the glass stage, no
-  /// per-poster rating chips (the detail rail carries that information).
+  /// Discover TV styling: quiet text-segment filters on the glass stage.
+  /// Poster details are governed independently by the Discover card scope.
   bool get _quiet => widget.embedded && widget.isTelevision;
 
   Widget _buildFilterBar() {
@@ -662,7 +678,8 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
                 quiet: _quiet,
                 focusNode: _groupNode,
                 options: [
-                  for (final c in _groupLists) StremioDropdownOption(c, c.label),
+                  for (final c in _groupLists)
+                    StremioDropdownOption(c, c.label),
                 ],
                 onSelected: _setList,
               ),
@@ -687,18 +704,28 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
               focusNode: _sortNode,
               options: [
                 StremioDropdownOption(
-                    _Sort.natural, _isCw ? 'Last Watched' : 'Default'),
+                  _Sort.natural,
+                  _isCw ? 'Last Watched' : 'Default',
+                ),
                 const StremioDropdownOption(_Sort.az, 'A–Z'),
                 const StremioDropdownOption(_Sort.za, 'Z–A'),
                 const StremioDropdownOption(
-                    _Sort.imdbDesc, 'IMDb Rating · High → Low'),
+                  _Sort.imdbDesc,
+                  'IMDb Rating · High → Low',
+                ),
                 const StremioDropdownOption(
-                    _Sort.imdbAsc, 'IMDb Rating · Low → High'),
+                  _Sort.imdbAsc,
+                  'IMDb Rating · Low → High',
+                ),
                 if (_showAdded) ...[
                   StremioDropdownOption(
-                      _Sort.addedNewest, '$_addedLabel · Newest'),
+                    _Sort.addedNewest,
+                    '$_addedLabel · Newest',
+                  ),
                   StremioDropdownOption(
-                      _Sort.addedOldest, '$_addedLabel · Oldest'),
+                    _Sort.addedOldest,
+                    '$_addedLabel · Oldest',
+                  ),
                 ],
               ],
               onSelected: _setSort,
@@ -766,15 +793,14 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       // resume point and plays fetched-list items like catalog titles.
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
-      // Discover on TV has the detail rail naming the type — drop the badge there.
-      showTypeBadge: !_quiet,
-      showRatingBadge: !_quiet,
       progressOf: _progressOf,
       isBound: widget.isBound,
       onLoadMore: () {},
       onExitTop: widget.isTelevision ? () => _listNode.requestFocus() : null,
       // Embedded: Left at grid column 0 escapes to the TV sidebar.
-      onExitLeft: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onExitLeft: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 

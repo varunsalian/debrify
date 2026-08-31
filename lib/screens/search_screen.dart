@@ -24,6 +24,7 @@ import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
+import '../services/discover_prefs.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
 import '../services/episode_artwork_service.dart';
@@ -100,6 +101,7 @@ import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
+import '../widgets/see_all/discover_card_settings_scope.dart';
 import '../widgets/see_all/discover_shelf_scope.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -1546,6 +1548,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// grid is the only thing phone/desktop ever render (see [_discStage]).
   String _discLayout = _discLayoutCached;
 
+  // Warmed before runApp, so the first Discover frame already has the user's
+  // poster-card choices instead of flashing the default chrome.
+  bool _discShowTypeTags = DiscoverPrefs.showTypeTags;
+  bool _discShowRatings = DiscoverPrefs.showRatings;
+
   /// Whether the STAGE layout is what this surface should render: the pref, on
   /// the Discover tab, on a TV. The canvas-size guard lives in the LayoutBuilder
   /// (a too-small canvas falls back to the flat panel, exactly like the grid's
@@ -1573,6 +1580,19 @@ class _SearchScreenState extends State<SearchScreen>
     _discTheaterTimer?.cancel();
     _discTakeover.value = 0;
     unawaited(_loadDiscoverLayout());
+  }
+
+  void _onDiscoverCardSettingsChanged() {
+    if (!mounted) return;
+    final showTypeTags = DiscoverPrefs.showTypeTags;
+    final showRatings = DiscoverPrefs.showRatings;
+    if (showTypeTags == _discShowTypeTags && showRatings == _discShowRatings) {
+      return;
+    }
+    setState(() {
+      _discShowTypeTags = showTypeTags;
+      _discShowRatings = showRatings;
+    });
   }
 
   @override
@@ -1688,6 +1708,10 @@ class _SearchScreenState extends State<SearchScreen>
     // Discover on TV: relay the trailer takeover to the sidebar chrome-dim so
     // the rail hides when the trailer goes fullscreen. The showing listener
     // arms the theater timer (deep lights-off a few seconds into playback).
+    if (widget.discoverMode) {
+      MainPageBridge.discoverCardSettingsChanged =
+          _onDiscoverCardSettingsChanged;
+    }
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.addListener(_relayDiscoverChromeDim);
       _discTrailerShowing.addListener(_onDiscShowingChanged);
@@ -2226,6 +2250,10 @@ class _SearchScreenState extends State<SearchScreen>
     _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
+    if (MainPageBridge.discoverCardSettingsChanged ==
+        _onDiscoverCardSettingsChanged) {
+      MainPageBridge.discoverCardSettingsChanged = null;
+    }
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.removeListener(_relayDiscoverChromeDim);
       _discTrailerShowing.removeListener(_onDiscShowingChanged);
@@ -14465,7 +14493,10 @@ class _SearchScreenState extends State<SearchScreen>
   /// The detail page's enrichment, replacing whatever the row had.
   void _adoptDetailPlayArt(StremioMeta item, PlayLoaderArt art) {
     _pendingPlayArt = art;
-    _pendingPlayArtKey = _playArtKey(item.effectiveImdbId ?? item.id, item.name);
+    _pendingPlayArtKey = _playArtKey(
+      item.effectiveImdbId ?? item.id,
+      item.name,
+    );
   }
 
   static String _playArtKey(String? id, String title) =>
@@ -16547,7 +16578,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// open/play/bound wiring is this screen's existing board handlers.
   Widget _buildDiscover() {
     final app = AppThemeScope.of(context);
-    final panel = _buildDiscoverPanel();
+    final panel = DiscoverCardSettingsScope(
+      showTypeTags: _discShowTypeTags,
+      showRatings: _discShowRatings,
+      child: _buildDiscoverPanel(),
+    );
     // Touch has no persistent focus, so a reactive detail rail has nothing to
     // react to — keep the full-width grid there. TV gets the glass-stage
     // two-pane layout.

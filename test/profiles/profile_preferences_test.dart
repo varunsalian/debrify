@@ -156,6 +156,17 @@ void main() {
     },
   );
 
+  test('Discover poster settings transfer as reviewed preferences', () {
+    for (final key in const [
+      'discover_show_type_tags',
+      'discover_show_ratings',
+    ]) {
+      expect(ProfileCreationService.copyablePreferenceKeys, contains(key));
+      expect(SanitizedProfilePreferences.allowsEntry(key, true), isTrue);
+      expect(SanitizedProfilePreferences.allowsEntry(key, 'yes'), isFalse);
+    }
+  });
+
   test('Home card orientation transfers as a reviewed preference', () {
     expect(
       ProfileCreationService.copyablePreferenceKeys,

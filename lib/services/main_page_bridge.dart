@@ -100,6 +100,10 @@ class MainPageBridge {
   /// only (the Home board and the Search tab never render that layout).
   static VoidCallback? discoverLayoutChanged;
 
+  /// Fired after the Discover poster-detail toggles change. The live Discover
+  /// tab rebuilds its shared card scope, so every source updates immediately.
+  static VoidCallback? discoverCardSettingsChanged;
+
   /// Fired by the TV Sidebar Style picker after writing `tv_sidebar_style`,
   /// so the app shell re-reads the pref and reskins the rail live. Set by
   /// main.dart.

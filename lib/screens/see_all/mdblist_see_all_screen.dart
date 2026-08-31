@@ -1272,8 +1272,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       onOpen: widget.onOpen,
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
-      showTypeBadge: !_quiet,
-      showRatingBadge: !_quiet,
       progressOf: (item) => _page.progressByImdb[item.imdbId],
       isBound: widget.isBound,
       onLoadMore: _isCatalog ? () {} : _loadMoreChoice,

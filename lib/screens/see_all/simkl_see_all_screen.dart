@@ -166,17 +166,17 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   /// dropdown must not be handed a value absent from its options.
   _Sort get _effectiveSort =>
       (!_showAdded &&
-              (_sort == _Sort.addedNewest || _sort == _Sort.addedOldest))
-          ? _Sort.natural
-          : _sort;
+          (_sort == _Sort.addedNewest || _sort == _Sort.addedOldest))
+      ? _Sort.natural
+      : _sort;
 
   List<FocusNode> get _filterNodes => [
-        if (widget.leadingNode != null) widget.leadingNode!,
-        _listNode,
-        _catNode,
-        _sortNode,
-        if (_showRandom) _randomNode,
-      ];
+    if (widget.leadingNode != null) widget.leadingNode!,
+    _listNode,
+    _catNode,
+    _sortNode,
+    if (_showRandom) _randomNode,
+  ];
 
   @override
   void initState() {
@@ -201,8 +201,10 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
     // Discover only: reopen on the order the user last picked for this source.
     // Read before the fetch so the arriving grid is sorted on its first paint.
     if (widget.embedded) {
-      final saved =
-          DiscoverPrefs.enumSortFor(DiscoverPrefs.simkl, _Sort.values);
+      final saved = DiscoverPrefs.enumSortFor(
+        DiscoverPrefs.simkl,
+        _Sort.values,
+      );
       if (saved != null) {
         _sort = saved;
         // A remembered DATE sort can't take effect here: Simkl opens on
@@ -228,9 +230,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       // A background CW refresh (progress moved, a title finished) — re-mirror.
       _items = widget.cwItems;
       _recompute();
-    } else if (_autoList &&
-        old.cwItems.isEmpty &&
-        widget.cwItems.isNotEmpty) {
+    } else if (_autoList && old.cwItems.isEmpty && widget.cwItems.isNotEmpty) {
       // We auto-fell-back to Trending because CW hadn't loaded yet; it just
       // arrived and the user hasn't picked a list — promote to Continue
       // Watching (the intended landing). Bump the token so a Trending fetch
@@ -280,11 +280,13 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
         break; // items already arrive in the list's natural (rank) order
       case _Sort.az:
         list.sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         break;
       case _Sort.za:
         list.sort(
-            (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
         break;
       case _Sort.imdbDesc:
       case _Sort.imdbAsc:
@@ -337,8 +339,9 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
   void _playRandom() {
     final play = _quickPlay;
     if (play == null || _visible.isEmpty) return;
-    AnalyticsService.trackInBackground(
-        'discover_random_play', {'source': 'simkl'});
+    AnalyticsService.trackInBackground('discover_random_play', {
+      'source': 'simkl',
+    });
     play(_visible[_random.nextInt(_visible.length)]);
   }
 
@@ -413,8 +416,9 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       onUp: () {
         if (!widget.embedded) _backNode.requestFocus();
       },
-      onLeftEdge:
-          widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onLeftEdge: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 
@@ -523,14 +527,22 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
                 const StremioDropdownOption(_Sort.az, 'A–Z'),
                 const StremioDropdownOption(_Sort.za, 'Z–A'),
                 const StremioDropdownOption(
-                    _Sort.imdbDesc, 'IMDb Rating · High → Low'),
+                  _Sort.imdbDesc,
+                  'IMDb Rating · High → Low',
+                ),
                 const StremioDropdownOption(
-                    _Sort.imdbAsc, 'IMDb Rating · Low → High'),
+                  _Sort.imdbAsc,
+                  'IMDb Rating · Low → High',
+                ),
                 if (_showAdded) ...[
                   StremioDropdownOption(
-                      _Sort.addedNewest, '$_addedLabel · Newest'),
+                    _Sort.addedNewest,
+                    '$_addedLabel · Newest',
+                  ),
                   StremioDropdownOption(
-                      _Sort.addedOldest, '$_addedLabel · Oldest'),
+                    _Sort.addedOldest,
+                    '$_addedLabel · Oldest',
+                  ),
                 ],
               ],
               onSelected: _setSort,
@@ -583,13 +595,12 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       onQuickPlay: _quickPlay,
       onItemFocused: widget.onItemFocused,
       progressOf: _progressOf,
-      showTypeBadge: !_quiet,
-      showRatingBadge: !_quiet,
       isBound: widget.isBound,
       onLoadMore: () {},
       onExitTop: widget.isTelevision ? () => _listNode.requestFocus() : null,
-      onExitLeft:
-          widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onExitLeft: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 

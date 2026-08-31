@@ -86,7 +86,8 @@ class ContinueWatchingSeeAllScreen extends StatefulWidget {
 }
 
 class _ContinueWatchingSeeAllScreenState
-    extends State<ContinueWatchingSeeAllScreen> with RouteAware {
+    extends State<ContinueWatchingSeeAllScreen>
+    with RouteAware {
   final GlobalKey<SeeAllPosterGridState> _gridKey = GlobalKey();
 
   // Live source list (refreshed after each open) + the derived, cached view.
@@ -250,11 +251,13 @@ class _ContinueWatchingSeeAllScreenState
         break; // items already arrive newest-first
       case _CwSort.az:
         list.sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         break;
       case _CwSort.za:
         list.sort(
-            (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
         break;
     }
     _visible = list;
@@ -283,8 +286,9 @@ class _ContinueWatchingSeeAllScreenState
   void _playRandom() {
     final play = widget.onQuickPlay;
     if (play == null || _visible.isEmpty) return;
-    AnalyticsService.trackInBackground(
-        'discover_random_play', {'source': 'continue_watching'});
+    AnalyticsService.trackInBackground('discover_random_play', {
+      'source': 'continue_watching',
+    });
     play(_visible[_random.nextInt(_visible.length)]);
   }
 
@@ -308,7 +312,9 @@ class _ContinueWatchingSeeAllScreenState
         if (!widget.embedded) _backNode.requestFocus();
       },
       // Embedded: Left off the leading Source dropdown escapes to the TV sidebar.
-      onLeftEdge: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onLeftEdge: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 
@@ -337,7 +343,8 @@ class _ContinueWatchingSeeAllScreenState
               title: widget.title,
               // Reflect what the grid actually shows, so a filter doesn't leave
               // the header disagreeing with the body.
-              subtitle: '${_visible.length}'
+              subtitle:
+                  '${_visible.length}'
                   ' ${_visible.length == 1 ? 'title' : 'titles'}',
               isTelevision: widget.isTelevision,
               backNode: _backNode,
@@ -362,8 +369,8 @@ class _ContinueWatchingSeeAllScreenState
     return n;
   }
 
-  /// Discover TV styling: quiet text-segment filters on the glass stage, no
-  /// per-poster rating chips (the detail rail carries that information).
+  /// Discover TV styling: quiet text-segment filters on the glass stage.
+  /// Poster details are governed independently by the Discover card scope.
   bool get _quiet => widget.embedded && widget.isTelevision;
 
   Widget _buildFilterBar() {
@@ -443,8 +450,11 @@ class _ContinueWatchingSeeAllScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.history_rounded,
-                  size: 44, color: app.fade(app.core.tx, 0.25)),
+              Icon(
+                Icons.history_rounded,
+                size: 44,
+                color: app.fade(app.core.tx, 0.25),
+              ),
               const SizedBox(height: 14),
               Text(
                 _items.isEmpty
@@ -471,16 +481,14 @@ class _ContinueWatchingSeeAllScreenState
       onOpen: widget.onOpen,
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
-      // Discover on TV has the detail rail naming the type and carrying the
-      // rating — drop both badges there.
-      showTypeBadge: !_quiet,
-      showRatingBadge: !_quiet,
       progressOf: widget.progressOf,
       isBound: widget.isBound,
       onLoadMore: () {},
       onExitTop: widget.isTelevision ? () => _catNode.requestFocus() : null,
       // Embedded: Left at grid column 0 escapes to the TV sidebar.
-      onExitLeft: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onExitLeft: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 }

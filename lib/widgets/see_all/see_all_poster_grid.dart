@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../theme/app_theme_scope.dart';
 import '../catalog_item_tile.dart';
+import 'discover_card_settings_scope.dart';
 import 'discover_shelf_scope.dart';
 
 /// The single source of truth for a See-All poster grid's layout maths: column
@@ -60,9 +61,10 @@ class SeeAllGridMetrics {
     // ~117px cards the design wants. Full-width TV canvases still resolve to
     // 5+ columns from the target size, so standalone See-All pages are
     // unaffected.
-    final cols = ((usable + columnGap) / (target + columnGap))
-        .floor()
-        .clamp(isTelevision ? 4 : 3, 10);
+    final cols = ((usable + columnGap) / (target + columnGap)).floor().clamp(
+      isTelevision ? 4 : 3,
+      10,
+    );
     // Size each cell = a 2:3 poster + a fixed 2-line title band below (matching
     // the board rails and Stremio), sized off the actual column width so the
     // poster stays 2:3 regardless of title length.
@@ -109,12 +111,14 @@ class SeeAllPosterGrid extends StatefulWidget {
   /// (the Discover two-pane detail rail listens to this).
   final void Function(StremioMeta item)? onItemFocused;
 
-  /// Forwarded to each tile — false drops the MOVIE/SERIES badge (Discover TV,
-  /// where the detail rail already names the type). Defaults to showing it.
+  /// Forwarded to each tile — false drops the MOVIE/SERIES badge. A surrounding
+  /// [DiscoverCardSettingsScope] can also turn it off for the whole Discover
+  /// surface. Defaults to showing it.
   final bool showTypeBadge;
 
-  /// Forwarded to each tile — false drops the ★-rating chip (Discover TV, where
-  /// the detail rail shows the rating). Defaults to showing it.
+  /// Forwarded to each tile — false drops the ★-rating chip. A surrounding
+  /// [DiscoverCardSettingsScope] can also turn it off for the whole Discover
+  /// surface. Defaults to showing it.
   final bool showRatingBadge;
 
   /// Optional resume progress (0..1) per item — draws the red bar.
@@ -240,8 +244,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
     // onto the last still-visible tile so focus isn't stranded.
     if (_nodes.length > widget.items.length) {
       final keep = widget.items.length;
-      final focusedHidden =
-          _nodes.skip(keep).any((n) => n.hasFocus);
+      final focusedHidden = _nodes.skip(keep).any((n) => n.hasFocus);
       if (focusedHidden && keep > 0) {
         _nodes[keep - 1].requestFocus();
       }
@@ -250,8 +253,9 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final threshold =
-        _shelf == null ? _loadMoreThreshold : _shelfLoadMoreThreshold;
+    final threshold = _shelf == null
+        ? _loadMoreThreshold
+        : _shelfLoadMoreThreshold;
     if (_scroll.position.pixels >=
         _scroll.position.maxScrollExtent - threshold) {
       widget.onLoadMore();
@@ -379,7 +383,11 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   /// host gave us, with a position line above it. No per-poster title band —
   /// the identity block on the stage names the focused title at full size, and
   /// a caption under every card would just repeat it smaller.
-  Widget _buildShelf(DiscoverShelfMetrics m) {
+  Widget _buildShelf(
+    DiscoverShelfMetrics m, {
+    required bool showTypeBadge,
+    required bool showRatingBadge,
+  }) {
     final app = AppThemeScope.of(context);
     final items = widget.items;
     return Align(
@@ -400,8 +408,9 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                       height: 12,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.6,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(app.seeAll.accent),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          app.seeAll.accent,
+                        ),
                       ),
                     ),
                   const Spacer(),
@@ -412,7 +421,9 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                   ValueListenableBuilder<int>(
                     valueListenable: _focusIndex,
                     builder: (_, i, __) {
-                      if (i < 0 || items.isEmpty) return const SizedBox.shrink();
+                      if (i < 0 || items.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
                       final at = (i + 1).clamp(1, items.length);
                       return Text(
                         '$at / ${items.length}${widget.exhausted ? '' : '+'}',
@@ -472,8 +483,9 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                         child: CatalogItemTile(
                           item: item,
                           isTelevision: widget.isTelevision,
-                          focusNode:
-                              index < _nodes.length ? _nodes[index] : null,
+                          focusNode: index < _nodes.length
+                              ? _nodes[index]
+                              : null,
                           hasBoundSource: widget.isBound?.call(item) ?? false,
                           onOpen: () => widget.onOpen(item),
                           onLongPress: widget.onQuickPlay == null
@@ -485,8 +497,12 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                           },
                           progress: widget.progressOf?.call(item),
                           showInlineTitle: false,
-                          showTypeBadge: widget.showTypeBadge,
-                          showRatingBadge: widget.showRatingBadge,
+                          showTypeBadge: showTypeBadge,
+                          showRatingBadge: showRatingBadge,
+                          // Type + rating + watched need about 142px to share
+                          // one row. Stage cards max out at 133px, but keep the
+                          // threshold explicit if those metrics ever change.
+                          compactBadgeLayout: m.cardWidth < 142,
                           // The stage sits beside the Home board and has to
                           // move like it: the board's rise, the board's poster
                           // fade, and a glide instead of a jump.
@@ -507,10 +523,24 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
 
   @override
   Widget build(BuildContext context) {
+    final discoverSettings = DiscoverCardSettingsScope.maybeOf(context);
+    final showTypeBadge =
+        widget.showTypeBadge && (discoverSettings?.showTypeTags ?? true);
+    final showRatingBadge =
+        widget.showRatingBadge && (discoverSettings?.showRatings ?? true);
     final shelf = _shelf;
-    if (shelf != null) return _buildShelf(shelf);
+    if (shelf != null) {
+      return _buildShelf(
+        shelf,
+        showTypeBadge: showTypeBadge,
+        showRatingBadge: showRatingBadge,
+      );
+    }
     final app = AppThemeScope.of(context);
-    final m = SeeAllGridMetrics.resolve(context, isTelevision: widget.isTelevision);
+    final m = SeeAllGridMetrics.resolve(
+      context,
+      isTelevision: widget.isTelevision,
+    );
     final cols = m.columns;
     final titleH = m.titleHeight;
     const titleGap = SeeAllGridMetrics.titleGap;
@@ -534,58 +564,55 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
               mainAxisSpacing: SeeAllGridMetrics.rowGap,
               crossAxisSpacing: SeeAllGridMetrics.columnGap,
             ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final item = widget.items[index];
-                return Focus(
-                  canRequestFocus: false,
-                  skipTraversal: true,
-                  onKeyEvent: (_, e) => _handleArrows(index, cols, e),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: CatalogItemTile(
-                          item: item,
-                          isTelevision: widget.isTelevision,
-                          focusNode:
-                              index < _nodes.length ? _nodes[index] : null,
-                          hasBoundSource: widget.isBound?.call(item) ?? false,
-                          onOpen: () => widget.onOpen(item),
-                          onLongPress: widget.onQuickPlay == null
-                              ? null
-                              : () => widget.onQuickPlay!(item),
-                          onFocused: widget.onItemFocused == null
-                              ? null
-                              : () => widget.onItemFocused!(item),
-                          progress: widget.progressOf?.call(item),
-                          showInlineTitle: false,
-                          showTypeBadge: widget.showTypeBadge,
-                          showRatingBadge: widget.showRatingBadge,
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final item = widget.items[index];
+              return Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: (_, e) => _handleArrows(index, cols, e),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: CatalogItemTile(
+                        item: item,
+                        isTelevision: widget.isTelevision,
+                        focusNode: index < _nodes.length ? _nodes[index] : null,
+                        hasBoundSource: widget.isBound?.call(item) ?? false,
+                        onOpen: () => widget.onOpen(item),
+                        onLongPress: widget.onQuickPlay == null
+                            ? null
+                            : () => widget.onQuickPlay!(item),
+                        onFocused: widget.onItemFocused == null
+                            ? null
+                            : () => widget.onItemFocused!(item),
+                        progress: widget.progressOf?.call(item),
+                        showInlineTitle: false,
+                        showTypeBadge: showTypeBadge,
+                        showRatingBadge: showRatingBadge,
+                        compactBadgeLayout: m.childWidth < 142,
+                      ),
+                    ),
+                    const SizedBox(height: titleGap),
+                    SizedBox(
+                      height: titleH,
+                      child: Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: app.fade(app.core.tx, 0.92),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
                         ),
                       ),
-                      const SizedBox(height: titleGap),
-                      SizedBox(
-                        height: titleH,
-                        child: Text(
-                          item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: app.fade(app.core.tx, 0.92),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              childCount: widget.items.length,
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }, childCount: widget.items.length),
           ),
         ),
         SliverToBoxAdapter(
@@ -598,8 +625,9 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(app.seeAll.accent),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          app.seeAll.accent,
+                        ),
                       ),
                     ),
                   )

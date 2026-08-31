@@ -8,6 +8,8 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/widgets/see_all/discover_detail_rail.dart';
 import 'package:debrify/widgets/catalog_item_tile.dart';
 import 'package:debrify/widgets/home/card_focus_rise.dart';
+import 'package:debrify/widgets/movie_watched_badge.dart';
+import 'package:debrify/widgets/see_all/discover_card_settings_scope.dart';
 import 'package:debrify/widgets/see_all/discover_shelf_scope.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 
@@ -127,10 +129,7 @@ void main() {
   ) async {
     var exitedLeft = 0;
     await tester.pumpWidget(
-      harness(
-        grid(items(8), onExitLeft: () => exitedLeft++),
-        shelf: shelf,
-      ),
+      harness(grid(items(8), onExitLeft: () => exitedLeft++), shelf: shelf),
     );
     await tester.pump();
     expect(tester.takeException(), isNull);
@@ -215,6 +214,62 @@ void main() {
     expect(find.byType(CardFocusRise), findsWidgets);
   });
 
+  testWidgets('narrow shelf posters stack enabled badges without overlap', (
+    tester,
+  ) async {
+    const rated = StremioMeta(
+      id: 'rated-stage-card',
+      imdbId: 'rated-stage-card',
+      type: 'movie',
+      name: 'Rated stage card',
+      imdbRating: 8.2,
+    );
+    Future<void> verify(DiscoverShelfMetrics metrics, Size size) async {
+      await tester.pumpWidget(
+        harness(
+          SeeAllPosterGrid(
+            items: const [rated],
+            isTelevision: true,
+            loadingMore: false,
+            exhausted: true,
+            onOpen: (_) {},
+            onLoadMore: () {},
+          ),
+          shelf: metrics,
+          size: size,
+        ),
+      );
+      await tester.pump();
+
+      final tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
+      expect(tile.compactBadgeLayout, isTrue);
+      expect(
+        tester.getSize(find.byType(CatalogItemTile)).width,
+        closeTo(metrics.cardWidth, 0.01),
+      );
+
+      final typeRect = tester.getRect(find.text('MOVIE'));
+      final ratingRect = tester.getRect(find.text('8.2'));
+      expect(typeRect.overlaps(ratingRect), isFalse);
+      expect(ratingRect.top, greaterThanOrEqualTo(typeRect.bottom));
+
+      final watched = tester.widget<MovieWatchedBadge>(
+        find.descendant(
+          of: find.byKey(const ValueKey('catalog-compact-badges')),
+          matching: find.byType(MovieWatchedBadge),
+        ),
+      );
+      expect(watched.compact, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+
+    await verify(shelf, tvSize);
+    await verify(
+      const DiscoverShelfMetrics(cardHeight: 140, hPad: 24),
+      const Size(960, 420),
+    );
+  });
+
   testWidgets('the wall keeps its own chrome', (tester) async {
     await tester.pumpWidget(harness(grid(items(6))));
     await tester.pump();
@@ -224,6 +279,83 @@ void main() {
     expect(wallTiles, isNotEmpty);
     expect(wallTiles.any((t) => t.boardChrome), isFalse);
     expect(find.byType(CardFocusRise), findsNothing);
+  });
+
+  testWidgets('narrow two-pane wall cards use the same safe badge stack', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        SeeAllPosterGrid(
+          items: const [
+            StremioMeta(
+              id: 'rated-wall-card',
+              type: 'series',
+              name: 'Rated wall card',
+              imdbRating: 7.9,
+            ),
+          ],
+          isTelevision: true,
+          loadingMore: false,
+          exhausted: true,
+          onOpen: (_) {},
+          onLoadMore: () {},
+        ),
+        size: const Size(565, 540),
+      ),
+    );
+    await tester.pump();
+
+    final tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
+    expect(tile.compactBadgeLayout, isTrue);
+    expect(
+      tester.getRect(find.text('SERIES')).overlaps(
+        tester.getRect(find.text('7.9')),
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets('Discover card settings govern both poster badges', (
+    tester,
+  ) async {
+    Widget scopedGrid({required bool tags, required bool ratings}) =>
+        DiscoverCardSettingsScope(
+          showTypeTags: tags,
+          showRatings: ratings,
+          child: SeeAllPosterGrid(
+            items: [
+              const StremioMeta(
+                id: 'rated',
+                type: 'movie',
+                name: 'Rated movie',
+                imdbRating: 8.2,
+              ),
+            ],
+            isTelevision: true,
+            loadingMore: false,
+            exhausted: true,
+            onOpen: (_) {},
+            onLoadMore: () {},
+          ),
+        );
+
+    await tester.pumpWidget(
+      harness(scopedGrid(tags: false, ratings: false), shelf: shelf),
+    );
+    await tester.pump();
+    var tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
+    expect(tile.showTypeBadge, isFalse);
+    expect(tile.showRatingBadge, isFalse);
+
+    // The harness uses Overlay.initialEntries, which are only consumed on the
+    // Overlay's first mount. Remount it before changing the inherited values.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(harness(scopedGrid(tags: true, ratings: true)));
+    await tester.pump();
+    tile = tester.widget<CatalogItemTile>(find.byType(CatalogItemTile));
+    expect(tile.showTypeBadge, isTrue);
+    expect(tile.showRatingBadge, isTrue);
   });
 
   testWidgets('no scope → the poster wall, unchanged', (tester) async {
@@ -254,9 +386,7 @@ void main() {
         Column(
           children: [
             Focus(focusNode: filter, child: const SizedBox(height: 40)),
-            Expanded(
-              child: grid(items(60), onExitTop: filter.requestFocus),
-            ),
+            Expanded(child: grid(items(60), onExitTop: filter.requestFocus)),
           ],
         ),
         shelf: shelf,
@@ -333,27 +463,30 @@ void main() {
       genres: const ['Drama'],
     );
 
-    Widget rail(StremioMeta? item, Duration settle, ValueNotifier<StremioMeta?> shown) =>
-        MediaQuery(
-          data: const MediaQueryData(size: tvSize),
-          child: Directionality(
-            textDirection: TextDirection.ltr,
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: DiscoverDetailRail(
-                item: item,
-                layout: DiscoverDetailLayout.stage,
-                settleDelay: settle,
-                stageBudget: 240,
-                trailerStreams: ValueNotifier(null),
-                trailerLoading: ValueNotifier(false),
-                trailerVolume: ValueNotifier(0),
-                trailerMeta: ValueNotifier(null),
-                shownItem: shown,
-              ),
-            ),
+    Widget rail(
+      StremioMeta? item,
+      Duration settle,
+      ValueNotifier<StremioMeta?> shown,
+    ) => MediaQuery(
+      data: const MediaQueryData(size: tvSize),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.bottomLeft,
+          child: DiscoverDetailRail(
+            item: item,
+            layout: DiscoverDetailLayout.stage,
+            settleDelay: settle,
+            stageBudget: 240,
+            trailerStreams: ValueNotifier(null),
+            trailerLoading: ValueNotifier(false),
+            trailerVolume: ValueNotifier(0),
+            trailerMeta: ValueNotifier(null),
+            shownItem: shown,
           ),
-        );
+        ),
+      ),
+    );
 
     testWidgets('the settled swap actually repaints', (tester) async {
       // The defect this pins: the settle runs from a Timer, outside any build.
