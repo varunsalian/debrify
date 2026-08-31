@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/profile_avatar_storage.dart';
@@ -356,6 +357,29 @@ void main() {
     expect(ids.toSet(), hasLength(ids.length));
     for (final art in ProfileArtRegistry.all) {
       expect(ProfileArtRegistry.byId(art.id), same(art));
+    }
+  });
+
+  test('every procedural painter survives a full cycle at any size', () {
+    // A malformed Path (an arc whose radius cannot span its endpoints, say)
+    // throws inside paint(), which on a profile wall means a crashed render
+    // rather than a bad-looking tile. Exercise the whole cycle so a blink or
+    // any other t-dependent branch is covered too, and a degenerate size so
+    // the scale-down cannot divide by zero.
+    for (final art in ProfileArtRegistry.all) {
+      if (art.paint == null) continue;
+      for (final size in const <Size>[Size(1, 1), Size(48, 48), Size(320, 96)]) {
+        for (var step = 0; step <= 20; step++) {
+          final recorder = ui.PictureRecorder();
+          final canvas = ui.Canvas(recorder);
+          expect(
+            () => art.paint!(canvas, size, step / 20),
+            returnsNormally,
+            reason: '${art.id} at $size, t=${step / 20}',
+          );
+          recorder.endRecording().dispose();
+        }
+      }
     }
   });
 }
