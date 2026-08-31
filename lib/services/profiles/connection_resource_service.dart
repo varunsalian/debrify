@@ -4,9 +4,12 @@ import 'dart:math';
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
+import '../../models/tracking_source.dart';
+import '../tracking_scrobble_preferences.dart';
 import 'device_key_provider.dart';
 import 'profile_authorization.dart';
 import 'profile_registry.dart';
+import 'profile_scope.dart';
 
 class ResourceAuthorizationException implements Exception {
   final String message;
@@ -500,6 +503,22 @@ class ConnectionResourceService {
         'No requested permission is allowed for the target role',
       );
     }
+    final trackingSource = switch (resource.type) {
+      ConnectionResourceType.trakt => TrackingSource.trakt,
+      ConnectionResourceType.simkl => TrackingSource.simkl,
+      ConnectionResourceType.mdblist => TrackingSource.mdblist,
+      _ => null,
+    };
+    final bindingSlot = resource.type.singletonCredentialBindingSlot;
+    final previousBinding = trackingSource == null || bindingSlot == null
+        ? null
+        : await registry.getBoundResourceId(targetProfileId, bindingSlot);
+    final previousGrant = previousBinding == resource.id
+        ? await registry.getGrant(targetProfileId, resource.id)
+        : null;
+    final wasAlreadyConnected =
+        previousBinding == resource.id &&
+        previousGrant?.allows(ResourcePermission.use) == true;
     final mask = effective.fold<int>(0, (value, item) => value | item.bit);
     await actor.validate(registry);
     await registry.upsertGrant(
@@ -514,6 +533,17 @@ class ConnectionResourceService {
       expectedResourceAuthorizationRevision: resource.authorizationRevision,
       expectedTargetAuthorizationRevision: target.authorizationRevision,
     );
+    if (trackingSource != null && !wasAlreadyConnected) {
+      await TrackingScrobblePreferences.enableForScope(
+        ProfileScope(
+          profileId: target.id,
+          dataGeneration: target.visibleDataGeneration,
+          // Captured preference access is not an active UI session.
+          sessionEpoch: 0,
+        ),
+        trackingSource,
+      );
+    }
   }
 
   Future<void> revokeGrant({

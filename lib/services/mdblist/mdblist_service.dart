@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../models/tracking_source.dart';
 import '../storage_service.dart';
 import '../episode_tracker_snapshot_revision.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -266,6 +267,7 @@ class MdblistService {
 
     Future<void> commit() async {
       await StorageService.saveMdblistApiKey(key);
+      await StorageService.enableTrackingScrobbleTarget(TrackingSource.mdblist);
       await StorageService.setMdblistUsername(snapshot.username);
       await StorageService.setMdblistSyncCheckpoint(null);
       if (capability == null || capability.isCurrentlyActive) {

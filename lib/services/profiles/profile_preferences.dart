@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 import 'profile_preference_budget.dart';
 import 'profile_runtime.dart';
@@ -15,6 +16,7 @@ enum CapturedProfilePreferenceAccess {
   migration,
   profileCreation,
   restore,
+  connectionGrant,
 
   /// The dev audit export, which inventories every profile's keys. Read-only
   /// like [nativeProjectionReadOnly] — a diagnostic that can write is a
@@ -23,6 +25,8 @@ enum CapturedProfilePreferenceAccess {
 }
 
 class ProfilePreferences implements SharedPreferences {
+  static final Lock _atomicStringListMutationLock = Lock();
+
   ProfilePreferences._(
     this._delegate,
     this._scope, {
@@ -219,6 +223,30 @@ class ProfilePreferences implements SharedPreferences {
     budgetKey: _physical(key),
     budgetValue: value,
   );
+
+  /// Serializes a string-list read/modify/write against every scoped instance.
+  /// The lock covers the physical profile key, so callers can safely update an
+  /// inactive captured profile without racing an active-session mutation.
+  /// Returning null from [update] leaves the stored value unchanged.
+  Future<bool> mutateStringListAtomically(
+    String key,
+    List<String>? Function(List<String>? current) update,
+  ) => _atomicStringListMutationLock.synchronized(() async {
+    _assertWritable();
+    final physical = _physical(key);
+    final current = _delegate.getStringList(physical);
+    final next = update(
+      current == null ? null : List<String>.unmodifiable(current),
+    );
+    if (next == null) return true;
+    final frozen = List<String>.unmodifiable(next);
+    return _write(
+      () => _delegate.setStringList(physical, frozen),
+      logicalKey: key,
+      budgetKey: physical,
+      budgetValue: frozen,
+    );
+  });
 
   /// Persist a coherent group of native-consumed scalar settings and publish
   /// their projection once. Used by native UI surfaces that return a complete

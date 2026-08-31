@@ -3455,6 +3455,7 @@ class RemoteCommandRouter {
       // Match interactive connect: a freshly imported Trakt session starts
       // with catalog scrobbling on.
       await StorageService.setTraktSyncCatalogItems(true);
+      await StorageService.enableTrackingScrobbleTarget(TrackingSource.trakt);
 
       debugPrint('RemoteCommandRouter: Trakt session configured successfully');
       _showSnackBar('Trakt connected successfully');
@@ -3487,6 +3488,7 @@ class RemoteCommandRouter {
       // Match interactive connect: a freshly imported Simkl session starts
       // with catalog scrobbling on.
       await StorageService.setSimklSyncCatalogItems(true);
+      await StorageService.enableTrackingScrobbleTarget(TrackingSource.simkl);
 
       debugPrint('RemoteCommandRouter: Simkl session configured successfully');
       _showSnackBar('Simkl connected successfully');

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/profiles/profile_policy.dart';
+import '../../models/tracking_source.dart';
 import '../episode_tracker_snapshot_revision.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
@@ -583,6 +584,9 @@ class TraktService {
         _deviceAuthorizations.remove(deviceCode);
         Future<void> commit() async {
           await _storeTokens(data);
+          await StorageService.enableTrackingScrobbleTarget(
+            TrackingSource.trakt,
+          );
           final accessToken = data['access_token'] as String;
           await _fetchAndStoreUsername(accessToken);
         }

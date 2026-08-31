@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/profiles/profile_policy.dart';
+import '../../models/tracking_source.dart';
 import '../episode_tracker_snapshot_revision.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
@@ -407,6 +408,9 @@ class SimklService {
           _pinAuthorizations.remove(userCode);
           Future<void> commit() async {
             await StorageService.setSimklAccessToken(accessToken);
+            await StorageService.enableTrackingScrobbleTarget(
+              TrackingSource.simkl,
+            );
             await _fetchAndStoreUsername(accessToken);
             StorageService.movieFinishedRevision.value++;
           }
