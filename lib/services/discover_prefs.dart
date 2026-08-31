@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'profiles/profile_preferences.dart';
 
-/// Remembered Sort selections for the Discover tab.
+/// Synchronously cached preferences for the Discover tab.
 ///
 /// Discover is a Source dropdown over a swappable See-All panel, and each panel
 /// used to open on its own default order every time — so a user who browses
@@ -15,11 +15,13 @@ import 'profiles/profile_preferences.dart';
 /// than as a per-catalog filter.
 ///
 /// Reads are synchronous off a cache warmed in `main()` before `runApp`, so a
-/// panel can apply the remembered order in `initState` and paint the first
-/// frame already sorted (no visible re-order a frame later). A cold cache — or
-/// any storage failure — simply means the panel opens on its default sort.
+/// panel can apply the remembered order and card chrome before its first frame
+/// (no visible re-order or badge flash). A cold cache — or any storage failure
+/// — simply means the panel opens on its default sort with card details shown.
 class DiscoverPrefs {
   static const String _prefix = 'discover_sort_';
+  static const String _showTypeTagsKey = 'discover_show_type_tags';
+  static const String _showRatingsKey = 'discover_show_ratings';
 
   // Source keys. Persisted, so never rename one without a migration.
   static const String cw = 'cw';
@@ -31,9 +33,11 @@ class DiscoverPrefs {
   static const List<String> _sources = [cw, trakt, simkl, mdblist, catalog];
 
   static final Map<String, String> _cache = {};
+  static bool _showTypeTags = true;
+  static bool _showRatings = true;
   static bool _warmed = false;
 
-  /// Load every remembered sort into the cache. Called once from `main()`;
+  /// Load every Discover preference into the cache. Called once from `main()`;
   /// repeat calls are no-ops.
   static Future<void> warmUp() async {
     if (_warmed) return;
@@ -44,6 +48,8 @@ class DiscoverPrefs {
         final id = prefs.getString('$_prefix$source');
         if (id != null) _cache[source] = id;
       }
+      _showTypeTags = prefs.getBool(_showTypeTagsKey) ?? true;
+      _showRatings = prefs.getBool(_showRatingsKey) ?? true;
     } catch (_) {
       // Storage unavailable — Discover just opens on its default sorts.
     }
@@ -82,8 +88,37 @@ class DiscoverPrefs {
   static Future<void> setEnumSort(String source, Enum value) =>
       setSort(source, value.name);
 
+  /// Whether Discover poster cards show their MOVIE/SERIES tag. Unset is on,
+  /// so existing profiles keep the information visible.
+  static bool get showTypeTags => _showTypeTags;
+
+  /// Whether Discover poster cards show their rating chip. Unset is on.
+  static bool get showRatings => _showRatings;
+
+  static Future<void> setShowTypeTags(bool value) async {
+    _showTypeTags = value;
+    try {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setBool(_showTypeTagsKey, value);
+    } catch (_) {
+      // Best-effort: the choice still holds for this session.
+    }
+  }
+
+  static Future<void> setShowRatings(bool value) async {
+    _showRatings = value;
+    try {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setBool(_showRatingsKey, value);
+    } catch (_) {
+      // Best-effort: the choice still holds for this session.
+    }
+  }
+
   static void resetProfileScope() {
     _cache.clear();
+    _showTypeTags = true;
+    _showRatings = true;
     _warmed = false;
   }
 

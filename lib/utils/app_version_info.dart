@@ -1,24 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// The app's own version/build, with a platform that may not be able to answer.
+/// The app's own version/build, with a safe failure mode.
 ///
 /// `package_info_plus` has no working Apple TV implementation:
 /// `package_info_plus_tvos` exists on pub.dev but requires
 /// `package_info_plus_platform_interface ^4.1.0`, which no published
 /// `package_info_plus` uses (10.2.1 still pins ^3.2.1), so it cannot be
-/// resolved into the app at all. On tvOS the method channel is therefore
-/// unimplemented and `PackageInfo.fromPlatform()` throws
-/// `MissingPluginException`.
+/// resolved into the app at all. The tvOS runner therefore implements the
+/// package's `getAll` method-channel contract directly from `Bundle.main`.
 ///
-/// That is not a cosmetic failure. The call sat un-guarded in the middle of
-/// [AppMigrationService], so the throw aborted the WHOLE migration run —
-/// addon seeding, per-version migrations, the lot — on every tvOS launch.
-///
-/// This wrapper degrades instead: a miss yields empty strings, which every
-/// caller already treats as "unknown version". Version-gated migrations then
-/// simply don't advance rather than crashing, and they resume for real once
-/// the plugin gains a tvOS implementation.
+/// This wrapper remains the last line of defence. A missing/regressed native
+/// channel or malformed platform result yields an explicit unknown value
+/// instead of aborting [AppMigrationService] and the rest of app startup.
 class AppVersionInfo {
   AppVersionInfo._();
 
@@ -40,6 +34,12 @@ class AppVersionInfo {
   static bool get isUnavailable => _unavailable;
   static bool _unavailable = false;
 
+  @visibleForTesting
+  static void debugReset() {
+    _cached = null;
+    _unavailable = false;
+  }
+
   /// Never throws. Cached after the first successful read; a failure is not
   /// cached, so a platform that gains an implementation later recovers
   /// without a restart.
@@ -48,12 +48,16 @@ class AppVersionInfo {
     if (cached != null) return cached;
     try {
       final info = await PackageInfo.fromPlatform();
+      if (info.version.trim().isEmpty || info.buildNumber.trim().isEmpty) {
+        throw const FormatException('Package info omitted version/build');
+      }
       _cached = info;
       _unavailable = false;
       return info;
     } catch (e) {
-      // MissingPluginException on tvOS; anything else is equally unusable
-      // here, and a version lookup is never worth taking the app down for.
+      // A version lookup is never worth taking the app down for. Callers that
+      // gate durable work consult [isUnavailable] and skip rather than record
+      // this empty sentinel as a real version.
       _unavailable = true;
       debugPrint('AppVersionInfo: package info unavailable ($e)');
       return _unknown;

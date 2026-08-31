@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
+import '../../services/discover_prefs.dart';
+import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
@@ -27,6 +29,8 @@ class DiscoverSettingsPage extends StatefulWidget {
 class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
   bool _loading = true;
   String _defaultSource = StorageService.discoverDefaultRememberLast;
+  bool _showTypeTags = true;
+  bool _showRatings = true;
   List<SettingsSelectOption> _options = const [];
   final FocusNode _dropdownNode = FocusNode(
     debugLabel: 'discover-default-source',
@@ -46,7 +50,11 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
   }
 
   Future<void> _load() async {
-    final defaultSource = await StorageService.getDiscoverDefaultSource();
+    final values = await Future.wait([
+      StorageService.getDiscoverDefaultSource(),
+      DiscoverPrefs.warmUp(),
+    ]);
+    final defaultSource = values[0] as String;
     final options = <SettingsSelectOption>[
       const SettingsSelectOption(
         StorageService.discoverDefaultRememberLast,
@@ -126,6 +134,8 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
     if (!mounted) return;
     setState(() {
       _defaultSource = defaultSource;
+      _showTypeTags = DiscoverPrefs.showTypeTags;
+      _showRatings = DiscoverPrefs.showRatings;
       _options = options;
       _loading = false;
     });
@@ -143,6 +153,18 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
     if (value == _defaultSource) return;
     setState(() => _defaultSource = value);
     await StorageService.setDiscoverDefaultSource(value);
+  }
+
+  Future<void> _setShowTypeTags(bool value) async {
+    setState(() => _showTypeTags = value);
+    await DiscoverPrefs.setShowTypeTags(value);
+    MainPageBridge.discoverCardSettingsChanged?.call();
+  }
+
+  Future<void> _setShowRatings(bool value) async {
+    setState(() => _showRatings = value);
+    await DiscoverPrefs.setShowRatings(value);
+    MainPageBridge.discoverCardSettingsChanged?.call();
   }
 
   @override
@@ -181,6 +203,28 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
                         onChanged: _select,
                         focusNode: _dropdownNode,
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Poster cards',
+                  children: [
+                    SettingsToggleTile(
+                      key: const ValueKey('discover-show-type-tags'),
+                      icon: Icons.local_offer_outlined,
+                      title: 'Show Movie/Series tags',
+                      subtitle: 'Display the content type on each poster',
+                      value: _showTypeTags,
+                      onChanged: _setShowTypeTags,
+                    ),
+                    SettingsToggleTile(
+                      key: const ValueKey('discover-show-ratings'),
+                      icon: Icons.star_outline_rounded,
+                      title: 'Show ratings',
+                      subtitle: 'Display available ratings on posters',
+                      value: _showRatings,
+                      onChanged: _setShowRatings,
                     ),
                   ],
                 ),

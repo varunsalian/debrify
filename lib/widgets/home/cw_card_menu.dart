@@ -39,17 +39,21 @@ Future<CwCardAction?> showCwCardMenu(
   return showDialog<CwCardAction>(
     context: context,
     barrierDismissible: true,
-    builder: (_) => _CwCardMenu(
-      title: title,
-      isTelevision: isTelevision,
-      posterUrl: posterUrl,
-      subtitle: subtitle,
-      showPlay: showPlay,
-      showRemove: showRemove,
-      playLabel: playLabel,
-      playDescription: playDescription,
-      removeLabel: removeLabel,
-      removeDescription: removeDescription,
+    // A TV hold opens this dialog while OK is still physically down. Eat the
+    // repeat tail before it can activate the autofocus row under the thumb.
+    builder: (_) => TvHeldKeyGuard(
+      child: _CwCardMenu(
+        title: title,
+        isTelevision: isTelevision,
+        posterUrl: posterUrl,
+        subtitle: subtitle,
+        showPlay: showPlay,
+        showRemove: showRemove,
+        playLabel: playLabel,
+        playDescription: playDescription,
+        removeLabel: removeLabel,
+        removeDescription: removeDescription,
+      ),
     ),
   );
 }

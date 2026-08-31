@@ -437,6 +437,42 @@
                 android:padding="3dp">
 
                 <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_epg_day_three_ago"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/iptv_premium_button_bg"
+                    android:focusable="true"
+                    android:text="−3d"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="10sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_epg_day_two_ago"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/iptv_premium_button_bg"
+                    android:focusable="true"
+                    android:text="−2d"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="10sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/iptv_epg_day_yesterday"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/iptv_premium_button_bg"
+                    android:focusable="true"
+                    android:text="Yday"
+                    android:textAllCaps="false"
+                    android:textColor="#FF7D898E"
+                    android:textSize="10sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/iptv_epg_day_today"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
@@ -446,7 +482,7 @@
                     android:text="Today"
                     android:textAllCaps="false"
                     android:textColor="#FFFFFFFF"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/iptv_epg_day_tomorrow"
@@ -455,10 +491,10 @@
                     android:layout_weight="1"
                     android:background="@drawable/iptv_premium_button_bg"
                     android:focusable="true"
-                    android:text="Tomorrow"
+                    android:text="Tmrw"
                     android:textAllCaps="false"
                     android:textColor="#FF7D898E"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/iptv_epg_day_later"
@@ -470,7 +506,7 @@
                     android:text="Later"
                     android:textAllCaps="false"
                     android:textColor="#FF7D898E"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <TextView

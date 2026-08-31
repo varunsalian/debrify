@@ -64,6 +64,8 @@ void main() {
     for (var digit = 1; digit <= 4; digit++) {
       await tester.tap(find.byKey(ValueKey('profile-pin-key-$digit')));
     }
+    // Unlock enables only at four digits — let that state land before tapping.
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('profile-pin-submit')));
     await tester.pump();
 
@@ -121,6 +123,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+    // Unlock enables only at four digits — let that state land before OK.
+    await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
@@ -134,6 +138,40 @@ void main() {
             .dy,
       ),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('TV ladder wraps: LEFT from the first key lands on the last, '
+      'RIGHT from the last lands on the first', (tester) async {
+    String? submitted;
+    await pump(
+      tester,
+      size: const Size(960, 540),
+      television: true,
+      onSubmit: (pin) async {
+        submitted = pin;
+        return const ProfilePinVerification(ProfilePinResult.verified);
+      },
+    );
+
+    // Digit 1 autofocuses. Press it, then LEFT must wrap to the far end —
+    // backspace — whose press erases the digit. RIGHT from backspace must
+    // wrap back to 1. The final PIN only reads '1234' if both wraps landed.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter); // '1'
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft); // wrap → ⌫
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter); // '' again
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight); // wrap → 1
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter); // '1'
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+    // Unlock enables only at four digits — let that state land before OK.
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(submitted, '1234');
     expect(tester.takeException(), isNull);
   });
 

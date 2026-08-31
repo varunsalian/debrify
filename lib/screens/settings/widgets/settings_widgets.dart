@@ -140,7 +140,7 @@ abstract final class SettingsRows {
   static const discoverDefault = SettingsRowContent(
     icon: Icons.explore_rounded,
     title: 'Default View',
-    subtitle: 'Choose what Discover shows when it opens',
+    subtitle: 'Default source and poster details',
   );
   static const debrifyTv = SettingsRowContent(
     icon: Icons.live_tv_rounded,

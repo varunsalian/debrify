@@ -3249,6 +3249,13 @@ class VideoPlayerLauncher {
                 'episode': int.parse(c.attributes['episode']!),
               if (c.attributes['has_next_episode'] != null)
                 'hasNextEpisode': c.attributes['has_next_episode'] == 'true',
+              if (c.attributes['tv_archive'] != null)
+                'tvArchive': c.attributes['tv_archive'],
+              if (int.tryParse(c.attributes['tv_archive_duration'] ?? '') !=
+                  null)
+                'tvArchiveDuration': int.parse(
+                  c.attributes['tv_archive_duration']!,
+                ),
               'isFavorite': favoriteUrls.contains(c.url),
               if ((resumePositions[c.url] ?? 0) > 0)
                 'resumePositionMs': resumePositions[c.url],

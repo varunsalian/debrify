@@ -738,9 +738,9 @@ class BackupRestoreService {
         (report.trakt || report.simkl || report.mdblist)) {
       // Old backup: it restored the legacy per-tracker sync-catalog switches
       // but carries no tracking payload. The scrobble masters were already
-      // seeded on this install's first policy read, so drop them and let the
-      // next read re-adopt the just-restored legacy values (absent-key rule:
-      // Trakt/Simkl default ON, MDBList follows its restored switch).
+      // seeded on this install's first policy read, so re-adopt the
+      // just-restored legacy values (absent-key rule: Trakt/Simkl default ON,
+      // MDBList follows its restored switch).
       await StorageService.reseedTrackingScrobbleTargetsFromLegacy();
     }
 

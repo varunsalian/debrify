@@ -2735,12 +2735,27 @@ class MainActivity : FlutterActivity() {
         android.util.Log.d("TVMazeUpdate", "MainActivity: received ${updates.size} updates, imdbId=$imdbId")
 
         try {
-            // Broadcast intent to the active player activity
+            // Broadcast intent to the active player activity. The episode
+            // JSON rides in cacheDir files, not extras: a 400+ episode pack
+            // serializes to well over the binder transaction budget, and an
+            // undeliverable broadcast makes the system kill the process
+            // (RemoteServiceException "can't deliver broadcast").
+            // The receiver reads without deleting (two instances can overlap
+            // during an activity handoff), so each push sweeps the previous
+            // staged files — pushes are serialized on the Dart side and
+            // seconds apart, while delivery is milliseconds.
+            cacheDir.listFiles { f ->
+                f.name.startsWith("episode_metadata_") ||
+                    f.name.startsWith("episode_guide_")
+            }?.forEach { it.delete() }
+            val stamp = System.nanoTime()
             val intent = Intent("com.debrify.app.tv.UPDATE_EPISODE_METADATA").apply {
                 setPackage(packageName)
                 val updatesJson = listToJson(updates).toString()
                 android.util.Log.d("TVMazeUpdate", "MainActivity: updatesJson length=${updatesJson.length}")
-                putExtra("metadataUpdates", updatesJson)
+                val updatesFile = java.io.File(cacheDir, "episode_metadata_${stamp}.json")
+                updatesFile.writeText(updatesJson)
+                putExtra("metadataUpdatesPath", updatesFile.absolutePath)
                 // Include discovered IMDB ID for Stremio subtitle fetching
                 if (!imdbId.isNullOrEmpty()) {
                     putExtra("imdbId", imdbId)
@@ -2748,7 +2763,9 @@ class MainActivity : FlutterActivity() {
                 }
                 // Full-show episode guide for the player's episode browser
                 if (guideEpisodes.isNotEmpty()) {
-                    putExtra("guideEpisodes", listToJson(guideEpisodes).toString())
+                    val guideFile = java.io.File(cacheDir, "episode_guide_${stamp}.json")
+                    guideFile.writeText(listToJson(guideEpisodes).toString())
+                    putExtra("guideEpisodesPath", guideFile.absolutePath)
                 }
                 // TVMaze's official show title for the OTT dock's identity row
                 (args["showName"] as? String)?.takeIf { it.isNotBlank() }?.let {

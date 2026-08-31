@@ -24,6 +24,25 @@ void main() {
     );
   });
 
+  test('Discover poster details default to on', () async {
+    await DiscoverPrefs.warmUp();
+
+    expect(DiscoverPrefs.showTypeTags, isTrue);
+    expect(DiscoverPrefs.showRatings, isTrue);
+  });
+
+  test('Discover poster detail choices survive a restart', () async {
+    await DiscoverPrefs.warmUp();
+    await DiscoverPrefs.setShowTypeTags(false);
+    await DiscoverPrefs.setShowRatings(false);
+
+    DiscoverPrefs.debugReset();
+    await DiscoverPrefs.warmUp();
+
+    expect(DiscoverPrefs.showTypeTags, isFalse);
+    expect(DiscoverPrefs.showRatings, isFalse);
+  });
+
   test('a picked sort survives a restart', () async {
     await DiscoverPrefs.warmUp();
     await DiscoverPrefs.setEnumSort(DiscoverPrefs.trakt, _FakeSort.az);
@@ -68,18 +87,20 @@ void main() {
     );
   });
 
-  test('a stored id that is no longer an option falls back to the default',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'discover_sort_mdblist': 'sortThatShipped_thenVanished',
-    });
-    await DiscoverPrefs.warmUp();
+  test(
+    'a stored id that is no longer an option falls back to the default',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'discover_sort_mdblist': 'sortThatShipped_thenVanished',
+      });
+      await DiscoverPrefs.warmUp();
 
-    expect(
-      DiscoverPrefs.enumSortFor(DiscoverPrefs.mdblist, _FakeSort.values),
-      isNull,
-    );
-  });
+      expect(
+        DiscoverPrefs.enumSortFor(DiscoverPrefs.mdblist, _FakeSort.values),
+        isNull,
+      );
+    },
+  );
 
   test('a pick is readable immediately, before the disk write lands', () async {
     await DiscoverPrefs.warmUp();

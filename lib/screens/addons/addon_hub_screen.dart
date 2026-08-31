@@ -1419,6 +1419,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                 hintText: 'Search addons',
                 hintStyle: TextStyle(color: app.fade(app.core.tx, 0.35)),
               ),
+              onSubmitted: (_) => _focusFirstRow(),
               onDownArrow: _focusFirstRow,
               onUpArrow: () => _searchBtnFocus.requestFocus(),
             ),

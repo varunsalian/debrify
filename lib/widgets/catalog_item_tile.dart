@@ -42,16 +42,19 @@ class CatalogItemTile extends StatefulWidget {
   /// (the See-All grid), so the two don't stack.
   final bool showInlineTitle;
 
-  /// When false the MOVIE/SERIES glass badge is dropped — used by the Discover
-  /// two-pane on TV, where the detail rail already names the type, so the badge
-  /// is redundant clutter. Left on everywhere else (Home board, search, Trakt
-  /// results) so mixed-type grids keep their at-a-glance type label.
+  /// When false the MOVIE/SERIES glass badge is dropped. Discover resolves
+  /// this from its poster-card setting; other mixed-type grids leave it on for
+  /// at-a-glance identification.
   final bool showTypeBadge;
 
-  /// When false the ★-rating chip is dropped — used by the Discover two-pane on
-  /// TV, where the detail rail shows the focused title's IMDb rating, so a chip
-  /// on every poster is noise against the glass stage.
+  /// When false the ★-rating chip is dropped. Discover resolves this from its
+  /// poster-card setting.
   final bool showRatingBadge;
+
+  /// Stack poster badges down the left edge instead of spreading them across
+  /// the top. The Discover stage shelf uses this on its narrow 2:3 cards, where
+  /// the type, rating and watched marker cannot safely share one row.
+  final bool compactBadgeLayout;
 
   /// Wear the HOME BOARD's card grammar instead of this tile's own: the shared
   /// [CardFocusRise] (calm 1.045 lift, twin shadow, ring — all on one curve),
@@ -76,6 +79,7 @@ class CatalogItemTile extends StatefulWidget {
     this.showInlineTitle = true,
     this.showTypeBadge = true,
     this.showRatingBadge = true,
+    this.compactBadgeLayout = false,
     this.boardChrome = false,
   });
 
@@ -188,22 +192,49 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           ),
         ),
 
-      if (widget.showTypeBadge)
-        Positioned(top: 10, left: 10, child: _GlassChip(label: typeLabel)),
-
-      if (supportsWatched)
+      if (widget.compactBadgeLayout)
         Positioned(
-          top: 9,
-          left: widget.showTypeBadge ? 68 : 9,
-          child: MovieWatchedBadge(
-            imdbId: movieId,
-            contentType: item.type,
-            tickPolicyScoped: true,
+          top: 10,
+          left: 10,
+          child: Column(
+            key: const ValueKey('catalog-compact-badges'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.showTypeBadge) _GlassChip(label: typeLabel),
+              if (rating != null && widget.showRatingBadge)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: _RatingChip(value: rating),
+                ),
+              if (supportsWatched)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: MovieWatchedBadge(
+                    imdbId: movieId,
+                    contentType: item.type,
+                    compact: true,
+                    tickPolicyScoped: true,
+                  ),
+                ),
+            ],
           ),
-        ),
-
-      if (rating != null && widget.showRatingBadge)
-        Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),
+        )
+      else ...[
+        if (widget.showTypeBadge)
+          Positioned(top: 10, left: 10, child: _GlassChip(label: typeLabel)),
+        if (supportsWatched)
+          Positioned(
+            top: 9,
+            left: widget.showTypeBadge ? 68 : 9,
+            child: MovieWatchedBadge(
+              imdbId: movieId,
+              contentType: item.type,
+              tickPolicyScoped: true,
+            ),
+          ),
+        if (rating != null && widget.showRatingBadge)
+          Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),
+      ],
 
       if (widget.hasBoundSource)
         Positioned(

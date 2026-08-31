@@ -161,7 +161,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       // re-mounts this panel, so don't steal the DPAD ring into the grid.
       if (widget.isTelevision && !widget.embedded) {
         WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _gridKey.currentState?.focusFirst());
+          (_) => _gridKey.currentState?.focusFirst(),
+        );
       }
     } else {
       _reload(autoFocus: !widget.embedded);
@@ -198,9 +199,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     return out;
   }
 
-  List<StremioAddonCatalog> _catalogsForType(String type) => widget.addon.catalogs
-      .where((c) => c.type == type && _usable(c))
-      .toList();
+  List<StremioAddonCatalog> _catalogsForType(String type) =>
+      widget.addon.catalogs.where((c) => c.type == type && _usable(c)).toList();
 
   /// Matches `search_screen._sectionTypeLabel` so the Type filter reads the same
   /// as the rail tag the user came from ("Movies", not "Movie").
@@ -272,7 +272,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       });
       if (autoFocus && widget.isTelevision && page.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _gridKey.currentState?.focusFirst());
+          (_) => _gridKey.currentState?.focusFirst(),
+        );
       }
     } catch (_) {
       if (!mounted || token != _reqToken) return;
@@ -332,8 +333,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     if (_randomBusy || _loadingInitial || _items.isEmpty) return;
     final play = widget.onQuickPlay;
     if (play == null) return;
-    AnalyticsService.trackInBackground(
-        'discover_random_play', {'source': 'catalog'});
+    AnalyticsService.trackInBackground('discover_random_play', {
+      'source': 'catalog',
+    });
     final token = _reqToken;
     setState(() => _randomBusy = true);
     StremioMeta? pick;
@@ -421,20 +423,20 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   // ── TV filter-bar focus wiring ─────────────────────────────────────────────
 
   List<FocusNode> get _filterNodes => [
-        if (widget.leadingNode != null) widget.leadingNode!,
-        _typeNode,
-        _catalogNode,
-        if (_catalog.supportsGenre) _genreNode,
-        _sortNode,
-        if (_showRandom) _randomNode,
-      ];
+    if (widget.leadingNode != null) widget.leadingNode!,
+    _typeNode,
+    _catalogNode,
+    if (_catalog.supportsGenre) _genreNode,
+    _sortNode,
+    if (_showRandom) _randomNode,
+  ];
 
   /// Whether the empty-state (with the Retry button) is currently shown instead
   /// of the grid.
   bool get _showingEmpty => !_loadingInitial && _items.isEmpty;
 
-  /// Discover TV styling: quiet text-segment filters on the glass stage, no
-  /// per-poster rating chips (the detail rail carries that information).
+  /// Discover TV styling: quiet text-segment filters on the glass stage.
+  /// Poster details are governed independently by the Discover card scope.
   bool get _quiet => widget.embedded && widget.isTelevision;
 
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
@@ -453,7 +455,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
         if (!widget.embedded) _backNode.requestFocus();
       },
       // Embedded: Left off the leading Source dropdown escapes to the TV sidebar.
-      onLeftEdge: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onLeftEdge: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 
@@ -480,7 +484,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           children: [
             SeeAllHeader(
               title: widget.addon.name,
-              subtitle: _searching ? 'Results for “$_searchQuery”' : 'Browse catalog',
+              subtitle: _searching
+                  ? 'Results for “$_searchQuery”'
+                  : 'Browse catalog',
               isTelevision: widget.isTelevision,
               backNode: _backNode,
               onFilterDown: () => _typeNode.requestFocus(),
@@ -507,7 +513,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           isTelevision: widget.isTelevision,
           leading: widget.leading,
           quiet: _quiet,
-          activeCount: (_genre != null ? 1 : 0) + (_sort != _sortDefault ? 1 : 0),
+          activeCount:
+              (_genre != null ? 1 : 0) + (_sort != _sortDefault ? 1 : 0),
           trailing: _showRandom
               ? SeeAllRandomButton(
                   quiet: _quiet,
@@ -564,7 +571,10 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
               focusNode: _sortNode,
               options: const [
                 StremioDropdownOption(_sortDefault, 'Default'),
-                StremioDropdownOption(_sortImdbDesc, 'IMDb Rating · High → Low'),
+                StremioDropdownOption(
+                  _sortImdbDesc,
+                  'IMDb Rating · High → Low',
+                ),
                 StremioDropdownOption(_sortImdbAsc, 'IMDb Rating · Low → High'),
               ],
               onSelected: _onSortChanged,
@@ -587,11 +597,16 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.movie_filter_rounded,
-                  size: 44, color: app.fade(app.core.tx, 0.25)),
+              Icon(
+                Icons.movie_filter_rounded,
+                size: 44,
+                color: app.fade(app.core.tx, 0.25),
+              ),
               const SizedBox(height: 14),
               Text(
-                _searching ? 'No matches for “$_searchQuery”' : 'Nothing in this catalog',
+                _searching
+                    ? 'No matches for “$_searchQuery”'
+                    : 'Nothing in this catalog',
                 style: TextStyle(
                   color: app.fade(app.core.tx, 0.7),
                   fontSize: 15,
@@ -634,7 +649,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                     foregroundColor: app.core.tx,
                     side: BorderSide(color: app.seeAll.accentBorder),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: app.shape.br(11),
                     ),
@@ -655,15 +672,13 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       onOpen: widget.onOpenItem,
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
-      // Discover on TV has the detail rail naming the type and carrying the
-      // rating — drop both badges there.
-      showTypeBadge: !_quiet,
-      showRatingBadge: !_quiet,
       isBound: widget.isBound,
       onLoadMore: _loadMore,
       onExitTop: widget.isTelevision ? () => _typeNode.requestFocus() : null,
       // Embedded: Left at grid column 0 escapes to the TV sidebar.
-      onExitLeft: widget.embedded ? () => MainPageBridge.focusTvSidebar?.call() : null,
+      onExitLeft: widget.embedded
+          ? () => MainPageBridge.focusTvSidebar?.call()
+          : null,
     );
   }
 }

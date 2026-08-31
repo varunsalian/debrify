@@ -40,6 +40,7 @@ void main() {
   // When true, get_simple_data_table answers real rows (with has_archive) —
   // the healthy-panel case whose catchup flags the schedule path must keep.
   var serveDataTable = false;
+  var dataTableIncludesRawStart = true;
 
   DateTime guideStart() {
     final now = DateTime.now().toUtc();
@@ -128,9 +129,10 @@ void main() {
                     '${start.add(slot * i).add(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000}',
                 'stop_timestamp':
                     '${start.add(slot * (i + 1)).add(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000}',
-                'start': rawPanelTime(
-                  start.add(slot * i).add(const Duration(hours: 2)),
-                ),
+                if (dataTableIncludesRawStart)
+                  'start': rawPanelTime(
+                    start.add(slot * i).add(const Duration(hours: 2)),
+                  ),
                 if (i == 0) 'has_archive': 1,
               },
           ];
@@ -148,6 +150,11 @@ void main() {
     IptvEpgService.instance.clearM3uEpgContext();
     await server.close(force: true);
     await storageRoot.delete(recursive: true);
+  });
+
+  setUp(() {
+    serveDataTable = false;
+    dataTableIncludesRawStart = true;
   });
 
   IptvChannel liveChannel(int id, {String? tvgId, String? name}) => IptvChannel(
@@ -209,6 +216,54 @@ void main() {
     serveDataTable = false;
     IptvEpgService.instance.clearM3uEpgContext();
   });
+
+  test(
+    'full guide deduplicates a shifted panel row without raw start',
+    () async {
+      serveDataTable = true;
+      dataTableIncludesRawStart = false;
+      final ch = liveChannel(11, tvgId: 'MOCK1.TEST');
+      final epgUrl = IptvEpgService.xmltvUrlFor(
+        'http://127.0.0.1:$port',
+        'ordering-no-raw',
+        'pass',
+      );
+      final status = await IptvEpgService.instance.setM3uEpgContext(
+        playlistKey: 'itest-order-no-raw',
+        epgUrl: epgUrl,
+        channels: [ch],
+      );
+      expect(status, M3uEpgStatus.matched);
+
+      final schedule = await IptvEpgService.instance.scheduleWithCatchupHistory(
+        ch,
+      );
+      final matching = schedule
+          .where((programme) => programme.title == 'Show 0 on mock1.test')
+          .toList();
+
+      expect(matching, hasLength(1));
+      final archived = matching.single;
+      final panelStart = guideStart().add(const Duration(hours: 2));
+      expect(
+        archived.start.millisecondsSinceEpoch,
+        guideStart().millisecondsSinceEpoch,
+      );
+      expect(
+        archived.replayStart?.millisecondsSinceEpoch,
+        panelStart.millisecondsSinceEpoch,
+      );
+      final localPanelStart = panelStart.toLocal();
+      final localRaw = rawPanelTime(localPanelStart);
+      expect(
+        IptvEpgService.catchupStart(archived),
+        '${localRaw.substring(0, 10)}:${localRaw.substring(11, 13)}-'
+        '${localRaw.substring(14, 16)}',
+      );
+
+      IptvEpgService.instance.clearM3uEpgContext();
+    },
+  );
 
   test('broken-short_epg panel: xmltv.php layering delivers now/next '
       '(case-insensitive ids + name-only fallback), snapshot survives '

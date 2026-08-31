@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,7 +9,8 @@ import '../../models/profiles/user_profile.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 
-/// The three 2026-08-17 gate looks — Row, Marquee and Theater (the default).
+/// The 2026-08-17 gate looks — Row, Marquee, Theater — plus Stage Cards
+/// (2026-08-31, the default).
 ///
 /// All share the wall's contract exactly: [onSelected] / [onManage] come from
 /// `ProfileGate`, which owns activation, PIN routing and the management
@@ -1149,6 +1152,551 @@ class _ProfileTheaterGateScreenState extends State<ProfileTheaterGateScreen> {
             color: Colors.white.withValues(alpha: .6),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────── Stage Cards ──────────
+
+/// Stage Cards (the DEFAULT): tall glass portrait cards on a dark stage.
+/// Each card is the person's own picture over their wash colour; the focused
+/// card grows, wears a white rim and a colour bloom, and re-lights the room.
+/// Landscape surfaces get a centred row (the growth is the focus indicator);
+/// portrait/touch surfaces get an evenly-lit grid where focus reads as rim +
+/// bloom only.
+class ProfileStageCardsGateScreen extends StatefulWidget {
+  final List<UserProfile> profiles;
+  final ValueChanged<UserProfile> onSelected;
+  final VoidCallback? onManage;
+
+  const ProfileStageCardsGateScreen({
+    super.key,
+    required this.profiles,
+    required this.onSelected,
+    this.onManage,
+  });
+
+  @override
+  State<ProfileStageCardsGateScreen> createState() =>
+      _ProfileStageCardsGateScreenState();
+}
+
+class _ProfileStageCardsGateScreenState
+    extends State<ProfileStageCardsGateScreen> {
+  static const Color _stageGround = Color(0xFF08090D);
+
+  /// The Manage pill's focus sentinel. A negative value can never collide
+  /// with a profile index when the roster grows underneath us (an appended
+  /// profile would have claimed `profiles.length`, silently re-lighting the
+  /// room for a card nobody focused).
+  static const int _manageFocus = -1;
+
+  int _focusedIndex = 0;
+  Timer? _greetingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleGreetingTick();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileStageCardsGateScreen old) {
+    super.didUpdateWidget(old);
+    if (_focusedIndex == _manageFocus) {
+      // The pill survives roster changes; it only vanishes with permission.
+      if (widget.onManage == null) _focusedIndex = 0;
+      return;
+    }
+    _focusedIndex = _clampFocusIndex(
+      _focusedIndex,
+      widget.profiles.length,
+      hasManage: false,
+    );
+  }
+
+  @override
+  void dispose() {
+    _greetingTimer?.cancel();
+    super.dispose();
+  }
+
+  Color get _wash {
+    if (widget.profiles.isEmpty ||
+        _focusedIndex < 0 ||
+        _focusedIndex >= widget.profiles.length) {
+      return _kNeutralWash;
+    }
+    final p = widget.profiles[_focusedIndex];
+    return ProfileAvatarView.washColor(p.avatarKey, p.role);
+  }
+
+  static String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'GOOD MORNING';
+    if (hour < 17) return 'GOOD AFTERNOON';
+    return 'GOOD EVENING';
+  }
+
+  /// The greeting is clock-derived and a TV can sit on this screen for hours,
+  /// so rebuild at the next boundary (noon / 5pm / midnight) instead of
+  /// wishing a rebuild happens to come along.
+  void _scheduleGreetingTick() {
+    final now = DateTime.now();
+    final nextHour = now.hour < 12 ? 12 : (now.hour < 17 ? 17 : 24);
+    final next = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(Duration(hours: nextHour));
+    _greetingTimer = Timer(
+      next.difference(now) + const Duration(seconds: 1),
+      () {
+        if (!mounted) return;
+        setState(() {});
+        _scheduleGreetingTick();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wash = _wash;
+    return Scaffold(
+      backgroundColor: _stageGround,
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(0, -1.05),
+            radius: 1.3,
+            colors: [wash.withValues(alpha: .22), _stageGround],
+          ),
+        ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide =
+                  constraints.maxWidth >= 700 &&
+                  constraints.maxWidth >= constraints.maxHeight;
+              return wide ? _wide(constraints) : _grid(constraints);
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Landscape: one centred row on the stage floor; the focused card grows.
+  Widget _wide(BoxConstraints constraints) {
+    // Base size leaves headroom for the focused card's 1.16x growth — on a
+    // 540-logical TV the growth must come from the budget, not from clamping
+    // against the row slot (which would widen text while barely growing the
+    // card).
+    final cardHeight = (constraints.maxHeight * .38).clamp(180.0, 331.0);
+    final grownHeight = cardHeight * 1.16;
+    return Column(
+      children: [
+        const Spacer(flex: 2),
+        _StageHeader(wash: _wash, greeting: _greeting(), wide: true),
+        const Spacer(flex: 2),
+        Flexible(
+          flex: 10,
+          child: Center(
+            child: SizedBox(
+              height: grownHeight,
+              child: Center(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  padding: const EdgeInsets.symmetric(horizontal: 48),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < widget.profiles.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 13),
+                          child: _card(
+                            i,
+                            baseHeight: cardHeight,
+                            growWhenFocused: true,
+                            dimWhenUnfocused: true,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (widget.onManage != null) _managePill(),
+        const Spacer(flex: 1),
+        const _KeyLegend(),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // Portrait / touch: an evenly-lit grid. Focus reads as rim + bloom only —
+  // on a device in your hand nobody gets dimmed.
+  Widget _grid(BoxConstraints constraints) {
+    final threeUp = constraints.maxWidth >= 600;
+    final columns = threeUp ? 3 : 2;
+    final gutter = threeUp ? 24.0 : 16.0;
+    final margin = threeUp ? 44.0 : 24.0;
+    final cardWidth =
+        ((constraints.maxWidth - 2 * margin - (columns - 1) * gutter) /
+                columns)
+            .clamp(110.0, 240.0);
+    final cardHeight = cardWidth * (threeUp ? 1.4 : 1.28);
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(margin, 26, margin, 30),
+      child: Column(
+        children: [
+          _StageHeader(wash: _wash, greeting: _greeting(), wide: false),
+          const SizedBox(height: 26),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: gutter,
+            runSpacing: gutter,
+            children: [
+              for (var i = 0; i < widget.profiles.length; i++)
+                SizedBox(
+                  width: cardWidth,
+                  height: cardHeight,
+                  child: _card(
+                    i,
+                    baseHeight: cardHeight,
+                    growWhenFocused: false,
+                    dimWhenUnfocused: false,
+                  ),
+                ),
+            ],
+          ),
+          if (widget.onManage != null) ...[
+            const SizedBox(height: 24),
+            _managePill(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _card(
+    int index, {
+    required double baseHeight,
+    required bool growWhenFocused,
+    required bool dimWhenUnfocused,
+  }) {
+    final p = widget.profiles[index];
+    return _GateFocusable(
+      autofocus: index == 0,
+      onFocus: () => setState(() => _focusedIndex = index),
+      onPressed: () => widget.onSelected(p),
+      builder: (context, hasFocus) => _StageCard(
+        height: growWhenFocused && hasFocus ? baseHeight * 1.16 : baseHeight,
+        focused: hasFocus,
+        dimmed: dimWhenUnfocused && !hasFocus,
+        name: p.name,
+        roleLabel: _roleLabel(p.role),
+        locked: p.hasPin,
+        wash: ProfileAvatarView.washColor(p.avatarKey, p.role),
+        child: ProfileAvatarView(
+          profileId: p.id,
+          avatarKey: p.avatarKey,
+          role: p.role,
+          name: p.name,
+          focused: hasFocus,
+          animateWhenIdle: !PlatformUtil.isTelevision,
+        ),
+      ),
+    );
+  }
+
+  Widget _managePill() => _GateFocusable(
+    autofocus: false,
+    onFocus: () => setState(() => _focusedIndex = _manageFocus),
+    onPressed: widget.onManage!,
+    builder: (context, hasFocus) => AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: Colors.white.withValues(alpha: hasFocus ? .10 : .03),
+        border: Border.all(
+          width: hasFocus ? 1.5 : 1,
+          color: Colors.white.withValues(alpha: hasFocus ? .85 : .14),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.manage_accounts_rounded,
+            size: 17,
+            color: Colors.white.withValues(alpha: hasFocus ? .95 : .55),
+          ),
+          const SizedBox(width: 9),
+          Flexible(
+            child: Text(
+              'Manage profiles',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: hasFocus ? .95 : .55),
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+                letterSpacing: .4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _StageHeader extends StatelessWidget {
+  final Color wash;
+  final String greeting;
+  final bool wide;
+
+  const _StageHeader({
+    required this.wash,
+    required this.greeting,
+    required this.wide,
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(
+        'DEBRIFY',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 5,
+          color: Colors.white.withValues(alpha: .32),
+        ),
+      ),
+      SizedBox(height: wide ? 14 : 12),
+      AnimatedDefaultTextStyle(
+        duration: const Duration(milliseconds: 350),
+        style: TextStyle(
+          fontSize: wide ? 13 : 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 3.5,
+          color: Color.lerp(wash, Colors.white, .25)!,
+        ),
+        child: Text(greeting),
+      ),
+      SizedBox(height: wide ? 10 : 8),
+      Text(
+        "Who's watching?",
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: wide ? 38 : 29,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -1.2,
+          color: Colors.white,
+        ),
+      ),
+    ],
+  );
+}
+
+class _StageCard extends StatelessWidget {
+  final double height;
+  final bool focused;
+  final bool dimmed;
+  final String name;
+  final String roleLabel;
+  final bool locked;
+  final Color wash;
+  final Widget child;
+
+  const _StageCard({
+    required this.height,
+    required this.focused,
+    required this.dimmed,
+    required this.name,
+    required this.roleLabel,
+    required this.locked,
+    required this.wash,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final width = height * .7;
+    final radius = (width * .11).clamp(16.0, 28.0);
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 220),
+      opacity: dimmed ? .62 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        width: width,
+        height: height,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(
+            width: focused ? 1.6 : 1,
+            color: focused
+                ? Colors.white.withValues(alpha: .85)
+                : Colors.white.withValues(alpha: .08),
+          ),
+          boxShadow: focused
+              ? [
+                  BoxShadow(
+                    color: wash.withValues(alpha: .38),
+                    blurRadius: 52,
+                    spreadRadius: 2,
+                  ),
+                  const BoxShadow(color: Color(0x66000000), blurRadius: 30),
+                ]
+              : const [
+                  BoxShadow(color: Color(0x55000000), blurRadius: 18),
+                ],
+        ),
+        // Metrics come from the width that actually laid out: a grid slot's
+        // tight constraints override the container's own width, and on short
+        // TVs the row slot can clamp the growth — the nameplate must follow
+        // the real card, not the requested one.
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final laidWidth = box.maxWidth.isFinite ? box.maxWidth : width;
+            final pad = (laidWidth * .1).clamp(12.0, 28.0);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                // The person's own picture IS the card face (art paints
+                // itself, icons keep their gradient plate).
+                child,
+                // Bloom rising from the floor of the card, in their colour.
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 260),
+                  opacity: focused ? .55 : .28,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0, 1.45),
+                        radius: 1.15,
+                        colors: [
+                          wash.withValues(alpha: .55),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Scrim so the nameplate stays legible over any picture.
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0, .42],
+                      colors: [
+                        Colors.black.withValues(alpha: .52),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: pad * .82,
+                  left: pad,
+                  right: pad,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: (laidWidth * .105).clamp(14.0, 29.0),
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -.5,
+                                height: 1.05,
+                              ),
+                            ),
+                          ),
+                          if (locked) ...[
+                            const SizedBox(width: 6),
+                            _StagePinChip(width: laidWidth),
+                          ],
+                        ],
+                      ),
+                      SizedBox(height: (laidWidth * .03).clamp(3.0, 8.0)),
+                      Text(
+                        roleLabel,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: .5),
+                          fontSize: (laidWidth * .045).clamp(7.5, 11.5),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _StagePinChip extends StatelessWidget {
+  final double width;
+
+  const _StagePinChip({required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    final fontSize = (width * .048).clamp(7.5, 11.0);
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: fontSize * .85,
+        vertical: fontSize * .48,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: const Color(0xFF090B11).withValues(alpha: .55),
+        border: Border.all(color: Colors.white.withValues(alpha: .16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.lock_rounded,
+            size: fontSize * 1.1,
+            color: Colors.white.withValues(alpha: .8),
+          ),
+          SizedBox(width: fontSize * .4),
+          Text(
+            'PIN',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .8),
+              fontSize: fontSize,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }

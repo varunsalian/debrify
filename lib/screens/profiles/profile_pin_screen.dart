@@ -7,6 +7,15 @@ import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 import '../../widgets/tv_text_field.dart';
 
+/// The Meridian PIN unlock (2026-08-31): the room is lit for one person.
+///
+/// The profile's wash colour (not the global brand red) drives every accent —
+/// the backdrop aurora, the ghost monogram, the entry segments and the Unlock
+/// bar. The keypad is bare thin numerals on glass rather than boxed keys, and
+/// entry reads as light segments that start at four slots and grow with the
+/// PIN (4–8 digits). Flows are untouched: verification, lockout copy,
+/// recovery ("Forgot PIN?"), hardware keys and the TV DPAD contract all
+/// behave exactly as before.
 class ProfilePinScreen extends StatefulWidget {
   final UserProfile profile;
   final Future<ProfilePinVerification> Function(String pin) onSubmit;
@@ -34,10 +43,29 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
   bool _busy = false;
   String? _error;
 
+  /// One node per TV ladder key (1..9, 0, backspace), so LEFT on the first
+  /// key can wrap to the last and RIGHT on the last can wrap to the first —
+  /// eleven presses to reach backspace from 1 was the complaint.
+  final List<FocusNode> _ladderNodes = List.generate(
+    11,
+    (i) => FocusNode(debugLabel: 'pin-ladder-$i'),
+  );
+
   bool get _tv => PlatformUtil.isTelevision;
+
+  /// Unlock is honest about its own guard: with fewer than four digits the
+  /// bar/disc dims and refuses, instead of glowing invitingly and eating the
+  /// press in silence.
+  bool get _canSubmit => !_busy && _digits.length >= 4;
+
+  Color get _wash =>
+      ProfileAvatarView.washColor(widget.profile.avatarKey, widget.profile.role);
 
   @override
   void dispose() {
+    for (final node in _ladderNodes) {
+      node.dispose();
+    }
     _digits.clear();
     super.dispose();
   }
@@ -200,9 +228,28 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     return KeyEventResult.ignored;
   }
 
+  /// Horizontal wrap for the TV ladder: LEFT on the leftmost key jumps to the
+  /// rightmost and vice versa. Everything in between stays with the
+  /// framework's geometric traversal, so this claims an arrow only at the
+  /// two ends.
+  KeyEventResult _handleLadderKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+        _ladderNodes.first.hasFocus) {
+      _ladderNodes.last.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+        _ladderNodes.last.hasFocus) {
+      _ladderNodes.first.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
-    const ground = Color(0xFF070708);
+    const ground = Color(0xFF07080C);
     return Scaffold(
       backgroundColor: ground,
       // A pure key LISTENER, never a focus target: when this wrapper was
@@ -223,10 +270,16 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
               return Stack(
                 children: [
                   Positioned.fill(
-                    child: _EditorialBackdrop(
-                      profile: widget.profile,
+                    child: _MeridianBackdrop(
+                      initial: widget.profile.name.trim().isEmpty
+                          ? '?'
+                          : widget.profile.name
+                                .trim()
+                                .characters
+                                .first
+                                .toUpperCase(),
+                      wash: _wash,
                       phone: phone,
-                      television: _tv,
                     ),
                   ),
                   Positioned(
@@ -250,116 +303,194 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     );
   }
 
-  Widget _identity({required double titleSize, bool compact = false}) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'PROFILE ACCESS',
-        style: TextStyle(
-          color: Color(0xFFED3E53),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 2.1,
+  Widget _squircleAvatar(double size) => Container(
+    width: size,
+    height: size,
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(size * .26),
+      border: Border.all(color: Colors.white.withValues(alpha: .14)),
+      boxShadow: [
+        BoxShadow(
+          color: _wash.withValues(alpha: .34),
+          blurRadius: size * .4,
+          spreadRadius: 2,
         ),
-      ),
-      SizedBox(height: compact ? 10 : 16),
-      Text(
-        'Welcome back,',
-        key: const Key('profile-pin-title'),
-        style: TextStyle(
-          color: const Color(0xFFF4F0E8),
-          fontSize: titleSize,
-          height: .93,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -1.5,
-        ),
-      ),
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(
-          '${widget.profile.name}.',
-          key: const Key('profile-pin-name'),
-          maxLines: 1,
+        const BoxShadow(color: Color(0x88000000), blurRadius: 24),
+      ],
+    ),
+    child: ProfileAvatarView(
+      profileId: widget.profile.id,
+      avatarKey: widget.profile.avatarKey,
+      role: widget.profile.role,
+      name: widget.profile.name,
+      animateWhenIdle: true,
+    ),
+  );
+
+  Widget _identity({
+    required double titleSize,
+    bool compact = false,
+    bool centered = false,
+  }) {
+    final nameTint = Color.lerp(_wash, Colors.white, .35)!;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PROFILE LOCKED',
           style: TextStyle(
-            color: const Color(0xFFED3E53),
+            color: Color.lerp(_wash, Colors.white, .22),
+            fontSize: compact ? 9.5 : 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 3.4,
+          ),
+        ),
+        SizedBox(height: compact ? 10 : 16),
+        Text(
+          'Welcome back,',
+          key: const Key('profile-pin-title'),
+          style: TextStyle(
+            color: const Color(0xFFF4F0E8),
             fontSize: titleSize,
-            height: .93,
+            height: .97,
             fontWeight: FontWeight.w800,
             letterSpacing: -1.5,
           ),
         ),
-      ),
-      SizedBox(height: compact ? 10 : 16),
-      Text(
-        'Your watchlist is waiting.',
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: .62),
-          fontSize: compact ? 12 : 15,
-        ),
-      ),
-    ],
-  );
-
-  Widget _indicators({required bool compact}) => Row(
-    key: const Key('profile-pin-indicators'),
-    mainAxisSize: MainAxisSize.min,
-    children: List.generate(
-      8,
-      (index) => AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        width: compact ? 10 : 12,
-        height: compact ? 10 : 12,
-        margin: EdgeInsets.only(right: compact ? 14 : 17),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: index < _digits.length
-              ? const Color(0xFFED3E53)
-              : Colors.transparent,
-          border: Border.all(
-            color: index < _digits.length
-                ? const Color(0xFFED3E53)
-                : Colors.white.withValues(alpha: .58),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: centered ? Alignment.center : Alignment.centerLeft,
+          child: Text(
+            '${widget.profile.name}.',
+            key: const Key('profile-pin-name'),
+            maxLines: 1,
+            style: TextStyle(
+              color: nameTint,
+              fontSize: titleSize,
+              height: .97,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -1.5,
+            ),
           ),
         ),
-      ),
-    ),
-  );
+        SizedBox(height: compact ? 10 : 16),
+        Text(
+          compact || centered
+              ? 'Your watchlist is waiting.'
+              : 'Enter your PIN — your watchlist is waiting.',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: .58),
+            fontSize: compact ? 12 : 14.5,
+          ),
+        ),
+      ],
+    );
+  }
 
-  Widget _submitKey({required bool horizontal}) => _PinKey(
-    key: const ValueKey('profile-pin-submit'),
-    icon: Icons.check_rounded,
-    semanticLabel: 'Unlock profile',
-    enabled: !_busy,
-    busy: _busy,
-    onPressed: _submit,
-    horizontal: horizontal,
-  );
+  /// The entry segments: eight identical slots (a PIN is 4–8 digits and we
+  /// only ever hold the hash), lighting up in the profile's colour as they
+  /// fill. Deliberately uniform — no length or brightness tiers.
+  Widget _indicators({required bool compact, bool centered = false}) {
+    final segWidth = compact ? 22.0 : 34.0;
+    final segHeight = compact ? 8.0 : 10.0;
+    final gap = compact ? 8.0 : 13.0;
+    return Row(
+      key: const Key('profile-pin-indicators'),
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: centered
+          ? MainAxisAlignment.center
+          : MainAxisAlignment.start,
+      children: List.generate(8, (index) {
+        final filled = index < _digits.length;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          width: segWidth,
+          height: segHeight,
+          margin: EdgeInsets.only(right: index == 7 ? 0 : gap),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(segHeight),
+            color: filled ? null : Colors.white.withValues(alpha: .11),
+            gradient: filled
+                ? LinearGradient(
+                    colors: [
+                      Color.lerp(_wash, Colors.white, .12)!,
+                      Color.lerp(_wash, Colors.white, .38)!,
+                    ],
+                  )
+                : null,
+            boxShadow: filled
+                ? [
+                    BoxShadow(
+                      color: _wash.withValues(alpha: .6),
+                      blurRadius: 14,
+                    ),
+                  ]
+                : const [],
+          ),
+        );
+      }),
+    );
+  }
 
-  List<Widget> _keys({required bool horizontal, bool includeSubmit = true}) => [
+  List<Widget> _digitKeys({List<FocusNode>? nodes, bool horizontal = false}) => [
     for (var digit = 1; digit <= 9; digit++)
       _PinKey(
         key: ValueKey('profile-pin-key-$digit'),
         label: '$digit',
+        wash: _wash,
         autofocus: digit == 1,
-        onPressed: () => _add(digit),
+        focusNode: nodes == null ? null : nodes[digit - 1],
         horizontal: horizontal,
+        onPressed: () => _add(digit),
       ),
+  ];
+
+  Widget _zeroKey({FocusNode? node, bool horizontal = false}) => _PinKey(
+    key: const ValueKey('profile-pin-key-0'),
+    label: '0',
+    wash: _wash,
+    focusNode: node,
+    horizontal: horizontal,
+    onPressed: () => _add(0),
+  );
+
+  Widget _backspaceKey({FocusNode? node, bool horizontal = false}) => _PinKey(
+    key: const ValueKey('profile-pin-backspace'),
+    icon: Icons.backspace_outlined,
+    semanticLabel: 'Backspace',
+    wash: _wash,
+    focusNode: node,
+    horizontal: horizontal,
+    onPressed: _backspace,
+  );
+
+  List<Widget> _gridKeys() => [
+    ..._digitKeys(),
+    _backspaceKey(),
+    _zeroKey(),
     _PinKey(
-      key: const ValueKey('profile-pin-backspace'),
-      icon: Icons.backspace_outlined,
-      semanticLabel: 'Backspace',
-      onPressed: _backspace,
-      horizontal: horizontal,
+      key: const ValueKey('profile-pin-submit'),
+      icon: Icons.check_rounded,
+      semanticLabel: 'Unlock profile',
+      wash: _wash,
+      accent: true,
+      enabled: _canSubmit,
+      busy: _busy,
+      onPressed: _submit,
     ),
-    _PinKey(
-      key: const ValueKey('profile-pin-key-0'),
-      label: '0',
-      onPressed: () => _add(0),
-      horizontal: horizontal,
-    ),
-    if (includeSubmit) _submitKey(horizontal: horizontal),
+  ];
+
+  /// Visual order IS node order: [_handleLadderKey] wraps on
+  /// `_ladderNodes.first`/`.last`, so any reorder here must move the node
+  /// assignments with it.
+  List<Widget> _ladderKeys() => [
+    ..._digitKeys(nodes: _ladderNodes, horizontal: true),
+    _zeroKey(node: _ladderNodes[9], horizontal: true),
+    _backspaceKey(node: _ladderNodes[10], horizontal: true),
   ];
 
   Widget _statusAndRecovery({bool center = false}) => Column(
@@ -374,14 +505,14 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
             : Text(
                 _error!,
                 key: const Key('profile-pin-error'),
-                style: const TextStyle(color: Color(0xFFFF7887), fontSize: 12),
+                style: const TextStyle(color: Color(0xFFFF8A97), fontSize: 12),
               ),
       ),
       if (widget.onRecovery != null)
         TextButton(
           onPressed: _busy ? null : _forgotPin,
           style: TextButton.styleFrom(
-            foregroundColor: Colors.white.withValues(alpha: .62),
+            foregroundColor: Colors.white.withValues(alpha: .55),
             padding: EdgeInsets.zero,
           ),
           child: const Text('Forgot PIN?'),
@@ -390,20 +521,21 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
   );
 
   Widget _buildPhone() => SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(28, 102, 28, 24),
+    padding: const EdgeInsets.fromLTRB(28, 66, 28, 24),
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _identity(titleSize: 43, compact: true),
-        const SizedBox(height: 30),
-        _indicators(compact: true),
-        const SizedBox(height: 20),
+        _squircleAvatar(96),
+        const SizedBox(height: 22),
+        _identity(titleSize: 30, compact: true, centered: true),
+        const SizedBox(height: 26),
+        _indicators(compact: true, centered: true),
+        const SizedBox(height: 14),
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: 3,
           childAspectRatio: 1.55,
-          children: _keys(horizontal: false),
+          children: _gridKeys(),
         ),
         _statusAndRecovery(center: true),
       ],
@@ -413,7 +545,7 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
   Widget _buildDesktop({required bool compactHeight}) => Padding(
     padding: compactHeight
         ? const EdgeInsets.fromLTRB(52, 16, 34, 16)
-        : const EdgeInsets.fromLTRB(64, 64, 64, 42),
+        : const EdgeInsets.fromLTRB(64, 56, 64, 42),
     child: Row(
       children: [
         Expanded(
@@ -422,9 +554,17 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 470),
-              child: _identity(
-                titleSize: compactHeight ? 42 : 58,
-                compact: compactHeight,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _squircleAvatar(compactHeight ? 96 : 148),
+                  SizedBox(height: compactHeight ? 18 : 34),
+                  _identity(
+                    titleSize: compactHeight ? 38 : 54,
+                    compact: compactHeight,
+                  ),
+                ],
               ),
             ),
           ),
@@ -433,19 +573,19 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
           flex: 9,
           child: Center(
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: compactHeight ? 280 : 390),
+              constraints: BoxConstraints(maxWidth: compactHeight ? 280 : 380),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _indicators(compact: false),
-                  SizedBox(height: compactHeight ? 12 : 24),
+                  _indicators(compact: compactHeight),
+                  SizedBox(height: compactHeight ? 12 : 26),
                   GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     crossAxisCount: 3,
-                    childAspectRatio: compactHeight ? 2.2 : 1.55,
-                    children: _keys(horizontal: false),
+                    childAspectRatio: compactHeight ? 2.2 : 1.4,
+                    children: _gridKeys(),
                   ),
                   _statusAndRecovery(),
                 ],
@@ -458,7 +598,7 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
   );
 
   Widget _buildTelevision() => Padding(
-    padding: const EdgeInsets.fromLTRB(56, 44, 56, 26),
+    padding: const EdgeInsets.fromLTRB(56, 40, 56, 24),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -466,108 +606,140 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: _identity(titleSize: 58),
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Row(
+                children: [
+                  _squircleAvatar(128),
+                  const SizedBox(width: 34),
+                  Flexible(child: _identity(titleSize: 40)),
+                ],
+              ),
             ),
           ),
         ),
         _indicators(compact: false),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            for (final key in _keys(horizontal: true, includeSubmit: false))
-              Expanded(child: key),
-          ],
+        const SizedBox(height: 14),
+        // The wrap listener is a pure ancestor: arrows bubble up from the
+        // focused key and are claimed only at the two ends of the ladder.
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleLadderKey,
+          child: Row(
+            children: [
+              for (final key in _ladderKeys()) Expanded(child: key),
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
-        // One full-width target beneath the keypad means Down reaches Submit
+        const SizedBox(height: 10),
+        // One full-width target beneath the keypad means Down reaches Unlock
         // from every number/backspace position. This is substantially easier
         // than traversing to the far-right end of a twelve-button TV row.
-        SizedBox(width: double.infinity, child: _submitKey(horizontal: true)),
-        _statusAndRecovery(),
+        _UnlockBar(
+          key: const ValueKey('profile-pin-submit'),
+          wash: _wash,
+          enabled: _canSubmit,
+          busy: _busy,
+          onPressed: _submit,
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _statusAndRecovery()),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '◀ ▶ move  ·  ▼ unlock  ·  OK press',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .3),
+                  fontSize: 11,
+                  letterSpacing: .4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     ),
   );
 }
 
-class _EditorialBackdrop extends StatelessWidget {
-  const _EditorialBackdrop({
-    required this.profile,
+/// Ghost monogram + the person's colour washing the dark — the identity
+/// backdrop behind every layout.
+class _MeridianBackdrop extends StatelessWidget {
+  const _MeridianBackdrop({
+    required this.initial,
+    required this.wash,
     required this.phone,
-    required this.television,
   });
 
-  final UserProfile profile;
+  final String initial;
+  final Color wash;
   final bool phone;
-  final bool television;
 
   @override
-  Widget build(BuildContext context) {
-    final wash = ProfileAvatarView.washColor(profile.avatarKey, profile.role);
-    final size = phone
-        ? 270.0
-        : television
-        ? 520.0
-        : 620.0;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: phone
-                    ? const Alignment(1.15, -1.15)
-                    : television
-                    ? const Alignment(1.05, -.15)
-                    : const Alignment(-1.05, 0),
-                radius: 1.15,
-                colors: [wash.withValues(alpha: .18), const Color(0xFF070708)],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          right: phone
-              ? -95
-              : television
-              ? -120
-              : null,
-          left: !phone && !television ? -250 : null,
-          top: phone
-              ? -150
-              : television
-              ? -80
-              : -90,
-          child: IgnorePointer(
-            child: Opacity(
-              opacity: .58,
-              child: Container(
-                width: size,
-                height: size,
-                padding: EdgeInsets.all(size * .08),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFED3E53).withValues(alpha: .12),
-                  border: Border.all(
-                    color: const Color(0xFFED3E53).withValues(alpha: .25),
-                  ),
-                ),
-                child: ClipOval(
-                  child: ProfileAvatarView(
-                    profileId: profile.id,
-                    avatarKey: profile.avatarKey,
-                    role: profile.role,
-                    name: profile.name,
-                    animateWhenIdle: true,
-                  ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final monoSize = phone
+          ? constraints.maxHeight * .58
+          : constraints.maxHeight * .95;
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: phone
+                      ? const Alignment(0, -1.1)
+                      : const Alignment(-.85, -.55),
+                  radius: 1.2,
+                  colors: [
+                    wash.withValues(alpha: .17),
+                    const Color(0xFF07080C),
+                  ],
                 ),
               ),
             ),
           ),
-        ),
-      ],
-    );
-  }
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(1.05, 1.2),
+                  radius: .9,
+                  colors: [
+                    wash.withValues(alpha: .08),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: phone ? -monoSize * .28 : null,
+            left: phone ? null : -monoSize * .1,
+            top: phone ? -monoSize * .12 : null,
+            bottom: phone ? null : -monoSize * .22,
+            child: IgnorePointer(
+              child: Text(
+                initial,
+                style: TextStyle(
+                  fontSize: monoSize,
+                  height: .8,
+                  fontWeight: FontWeight.w800,
+                  color: Color.lerp(
+                    wash,
+                    Colors.white,
+                    .12,
+                  )!.withValues(alpha: .07),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 class _RoundBackButton extends StatelessWidget {
@@ -581,48 +753,49 @@ class _RoundBackButton extends StatelessWidget {
     onPressed: onPressed,
     style: IconButton.styleFrom(
       foregroundColor: Colors.white,
-      backgroundColor: Colors.black.withValues(alpha: .28),
+      backgroundColor: Colors.white.withValues(alpha: .05),
+      side: BorderSide(color: Colors.white.withValues(alpha: .1)),
     ),
     icon: const Icon(Icons.arrow_back_rounded),
   );
 }
 
-class _PinKey extends StatefulWidget {
-  const _PinKey({
-    super.key,
-    this.label,
-    this.icon,
-    this.semanticLabel,
+/// The one activation contract for every PIN target: Semantics(button) over
+/// a Focus that fires on select/enter/space behind the enabled guard, over an
+/// opaque tap region. A TV-remote quirk (a new logical key some remote
+/// sends) gets fixed here exactly once.
+class _PinActivatable extends StatefulWidget {
+  const _PinActivatable({
     this.autofocus = false,
+    this.focusNode,
     this.enabled = true,
-    this.busy = false,
+    this.semanticLabel,
     required this.onPressed,
-    required this.horizontal,
+    required this.builder,
   });
 
-  final String? label;
-  final IconData? icon;
-  final String? semanticLabel;
   final bool autofocus;
+  final FocusNode? focusNode;
   final bool enabled;
-  final bool busy;
+  final String? semanticLabel;
   final VoidCallback onPressed;
-  final bool horizontal;
+  final Widget Function(BuildContext context, bool focused) builder;
 
   @override
-  State<_PinKey> createState() => _PinKeyState();
+  State<_PinActivatable> createState() => _PinActivatableState();
 }
 
-class _PinKeyState extends State<_PinKey> {
+class _PinActivatableState extends State<_PinActivatable> {
   bool _focused = false;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     enabled: widget.enabled,
-    label: widget.semanticLabel ?? widget.label,
+    label: widget.semanticLabel,
     child: Focus(
       autofocus: widget.autofocus,
+      focusNode: widget.focusNode,
       onFocusChange: (value) => setState(() => _focused = value),
       onKeyEvent: (_, event) {
         if (!widget.enabled || event is! KeyDownEvent) {
@@ -639,39 +812,220 @@ class _PinKeyState extends State<_PinKey> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.enabled ? widget.onPressed : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: widget.horizontal ? 58 : null,
-          margin: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: _focused
-                ? Colors.white.withValues(alpha: .09)
-                : Colors.transparent,
-            border: Border.all(
-              width: _focused ? 2 : 1,
-              color: _focused
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: .15),
-            ),
+        child: widget.builder(context, _focused),
+      ),
+    ),
+  );
+}
+
+/// A keypad key: a bare thin numeral (or icon) on glass. Focus lights the
+/// glyph and draws a small underline bar in the profile's colour; [accent]
+/// renders the grid's Unlock key as a filled colour disc instead.
+class _PinKey extends StatelessWidget {
+  const _PinKey({
+    super.key,
+    this.label,
+    this.icon,
+    this.semanticLabel,
+    this.autofocus = false,
+    this.enabled = true,
+    this.busy = false,
+    this.accent = false,
+    this.focusNode,
+    required this.wash,
+    required this.onPressed,
+    this.horizontal = false,
+  });
+
+  final String? label;
+  final IconData? icon;
+  final String? semanticLabel;
+  final bool autofocus;
+  final bool enabled;
+  final bool busy;
+  final bool accent;
+  final FocusNode? focusNode;
+  final Color wash;
+  final VoidCallback onPressed;
+  final bool horizontal;
+
+  @override
+  Widget build(BuildContext context) => _PinActivatable(
+    autofocus: autofocus,
+    focusNode: focusNode,
+    enabled: enabled,
+    semanticLabel: semanticLabel ?? label,
+    onPressed: onPressed,
+    builder: (context, focused) => SizedBox(
+      height: horizontal ? 58 : null,
+      child: accent ? _accentBody(focused) : _bareBody(focused),
+    ),
+  );
+
+  /// The grid's Unlock disc, filled with the profile's colour; dims while
+  /// fewer than four digits make it a dead end.
+  Widget _accentBody(bool focused) => Center(
+    child: AnimatedOpacity(
+      duration: const Duration(milliseconds: 140),
+      opacity: enabled || busy ? 1 : .4,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(wash, Colors.white, .16)!,
+              Color.lerp(wash, Colors.black, .28)!,
+            ],
           ),
-          alignment: Alignment.center,
-          child: widget.busy
+          border: Border.all(
+            width: focused ? 2 : 0,
+            color: focused ? Colors.white : Colors.transparent,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: wash.withValues(alpha: focused ? .6 : .35),
+              blurRadius: focused ? 26 : 16,
+            ),
+          ],
+        ),
+        child: Center(
+          child: busy
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : widget.icon != null
-              ? Icon(widget.icon, color: const Color(0xFFF4F0E8), size: 21)
-              : Text(
-                  widget.label!,
-                  style: const TextStyle(
-                    color: Color(0xFFF4F0E8),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
                   ),
-                ),
+                )
+              : Icon(icon, color: Colors.white, size: 22),
         ),
+      ),
+    ),
+  );
+
+  Widget _bareBody(bool focused) {
+    final glyphColor = Colors.white.withValues(alpha: focused ? 1 : .48);
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (busy)
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else if (icon != null)
+          Icon(icon, color: glyphColor, size: horizontal ? 20 : 22)
+        else
+          Text(
+            label!,
+            style: TextStyle(
+              color: glyphColor,
+              fontSize: horizontal ? 26 : 30,
+              fontWeight: focused ? FontWeight.w500 : FontWeight.w300,
+              shadows: focused
+                  ? [Shadow(color: wash.withValues(alpha: .8), blurRadius: 18)]
+                  : const [],
+            ),
+          ),
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 120),
+          bottom: horizontal ? 6 : 4,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: focused ? 26 : 0,
+            height: 3,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(2),
+              color: Color.lerp(wash, Colors.white, .15),
+              boxShadow: [
+                BoxShadow(color: wash.withValues(alpha: .8), blurRadius: 12),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The TV's full-width Unlock light bar, sitting beneath the ladder so Down
+/// always lands on it. Its brightness NEVER follows the digit count (an
+/// enable-pop reads as focus arriving); it sits at one constant level and
+/// only real DPAD focus lights it fully, with the white ring.
+class _UnlockBar extends StatelessWidget {
+  const _UnlockBar({
+    super.key,
+    required this.wash,
+    required this.enabled,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final Color wash;
+  final bool enabled;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => _PinActivatable(
+    enabled: enabled,
+    semanticLabel: 'Unlock profile',
+    onPressed: onPressed,
+    builder: (context, focused) => AnimatedOpacity(
+      duration: const Duration(milliseconds: 140),
+      opacity: focused || busy ? 1 : .68,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(wash, Colors.white, .14)!,
+              Color.lerp(wash, Colors.black, .3)!,
+            ],
+          ),
+          border: Border.all(
+            width: focused ? 2 : 1,
+            color: focused ? Colors.white : Colors.white.withValues(alpha: .25),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: wash.withValues(alpha: focused ? .55 : .3),
+              blurRadius: focused ? 34 : 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: busy
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'UNLOCK',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 4,
+                ),
+              ),
       ),
     ),
   );

@@ -11,8 +11,8 @@ import '../../widgets/profiles/profile_avatar_view.dart';
 /// profile is entered and profile-scoped preferences do not exist yet at
 /// that point.
 ///
-/// `marquee` is the DEFAULT (2026-08-17, after a couch comparison of all
-/// five): a device that never chose keeps getting the flagship look; an
+/// `stageCards` is the DEFAULT (2026-08-31, the approved Stage Cards
+/// redesign): a device that never chose keeps getting the flagship look; an
 /// explicit earlier choice is a stored value and survives.
 class ProfileGateStyle {
   ProfileGateStyle._();
@@ -23,11 +23,17 @@ class ProfileGateStyle {
   static const String row = 'row';
   static const String marquee = 'marquee';
   static const String theater = 'theater';
+  static const String stageCards = 'stage_cards';
 
-  static const String defaultStyle = marquee;
+  static const String defaultStyle = stageCards;
 
   /// Picker metadata, in display order.
   static const List<({String id, String label, String blurb})> options = [
+    (
+      id: stageCards,
+      label: 'Stage Cards',
+      blurb: 'Glass portrait cards that light the room',
+    ),
     (
       id: marquee,
       label: 'Lighthouse',
@@ -47,8 +53,15 @@ class ProfileGateStyle {
     (id: classic, label: 'Classic', blurb: 'The original card grid'),
   ];
 
-  static String labelFor(String id) =>
-      options.firstWhere((o) => o.id == id, orElse: () => options.first).label;
+  static String labelFor(String id) => options
+      .firstWhere(
+        (o) => o.id == id,
+        // Resolve unknown ids through defaultStyle, not list position — the
+        // picker list is display-ordered and the front slot is not owed to
+        // the default forever.
+        orElse: () => options.firstWhere((o) => o.id == defaultStyle),
+      )
+      .label;
 
   /// Synchronous mirror for build paths; loaded whenever the gate loads its
   /// roster, and after the hub writes a change.

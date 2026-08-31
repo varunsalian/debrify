@@ -37,6 +37,8 @@ class ProfileCreationService {
     'discover_layout',
     'discover_default_source',
     'discover_last_source',
+    'discover_show_type_tags',
+    'discover_show_ratings',
     'detail_page_style',
     'detail_theme',
     'parents_guide_style',

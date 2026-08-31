@@ -117,6 +117,7 @@ import '../services/mdblist/mdblist_service.dart';
 import 'package:http/http.dart' as http;
 import '../utils/episode_progress_merge.dart';
 import '../utils/tv_keys.dart';
+import '../utils/tv_search_focus_handoff.dart';
 
 // Re-export PlaylistEntry for backward compatibility
 export 'video_player/models/playlist_entry.dart';
@@ -14562,10 +14563,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return parts.join(' | ');
   }
 
-  Widget _buildIdentifyTitleResultTile(StremioMeta meta) {
+  Widget _buildIdentifyTitleResultTile(
+    StremioMeta meta, {
+    FocusNode? focusNode,
+  }) {
     final posterUrl = _normalisePosterUrl(meta.poster);
 
     return InkWell(
+      focusNode: focusNode,
       onTap: () => Navigator.of(context).pop(meta),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -14637,6 +14642,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return null;
 
     final controller = TextEditingController(text: initialQuery);
+    final searchFocusNode = FocusNode(debugLabel: 'identify-title-search');
+    final firstResultFocusNode = FocusNode(
+      debugLabel: 'identify-title-first-result',
+    );
+    final searchSubmitFocus = TvSearchFocusHandoff();
     var results = <StremioMeta>[];
     var isSearching = false;
     var hasSearched = false;
@@ -14649,6 +14659,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final token = ++searchToken;
 
       if (query.isEmpty) {
+        searchSubmitFocus.cancel();
         setSheetState(() {
           results = [];
           errorMessage = null;
@@ -14671,14 +14682,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           results = _filterIdentitySearchResults(metas);
           isSearching = false;
         });
+        if (results.isEmpty) {
+          searchSubmitFocus.cancel();
+        } else {
+          searchSubmitFocus.complete(
+            field: searchFocusNode,
+            isMounted: () => sheetActive && mounted,
+            requestFocus: firstResultFocusNode.requestFocus,
+            targetHasFocus: () => firstResultFocusNode.hasFocus,
+          );
+        }
       } catch (e) {
         if (!sheetActive || !mounted || token != searchToken) return;
+        searchSubmitFocus.cancel();
         setSheetState(() {
           results = [];
           errorMessage = 'Search failed. Try again.';
           isSearching = false;
         });
       }
+    }
+
+    Future<void> submitSearch(
+      String rawQuery,
+      StateSetter setSheetState,
+    ) async {
+      searchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
+      await runSearch(rawQuery, setSheetState);
     }
 
     // Right-side glass panel (the player menu's grammar) rather than the old
@@ -14767,9 +14797,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
                           child: TvTextField(
                             controller: controller,
+                            focusNode: searchFocusNode,
                             autofocus: initialQuery.trim().isEmpty,
+                            onChanged: (_) => searchSubmitFocus.cancel(),
                             onSubmitted: (value) =>
-                                runSearch(value, setSheetState),
+                                submitSearch(value, setSheetState),
                             style: const TextStyle(color: Colors.white),
                             textInputAction: TextInputAction.search,
                             decoration: InputDecoration(
@@ -14784,8 +14816,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               suffixIcon: IconButton(
                                 icon: const Icon(Icons.arrow_forward_rounded),
                                 color: Colors.white70,
-                                onPressed: () =>
-                                    runSearch(controller.text, setSheetState),
+                                onPressed: () => runSearch(
+                                  controller.text,
+                                  setSheetState,
+                                ),
                               ),
                               filled: true,
                               fillColor: Colors.white.withValues(alpha: 0.08),
@@ -14852,6 +14886,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 itemBuilder: (_, index) =>
                                     _buildIdentifyTitleResultTile(
                                       results[index],
+                                      focusNode: index == 0
+                                          ? firstResultFocusNode
+                                          : null,
                                     ),
                               );
                             },
@@ -14873,6 +14910,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           sheetActive = false;
         });
 
+    searchSubmitFocus.cancel();
+    searchFocusNode.dispose();
+    firstResultFocusNode.dispose();
     controller.dispose();
     return selected;
   }

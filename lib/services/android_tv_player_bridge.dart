@@ -843,10 +843,15 @@ class AndroidTvPlayerBridge {
           final epgArgs = call.arguments;
           String? epgChannelUrl;
           var includeSchedule = false;
+          var archiveDisabled = false;
+          int? archiveDurationDays;
           if (epgArgs is Map) {
             final raw = epgArgs['channelUrl'];
             if (raw is String) epgChannelUrl = raw;
             includeSchedule = epgArgs['includeSchedule'] == true;
+            archiveDisabled = epgArgs['archiveDisabled'] == true;
+            archiveDurationDays = (epgArgs['archiveDurationDays'] as num?)
+                ?.toInt();
           }
           if (epgChannelUrl == null ||
               !IptvEpgService.isEpgCapableUrl(epgChannelUrl)) {
@@ -861,9 +866,13 @@ class AndroidTvPlayerBridge {
               if (nowNext.next != null) 'next': nowNext.next!.toBridgeMap(),
               if (includeSchedule)
                 'schedule': [
-                  for (final p in await IptvEpgService.instance.schedule(
-                    epgChannelUrl,
-                  ))
+                  for (final p
+                      in await IptvEpgService.instance
+                          .scheduleWithCatchupHistoryUrl(
+                            epgChannelUrl,
+                            archiveDisabled: archiveDisabled,
+                            archiveDurationDays: archiveDurationDays,
+                          ))
                     p.toBridgeMap(),
                 ],
             };
@@ -893,7 +902,13 @@ class AndroidTvPlayerBridge {
           final startMs = (args['startMs'] as num?)?.toInt();
           if (channelUrl == null || startMs == null) return null;
           try {
-            final schedule = await IptvEpgService.instance.schedule(channelUrl);
+            final schedule = await IptvEpgService.instance
+                .scheduleWithCatchupHistoryUrl(
+                  channelUrl,
+                  archiveDisabled: args['archiveDisabled'] == true,
+                  archiveDurationDays: (args['archiveDurationDays'] as num?)
+                      ?.toInt(),
+                );
             EpgProgramme? programme;
             for (final item in schedule) {
               if (item.start.millisecondsSinceEpoch == startMs) {
@@ -1101,17 +1116,20 @@ class AndroidTvPlayerBridge {
               'TVMazeUpdate: Sending ${pending?.length ?? 0} pending metadata updates, imdbId=$pendingImdb',
             );
             // Send the pending updates via broadcast (including IMDB ID for subtitles)
-            await updateEpisodeMetadata(
+            final sent = await updateEpisodeMetadata(
               pending ?? [],
               imdbId: pendingImdb,
               guideEpisodes: pendingGuide,
               showName: _pendingShowName,
             );
-            // Clear pending updates after sending
-            _pendingMetadataUpdates = null;
-            _pendingImdbId = null;
-            _pendingGuideEpisodes = null;
-            _pendingShowName = null;
+            // Clear only on success so a transient native failure (e.g. the
+            // staging file write) leaves the data for the next re-request.
+            if (sent) {
+              _pendingMetadataUpdates = null;
+              _pendingImdbId = null;
+              _pendingGuideEpisodes = null;
+              _pendingShowName = null;
+            }
           } else {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }

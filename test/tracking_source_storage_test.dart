@@ -47,6 +47,73 @@ void main() {
     });
   });
 
+  test('connecting a tracker re-enables only that scrobble target', () async {
+    for (final source in const <TrackingSource>[
+      TrackingSource.trakt,
+      TrackingSource.simkl,
+      TrackingSource.mdblist,
+    ]) {
+      await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+        TrackingSource.local,
+      });
+
+      await StorageService.enableTrackingScrobbleTarget(source);
+
+      expect(
+        await StorageService.getTrackingScrobbleTargets(),
+        <TrackingSource>{TrackingSource.local, source},
+      );
+    }
+  });
+
+  test('re-enabling an active scrobble target is idempotent', () async {
+    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      TrackingSource.local,
+      TrackingSource.simkl,
+    });
+    final revision = StorageService.trackingSourceRevision.value;
+
+    await StorageService.enableTrackingScrobbleTarget(TrackingSource.simkl);
+
+    expect(StorageService.trackingSourceRevision.value, revision);
+    expect(await StorageService.getTrackingScrobbleTargets(), <TrackingSource>{
+      TrackingSource.local,
+      TrackingSource.simkl,
+    });
+  });
+
+  test('re-enabling a tracker preserves other scrobble choices', () async {
+    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      TrackingSource.local,
+      TrackingSource.trakt,
+    });
+
+    await StorageService.enableTrackingScrobbleTarget(TrackingSource.simkl);
+
+    expect(await StorageService.getTrackingScrobbleTargets(), <TrackingSource>{
+      TrackingSource.local,
+      TrackingSource.trakt,
+      TrackingSource.simkl,
+    });
+  });
+
+  test('simultaneous tracker connections merge every target', () async {
+    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      TrackingSource.local,
+    });
+
+    await Future.wait(<Future<void>>[
+      StorageService.enableTrackingScrobbleTarget(TrackingSource.trakt),
+      StorageService.enableTrackingScrobbleTarget(TrackingSource.simkl),
+      StorageService.enableTrackingScrobbleTarget(TrackingSource.mdblist),
+    ]);
+
+    expect(
+      await StorageService.getTrackingScrobbleTargets(),
+      Set<TrackingSource>.of(TrackingSource.values),
+    );
+  });
+
   test(
     'legacy reseed after an old-backup restore re-adopts restored switches',
     () async {

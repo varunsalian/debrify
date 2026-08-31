@@ -4,6 +4,7 @@ import '../services/main_page_bridge.dart';
 import '../widgets/browse/browse_results_focus.dart';
 import '../widgets/browse/browse_search_header.dart';
 import '../theme/app_theme_scope.dart';
+import '../utils/tv_search_focus_handoff.dart';
 
 /// Arguments handed to a [BrowseScreen.viewBuilder] to construct its result
 /// view. The builder must attach [resultKey] to the view (its state must
@@ -64,6 +65,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'browse-search');
   final GlobalKey _resultKey = GlobalKey();
+  final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
 
   String _query = '';
   int _searchToken = 0;
@@ -104,20 +106,39 @@ class _BrowseScreenState extends State<BrowseScreen> {
   }
 
   void _onChanged(String value) {
+    _searchSubmitFocus.cancel();
     // Live filtering (IPTV): reflect every keystroke in the query.
     setState(() => _query = value);
   }
 
+  void _onSubmitQueryChanged(String _) => _searchSubmitFocus.cancel();
+
   void _onSubmitted(String value) {
+    _searchSubmitFocus.arm(enabled: widget.isTelevision);
     // Submit mode (YouTube): commit the query and bump the token so an
     // identical re-submit (e.g. retry after a network error) still re-runs.
     setState(() {
       _query = value.trim();
       _searchToken++;
     });
+    _completeSearchSubmitFocus();
+  }
+
+  void _onLiveSearchSubmitted(String _) {
+    _searchSubmitFocus.arm(enabled: widget.isTelevision);
+    _completeSearchSubmitFocus();
+  }
+
+  void _completeSearchSubmitFocus() {
+    _searchSubmitFocus.complete(
+      field: _searchFocusNode,
+      isMounted: () => mounted,
+      requestFocus: _focusContent,
+    );
   }
 
   void _onClear() {
+    _searchSubmitFocus.cancel();
     _searchController.clear();
     setState(() {
       _query = '';
@@ -151,8 +172,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
               keyboardInk: app.core.tx,
               keyboardInkOnAccent: app.inkOn(app.youtube.focus),
               hintText: widget.hintText,
-              onChanged: widget.submitOnly ? null : _onChanged,
-              onSubmitted: widget.submitOnly ? _onSubmitted : null,
+              onChanged: widget.submitOnly ? _onSubmitQueryChanged : _onChanged,
+              onSubmitted: widget.submitOnly
+                  ? _onSubmitted
+                  : _onLiveSearchSubmitted,
               onClear: _onClear,
               onDownArrow: _focusContent,
             ),

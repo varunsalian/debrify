@@ -83,6 +83,19 @@ void main() {
     expect(screen.iptvBrowseProvider, same(browse));
   });
 
+  test('browse payload preserves Xtream archive constraints', () {
+    final channel = iptvChannelFromBrowsePayload({
+      'name': 'Archive channel',
+      'url': 'https://example.com/archive.ts',
+      'contentType': 'live',
+      'tvArchive': '0',
+      'tvArchiveDuration': 1,
+    });
+
+    expect(channel.attributes['tv_archive'], '0');
+    expect(channel.attributes['tv_archive_duration'], '1');
+  });
+
   testWidgets('compact layout exposes explicit touch schedule action', (
     tester,
   ) async {

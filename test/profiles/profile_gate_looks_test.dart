@@ -66,13 +66,18 @@ void main() {
   }
 
   group('style registry', () {
-    test('marquee is the default and labels resolve', () {
-      expect(ProfileGateStyle.defaultStyle, ProfileGateStyle.marquee);
+    test('stage cards is the default and labels resolve', () {
+      expect(ProfileGateStyle.defaultStyle, ProfileGateStyle.stageCards);
+      expect(
+        ProfileGateStyle.labelFor(ProfileGateStyle.stageCards),
+        'Stage Cards',
+      );
       expect(ProfileGateStyle.labelFor(ProfileGateStyle.theater), 'Theater');
       expect(ProfileGateStyle.labelFor(ProfileGateStyle.row), 'Row');
       expect(
         ProfileGateStyle.options.map((o) => o.id),
         containsAll(<String>[
+          ProfileGateStyle.stageCards,
           ProfileGateStyle.theater,
           ProfileGateStyle.marquee,
           ProfileGateStyle.row,
@@ -83,7 +88,152 @@ void main() {
     });
 
     test('unknown stored ids fall back to the default label', () {
-      expect(ProfileGateStyle.labelFor('style-from-the-future'), 'Lighthouse');
+      expect(
+        ProfileGateStyle.labelFor('style-from-the-future'),
+        'Stage Cards',
+      );
+    });
+  });
+
+  group('Stage Cards', () {
+    testWidgets('DPAD moves focus and OK opens the profile', (tester) async {
+      UserProfile? selected;
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (p) => selected = p,
+          onManage: () {},
+        ),
+      );
+
+      // Every card wears its name and role at rest — nothing hides.
+      expect(find.text('Meera'), findsOneWidget);
+      expect(find.text('Kiran'), findsOneWidget);
+      expect(find.text('ADMIN'), findsOneWidget);
+      expect(find.text('KID'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(selected?.id, 'p2');
+    });
+
+    testWidgets('Manage pill appears only when permitted, and opens', (
+      tester,
+    ) async {
+      var managed = false;
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: () => managed = true,
+        ),
+      );
+      expect(find.text('Manage profiles'), findsOneWidget);
+
+      // The same two-tap grammar as the cards: focus, then activate.
+      await tester.tap(find.text('Manage profiles'));
+      await tester.pump();
+      await tester.tap(find.text('Manage profiles'));
+      await tester.pump();
+      expect(managed, isTrue);
+    });
+
+    testWidgets('no Manage affordance without permission', (tester) async {
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: null,
+        ),
+      );
+      expect(find.text('Manage profiles'), findsNothing);
+    });
+
+    testWidgets('narrow surface falls into the grid without overflow', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        size: const Size(360, 740),
+      );
+      expect(find.text('Meera'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'a big household at accessibility text scale scrolls, never overflows',
+      (tester) async {
+        final big = [
+          for (var i = 0; i < 8; i++)
+            profile('big-$i', 'Person $i', UserProfileRole.member),
+        ];
+        await pump(
+          tester,
+          ProfileStageCardsGateScreen(
+            profiles: big,
+            onSelected: (_) {},
+            onManage: () {},
+          ),
+          size: const Size(320, 568),
+          textScale: 1.5,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('a TV-width row scrolls a big household', (tester) async {
+      final big = [
+        for (var i = 0; i < 12; i++)
+          profile('big-$i', 'Person $i', UserProfileRole.member),
+      ];
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: big,
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        size: const Size(960, 540),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('roster shrink re-bounds the remembered focus', (tester) async {
+      final key = GlobalKey();
+      Future<void> pumpWith(List<UserProfile> profiles) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ProfileStageCardsGateScreen(
+              key: key,
+              profiles: profiles,
+              onSelected: (_) {},
+              onManage: null,
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await pumpWith(household);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Kiran'), findsOneWidget);
+
+      await pumpWith([household.first]);
+      expect(find.text('Meera'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 

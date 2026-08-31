@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
@@ -9,16 +10,17 @@ import '../../services/remote_control/remote_pairing_store.dart';
 import '../../services/remote_control/remote_session.dart';
 import '../../services/remote_control/udp_command_service.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
+import '../tv_text_field.dart';
 
 /// Pairing-code UI for the encrypted remote-control protocol.
 ///
 /// Receiver (TV) side: [RemotePairingPanel] embeds in the receive screen and
 /// registers itself as the gate's presenter; [showRemotePairingDialog] is the
 /// fallback route the router raises when a pairing request arrives while no
-/// presenter is mounted (the always-on TV listener case). Sender (phone)
-/// side: [showPairingCodeEntrySheet] collects the 6 digits off the TV screen,
+/// presenter is mounted (the always-on TV listener case). Sender side:
+/// [showPairingCodeEntrySheet] collects the 6 digits off the receiver screen,
 /// and [showLegacyBlockedDialog] / [showTvIdentityChangedDialog] carry the
-/// old-receiver policy messaging.
+/// old-receiver policy messaging. Either physical device may take either role.
 
 /// Card showing the active pairing code. Renders nothing while no pairing is
 /// in flight; parents just drop it into their layout.
@@ -166,72 +168,122 @@ class _AutoDismissOnGateClearState extends State<_AutoDismissOnGateClear> {
   Widget build(BuildContext context) => widget.child;
 }
 
-/// Phone-side entry for the code shown on the TV. Returns the 6 digits, or
-/// null on cancel.
+/// Sender-side entry for the code shown on the receiver. Returns the 6 digits,
+/// or null on cancel. The sender can itself be a TV, so this must remain fully
+/// operable without touch input.
 Future<String?> showPairingCodeEntrySheet(
   BuildContext context, {
   required String tvName,
   String? errorText,
-}) {
-  final controller = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (dialogContext, setDialogState) => AlertDialog(
-        title: Text('Enter the code shown on "$tvName"'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 8,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                counterText: '',
-                hintText: '000000',
-                errorText: errorText,
-              ),
-              onChanged: (_) => setDialogState(() {}),
-              onSubmitted: (value) {
-                if (value.length == 6) {
-                  Navigator.of(dialogContext).pop(value);
-                }
-              },
+}) => showDialog<String>(
+  context: context,
+  builder: (_) => _PairingCodeEntryDialog(tvName: tvName, errorText: errorText),
+);
+
+class _PairingCodeEntryDialog extends StatefulWidget {
+  final String tvName;
+  final String? errorText;
+
+  const _PairingCodeEntryDialog({required this.tvName, this.errorText});
+
+  @override
+  State<_PairingCodeEntryDialog> createState() =>
+      _PairingCodeEntryDialogState();
+}
+
+class _PairingCodeEntryDialogState extends State<_PairingCodeEntryDialog> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _fieldFocus = FocusNode(debugLabel: 'pairing-code-field');
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'pairing-code-cancel');
+  final FocusNode _confirmFocus = FocusNode(debugLabel: 'pairing-code-confirm');
+  bool _closing = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _fieldFocus.dispose();
+    _cancelFocus.dispose();
+    _confirmFocus.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    if (_closing) return;
+    final code = value ?? _controller.text;
+    if (code.length != 6) return;
+    _closing = true;
+    Navigator.of(context).pop(code);
+  }
+
+  void _changed(String value) {
+    // A pairing code has exactly one valid length. Submit as soon as the sixth
+    // digit lands so a TV sender never has to escape an editable field merely
+    // to reach Confirm. The button and IME action remain equivalent fallbacks.
+    if (value.length == 6) {
+      _submit(value);
+      return;
+    }
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Enter the code shown on "${widget.tvName}"'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TvTextField(
+            controller: _controller,
+            focusNode: _fieldFocus,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            keyboardSubmitLabel: 'Confirm',
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(6),
+            ],
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 8,
+              fontFeatures: [FontFeature.tabularFigures()],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'This confirms you are sending to the right TV — if the codes '
-              'don\'t match, someone may be interfering with your network.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).hintColor,
-              ),
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: '000000',
+              errorText: widget.errorText,
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(null),
-            child: const Text('Cancel'),
+            onChanged: _changed,
+            onSubmitted: _submit,
+            onDownArrow: () =>
+                (_controller.text.length == 6 ? _confirmFocus : _cancelFocus)
+                    .requestFocus(),
           ),
-          FilledButton(
-            onPressed: controller.text.length == 6
-                ? () => Navigator.of(dialogContext).pop(controller.text)
-                : null,
-            child: const Text('Confirm'),
+          const SizedBox(height: 8),
+          Text(
+            'This confirms you are sending to the right TV — if the codes '
+            'don\'t match, someone may be interfering with your network.',
+            style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
           ),
         ],
       ),
-    ),
-  );
+      actions: [
+        TextButton(
+          focusNode: _cancelFocus,
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          focusNode: _confirmFocus,
+          onPressed: _controller.text.length == 6 ? _submit : null,
+          child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
 }
 
 /// The credential gate's shared busy surface, shown while the v2 handshake
@@ -430,8 +482,10 @@ Future<RemoteSession?> ensureAuthorizedSession(
   // Traced end to end: "transfer just spins" is the single hardest remote
   // report to diagnose, because every step here is silent on the happy path
   // and the failure modes are indistinguishable from the outside.
-  debugPrint('RemoteGate: start for ${device.deviceName} @ ${device.ip} '
-      '(advertised proto v${device.protoVersion})');
+  debugPrint(
+    'RemoteGate: start for ${device.deviceName} @ ${device.ip} '
+    '(advertised proto v${device.protoVersion})',
+  );
   final sameNamePins = await RemotePairingStore.knownReceiversNamed(
     device.deviceName,
   );
@@ -492,8 +546,10 @@ Future<RemoteSession?> ensureAuthorizedSession(
     }
     return null;
   }
-  debugPrint('RemoteGate: handshake returned ${session == null ? "NO session "
-      "(peer did not answer v2)" : "a session"}');
+  debugPrint(
+    'RemoteGate: handshake returned ${session == null ? "NO session "
+              "(peer did not answer v2)" : "a session"}',
+  );
   if (!context.mounted) return null;
 
   if (session == null) {

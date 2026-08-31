@@ -731,6 +731,129 @@ void main() {
     },
   );
 
+  testWidgets('a short DPAD press opens, but not until the key is released', (
+    tester,
+  ) async {
+    final a = _meta('tt1', 'Alpha');
+    var opens = 0;
+    var options = 0;
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'Continue Watching',
+            nodes: [rows[0][0]],
+            items: [
+              SpotlightCard(
+                title: a.name,
+                onOpen: () => opens++,
+                onOptions: () => options++,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(opens, 0, reason: 'key-down must arm the possible hold, not open');
+    expect(options, 0);
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(opens, 1);
+    expect(options, 0);
+  });
+
+  testWidgets('a held DPAD press invokes options without opening Details', (
+    tester,
+  ) async {
+    final a = _meta('tt1', 'Alpha');
+    var opens = 0;
+    var options = 0;
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'Continue Watching',
+            nodes: [rows[0][0]],
+            items: [
+              SpotlightCard(
+                title: a.name,
+                onOpen: () => opens++,
+                onOptions: () => options++,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 650));
+    expect(options, 1, reason: 'the hold must fire while OK is still down');
+    expect(opens, 0);
+
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(options, 1);
+    expect(opens, 0, reason: 'the release must not echo into Details');
+  });
+
+  testWidgets('a touch long-press dispatches options without opening Details', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final a = _meta('tt1', 'Alpha');
+    var opens = 0;
+    var options = 0;
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'Continue Watching',
+            nodes: [rows[0][0]],
+            items: [
+              SpotlightCard(
+                title: a.name,
+                onOpen: () => opens++,
+                onOptions: () => options++,
+              ),
+            ],
+          ),
+        ],
+        dpad: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final longPressTarget = find.descendant(
+      of: find.byType(SpotlightBoard),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is GestureDetector && widget.onLongPress != null,
+      ),
+    );
+    expect(longPressTarget, findsOneWidget);
+
+    await tester.ensureVisible(longPressTarget);
+    await tester.pumpAndSettle();
+    await tester.longPress(longPressTarget);
+    await tester.pump();
+    expect(options, 1);
+    expect(opens, 0);
+  });
+
   testWidgets('a rolling trailer stops the reel — it must not cut away', (
     tester,
   ) async {

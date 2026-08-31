@@ -3,17 +3,22 @@ import 'dart:io';
 
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Directory temporaryDirectory;
   late ProfileRegistry registry;
   late ConnectionResourceService resources;
@@ -26,6 +31,7 @@ void main() {
   });
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     temporaryDirectory = await Directory.systemTemp.createTemp(
       'resource-test-',
     );
@@ -160,6 +166,109 @@ void main() {
       resource.id,
     );
   });
+
+  test('new shared tracker bindings enable only the target profile', () async {
+    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      TrackingSource.local,
+    });
+    final trackerResources = <ConnectionResourceType, ConnectionResource>{};
+    for (final type in const <ConnectionResourceType>[
+      ConnectionResourceType.trakt,
+      ConnectionResourceType.simkl,
+      ConnectionResourceType.mdblist,
+    ]) {
+      trackerResources[type] = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: type,
+        label: 'Shared ${type.name}',
+        publicConfig: const <String, dynamic>{},
+        secretConfig: <String, dynamic>{'credential': '${type.name}-secret'},
+      );
+    }
+
+    await activate(memberId, 2);
+    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      TrackingSource.local,
+    });
+    await activate(adminId, 3);
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    for (final resource in trackerResources.values) {
+      await resources.grant(
+        actor: actor,
+        targetProfileId: memberId,
+        resourceId: resource.id,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+    }
+
+    expect(await StorageService.getTrackingScrobbleTargets(), <TrackingSource>{
+      TrackingSource.local,
+    });
+    await activate(memberId, 4);
+    expect(
+      await StorageService.getTrackingScrobbleTargets(),
+      Set<TrackingSource>.of(TrackingSource.values),
+    );
+  });
+
+  test(
+    'an unchanged grant preserves opt-out but revoke and regrant enables it',
+    () async {
+      final resource = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.trakt,
+        label: 'Shared Trakt',
+        publicConfig: const <String, dynamic>{},
+        secretConfig: const <String, dynamic>{'accessToken': 'trakt-secret'},
+      );
+      var actor = await ProfileAuthorizationContext.capture(registry);
+      await resources.grant(
+        actor: actor,
+        targetProfileId: memberId,
+        resourceId: resource.id,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+
+      await activate(memberId, 2);
+      await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+        TrackingSource.local,
+      });
+      await activate(adminId, 3);
+      actor = await ProfileAuthorizationContext.capture(registry);
+      await resources.grant(
+        actor: actor,
+        targetProfileId: memberId,
+        resourceId: resource.id,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+      await activate(memberId, 4);
+      expect(
+        await StorageService.getTrackingScrobbleTargets(),
+        <TrackingSource>{TrackingSource.local},
+      );
+
+      await activate(adminId, 5);
+      actor = await ProfileAuthorizationContext.capture(registry);
+      await resources.revokeGrant(
+        actor: actor,
+        targetProfileId: memberId,
+        resourceId: resource.id,
+      );
+      actor = await ProfileAuthorizationContext.capture(registry);
+      await resources.grant(
+        actor: actor,
+        targetProfileId: memberId,
+        resourceId: resource.id,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+
+      await activate(memberId, 6);
+      expect(
+        await StorageService.getTrackingScrobbleTargets(),
+        <TrackingSource>{TrackingSource.local, TrackingSource.trakt},
+      );
+    },
+  );
 
   test('repairs one unambiguous legacy scalar grant', () async {
     final resource = await resources.create(

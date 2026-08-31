@@ -24,6 +24,7 @@ import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
+import '../services/discover_prefs.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
 import '../services/episode_artwork_service.dart';
@@ -65,6 +66,7 @@ import '../utils/episode_progress_merge.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
+import '../utils/tv_search_focus_handoff.dart';
 import '../services/app_route_observer.dart';
 import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
@@ -100,6 +102,7 @@ import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
+import '../widgets/see_all/discover_card_settings_scope.dart';
 import '../widgets/see_all/discover_shelf_scope.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -446,6 +449,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
+  final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
   // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
@@ -1546,6 +1550,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// grid is the only thing phone/desktop ever render (see [_discStage]).
   String _discLayout = _discLayoutCached;
 
+  // Warmed before runApp, so the first Discover frame already has the user's
+  // poster-card choices instead of flashing the default chrome.
+  bool _discShowTypeTags = DiscoverPrefs.showTypeTags;
+  bool _discShowRatings = DiscoverPrefs.showRatings;
+
   /// Whether the STAGE layout is what this surface should render: the pref, on
   /// the Discover tab, on a TV. The canvas-size guard lives in the LayoutBuilder
   /// (a too-small canvas falls back to the flat panel, exactly like the grid's
@@ -1573,6 +1582,19 @@ class _SearchScreenState extends State<SearchScreen>
     _discTheaterTimer?.cancel();
     _discTakeover.value = 0;
     unawaited(_loadDiscoverLayout());
+  }
+
+  void _onDiscoverCardSettingsChanged() {
+    if (!mounted) return;
+    final showTypeTags = DiscoverPrefs.showTypeTags;
+    final showRatings = DiscoverPrefs.showRatings;
+    if (showTypeTags == _discShowTypeTags && showRatings == _discShowRatings) {
+      return;
+    }
+    setState(() {
+      _discShowTypeTags = showTypeTags;
+      _discShowRatings = showRatings;
+    });
   }
 
   @override
@@ -1688,6 +1710,10 @@ class _SearchScreenState extends State<SearchScreen>
     // Discover on TV: relay the trailer takeover to the sidebar chrome-dim so
     // the rail hides when the trailer goes fullscreen. The showing listener
     // arms the theater timer (deep lights-off a few seconds into playback).
+    if (widget.discoverMode) {
+      MainPageBridge.discoverCardSettingsChanged =
+          _onDiscoverCardSettingsChanged;
+    }
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.addListener(_relayDiscoverChromeDim);
       _discTrailerShowing.addListener(_onDiscShowingChanged);
@@ -2226,6 +2252,10 @@ class _SearchScreenState extends State<SearchScreen>
     _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
+    if (MainPageBridge.discoverCardSettingsChanged ==
+        _onDiscoverCardSettingsChanged) {
+      MainPageBridge.discoverCardSettingsChanged = null;
+    }
     if (widget.discoverMode && widget.isTelevision) {
       _discTakeover.removeListener(_relayDiscoverChromeDim);
       _discTrailerShowing.removeListener(_onDiscShowingChanged);
@@ -5458,8 +5488,14 @@ class _SearchScreenState extends State<SearchScreen>
         _applySections(raw.whereType<CatalogSection>().toList());
       }
       setState(() => _catalogSearching = false);
+      if (tv && _rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
+        _completeSearchSubmitFocus(_rowNodes.first.first);
+      } else if (tv) {
+        _searchSubmitFocus.cancel();
+      }
     } catch (_) {
       if (!mounted || token != _catalogSearchToken) return;
+      _searchSubmitFocus.cancel();
       setState(() => _catalogSearching = false);
     }
   }
@@ -6764,7 +6800,13 @@ class _SearchScreenState extends State<SearchScreen>
         // adds its useful episode / remaining-time context.
         captions: _homeLandscapeCards,
         items: [
-          for (final m in row.items) _spotlightContinueWatchingCard(row, m),
+          for (var col = 0; col < row.items.length; col++)
+            _spotlightContinueWatchingCard(
+              row,
+              row.items[col],
+              rail.cwIndex,
+              col,
+            ),
         ],
       );
     }
@@ -6806,7 +6848,12 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  SpotlightCard _spotlightContinueWatchingCard(_CwRow row, StremioMeta item) {
+  SpotlightCard _spotlightContinueWatchingCard(
+    _CwRow row,
+    StremioMeta item,
+    int cwIndex,
+    int col,
+  ) {
     final wideArt = _wideArtUrl(item);
     final episodeArt = item.type == 'series'
         ? row.episodeArtworkOf(item)
@@ -6830,7 +6877,11 @@ class _SearchScreenState extends State<SearchScreen>
       // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
       progress: (row.progressOf(item) ?? 0) * 100,
       onOpen: () => row.onOpen(item),
-      onOptions: () => row.onQuickPlay(item),
+      // Spotlight used to bypass the shared CW hold handler and Quick Play
+      // unconditionally. Route through the same preference-aware menu path as
+      // every other Home layout so disabled means Play/Remove and enabled
+      // means immediate playback on both touch and DPAD.
+      onOptions: () => _openCwCardMenu(row, item, cwIndex, col),
     );
   }
 
@@ -10661,6 +10712,7 @@ class _SearchScreenState extends State<SearchScreen>
   // ── Search field ─────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
+    _searchSubmitFocus.cancel();
     // Every mode searches on SUBMIT. Because the field is shared, emptying it
     // must invalidate EVERY mode's cached query/result state; otherwise a mode
     // switch can reveal results for text the field no longer contains.
@@ -10673,6 +10725,11 @@ class _SearchScreenState extends State<SearchScreen>
   void _onQuerySubmitted(String value) {
     _catalogDebounce?.cancel();
     final q = value.trim();
+    if (q.isEmpty) {
+      _searchSubmitFocus.cancel();
+    } else {
+      _searchSubmitFocus.arm(enabled: widget.isTelevision);
+    }
     switch (_mode) {
       case _Mode.keyword:
         _runKeyword(q);
@@ -10696,6 +10753,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   void _clearQuery() {
     _catalogDebounce?.cancel();
+    _searchSubmitFocus.cancel();
     _searchController.clear();
     _kwSearchToken++;
     _disposeKwNodes();
@@ -10718,6 +10776,15 @@ class _SearchScreenState extends State<SearchScreen>
       _listsError = null;
     });
     _restoreHome();
+  }
+
+  void _completeSearchSubmitFocus(FocusNode target) {
+    _searchSubmitFocus.complete(
+      field: _searchFocusNode,
+      isMounted: () => mounted,
+      requestFocus: target.requestFocus,
+      targetHasFocus: () => target.hasFocus,
+    );
   }
 
   void _disposeListsNodes() {
@@ -10755,7 +10822,10 @@ class _SearchScreenState extends State<SearchScreen>
   Future<void> _runListsSearch(String query) async {
     // Keep the runtime flag authoritative: when disabled, the selector omits
     // Lists and no list-search request can be issued.
-    if (!kMdblistEnabled) return;
+    if (!kMdblistEnabled) {
+      _searchSubmitFocus.cancel();
+      return;
+    }
     final q = query.trim();
     final token = ++_listsToken;
     if (q.isEmpty) {
@@ -10772,6 +10842,7 @@ class _SearchScreenState extends State<SearchScreen>
     final connected = await MdblistService.instance.isAuthenticated();
     if (!mounted || token != _listsToken) return;
     if (!connected) {
+      _searchSubmitFocus.cancel();
       setState(() {
         _listsSearching = false;
         _listsError = 'Connect MDBList in Settings to search public lists.';
@@ -10792,6 +10863,11 @@ class _SearchScreenState extends State<SearchScreen>
       _listsError = result.isUsable ? null : _listsFailureMessage(result);
       _ensureListsNodes();
     });
+    if (_listsNodes.isEmpty) {
+      _searchSubmitFocus.cancel();
+    } else {
+      _completeSearchSubmitFocus(_listsNodes.first);
+    }
   }
 
   String _listsFailureMessage(
@@ -11026,6 +11102,7 @@ class _SearchScreenState extends State<SearchScreen>
           (engineCounts is! Map || engineCounts.isEmpty) &&
           (engineErrors is! Map || engineErrors.isEmpty);
       if (torrents.isEmpty && noEngineRan) {
+        _searchSubmitFocus.cancel();
         setState(() {
           _kwError =
               'No sources enabled. Turn on at least one source in '
@@ -11037,6 +11114,7 @@ class _SearchScreenState extends State<SearchScreen>
       // Every source errored and nothing came back → surface the failure
       // instead of a misleading "No results" (searchAllEngines fails soft).
       if (torrents.isEmpty && engineErrors is Map && engineErrors.isNotEmpty) {
+        _searchSubmitFocus.cancel();
         setState(() {
           _kwError =
               'Search failed on all sources. Check your connection or '
@@ -11051,6 +11129,7 @@ class _SearchScreenState extends State<SearchScreen>
     } catch (e) {
       if (!mounted || token != _kwSearchToken) return;
       _kwSearching = false;
+      _searchSubmitFocus.cancel();
       setState(() {
         _kwError = _friendlyKeywordError(e);
         _kwLoading = false;
@@ -11081,6 +11160,9 @@ class _SearchScreenState extends State<SearchScreen>
     _kwLoading = false; // first batch replaces the full-screen loader
     _recomputeKeyword();
     _reanchorKwTab(tabAnchor);
+    if (_kwToolbarVisible) {
+      _completeSearchSubmitFocus(_kwToolbarNodes.first);
+    }
     if (_kwRefocusToolbar) {
       // The Sources-dialog re-search unmounted the focused toolbar; the
       // toolbar just remounted with this first paint — put the remote back
@@ -11117,6 +11199,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// behind the pill instead.
   void _kwFreeze() {
     _kwStreamFrozen = true;
+    _searchSubmitFocus.cancel();
   }
 
   /// Freeze AND fold any parked arrivals in — used by toolbar/dialog/tab
@@ -12403,6 +12486,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (mounted &&
         !widget.searchMode &&
         (action == SimklItemMenuAction.removeFromContinueWatching ||
+            action == SimklItemMenuAction.removeFromList ||
             action == SimklItemMenuAction.moveToCompleted ||
             action == SimklItemMenuAction.moveToDropped ||
             action == SimklItemMenuAction.moveToOnHold ||
@@ -14464,7 +14548,10 @@ class _SearchScreenState extends State<SearchScreen>
   /// The detail page's enrichment, replacing whatever the row had.
   void _adoptDetailPlayArt(StremioMeta item, PlayLoaderArt art) {
     _pendingPlayArt = art;
-    _pendingPlayArtKey = _playArtKey(item.effectiveImdbId ?? item.id, item.name);
+    _pendingPlayArtKey = _playArtKey(
+      item.effectiveImdbId ?? item.id,
+      item.name,
+    );
   }
 
   static String _playArtKey(String? id, String title) =>
@@ -16546,7 +16633,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// open/play/bound wiring is this screen's existing board handlers.
   Widget _buildDiscover() {
     final app = AppThemeScope.of(context);
-    final panel = _buildDiscoverPanel();
+    final panel = DiscoverCardSettingsScope(
+      showTypeTags: _discShowTypeTags,
+      showRatings: _discShowRatings,
+      child: _buildDiscoverPanel(),
+    );
     // Touch has no persistent focus, so a reactive detail rail has nothing to
     // react to — keep the full-width grid there. TV gets the glass-stage
     // two-pane layout.

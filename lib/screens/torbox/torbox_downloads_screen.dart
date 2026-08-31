@@ -31,6 +31,7 @@ import '../../widgets/tv_text_field.dart';
 import '../video_player_screen.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../utils/tv_search_focus_handoff.dart';
 
 /// TV: skip the dialog backdrop blur — the dialog panels here are fully
 /// opaque, so the blur only tints the thin margin ring around them, while its
@@ -191,6 +192,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final FocusNode _deleteButtonFocusNode = FocusNode(
     debugLabel: 'torbox-delete-btn',
   );
+  final TvSearchFocusHandoff _torrentSearchSubmitFocus = TvSearchFocusHandoff();
 
   static const int _limit = 50;
 
@@ -5735,7 +5737,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();
-    if (query.isEmpty) return;
+    if (query.isEmpty) {
+      _torrentSearchSubmitFocus.cancel();
+      return;
+    }
     if (widget.selectSourceMode &&
         _hiddenFromNav &&
         !_queryMatchesInitialTitle(query)) {
@@ -5748,22 +5753,41 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           duration: const Duration(seconds: 3),
         ),
       );
+      _torrentSearchSubmitFocus.cancel();
       return;
     }
-    if (_allTorrentsForSearch.isEmpty && !_isLoadingTorrentSearch) {
-      setState(() {
-        _torrentSearchQuery = query;
-        _isLoadingTorrentSearch = true;
-      });
-      _fetchAllTorrentsForSearch();
+    _torrentSearchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
+    if (_allTorrentsForSearch.isEmpty) {
+      setState(() => _torrentSearchQuery = query);
+      if (!_isLoadingTorrentSearch) {
+        setState(() => _isLoadingTorrentSearch = true);
+        _fetchAllTorrentsForSearch();
+      }
     } else {
       setState(() => _torrentSearchQuery = query);
+      _completeTorrentSearchSubmitFocus();
     }
+  }
+
+  void _completeTorrentSearchSubmitFocus() {
+    if (_filteredTorrentSearchResults.isEmpty) {
+      _torrentSearchSubmitFocus.cancel();
+      return;
+    }
+    _torrentSearchSubmitFocus.complete(
+      field: _torrentSearchFocusNode,
+      isMounted: () => mounted,
+      requestFocus: _firstItemFocusNode.requestFocus,
+      targetHasFocus: () => _firstItemFocusNode.hasFocus,
+    );
   }
 
   Future<void> _fetchAllTorrentsForSearch() async {
     final key = _apiKey;
-    if (key == null || key.isEmpty) return;
+    if (key == null || key.isEmpty) {
+      _torrentSearchSubmitFocus.cancel();
+      return;
+    }
 
     try {
       final List<TorboxTorrent> allTorrents = [];
@@ -5790,9 +5814,11 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           _allTorrentsForSearch = allTorrents;
           _isLoadingTorrentSearch = false;
         });
+        _completeTorrentSearchSubmitFocus();
       }
     } catch (e) {
       if (mounted) {
+        _torrentSearchSubmitFocus.cancel();
         setState(() => _isLoadingTorrentSearch = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -6708,6 +6734,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               controller: _torrentSearchController,
               focusNode: _torrentSearchFocusNode,
               autofocus: true,
+              onChanged: (_) => _torrentSearchSubmitFocus.cancel(),
               onSubmitted: (_) => _submitTorrentSearch(),
               textInputAction: TextInputAction.search,
               style: const TextStyle(fontSize: 14),
@@ -6749,6 +6776,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
                   if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+                    _torrentSearchSubmitFocus.cancel();
                     _torrentSearchController.clear();
                     setState(() => _torrentSearchQuery = '');
                     _torrentSearchFocusNode.requestFocus();
@@ -6765,6 +6793,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return IconButton(
                       onPressed: () {
+                        _torrentSearchSubmitFocus.cancel();
                         _torrentSearchController.clear();
                         setState(() => _torrentSearchQuery = '');
                         _torrentSearchFocusNode.requestFocus();

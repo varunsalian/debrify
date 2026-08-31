@@ -16,6 +16,8 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
+import '../utils/platform_util.dart';
+import '../utils/tv_search_focus_handoff.dart';
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
@@ -135,6 +137,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final FocusNode _deleteButtonFocusNode = FocusNode(
     debugLabel: 'rd-delete-btn',
   );
+  final TvSearchFocusHandoff _torrentSearchSubmitFocus = TvSearchFocusHandoff();
 
   // Flag to focus first item after data loads (set by TV content focus handler)
   bool _shouldFocusOnLoad = false;
@@ -560,7 +563,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();
-    if (query.isEmpty) return;
+    if (query.isEmpty) {
+      _torrentSearchSubmitFocus.cancel();
+      return;
+    }
     if (widget.selectSourceMode &&
         _hiddenFromNav &&
         !_queryMatchesInitialTitle(query)) {
@@ -573,18 +579,37 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           duration: const Duration(seconds: 3),
         ),
       );
+      _torrentSearchSubmitFocus.cancel();
       return;
     }
+    _torrentSearchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
     setState(() => _torrentSearchQuery = query);
-    if (_allTorrentsForSearch.isEmpty && !_isLoadingSearch) {
-      _fetchAllTorrentsForSearch();
+    if (_allTorrentsForSearch.isEmpty) {
+      if (!_isLoadingSearch) _fetchAllTorrentsForSearch();
     } else {
       setState(() {}); // Trigger rebuild with new query
+      _completeTorrentSearchSubmitFocus();
     }
   }
 
+  void _completeTorrentSearchSubmitFocus() {
+    if (_filteredSearchTorrents.isEmpty) {
+      _torrentSearchSubmitFocus.cancel();
+      return;
+    }
+    _torrentSearchSubmitFocus.complete(
+      field: _torrentSearchFocusNode,
+      isMounted: () => mounted,
+      requestFocus: _firstItemFocusNode.requestFocus,
+      targetHasFocus: () => _firstItemFocusNode.hasFocus,
+    );
+  }
+
   Future<void> _fetchAllTorrentsForSearch() async {
-    if (_apiKey == null) return;
+    if (_apiKey == null) {
+      _torrentSearchSubmitFocus.cancel();
+      return;
+    }
     setState(() => _isLoadingSearch = true);
 
     try {
@@ -611,9 +636,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           _allTorrentsForSearch = allTorrents;
           _isLoadingSearch = false;
         });
+        _completeTorrentSearchSubmitFocus();
       }
     } catch (e) {
       if (mounted) {
+        _torrentSearchSubmitFocus.cancel();
         setState(() => _isLoadingSearch = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3352,6 +3379,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               controller: _torrentSearchController,
               focusNode: _torrentSearchFocusNode,
               autofocus: true,
+              onChanged: (_) => _torrentSearchSubmitFocus.cancel(),
               onSubmitted: (_) => _submitTorrentSearch(),
               textInputAction: TextInputAction.search,
               style: const TextStyle(fontSize: 14),
@@ -3393,6 +3421,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
                   if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+                    _torrentSearchSubmitFocus.cancel();
                     _torrentSearchController.clear();
                     setState(() => _torrentSearchQuery = '');
                     _torrentSearchFocusNode.requestFocus();
@@ -3409,6 +3438,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return IconButton(
                       onPressed: () {
+                        _torrentSearchSubmitFocus.cancel();
                         _torrentSearchController.clear();
                         setState(() => _torrentSearchQuery = '');
                         _torrentSearchFocusNode.requestFocus();

@@ -8054,6 +8054,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _channelSearchFocusNode.requestFocus();
   }
 
+  void _focusBelowChannelSearch() {
+    final fieldContext = _channelSearchFocusNode.context;
+    if (fieldContext != null) {
+      FocusScope.of(fieldContext).nextFocus();
+    }
+  }
+
   void _handleTopMenuAction(_DebrifyTvTopMenuAction action) {
     switch (action) {
       case _DebrifyTvTopMenuAction.import:
@@ -8419,12 +8426,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   }
                 },
                 onUpArrow: () => _channelSearchButtonFocusNode.requestFocus(),
-                onDownArrow: () {
-                  final ctx = _channelSearchFocusNode.context;
-                  if (ctx != null) {
-                    FocusScope.of(ctx).nextFocus();
-                  }
-                },
+                onSubmitted: (_) => _focusBelowChannelSearch(),
+                onDownArrow: _focusBelowChannelSearch,
                 decoration: InputDecoration(
                   hintText: 'Search channels...',
                   hintStyle: TextStyle(

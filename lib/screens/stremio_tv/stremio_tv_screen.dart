@@ -2738,6 +2738,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   keyboardInk: app.core.tx,
                                   keyboardInkOnAccent:
                                       app.inkOn(app.youtube.focus),
+                                  onSubmitted: (_) =>
+                                      _searchBtnFocusNode.requestFocus(),
                                   onDownArrow: () =>
                                       _searchBtnFocusNode.requestFocus(),
                                   onUpArrow: () {

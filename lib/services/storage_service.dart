@@ -29,6 +29,7 @@ import '../models/tv_hero_artwork_quality.dart';
 import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
+import 'tracking_scrobble_preferences.dart';
 
 /// Which ambient-trailer surface a sound/volume preference belongs to.
 ///
@@ -61,7 +62,8 @@ enum TvRenderQuality {
 class StorageService {
   static const String _explicitlyWatchedSeriesKey =
       'explicitly_watched_series_v1';
-  static const String trackingScrobbleTargetsKey = 'tracking_scrobble_targets';
+  static const String trackingScrobbleTargetsKey =
+      TrackingScrobblePreferences.key;
   static const String watchProgressSourceKey = 'watch_progress_source';
   static const String homeTickSourcesKey = 'home_tick_sources';
 
@@ -6150,49 +6152,25 @@ class StorageService {
   /// Reads the new master scrobble switches. On first read, adopt the retired
   /// per-tracker catalog switches once. An absent legacy value means ON: that
   /// matches interactive connection and old Trakt/Simkl restore behavior.
-  static Future<Set<TrackingSource>> getTrackingScrobbleTargets() async {
-    final prefs = await ProfilePreferences.instance();
-    final stored = prefs.getStringList(trackingScrobbleTargetsKey);
-    if (stored != null) {
-      return <TrackingSource>{
-        TrackingSource.local,
-        for (final value in stored)
-          if (TrackingSourceStorageName.parse(value) case final source?) source,
-      };
-    }
-
-    final seeded = <TrackingSource>{TrackingSource.local};
-    const legacyKeys = <TrackingSource, String>{
-      TrackingSource.trakt: 'trakt_sync_catalog_items',
-      TrackingSource.simkl: 'simkl_sync_catalog_items',
-      TrackingSource.mdblist: 'mdblist_sync_catalog_items',
-    };
-    for (final entry in legacyKeys.entries) {
-      if (!prefs.containsKey(entry.value) ||
-          (prefs.getBool(entry.value) ?? true)) {
-        seeded.add(entry.key);
-      }
-    }
-    await prefs.setStringList(
-      trackingScrobbleTargetsKey,
-      seeded.map((source) => source.storageName).toList(growable: false),
-    );
-    return seeded;
-  }
+  static Future<Set<TrackingSource>> getTrackingScrobbleTargets() =>
+      TrackingScrobblePreferences.readCurrent();
 
   static Future<void> setTrackingScrobbleTargets(
     Set<TrackingSource> value,
   ) async {
-    final prefs = await ProfilePreferences.instance();
-    final normalized = <TrackingSource>{
-      TrackingSource.local,
-      ...value.where(_allTrackingSources.contains),
-    };
-    await prefs.setStringList(
-      trackingScrobbleTargetsKey,
-      normalized.map((source) => source.storageName).toList(growable: false),
-    );
+    await TrackingScrobblePreferences.writeCurrent(value);
     trackingSourceRevision.value++;
+  }
+
+  /// Turns on scrobbling for a newly connected tracker without disturbing the
+  /// user's choices for any other tracker. Connection flows call this after
+  /// authentication succeeds so reconnecting restores the provider's default
+  /// ON state even when it had previously been unticked.
+  static Future<void> enableTrackingScrobbleTarget(
+    TrackingSource source,
+  ) async {
+    final changed = await TrackingScrobblePreferences.enableCurrent(source);
+    if (changed) trackingSourceRevision.value++;
   }
 
   static Future<WatchProgressSource> getWatchProgressSource() async {
@@ -6269,14 +6247,12 @@ class StorageService {
     };
   }
 
-  /// Drops the seeded scrobble masters so the next read re-adopts the legacy
-  /// per-tracker switches. Needed after restoring an OLD backup (one with no
-  /// tracking payload): the masters were already seeded on first policy read
-  /// at app start, so without this the restored legacy values — notably an
+  /// Re-adopts the legacy per-tracker switches after restoring an OLD backup
+  /// with no tracking payload. The masters were already seeded on first policy
+  /// read at app start, so without this the restored legacy values — notably an
   /// MDBList sync-catalog OFF — would be silently ignored.
   static Future<void> reseedTrackingScrobbleTargetsFromLegacy() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(trackingScrobbleTargetsKey);
+    await TrackingScrobblePreferences.reseedCurrentFromLegacy();
     trackingSourceRevision.value++;
   }
 

@@ -498,11 +498,17 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
           onSelected: _selected,
           onManage: onManage,
         );
-      // Marquee is the default; an unknown stored value (a future style
-      // rolled back) lands here too rather than on a blank screen.
       case ProfileGateStyle.marquee:
-      default:
         return ProfileMarqueeGateScreen(
+          profiles: profiles,
+          onSelected: _selected,
+          onManage: onManage,
+        );
+      // Stage Cards is the default; an unknown stored value (a future style
+      // rolled back) lands here too rather than on a blank screen.
+      case ProfileGateStyle.stageCards:
+      default:
+        return ProfileStageCardsGateScreen(
           profiles: profiles,
           onSelected: _selected,
           onManage: onManage,
