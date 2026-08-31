@@ -2059,9 +2059,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun setupMetadataReceiver() {
         metadataUpdateReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-                val updatesJson = intent?.getStringExtra("metadataUpdates")
+                // Large JSON arrives as cacheDir file paths — inline extras
+                // over the binder limit get the process killed by the system
+                // ("can't deliver broadcast"). Inline extras remain as a
+                // fallback; a missing/unreadable file just skips the update.
+                val updatesJson = readStagedExtra(
+                    intent, "metadataUpdatesPath", "episode_metadata_",
+                ) ?: intent?.getStringExtra("metadataUpdates")
                 val imdbId = intent?.getStringExtra("imdbId")
-                val guideJson = intent?.getStringExtra("guideEpisodes")
+                val guideJson = readStagedExtra(
+                    intent, "guideEpisodesPath", "episode_guide_",
+                ) ?: intent?.getStringExtra("guideEpisodes")
                 val showName = intent?.getStringExtra("showName")
                 handleMetadataUpdate(updatesJson, imdbId, guideJson, showName)
             }
@@ -2077,6 +2085,37 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Request metadata from Flutter now that receiver is ready
         requestMetadataFromFlutter()
+    }
+
+    /** Reads a staged cacheDir JSON file whose path rides in [key].
+     *  Returns null when the extra is absent or the file can't be read.
+     *
+     *  Read-only on purpose: during an activity handoff two player instances
+     *  briefly have live receivers, and a delete-on-read would let the dying
+     *  one consume the file before the live one sees it. The sender sweeps
+     *  old staged files on each push instead.
+     *
+     *  Pre-33 the receiver is effectively exported, so never trust the path:
+     *  only files of the expected [prefix] directly inside our cacheDir. */
+    private fun readStagedExtra(
+        intent: android.content.Intent?,
+        key: String,
+        prefix: String,
+    ): String? {
+        val path = intent?.getStringExtra(key) ?: return null
+        return try {
+            val file = java.io.File(path).canonicalFile
+            if (file.parentFile?.canonicalPath != cacheDir.canonicalPath ||
+                !file.name.startsWith(prefix)
+            ) {
+                android.util.Log.e("TVMazeUpdate", "Rejected staged $key outside cacheDir")
+                return null
+            }
+            file.readText()
+        } catch (e: Exception) {
+            android.util.Log.e("TVMazeUpdate", "Failed to read staged $key: ${e.message}")
+            null
+        }
     }
 
     private fun handleMetadataUpdate(

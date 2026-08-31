@@ -1101,17 +1101,20 @@ class AndroidTvPlayerBridge {
               'TVMazeUpdate: Sending ${pending?.length ?? 0} pending metadata updates, imdbId=$pendingImdb',
             );
             // Send the pending updates via broadcast (including IMDB ID for subtitles)
-            await updateEpisodeMetadata(
+            final sent = await updateEpisodeMetadata(
               pending ?? [],
               imdbId: pendingImdb,
               guideEpisodes: pendingGuide,
               showName: _pendingShowName,
             );
-            // Clear pending updates after sending
-            _pendingMetadataUpdates = null;
-            _pendingImdbId = null;
-            _pendingGuideEpisodes = null;
-            _pendingShowName = null;
+            // Clear only on success so a transient native failure (e.g. the
+            // staging file write) leaves the data for the next re-request.
+            if (sent) {
+              _pendingMetadataUpdates = null;
+              _pendingImdbId = null;
+              _pendingGuideEpisodes = null;
+              _pendingShowName = null;
+            }
           } else {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
