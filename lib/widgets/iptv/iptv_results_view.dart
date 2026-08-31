@@ -3328,6 +3328,15 @@ class IptvResultsViewState extends State<IptvResultsView>
           if (entry.channel.attributes['has_next_episode'] != null)
             'hasNextEpisode':
                 entry.channel.attributes['has_next_episode'] == 'true',
+          if (entry.channel.attributes['tv_archive'] != null)
+            'tvArchive': entry.channel.attributes['tv_archive'],
+          if (int.tryParse(
+                entry.channel.attributes['tv_archive_duration'] ?? '',
+              ) !=
+              null)
+            'tvArchiveDuration': int.parse(
+              entry.channel.attributes['tv_archive_duration']!,
+            ),
           if (entry.channel.attributes['series_playlist_id'] != null)
             'seriesPlaylistId': entry.channel.attributes['series_playlist_id'],
         },

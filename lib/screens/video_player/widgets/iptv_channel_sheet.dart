@@ -624,6 +624,12 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     if (raw['hasNextEpisode'] != null) {
       attributes['has_next_episode'] = raw['hasNextEpisode'].toString();
     }
+    if (raw['tvArchive'] != null) {
+      attributes['tv_archive'] = raw['tvArchive'].toString();
+    }
+    if (raw['tvArchiveDuration'] != null) {
+      attributes['tv_archive_duration'] = raw['tvArchiveDuration'].toString();
+    }
     return IptvChannel(
       channelNumber: (raw['channelNumber'] as num?)?.toInt(),
       name: raw['name'] as String? ?? 'Unknown channel',

@@ -27,6 +27,11 @@ class EpgProgramme {
   /// XMLTV programmes (no catchup there).
   final String? rawStart;
 
+  /// Parsed start from the panel row that owns the replay. This survives
+  /// merging catch-up metadata onto an authoritative XMLTV display timeline,
+  /// including when the panel omitted its textual [rawStart].
+  final DateTime? replayStart;
+
   const EpgProgramme({
     required this.title,
     required this.description,
@@ -34,6 +39,7 @@ class EpgProgramme {
     required this.stop,
     this.hasArchive = false,
     this.rawStart,
+    this.replayStart,
   });
 
   bool airsAt(DateTime t) => !t.isBefore(start) && t.isBefore(stop);
@@ -186,10 +192,21 @@ class IptvEpgService {
   static const _scheduleTtl = Duration(minutes: 30);
   static const _maxScheduleEntries = 24;
 
+  /// Completed Xtream programmes exposed by the panel's per-channel data
+  /// table. This is deliberately separate from [_scheduleCache]: the normal
+  /// now/future timeline stays on its small three-hour history window, while
+  /// an explicitly opened full guide can opt into a bounded replay archive.
+  final LinkedHashMap<String, _CachedPanelSchedule> _panelScheduleCache =
+      LinkedHashMap();
+  static const _catchupHistoryWindow = Duration(days: 3);
+  static const _maxCatchupHistoryEntries = 500;
+  static const _maxCompactScheduleEntries = 250;
+
   // In-flight coalescing: the rail, the row, and the player can all ask for
   // the same channel at once.
   final Map<String, Future<EpgNowNext>> _nowNextInFlight = {};
   final Map<String, Future<List<EpgProgramme>>> _scheduleInFlight = {};
+  final Map<String, Future<List<EpgProgramme>>> _panelScheduleInFlight = {};
 
   // ── XMLTV context (plain M3U playlists) ──────────────────────────────────
   //
@@ -625,8 +642,9 @@ class IptvEpgService {
 
   /// The timeshift `start` parameter: `YYYY-MM-DD:HH-MM` in PANEL-local
   /// time. Prefer the listing's own raw start string (already panel-local);
-  /// fall back to our local clock rendering of the parsed start — right
-  /// whenever panel and device share a timezone.
+  /// fall back to our local clock rendering of the parsed panel start (or the
+  /// display start when no panel row was retained) — right whenever panel and
+  /// device share a timezone.
   @visibleForTesting
   static String catchupStart(EpgProgramme programme) {
     final raw = programme.rawStart?.trim();
@@ -638,7 +656,7 @@ class IptvEpgService {
         return '${match.group(1)}:${match.group(2)}-${match.group(3)}';
       }
     }
-    final s = programme.start;
+    final s = programme.replayStart ?? programme.start;
     String two(int v) => v.toString().padLeft(2, '0');
     return '${s.year}-${two(s.month)}-${two(s.day)}:${two(s.hour)}-${two(s.minute)}';
   }
@@ -780,6 +798,11 @@ class IptvEpgService {
   bool? debugNowNextIsFailure(String channelUrl) =>
       _nowNextCache[channelUrl]?.failed;
 
+  /// Number of decoded panel rows retained for this channel, if cached.
+  @visibleForTesting
+  int? debugPanelScheduleSize(String channelUrl) =>
+      _panelScheduleCache[channelUrl]?.value.length;
+
   /// Backdate a cached now/next entry so a test can cross a TTL boundary
   /// without waiting on the clock. Preserves the entry's value and its
   /// failure flag — only [_CachedNowNext.fetchedAt] moves.
@@ -832,7 +855,13 @@ class IptvEpgService {
   /// whose data-table timestamps carry a provider-wide timezone shift.
   /// Pure-M3U channels only ever have the XMLTV index, while Xtream channels
   /// without XMLTV coverage keep using the data table as before.
-  Future<List<EpgProgramme>> schedule(String channelUrl) {
+  Future<List<EpgProgramme>> schedule(String channelUrl) =>
+      _schedule(channelUrl);
+
+  Future<List<EpgProgramme>> _schedule(
+    String channelUrl, {
+    List<EpgProgramme>? panelListings,
+  }) {
     final xmltv = _xmltvProgrammesFor(channelUrl);
     if (xmltv != null && _parseXtreamUrl(channelUrl) == null) {
       return Future.value(xmltv);
@@ -850,13 +879,139 @@ class IptvEpgService {
     final inFlight = _scheduleInFlight[inFlightKey];
     if (inFlight != null) return inFlight;
 
-    final future = _fetchSchedule(channelUrl, contextGeneration).whenComplete(
-      () {
-        _scheduleInFlight.remove(inFlightKey);
-      },
-    );
+    final future =
+        _fetchSchedule(
+          channelUrl,
+          contextGeneration,
+          panelListings: panelListings,
+        ).whenComplete(() {
+          _scheduleInFlight.remove(inFlightKey);
+        });
     _scheduleInFlight[inFlightKey] = future;
     return future;
+  }
+
+  /// The full guide shown after an explicit schedule action: the existing
+  /// compact schedule plus up to 72 hours of completed Xtream catch-up.
+  ///
+  /// Keeping this opt-in prevents archive history from widening the XMLTV
+  /// ingest, row-level now/next lookups, or the focus-stage preview. Only
+  /// programmes the panel itself marks archived are added, and the channel's
+  /// advertised archive duration can shorten (never extend) the 72h window.
+  Future<List<EpgProgramme>> scheduleWithCatchupHistory(IptvChannel channel) =>
+      scheduleWithCatchupHistoryUrl(
+        channel.url,
+        archiveDisabled: channel.attributes['tv_archive'] == '0',
+        archiveDurationDays: int.tryParse(
+          channel.attributes['tv_archive_duration'] ?? '',
+        ),
+      );
+
+  /// URL-only form for the native Android TV bridge. Archive capability
+  /// metadata crosses the launch payload when available; favorites and older
+  /// saved rows may omit it, in which case per-programme `has_archive` remains
+  /// the authoritative allow signal.
+  Future<List<EpgProgramme>> scheduleWithCatchupHistoryUrl(
+    String channelUrl, {
+    bool archiveDisabled = false,
+    int? archiveDurationDays,
+  }) async {
+    if (archiveDisabled) {
+      final normal = await schedule(channelUrl);
+      return [
+        for (final programme in normal)
+          if (!programme.hasArchive)
+            programme
+          else
+            EpgProgramme(
+              title: programme.title,
+              description: programme.description,
+              start: programme.start,
+              stop: programme.stop,
+              rawStart: programme.rawStart,
+              replayStart: programme.replayStart,
+            ),
+      ];
+    }
+
+    final ref = _parseXtreamUrl(channelUrl);
+    if (ref == null) return schedule(channelUrl);
+
+    // Share this result, including an empty/failure result, with both halves
+    // of this guide load. Empty results remain uncached globally so a later
+    // explicit guide open can retry a transient panel problem.
+    final panelListings = await _panelSchedule(channelUrl, ref);
+    final normal = await _schedule(channelUrl, panelListings: panelListings);
+    final history = _catchupHistoryFromListings(
+      panelListings,
+      archiveDurationDays: archiveDurationDays,
+    );
+    if (history.isEmpty) return normal;
+    if (normal.isEmpty) return history;
+
+    // The XMLTV-authoritative normal timeline may already contain the recent
+    // archived rows with panel metadata donated into it. Prefer those display
+    // times and add only genuinely older/different panel rows. rawStart is the
+    // strongest identity because it came from the same data-table row.
+    final combined = <EpgProgramme>[...normal];
+    for (final candidate in history) {
+      final duplicate = combined.any((existing) {
+        final raw = candidate.rawStart;
+        if (raw != null && existing.rawStart == raw) return true;
+        final replayStart = candidate.replayStart;
+        if (replayStart != null && existing.replayStart == replayStart) {
+          return true;
+        }
+        return existing.title == candidate.title &&
+            existing.start == candidate.start &&
+            existing.stop == candidate.stop;
+      });
+      if (!duplicate) combined.add(candidate);
+    }
+    combined.sort((a, b) => a.start.compareTo(b.start));
+    return combined;
+  }
+
+  /// Completed, panel-confirmed Xtream replay rows from the last 72 hours.
+  /// This never manufactures archive availability from XMLTV alone.
+  Future<List<EpgProgramme>> catchupHistoryUrl(
+    String channelUrl, {
+    bool archiveDisabled = false,
+    int? archiveDurationDays,
+  }) async {
+    if (archiveDisabled) return const [];
+    final ref = _parseXtreamUrl(channelUrl);
+    if (ref == null) return const [];
+    final listings = await _panelSchedule(channelUrl, ref);
+    return _catchupHistoryFromListings(
+      listings,
+      archiveDurationDays: archiveDurationDays,
+    );
+  }
+
+  List<EpgProgramme> _catchupHistoryFromListings(
+    List<EpgProgramme> listings, {
+    int? archiveDurationDays,
+  }) {
+    if (listings.isEmpty) return const [];
+
+    var window = _catchupHistoryWindow;
+    if (archiveDurationDays != null && archiveDurationDays > 0) {
+      final providerWindow = Duration(days: archiveDurationDays);
+      if (providerWindow < window) window = providerWindow;
+    }
+    final now = DateTime.now();
+    final floor = now.subtract(window);
+    final result = [
+      for (final programme in listings)
+        if (programme.hasArchive &&
+            programme.stop.isBefore(now) &&
+            !programme.start.isBefore(floor))
+          programme,
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    return result.length > _maxCatchupHistoryEntries
+        ? result.sublist(result.length - _maxCatchupHistoryEntries)
+        : result;
   }
 
   Future<EpgNowNext> _fetchNowNext(String channelUrl) async {
@@ -879,22 +1034,14 @@ class IptvEpgService {
 
   Future<List<EpgProgramme>> _fetchSchedule(
     String channelUrl,
-    int contextGeneration,
-  ) async {
+    int contextGeneration, {
+    List<EpgProgramme>? panelListings,
+  }) async {
     final ref = _parseXtreamUrl(channelUrl);
     if (ref == null) return const [];
     final xmltv = _xmltvProgrammesFor(channelUrl);
 
-    var listings =
-        await _fetchListings(ref, 'get_simple_data_table', '') ??
-        const <EpgProgramme>[];
-    if (listings.isEmpty) {
-      // Old panels shipped this endpoint under a typo'd action name;
-      // production clients fall back to it when the real one is empty.
-      listings =
-          await _fetchListings(ref, 'get_simple_date_table', '') ??
-          const <EpgProgramme>[];
-    }
+    var listings = panelListings ?? await _panelSchedule(channelUrl, ref);
     // Panels differ wildly in horizon; some return a week of history. Keep
     // from a couple of hours back (context for "what did I just miss") to
     // whatever future the panel serves, capped so the UI stays bounded.
@@ -951,6 +1098,85 @@ class IptvEpgService {
     return listings;
   }
 
+  /// Fetch the panel's per-channel table once and share its bounded useful
+  /// subset between the compact schedule and the opt-in catch-up browser.
+  /// Empty/failure answers are not cached so opening the guide again can retry
+  /// a transient panel problem, matching the existing schedule behavior.
+  Future<List<EpgProgramme>> _panelSchedule(
+    String channelUrl,
+    _XtreamRef ref,
+  ) async {
+    final cached = _panelScheduleCache[channelUrl];
+    if (cached != null && !cached.isStale) return cached.value;
+
+    final inFlight = _panelScheduleInFlight[channelUrl];
+    if (inFlight != null) return inFlight;
+
+    final future = _fetchPanelSchedule(channelUrl, ref).whenComplete(() {
+      _panelScheduleInFlight.remove(channelUrl);
+    });
+    _panelScheduleInFlight[channelUrl] = future;
+    return future;
+  }
+
+  Future<List<EpgProgramme>> _fetchPanelSchedule(
+    String channelUrl,
+    _XtreamRef ref,
+  ) async {
+    var listings =
+        await _fetchListings(ref, 'get_simple_data_table', '') ??
+        const <EpgProgramme>[];
+    if (listings.isEmpty) {
+      // Old panels shipped this endpoint under a typo'd action name;
+      // production clients fall back to it when the real one is empty.
+      listings =
+          await _fetchListings(ref, 'get_simple_date_table', '') ??
+          const <EpgProgramme>[];
+    }
+    listings = _boundPanelSchedule(listings, DateTime.now());
+    if (listings.isNotEmpty) {
+      _panelScheduleCache.remove(channelUrl);
+      _panelScheduleCache[channelUrl] = _CachedPanelSchedule(listings);
+      while (_panelScheduleCache.length > _maxScheduleEntries) {
+        _panelScheduleCache.remove(_panelScheduleCache.keys.first);
+      }
+    }
+    return listings;
+  }
+
+  /// Retain exactly what the two consumers can use: at most 500 completed
+  /// archived rows from the catch-up window and the same 250-row compact
+  /// timeline [schedule] has always exposed. Object-identity set semantics
+  /// remove the recent archived rows that belong to both groups.
+  static List<EpgProgramme> _boundPanelSchedule(
+    List<EpgProgramme> source,
+    DateTime now,
+  ) {
+    final historyFloor = now.subtract(_catchupHistoryWindow);
+    var history = [
+      for (final programme in source)
+        if (programme.hasArchive &&
+            programme.stop.isBefore(now) &&
+            !programme.start.isBefore(historyFloor))
+          programme,
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    if (history.length > _maxCatchupHistoryEntries) {
+      history = history.sublist(history.length - _maxCatchupHistoryEntries);
+    }
+
+    final timelineFloor = now.subtract(const Duration(hours: 3));
+    var timeline = [
+      for (final programme in source)
+        if (programme.stop.isAfter(timelineFloor)) programme,
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    if (timeline.length > _maxCompactScheduleEntries) {
+      timeline = timeline.sublist(0, _maxCompactScheduleEntries);
+    }
+
+    return <EpgProgramme>{...history, ...timeline}.toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+  }
+
   static List<EpgProgramme> _trimSchedule(
     List<EpgProgramme> source,
     DateTime now,
@@ -960,7 +1186,9 @@ class IptvEpgService {
       for (final p in source)
         if (p.stop.isAfter(floor)) p,
     ]..sort((a, b) => a.start.compareTo(b.start));
-    return result.length > 250 ? result.sublist(0, 250) : result;
+    return result.length > _maxCompactScheduleEntries
+        ? result.sublist(0, _maxCompactScheduleEntries)
+        : result;
   }
 
   /// Overlay catch-up metadata from the panel onto the XMLTV timeline.
@@ -1061,6 +1289,7 @@ class IptvEpgService {
             stop: xmlProgramme.stop,
             hasArchive: match.hasArchive,
             rawStart: match.rawStart,
+            replayStart: match.replayStart ?? match.start,
           );
         }(),
     ];
@@ -1156,13 +1385,15 @@ class IptvEpgService {
     final title = _decodeXtreamText(item['title']);
     if (title.isEmpty) return null;
     final archive = item['has_archive'];
+    final hasArchive = archive == 1 || archive == '1' || archive == true;
     return EpgProgramme(
       title: title,
       description: _decodeXtreamText(item['description']),
       start: start,
       stop: stop,
-      hasArchive: archive == 1 || archive == '1' || archive == true,
+      hasArchive: hasArchive,
       rawStart: item['start'] is String ? item['start'] as String : null,
+      replayStart: hasArchive ? start : null,
     );
   }
 
@@ -1360,6 +1591,15 @@ class _CachedSchedule {
   final int contextGeneration;
   _CachedSchedule(this.value, {required this.contextGeneration})
     : fetchedAt = DateTime.now();
+
+  bool get isStale =>
+      DateTime.now().difference(fetchedAt) >= IptvEpgService._scheduleTtl;
+}
+
+class _CachedPanelSchedule {
+  final List<EpgProgramme> value;
+  final DateTime fetchedAt = DateTime.now();
+  _CachedPanelSchedule(this.value);
 
   bool get isStale =>
       DateTime.now().difference(fetchedAt) >= IptvEpgService._scheduleTtl;

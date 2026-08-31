@@ -997,8 +997,8 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
   }
 
   Future<void> _load() async {
-    final programmes = await IptvEpgService.instance.schedule(
-      widget.channel.url,
+    final programmes = await IptvEpgService.instance.scheduleWithCatchupHistory(
+      widget.channel,
     );
     if (!mounted) return;
 

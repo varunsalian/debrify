@@ -8554,6 +8554,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     channel.optBoolean("hasNextEpisode").takeIf {
                         channel.has("hasNextEpisode")
                     },
+                tvArchive = channel.optString("tvArchive")
+                    .takeIf { it.isNotEmpty() },
+                tvArchiveDuration = channel.optInt("tvArchiveDuration", 0)
+                    .takeIf { it > 0 },
                 resumePositionMs = channel.optLong("resumePositionMs", 0L),
                 headers = channel.optJSONObject("httpHeaders")?.let { obj ->
                     buildMap {
@@ -8607,6 +8611,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 season = (channel["season"] as? Number)?.toInt(),
                 episode = (channel["episode"] as? Number)?.toInt(),
                 hasNextEpisode = channel["hasNextEpisode"] as? Boolean,
+                tvArchive = (channel["tvArchive"] as? String)
+                    ?.takeIf { it.isNotEmpty() },
+                tvArchiveDuration = (channel["tvArchiveDuration"] as? Number)
+                    ?.toInt(),
                 resumePositionMs =
                     (channel["resumePositionMs"] as? Number)?.toLong() ?: 0L,
                 headers = headers,
@@ -8630,6 +8638,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         season: Int?,
         episode: Int?,
         hasNextEpisode: Boolean?,
+        tvArchive: String?,
+        tvArchiveDuration: Int?,
         resumePositionMs: Long,
         headers: Map<String, String>,
     ): IptvChannelEntry {
@@ -8657,6 +8667,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             season = season,
             episode = episode,
             hasNextEpisode = hasNextEpisode,
+            tvArchive = tvArchive,
+            tvArchiveDuration = tvArchiveDuration,
         )
     }
 
@@ -9473,6 +9485,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             R.id.iptv_source_button,
             R.id.iptv_category_button,
             R.id.iptv_mode_live,
+            R.id.iptv_epg_day_three_ago,
+            R.id.iptv_epg_day_two_ago,
+            R.id.iptv_epg_day_yesterday,
             R.id.iptv_epg_day_today,
             R.id.iptv_epg_day_tomorrow,
             R.id.iptv_epg_day_later,
@@ -9559,6 +9574,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         findViewById<View>(R.id.iptv_mode_live)?.setOnClickListener {
             selectIptvContentType("live")
         }
+        findViewById<View>(R.id.iptv_epg_day_three_ago)?.setOnClickListener {
+            selectIptvEpgDay(-3)
+        }
+        findViewById<View>(R.id.iptv_epg_day_two_ago)?.setOnClickListener {
+            selectIptvEpgDay(-2)
+        }
+        findViewById<View>(R.id.iptv_epg_day_yesterday)?.setOnClickListener {
+            selectIptvEpgDay(-1)
+        }
         findViewById<View>(R.id.iptv_epg_day_today)?.setOnClickListener {
             selectIptvEpgDay(0)
         }
@@ -9637,6 +9661,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             R.id.iptv_source_button,
             R.id.iptv_category_button,
             R.id.iptv_mode_live,
+            R.id.iptv_epg_day_three_ago,
+            R.id.iptv_epg_day_two_ago,
+            R.id.iptv_epg_day_yesterday,
             R.id.iptv_epg_day_today,
             R.id.iptv_epg_day_tomorrow,
             R.id.iptv_epg_day_later,
@@ -10591,7 +10618,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!entry.url.startsWith("http")) return // stremio-tv:// keys etc.
 
         entry.epgLoading = true
-        requestIptvEpg(entry.url, includeSchedule = false) { result ->
+        requestIptvEpg(entry, includeSchedule = false) { result ->
             entry.epgLoading = false
             entry.epgLoaded = true
             val now = result?.get("now") as? Map<*, *>
@@ -10682,7 +10709,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         paintIptvEpgLogo(entry)
         selectIptvEpgDay(0, requestFocus = false)
 
-        requestIptvEpg(entry.url, includeSchedule = true) { result ->
+        requestIptvEpg(entry, includeSchedule = true) { result ->
             if (token != iptvEpgToken || isFinishing || isDestroyed ||
                 !iptvGuideVisible || !iptvEpgVisible
             ) {
@@ -10778,6 +10805,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 View.GONE
             }
         val dayButtons = listOf(
+            -3 to findViewById<AppCompatButton>(R.id.iptv_epg_day_three_ago),
+            -2 to findViewById<AppCompatButton>(R.id.iptv_epg_day_two_ago),
+            -1 to findViewById<AppCompatButton>(R.id.iptv_epg_day_yesterday),
             0 to findViewById<AppCompatButton>(R.id.iptv_epg_day_today),
             1 to findViewById<AppCompatButton>(R.id.iptv_epg_day_tomorrow),
             2 to findViewById<AppCompatButton>(R.id.iptv_epg_day_later),
@@ -10829,6 +10859,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "logoUrl" to channelEntry.logoUrl,
                 "playlistId" to channelEntry.sourceId,
                 "httpHeaders" to channelEntry.httpHeaders,
+                "archiveDisabled" to (channelEntry.tvArchive == "0"),
+                "archiveDurationDays" to channelEntry.tvArchiveDuration,
             ),
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
@@ -10916,7 +10948,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * (IllegalStateException). MethodChannel results are async already.
      */
     private fun requestIptvEpg(
-        channelUrl: String,
+        entry: IptvChannelEntry,
         includeSchedule: Boolean,
         callback: (Map<*, *>?) -> Unit,
     ) {
@@ -10941,8 +10973,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         handler.postDelayed({ deliver(null) }, 45_000)
         try {
             val args = hashMapOf<String, Any?>(
-                "channelUrl" to channelUrl,
+                "channelUrl" to entry.url,
                 "includeSchedule" to includeSchedule,
+                "archiveDisabled" to (entry.tvArchive == "0"),
+                "archiveDurationDays" to entry.tvArchiveDuration,
             )
             val channel = MainActivity.getAndroidTvPlayerChannel()
             if (channel == null) {
@@ -20285,6 +20319,11 @@ private data class IptvChannelEntry(
     // channel saved into a list is rebuilt from stored metadata alone, and
     // without the runtime its progress/resume UI has nothing to divide by.
     val duration: Int = -1,
+    // Xtream archive capability copied from the launch/browse payload. It is
+    // sent back with explicit full-guide requests so Dart can cap the lazy
+    // history without changing the normal now/next path.
+    val tvArchive: String? = null,
+    val tvArchiveDuration: Int? = null,
     var sourceId: String? = null,
     var sourceName: String? = null,
     var isFavorite: Boolean = false,

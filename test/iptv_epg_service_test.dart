@@ -19,6 +19,7 @@ void main() {
     var failingActions = <String>{};
     // Panel is healthy but genuinely has no programmes for the channel.
     var emptyGuide = false;
+    List<Map<String, dynamic>>? dataTableListings;
     final seenActions = <String>[];
 
     String epgText(String s) => plainTitles ? s : base64Encode(utf8.encode(s));
@@ -70,7 +71,9 @@ void main() {
         } else if (action == 'get_short_epg' ||
             (action == 'get_simple_data_table' && !dataTableTypoOnly) ||
             (action == 'get_simple_date_table' && typoServesRows)) {
-          final rows = listingsAroundNow();
+          final rows = action == 'get_short_epg'
+              ? listingsAroundNow()
+              : (dataTableListings ?? listingsAroundNow());
           // PHP assoc-array panels serve an OBJECT keyed by index.
           listings = listingsAsMap
               ? {for (var i = 0; i < rows.length; i++) '$i': rows[i]}
@@ -98,6 +101,7 @@ void main() {
       plainTitles = false;
       dataTableTypoOnly = false;
       emptyGuide = false;
+      dataTableListings = null;
       failingActions = {};
       seenActions.clear();
     });
@@ -238,6 +242,166 @@ void main() {
       expect(seenActions, contains('get_simple_data_table'),
           reason: 'the real action must be attempted first');
       expect(seenActions, contains('get_simple_date_table'));
+    });
+
+    test(
+      'full schedule adds only completed archived rows from the last 72h',
+      () async {
+        final now = DateTime.now();
+        Map<String, dynamic> row(
+          String title,
+          DateTime start,
+          DateTime stop, {
+          bool archived = true,
+        }) => {
+          'title': epgText(title),
+          'description': '',
+          'start_timestamp': '${start.millisecondsSinceEpoch ~/ 1000}',
+          'stop_timestamp': '${stop.millisecondsSinceEpoch ~/ 1000}',
+          'start': start.toIso8601String().replaceFirst('T', ' '),
+          if (archived) 'has_archive': 1,
+        };
+        dataTableListings = [
+          row(
+            'Inside window',
+            now.subtract(const Duration(hours: 71)),
+            now.subtract(const Duration(hours: 70)),
+          ),
+          row(
+            'Outside window',
+            now.subtract(const Duration(hours: 74)),
+            now.subtract(const Duration(hours: 73)),
+          ),
+          row(
+            'Not archived',
+            now.subtract(const Duration(hours: 30)),
+            now.subtract(const Duration(hours: 29)),
+            archived: false,
+          ),
+          row(
+            'Still airing',
+            now.subtract(const Duration(minutes: 20)),
+            now.add(const Duration(minutes: 10)),
+          ),
+        ];
+        final channel = IptvChannel(
+          name: 'Archive channel',
+          url: channelUrl(111),
+          duration: -1,
+          contentType: 'live',
+          attributes: const {'tv_archive': '1', 'tv_archive_duration': '7'},
+        );
+
+        final result = await IptvEpgService.instance.scheduleWithCatchupHistory(
+          channel,
+        );
+
+        expect(result.map((p) => p.title), contains('Inside window'));
+        expect(result.map((p) => p.title), contains('Still airing'));
+        expect(result.map((p) => p.title), isNot(contains('Outside window')));
+        expect(result.map((p) => p.title), isNot(contains('Not archived')));
+        final completed = result.where((p) => p.stop.isBefore(DateTime.now()));
+        expect(completed.map((p) => p.title), ['Inside window']);
+        expect(completed.single.hasArchive, isTrue);
+      },
+    );
+
+    test('provider archive duration shortens the 72h history window', () async {
+      final now = DateTime.now();
+      Map<String, dynamic> archived(String title, int ageHours) {
+        final start = now.subtract(Duration(hours: ageHours));
+        final stop = start.add(const Duration(hours: 1));
+        return {
+          'title': epgText(title),
+          'description': '',
+          'start_timestamp': '${start.millisecondsSinceEpoch ~/ 1000}',
+          'stop_timestamp': '${stop.millisecondsSinceEpoch ~/ 1000}',
+          'start': start.toIso8601String().replaceFirst('T', ' '),
+          'has_archive': 1,
+        };
+      }
+
+      dataTableListings = [
+        archived('Ten hours old', 10),
+        archived('Twenty-five hours old', 25),
+      ];
+      final result = await IptvEpgService.instance.catchupHistoryUrl(
+        channelUrl(112),
+        archiveDurationDays: 1,
+      );
+
+      expect(result.map((p) => p.title), ['Ten hours old']);
+    });
+
+    test('explicit archive-off skips catch-up history', () async {
+      final result = await IptvEpgService.instance.catchupHistoryUrl(
+        channelUrl(113),
+        archiveDisabled: true,
+      );
+
+      expect(result, isEmpty);
+      expect(seenActions, isEmpty);
+    });
+
+    test(
+      'full schedule reuses an empty panel result within one load',
+      () async {
+        emptyGuide = true;
+
+        final result = await IptvEpgService.instance
+            .scheduleWithCatchupHistoryUrl(channelUrl(114));
+
+        expect(result, isEmpty);
+        expect(
+          seenActions.where((action) => action == 'get_simple_data_table'),
+          hasLength(1),
+        );
+        expect(
+          seenActions.where((action) => action == 'get_simple_date_table'),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('overlapping full schedules share one panel fetch', () async {
+      emptyGuide = true;
+      final url = channelUrl(115);
+
+      await Future.wait([
+        IptvEpgService.instance.scheduleWithCatchupHistoryUrl(url),
+        IptvEpgService.instance.scheduleWithCatchupHistoryUrl(url),
+      ]);
+
+      expect(
+        seenActions.where((action) => action == 'get_simple_data_table'),
+        hasLength(1),
+      );
+      expect(
+        seenActions.where((action) => action == 'get_simple_date_table'),
+        hasLength(1),
+      );
+    });
+
+    test('panel cache retains at most the useful catch-up rows', () async {
+      final now = DateTime.now();
+      dataTableListings = [
+        for (var i = 0; i < 1000; i++)
+          {
+            'title': epgText('Archived show $i'),
+            'description': '',
+            'start_timestamp':
+                '${now.subtract(Duration(minutes: i + 2)).millisecondsSinceEpoch ~/ 1000}',
+            'stop_timestamp':
+                '${now.subtract(Duration(minutes: i + 1)).millisecondsSinceEpoch ~/ 1000}',
+            'has_archive': 1,
+          },
+      ];
+      final url = channelUrl(116);
+
+      final result = await IptvEpgService.instance.catchupHistoryUrl(url);
+
+      expect(result, hasLength(500));
+      expect(IptvEpgService.instance.debugPanelScheduleSize(url), 500);
     });
   });
 
