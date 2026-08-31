@@ -632,9 +632,9 @@ class SimklService {
   }
 
   /// Move a title into a watchlist status (`plantowatch`/`watching`/`hold`/
-  /// `completed`/`dropped`) via `POST /sync/add-to-list`. Simkl has no
-  /// "remove from list" endpoint — moving is the only operation; there's no
-  /// way to fully delist an item back to "no status".
+  /// `completed`/`dropped`) via `POST /sync/add-to-list`. Removing the title
+  /// altogether uses the whole-title form of `POST /sync/history/remove`; see
+  /// [removeFromList].
   Future<bool> addToList(String imdbId, String type, String status) async {
     final token = await StorageService.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
@@ -736,8 +736,11 @@ class SimklService {
     return true;
   }
 
-  /// Unmark a whole title via `POST /sync/history/remove`.
-  Future<bool> markUnwatched(String imdbId, String type) async {
+  /// Remove a whole title from the user's Simkl library via
+  /// `POST /sync/history/remove` with no season/episode nesting. Simkl's
+  /// current API defines that shape as the canonical "Remove from list"
+  /// operation: it clears the watchlist status and any title-level history.
+  Future<bool> removeFromList(String imdbId, String type) async {
     final token = await StorageService.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final typeKey = _typeKey(type);
@@ -751,7 +754,7 @@ class SimklService {
         ],
       },
       token: token,
-      label: 'markUnwatched $typeKey',
+      label: 'removeFromList $typeKey',
     );
     if (!_wasMatched(result, typeKey)) return false;
     _invalidateLibraryCache();
@@ -761,6 +764,12 @@ class SimklService {
     }
     return true;
   }
+
+  /// Existing watched-action name retained for callers that mean "make this
+  /// whole title unwatched". At title granularity Simkl performs that operation
+  /// by removing the item from the library, so it shares [removeFromList].
+  Future<bool> markUnwatched(String imdbId, String type) =>
+      removeFromList(imdbId, type);
 
   /// Mark a single episode watched via `POST /sync/history` with the nested
   /// `seasons[].episodes[]` shape.

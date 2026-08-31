@@ -10,16 +10,16 @@ enum SimklEpisodeMenuAction { markWatched, markUnwatched, rate }
 /// Actions available in the Simkl item quick-action strip.
 ///
 /// Deliberately smaller than [TraktItemMenuAction]: Simkl has no
-/// Collection/Recommendations concept and no custom-lists API yet, and no
-/// "remove from list" endpoint — only moving between the 5 watchlist states,
-/// which is why these are `moveToX` actions rather than Trakt-style
-/// add/remove toggles.
+/// Collection/Recommendations concept and no custom-lists API yet. Its five
+/// watchlist states are mutually exclusive: a `moveToX` action selects one,
+/// while [removeFromList] clears the active state entirely.
 enum SimklItemMenuAction {
   moveToPlanToWatch,
   moveToWatching,
   moveToOnHold,
   moveToCompleted,
   moveToDropped,
+  removeFromList,
   removeFromContinueWatching,
   rate,
   removeRating,
@@ -105,6 +105,39 @@ Future<int?> showSimklRatingDialog(BuildContext context) {
   );
 }
 
+/// Confirms Simkl's destructive whole-title removal. Status alone cannot prove
+/// a Plan-to-Watch item is untouched: ratings and watched history can survive a
+/// later move back to that status. Keep this warning in the shared action path
+/// so the sheet, legacy details, catalog browser and search results all disclose
+/// the same data loss before calling `/sync/history/remove`.
+Future<bool> confirmSimklTitleRemoval(
+  BuildContext context,
+  String title,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Remove from Simkl?'),
+      content: Text(
+        'Removing "$title" from Simkl permanently clears its list status, '
+        'watched history, rating, and saved playback progress.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF8B8B)),
+          child: const Text('Remove'),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
 /// Handles a Simkl menu action for a given item. Shows snackbar feedback.
 Future<void> handleSimklMenuAction(
   BuildContext context,
@@ -149,6 +182,17 @@ Future<void> handleSimklMenuAction(
       actionLabel = 'Marked Dropped on Simkl';
       success = await simklService.addToList(imdbId, type, 'dropped');
       // As above — the session-clear is what removes it, so fold the result in.
+      if (success) success = await simklService.deletePlaybackForImdb(imdbId);
+    case SimklItemMenuAction.removeFromList:
+      if (!context.mounted ||
+          !await confirmSimklTitleRemoval(context, item.name)) {
+        return;
+      }
+      actionLabel = 'Removed from Simkl';
+      success = await simklService.removeFromList(imdbId, type);
+      // Library removal does not clear Simkl's separately stored paused
+      // playback sessions. Clear every matching movie/episode session too so
+      // an untracked title cannot immediately reappear in Continue Watching.
       if (success) success = await simklService.deletePlaybackForImdb(imdbId);
     case SimklItemMenuAction.removeFromContinueWatching:
       if (type == 'series') {
@@ -234,10 +278,10 @@ SimklItemMenuAction _statusMoveAction(String status) {
 /// Trakt's does, so there's nothing to fall back to when disconnected; it's
 /// just empty.
 ///
-/// Shows the current watchlist status (from [status]) and offers "Move to
-/// X" for every OTHER applicable status, since Simkl has no toggle-off —
-/// only moving between states. Watching/On Hold only apply to series
-/// (Simkl's own constraint: movies are single-session).
+/// Shows the current watchlist status (from [status]), offers "Move to X" for
+/// every OTHER applicable status, and offers removal when one is active.
+/// Watching/On Hold only apply to series (Simkl's own constraint: movies are
+/// single-session).
 List<SimklMenuOption> buildSimklMenuOptions({
   bool isSeries = false,
   bool isSimklAuthenticated = false,
@@ -298,6 +342,14 @@ List<SimklMenuOption> buildSimklMenuOptions({
         'Dropped',
         Icons.cancel_rounded,
         const Color(0xFFEF4444),
+      ),
+    if (current != null)
+      const SimklMenuOption(
+        action: SimklItemMenuAction.removeFromList,
+        icon: Icons.remove_circle_outline_rounded,
+        color: Color(0xFFF87171),
+        label: 'Remove from Simkl',
+        caption: 'Remove',
       ),
     // Only when the title is actually in Continue Watching (has a paused
     // playback session) — clears that session so it leaves the CW row without

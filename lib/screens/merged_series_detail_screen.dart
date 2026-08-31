@@ -2655,6 +2655,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       case SimklItemMenuAction.moveToDropped:
         return 'Mark this dropped on Simkl so it stops showing up as '
             'something you\'re meaning to finish.';
+      case SimklItemMenuAction.removeFromList:
+        return 'Remove this title from your Simkl library, including its '
+            'active status, watched history, rating and saved playback progress.';
       case SimklItemMenuAction.removeFromContinueWatching:
         return 'Take this off your Simkl Continue Watching rows. A movie just '
             'clears its paused position; a series is moved to On Hold so its '
@@ -2734,8 +2737,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   /// Simkl's own sheet — mirrors [_showQuickActionsMenu], but Simkl's five
-  /// statuses are mutually exclusive, so they render as one picker instead of
-  /// a list of "Move to X" commands.
+  /// statuses are mutually exclusive, so they render as an exclusive toggle
+  /// group instead of a list of "Move to X" commands.
   void _showSimklQuickActionsMenu() {
     if (_menuOptionsSimkl.isEmpty || widget.onSimklAction == null) return;
     showModalBottomSheet<void>(
@@ -4931,10 +4934,8 @@ class _TraktSheetState extends State<_TraktSheet> {
 /// Simkl's sheet — the same job as [_TraktSheet], deliberately not sharing a
 /// type with it (Trakt and Simkl stay independent everywhere in this screen).
 ///
-/// Simkl has no toggle-off: a title sits in exactly one of five lists, and the
-/// only move is between them. So the statuses render as one exclusive picker
-/// showing where the title is now, rather than four "Move to X" commands with
-/// the current state left implicit.
+/// A title sits in at most one of five lists. Turning on a different switch
+/// moves it; turning off the active switch removes it from the Simkl library.
 class _SimklSheet extends StatefulWidget {
   final String title;
   final bool isTelevision;
@@ -5033,6 +5034,7 @@ class _SimklSheetState extends State<_SimklSheet> {
     }
 
     final current = _status?.currentStatus;
+    final canRemove = opt(SimklItemMenuAction.removeFromList) != null;
     final removeCw = opt(SimklItemMenuAction.removeFromContinueWatching);
     final canRate = opt(SimklItemMenuAction.rate) != null;
     final canUnrate = opt(SimklItemMenuAction.removeRating) != null;
@@ -5058,12 +5060,16 @@ class _SimklSheetState extends State<_SimklSheet> {
           label: label,
           selected: value == current,
           autofocus: widget.isTelevision && i == focusIndex,
-          // The current row has nothing to move to, so its tap is a no-op —
-          // but it must still be *focusable*: a disabled InkWell can't hold
-          // the DPAD cursor, so the row you just activated would drop focus
-          // the moment it became current.
+          // These switches form one exclusive group. Turning another one on
+          // moves the title; turning the active one off removes it entirely.
+          // Keep every row focusable so a successful move doesn't strand DPAD.
           onTap: value == current
-              ? () {}
+              ? (canRemove
+                    ? () => _run(
+                        () =>
+                            widget.onAction(SimklItemMenuAction.removeFromList),
+                      )
+                    : () {})
               : () => _run(() => widget.onAction(action)),
         ),
     ];
@@ -5158,16 +5164,16 @@ class _SimklSheetState extends State<_SimklSheet> {
   }
 }
 
-/// One of Simkl's five lists, shown as a radio-style row so the exclusivity is
-/// visible. The current status is marked and inert — there's nothing to do.
+/// One of Simkl's five mutually-exclusive list switches. The whole row is the
+/// DPAD stop; the nested switch is excluded from focus so TV navigation still
+/// costs one press per status.
 class _SimklStatusRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
   final bool autofocus;
 
-  /// Never null — the current row passes a no-op so it stays focusable. See
-  /// the call site in [_SimklSheetState.build].
+  /// Never null so every row remains focusable after a state transition.
   final VoidCallback onTap;
 
   const _SimklStatusRow({
@@ -5205,28 +5211,6 @@ class _SimklStatusRow extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: selected ? kSimklCyan : Colors.transparent,
-                    border: Border.all(
-                      color: selected
-                          ? kSimklCyan
-                          : Colors.white.withValues(alpha: 0.22),
-                      width: 2,
-                    ),
-                  ),
-                  child: selected
-                      ? const Icon(
-                          Icons.check_rounded,
-                          size: 12,
-                          color: Color(0xFF04262C),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 13),
                 Icon(
                   icon,
                   size: 19,
@@ -5245,15 +5229,14 @@ class _SimklStatusRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (selected)
-                  Text(
-                    'now',
-                    style: TextStyle(
-                      color: kSimklCyan.withValues(alpha: 0.7),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                    ),
+                ExcludeFocus(
+                  child: Switch.adaptive(
+                    value: selected,
+                    activeThumbColor: kSimklCyan,
+                    activeTrackColor: kSimklCyan.withValues(alpha: 0.42),
+                    onChanged: (_) => onTap(),
                   ),
+                ),
               ],
             ),
           ),

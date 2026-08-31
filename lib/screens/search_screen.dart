@@ -12403,6 +12403,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (mounted &&
         !widget.searchMode &&
         (action == SimklItemMenuAction.removeFromContinueWatching ||
+            action == SimklItemMenuAction.removeFromList ||
             action == SimklItemMenuAction.moveToCompleted ||
             action == SimklItemMenuAction.moveToDropped ||
             action == SimklItemMenuAction.moveToOnHold ||
