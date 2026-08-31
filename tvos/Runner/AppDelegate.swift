@@ -607,6 +607,7 @@ private final class TvOsProfilePrivacyController {
 class AppDelegate: FlutterAppDelegate {
     /// Retained so the channel outlives `application(_:didFinishLaunchingWithOptions:)`.
     private var logChannel: FlutterMethodChannel?
+    private var packageInfoChannel: FlutterMethodChannel?
     private var keyboardChannel: FlutterMethodChannel?
     private var urlChannel: FlutterMethodChannel?
     private var systemChannel: FlutterMethodChannel?
@@ -718,6 +719,34 @@ class AppDelegate: FlutterAppDelegate {
             on: flutterViewController.binaryMessenger)
 
         GeneratedPluginRegistrant.register(with: self)
+
+        // package_info_plus has no compatible tvOS plugin. Its Dart half only
+        // needs this small method-channel contract, though, and the values are
+        // already authoritative in the application bundle. Implementing the
+        // contract here keeps every existing PackageInfo.fromPlatform() caller
+        // honest without fabricating a version in Dart or adding an
+        // unresolvable package_info_plus_tvos dependency.
+        let packageInfoChannel = FlutterMethodChannel(
+            name: "dev.fluttercommunity.plus/package_info",
+            binaryMessenger: flutterViewController.binaryMessenger)
+        packageInfoChannel.setMethodCallHandler { call, result in
+            guard call.method == "getAll" else {
+                result(FlutterMethodNotImplemented)
+                return
+            }
+            let bundle = Bundle.main
+            let appName =
+                (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ??
+                (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? ""
+            result([
+                "appName": appName,
+                "packageName": bundle.bundleIdentifier ?? "",
+                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+                "buildNumber": bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+                "buildSignature": "",
+            ])
+        }
+        self.packageInfoChannel = packageInfoChannel
 
         // External player launch. url_launcher has no tvOS implementation in
         // this fork, and porting it for two UIApplication calls would be the

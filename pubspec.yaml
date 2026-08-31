@@ -128,8 +128,9 @@ dependencies:
   # package_info_plus_platform_interface ^4.1.0, which NO published
   # package_info_plus uses (10.2.1, the latest, still pins ^3.2.1) — so it
   # cannot resolve against any real version of the plugin it implements.
-  # PackageInfo.fromPlatform() therefore throws on tvOS and its three call
-  # sites need guarding. Revisit when the package catches up.
+  # Runner/AppDelegate.swift implements package_info_plus's tiny `getAll`
+  # method-channel contract directly from Bundle.main instead. Revisit when
+  # the package catches up.
   path_provider_tvos: ^0.0.3
   shared_preferences_tvos: ^0.0.2
   sqflite_tvos: ^0.0.2
