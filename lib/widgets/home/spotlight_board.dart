@@ -13,6 +13,8 @@ import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
 import '../../utils/dominant_color.dart';
+import '../../utils/dialog_tap_guard.dart';
+import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
@@ -2354,6 +2356,14 @@ class _Card extends StatefulWidget {
 class _CardState extends State<_Card> {
   bool _f = false;
 
+  /// DPAD centre is a key gesture, not a pointer long-press. Keep the short
+  /// press for opening Details, but let a held press reach the card's options
+  /// action (Continue Watching's preference-aware Play/Remove handler).
+  late final TvHoldOk _hold = TvHoldOk(
+    onTap: () => widget.card.onOpen(),
+    onHold: () => widget.card.onOptions?.call(),
+  );
+
   /// Pointer hover — desktop's focus. Kept SEPARATE from [_f] and OR-ed at
   /// paint, so a pointer wandering off a card can never erase a real focus
   /// visual that a keyboard put there.
@@ -2393,6 +2403,7 @@ class _CardState extends State<_Card> {
 
   @override
   void dispose() {
+    _hold.reset();
     if (_previewActivityReported) {
       widget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
     }
@@ -2702,7 +2713,10 @@ class _CardState extends State<_Card> {
     // its tap — invisible on TV (DPAD never reaches an un-noded card),
     // real on touch. The hover layer is NOT unconditional — see [hoverable].
     final tappable = GestureDetector(
-      onTap: c.onOpen,
+      onTap: () {
+        if (DialogTapGuard.shouldIgnoreTap()) return;
+        c.onOpen();
+      },
       onLongPress: c.onOptions,
       child: card,
     );
@@ -2727,6 +2741,7 @@ class _CardState extends State<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
+        if (!v) _hold.reset();
         if (v && context.findRenderObject() is RenderBox) {
           Scrollable.ensureVisible(
             context,
@@ -2743,15 +2758,13 @@ class _CardState extends State<_Card> {
         }
       },
       onKeyEvent: (_, e) {
-        if (e is! KeyDownEvent) return KeyEventResult.ignored;
         final k = e.logicalKey;
-        if (k == LogicalKeyboardKey.enter ||
-            k == LogicalKeyboardKey.select ||
-            k == LogicalKeyboardKey.gameButtonA) {
-          c.onOpen();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
+        if (!isActivateOrSpaceKey(k)) return KeyEventResult.ignored;
+        if (widget.dpad && c.onOptions != null) return _hold.handle(e);
+        if (e is KeyDownEvent) c.onOpen();
+        // Own the complete activation sequence so repeats cannot bubble into
+        // an ancestor shortcut after this card accepted the initial press.
+        return KeyEventResult.handled;
       },
       child: interactive,
     );

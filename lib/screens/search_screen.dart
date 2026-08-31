@@ -6800,7 +6800,13 @@ class _SearchScreenState extends State<SearchScreen>
         // adds its useful episode / remaining-time context.
         captions: _homeLandscapeCards,
         items: [
-          for (final m in row.items) _spotlightContinueWatchingCard(row, m),
+          for (var col = 0; col < row.items.length; col++)
+            _spotlightContinueWatchingCard(
+              row,
+              row.items[col],
+              rail.cwIndex,
+              col,
+            ),
         ],
       );
     }
@@ -6842,7 +6848,12 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  SpotlightCard _spotlightContinueWatchingCard(_CwRow row, StremioMeta item) {
+  SpotlightCard _spotlightContinueWatchingCard(
+    _CwRow row,
+    StremioMeta item,
+    int cwIndex,
+    int col,
+  ) {
     final wideArt = _wideArtUrl(item);
     final episodeArt = item.type == 'series'
         ? row.episodeArtworkOf(item)
@@ -6866,7 +6877,11 @@ class _SearchScreenState extends State<SearchScreen>
       // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
       progress: (row.progressOf(item) ?? 0) * 100,
       onOpen: () => row.onOpen(item),
-      onOptions: () => row.onQuickPlay(item),
+      // Spotlight used to bypass the shared CW hold handler and Quick Play
+      // unconditionally. Route through the same preference-aware menu path as
+      // every other Home layout so disabled means Play/Remove and enabled
+      // means immediate playback on both touch and DPAD.
+      onOptions: () => _openCwCardMenu(row, item, cwIndex, col),
     );
   }
 
