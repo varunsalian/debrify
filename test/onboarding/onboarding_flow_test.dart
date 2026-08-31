@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/screens/settings/profile_backup_flows.dart';
 import 'package:debrify/services/engine/remote_engine_manager.dart';
+import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -67,7 +68,9 @@ void main() {
       await tester.pump();
       await tester.tap(find.textContaining('Continue'));
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.tap(find.text('Skip both'));
+      await tester.tap(
+        find.text(kMdblistEnabled ? 'Skip trackers' : 'Skip both'),
+      );
       await tester.pump();
       expect(find.textContaining("You're ready"), findsOneWidget);
       await tester.tap(find.textContaining('Start watching'));
@@ -124,7 +127,9 @@ void main() {
     expect(find.text('All 1 selected'), findsOneWidget);
     await tester.tap(find.textContaining('Continue'));
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Skip both'));
+    await tester.tap(
+      find.text(kMdblistEnabled ? 'Skip trackers' : 'Skip both'),
+    );
     await tester.pump();
     await tester.tap(find.textContaining('Start watching'));
     await tester.pumpAndSettle();

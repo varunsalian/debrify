@@ -969,8 +969,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       case OnboardStep.trackers:
         eyebrow = 'Step 3 of 4';
         title = 'Keep your\nprogress synced.';
+        // "Both" only holds while Trakt and Simkl are the whole list. The
+        // step's own footer already switches on [kMdblistEnabled]; this
+        // sentence has to move with it or it contradicts the cards below it.
         subtitle =
-            'A tracker remembers what you watched across devices. Both are optional.';
+            'A tracker remembers what you watched across devices. '
+            '${kMdblistEnabled ? 'All are optional.' : 'Both are optional.'}';
         final step = TrackersStep(
           layout: layout,
           focusController: _focus,
