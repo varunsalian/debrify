@@ -13,6 +13,7 @@ import '../../../widgets/recording_limit_dialogs.dart';
 import '../../../services/storage_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../utils/tv_search_focus_handoff.dart';
 import '../../../models/iptv_playlist.dart';
 import '../../../widgets/iptv/iptv_epg_panel.dart';
 import '../../../widgets/iptv/styles/iptv_style.dart';
@@ -105,6 +106,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final FocusNode _keyboardFocusNode = FocusNode();
+  final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
   final ScrollController _scrollController = ScrollController();
   late AnimationController _animController;
   late Animation<Offset> _slideAnim;
@@ -432,12 +434,31 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   Future<void> _submitSearch() async {
     final query = _searchController.text.trim();
     if (query.isEmpty) {
+      _searchSubmitFocus.cancel();
       await _clearSearch();
       return;
     }
+    _searchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
     _beginAllCategorySearch();
     _submittedQuery = query;
     await _requestBrowse(category: null, query: query);
+    if (!mounted || query != _submittedQuery) return;
+    if (_browseError != null || _filteredChannels.isEmpty) {
+      _searchSubmitFocus.cancel();
+      return;
+    }
+    _searchSubmitFocus.complete(
+      field: _searchFocusNode,
+      isMounted: () => mounted,
+      requestFocus: () {
+        if (!mounted) return;
+        setState(() => _focusZone = _FocusZone.channels);
+        _keyboardFocusNode.requestFocus();
+        _scrollToFocused();
+      },
+      targetHasFocus: () =>
+          _keyboardFocusNode.hasFocus && _focusZone == _FocusZone.channels,
+    );
   }
 
   /// Close the guide, putting back the category an unfinished search parked.
@@ -1595,6 +1616,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             ),
           ),
           onChanged: (_) {
+            _searchSubmitFocus.cancel();
             // Rebuilds for the header prompt and the clear button. With a
             // provider the list is untouched until submit; without one this
             // is the only search there is.
@@ -2477,12 +2499,14 @@ class _CategoryPickerDialog extends StatefulWidget {
 class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final FocusNode _firstMatchFocusNode = FocusNode();
   String _query = '';
 
   @override
   void dispose() {
     _controller.dispose();
     _focusNode.dispose();
+    _firstMatchFocusNode.dispose();
     super.dispose();
   }
 
@@ -2496,6 +2520,10 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
       for (final category in all)
         if ((category ?? 'All').toLowerCase().contains(query)) category,
     ];
+  }
+
+  void _focusFirstMatch() {
+    if (_matches.isNotEmpty) _firstMatchFocusNode.requestFocus();
   }
 
   @override
@@ -2603,6 +2631,9 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                     ),
                   ),
                   onChanged: (value) => setState(() => _query = value),
+                  onSubmitted: (_) => _focusFirstMatch(),
+                  onDownArrow: _focusFirstMatch,
+                  textInputAction: TextInputAction.search,
                 ),
               ),
             ),
@@ -2630,6 +2661,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                         return _CategoryPickerRow(
                           label: category ?? 'All',
                           selected: isSelected,
+                          focusNode: index == 0 ? _firstMatchFocusNode : null,
                           onTap: () => Navigator.of(
                             context,
                           ).pop(_CategoryChoice(category)),
@@ -2648,12 +2680,14 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
 class _CategoryPickerRow extends StatelessWidget {
   final String label;
   final bool selected;
+  final FocusNode? focusNode;
   final VoidCallback onTap;
   final IptvStyleTokens? tokens;
 
   const _CategoryPickerRow({
     required this.label,
     required this.selected,
+    this.focusNode,
     required this.onTap,
     this.tokens,
   });
@@ -2664,6 +2698,7 @@ class _CategoryPickerRow extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        focusNode: focusNode,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

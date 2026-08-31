@@ -379,13 +379,19 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
 
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _searchFocusNode.unfocus();
-      // Reclaim the sheet's key listener: unfocusing clears the scope's
-      // focused child, and without this the list paints a focused row but
-      // stops receiving DPAD keys entirely.
-      _keyboardFocusNode.requestFocus();
-      setState(() => _focusZone = _FocusZone.channels);
+      _focusChannels();
     }
+  }
+
+  void _focusChannels() {
+    if (_filteredChannels.isEmpty) return;
+    _searchFocusNode.unfocus();
+    // Reclaim the sheet's key listener: unfocusing clears the scope's focused
+    // child, and without this the list paints a focused row but stops receiving
+    // DPAD keys entirely.
+    _keyboardFocusNode.requestFocus();
+    setState(() => _focusZone = _FocusZone.channels);
+    _scrollToFocused();
   }
 
   void _handleChannelKeys(KeyEvent event) {
@@ -654,6 +660,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
             ),
           ),
           onChanged: (_) => _applyFilters(),
+          onSubmitted: (_) => _focusChannels(),
           textInputAction: TextInputAction.search,
         ),
       ),

@@ -602,6 +602,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       child: TvTextField(
                         controller: _searchController,
                         focusNode: _searchBarFocusNode,
+                        onSubmitted: (_) => _searchFocusNode.requestFocus(),
                         onDownArrow: () => _searchFocusNode.requestFocus(),
                         onUpArrow: () {},
                         onLeftArrow: () =>

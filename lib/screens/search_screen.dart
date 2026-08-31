@@ -66,6 +66,7 @@ import '../utils/episode_progress_merge.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
+import '../utils/tv_search_focus_handoff.dart';
 import '../services/app_route_observer.dart';
 import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
@@ -448,6 +449,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
+  final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
   // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
   // toggle is reachable with a remote (arrow-up from the search field).
   final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
@@ -5486,8 +5488,14 @@ class _SearchScreenState extends State<SearchScreen>
         _applySections(raw.whereType<CatalogSection>().toList());
       }
       setState(() => _catalogSearching = false);
+      if (tv && _rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
+        _completeSearchSubmitFocus(_rowNodes.first.first);
+      } else if (tv) {
+        _searchSubmitFocus.cancel();
+      }
     } catch (_) {
       if (!mounted || token != _catalogSearchToken) return;
+      _searchSubmitFocus.cancel();
       setState(() => _catalogSearching = false);
     }
   }
@@ -10689,6 +10697,7 @@ class _SearchScreenState extends State<SearchScreen>
   // ── Search field ─────────────────────────────────────────────────────────
 
   void _onQueryChanged(String value) {
+    _searchSubmitFocus.cancel();
     // Every mode searches on SUBMIT. Because the field is shared, emptying it
     // must invalidate EVERY mode's cached query/result state; otherwise a mode
     // switch can reveal results for text the field no longer contains.
@@ -10701,6 +10710,11 @@ class _SearchScreenState extends State<SearchScreen>
   void _onQuerySubmitted(String value) {
     _catalogDebounce?.cancel();
     final q = value.trim();
+    if (q.isEmpty) {
+      _searchSubmitFocus.cancel();
+    } else {
+      _searchSubmitFocus.arm(enabled: widget.isTelevision);
+    }
     switch (_mode) {
       case _Mode.keyword:
         _runKeyword(q);
@@ -10724,6 +10738,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   void _clearQuery() {
     _catalogDebounce?.cancel();
+    _searchSubmitFocus.cancel();
     _searchController.clear();
     _kwSearchToken++;
     _disposeKwNodes();
@@ -10746,6 +10761,15 @@ class _SearchScreenState extends State<SearchScreen>
       _listsError = null;
     });
     _restoreHome();
+  }
+
+  void _completeSearchSubmitFocus(FocusNode target) {
+    _searchSubmitFocus.complete(
+      field: _searchFocusNode,
+      isMounted: () => mounted,
+      requestFocus: target.requestFocus,
+      targetHasFocus: () => target.hasFocus,
+    );
   }
 
   void _disposeListsNodes() {
@@ -10783,7 +10807,10 @@ class _SearchScreenState extends State<SearchScreen>
   Future<void> _runListsSearch(String query) async {
     // Keep the runtime flag authoritative: when disabled, the selector omits
     // Lists and no list-search request can be issued.
-    if (!kMdblistEnabled) return;
+    if (!kMdblistEnabled) {
+      _searchSubmitFocus.cancel();
+      return;
+    }
     final q = query.trim();
     final token = ++_listsToken;
     if (q.isEmpty) {
@@ -10800,6 +10827,7 @@ class _SearchScreenState extends State<SearchScreen>
     final connected = await MdblistService.instance.isAuthenticated();
     if (!mounted || token != _listsToken) return;
     if (!connected) {
+      _searchSubmitFocus.cancel();
       setState(() {
         _listsSearching = false;
         _listsError = 'Connect MDBList in Settings to search public lists.';
@@ -10820,6 +10848,11 @@ class _SearchScreenState extends State<SearchScreen>
       _listsError = result.isUsable ? null : _listsFailureMessage(result);
       _ensureListsNodes();
     });
+    if (_listsNodes.isEmpty) {
+      _searchSubmitFocus.cancel();
+    } else {
+      _completeSearchSubmitFocus(_listsNodes.first);
+    }
   }
 
   String _listsFailureMessage(
@@ -11054,6 +11087,7 @@ class _SearchScreenState extends State<SearchScreen>
           (engineCounts is! Map || engineCounts.isEmpty) &&
           (engineErrors is! Map || engineErrors.isEmpty);
       if (torrents.isEmpty && noEngineRan) {
+        _searchSubmitFocus.cancel();
         setState(() {
           _kwError =
               'No sources enabled. Turn on at least one source in '
@@ -11065,6 +11099,7 @@ class _SearchScreenState extends State<SearchScreen>
       // Every source errored and nothing came back → surface the failure
       // instead of a misleading "No results" (searchAllEngines fails soft).
       if (torrents.isEmpty && engineErrors is Map && engineErrors.isNotEmpty) {
+        _searchSubmitFocus.cancel();
         setState(() {
           _kwError =
               'Search failed on all sources. Check your connection or '
@@ -11079,6 +11114,7 @@ class _SearchScreenState extends State<SearchScreen>
     } catch (e) {
       if (!mounted || token != _kwSearchToken) return;
       _kwSearching = false;
+      _searchSubmitFocus.cancel();
       setState(() {
         _kwError = _friendlyKeywordError(e);
         _kwLoading = false;
@@ -11109,6 +11145,9 @@ class _SearchScreenState extends State<SearchScreen>
     _kwLoading = false; // first batch replaces the full-screen loader
     _recomputeKeyword();
     _reanchorKwTab(tabAnchor);
+    if (_kwToolbarVisible) {
+      _completeSearchSubmitFocus(_kwToolbarNodes.first);
+    }
     if (_kwRefocusToolbar) {
       // The Sources-dialog re-search unmounted the focused toolbar; the
       // toolbar just remounted with this first paint — put the remote back
@@ -11145,6 +11184,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// behind the pill instead.
   void _kwFreeze() {
     _kwStreamFrozen = true;
+    _searchSubmitFocus.cancel();
   }
 
   /// Freeze AND fold any parked arrivals in — used by toolbar/dialog/tab

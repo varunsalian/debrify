@@ -126,6 +126,17 @@ class _ChannelGuideState extends State<ChannelGuide>
     }
   }
 
+  void _focusChannels() {
+    if (_filteredChannels.isEmpty) return;
+    _searchFocusNode.unfocus();
+    // Reclaim the sheet's key listener: unfocusing clears the scope's focused
+    // child, and without this the list paints a focused row but stops receiving
+    // DPAD keys entirely.
+    _keyboardFocusNode.requestFocus();
+    setState(() {}); // Trigger rebuild to show focus highlight.
+    _scrollToFocused();
+  }
+
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return;
 
@@ -140,13 +151,7 @@ class _ChannelGuideState extends State<ChannelGuide>
     // If search is focused, let it handle text input
     if (_searchFocusNode.hasFocus) {
       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        // Move focus away from search to enable list navigation
-        _searchFocusNode.unfocus();
-      // Reclaim the sheet's key listener: unfocusing clears the scope's
-      // focused child, and without this the list paints a focused row but
-      // stops receiving DPAD keys entirely.
-      _keyboardFocusNode.requestFocus();
-        setState(() {}); // Trigger rebuild to show focus highlight
+        _focusChannels();
       }
       return;
     }
@@ -323,6 +328,7 @@ class _ChannelGuideState extends State<ChannelGuide>
           ),
         ),
         onChanged: _filterChannels,
+        onSubmitted: (_) => _focusChannels(),
         textInputAction: TextInputAction.search,
       ),
     );
