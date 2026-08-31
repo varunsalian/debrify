@@ -391,14 +391,13 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     );
   }
 
-  /// The entry segments. All eight slots are always on stage — a PIN is 4–8
-  /// digits and we only ever hold the hash, so the honest cue is "at least
-  /// these four, up to all eight": the first four at full size, the optional
-  /// tail as quieter ticks that swell to full segments as they fill.
+  /// The entry segments: eight identical slots (a PIN is 4–8 digits and we
+  /// only ever hold the hash), lighting up in the profile's colour as they
+  /// fill. Deliberately uniform — no length or brightness tiers.
   Widget _indicators({required bool compact, bool centered = false}) {
-    final segWidth = compact ? 26.0 : 34.0;
+    final segWidth = compact ? 22.0 : 34.0;
     final segHeight = compact ? 8.0 : 10.0;
-    final gap = compact ? 10.0 : 13.0;
+    final gap = compact ? 8.0 : 13.0;
     return Row(
       key: const Key('profile-pin-indicators'),
       mainAxisSize: MainAxisSize.min,
@@ -407,17 +406,14 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
           : MainAxisAlignment.start,
       children: List.generate(8, (index) {
         final filled = index < _digits.length;
-        final optional = index >= 4;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          width: filled || !optional ? segWidth : segWidth * .5,
+          width: segWidth,
           height: segHeight,
           margin: EdgeInsets.only(right: index == 7 ? 0 : gap),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(segHeight),
-            color: filled
-                ? null
-                : Colors.white.withValues(alpha: optional ? .07 : .12),
+            color: filled ? null : Colors.white.withValues(alpha: .11),
             gradient: filled
                 ? LinearGradient(
                     colors: [
@@ -960,10 +956,9 @@ class _PinKey extends StatelessWidget {
 }
 
 /// The TV's full-width Unlock light bar, sitting beneath the ladder so Down
-/// always lands on it. Three distinct brightness states so becoming READY is
-/// never mistaken for holding FOCUS: dim while the entry is too short,
-/// half-lit once submittable, and full-bright with the white ring only when
-/// DPAD focus is actually here.
+/// always lands on it. Its brightness NEVER follows the digit count (an
+/// enable-pop reads as focus arriving); it sits at one constant level and
+/// only real DPAD focus lights it fully, with the white ring.
 class _UnlockBar extends StatelessWidget {
   const _UnlockBar({
     super.key,
@@ -985,13 +980,7 @@ class _UnlockBar extends StatelessWidget {
     onPressed: onPressed,
     builder: (context, focused) => AnimatedOpacity(
       duration: const Duration(milliseconds: 140),
-      opacity: busy
-          ? 1
-          : !enabled
-          ? .4
-          : focused
-          ? 1
-          : .68,
+      opacity: focused || busy ? 1 : .68,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         width: double.infinity,
