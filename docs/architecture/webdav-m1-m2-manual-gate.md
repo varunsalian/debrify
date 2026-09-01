@@ -4,6 +4,17 @@ Run this gate before shipping a build that includes WebDAV migration. The
 automated fake-server suite remains the CI gate; this check covers real-server
 behavior that is intentionally not reproduced by a Docker service in CI.
 
+## Validation record
+
+- **2026-09-01 — Koofr WebDAV:** the M1/M2 WebDAV migration flow at commit
+  `366df767` was manually tested against Koofr and reported working end to
+  end.
+- The exact client-platform matrix and individual stress/error checks below
+  were not recorded, so this entry is a real-provider smoke test rather than a
+  pass of every numbered gate.
+- **Nextcloud 34.0.3:** deferred on 2026-09-01; not tested and not claimed as
+  validated.
+
 ## Pinned server
 
 - Nextcloud Server **34.0.3** (the current stable maintenance release when
