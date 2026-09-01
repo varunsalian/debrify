@@ -55,7 +55,7 @@ void main() {
     expect(dropdown.options.map((option) => option.value), contains('mdblist'));
   });
 
-  testWidgets('poster tags and ratings are both on by default', (tester) async {
+  testWidgets('poster details are on by default', (tester) async {
     await pumpPage(tester, mdblistAuthenticated: false);
 
     final typeTags = tester.widget<SettingsToggleTile>(
@@ -64,8 +64,12 @@ void main() {
     final ratings = tester.widget<SettingsToggleTile>(
       find.byKey(const ValueKey('discover-show-ratings')),
     );
+    final titles = tester.widget<SettingsToggleTile>(
+      find.byKey(const ValueKey('discover-show-titles')),
+    );
     expect(typeTags.value, isTrue);
     expect(ratings.value, isTrue);
+    expect(titles.value, isTrue);
   });
 
   testWidgets('poster detail toggles persist their choices', (tester) async {
@@ -77,14 +81,19 @@ void main() {
     final ratings = tester.widget<SettingsToggleTile>(
       find.byKey(const ValueKey('discover-show-ratings')),
     );
+    final titles = tester.widget<SettingsToggleTile>(
+      find.byKey(const ValueKey('discover-show-titles')),
+    );
     typeTags.onChanged(false);
     ratings.onChanged(false);
+    titles.onChanged(false);
     await tester.pump();
 
     DiscoverPrefs.debugReset();
     await DiscoverPrefs.warmUp();
     expect(DiscoverPrefs.showTypeTags, isFalse);
     expect(DiscoverPrefs.showRatings, isFalse);
+    expect(DiscoverPrefs.showTitles, isFalse);
   });
 
   testWidgets('keeps a restored MDBList default selectable when disconnected', (

@@ -30,8 +30,11 @@ import '../../theme/app_theme_scope.dart';
 class SettingsTvLayout extends StatefulWidget {
   final List<ConnectionInfo> connections;
 
-  /// Watch-history services (Trakt, Simkl, MDBList) — their own rail category
-  /// rather than three more cards in Connections, which had grown to ten.
+  /// Cross-service watch-history policy, visually separated from the account
+  /// connections below it in the Trackers category.
+  final ConnectionInfo tracking;
+
+  /// Watch-history services (Trakt, Simkl, MDBList) in their own section.
   final List<ConnectionInfo> trackers;
 
   /// Focus target the sidebar hand-off and post-logout restores aim at —
@@ -147,6 +150,7 @@ class SettingsTvLayout extends StatefulWidget {
   const SettingsTvLayout({
     super.key,
     required this.connections,
+    required this.tracking,
     required this.trackers,
     required this.firstFocusNode,
     required this.onOpenSearch,
@@ -269,7 +273,7 @@ const List<_Category> _kCategories = [
     'Trackers',
     'Trakt & Simkl watch history',
     'Keep every watch in sync.',
-    'Connect watch-history services and see their health at a glance.',
+    'Choose how tracking works, then connect each watch-history service.',
   ),
   _Category(
     Icons.home_rounded,
@@ -302,7 +306,7 @@ const List<_Category> _kCategories = [
   _Category(
     Icons.explore_rounded,
     'Discover',
-    'Default source',
+    'Source & poster cards',
     'Open Discover where you left it.',
     'Remember the last source or choose one place to open every time.',
   ),
@@ -408,12 +412,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       (i) => FocusNode(debugLabel: 'settings-tv-rail-$i'),
     );
     // The pool must cover whichever category has the most rows. Connections
-    // and Trackers each have one row per provider; the fixed categories have
+    // and Trackers each have one node per card; the fixed categories have
     // at most [_kMaxCategoryRows]. Computed over all three rather than
     // assuming Connections is always the biggest — it no longer holds every
     // provider.
     var poolSize = _kMaxCategoryRows;
-    for (final n in [widget.connections.length, widget.trackers.length]) {
+    for (final n in [widget.connections.length, widget.trackers.length + 1]) {
       if (n > poolSize) poolSize = n;
     }
     _paneNodes = List.generate(
@@ -551,11 +555,11 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
 
   KeyEventResult _paneKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_selected.value == 1) return _trackerPaneKey(event);
     final key = event.logicalKey;
     final i = _paneNodes.indexWhere((n) => n.hasFocus);
     final grid =
-        (_selected.value == 0 || _selected.value == 1) &&
-        MediaQuery.sizeOf(context).width >= 880;
+        _selected.value == 0 && MediaQuery.sizeOf(context).width >= 880;
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (grid && i > 0 && i.isOdd && _isPaneRowLive(i - 1)) {
         _focusPaneRow(i - 1, travel: const Offset(-1, 0));
@@ -590,6 +594,60 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     if (key == LogicalKeyboardKey.arrowDown) {
       if (i >= 0 && i + step < _paneNodes.length && _isPaneRowLive(i + step)) {
         _focusPaneRow(i + step, travel: const Offset(0, 1));
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Tracking is a full-width policy card above a separate two-column account
+  /// grid, so the generic even/odd grid walker cannot describe its geometry.
+  KeyEventResult _trackerPaneKey(KeyEvent event) {
+    final key = event.logicalKey;
+    final i = _paneNodes.indexWhere((n) => n.hasFocus);
+    if (i < 0) return KeyEventResult.ignored;
+    final count = widget.trackers.length + 1;
+    final twoColumns = MediaQuery.sizeOf(context).width >= 880;
+
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      // Provider cards use indices 1...: even indices are the right column.
+      if (twoColumns && i >= 2 && i.isEven && _isPaneRowLive(i - 1)) {
+        _focusPaneRow(i - 1, travel: const Offset(-1, 0));
+      } else {
+        ParallaxTravel.note(const Offset(-1, 0));
+        _railNodes[_selected.value].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (twoColumns &&
+          i >= 1 &&
+          i.isOdd &&
+          i + 1 < count &&
+          _isPaneRowLive(i + 1)) {
+        _focusPaneRow(i + 1, travel: const Offset(1, 0));
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      final target = !twoColumns
+          ? i - 1
+          : i <= 2
+          ? 0
+          : i - 2;
+      if (target >= 0 && target != i && _isPaneRowLive(target)) {
+        _focusPaneRow(target, travel: const Offset(0, -1));
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      final target = !twoColumns
+          ? i + 1
+          : i == 0
+          ? 1
+          : i + 2;
+      if (target < count && _isPaneRowLive(target)) {
+        _focusPaneRow(target, travel: const Offset(0, 1));
       }
       return KeyEventResult.handled;
     }
@@ -823,7 +881,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       case 0: // Connections
         return [_buildConnectionGrid(widget.connections)];
       case 1: // Trackers
-        return [_buildConnectionGrid(widget.trackers)];
+        return [_buildTrackerGroups()];
       case 2: // Home & Display
         // Nodes stay CONTIGUOUS from 0 — the DPAD walker only advances to
         // the immediately adjacent live node, so a gap strands Down.
@@ -1338,6 +1396,48 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   isLeftColumn: false,
                 ),
               ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTrackerGroups() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = MediaQuery.sizeOf(context).width >= 880;
+        final width = twoColumns
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SettingsSectionLabel('Tracking'),
+            SizedBox(
+              width: constraints.maxWidth,
+              child: ConnectionCard(
+                info: widget.tracking,
+                focusNode: _paneNodes[0],
+                isLeftColumn: false,
+              ),
+            ),
+            const SizedBox(height: 22),
+            const SettingsSectionLabel('Tracker services'),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (var i = 0; i < widget.trackers.length; i++)
+                  SizedBox(
+                    width: width,
+                    child: ConnectionCard(
+                      info: widget.trackers[i],
+                      focusNode: _paneNodes[i + 1],
+                      isLeftColumn: false,
+                    ),
+                  ),
+              ],
+            ),
           ],
         );
       },

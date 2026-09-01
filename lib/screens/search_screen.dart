@@ -1554,6 +1554,7 @@ class _SearchScreenState extends State<SearchScreen>
   // poster-card choices instead of flashing the default chrome.
   bool _discShowTypeTags = DiscoverPrefs.showTypeTags;
   bool _discShowRatings = DiscoverPrefs.showRatings;
+  bool _discShowTitles = DiscoverPrefs.showTitles;
 
   /// Whether the STAGE layout is what this surface should render: the pref, on
   /// the Discover tab, on a TV. The canvas-size guard lives in the LayoutBuilder
@@ -1588,12 +1589,16 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted) return;
     final showTypeTags = DiscoverPrefs.showTypeTags;
     final showRatings = DiscoverPrefs.showRatings;
-    if (showTypeTags == _discShowTypeTags && showRatings == _discShowRatings) {
+    final showTitles = DiscoverPrefs.showTitles;
+    if (showTypeTags == _discShowTypeTags &&
+        showRatings == _discShowRatings &&
+        showTitles == _discShowTitles) {
       return;
     }
     setState(() {
       _discShowTypeTags = showTypeTags;
       _discShowRatings = showRatings;
+      _discShowTitles = showTitles;
     });
   }
 
@@ -16636,6 +16641,7 @@ class _SearchScreenState extends State<SearchScreen>
     final panel = DiscoverCardSettingsScope(
       showTypeTags: _discShowTypeTags,
       showRatings: _discShowRatings,
+      showTitles: _discShowTitles,
       child: _buildDiscoverPanel(),
     );
     // Touch has no persistent focus, so a reactive detail rail has nothing to
@@ -17923,6 +17929,19 @@ class _SearchScreenState extends State<SearchScreen>
   String? _catalogSourceTag(CatalogSection section) =>
       _hideHomeCatalogAddonNames ? null : _sectionTag(section);
 
+  /// Poster walls reached by expanding a Home row share Discover's card-detail
+  /// controls. Search stays independent: its standalone result walls retain
+  /// their normal labels and badges.
+  Widget _withHomeExpandedCardSettings(Widget child) {
+    if (widget.searchMode || widget.discoverMode) return child;
+    return DiscoverCardSettingsScope(
+      showTypeTags: DiscoverPrefs.showTypeTags,
+      showRatings: DiscoverPrefs.showRatings,
+      showTitles: DiscoverPrefs.showTitles,
+      child: child,
+    );
+  }
+
   /// Open the full-screen Stremio-styled catalog browser for a rail. Seeds the
   /// grid with the rail's already-loaded items + paging cursor so it continues
   /// where the rail left off; item taps route back through [_openItem] so the
@@ -17938,23 +17957,25 @@ class _SearchScreenState extends State<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => CatalogSeeAllScreen(
-              addon: section.addon,
-              initialCatalog: section.catalog,
-              seedItems: List<StremioMeta>.of(section.items),
-              seedNextSkip: section.nextSkip,
-              // Search sections carry their query → See All keeps searching
-              // this catalog (paged) instead of browsing it.
-              query: section.query,
-              isTelevision: widget.isTelevision,
-              onOpenItem: (item) => _openItem(item, section.addon),
-              onQuickPlay: _pikpakOnly
-                  ? null
-                  : (item) => _onCatalogPlay(item, section.addon),
-              // Bound-source badges are intentionally omitted here: _isBound only
-              // tracks rail/CW items (not See-All paged items) and wouldn't
-              // reactively update in a pushed screen, so a badge would be a false
-              // negative more often than not. Revisit with a per-item lookup.
+            builder: (_) => _withHomeExpandedCardSettings(
+              CatalogSeeAllScreen(
+                addon: section.addon,
+                initialCatalog: section.catalog,
+                seedItems: List<StremioMeta>.of(section.items),
+                seedNextSkip: section.nextSkip,
+                // Search sections carry their query → See All keeps searching
+                // this catalog (paged) instead of browsing it.
+                query: section.query,
+                isTelevision: widget.isTelevision,
+                onOpenItem: (item) => _openItem(item, section.addon),
+                onQuickPlay: _pikpakOnly
+                    ? null
+                    : (item) => _onCatalogPlay(item, section.addon),
+                // Bound-source badges are intentionally omitted here: _isBound only
+                // tracks rail/CW items (not See-All paged items) and wouldn't
+                // reactively update in a pushed screen, so a badge would be a false
+                // negative more often than not. Revisit with a per-item lookup.
+              ),
             ),
           ),
         )
@@ -18011,7 +18032,11 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => screen))
+        .push(
+          MaterialPageRoute(
+            builder: (_) => _withHomeExpandedCardSettings(screen),
+          ),
+        )
         // trackers:true — this grid renders the tracker's own lists, and a
         // played title must reflect on return (same as _openTraktSeeAll).
         .then((_) => _refreshAfterPlayback(trackers: true));
@@ -18121,17 +18146,19 @@ class _SearchScreenState extends State<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => ContinueWatchingSeeAllScreen(
-              title: title,
-              initialCategory: initialCategory,
-              items: List<StremioMeta>.of(items),
-              progressOf: progressOf,
-              onOpen: onOpen,
-              onQuickPlay: onQuickPlay,
-              onReload: onReload,
-              // CW items are all rail-loaded, so _boundCounts covers them.
-              isBound: _isBound,
-              isTelevision: widget.isTelevision,
+            builder: (_) => _withHomeExpandedCardSettings(
+              ContinueWatchingSeeAllScreen(
+                title: title,
+                initialCategory: initialCategory,
+                items: List<StremioMeta>.of(items),
+                progressOf: progressOf,
+                onOpen: onOpen,
+                onQuickPlay: onQuickPlay,
+                onReload: onReload,
+                // CW items are all rail-loaded, so _boundCounts covers them.
+                isBound: _isBound,
+                isTelevision: widget.isTelevision,
+              ),
             ),
           ),
         )
@@ -18177,19 +18204,21 @@ class _SearchScreenState extends State<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => TraktSeeAllScreen(
-              initialCategory: initialCategory,
-              cwItems: List<StremioMeta>.of(_traktAll),
-              // Pass the live progress map (read-only in the screen) so resume
-              // bars reflect any refresh while the screen is open, matching the
-              // old live-closure behaviour; items stay a snapshot so the grid
-              // doesn't shift under the user.
-              cwProgress: _cwCardMaps(_CwKind.trakt).progress,
-              onOpen: _openTraktItem,
-              onQuickPlay: _pikpakOnly ? null : _playTraktItem,
-              // CW items are all rail-loaded, so _boundCounts covers them.
-              isBound: _isBound,
-              isTelevision: widget.isTelevision,
+            builder: (_) => _withHomeExpandedCardSettings(
+              TraktSeeAllScreen(
+                initialCategory: initialCategory,
+                cwItems: List<StremioMeta>.of(_traktAll),
+                // Pass the live progress map (read-only in the screen) so resume
+                // bars reflect any refresh while the screen is open, matching the
+                // old live-closure behaviour; items stay a snapshot so the grid
+                // doesn't shift under the user.
+                cwProgress: _cwCardMaps(_CwKind.trakt).progress,
+                onOpen: _openTraktItem,
+                onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+                // CW items are all rail-loaded, so _boundCounts covers them.
+                isBound: _isBound,
+                isTelevision: widget.isTelevision,
+              ),
             ),
           ),
         )

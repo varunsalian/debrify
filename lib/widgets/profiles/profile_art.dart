@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'profile_face_art.dart';
+
 /// A built-in avatar, either drawn in code or shipped as a bounded asset.
 ///
 /// The original abstract set is gradients and keyframes, so it costs only a
@@ -88,6 +90,79 @@ class ProfileArtRegistry {
       label: 'Sleepy Sundae',
       color: Color(0xFF5DAE9F),
       assetPath: 'assets/images/profile_avatars/snack_sundae.gif',
+    ),
+    // Flat-vector characters, drawn in code. Deliberately unshaded — see
+    // ProfileFaceArt. Each blinks once per cycle, which is the whole of their
+    // animation.
+    ProfileArt(
+      id: 'cat',
+      label: 'Mittens',
+      color: Color(0xFF1F6F63),
+      animated: true,
+      paint: ProfileFaceArt.cat,
+    ),
+    ProfileArt(
+      id: 'fox',
+      label: 'Fox',
+      color: Color(0xFFB4552C),
+      animated: true,
+      paint: ProfileFaceArt.fox,
+    ),
+    ProfileArt(
+      id: 'panda',
+      label: 'Panda',
+      color: Color(0xFF3C6E8F),
+      animated: true,
+      paint: ProfileFaceArt.panda,
+    ),
+    ProfileArt(
+      id: 'owl',
+      label: 'Owl',
+      color: Color(0xFF6B4E8E),
+      animated: true,
+      paint: ProfileFaceArt.owl,
+    ),
+    ProfileArt(
+      id: 'bear',
+      label: 'Bear',
+      color: Color(0xFF8A5A33),
+      animated: true,
+      paint: ProfileFaceArt.bear,
+    ),
+    ProfileArt(
+      id: 'kiddo',
+      label: 'Kiddo',
+      color: Color(0xFFC77E3A),
+      animated: true,
+      paint: ProfileFaceArt.kiddo,
+    ),
+    ProfileArt(
+      id: 'grownup',
+      label: 'Grown-up',
+      color: Color(0xFF3E7A6B),
+      animated: true,
+      paint: ProfileFaceArt.grownup,
+    ),
+    ProfileArt(
+      id: 'sage',
+      label: 'Sage',
+      color: Color(0xFF5C6B8A),
+      animated: true,
+      paint: ProfileFaceArt.sage,
+    ),
+    ProfileArt(
+      id: 'ghost',
+      label: 'Boo',
+      color: Color(0xFF4C3F8F),
+      animated: true,
+      paint: ProfileFaceArt.ghost,
+    ),
+    ProfileArt(
+      id: 'blob',
+      label: 'Blob',
+      color: Color(0xFF2E6B4F),
+      animated: true,
+      paint: ProfileFaceArt.blob,
     ),
     ProfileArt(
       id: 'aurora',

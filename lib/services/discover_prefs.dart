@@ -22,6 +22,7 @@ class DiscoverPrefs {
   static const String _prefix = 'discover_sort_';
   static const String _showTypeTagsKey = 'discover_show_type_tags';
   static const String _showRatingsKey = 'discover_show_ratings';
+  static const String _showTitlesKey = 'discover_show_titles';
 
   // Source keys. Persisted, so never rename one without a migration.
   static const String cw = 'cw';
@@ -35,6 +36,7 @@ class DiscoverPrefs {
   static final Map<String, String> _cache = {};
   static bool _showTypeTags = true;
   static bool _showRatings = true;
+  static bool _showTitles = true;
   static bool _warmed = false;
 
   /// Load every Discover preference into the cache. Called once from `main()`;
@@ -50,6 +52,7 @@ class DiscoverPrefs {
       }
       _showTypeTags = prefs.getBool(_showTypeTagsKey) ?? true;
       _showRatings = prefs.getBool(_showRatingsKey) ?? true;
+      _showTitles = prefs.getBool(_showTitlesKey) ?? true;
     } catch (_) {
       // Storage unavailable — Discover just opens on its default sorts.
     }
@@ -95,6 +98,11 @@ class DiscoverPrefs {
   /// Whether Discover poster cards show their rating chip. Unset is on.
   static bool get showRatings => _showRatings;
 
+  /// Whether poster walls opened from Discover or a Home row show the title
+  /// beneath each poster. Unset is on so existing profiles keep their current
+  /// presentation until they explicitly hide it.
+  static bool get showTitles => _showTitles;
+
   static Future<void> setShowTypeTags(bool value) async {
     _showTypeTags = value;
     try {
@@ -115,10 +123,21 @@ class DiscoverPrefs {
     }
   }
 
+  static Future<void> setShowTitles(bool value) async {
+    _showTitles = value;
+    try {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setBool(_showTitlesKey, value);
+    } catch (_) {
+      // Best-effort: the choice still holds for this session.
+    }
+  }
+
   static void resetProfileScope() {
     _cache.clear();
     _showTypeTags = true;
     _showRatings = true;
+    _showTitles = true;
     _warmed = false;
   }
 

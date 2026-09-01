@@ -60,3 +60,7 @@ dev/tool/discord/nightly_logs/
 # packages/media_kit_libs_tvos_video/fetch_frameworks.sh.
 packages/media_kit_libs_tvos_video/tvos/Frameworks/
 tvos/build/
+
+# Local Apple TV deploy runbook — machine-specific device UDIDs, signing
+# identity and 7-day profile expiry dates that would go stale in the repo.
+TVOS_INSTALL.md

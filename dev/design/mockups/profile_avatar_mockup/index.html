@@ -1,0 +1,402 @@
+<meta charset="utf-8">
+<title>Debrify — Stock Avatar Mocks</title>
+<style>
+  :root{
+    --bg:#0E1116; --panel:#161B22; --line:#242B36;
+    --ink:#E8EDF4; --dim:#8B97A8; --accent:#4FA3F7;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:40px 44px 64px; background:var(--bg); color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;
+  }
+  h1{font-size:23px; margin:0 0 6px; letter-spacing:-.02em}
+  .sub{color:var(--dim); font-size:14px; margin:0 0 34px}
+  h2{font-size:16px; margin:38px 0 4px; letter-spacing:-.01em}
+  h2 .tag{
+    font-size:11px; font-weight:600; color:#0E1116; background:var(--accent);
+    padding:2px 7px; border-radius:99px; margin-left:9px; vertical-align:2px;
+  }
+  .note{color:var(--dim); font-size:13.5px; margin:0 0 18px; max-width:860px}
+
+  .row{display:flex; gap:26px; flex-wrap:wrap; margin-bottom:10px}
+  .cell{width:118px; text-align:center}
+  .av{width:118px; height:118px; border-radius:26px; display:block; overflow:hidden}
+  .cell .name{font-size:12.5px; color:var(--ink); margin-top:9px; font-weight:500}
+  .cell .kind{font-size:11px; color:var(--dim); margin-top:1px}
+
+  .dirgrid{
+    display:grid; grid-template-columns:132px repeat(3,118px); gap:22px 26px;
+    align-items:center; background:var(--panel); border:1px solid var(--line);
+    border-radius:16px; padding:22px 24px; margin-bottom:8px; width:max-content;
+  }
+  .dirlabel{font-size:13.5px; font-weight:600}
+  .dirlabel span{display:block; font-weight:400; color:var(--dim); font-size:11.5px; margin-top:3px; line-height:1.35}
+
+  .strip{
+    display:flex; gap:18px; align-items:center; background:var(--panel);
+    border:1px solid var(--line); border-radius:16px; padding:20px 24px; width:max-content;
+  }
+  .strip .av{width:64px; height:64px; border-radius:50%}
+  .strip .cell{width:64px}
+  .strip .name{font-size:11px; margin-top:7px}
+  .caption{color:var(--dim); font-size:12.5px; margin-top:10px}
+</style>
+
+<!-- ══════════ avatar definitions ══════════ -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+
+<!-- ---------- DIRECTION A · FLAT GEO ---------- -->
+<symbol id="a-cat" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#1F6F63"/>
+  <path d="M74 106 L84 50 L126 84 Z" fill="#F2E2CE"/>
+  <path d="M182 106 L172 50 L130 84 Z" fill="#F2E2CE"/>
+  <path d="M85 97 L90 68 L111 85 Z" fill="#E0968E"/>
+  <path d="M171 97 L166 68 L145 85 Z" fill="#E0968E"/>
+  <circle cx="128" cy="140" r="62" fill="#F2E2CE"/>
+  <circle cx="105" cy="134" r="8.5" fill="#2A3340"/>
+  <circle cx="151" cy="134" r="8.5" fill="#2A3340"/>
+  <path d="M121 155 L135 155 L128 163 Z" fill="#E07A6B"/>
+  <path d="M128 163 q-11 12 -21 3" stroke="#2A3340" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <path d="M128 163 q11 12 21 3" stroke="#2A3340" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <path d="M62 138 L92 143 M62 156 L92 153" stroke="#2A3340" stroke-width="3.5" stroke-linecap="round" opacity=".5"/>
+  <path d="M194 138 L164 143 M194 156 L164 153" stroke="#2A3340" stroke-width="3.5" stroke-linecap="round" opacity=".5"/>
+</symbol>
+
+<symbol id="a-kid" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#D98E32"/>
+  <path d="M50 256 v-30 a78 78 0 0 1 156 0 v30 Z" fill="#3E7CA8"/>
+  <rect x="115" y="168" width="26" height="26" fill="#E9BE97"/>
+  <circle cx="128" cy="120" r="58" fill="#4A3527"/>
+  <circle cx="128" cy="133" r="52" fill="#F6D6B2"/>
+  <circle cx="109" cy="130" r="7" fill="#2A3340"/>
+  <circle cx="147" cy="130" r="7" fill="#2A3340"/>
+  <path d="M112 152 q16 14 32 0" stroke="#2A3340" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="94" cy="146" r="7" fill="#E89A87" opacity=".7"/>
+  <circle cx="162" cy="146" r="7" fill="#E89A87" opacity=".7"/>
+</symbol>
+
+<symbol id="a-ghost" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#4C3F8F"/>
+  <path d="M64 214 V126 a64 64 0 0 1 128 0 v88 q-16 18 -32 0 q-16 18 -32 0 q-16 18 -32 0 q-16 18 -32 0 Z" fill="#F4F1FA"/>
+  <ellipse cx="106" cy="126" rx="9" ry="12" fill="#2A2450"/>
+  <ellipse cx="150" cy="126" rx="9" ry="12" fill="#2A2450"/>
+  <ellipse cx="128" cy="158" rx="11" ry="8" fill="#2A2450"/>
+  <circle cx="88" cy="152" r="8" fill="#C9A8E8" opacity=".55"/>
+  <circle cx="168" cy="152" r="8" fill="#C9A8E8" opacity=".55"/>
+</symbol>
+
+<!-- ---------- DIRECTION B · STICKER OUTLINE ---------- -->
+<symbol id="b-cat" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#2E8B7A"/>
+  <g stroke="#1A1F27" stroke-width="7" stroke-linejoin="round">
+    <path d="M76 108 L86 54 L126 86 Z" fill="#FFD9A0"/>
+    <path d="M180 108 L170 54 L130 86 Z" fill="#FFD9A0"/>
+    <circle cx="128" cy="140" r="60" fill="#FFD9A0"/>
+  </g>
+  <circle cx="106" cy="134" r="9" fill="#1A1F27"/>
+  <circle cx="150" cy="134" r="9" fill="#1A1F27"/>
+  <path d="M121 156 L135 156 L128 164 Z" fill="#1A1F27"/>
+  <path d="M128 164 q-11 12 -21 3 M128 164 q11 12 21 3" stroke="#1A1F27" stroke-width="5" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="b-kid" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#E09A3C"/>
+  <g stroke="#1A1F27" stroke-width="7" stroke-linejoin="round">
+    <path d="M52 256 v-28 a76 76 0 0 1 152 0 v28 Z" fill="#4B90C4"/>
+    <circle cx="128" cy="126" r="56" fill="#FFD9B0"/>
+    <path d="M72 122 a56 56 0 0 1 112 0 q-26-20-56-20 t-56 20 Z" fill="#4A3527"/>
+  </g>
+  <circle cx="110" cy="132" r="7.5" fill="#1A1F27"/>
+  <circle cx="146" cy="132" r="7.5" fill="#1A1F27"/>
+  <path d="M112 154 q16 14 32 0" stroke="#1A1F27" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="b-ghost" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#5A4BA8"/>
+  <path d="M66 212 V126 a62 62 0 0 1 124 0 v86 q-15.5 17 -31 0 q-15.5 17 -31 0 q-15.5 17 -31 0 q-15.5 17 -31 0 Z"
+        fill="#FBFAFF" stroke="#1A1F27" stroke-width="7" stroke-linejoin="round"/>
+  <ellipse cx="107" cy="126" rx="9" ry="12" fill="#1A1F27"/>
+  <ellipse cx="149" cy="126" rx="9" ry="12" fill="#1A1F27"/>
+  <ellipse cx="128" cy="158" rx="10" ry="7" fill="#1A1F27"/>
+</symbol>
+
+<!-- ---------- DIRECTION C · MONOLINE DUOTONE ---------- -->
+<symbol id="c-cat" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#15202B"/>
+  <g fill="none" stroke="#5FD3B2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M78 108 L88 56 L126 86"/>
+    <path d="M178 108 L168 56 L130 86"/>
+    <circle cx="128" cy="140" r="58"/>
+    <path d="M104 132 v8 M152 132 v8"/>
+    <path d="M116 160 q12 10 24 0"/>
+    <path d="M66 140 L94 144 M66 156 L94 152 M190 140 L162 144 M190 156 L162 152" opacity=".5"/>
+  </g>
+</symbol>
+
+<symbol id="c-kid" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#15202B"/>
+  <g fill="none" stroke="#F0B354" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="128" cy="126" r="52"/>
+    <path d="M78 112 q14 -30 50 -30 t50 30" />
+    <path d="M92 104 q20 14 40 6 q18 -8 32 4"/>
+    <path d="M108 128 v8 M148 128 v8"/>
+    <path d="M112 152 q16 13 32 0"/>
+    <path d="M62 250 a66 66 0 0 1 132 0"/>
+  </g>
+</symbol>
+
+<symbol id="c-ghost" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#15202B"/>
+  <g fill="none" stroke="#A78BF0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M68 208 V128 a60 60 0 0 1 120 0 v80 q-15 16 -30 0 q-15 16 -30 0 q-15 16 -30 0 q-15 16 -30 0 Z"/>
+    <path d="M108 124 v10 M148 124 v10"/>
+    <path d="M120 160 q8 8 16 0"/>
+  </g>
+</symbol>
+
+<!-- ---------- DIRECTION D · LAYERED PAPER ---------- -->
+<symbol id="d-cat" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#2A7D6E"/>
+  <circle cx="128" cy="146" r="70" fill="#12564C" opacity=".55"/>
+  <path d="M74 106 L84 50 L126 84 Z" fill="#D8C3A5"/>
+  <path d="M182 106 L172 50 L130 84 Z" fill="#D8C3A5"/>
+  <circle cx="128" cy="140" r="62" fill="#F3E4CD"/>
+  <path d="M128 78 a62 62 0 0 1 0 124 Z" fill="#DCC9AE" opacity=".55"/>
+  <circle cx="105" cy="134" r="8.5" fill="#33403C"/>
+  <circle cx="151" cy="134" r="8.5" fill="#33403C"/>
+  <path d="M121 155 L135 155 L128 163 Z" fill="#C97B67"/>
+  <path d="M128 163 q-11 12 -21 3 M128 163 q11 12 21 3" stroke="#33403C" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="d-kid" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#C98436"/>
+  <circle cx="128" cy="132" r="76" fill="#A9691F" opacity=".5"/>
+  <path d="M52 256 v-30 a76 76 0 0 1 152 0 v30 Z" fill="#3F7EA8"/>
+  <path d="M128 172 a76 76 0 0 1 76 54 v30 h-76 Z" fill="#33698C" opacity=".6"/>
+  <circle cx="128" cy="120" r="57" fill="#463126"/>
+  <circle cx="128" cy="133" r="51" fill="#F4D3AE"/>
+  <path d="M128 82 a51 51 0 0 1 0 102 Z" fill="#E2BE97" opacity=".5"/>
+  <circle cx="109" cy="130" r="7" fill="#33403C"/>
+  <circle cx="147" cy="130" r="7" fill="#33403C"/>
+  <path d="M112 152 q16 14 32 0" stroke="#33403C" stroke-width="5" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="d-ghost" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#544595"/>
+  <circle cx="128" cy="140" r="76" fill="#3B2F72" opacity=".55"/>
+  <path d="M64 214 V126 a64 64 0 0 1 128 0 v88 q-16 18 -32 0 q-16 18 -32 0 q-16 18 -32 0 q-16 18 -32 0 Z" fill="#F5F2FB"/>
+  <path d="M128 62 a64 64 0 0 1 64 64 v88 q-16 18 -32 0 q-16 18 -32 0 Z" fill="#DCD5EE" opacity=".65"/>
+  <ellipse cx="106" cy="126" rx="9" ry="12" fill="#3B3260"/>
+  <ellipse cx="150" cy="126" rx="9" ry="12" fill="#3B3260"/>
+  <ellipse cx="128" cy="158" rx="11" ry="8" fill="#3B3260"/>
+</symbol>
+
+<!-- ---------- THE PROPOSED TEN (flat geo) ---------- -->
+<symbol id="s-fox" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#B4552C"/>
+  <path d="M70 112 L78 48 L124 84 Z" fill="#E8813F"/>
+  <path d="M186 112 L178 48 L132 84 Z" fill="#E8813F"/>
+  <path d="M82 100 L86 66 L108 84 Z" fill="#F6C9A0"/>
+  <path d="M174 100 L170 66 L148 84 Z" fill="#F6C9A0"/>
+  <path d="M128 78 a62 62 0 0 1 62 62 q0 44 -62 66 q-62 -22 -62 -66 a62 62 0 0 1 62 -62 Z" fill="#E8813F"/>
+  <path d="M128 130 q-40 6 -40 34 q0 30 40 42 q40 -12 40 -42 q0 -28 -40 -34 Z" fill="#F8EDE0"/>
+  <circle cx="103" cy="130" r="8.5" fill="#2A2320"/>
+  <circle cx="153" cy="130" r="8.5" fill="#2A2320"/>
+  <path d="M120 166 L136 166 L128 176 Z" fill="#2A2320"/>
+</symbol>
+
+<symbol id="s-panda" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#3C6E8F"/>
+  <circle cx="80" cy="88" r="26" fill="#2A2E35"/>
+  <circle cx="176" cy="88" r="26" fill="#2A2E35"/>
+  <circle cx="128" cy="140" r="66" fill="#F7F5F2"/>
+  <ellipse cx="102" cy="130" rx="19" ry="23" fill="#2A2E35" transform="rotate(-14 102 130)"/>
+  <ellipse cx="154" cy="130" rx="19" ry="23" fill="#2A2E35" transform="rotate(14 154 130)"/>
+  <circle cx="103" cy="132" r="7" fill="#F7F5F2"/>
+  <circle cx="153" cy="132" r="7" fill="#F7F5F2"/>
+  <ellipse cx="128" cy="164" rx="11" ry="8" fill="#2A2E35"/>
+  <path d="M128 172 q-10 11 -19 3 M128 172 q10 11 19 3" stroke="#2A2E35" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="s-owl" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#6B4E8E"/>
+  <path d="M70 96 L92 62 L112 88 Z" fill="#9B79C4"/>
+  <path d="M186 96 L164 62 L144 88 Z" fill="#9B79C4"/>
+  <path d="M128 74 a64 64 0 0 1 64 64 v18 a64 64 0 0 1 -128 0 v-18 a64 64 0 0 1 64 -64 Z" fill="#9B79C4"/>
+  <circle cx="102" cy="126" r="27" fill="#F4EFF9"/>
+  <circle cx="154" cy="126" r="27" fill="#F4EFF9"/>
+  <circle cx="102" cy="126" r="12" fill="#2E2440"/>
+  <circle cx="154" cy="126" r="12" fill="#2E2440"/>
+  <path d="M118 150 L138 150 L128 166 Z" fill="#E8A33F"/>
+  <path d="M100 186 q28 16 56 0" stroke="#7B5AA6" stroke-width="7" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="s-bear" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#8A5A33"/>
+  <circle cx="80" cy="86" r="27" fill="#C08A57"/>
+  <circle cx="176" cy="86" r="27" fill="#C08A57"/>
+  <circle cx="80" cy="86" r="14" fill="#E0B489"/>
+  <circle cx="176" cy="86" r="14" fill="#E0B489"/>
+  <circle cx="128" cy="142" r="66" fill="#C08A57"/>
+  <ellipse cx="128" cy="166" rx="34" ry="26" fill="#E8D0B4"/>
+  <circle cx="104" cy="128" r="8.5" fill="#33261C"/>
+  <circle cx="152" cy="128" r="8.5" fill="#33261C"/>
+  <ellipse cx="128" cy="156" rx="12" ry="9" fill="#33261C"/>
+  <path d="M128 165 q-10 11 -19 3 M128 165 q10 11 19 3" stroke="#33261C" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="s-blob" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#2E6B4F"/>
+  <path d="M128 58 q56 0 66 48 q10 48 -22 76 q-32 28 -88 10 q-34 -18 -32 -62 q2 -50 42 -64 q17 -8 34 -8 Z" fill="#5FCB8E"/>
+  <circle cx="104" cy="126" r="20" fill="#F6FBF7"/>
+  <circle cx="154" cy="122" r="15" fill="#F6FBF7"/>
+  <circle cx="107" cy="129" r="9" fill="#20402F"/>
+  <circle cx="156" cy="124" r="7" fill="#20402F"/>
+  <path d="M100 164 q28 26 56 -2" stroke="#20402F" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M96 70 l8 -22 M150 64 l14 -18" stroke="#5FCB8E" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="104" cy="44" r="7" fill="#5FCB8E"/>
+  <circle cx="166" cy="42" r="7" fill="#5FCB8E"/>
+</symbol>
+
+<symbol id="s-robot" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#2B5F8C"/>
+  <path d="M128 40 v26" stroke="#8FC3E8" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="128" cy="38" r="10" fill="#F0C64E"/>
+  <rect x="60" y="70" width="136" height="118" rx="30" fill="#CBDCE8"/>
+  <rect x="44" y="112" width="16" height="36" rx="8" fill="#8FC3E8"/>
+  <rect x="196" y="112" width="16" height="36" rx="8" fill="#8FC3E8"/>
+  <rect x="82" y="102" width="92" height="46" rx="16" fill="#22384A"/>
+  <circle cx="106" cy="125" r="10" fill="#5FD3E8"/>
+  <circle cx="150" cy="125" r="10" fill="#5FD3E8"/>
+  <path d="M100 166 h56" stroke="#22384A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M112 166 v8 M128 166 v8 M144 166 v8" stroke="#22384A" stroke-width="5" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="s-alien" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#7A3D6B"/>
+  <path d="M104 62 l-8 -20 M152 62 l8 -20" stroke="#C77FB4" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="94" cy="38" r="8" fill="#F0C64E"/>
+  <circle cx="162" cy="38" r="8" fill="#F0C64E"/>
+  <path d="M128 68 q64 0 64 60 q0 56 -64 76 q-64 -20 -64 -76 q0 -60 64 -60 Z" fill="#8FD96B"/>
+  <ellipse cx="102" cy="126" rx="17" ry="24" fill="#22331C" transform="rotate(-12 102 126)"/>
+  <ellipse cx="154" cy="126" rx="17" ry="24" fill="#22331C" transform="rotate(12 154 126)"/>
+  <circle cx="99" cy="118" r="6" fill="#F6FBF3" opacity=".9"/>
+  <circle cx="151" cy="118" r="6" fill="#F6FBF3" opacity=".9"/>
+  <path d="M108 172 q20 14 40 0" stroke="#22331C" stroke-width="6" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="s-sprout" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#C77E3A"/>
+  <path d="M50 256 v-30 a78 78 0 0 1 156 0 v30 Z" fill="#4C8FBF"/>
+  <rect x="115" y="168" width="26" height="26" fill="#E5B78C"/>
+  <circle cx="128" cy="118" r="58" fill="#4A3527"/>
+  <circle cx="128" cy="133" r="52" fill="#F6D6B2"/>
+  <circle cx="109" cy="130" r="7" fill="#2A3340"/>
+  <circle cx="147" cy="130" r="7" fill="#2A3340"/>
+  <path d="M112 152 q16 14 32 0" stroke="#2A3340" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="93" cy="146" r="7.5" fill="#E89A87" opacity=".75"/>
+  <circle cx="163" cy="146" r="7.5" fill="#E89A87" opacity=".75"/>
+</symbol>
+
+<symbol id="s-crew" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#3E7A6B"/>
+  <path d="M46 256 v-32 a82 82 0 0 1 164 0 v32 Z" fill="#26424C"/>
+  <rect x="114" y="166" width="28" height="28" fill="#D9A075"/>
+  <circle cx="128" cy="122" r="56" fill="#E8B588"/>
+  <path d="M74 116 a54 54 0 0 1 108 0 q-8 -34 -54 -34 t-54 34 Z" fill="#2E2620"/>
+  <path d="M74 116 q-6 26 6 34 q-4 -22 0 -34 Z" fill="#2E2620"/>
+  <path d="M182 116 q6 26 -6 34 q4 -22 0 -34 Z" fill="#2E2620"/>
+  <circle cx="109" cy="126" r="7" fill="#2A2320"/>
+  <circle cx="147" cy="126" r="7" fill="#2A2320"/>
+  <path d="M114 150 q14 11 28 0" stroke="#2A2320" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M96 106 q12 -7 24 -2 M136 104 q12 -5 24 2" stroke="#2E2620" stroke-width="6" fill="none" stroke-linecap="round"/>
+</symbol>
+
+<symbol id="s-sage" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="#5C6B8A"/>
+  <path d="M46 256 v-32 a82 82 0 0 1 164 0 v32 Z" fill="#7C4F4F"/>
+  <rect x="114" y="166" width="28" height="28" fill="#DCA98A"/>
+  <circle cx="128" cy="122" r="56" fill="#EFC7A4"/>
+  <path d="M72 118 a56 56 0 0 1 112 0 q-4 -40 -56 -40 t-56 40 Z" fill="#D8DCE2"/>
+  <path d="M72 118 q-8 24 4 32 q-4 -20 -4 -32 Z" fill="#D8DCE2"/>
+  <path d="M184 118 q8 24 -4 32 q4 -20 4 -32 Z" fill="#D8DCE2"/>
+  <g fill="none" stroke="#4A4034" stroke-width="4.5">
+    <circle cx="107" cy="128" r="17"/>
+    <circle cx="151" cy="128" r="17"/>
+    <path d="M124 128 h8"/>
+  </g>
+  <circle cx="107" cy="128" r="6" fill="#2A2320"/>
+  <circle cx="151" cy="128" r="6" fill="#2A2320"/>
+  <path d="M112 158 q16 12 32 0" stroke="#2A2320" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M104 168 q24 22 48 0 q-24 10 -48 0 Z" fill="#D8DCE2"/>
+</symbol>
+
+</svg>
+
+<!-- ══════════ page ══════════ -->
+<h1>Stock avatars — direction mocks</h1>
+<p class="sub">Hand-built flat vector. No renders, no gradients, no glossy highlights — the things that make the current snack set read as AI.</p>
+
+<h2>1 · Four directions, same three subjects</h2>
+<p class="note">Same cat / kid / ghost drawn four ways, so the comparison is fair. Pick a direction and I'll build all ten in it.</p>
+
+<div class="dirgrid">
+  <div class="dirlabel">A · Flat Geo<span>Pure flat fills, zero outlines. Netflix-ish. Reads cleanest when small.</span></div>
+  <svg class="av" viewBox="0 0 256 256"><use href="#a-cat"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#a-kid"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#a-ghost"/></svg>
+
+  <div class="dirlabel">B · Sticker Outline<span>Heavy dark keyline around every shape. Most punch, survives busy backdrops.</span></div>
+  <svg class="av" viewBox="0 0 256 256"><use href="#b-cat"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#b-kid"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#b-ghost"/></svg>
+
+  <div class="dirlabel">C · Monoline<span>One accent stroke on near-black. Most "premium", least playful. Fits the dark UI.</span></div>
+  <svg class="av" viewBox="0 0 256 256"><use href="#c-cat"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#c-kid"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#c-ghost"/></svg>
+
+  <div class="dirlabel">D · Layered Paper<span>Flat + one darker tone for depth. Warmer, still no gradients.</span></div>
+  <svg class="av" viewBox="0 0 256 256"><use href="#d-cat"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#d-kid"/></svg>
+  <svg class="av" viewBox="0 0 256 256"><use href="#d-ghost"/></svg>
+</div>
+
+<h2>2 · The proposed ten <span class="tag">Direction A</span></h2>
+<p class="note">Animals, family and funny — complementing the five snack avatars you already ship, not repeating them.</p>
+
+<div class="row">
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#a-cat"/></svg><div class="name">Mittens</div><div class="kind">animal</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-fox"/></svg><div class="name">Fox</div><div class="kind">animal</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-panda"/></svg><div class="name">Panda</div><div class="kind">animal</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-owl"/></svg><div class="name">Owl</div><div class="kind">animal</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-bear"/></svg><div class="name">Bear</div><div class="kind">animal</div></div>
+</div>
+<div class="row">
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-sprout"/></svg><div class="name">Kiddo</div><div class="kind">family</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-crew"/></svg><div class="name">Grown-up</div><div class="kind">family</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-sage"/></svg><div class="name">Sage</div><div class="kind">family</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#a-ghost"/></svg><div class="name">Boo</div><div class="kind">funny</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-blob"/></svg><div class="name">Blob</div><div class="kind">funny</div></div>
+</div>
+<div class="row">
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-robot"/></svg><div class="name">Robo</div><div class="kind">spare · funny</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-alien"/></svg><div class="name">Zap</div><div class="kind">spare · funny</div></div>
+</div>
+<p class="caption">Twelve drawn, ten shipped — two spares so you can swap any you dislike.</p>
+
+<h2>3 · In context — the picker row</h2>
+<p class="note">Circle-cropped at the size the profile picker actually uses. This is the test that matters: legible at 64&nbsp;px.</p>
+<div class="strip">
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#a-cat"/></svg><div class="name">Mittens</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-fox"/></svg><div class="name">Fox</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-panda"/></svg><div class="name">Panda</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-owl"/></svg><div class="name">Owl</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-bear"/></svg><div class="name">Bear</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-sprout"/></svg><div class="name">Kiddo</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-crew"/></svg><div class="name">Grown-up</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-sage"/></svg><div class="name">Sage</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#a-ghost"/></svg><div class="name">Boo</div></div>
+  <div class="cell"><svg class="av" viewBox="0 0 256 256"><use href="#s-blob"/></svg><div class="name">Blob</div></div>
+</div>

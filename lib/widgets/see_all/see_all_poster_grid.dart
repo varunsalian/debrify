@@ -52,6 +52,7 @@ class SeeAllGridMetrics {
   static SeeAllGridMetrics resolve(
     BuildContext context, {
     required bool isTelevision,
+    bool showTitles = true,
   }) {
     final width = MediaQuery.of(context).size.width;
     final target = isTelevision ? 132.0 : 178.0;
@@ -70,8 +71,10 @@ class SeeAllGridMetrics {
     // poster stays 2:3 regardless of title length.
     final usableForCell = (width - _hPad).clamp(1.0, double.infinity);
     final childWidth = (usableForCell - (cols - 1) * columnGap) / cols;
-    final titleH = MediaQuery.textScalerOf(context).scale(13) * 1.3 * 2;
-    final cellH = childWidth * 1.5 + titleGap + titleH;
+    final titleH = showTitles
+        ? MediaQuery.textScalerOf(context).scale(13) * 1.3 * 2
+        : 0.0;
+    final cellH = childWidth * 1.5 + (showTitles ? titleGap + titleH : 0);
     return SeeAllGridMetrics(
       columns: cols,
       childWidth: childWidth,
@@ -528,6 +531,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
         widget.showTypeBadge && (discoverSettings?.showTypeTags ?? true);
     final showRatingBadge =
         widget.showRatingBadge && (discoverSettings?.showRatings ?? true);
+    final showTitles = discoverSettings?.showTitles ?? true;
     final shelf = _shelf;
     if (shelf != null) {
       return _buildShelf(
@@ -540,6 +544,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
     final m = SeeAllGridMetrics.resolve(
       context,
       isTelevision: widget.isTelevision,
+      showTitles: showTitles,
     );
     final cols = m.columns;
     final titleH = m.titleHeight;
@@ -593,22 +598,24 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                         compactBadgeLayout: m.childWidth < 142,
                       ),
                     ),
-                    const SizedBox(height: titleGap),
-                    SizedBox(
-                      height: titleH,
-                      child: Text(
-                        item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: app.fade(app.core.tx, 0.92),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          height: 1.3,
+                    if (showTitles) ...[
+                      const SizedBox(height: titleGap),
+                      SizedBox(
+                        height: titleH,
+                        child: Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: app.fade(app.core.tx, 0.92),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               );
