@@ -2855,11 +2855,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _setActiveExternalSubtitlePath(String? path, {String? subtitleId}) {
     if (_activeExternalSubtitlePath == path) return;
     _activeExternalSubtitlePath = path;
+    final controller = _subtitleAutoSync;
+    // Order matters, all synchronous: (1) nothing computed for the old
+    // subtitle may land from here on — the memory recall below awaits, and
+    // a stale verdict in that gap would be applied to the new subtitle;
+    // (2) the live offset AND scale belong to the old subtitle, so they go
+    // back to neutral before the new identity is registered (a reset never
+    // writes memory); (3) only then the new identity.
+    controller?.abandonSubtitle();
+    _resetSubtitleSyncOffset();
     final identity = path == null
         ? null
         : _externalSubtitleSyncIdentity(path, subtitleId);
     SubtitleSettingsService.instance.setActiveSubtitleIdentity(identity);
-    final controller = _subtitleAutoSync;
     debugPrint(
       'SubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} '
       '(controller=${controller == null ? 'MISSING' : 'present'})',

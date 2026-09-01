@@ -152,6 +152,7 @@ class SpeechFeatureTap(
     /** Player.Listener.onPositionDiscontinuity — main thread. */
     fun notifyDiscontinuity(newPositionMs: Long) = synchronized(lock) {
         val seg = current ?: return
+        if (seg.broken) return // made invisible on purpose; never re-stamped
         val ageMs = seg.frameCount * seg.frameDurationMs
         if (seg.anchorMs == UNANCHORED) {
             seg.anchorMs = newPositionMs
@@ -193,7 +194,7 @@ class SpeechFeatureTap(
         // Anchor poll — see class doc. Position is frozen while buffering.
         if (seg != null) mainPost {
             synchronized(lock) {
-                if (seg === current && seg.anchorMs == UNANCHORED) {
+                if (seg === current && !seg.broken && seg.anchorMs == UNANCHORED) {
                     seg.anchorMs = positionMs()
                 }
             }
@@ -228,13 +229,16 @@ class SpeechFeatureTap(
                 }
                 else -> return
             }
-            if (n == 0) return // trailing partial sample: nothing more to read
+            if (n == 0) {
+                pool.offer(array)
+                return // trailing partial sample: nothing more to read
+            }
             if (queue.size >= MAX_QUEUED_CHUNKS) {
                 // The worker is hopelessly behind (thermal throttle, a stalled
                 // VAD). Dropping samples would silently time-warp this run's
                 // frame grid, so the run is made invisible instead.
                 pool.offer(array)
-                synchronized(lock) { seg.anchorMs = UNANCHORED }
+                markBroken(seg)
                 droppedChunks++
                 if (droppedChunks == 1) {
                     android.util.Log.w("AutoSync", "feature worker backlog — dropping audio, segment unanchored")
@@ -259,7 +263,7 @@ class SpeechFeatureTap(
                     // Feature extraction must never take the player down. A
                     // broken run is made invisible; playback is untouched.
                     android.util.Log.e("AutoSync", "feature worker failed", e)
-                    chunk.segment?.let { synchronized(lock) { it.anchorMs = UNANCHORED } }
+                    chunk.segment?.let { markBroken(it) }
                 }
                 pool.offer(chunk.samples)
             }
@@ -290,6 +294,7 @@ class SpeechFeatureTap(
      */
     private fun rollover(seg: Segment): Segment = synchronized(lock) {
         val next = Segment(seg.sampleRate, seg.channels, seg.encoding, vad).also {
+            it.broken = seg.broken
             it.anchorMs = if (seg.anchorMs == UNANCHORED) UNANCHORED
             else seg.anchorMs + (seg.frameCount * seg.frameDurationMs).roundToLong()
         }
@@ -306,6 +311,22 @@ class SpeechFeatureTap(
         }
         trimLocked()
         next
+    }
+
+    /**
+     * A run whose frame grid can no longer be trusted (dropped audio, a
+     * worker failure) is made permanently invisible: it and every
+     * continuation it rolled into — the samples in question may have landed
+     * anywhere down that chain — lose their anchor, and nothing (not the
+     * flush poll, not a discontinuity) may ever stamp one back.
+     */
+    private fun markBroken(seg: Segment) = synchronized(lock) {
+        var s: Segment? = seg
+        while (s != null) {
+            s.broken = true
+            s.anchorMs = UNANCHORED
+            s = s.successor
+        }
     }
 
     private fun trimLocked() {
@@ -331,6 +352,10 @@ class SpeechFeatureTap(
         /** Continuation opened by a rollover; queued chunks follow it. */
         @Volatile
         var successor: Segment? = null
+
+        /** Frame grid no longer trustworthy; stays unanchored forever. */
+        @Volatile
+        var broken = false
 
         private val extractor = SpeechFrameExtractor(sampleRate, vad)
         val frameSamples: Int get() = extractor.frameSamples

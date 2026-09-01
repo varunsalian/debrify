@@ -153,6 +153,10 @@ class MediaKitSubtitleAutoSync {
   /// re-search over far more audio than the original pass ever had.
   static const int verifyVetoMisses = 3;
 
+  /// Cues that must fall inside the six-minute verify window for a pass to
+  /// be judged at all (and so for a miss to count).
+  static const int verifyMinCues = 12;
+
   /// Residual corrections in the same direction before the controller stops
   /// chasing the drift and measures it: a framerate mismatch shows up as a
   /// sync that keeps needing the same push, and one full-width pass with the
@@ -295,6 +299,15 @@ class MediaKitSubtitleAutoSync {
         'Trying to sync subtitles…',
       ),
     );
+  }
+
+  /// Synchronous cut-off for a subtitle that is being replaced: nothing
+  /// computed for it may land after this returns. Hosts call it BEFORE any
+  /// asynchronous work (a memory recall) that precedes [activateSubtitle],
+  /// so no stale verdict can reach the player during that gap.
+  void abandonSubtitle() {
+    _generation++;
+    _cancelPasses();
   }
 
   /// The subtitle went away. Passes stop; the tap stays installed and keeps
@@ -539,11 +552,18 @@ class MediaKitSubtitleAutoSync {
   /// Scale first, then offset: the offset callback is the one whose settings
   /// echo reaches [manualOffsetChanged], and [_applied] must already describe
   /// the full transform by then so the echo is recognised as our own.
-  Future<void> _applySync({required int offsetMs, required double scale}) async {
+  ///
+  /// Both host callbacks await preference writes, so a subtitle switch can
+  /// land between them; each is guarded so a stale half-transform is never
+  /// written under the next subtitle's identity. Returns false if abandoned.
+  Future<bool> _applySync({required int offsetMs, required double scale}) async {
+    final generation = _generation;
     _applied = (offsetMs: offsetMs, scale: scale);
     _verifyMisses = 0;
     await applyScale(scale);
+    if (_disposed || generation != _generation) return false;
     await applyOffsetMs(offsetMs);
+    return !_disposed && generation == _generation;
   }
 
   void _scheduleVerification({bool initial = false}) {
@@ -576,6 +596,21 @@ class MediaKitSubtitleAutoSync {
     }
     final position = currentPositionMs();
     final windowStart = position - 360000;
+    // A window the subtitle itself says is dialogue-free (credits, a
+    // montage, a long action beat) cannot confirm OR refute anything; it
+    // must not count towards the veto. Judged on the cues as displayed.
+    var cuesInWindow = 0;
+    for (final cue in _cues) {
+      final start = (cue.startMs * applied.scale).round() + applied.offsetMs;
+      if (start >= windowStart && start <= position + 10000) cuesInWindow++;
+    }
+    if (cuesInWindow < verifyMinCues) {
+      debugPrint(
+        'SubtitleAutoSync: verify skipped — $cuesInWindow cues in window',
+      );
+      _scheduleVerification();
+      return;
+    }
     final recent = _tap
         .snapshot()
         .where((segment) {
@@ -678,26 +713,94 @@ class MediaKitSubtitleAutoSync {
         '(best ${result.bestOffsetMs}ms z ${result.bestZ.toStringAsFixed(1)})',
       );
       if (_verifyMisses >= verifyVetoMisses) {
-        await _withdrawSync(generation, path);
+        await _reauditSync(generation, path, applied);
         return;
       }
     }
     _scheduleVerification();
   }
 
-  /// The film has refused to confirm the applied sync often enough: take it
-  /// back and search again from everything heard since. Quiet on purpose —
-  /// a wrong sync withdrawn reads as "still trying", and the ladder's next
-  /// verdict speaks for itself.
-  Future<void> _withdrawSync(int generation, String path) async {
-    debugPrint('SubtitleAutoSync: sync withdrawn after $_verifyMisses misses');
-    await _applySync(offsetMs: 0, scale: 1);
-    if (_disposed || generation != _generation || path != _subtitlePath) return;
-    _applied = null;
+  /// The recent windows have refused to confirm the applied sync often
+  /// enough. Before taking anything back, re-judge it from the WHOLE
+  /// history (far more audio than the pass that produced it): the same
+  /// verdict keeps it — quietly, so a scored stretch never makes a correct
+  /// sync flicker — a different confident verdict replaces it, and only no
+  /// verdict at all withdraws it and re-arms the ladder.
+  Future<void> _reauditSync(
+    int generation,
+    String path,
+    SubtitleSyncApplied applied,
+  ) async {
+    if (_running) {
+      _scheduleVerification();
+      return;
+    }
+    debugPrint('SubtitleAutoSync: re-auditing after $_verifyMisses misses');
+    final run = ++_alignmentRun;
+    _running = true;
+    SubtitleAlignResult result;
+    try {
+      result = await compute(
+        _alignInBackground,
+        _AlignRequest(segments: _tap.snapshot(), cues: _cues, tiered: true),
+      );
+    } catch (error) {
+      debugPrint('SubtitleAutoSync: re-audit failed: $error');
+      result = const SubtitleAlignNoMatch(analyzedSec: 0);
+    } finally {
+      if (run == _alignmentRun) _running = false;
+    }
+    if (_disposed ||
+        generation != _generation ||
+        run != _alignmentRun ||
+        path != _subtitlePath ||
+        !_tap.reliable ||
+        _applied != applied) {
+      return;
+    }
     _verifyMisses = 0;
     _resyncCount = 0;
     _lastResidualSign = 0;
-    _startLadder();
+    switch (result) {
+      case SubtitleAlignSynced()
+          when applied.scale == 1 &&
+              (result.offsetMs - applied.offsetMs).abs() <= 400:
+        debugPrint('SubtitleAutoSync: re-audit confirmed ${applied.offsetMs}ms');
+        _scheduleVerification();
+      case SubtitleAlignSynced():
+        debugPrint(
+          'SubtitleAutoSync: re-audit moved ${applied.offsetMs} -> '
+          '${result.offsetMs}ms',
+        );
+        await _applySync(offsetMs: result.offsetMs, scale: 1);
+        if (_disposed || generation != _generation) return;
+        onNotice(
+          SubtitleAutoSyncNotice(
+            SubtitleAutoSyncNoticeKind.resynced,
+            'Subtitles re-synced ${_formatOffset(result.offsetMs)}',
+          ),
+        );
+        _scheduleVerification();
+      case SubtitleAlignDrift():
+        await _applySync(offsetMs: result.offsetMs, scale: result.scale);
+        if (_disposed || generation != _generation) return;
+        onNotice(
+          SubtitleAutoSyncNotice(
+            SubtitleAutoSyncNoticeKind.resynced,
+            'Subtitles re-synced ${_formatOffset(result.offsetMs)} '
+            '(framerate drift corrected)',
+          ),
+        );
+        _scheduleVerification();
+      case SubtitleAlignNoMatch() || SubtitleAlignNotEnoughAudio():
+        debugPrint('SubtitleAutoSync: sync withdrawn — re-audit found nothing');
+        await _applySync(offsetMs: 0, scale: 1);
+        if (_disposed || generation != _generation || path != _subtitlePath) {
+          return;
+        }
+        _applied = null;
+        _startLadder();
+    }
   }
 
   /// Two same-direction corrections in a row: measure the drift over the

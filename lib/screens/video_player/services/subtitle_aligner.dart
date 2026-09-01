@@ -320,7 +320,10 @@ class SubtitleAligner {
       if (best == null || scaledPeak.z > best.z) best = scaledPeak;
     }
     if (best == null) {
-      return SubtitleAlignNoMatch(
+      // No lag had enough cue mass inside the audio (or too few lags to
+      // judge a background): there was nothing to refuse. Reported as
+      // "not enough" so a dialogue-free stretch never counts as a miss.
+      return SubtitleAlignNotEnoughAudio(
         analyzedSec: analyzedSec,
         usableCues: speechCues.length,
       );

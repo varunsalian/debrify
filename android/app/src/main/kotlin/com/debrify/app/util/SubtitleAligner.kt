@@ -406,7 +406,10 @@ object SubtitleAligner {
             if (scale == 1.0) bestUnscaled = peak
             if (best == null || peak.z > best.z) best = peak.copy(scale = scale)
         }
-        val chosen = best ?: return AlignResult.NoMatch(analyzedSec, speechCues.size)
+        // No lag had enough cue mass inside the audio (or too few lags to
+        // judge a background): there was nothing to refuse. "Not enough" so
+        // a dialogue-free stretch never counts as a verify miss.
+        val chosen = best ?: return AlignResult.NotEnoughAudio(analyzedSec, speechCues.size)
 
         // Parsimony: a scaled hypothesis must decisively beat pure offset.
         val effective = if (chosen.scale != 1.0 &&

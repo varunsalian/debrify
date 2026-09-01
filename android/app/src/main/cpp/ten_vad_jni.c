@@ -23,14 +23,17 @@ JNIEXPORT jint JNICALL JNI_FN(nativeProcess)(JNIEnv *env, jclass clazz, jlong ha
                                              jshortArray audio, jint length, jfloatArray out) {
     (void)clazz;
     if (handle == 0 || audio == NULL || out == NULL || length <= 0) return -1;
+    if (length > 1024) return -1;
     if ((*env)->GetArrayLength(env, audio) < length || (*env)->GetArrayLength(env, out) < 1) return -1;
-    jshort *samples = (*env)->GetPrimitiveArrayCritical(env, audio, NULL);
-    if (samples == NULL) return -1;
+    // Copy rather than pin: the inference takes long enough that holding a
+    // critical region would stall the GC on every 16 ms hop.
+    jshort samples[1024];
+    (*env)->GetShortArrayRegion(env, audio, 0, length, samples);
+    if ((*env)->ExceptionCheck(env)) return -1;
     float probability = 0.0f;
     int flag = 0;
     int rc = ten_vad_process((ten_vad_handle_t)(intptr_t)handle, (const int16_t *)samples,
                              (size_t)length, &probability, &flag);
-    (*env)->ReleasePrimitiveArrayCritical(env, audio, samples, JNI_ABORT);
     if (rc != 0) return -1;
     (*env)->SetFloatArrayRegion(env, out, 0, 1, &probability);
     return flag ? 1 : 0;

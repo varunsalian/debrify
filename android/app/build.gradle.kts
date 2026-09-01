@@ -61,7 +61,15 @@ android {
         resValue("string", "app_name", "Debrify")
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DANDROID_STL=none")
+                // 16 KB page alignment: NDK r27 still emits 4 KB LOAD
+                // segments by default, and one such library in the APK puts
+                // the whole app into Android 16's page-size compatibility
+                // mode (with its warning dialog). The prebuilt ten-vad is
+                // already 16 KB-aligned; the shim must match.
+                arguments += listOf(
+                    "-DANDROID_STL=none",
+                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
+                )
             }
         }
     }

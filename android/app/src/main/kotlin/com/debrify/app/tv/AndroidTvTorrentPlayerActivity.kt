@@ -1278,6 +1278,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // peak (the full-width escalation after two included) before the applied
     // sync is WITHDRAWN and the ladder searches again over everything heard.
     private val autoSyncVerifyVetoMisses = 3
+    // Cues that must fall inside the six-minute verify window for a pass to
+    // be judged at all (and so for a miss to count).
+    private val autoSyncVerifyMinCues = 12
     // Same-direction residual corrections before the drift is MEASURED over
     // the whole history (full tier, every framerate hypothesis) instead of
     // chased two minutes at a time.
@@ -14738,23 +14741,79 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * The film has refused to confirm the applied sync often enough: take it
-     * back and search again from everything heard since. Quiet on purpose —
-     * a wrong sync withdrawn reads as "still trying", and the ladder's next
-     * verdict speaks for itself. The zero write also forgets the memory
-     * entry, so a bad remembered sync cannot come back next session.
+     * The recent windows have refused to confirm the applied sync often
+     * enough. Before taking anything back, re-judge it from the WHOLE
+     * history (far more audio than the pass that produced it): the same
+     * verdict keeps it — quietly, so a scored stretch never makes a correct
+     * sync flicker — a different confident verdict replaces it, and only no
+     * verdict at all withdraws it and re-arms the ladder. The zero write of
+     * a withdrawal also forgets the memory entry, so a bad remembered sync
+     * cannot come back next session.
      */
-    private fun withdrawAutoSync(url: String) {
-        android.util.Log.d("AutoSync", "sync withdrawn after $autoSyncVerifyMisses verify misses")
-        cancelAutoSyncVerify()
-        autoSyncAppliedOffsetMs = null
-        autoSyncAppliedScale = 1.0
-        SubtitleSettings.setSyncScale(this, 1.0)
-        SubtitleSettings.setSyncOffsetMs(this, 0L)
-        applySubtitleSettings()
-        autoSyncResultLabel = "withdrawn"
-        autoSyncResultUrl = url
-        startAutoSyncLadder()
+    private fun reauditAutoSync(url: String, applied: Long, appliedScale: Double) {
+        if (autoSyncRunning) return
+        val tap = speechTap ?: return
+        val rawCues = SubtitleCueCache.get(url) ?: return
+        android.util.Log.d("AutoSync", "re-auditing after $autoSyncVerifyMisses verify misses")
+        autoSyncRunning = true
+        subtitleScope.launch {
+            val result = try {
+                val cues = rawCues.map { CueSpan(it.startMs, it.endMs, it.text) }
+                withContext(Dispatchers.Default) { SubtitleAligner.alignTiered(tap.snapshot(), cues) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                android.util.Log.e("AutoSync", "re-audit failed", e)
+                AlignResult.NoMatch(0)
+            } finally {
+                autoSyncRunning = false
+            }
+            if (activeExternalSubtitleUrl != url || autoSyncAppliedOffsetMs != applied) return@launch
+            autoSyncVerifyMisses = 0
+            autoSyncResyncCount = 0
+            autoSyncLastResidualSign = 0
+            val act = this@AndroidTvTorrentPlayerActivity
+            when {
+                result is AlignResult.Synced && appliedScale == 1.0 &&
+                    kotlin.math.abs(result.offsetMs - applied) <= 400 -> {
+                    android.util.Log.d("AutoSync", "re-audit confirmed $applied")
+                }
+                result is AlignResult.Synced -> {
+                    android.util.Log.d("AutoSync", "re-audit moved $applied -> ${result.offsetMs}")
+                    SubtitleSettings.setSyncScale(act, 1.0)
+                    SubtitleSettings.setSyncOffsetMs(act, result.offsetMs)
+                    applySubtitleSettings()
+                    autoSyncAppliedOffsetMs = result.offsetMs
+                    autoSyncAppliedScale = 1.0
+                    autoSyncResultLabel = "✓ ${SubtitleSettings.formatSyncOffset(result.offsetMs)}"
+                    autoSyncResultUrl = url
+                    showSyncToast("↻", AutoSyncColors.OK, "Re-synced", autoHideMs = 3_000)
+                }
+                result is AlignResult.Drift -> {
+                    android.util.Log.d("AutoSync", "re-audit found drift scale=${result.scale} offset=${result.offsetMs}")
+                    SubtitleSettings.setSyncScale(act, result.scale)
+                    SubtitleSettings.setSyncOffsetMs(act, result.offsetMs)
+                    applySubtitleSettings()
+                    autoSyncAppliedOffsetMs = result.offsetMs
+                    autoSyncAppliedScale = result.scale
+                    autoSyncResultLabel = "↻ ${SubtitleSettings.formatSyncOffset(result.offsetMs)} ×${String.format("%.4f", result.scale)}"
+                    autoSyncResultUrl = url
+                    showSyncToast("↻", AutoSyncColors.OK, "Re-synced", hint = "Framerate drift corrected", autoHideMs = 3_500)
+                }
+                else -> {
+                    android.util.Log.d("AutoSync", "sync withdrawn — re-audit found nothing: $result")
+                    cancelAutoSyncVerify()
+                    autoSyncAppliedOffsetMs = null
+                    autoSyncAppliedScale = 1.0
+                    SubtitleSettings.setSyncScale(act, 1.0)
+                    SubtitleSettings.setSyncOffsetMs(act, 0L)
+                    applySubtitleSettings()
+                    autoSyncResultLabel = "withdrawn"
+                    autoSyncResultUrl = url
+                    startAutoSyncLadder()
+                }
+            }
+        }
     }
 
     /**
@@ -14839,6 +14898,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val rawCues = SubtitleCueCache.get(url) ?: return
         val pos = player?.currentPosition ?: return
         val windowStart = pos - 360_000
+        // A window the subtitle itself says is dialogue-free (credits, a
+        // montage, a long action beat) cannot confirm OR refute anything and
+        // must not count towards the veto. Judged on the cues as displayed.
+        val scaleNow = autoSyncAppliedScale
+        val cuesInWindow = rawCues.count {
+            val start = (it.startMs * scaleNow).roundToLong() + applied
+            start >= windowStart && start <= pos + 10_000
+        }
+        if (cuesInWindow < autoSyncVerifyMinCues) {
+            android.util.Log.d("AutoSync", "verify skipped: $cuesInWindow cues in window")
+            return
+        }
         val segments = tap.snapshot().filter {
             it.anchorMs != Long.MIN_VALUE &&
                 it.anchorMs + it.durationMs >= windowStart &&
@@ -14925,7 +14996,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     autoSyncVerifyMisses++
                     android.util.Log.d("AutoSync", "verify miss ${autoSyncVerifyMisses}: $result")
                     if (autoSyncVerifyMisses >= autoSyncVerifyVetoMisses) {
-                        withdrawAutoSync(url)
+                        reauditAutoSync(url, applied, appliedScale)
                     }
                 }
                 else -> {

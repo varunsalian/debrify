@@ -75,11 +75,25 @@ elif [[ -f "$INPUT" && "$INPUT" == *.apk ]]; then
   # ARM ABIs only; the app falls back to energy features where it is absent,
   # but a release that silently lost it on ARM would be a regression.
   unzip -q "$INPUT" 'lib/*/libten_vad.so' 'lib/*/libdebrify_tenvad.so' -d "$WORK/apk" || true
+  readelf_bin="$(command -v readelf || command -v llvm-readelf || true)"
   for abi in armeabi-v7a arm64-v8a; do
     for vad_lib in libten_vad.so libdebrify_tenvad.so; do
       if [[ ! -f "$WORK/apk/lib/$abi/$vad_lib" ]]; then
         echo "error: expected lib/$abi/$vad_lib (subtitle auto-sync VAD) in $INPUT" >&2
         exit 1
+      fi
+      # Every 64-bit LOAD segment must be 16 KB-aligned or Android 16 drops
+      # the whole app into page-size compatibility mode (16 KB pages exist
+      # only on 64-bit devices; 32-bit ARM is exempt).
+      if [[ "$abi" == "arm64-v8a" && -n "$readelf_bin" ]]; then
+        if "$readelf_bin" -lW "$WORK/apk/lib/$abi/$vad_lib" | awk '$1 == "LOAD" { a = $NF; if (a != "0x4000" && a != "0x10000") bad = 1 } END { exit bad }'; then
+          :
+        else
+          echo "error: lib/$abi/$vad_lib has a LOAD segment not 16 KB-aligned" >&2
+          exit 1
+        fi
+      elif [[ "$abi" == "arm64-v8a" ]]; then
+        echo "warning: readelf not found; skipping 16 KB alignment check for lib/$abi/$vad_lib" >&2
       fi
     done
   done
