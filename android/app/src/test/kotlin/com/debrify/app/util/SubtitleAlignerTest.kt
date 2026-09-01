@@ -91,6 +91,80 @@ class SubtitleAlignerTest {
         }
     }
 
+    /**
+     * The same run as [segment] but carrying a neural VAD track: near 1 in
+     * speech, a little raised under music (a real detector leaks some), and a
+     * noisy floor elsewhere. Energies are still filled so the fallback path
+     * would work too; the aligner must prefer the probabilities.
+     */
+    private fun vadSegment(
+        anchorMs: Long,
+        durationMs: Int,
+        speech: List<LongRange>,
+        music: List<LongRange> = emptyList(),
+        seed: Int = 7,
+    ): FeatureSegment {
+        val base = segment(anchorMs, durationMs, speech, music, seed)
+        val rnd = Random(seed + 1)
+        val vad = FloatArray(base.band.size) { i ->
+            val t = anchorMs + (i * frameMs).toLong()
+            when {
+                speech.any { t in it } -> 0.85f + rnd.nextFloat() * 0.15f
+                music.any { t in it } -> 0.10f + rnd.nextFloat() * 0.25f
+                else -> rnd.nextFloat() * 0.08f
+            }
+        }
+        return FeatureSegment(anchorMs, base.sampleRate, base.frameSamples, base.band, base.broadband, vad)
+    }
+
+    // ── 0. Neural VAD track ────────────────────────────────────────────────
+
+    @Test
+    fun `a VAD track is used as the activity signal verbatim`() {
+        val speech = speechPattern(0, 60_000)
+        val seg = vadSegment(0, 60_000, speech)
+        val score = SubtitleAligner.speechScore(seg)
+        assertEquals(seg.vad!!.size, score.size)
+        for (i in score.indices) assertEquals(seg.vad!![i], score[i], 1e-6f)
+    }
+
+    @Test
+    fun `with a VAD track a true offset resolves from 30s through a scored opening`() {
+        for (seed in intArrayOf(3, 5)) {
+            val speech = speechPattern(0, 30_000, seed = seed)
+            val seg = vadSegment(0, 30_000, speech, music = listOf(0L..10_000L), seed = seed + 100)
+            val result = SubtitleAligner.alignTiered(listOf(seg), cuesFor(speech, offsetEarlierMs = 2_000))
+            assertTrue("seed $seed: expected Synced, got $result", result is AlignResult.Synced)
+            assertTrue(abs((result as AlignResult.Synced).offsetMs - 2_000) <= 300)
+        }
+    }
+
+    @Test
+    fun `with a VAD track unrelated cues are still refused at every rung`() {
+        for (seconds in intArrayOf(30, 45, 60, 90, 120)) {
+            for (seed in intArrayOf(3, 5)) {
+                val speech = speechPattern(0, seconds * 1_000L, seed = seed)
+                val unrelated = speechPattern(0, seconds * 1_000L, seed = seed + 40)
+                val seg = vadSegment(
+                    0, seconds * 1_000, speech,
+                    music = listOf(0L..(seconds * 1_000L / 3)), seed = seed + 100,
+                )
+                val result = SubtitleAligner.alignTiered(listOf(seg), cuesFor(unrelated, 0))
+                assertTrue("${seconds}s seed $seed: expected refusal, got $result", result !is AlignResult.Synced)
+            }
+        }
+    }
+
+    @Test
+    fun `a mismatched VAD track length falls back to energy features`() {
+        val speech = speechPattern(0, 60_000)
+        val base = segment(0, 60_000, speech)
+        val broken = FeatureSegment(0, base.sampleRate, base.frameSamples, base.band, base.broadband, FloatArray(10))
+        val fromEnergy = SubtitleAligner.speechScore(base)
+        val fromBroken = SubtitleAligner.speechScore(broken)
+        for (i in fromEnergy.indices) assertEquals(fromEnergy[i], fromBroken[i], 0f)
+    }
+
     // ── 1. Recovery + sign ──────────────────────────────────────────────────
 
     @Test

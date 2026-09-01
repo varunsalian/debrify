@@ -19,7 +19,9 @@ import kotlin.math.sqrt
  * long watch — more than the sync error this whole feature exists to remove.
  *
  * [band] is per-frame RMS of the speech band (~300–3400 Hz), [broadband] the
- * unfiltered per-frame RMS. Both linear amplitude, not dB.
+ * unfiltered per-frame RMS. Both linear amplitude, not dB. [vad], when
+ * present, is a per-frame neural speech probability in [0, 1] (ten-vad) and
+ * replaces the energy heuristics as the activity signal for this run.
  */
 class FeatureSegment(
     val anchorMs: Long,
@@ -27,6 +29,7 @@ class FeatureSegment(
     val frameSamples: Int,
     val band: FloatArray,
     val broadband: FloatArray,
+    val vad: FloatArray? = null,
 ) {
     val frameDurationMs: Double get() = frameSamples * 1000.0 / sampleRate
     val durationMs: Double get() = band.size * frameDurationMs
@@ -469,8 +472,17 @@ object SubtitleAligner {
 
     // ── Speech scoring ──────────────────────────────────────────────────────
 
-    /** Per-frame speech score in [0,1] from the tap's raw band energies. */
+    /**
+     * Per-frame speech score in [0,1]. A neural VAD probability, when the
+     * tap supplies one, IS the score: it already separates dialogue from
+     * score, effects and crowd noise far better than the energy heuristics
+     * below, which remain the fallback for runs without a detector.
+     */
     internal fun speechScore(s: FeatureSegment): FloatArray {
+        val vad = s.vad
+        if (vad != null && vad.size == s.band.size) {
+            return FloatArray(vad.size) { vad[it].coerceIn(0f, 1f) }
+        }
         val nF = s.band.size
         val logE = DoubleArray(nF) { ln(s.band[it] + 1e-6) }
 

@@ -2648,10 +2648,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // free. Created fresh per player build so a rebuild can't feed an old
         // tap. Passthrough audio bypasses processors entirely — the tap then
         // simply never fills and auto-sync declines instead of guessing.
+        speechTap?.release()
         val tap = SpeechFeatureTap(
             mainPost = { action -> runOnUiThread(action) },
             positionMs = { player?.currentPosition ?: 0L },
         ).also { speechTap = it }
+        android.util.Log.d("AutoSync", "speech tap ready: ${tap.detectorDescription}")
         val baseRenderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: android.content.Context,
@@ -18491,6 +18493,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         subtitleListener = null
         trackSelector = null
         offsetRenderersFactory = null
+        speechTap?.release()
         speechTap = null
         syncOverlay = null
         linePickerOverlay?.hide()

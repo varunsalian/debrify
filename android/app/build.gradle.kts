@@ -33,6 +33,16 @@ android {
         }
     }
 
+    // JNI shim over the prebuilt ten-vad neural VAD (subtitle auto-sync).
+    // Plain C, no STL; ABIs without a prebuilt produce no library and the
+    // feature falls back to energy features at runtime.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -49,6 +59,11 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         resValue("string", "app_name", "Debrify")
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DANDROID_STL=none")
+            }
+        }
     }
 
     signingConfigs {

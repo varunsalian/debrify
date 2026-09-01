@@ -71,6 +71,18 @@ elif [[ -f "$INPUT" && "$INPUT" == *.apk ]]; then
       exit 1
     fi
   done
+  # The native TV player's neural VAD (ten-vad + its JNI shim) ships for the
+  # ARM ABIs only; the app falls back to energy features where it is absent,
+  # but a release that silently lost it on ARM would be a regression.
+  unzip -q "$INPUT" 'lib/*/libten_vad.so' 'lib/*/libdebrify_tenvad.so' -d "$WORK/apk" || true
+  for abi in armeabi-v7a arm64-v8a; do
+    for vad_lib in libten_vad.so libdebrify_tenvad.so; do
+      if [[ ! -f "$WORK/apk/lib/$abi/$vad_lib" ]]; then
+        echo "error: expected lib/$abi/$vad_lib (subtitle auto-sync VAD) in $INPUT" >&2
+        exit 1
+      fi
+    done
+  done
   while IFS= read -r binary; do
     verify_binary "$binary" "${binary#"$WORK/apk/"}"
     verified=$((verified + 1))
