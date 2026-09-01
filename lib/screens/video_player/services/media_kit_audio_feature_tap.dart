@@ -78,9 +78,15 @@ class MediaKitAudioFeatureTap {
   static const String _propertyFilter =
       '@$filterLabel:lavfi=[$_analysisChain]';
 
-  static String _fileFilter(String path) =>
+  /// `direct=1` asks the filter to write each record straight through
+  /// instead of via FFmpeg's ~32 KB avio buffer, which otherwise parks the
+  /// last ~25 s of records until it fills — the single largest source of
+  /// wall-clock latency between "enough audio heard" and "the aligner can
+  /// see it". Old FFmpeg builds without the option reject the graph, so the
+  /// install falls back to buffered writes rather than losing file mode.
+  static String _fileFilter(String path, {required bool direct}) =>
       '@$filterLabel:lavfi=[$_analysisChain,'
-      'ametadata=mode=print:file=$path]';
+      'ametadata=mode=print:file=$path${direct ? ':direct=1' : ''}]';
 
   static const int _targetFrameMs = 32;
   static const int _rolloverFrames = 18750;
@@ -112,6 +118,7 @@ class MediaKitAudioFeatureTap {
 
   // File transport state.
   File? _metadataFile;
+  bool _directWrites = false;
   Timer? _tailTimer;
   bool _polling = false;
   int _pollFailures = 0;
@@ -157,7 +164,10 @@ class MediaKitAudioFeatureTap {
       if (await _installFileTransport()) {
         _installed = true;
         _fileMode = true;
-        debugPrint('SubtitleAutoSync: tap installed (file transport)');
+        debugPrint(
+          'SubtitleAutoSync: tap installed (file transport, '
+          '${_directWrites ? 'unbuffered' : 'buffered'})',
+        );
         return true;
       }
 
@@ -247,11 +257,29 @@ class MediaKitAudioFeatureTap {
       }
       file = File(path);
       await file.writeAsString('');
-      await _requirePlayer.command(<String>[
-        'af',
-        'add',
-        _fileFilter(path),
-      ], throwOnError: true);
+      var direct = true;
+      try {
+        await _requirePlayer.command(<String>[
+          'af',
+          'add',
+          _fileFilter(path, direct: true),
+        ], throwOnError: true);
+      } catch (error) {
+        debugPrint(
+          'SubtitleAutoSync: unbuffered metadata log rejected ($error) — '
+          'using buffered writes',
+        );
+        try {
+          await _requirePlayer.command(<String>['af', 'remove', '@$filterLabel']);
+        } catch (_) {}
+        direct = false;
+        await _requirePlayer.command(<String>[
+          'af',
+          'add',
+          _fileFilter(path, direct: false),
+        ], throwOnError: true);
+      }
+      _directWrites = direct;
       _metadataFile = file;
       _tailOffset = 0;
       _tailPartial = '';

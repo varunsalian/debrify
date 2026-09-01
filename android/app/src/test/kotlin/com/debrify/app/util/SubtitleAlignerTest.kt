@@ -237,14 +237,86 @@ class SubtitleAlignerTest {
     // ── The tiered ladder (fast first sync without losing the gate) ────────
 
     @Test
-    fun `narrow tier syncs a typical offset from ~30s of audio`() {
+    fun `narrow tier syncs a typical offset from ~45s of audio`() {
         // The whole point of the ladder: a few-seconds offset must not cost
-        // the user a minute of watching. ±15s window, low-audio thresholds.
-        val speech = speechPattern(0, 30_000)
-        val seg = segment(0, 30_000, speech)
-        val result = SubtitleAligner.alignTiered(listOf(seg), cuesFor(speech, offsetEarlierMs = 2_000))
-        assertTrue("expected Synced, got $result", result is AlignResult.Synced)
-        assertTrue(abs((result as AlignResult.Synced).offsetMs - 2_000) <= 150)
+        // the user minutes of watching. ±15s window, low-audio thresholds —
+        // and a scored opening, the DC-shift trap the gate must survive.
+        for (seed in intArrayOf(3, 5)) {
+            val speech = speechPattern(0, 45_000, seed = seed)
+            val seg = segment(0, 45_000, speech, music = listOf(0L..15_000L), seed = seed + 100)
+            val result = SubtitleAligner.alignTiered(listOf(seg), cuesFor(speech, offsetEarlierMs = 2_000))
+            assertTrue("seed $seed: expected Synced, got $result", result is AlignResult.Synced)
+            assertTrue(abs((result as AlignResult.Synced).offsetMs - 2_000) <= 300)
+        }
+    }
+
+    @Test
+    fun `unrelated cues are refused at every rung, scored audio included`() {
+        // A loud sustained score over the first third plus wrong-film cues,
+        // at every ladder rung: never a confident verdict. (The old z ≥ 8
+        // narrow gate let these through at z 8–10.)
+        for (seconds in intArrayOf(30, 45, 60, 90, 120, 180)) {
+            for (seed in intArrayOf(3, 5)) {
+                val speech = speechPattern(0, seconds * 1_000L, seed = seed)
+                val unrelated = speechPattern(0, seconds * 1_000L, seed = seed + 40)
+                val seg = segment(
+                    0, seconds * 1_000, speech,
+                    music = listOf(0L..(seconds * 1_000L / 3)), seed = seed + 100,
+                )
+                val result = SubtitleAligner.alignTiered(listOf(seg), cuesFor(unrelated, 0))
+                assertTrue("${seconds}s seed $seed: expected refusal, got $result", result !is AlignResult.Synced)
+                assertTrue(result !is AlignResult.Drift)
+            }
+        }
+    }
+
+    @Test
+    fun `a drifting file never gets a far-off plain offset from a short span`() {
+        val scale = 23.976 / 25.0
+        for (seconds in intArrayOf(45, 60, 90)) {
+            for (seed in intArrayOf(3, 5)) {
+                val speech = speechPattern(0, seconds * 1_000L, seed = seed)
+                val drifted = speech.map { s ->
+                    CueSpan((s.first * scale).toLong() + 1_500, (s.last * scale).toLong() + 1_750, "A plausible dialogue line")
+                }
+                val seg = segment(
+                    0, seconds * 1_000, speech,
+                    music = listOf(0L..(seconds * 1_000L / 3)), seed = seed + 100,
+                )
+                val result = SubtitleAligner.alignTiered(listOf(seg), drifted)
+                assertTrue("${seconds}s seed $seed: $result", result !is AlignResult.Drift)
+                if (result is AlignResult.Synced) {
+                    assertTrue("${seconds}s seed $seed: far-off offset $result", abs(result.offsetMs) < 1_000)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `framerate drift is corrected once enough of the file was heard`() {
+        // display = file × (25/23.976) − 1.56 s; three minutes is past the
+        // trust span, so the verdict is a Drift carrying that transform.
+        val speech = speechPattern(0, 3 * 60_000)
+        val scale = 23.976 / 25.0
+        val drifted = speech.map { s ->
+            CueSpan((s.first * scale).toLong() + 1_500, (s.last * scale).toLong() + 1_750, "A plausible dialogue line")
+        }
+        val result = SubtitleAligner.align(listOf(segment(0, 3 * 60_000, speech)), drifted)
+        assertTrue("expected Drift, got $result", result is AlignResult.Drift)
+        val drift = result as AlignResult.Drift
+        assertEquals(25.0 / 23.976, drift.scale, 0.002)
+        assertTrue("offset ${drift.offsetMs} should be ≈ −1564", abs(drift.offsetMs + 1_564) <= 500)
+    }
+
+    @Test
+    fun `local centring zeroes masked-out cells and removes a regional mean`() {
+        val audio = DoubleArray(2_000) { if (it < 1_000) 0.2 else 0.8 }
+        val mask = DoubleArray(2_000) { if (it == 1_500) 0.0 else 1.0 }
+        val centered = SubtitleAligner.centerLocally(audio, mask)
+        assertEquals(0.0, centered[1_500], 0.0)
+        assertEquals(0.0, centered[300], 1e-9)
+        assertEquals(0.0, centered[1_800], 1e-9)
+        assertTrue(centered.all { abs(it) < 0.31 })
     }
 
     @Test

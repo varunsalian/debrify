@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -190,6 +192,12 @@ class SubtitleSettingsService {
   static const int syncOffsetMaxMs = 3600000;
   static const int syncOffsetStepMs = 100;
 
+  /// Per-profile memory of dialed-in syncs, keyed by content + subtitle
+  /// identity: a most-recent-last JSON list of `[identity, offsetMs, scale]`.
+  /// Same shape and cap as Android TV's `sync_offset_memory_v1`.
+  static const String _keySyncMemory = 'subtitle_sync_offset_memory_v1';
+  static const int _syncMemoryMax = 200;
+
   static SubtitleSettingsService? _instance;
   static SubtitleSettingsService get instance {
     _instance ??= SubtitleSettingsService._();
@@ -202,10 +210,21 @@ class SubtitleSettingsService {
 
   // The sync offset is per-subtitle and lives only for the current playback
   // session — a delay calibrated for one subtitle file is meaningless for a
-  // different subtitle or a different episode, so it is deliberately in-memory
-  // (never persisted) and reset to 0 whenever the subtitle or content changes.
+  // different subtitle or a different episode, so the LIVE value is in-memory
+  // and reset whenever the subtitle or content changes. What persists is the
+  // per-identity memory below: an explicit, announced recall at subtitle load
+  // (never an ambient read) restores a sync the same content+subtitle had.
   // (The style settings above stay persisted; only the offset is session-scoped.)
   int _syncOffsetMs = 0;
+
+  /// Framerate correction applied with the offset: display time = file time
+  /// × scale + offset. 1.0 for every subtitle that merely needs a shift.
+  double _syncScale = 1.0;
+
+  /// The player's "what subtitle is on screen" key, set by the screen at
+  /// subtitle load. Memory writes go under it; null means nothing is
+  /// remembered (a slider dialed with subtitles off has no owner).
+  String? _activeSubtitleIdentity;
 
   Future<void> _ensurePrefs() async {
     _prefs ??= await ProfilePreferences.instance();
@@ -232,6 +251,8 @@ class SubtitleSettingsService {
   void resetProfileScope() {
     _prefs = null;
     _syncOffsetMs = 0;
+    _syncScale = 1.0;
+    _activeSubtitleIdentity = null;
   }
 
   // Getters
@@ -329,13 +350,103 @@ class SubtitleSettingsService {
     return _syncOffsetMs;
   }
 
+  double get syncScale => _syncScale;
+
+  /// Persist per subtitle identity INSIDE the one setter every writer uses
+  /// (stepper, line picker, auto-sync, verify) — whoever dials a sync in,
+  /// the same content+subtitle restores it next session. A zero offset with
+  /// no scale is "nothing to remember" and forgets the entry.
   Future<void> setSyncOffsetMs(int ms) async {
     _syncOffsetMs = ms.clamp(syncOffsetMinMs, syncOffsetMaxMs);
+    await _rememberActiveSync();
   }
 
-  /// Clear the in-memory sync offset. Call when the subtitle or content changes.
+  Future<void> setSyncScale(double scale) async {
+    _syncScale = scale.isFinite && scale > 0 ? scale : 1.0;
+    await _rememberActiveSync();
+  }
+
+  /// Clear the live sync. Call when the subtitle or content changes. Never
+  /// touches memory: a transition is not the user saying "zero".
   void resetSyncOffset() {
     _syncOffsetMs = 0;
+    _syncScale = 1.0;
+  }
+
+  /// Register (or clear) the identity memory writes belong to. Does not
+  /// change the live values — the screen resets those on its own seams.
+  void setActiveSubtitleIdentity(String? identity) {
+    _activeSubtitleIdentity = identity;
+  }
+
+  String? get activeSubtitleIdentity => _activeSubtitleIdentity;
+
+  /// The remembered sync for [identity], or null. Pure read.
+  Future<SubtitleSyncMemoryEntry?> recallSync(String identity) async {
+    final entries = await _readSyncMemory();
+    for (final entry in entries.reversed) {
+      if (entry.identity != identity) continue;
+      if (entry.offsetMs == 0 && entry.scale == 1.0) return null;
+      return entry;
+    }
+    return null;
+  }
+
+  Future<void> _rememberActiveSync() async {
+    final identity = _activeSubtitleIdentity;
+    if (identity == null) return;
+    final entries = await _readSyncMemory();
+    entries.removeWhere((entry) => entry.identity == identity);
+    if (_syncOffsetMs != 0 || _syncScale != 1.0) {
+      entries.add(
+        SubtitleSyncMemoryEntry(
+          identity: identity,
+          offsetMs: _syncOffsetMs,
+          scale: _syncScale,
+        ),
+      );
+    }
+    final trimmed = entries.length <= _syncMemoryMax
+        ? entries
+        : entries.sublist(entries.length - _syncMemoryMax);
+    await _ensurePrefs();
+    await _prefs!.setString(
+      _keySyncMemory,
+      jsonEncode(<Object>[
+        for (final entry in trimmed)
+          <Object>[entry.identity, entry.offsetMs, entry.scale],
+      ]),
+    );
+  }
+
+  Future<List<SubtitleSyncMemoryEntry>> _readSyncMemory() async {
+    await _ensurePrefs();
+    final raw = _prefs!.getString(_keySyncMemory);
+    if (raw == null || raw.isEmpty) return <SubtitleSyncMemoryEntry>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <SubtitleSyncMemoryEntry>[];
+      final out = <SubtitleSyncMemoryEntry>[];
+      for (final item in decoded) {
+        if (item is! List || item.length < 2) continue;
+        final identity = item[0];
+        final offset = item[1];
+        if (identity is! String || offset is! num) continue;
+        final scale = item.length > 2 && item[2] is num
+            ? (item[2] as num).toDouble()
+            : 1.0;
+        out.add(
+          SubtitleSyncMemoryEntry(
+            identity: identity,
+            offsetMs: offset.toInt().clamp(syncOffsetMinMs, syncOffsetMaxMs),
+            scale: scale.isFinite && scale > 0 ? scale : 1.0,
+          ),
+        );
+      }
+      return out;
+    } catch (_) {
+      return <SubtitleSyncMemoryEntry>[];
+    }
   }
 
   // Get current values
@@ -684,4 +795,17 @@ class SubtitleSettingsData {
       syncOffsetMs: syncOffsetMs ?? this.syncOffsetMs,
     );
   }
+}
+
+/// One remembered sync: display time = file time × [scale] + [offsetMs].
+class SubtitleSyncMemoryEntry {
+  final String identity;
+  final int offsetMs;
+  final double scale;
+
+  const SubtitleSyncMemoryEntry({
+    required this.identity,
+    required this.offsetMs,
+    this.scale = 1.0,
+  });
 }

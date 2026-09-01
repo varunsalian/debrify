@@ -188,6 +188,126 @@ void main() {
     expect(result, isA<SubtitleAlignNotEnoughAudio>());
   });
 
+  test('unrelated cues are refused at every rung, scored audio included', () {
+    // The narrow gate must not be a false-positive machine. A loud sustained
+    // score over the first third (the DC-shift trap: sliding cues out of the
+    // quiet region correlates for free) plus wrong-film cues, at every
+    // ladder rung — never a confident verdict.
+    for (final seconds in <int>[30, 45, 60, 90, 120, 180]) {
+      for (final seed in <int>[3, 5]) {
+        final speech = speechPattern(0, seconds * 1000, seed: seed);
+        final unrelated = speechPattern(0, seconds * 1000, seed: seed + 40);
+        final result = SubtitleAligner.alignTiered(<AudioFeatureSegment>[
+          segment(
+            0,
+            seconds * 1000,
+            speech,
+            music: <_Span>[(start: 0, end: seconds * 1000 ~/ 3)],
+            seed: seed + 100,
+          ),
+        ], cuesFor(unrelated, 0));
+        expect(
+          result,
+          isNot(isA<SubtitleAlignSynced>()),
+          reason: '${seconds}s seed $seed: $result',
+        );
+        expect(result, isNot(isA<SubtitleAlignDrift>()));
+      }
+    }
+  });
+
+  test('a true offset resolves from forty-five seconds with scored audio', () {
+    for (final seed in <int>[3, 5]) {
+      final speech = speechPattern(0, 45000, seed: seed);
+      final result = SubtitleAligner.alignTiered(<AudioFeatureSegment>[
+        segment(
+          0,
+          45000,
+          speech,
+          music: <_Span>[(start: 0, end: 15000)],
+          seed: seed + 100,
+        ),
+      ], cuesFor(speech, 2000));
+      expect(result, isA<SubtitleAlignSynced>(), reason: 'seed $seed: $result');
+      expect((result as SubtitleAlignSynced).offsetMs, closeTo(2000, 300));
+    }
+  });
+
+  test('a drifting file never gets a far-off plain offset from a short span', () {
+    // Under two minutes the scale cannot be trusted, so nothing scaled is
+    // applied — and the losing plain-offset hypothesis must never surface
+    // as the −11 s garbage the old narrow gate produced. At most the
+    // instantaneous offset (within a second) may be reported.
+    const scale = 23.976 / 25;
+    for (final seconds in <int>[45, 60, 90]) {
+      for (final seed in <int>[3, 5]) {
+        final speech = speechPattern(0, seconds * 1000, seed: seed);
+        final drifted = <SubtitleCueSpan>[
+          for (final span in speech)
+            SubtitleCueSpan(
+              (span.start * scale).floor() + 1500,
+              (span.end * scale).floor() + 1750,
+              'A plausible dialogue line',
+            ),
+        ];
+        final result = SubtitleAligner.alignTiered(<AudioFeatureSegment>[
+          segment(
+            0,
+            seconds * 1000,
+            speech,
+            music: <_Span>[(start: 0, end: seconds * 1000 ~/ 3)],
+            seed: seed + 100,
+          ),
+        ], drifted);
+        expect(result, isNot(isA<SubtitleAlignDrift>()));
+        if (result is SubtitleAlignSynced) {
+          expect(
+            result.offsetMs.abs(),
+            lessThan(1000),
+            reason: '${seconds}s seed $seed: $result',
+          );
+        }
+      }
+    }
+  });
+
+  test('framerate drift is corrected once enough of the file was heard', () {
+    // Cues authored for 25 fps timing on 23.976 fps audio, shifted 1.5 s:
+    // display = file × (25/23.976) − 1.56 s. Three minutes is past the
+    // trust span, so the verdict is a Drift carrying that transform.
+    final speech = speechPattern(0, 3 * 60000);
+    const scale = 23.976 / 25;
+    final drifted = <SubtitleCueSpan>[
+      for (final span in speech)
+        SubtitleCueSpan(
+          (span.start * scale).floor() + 1500,
+          (span.end * scale).floor() + 1750,
+          'A plausible dialogue line',
+        ),
+    ];
+    final result = SubtitleAligner.align(<AudioFeatureSegment>[
+      segment(0, 3 * 60000, speech),
+    ], drifted);
+    expect(result, isA<SubtitleAlignDrift>(), reason: '$result');
+    final drift = result as SubtitleAlignDrift;
+    expect(drift.scale, closeTo(25 / 23.976, 0.002));
+    expect(drift.offsetMs, closeTo(-1564, 500));
+  });
+
+  test('local centring zeroes masked-out cells and removes a regional mean', () {
+    final audio = <double>[
+      for (var i = 0; i < 2000; i++) i < 1000 ? 0.2 : 0.8,
+    ];
+    final mask = <double>[for (var i = 0; i < 2000; i++) i == 1500 ? 0 : 1];
+    final centered = SubtitleAligner.centerLocally(audio, mask);
+    expect(centered[1500], 0);
+    // Deep inside each region the local mean equals the level: ≈ 0.
+    expect(centered[300].abs(), lessThan(1e-9));
+    expect(centered[1800].abs(), lessThan(1e-9));
+    // A global mean (0.5) would have left ±0.3 everywhere.
+    expect(centered.every((v) => v.abs() < 0.31), isTrue);
+  });
+
   test('filters SDH and music-only cues', () {
     final kept = SubtitleAligner.filterCues(const <SubtitleCueSpan>[
       SubtitleCueSpan(0, 1000, '[door slams]'),

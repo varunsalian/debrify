@@ -12,6 +12,9 @@ enum AutoSyncPillPhase {
   /// An alignment pass is running right now.
   checking,
   synced,
+
+  /// A sync remembered from an earlier session was re-applied at load.
+  restored,
   failed,
 }
 
@@ -103,7 +106,8 @@ class _AutoSyncPillState extends State<AutoSyncPill>
       borderRadius: BorderRadius.circular(999),
       border: Border.all(
         color: switch (phase) {
-          AutoSyncPillPhase.synced => _green.withValues(alpha: 0.30),
+          AutoSyncPillPhase.synced ||
+          AutoSyncPillPhase.restored => _green.withValues(alpha: 0.30),
           AutoSyncPillPhase.failed => _amber.withValues(alpha: 0.30),
           _ => Colors.white.withValues(alpha: 0.13),
         },
@@ -133,6 +137,10 @@ class _AutoSyncPillState extends State<AutoSyncPill>
       case AutoSyncPillPhase.synced:
         textColor = _green;
         label = 'SUBTITLES SYNCED';
+        upper = true;
+      case AutoSyncPillPhase.restored:
+        textColor = _green;
+        label = 'SYNC RESTORED';
         upper = true;
       case AutoSyncPillPhase.failed:
         textColor = _amber;

@@ -298,6 +298,16 @@ object SubtitleSettings {
     // at any of the many subtitle-switch seams, so none can be forgotten.
     private var syncOffsetOwnerIdentity: String? = null
     private var syncOffsetMs: Long = 0L
+
+    /**
+     * Framerate correction applied with the offset: display time = file time
+     * × scale + offset. 1.0 for every subtitle that merely needs a shift.
+     * Scoped and remembered exactly like the offset.
+     */
+    private var syncScale: Double = 1.0
+
+    /** One remembered sync: display time = file time × [scale] + [offsetMs]. */
+    data class RememberedSync(val offsetMs: Long, val scale: Double)
     private var activeSubtitleIdentityProvider: (() -> String?)? = null
     private var identityProviderOwner: Any? = null
 
@@ -331,6 +341,7 @@ object SubtitleSettings {
     fun resetSyncOffset() {
         syncOffsetOwnerIdentity = null
         syncOffsetMs = 0L
+        syncScale = 1.0
     }
 
     @JvmStatic
@@ -346,49 +357,81 @@ object SubtitleSettings {
 
     @JvmStatic
     fun setSyncOffsetMs(context: Context, ms: Long) {
-        syncOffsetOwnerIdentity = activeSubtitleIdentityProvider?.invoke()
+        val owner = activeSubtitleIdentityProvider?.invoke()
+        // A new owner starts from an unscaled timeline: the scale belonged to
+        // the subtitle it was measured on, never to the next one.
+        if (owner != syncOffsetOwnerIdentity) syncScale = 1.0
+        syncOffsetOwnerIdentity = owner
         syncOffsetMs = ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
         // Persist per subtitle identity, INSIDE the one setter every writer
         // uses (slider, line picker, auto-sync, verify) — so whoever dials a
         // sync in, the same content+subtitle restores it next session. The
         // session-scoped read semantics above are untouched: recall is an
         // explicit, announced act at subtitle load, never an ambient read.
+        persistActiveSync(context)
+    }
+
+    @JvmStatic
+    fun getSyncScale(context: Context): Double {
+        val active = activeSubtitleIdentityProvider?.invoke()
+        return if (active == syncOffsetOwnerIdentity) syncScale else 1.0
+    }
+
+    /** Auto-sync's drift correction. Same owner/persistence rules as the offset. */
+    @JvmStatic
+    fun setSyncScale(context: Context, scale: Double) {
+        val owner = activeSubtitleIdentityProvider?.invoke()
+        if (owner != syncOffsetOwnerIdentity) syncOffsetMs = 0L
+        syncOffsetOwnerIdentity = owner
+        syncScale = if (scale.isFinite() && scale > 0.0) scale else 1.0
+        persistActiveSync(context)
+    }
+
+    private fun persistActiveSync(context: Context) {
         syncOffsetOwnerIdentity?.let { identity ->
-            if (syncOffsetMs == 0L) forgetRememberedSync(context, identity)
-            else rememberSync(context, identity, syncOffsetMs)
+            if (syncOffsetMs == 0L && syncScale == 1.0) forgetRememberedSync(context, identity)
+            else rememberSync(context, identity, syncOffsetMs, syncScale)
         }
     }
 
     // ── Sync-offset memory ───────────────────────────────────────────────────
-    // A small most-recent-last list of [identity, offsetMs] pairs in the app's
-    // own prefs. The identity (content + subtitle URL, or content + "emb")
-    // already encodes exactly when a remembered offset is valid again.
+    // A small most-recent-last list of [identity, offsetMs, scale] entries in
+    // the app's own prefs (older two-element entries read as scale 1.0). The
+    // identity (content + subtitle URL, or content + "emb") already encodes
+    // exactly when a remembered sync is valid again.
 
     private const val KEY_SYNC_MEMORY = "sync_offset_memory_v1"
     private const val SYNC_MEMORY_MAX = 200
 
-    /** The remembered offset for [identity], or null. Does not touch session state. */
+    /** The remembered sync for [identity], or null. Does not touch session state. */
     @JvmStatic
-    fun recallSyncOffset(context: Context, identity: String): Long? {
+    fun recallSync(context: Context, identity: String): RememberedSync? {
         val arr = readSyncMemory(context)
         for (i in arr.length() - 1 downTo 0) {
-            val pair = arr.optJSONArray(i) ?: continue
-            if (pair.optString(0) == identity) {
-                val ms = pair.optLong(1)
-                return if (ms == 0L) null else ms.coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
+            val entry = arr.optJSONArray(i) ?: continue
+            if (entry.optString(0) == identity) {
+                val ms = entry.optLong(1).coerceIn(SYNC_OFFSET_MIN_MS, SYNC_OFFSET_MAX_MS)
+                val rawScale = entry.optDouble(2, 1.0)
+                val scale = if (rawScale.isFinite() && rawScale > 0.0) rawScale else 1.0
+                return if (ms == 0L && scale == 1.0) null else RememberedSync(ms, scale)
             }
         }
         return null
     }
 
-    private fun rememberSync(context: Context, identity: String, ms: Long) {
+    /** The remembered offset for [identity], or null. Does not touch session state. */
+    @JvmStatic
+    fun recallSyncOffset(context: Context, identity: String): Long? =
+        recallSync(context, identity)?.offsetMs?.takeIf { it != 0L }
+
+    private fun rememberSync(context: Context, identity: String, ms: Long, scale: Double) {
         val arr = readSyncMemory(context)
         val out = org.json.JSONArray()
         for (i in 0 until arr.length()) {
             val pair = arr.optJSONArray(i) ?: continue
             if (pair.optString(0) != identity) out.put(pair)
         }
-        out.put(org.json.JSONArray().put(identity).put(ms))
+        out.put(org.json.JSONArray().put(identity).put(ms).put(scale))
         // Trim oldest (the list is most-recent-last).
         val trimmed = if (out.length() <= SYNC_MEMORY_MAX) out else {
             org.json.JSONArray().also { t ->

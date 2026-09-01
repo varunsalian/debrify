@@ -2682,6 +2682,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       isPlaying: () => _isPlaying,
       currentOffsetMs: () => _subtitleSettings?.syncOffsetMs ?? 0,
       applyOffsetMs: _applyAutoSubtitleSyncOffset,
+      applyScale: _applyAutoSubtitleSyncScale,
       onNotice: _showSubtitleAutoSyncNotice,
     );
   }
@@ -2709,6 +2710,72 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // write failure must not escape a timer callback or affect playback.
       debugPrint('SubtitleAutoSync: offset persistence failed: $error');
     }
+  }
+
+  /// Framerate-drift correction from the aligner: display time = file time
+  /// × scale + offset. Applied through mpv's `sub-speed`, whose lookup is
+  /// exactly `(pts − sub-delay) / sub-speed`, so the pair maps 1:1.
+  Future<void> _applyAutoSubtitleSyncScale(double scale) async {
+    if (!mounted) return;
+    _applySubtitleSyncScale(scale);
+    try {
+      await SubtitleSettingsService.instance.setSyncScale(scale);
+    } catch (error) {
+      debugPrint('SubtitleAutoSync: scale persistence failed: $error');
+    }
+  }
+
+  void _applySubtitleSyncScale(double scale) {
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      final safe = scale.isFinite && scale > 0 ? scale : 1.0;
+      platform.setProperty('sub-speed', safe.toStringAsFixed(6));
+    }
+  }
+
+  /// Content + subtitle key the sync memory is filed under. Mirrors Android
+  /// TV's `resumeId|ext:url`: the addon subtitle id is stable across
+  /// sessions, the downloaded temp path is not.
+  String _externalSubtitleSyncIdentity(String path, String? subtitleId) =>
+      '$_resumeKey|ext:${subtitleId ?? path}';
+
+  /// Re-apply a remembered sync for this content+subtitle BEFORE the
+  /// controller looks at it, then hand the controller the subtitle with that
+  /// sync adopted — it verifies instead of re-searching, so a rewatch shows
+  /// correct timing from the first line.
+  Future<void> _restoreRememberedSyncThenActivate(
+    String path,
+    String identity,
+    MediaKitSubtitleAutoSync controller,
+  ) async {
+    SubtitleSyncApplied? restored;
+    try {
+      final entry = await SubtitleSettingsService.instance.recallSync(identity);
+      if (entry != null &&
+          mounted &&
+          _activeExternalSubtitlePath == path &&
+          (_subtitleSettings?.syncOffsetMs ?? 0) == 0) {
+        _applySubtitleSyncScale(entry.scale);
+        _applySubtitleSyncOffset(entry.offsetMs);
+        await SubtitleSettingsService.instance.setSyncScale(entry.scale);
+        await SubtitleSettingsService.instance.setSyncOffsetMs(entry.offsetMs);
+        if (!mounted || _activeExternalSubtitlePath != path) return;
+        _subtitleSettings = _subtitleSettings?.copyWith(
+          syncOffsetMs: entry.offsetMs,
+        );
+        setState(() {});
+        restored = (offsetMs: entry.offsetMs, scale: entry.scale);
+        debugPrint(
+          'SubtitleAutoSync: restored ${entry.offsetMs}ms '
+          '×${entry.scale.toStringAsFixed(5)} for $identity',
+        );
+        _showAutoSyncPillResult(AutoSyncPillPhase.restored);
+      }
+    } catch (error) {
+      debugPrint('SubtitleAutoSync: sync recall failed: $error');
+    }
+    if (!mounted || _activeExternalSubtitlePath != path) return;
+    await controller.activateSubtitle(path, restored: restored);
   }
 
   void _showSubtitleAutoSyncNotice(SubtitleAutoSyncNotice notice) {
@@ -2785,20 +2852,53 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_autoSyncPill.value != null) _autoSyncPill.value = null;
   }
 
-  void _setActiveExternalSubtitlePath(String? path) {
+  void _setActiveExternalSubtitlePath(String? path, {String? subtitleId}) {
     if (_activeExternalSubtitlePath == path) return;
     _activeExternalSubtitlePath = path;
+    final identity = path == null
+        ? null
+        : _externalSubtitleSyncIdentity(path, subtitleId);
+    SubtitleSettingsService.instance.setActiveSubtitleIdentity(identity);
     final controller = _subtitleAutoSync;
     debugPrint(
       'SubtitleAutoSync: external subtitle ${path == null ? 'cleared' : 'set'} '
       '(controller=${controller == null ? 'MISSING' : 'present'})',
     );
-    if (controller == null) return;
     if (path == null) {
-      unawaited(controller.deactivateSubtitle());
       _hideAutoSyncPill();
-    } else {
-      unawaited(controller.activateSubtitle(path));
+      if (controller != null) unawaited(controller.deactivateSubtitle());
+      return;
+    }
+    if (controller == null) {
+      // No auto-sync (unsupported platform / disabled): memory still applies.
+      unawaited(_restoreRememberedSyncOnly(path, identity!));
+      return;
+    }
+    unawaited(_restoreRememberedSyncThenActivate(path, identity!, controller));
+  }
+
+  Future<void> _restoreRememberedSyncOnly(String path, String identity) async {
+    try {
+      final entry = await SubtitleSettingsService.instance.recallSync(identity);
+      if (entry == null ||
+          !mounted ||
+          _activeExternalSubtitlePath != path ||
+          (_subtitleSettings?.syncOffsetMs ?? 0) != 0) {
+        return;
+      }
+      _applySubtitleSyncScale(entry.scale);
+      _applySubtitleSyncOffset(entry.offsetMs);
+      await SubtitleSettingsService.instance.setSyncScale(entry.scale);
+      await SubtitleSettingsService.instance.setSyncOffsetMs(entry.offsetMs);
+      if (!mounted || _activeExternalSubtitlePath != path) return;
+      setState(() {
+        _subtitleSettings = _subtitleSettings?.copyWith(
+          syncOffsetMs: entry.offsetMs,
+        );
+      });
+      _showAutoSyncPillResult(AutoSyncPillPhase.restored);
+    } catch (error) {
+      debugPrint('SubtitleAutoSync: sync recall failed: $error');
     }
   }
 
@@ -4508,6 +4608,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         : null;
     _setActiveExternalSubtitlePath(
       restoredOriginalSelection ? attempt.previousExternalPath : null,
+      subtitleId: restoredOriginalSelection ? attempt.previousStremioId : null,
     );
     final String restoredSelection;
     if (restoredOriginalSelection && attempt.previousStremioId != null) {
@@ -5716,6 +5817,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // on these transitions and no style rendering depends on the offset).
     _subtitleSettings = _subtitleSettings?.copyWith(syncOffsetMs: 0);
     _applySubtitleSyncOffset(0);
+    _applySubtitleSyncScale(1.0);
   }
 
   /// Overlays inside the player share its route scope, which already has a
@@ -15512,7 +15614,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
       _selectedStremioSubtitleId = sub.id;
-      _setActiveExternalSubtitlePath(filePath);
+      _setActiveExternalSubtitlePath(filePath, subtitleId: sub.id);
       await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
       return true;
     } catch (e) {
@@ -15546,7 +15648,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       if (!applied) return false;
       if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _setActiveExternalSubtitlePath(filePath);
+      _setActiveExternalSubtitlePath(filePath, subtitleId: sub.id);
       return true;
     } catch (e) {
       debugPrint('TracksSheet: subtitle apply failed - $e');
@@ -15658,6 +15760,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _activeSubtitleApplyAttempt = null;
     _cleanupTempSubtitleFilesSync();
     _setActiveExternalSubtitlePath(null);
+    // Audio features heard on the outgoing item would mis-anchor anything
+    // on the incoming timeline; the tap starts over.
+    final autoSync = _subtitleAutoSync;
+    if (autoSync != null) unawaited(autoSync.contentChanged());
     _showSyncOverlay = false;
     // The menu's subtitle pane is keyed to the outgoing item's identity.
     _showPlayerMenu = false;
@@ -16293,7 +16399,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final applied = await _applyExternalSubtitleTrack(track);
       if (!applied) return;
       _selectedStremioSubtitleId = matchingSub.id;
-      _setActiveExternalSubtitlePath(filePath);
+      _setActiveExternalSubtitlePath(filePath, subtitleId: matchingSub.id);
 
       debugPrint(
         'SubAuto: APPLIED addon subtitle "${matchingSub.displayName}" lang=${matchingSub.lang} source=${matchingSub.source}',

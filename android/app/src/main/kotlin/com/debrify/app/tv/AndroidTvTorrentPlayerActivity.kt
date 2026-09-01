@@ -129,6 +129,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.concurrent.thread
+import kotlin.math.roundToLong
 
 @OptIn(UnstableApi::class)
 class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
@@ -1266,7 +1267,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // each silent unless it SUCCEEDS. Stops on success, on drift (retrying
     // won't fix a framerate mismatch), when the user dials any manual offset,
     // or when the rungs run out.
-    private val autoSyncLadderSec = intArrayOf(20, 45, 90, 180)
+    // Denser than the original 20/45/90/180 so the first honest verdict lands
+    // as early as the gates allow; a pass costs a few FFTs and the z ≥ 8
+    // narrow gate makes extra looks statistically free.
+    private val autoSyncLadderSec = intArrayOf(30, 45, 60, 90, 120, 180)
+    private val autoSyncLadderTickMs = 2_000L
+    private val autoSyncFirstVerifyMs = 45_000L
+    private val autoSyncVerifyIntervalMs = 120_000L
+    // Consecutive verify passes that had audio and cues to judge yet found no
+    // peak (the full-width escalation after two included) before the applied
+    // sync is WITHDRAWN and the ladder searches again over everything heard.
+    private val autoSyncVerifyVetoMisses = 3
+    // Same-direction residual corrections before the drift is MEASURED over
+    // the whole history (full tier, every framerate hypothesis) instead of
+    // chased two minutes at a time.
+    private val autoSyncDriftEscalationResyncs = 2
+    private var autoSyncResyncCount = 0
+    private var autoSyncLastResidualSign = 0
     private var autoSyncLadderIdx = 0
     private var autoSyncLadderDone = false
     private var autoSyncLadderTick: Runnable? = null
@@ -1277,6 +1294,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // The applied value doubles as the tamper flag: the moment the stored
     // offset differs from it, the user has taken over and verification ends.
     private var autoSyncAppliedOffsetMs: Long? = null
+    /** Framerate scale applied with [autoSyncAppliedOffsetMs] (1.0 = none). */
+    private var autoSyncAppliedScale: Double = 1.0
     private var autoSyncVerifyTick: Runnable? = null
     private var autoSyncVerifyMisses = 0
 
@@ -14539,9 +14558,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             when (result) {
                 is AlignResult.Synced -> {
                     autoSyncLadderDone = true
+                    SubtitleSettings.setSyncScale(this@AndroidTvTorrentPlayerActivity, 1.0)
                     SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, result.offsetMs)
                     applySubtitleSettings()
                     autoSyncAppliedOffsetMs = result.offsetMs
+                    autoSyncAppliedScale = 1.0
                     scheduleAutoSyncVerify()
                     val fmt = SubtitleSettings.formatSyncOffset(result.offsetMs)
                     remember("✓ $fmt")
@@ -14556,16 +14577,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     )
                 }
                 is AlignResult.Drift -> {
-                    autoSyncLadderDone = true // a longer listen can't fix drift
-                    remember("drifting")
-                    // Worth a word in both modes: drift means THIS subtitle
-                    // file can never be fixed by an offset — switching is the
-                    // only cure, so say so.
+                    // A framerate mismatch, measured over enough of the file
+                    // to trust (DRIFT_MIN_SPAN_MS): apply scale + offset
+                    // through the same store the offset alone uses, so the
+                    // side-render ticker, the memory and verify all see it.
+                    autoSyncLadderDone = true
+                    SubtitleSettings.setSyncScale(this@AndroidTvTorrentPlayerActivity, result.scale)
+                    SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, result.offsetMs)
+                    applySubtitleSettings()
+                    autoSyncAppliedOffsetMs = result.offsetMs
+                    autoSyncAppliedScale = result.scale
+                    scheduleAutoSyncVerify()
+                    val fmt = SubtitleSettings.formatSyncOffset(result.offsetMs)
+                    remember("✓ $fmt ×${String.format("%.4f", result.scale)}")
+                    android.util.Log.d(
+                        "AutoSync",
+                        "drift corrected scale=${result.scale} offset=${result.offsetMs}ms z=${result.zPeak}",
+                    )
                     showSyncToast(
-                        "✕", AutoSyncColors.FAIL,
-                        "Subs drift on this file",
-                        hint = "Try another subtitle",
-                        autoHideMs = 4_500,
+                        "✓", AutoSyncColors.OK,
+                        "Subtitles synced",
+                        hint = "Framerate drift corrected",
+                        autoHideMs = 3_500,
                     )
                 }
                 is AlignResult.NoMatch -> {
@@ -14626,7 +14659,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!isAutoSyncPrefEnabled()) return
         // The one up-front sentence, then the heartbeat. Skipped when a
         // remembered offset just restored — that pill already said everything.
-        if (SubtitleSettings.getSyncOffsetMs(this) == 0L) {
+        if (SubtitleSettings.getSyncOffsetMs(this) == 0L &&
+            SubtitleSettings.getSyncScale(this) == 1.0
+        ) {
             openAutoSyncPillWindow()
         }
         autoSyncLadderIdx = 0
@@ -14637,20 +14672,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val tap = speechTap
                 if (tap != null && !autoSyncRunning &&
                     SubtitleSettings.getSyncOffsetMs(this@AndroidTvTorrentPlayerActivity) == 0L &&
-                    autoSyncLadderIdx < autoSyncLadderSec.size &&
-                    tap.anchoredDurationMs() >= autoSyncLadderSec[autoSyncLadderIdx] * 1000.0
+                    SubtitleSettings.getSyncScale(this@AndroidTvTorrentPlayerActivity) == 1.0 &&
+                    autoSyncLadderIdx < autoSyncLadderSec.size
                 ) {
-                    autoSyncLadderIdx++
-                    android.util.Log.d("AutoSync", "ladder attempt ${autoSyncLadderIdx}/${autoSyncLadderSec.size}")
-                    runSubtitleAutoSync(auto = true)
+                    val anchoredMs = tap.anchoredDurationMs()
+                    if (anchoredMs >= autoSyncLadderSec[autoSyncLadderIdx] * 1000.0) {
+                        // History may already cover several rungs (a subtitle
+                        // switched late in the film — the tap keeps listening
+                        // across subtitle changes): take the highest rung it
+                        // satisfies so the first attempt is the strongest one
+                        // available, not the weakest.
+                        while (autoSyncLadderIdx < autoSyncLadderSec.size &&
+                            anchoredMs >= autoSyncLadderSec[autoSyncLadderIdx] * 1000.0
+                        ) autoSyncLadderIdx++
+                        android.util.Log.d(
+                            "AutoSync",
+                            "ladder attempt ${autoSyncLadderIdx}/${autoSyncLadderSec.size} with ${(anchoredMs / 1000).toInt()}s anchored",
+                        )
+                        runSubtitleAutoSync(auto = true)
+                    }
                 }
                 if (!autoSyncLadderDone && autoSyncLadderIdx < autoSyncLadderSec.size) {
-                    externalSubtitleHandler.postDelayed(this, 8_000)
+                    externalSubtitleHandler.postDelayed(this, autoSyncLadderTickMs)
                 }
             }
         }
         autoSyncLadderTick = tick
-        externalSubtitleHandler.postDelayed(tick, 8_000)
+        // First look right away: with audio already on hand there is nothing
+        // to wait for, and the tick itself only polls a counter.
+        externalSubtitleHandler.post(tick)
     }
 
     private fun cancelAutoSyncLadder() {
@@ -14666,18 +14716,103 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun run() {
                 maybeRunAutoSyncVerify()
                 if (autoSyncVerifyTick === this) {
-                    externalSubtitleHandler.postDelayed(this, 120_000)
+                    externalSubtitleHandler.postDelayed(this, autoSyncVerifyIntervalMs)
                 }
             }
         }
         autoSyncVerifyTick = tick
-        externalSubtitleHandler.postDelayed(tick, 90_000)
+        // Short first check on purpose: a narrow-tier sync from twenty
+        // seconds of audio is re-checked against the next stretch of
+        // dialogue soon, not a minute and a half later.
+        externalSubtitleHandler.postDelayed(tick, autoSyncFirstVerifyMs)
     }
 
     private fun cancelAutoSyncVerify() {
         autoSyncVerifyTick?.let { externalSubtitleHandler.removeCallbacks(it) }
         autoSyncVerifyTick = null
         autoSyncVerifyMisses = 0
+        autoSyncResyncCount = 0
+        autoSyncLastResidualSign = 0
+    }
+
+    /**
+     * The film has refused to confirm the applied sync often enough: take it
+     * back and search again from everything heard since. Quiet on purpose —
+     * a wrong sync withdrawn reads as "still trying", and the ladder's next
+     * verdict speaks for itself. The zero write also forgets the memory
+     * entry, so a bad remembered sync cannot come back next session.
+     */
+    private fun withdrawAutoSync(url: String) {
+        android.util.Log.d("AutoSync", "sync withdrawn after $autoSyncVerifyMisses verify misses")
+        cancelAutoSyncVerify()
+        autoSyncAppliedOffsetMs = null
+        autoSyncAppliedScale = 1.0
+        SubtitleSettings.setSyncScale(this, 1.0)
+        SubtitleSettings.setSyncOffsetMs(this, 0L)
+        applySubtitleSettings()
+        autoSyncResultLabel = "withdrawn"
+        autoSyncResultUrl = url
+        startAutoSyncLadder()
+    }
+
+    /**
+     * Two same-direction corrections in a row: measure the drift over the
+     * whole history instead of chasing it. Applies only a confident framerate
+     * verdict; a plain-offset answer changes nothing (the residual pass
+     * already keeps the offset right).
+     */
+    private fun escalateAutoSyncDrift(url: String) {
+        if (autoSyncRunning) return
+        val tap = speechTap ?: return
+        val rawCues = SubtitleCueCache.get(url) ?: return
+        val applied = autoSyncAppliedOffsetMs ?: return
+        val segments = tap.snapshot().filter { it.anchorMs != Long.MIN_VALUE }
+        if (segments.isEmpty()) return
+        val spanStart = segments.minOf { it.anchorMs }
+        val spanEnd = segments.maxOf { it.anchorMs + it.durationMs.roundToLong() }
+        if (spanEnd - spanStart < SubtitleAligner.Tuning.DRIFT_MIN_SPAN_MS) {
+            android.util.Log.d("AutoSync", "drift check skipped — span too short")
+            return
+        }
+        autoSyncRunning = true
+        subtitleScope.launch {
+            val result = try {
+                val cues = rawCues.map { CueSpan(it.startMs, it.endMs, it.text) }
+                withContext(Dispatchers.Default) { SubtitleAligner.align(segments, cues) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                android.util.Log.e("AutoSync", "drift check failed", e)
+                AlignResult.NoMatch(0)
+            } finally {
+                autoSyncRunning = false
+            }
+            if (activeExternalSubtitleUrl != url || autoSyncAppliedOffsetMs != applied) return@launch
+            if (result is AlignResult.Drift) {
+                android.util.Log.d(
+                    "AutoSync",
+                    "drift measured scale=${result.scale} offset=${result.offsetMs}ms z=${result.zPeak}",
+                )
+                SubtitleSettings.setSyncScale(this@AndroidTvTorrentPlayerActivity, result.scale)
+                SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, result.offsetMs)
+                applySubtitleSettings()
+                autoSyncAppliedOffsetMs = result.offsetMs
+                autoSyncAppliedScale = result.scale
+                autoSyncVerifyMisses = 0
+                autoSyncResyncCount = 0
+                autoSyncLastResidualSign = 0
+                autoSyncResultLabel = "↻ ${SubtitleSettings.formatSyncOffset(result.offsetMs)} ×${String.format("%.4f", result.scale)}"
+                autoSyncResultUrl = url
+                showSyncToast(
+                    "↻", AutoSyncColors.OK,
+                    "Re-synced",
+                    hint = "Framerate drift corrected",
+                    autoHideMs = 3_500,
+                )
+            } else {
+                android.util.Log.d("AutoSync", "drift check found no framerate mismatch: $result")
+            }
+        }
     }
 
     /**
@@ -14708,16 +14843,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 it.anchorMs <= pos + 10_000
         }
         if (segments.sumOf { it.durationMs } < 30_000.0) return
+        val appliedScale = autoSyncAppliedScale
         autoSyncRunning = true
         subtitleScope.launch {
             val escalated = autoSyncVerifyMisses >= 2
             val result = try {
+                // Cues ride in pre-transformed by everything applied (scale
+                // AND offset), so a still-correct sync correlates at lag 0.
                 val centered = rawCues.map {
-                    CueSpan(it.startMs + applied, it.endMs + applied, it.text)
+                    CueSpan(
+                        (it.startMs * appliedScale).roundToLong() + applied,
+                        (it.endMs * appliedScale).roundToLong() + applied,
+                        it.text,
+                    )
                 }
                 withContext(Dispatchers.Default) {
                     if (escalated) {
-                        SubtitleAligner.align(segments, centered)
+                        // Full width, offset-only: the scale was decided at
+                        // sync time and a six-minute window must not
+                        // re-litigate it.
+                        SubtitleAligner.align(segments, centered, scales = doubleArrayOf(1.0))
                     } else {
                         SubtitleAligner.align(
                             segments, centered,
@@ -14733,7 +14878,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Throwable, like the ladder call: an OOM from a bad grid is
+                // an Error and must not take the player down.
                 android.util.Log.e("AutoSync", "verify failed", e)
                 AlignResult.NoMatch(0)
             } finally {
@@ -14745,24 +14892,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     autoSyncVerifyMisses = 0
                     if (kotlin.math.abs(result.offsetMs) > 400) {
                         val newOffset = applied + result.offsetMs
+                        val sign = java.lang.Long.signum(result.offsetMs)
+                        autoSyncResyncCount =
+                            if (sign == autoSyncLastResidualSign) autoSyncResyncCount + 1 else 1
+                        autoSyncLastResidualSign = sign
                         SubtitleSettings.setSyncOffsetMs(this@AndroidTvTorrentPlayerActivity, newOffset)
                         applySubtitleSettings()
                         autoSyncAppliedOffsetMs = newOffset
                         autoSyncResultLabel = "✓ ${SubtitleSettings.formatSyncOffset(newOffset)}"
                         autoSyncResultUrl = url
-                        android.util.Log.d("AutoSync", "verify re-synced $applied -> $newOffset (escalated=$escalated)")
+                        android.util.Log.d(
+                            "AutoSync",
+                            "verify re-synced $applied -> $newOffset (escalated=$escalated, same-direction run $autoSyncResyncCount)",
+                        )
                         showSyncToast(
                             "↻", AutoSyncColors.OK,
                             "Re-synced",
                             autoHideMs = 3_000,
                         )
+                        if (autoSyncResyncCount >= autoSyncDriftEscalationResyncs && appliedScale == 1.0) {
+                            escalateAutoSyncDrift(url)
+                        }
                     } else {
+                        autoSyncResyncCount = 0
+                        autoSyncLastResidualSign = 0
                         android.util.Log.d("AutoSync", "verify confirmed $applied (residual ${result.offsetMs}ms)")
                     }
                 }
                 is AlignResult.NoMatch -> {
                     autoSyncVerifyMisses++
                     android.util.Log.d("AutoSync", "verify miss ${autoSyncVerifyMisses}: $result")
+                    if (autoSyncVerifyMisses >= autoSyncVerifyVetoMisses) {
+                        withdrawAutoSync(url)
+                    }
                 }
                 else -> {
                     // NotEnoughAudio / Drift: wait for more playback; a miss
@@ -15415,17 +15577,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // arms — a non-zero recall parks the ladder via its own offset==0
         // gate. Announced: an offset appearing out of nowhere must say why.
         val recalledIdentity = currentSubtitleIdentity()
-        val recalled = recalledIdentity?.let { SubtitleSettings.recallSyncOffset(this, it) }
+        val recalled = recalledIdentity?.let { SubtitleSettings.recallSync(this, it) }
         if (recalled != null) {
-            SubtitleSettings.setSyncOffsetMs(this, recalled)
+            SubtitleSettings.setSyncScale(this, recalled.scale)
+            SubtitleSettings.setSyncOffsetMs(this, recalled.offsetMs)
             // Same initialized-guard the overlay clear above uses: the side
             // ticker reads the offset at lookup time anyway, so on a very
             // early load the apply can be safely skipped rather than touch a
             // lateinit view.
             if (::subtitleOverlay.isInitialized) applySubtitleSettings()
-            autoSyncResultLabel = "↻ ${SubtitleSettings.formatSyncOffset(recalled)}"
+            autoSyncResultLabel = "↻ ${SubtitleSettings.formatSyncOffset(recalled.offsetMs)}"
             autoSyncResultUrl = subtitle.url
-            autoSyncAppliedOffsetMs = recalled
+            autoSyncAppliedOffsetMs = recalled.offsetMs
+            autoSyncAppliedScale = recalled.scale
             scheduleAutoSyncVerify()
             showSyncToast(
                 "↻", AutoSyncColors.OK,
@@ -15443,6 +15607,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         cancelAutoSyncLadder()
         cancelAutoSyncVerify()
         autoSyncAppliedOffsetMs = null
+        autoSyncAppliedScale = 1.0
         externalSubtitleLoadToken++
         externalSubtitleTicker?.let { externalSubtitleHandler.removeCallbacks(it) }
         externalSubtitleTicker = null
@@ -15483,7 +15648,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (cues.isEmpty()) return
         // Same convention as the sync line picker: a positive offset means the
         // subtitle text lags the audio, so we look up cues at (position - offset).
-        val effectiveMs = (player?.currentPosition ?: return) - SubtitleSettings.getSyncOffsetMs(this)
+        // Auto-sync's drift correction adds a scale: display = file × scale +
+        // offset, so the file time under the playhead is (position − offset) / scale.
+        val positionMs = player?.currentPosition ?: return
+        val scale = SubtitleSettings.getSyncScale(this)
+        val shifted = positionMs - SubtitleSettings.getSyncOffsetMs(this)
+        val effectiveMs = if (scale == 1.0) shifted else (shifted / scale).roundToLong()
 
         // Binary search for the last cue starting at or before effectiveMs,
         // then collect all still-active overlapping cues. Cues are sorted only

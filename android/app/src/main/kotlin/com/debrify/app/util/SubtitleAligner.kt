@@ -49,16 +49,22 @@ sealed class AlignResult {
         val analyzedSec: Int,
         val zPeak: Double = 0.0,
         val usableCues: Int = 0,
+        /** Best z outside the peak's ±2 s neighbourhood. */
+        val runnerUpZ: Double = 0.0,
     ) : AlignResult()
 
     /**
-     * A framerate-scaled hypothesis won decisively: the subtitle drifts, and a
-     * constant offset cannot fix it. Reported, never auto-applied.
+     * A framerate-scaled hypothesis won decisively over enough media time to
+     * trust it: display time = file time × [scale] + [offsetMs]. Applied by
+     * the player through the same gates as a plain offset (see
+     * [Tuning.DRIFT_MIN_SPAN_MS]).
      */
     data class Drift(
         val scale: Double,
         val offsetMs: Long,
         val confidence: Double = 0.0,
+        val analyzedSec: Int = 0,
+        val zPeak: Double = 0.0,
     ) : AlignResult()
 
     /** Enough data, no peak that clears the confidence gate. Nothing applied. */
@@ -68,6 +74,7 @@ sealed class AlignResult {
         val bestOffsetMs: Long? = null,
         val bestZ: Double = 0.0,
         val bestPsr: Double = 0.0,
+        val runnerUpZ: Double = 0.0,
     ) : AlignResult()
 
     /** Too little anchored audio (or too few usable cues) to even try. */
@@ -123,8 +130,13 @@ object SubtitleAligner {
          * (null z is ≈ N(0,1); 8 is beyond reach of chance) and keeps PSR as
          * a moderate distinctness check.
          */
-        const val NARROW_MIN_ZPEAK = 8.0
-        const val NARROW_MIN_PSR = 2.5
+        // 2026-09 recalibration: the z statistic is inflated ~3× over a true
+        // N(0,1) null by the burst autocorrelation of dialogue (measured on
+        // synthetic speech: the best UNRELATED lag reaches z 8–10 with
+        // 45–120 s of audio, a true match 16+ from 45 s). 8 was inside the
+        // null's reach; 11 is not. PSR 3 stays a moderate distinctness check.
+        const val NARROW_MIN_ZPEAK = 11.0
+        const val NARROW_MIN_PSR = 3.0
 
         /** Full tier won't try below this many dialogue cues. */
         const val MIN_CUES = 20
@@ -162,6 +174,29 @@ object SubtitleAligner {
         const val MIN_ZPEAK = 4.0
         const val MIN_PSR = 5.0
 
+        /**
+         * The winning peak must beat the strongest rival outside its ±2 s
+         * neighbourhood by this factor, in every tier. A spurious winner is
+         * the maximum of a null landscape, so its runner-up is nearly as
+         * tall (measured ≤ 1.35); a true peak stands alone (≥ 1.9 from 45 s
+         * of audio, ≥ 3 from 90 s). The sharpest single discriminator measured.
+         */
+        const val MIN_PEAK_RATIO = 1.4
+
+        /**
+         * The activity signal is centred on a ROLLING mean over this window,
+         * not the global mean. Film audio is not stationary: a scored or
+         * silent stretch sits below the global mean and dialogue above it,
+         * so any lag that slides the cue mass out of the quiet region and
+         * into the loud one correlates positively no matter how the cues
+         * line up — measured as confident peaks at exactly ±13–15 s (the
+         * edge of the narrow window) on unrelated and drifting subtitles.
+         * Local centring makes every half-minute zero-mean, so only
+         * burst-level alignment can score. Long against the 2–4 s dialogue
+         * cycle that carries the signal, so a true peak is untouched.
+         */
+        const val CENTERING_WINDOW_MS = 30_000.0
+
         /** Peak neighbourhood excluded from the PSR background (±2 s). */
         const val PSR_EXCLUDE_MS = 2_000.0
 
@@ -171,6 +206,30 @@ object SubtitleAligner {
          * (pure offset) wins.
          */
         const val SCALE_PARSIMONY = 1.10
+
+        /**
+         * A drift (framerate) verdict is only trusted — and therefore applied
+         * — once the watched audio spans at least this much media time.
+         * Scaling is anchored at media time 0, so over a short span early in
+         * a file the scaled and unscaled hypotheses differ by well under a
+         * cue's width and a lucky sidelobe could win the parsimony race.
+         * Below this span the ladder simply keeps listening; nothing is
+         * applied from a doubtful drift call.
+         */
+        const val DRIFT_MIN_SPAN_MS = 120_000.0
+
+        /**
+         * A lag is only scoreable when its cue mass inside valid audio is at
+         * least this fraction of the best mass any lag achieves. The absolute
+         * floors bound the worst case for twenty seconds of audio, but with a
+         * minute on hand a lag that slides all but ten seconds of cues off
+         * the end can still clear them — and ten seconds of bursty dialogue
+         * against a bursty activity signal produces spurious peaks well past
+         * the z gate (measured: z 11.5 on a drifting file at a −11 s lag
+         * nothing supported). Relative to the achievable mass, such edge lags
+         * are never candidates.
+         */
+        const val MIN_OVERLAP_FRACTION = 0.5
 
         /** Common framerate mismatches; anything else is out of scope. */
         val SCALES = doubleArrayOf(
@@ -250,6 +309,7 @@ object SubtitleAligner {
         minCues: Int = Tuning.MIN_CUES,
         minZPeak: Double = Tuning.MIN_ZPEAK,
         minPsr: Double = Tuning.MIN_PSR,
+        minPeakRatio: Double = Tuning.MIN_PEAK_RATIO,
         scales: DoubleArray = Tuning.SCALES,
     ): AlignResult {
         // Sanity bounds, not just the UNANCHORED sentinel: an anchor from the
@@ -316,19 +376,15 @@ object SubtitleAligner {
         }
 
         var maskSum = 0.0
-        var actSum = 0.0
-        for (g in 0 until n) { maskSum += mask[g]; actSum += audio[g] * mask[g] }
+        for (g in 0 until n) maskSum += mask[g]
         if (maskSum < minAudioMs / Tuning.GRID_MS) {
             return AlignResult.NotEnoughAudio(analyzedSec, speechCues.size)
         }
-        val mean = actSum / maskSum
+        val a0 = centerLocally(audio, mask)
         var varSum = 0.0
-        for (g in 0 until n) if (mask[g] > 0) varSum += (audio[g] - mean) * (audio[g] - mean)
+        for (g in 0 until n) if (mask[g] > 0) varSum += a0[g] * a0[g]
         val sigma = sqrt(varSum / maskSum)
         if (sigma < 1e-4) return AlignResult.NotEnoughAudio(analyzedSec, speechCues.size) // silence / flat
-
-        val a0 = DoubleArray(n)
-        for (g in 0 until n) a0[g] = mask[g] * (audio[g] - mean)
 
         // ── FFT setup (audio-side transforms are shared across hypotheses) ──
         val k = (searchMs / Tuning.GRID_MS).toInt() // lag radius in grids
@@ -356,20 +412,59 @@ object SubtitleAligner {
         ) bestUnscaled.copy(scale = 1.0) else chosen
 
         val offsetMs = (effective.lagGrids * Tuning.GRID_MS).roundToLong()
-        if (effective.z < minZPeak || effective.psr < minPsr) {
+        val rivalled = effective.runnerUpZ > 0.0 && effective.z < minPeakRatio * effective.runnerUpZ
+        if (effective.z < minZPeak || effective.psr < minPsr || rivalled) {
             // The below-gate candidate rides along so the device run reports
             // HOW close it came — the difference between "gate needs a nudge"
             // and "nothing correlates at all" is the whole diagnosis.
             return AlignResult.NoMatch(
                 analyzedSec, speechCues.size,
                 bestOffsetMs = offsetMs, bestZ = effective.z, bestPsr = effective.psr,
+                runnerUpZ = effective.runnerUpZ,
             )
         }
         return if (effective.scale != 1.0) {
-            AlignResult.Drift(effective.scale, offsetMs, effective.psr)
+            if ((t1 - t0) < Tuning.DRIFT_MIN_SPAN_MS) {
+                // Too little media time to trust a framerate call. Never
+                // apply a doubtful scale — and never apply the losing
+                // unscaled offset to a file that is probably drifting
+                // either. Keep listening.
+                AlignResult.NotEnoughAudio(analyzedSec, speechCues.size)
+            } else {
+                AlignResult.Drift(effective.scale, offsetMs, effective.psr, analyzedSec, effective.z)
+            }
         } else {
-            AlignResult.Synced(offsetMs, effective.psr, analyzedSec, effective.z, speechCues.size)
+            AlignResult.Synced(
+                offsetMs, effective.psr, analyzedSec, effective.z, speechCues.size,
+                runnerUpZ = effective.runnerUpZ,
+            )
         }
+    }
+
+    /**
+     * `mask · (audio − rolling masked mean)` over ±[Tuning.CENTERING_WINDOW_MS]/2.
+     * Unmasked cells never contribute to a neighbourhood mean and come back
+     * as exact zeros.
+     */
+    internal fun centerLocally(audio: DoubleArray, mask: DoubleArray): DoubleArray {
+        val n = audio.size
+        val half = max(1, (Tuning.CENTERING_WINDOW_MS / Tuning.GRID_MS / 2).toInt())
+        val pm = DoubleArray(n + 1)
+        val pa = DoubleArray(n + 1)
+        for (i in 0 until n) {
+            pm[i + 1] = pm[i] + mask[i]
+            pa[i + 1] = pa[i] + audio[i] * mask[i]
+        }
+        val out = DoubleArray(n)
+        for (i in 0 until n) {
+            if (mask[i] <= 0.0) continue
+            val lo = max(0, i - half)
+            val hi = min(n, i + half + 1)
+            val cnt = pm[hi] - pm[lo]
+            if (cnt <= 0.0) continue
+            out[i] = audio[i] - (pa[hi] - pa[lo]) / cnt
+        }
+        return out
     }
 
     // ── Speech scoring ──────────────────────────────────────────────────────
@@ -472,7 +567,13 @@ object SubtitleAligner {
 
     // ── Peak selection ──────────────────────────────────────────────────────
 
-    internal data class Peak(val lagGrids: Double, val z: Double, val psr: Double, val scale: Double = 1.0)
+    internal data class Peak(
+        val lagGrids: Double,
+        val z: Double,
+        val psr: Double,
+        val scale: Double = 1.0,
+        val runnerUpZ: Double = 0.0,
+    )
 
     /**
      * Z-scores every lag and finds the best one. With cExt indexed at (g - lag
@@ -490,10 +591,13 @@ object SubtitleAligner {
         minCueOverlapFrames: Int,
     ): Peak? {
         val z = DoubleArray(2 * k + 1) { Double.NaN }
+        var maxMass = 0.0
+        for (i in 0..2 * k) if (corrM[i] > maxMass) maxMass = corrM[i]
+        val overlapFloor = max(minCueOverlapFrames.toDouble(), maxMass * Tuning.MIN_OVERLAP_FRACTION)
         var bestIdx = -1
         for (i in 0..2 * k) {
             val nL = corrM[i]
-            if (nL < minCueOverlapFrames) continue
+            if (nL < overlapFloor) continue
             z[i] = corrA[i] / (sigma * sqrt(nL))
             if (bestIdx < 0 || z[i] > z[bestIdx]) bestIdx = i
         }
@@ -504,9 +608,11 @@ object SubtitleAligner {
         var cnt = 0
         var sum = 0.0
         var sumSq = 0.0
+        var runnerUp = Double.NEGATIVE_INFINITY
         for (i in 0..2 * k) {
             if (z[i].isNaN() || abs(i - bestIdx) <= excl) continue
             cnt++; sum += z[i]; sumSq += z[i] * z[i]
+            if (z[i] > runnerUp) runnerUp = z[i]
         }
         if (cnt < 50) return null // background too small to judge the peak
         val bgMean = sum / cnt
@@ -522,7 +628,7 @@ object SubtitleAligner {
                 if (abs(d) <= 1.0) lag -= d // corr index runs opposite to lag
             }
         }
-        return Peak(lag, z[bestIdx], psr)
+        return Peak(lag, z[bestIdx], psr, runnerUpZ = if (runnerUp.isFinite()) runnerUp else 0.0)
     }
 
     // ── Minimal iterative radix-2 FFT ───────────────────────────────────────

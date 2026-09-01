@@ -39,24 +39,37 @@ class SubtitleAlignSynced extends SubtitleAlignResult {
   final double zPeak;
   final int usableCues;
 
+  /// Best z outside the peak's ±2 s neighbourhood — how far the winner
+  /// stands above the strongest rival, not just the average lag.
+  final double runnerUpZ;
+
   const SubtitleAlignSynced({
     required this.offsetMs,
     required this.confidence,
     required this.analyzedSec,
     this.zPeak = 0,
     this.usableCues = 0,
+    this.runnerUpZ = 0,
   });
 }
 
+/// A framerate-scaled hypothesis won decisively over enough media time to
+/// trust it: display time = file time × [scale] + [offsetMs]. Applied by the
+/// players through the same gates as a plain offset (see
+/// [SubtitleAligner.driftMinSpanMs]).
 class SubtitleAlignDrift extends SubtitleAlignResult {
   final double scale;
   final int offsetMs;
   final double confidence;
+  final int analyzedSec;
+  final double zPeak;
 
   const SubtitleAlignDrift({
     required this.scale,
     required this.offsetMs,
     this.confidence = 0,
+    this.analyzedSec = 0,
+    this.zPeak = 0,
   });
 }
 
@@ -66,6 +79,7 @@ class SubtitleAlignNoMatch extends SubtitleAlignResult {
   final int? bestOffsetMs;
   final double bestZ;
   final double bestPsr;
+  final double runnerUpZ;
 
   const SubtitleAlignNoMatch({
     required this.analyzedSec,
@@ -73,6 +87,7 @@ class SubtitleAlignNoMatch extends SubtitleAlignResult {
     this.bestOffsetMs,
     this.bestZ = 0,
     this.bestPsr = 0,
+    this.runnerUpZ = 0,
   });
 }
 
@@ -98,16 +113,59 @@ class SubtitleAligner {
   static const double narrowMinAudioMs = 20000;
   static const int narrowMinCueOverlapFrames = 300;
   static const int narrowMinCues = 8;
-  static const double narrowMinZPeak = 8;
-  static const double narrowMinPsr = 2.5;
+  /// Narrow-tier gate. The z statistic is inflated ~3× over a true N(0,1)
+  /// null by the burst autocorrelation of dialogue (measured on synthetic
+  /// speech: the best UNRELATED lag reaches z 8–10 with 45–120 s of audio,
+  /// a true match 16+ from 45 s). 8 was inside the null's reach; 11 is not.
+  /// PSR at 3 stays a moderate distinctness check (deflated in a narrow
+  /// window by the true peak's own sidelobes, see the Kotlin twin).
+  static const double narrowMinZPeak = 11;
+  static const double narrowMinPsr = 3.0;
   static const int minCues = 20;
   static const int maxGrid = 120000;
   static const double minAudioMs = 45000;
   static const int minCueOverlapFrames = 940;
   static const double minZPeak = 4;
   static const double minPsr = 5;
+
+  /// The winning peak must beat the strongest rival outside its ±2 s
+  /// neighbourhood by this factor, in every tier. A spurious winner is the
+  /// maximum of a null landscape, so its runner-up is nearly as tall
+  /// (measured ≤ 1.35); a true peak stands alone (≥ 1.9 from 45 s of audio,
+  /// ≥ 3 from 90 s). This is the sharpest single discriminator measured.
+  static const double minPeakRatio = 1.4;
   static const double psrExcludeMs = 2000;
   static const double scaleParsimony = 1.10;
+
+  /// A drift (framerate) verdict is only trusted — and therefore applied —
+  /// once the watched audio spans at least this much media time. Scaling is
+  /// anchored at media time 0, so over a short span early in a file the
+  /// scaled and unscaled hypotheses differ by well under a cue's width and a
+  /// lucky sidelobe could win the parsimony race. Below this span the ladder
+  /// simply keeps listening; nothing is applied from a doubtful drift call.
+  static const double driftMinSpanMs = 120000;
+
+  /// A lag is only scoreable when its cue mass inside valid audio is at
+  /// least this fraction of the best mass any lag achieves. The absolute
+  /// floors above bound the worst case for twenty seconds of audio, but with
+  /// a minute on hand a lag that slides all but ten seconds of cues off the
+  /// end can still clear them — and ten seconds of bursty dialogue against a
+  /// bursty activity signal produces spurious peaks well past the z gate
+  /// (measured: z 11.5 on a drifting file at a −11 s lag nothing supported).
+  /// Relative to the achievable mass, such edge lags are never candidates.
+  static const double minOverlapFraction = 0.5;
+
+  /// The activity signal is centred on a ROLLING mean over this window, not
+  /// the global mean. Film audio is not stationary: a scored or silent
+  /// stretch sits below the global mean and dialogue above it, so any lag
+  /// that slides the cue mass out of the quiet region and into the loud one
+  /// correlates positively no matter how the cues line up — measured as
+  /// confident peaks at exactly ±13–15 s (the edge of the narrow window) on
+  /// unrelated and drifting subtitles. Local centring makes every
+  /// half-minute zero-mean, so only burst-level alignment can score. The
+  /// window is long against the 2–4 s dialogue cycle that carries the
+  /// signal, so a true peak is untouched.
+  static const double centeringWindowMs = 30000;
   static const List<double> scales = <double>[
     1,
     25 / 23.976,
@@ -163,6 +221,7 @@ class SubtitleAligner {
     int minimumCues = minCues,
     double minimumZPeak = minZPeak,
     double minimumPsr = minPsr,
+    double minimumPeakRatio = minPeakRatio,
     List<double> scaleCandidates = scales,
   }) {
     final usable = segments
@@ -215,10 +274,8 @@ class SubtitleAligner {
     }
 
     var maskSum = 0.0;
-    var activitySum = 0.0;
     for (var i = 0; i < n; i++) {
       maskSum += mask[i];
-      activitySum += audio[i] * mask[i];
     }
     if (maskSum < minimumAudioMs / gridMs) {
       return SubtitleAlignNotEnoughAudio(
@@ -226,13 +283,10 @@ class SubtitleAligner {
         usableCues: speechCues.length,
       );
     }
-    final mean = activitySum / maskSum;
+    final centeredAudio = centerLocally(audio, mask);
     var varianceSum = 0.0;
     for (var i = 0; i < n; i++) {
-      if (mask[i] > 0) {
-        final difference = audio[i] - mean;
-        varianceSum += difference * difference;
-      }
+      if (mask[i] > 0) varianceSum += centeredAudio[i] * centeredAudio[i];
     }
     final sigma = math.sqrt(varianceSum / maskSum);
     if (sigma < 1e-4) {
@@ -241,12 +295,6 @@ class SubtitleAligner {
         usableCues: speechCues.length,
       );
     }
-
-    final centeredAudio = List<double>.generate(
-      n,
-      (i) => mask[i] * (audio[i] - mean),
-      growable: false,
-    );
     final lagRadius = (searchWindowMs / gridMs).floor();
     final transformSize = _nextPowerOfTwo(n + 2 * lagRadius + 1);
     final audioFft = _Fft(transformSize).forwardConjugate(centeredAudio);
@@ -285,20 +333,35 @@ class SubtitleAligner {
       effective = bestUnscaled;
     }
     final offsetMs = (effective.lagGrids * gridMs).round();
-    if (effective.z < minimumZPeak || effective.psr < minimumPsr) {
+    final rivalled =
+        effective.runnerUpZ > 0 &&
+        effective.z < minimumPeakRatio * effective.runnerUpZ;
+    if (effective.z < minimumZPeak || effective.psr < minimumPsr || rivalled) {
       return SubtitleAlignNoMatch(
         analyzedSec: analyzedSec,
         usableCues: speechCues.length,
         bestOffsetMs: offsetMs,
         bestZ: effective.z,
         bestPsr: effective.psr,
+        runnerUpZ: effective.runnerUpZ,
       );
     }
     if (effective.scale != 1) {
+      if (t1 - t0 < driftMinSpanMs) {
+        // Too little media time to trust a framerate call. Never apply a
+        // doubtful scale — and never apply the losing unscaled offset to a
+        // file that is probably drifting either. Keep listening.
+        return SubtitleAlignNotEnoughAudio(
+          analyzedSec: analyzedSec,
+          usableCues: speechCues.length,
+        );
+      }
       return SubtitleAlignDrift(
         scale: effective.scale,
         offsetMs: offsetMs,
         confidence: effective.psr,
+        analyzedSec: analyzedSec,
+        zPeak: effective.z,
       );
     }
     return SubtitleAlignSynced(
@@ -307,7 +370,33 @@ class SubtitleAligner {
       analyzedSec: analyzedSec,
       zPeak: effective.z,
       usableCues: speechCues.length,
+      runnerUpZ: effective.runnerUpZ,
     );
+  }
+
+  /// `mask · (audio − rolling masked mean)` over ±[centeringWindowMs]/2.
+  /// Unmasked cells never contribute to a neighbourhood mean and come back
+  /// as exact zeros.
+  static List<double> centerLocally(List<double> audio, List<double> mask) {
+    final n = audio.length;
+    final half = math.max(1, (centeringWindowMs / gridMs / 2).floor());
+    final prefixMask = List<double>.filled(n + 1, 0);
+    final prefixAudio = List<double>.filled(n + 1, 0);
+    for (var i = 0; i < n; i++) {
+      prefixMask[i + 1] = prefixMask[i] + mask[i];
+      prefixAudio[i + 1] = prefixAudio[i] + audio[i] * mask[i];
+    }
+    final output = List<double>.filled(n, 0);
+    for (var i = 0; i < n; i++) {
+      if (mask[i] <= 0) continue;
+      final low = math.max(0, i - half);
+      final high = math.min(n, i + half + 1);
+      final count = prefixMask[high] - prefixMask[low];
+      if (count <= 0) continue;
+      final localMean = (prefixAudio[high] - prefixAudio[low]) / count;
+      output[i] = audio[i] - localMean;
+    }
+    return output;
   }
 
   static List<double> speechScore(AudioFeatureSegment segment) {
@@ -424,10 +513,18 @@ class SubtitleAligner {
     int minimumOverlap,
   ) {
     final z = List<double>.filled(2 * lagRadius + 1, double.nan);
+    var maxMass = 0.0;
+    for (var i = 0; i <= 2 * lagRadius; i++) {
+      if (mass[i] > maxMass) maxMass = mass[i];
+    }
+    final overlapFloor = math.max(
+      minimumOverlap.toDouble(),
+      maxMass * minOverlapFraction,
+    );
     var bestIndex = -1;
     for (var i = 0; i <= 2 * lagRadius; i++) {
       final overlap = mass[i];
-      if (overlap < minimumOverlap) continue;
+      if (overlap < overlapFloor) continue;
       z[i] = correlation[i] / (sigma * math.sqrt(overlap));
       if (bestIndex < 0 || z[i] > z[bestIndex]) bestIndex = i;
     }
@@ -437,11 +534,13 @@ class SubtitleAligner {
     var count = 0;
     var sum = 0.0;
     var squareSum = 0.0;
+    var runnerUp = double.negativeInfinity;
     for (var i = 0; i <= 2 * lagRadius; i++) {
       if (z[i].isNaN || (i - bestIndex).abs() <= exclusion) continue;
       count++;
       sum += z[i];
       squareSum += z[i] * z[i];
+      if (z[i] > runnerUp) runnerUp = z[i];
     }
     if (count < 50) return null;
     final backgroundMean = sum / count;
@@ -462,7 +561,13 @@ class SubtitleAligner {
         if (delta.abs() <= 1) lag -= delta;
       }
     }
-    return _Peak(lag, z[bestIndex], psr);
+    return _Peak(
+      lag,
+      z[bestIndex],
+      psr,
+      1,
+      runnerUp.isFinite ? runnerUp : 0,
+    );
   }
 
   static int _nextPowerOfTwo(int value) {
@@ -479,11 +584,12 @@ class _Peak {
   final double z;
   final double psr;
   final double scale;
+  final double runnerUpZ;
 
-  const _Peak(this.lagGrids, this.z, this.psr, [this.scale = 1]);
+  const _Peak(this.lagGrids, this.z, this.psr, [this.scale = 1, this.runnerUpZ = 0]);
 
   _Peak copyWith({double? scale}) =>
-      _Peak(lagGrids, z, psr, scale ?? this.scale);
+      _Peak(lagGrids, z, psr, scale ?? this.scale, runnerUpZ);
 }
 
 class _ComplexVector {
