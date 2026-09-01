@@ -21,7 +21,10 @@ ConnectionInfo _connection(String title, {bool connected = true}) =>
       onTap: _noop,
     );
 
-SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
+SettingsTvLayout _layout(
+  FocusNode entry, {
+  Future<void> Function()? onOpenSyncAndMigrate,
+}) => SettingsTvLayout(
   connections: [
     _connection('Real Debrid'),
     _connection('Torbox'),
@@ -46,6 +49,7 @@ SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
   downloadLocationSubtitle: 'Downloads/Debrify',
   onCreateBackup: _noop,
   onRestoreBackup: _noop,
+  onOpenSyncAndMigrate: onOpenSyncAndMigrate ?? _noop,
   onDangerAction: _noop,
   appVersion: '0.8.2-alpha',
   onCheckForUpdates: _noop,
@@ -137,6 +141,52 @@ Future<void> _pumpTv(
 }
 
 void main() {
+  testWidgets('Sync and Migrate has its own reachable TV rail category', (
+    tester,
+  ) async {
+    final entry = FocusNode(debugLabel: 'settings-test-entry-sync');
+    addTearDown(entry.dispose);
+    var opened = false;
+    tester.view.physicalSize = const Size(960, 540);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final theme = AppThemes.byId('spotlight');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeAdapter.themed(theme, TextBrightness.bright),
+        builder: (context, child) => AppThemeScope(theme: theme, child: child!),
+        home: Scaffold(
+          body: _layout(entry, onOpenSyncAndMigrate: () async => opened = true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    entry.requestFocus();
+    await tester.pump();
+    for (var index = 0; index < 10; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-rail-10',
+    );
+    expect(find.text('Sync and Migrate'), findsWidgets);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-pane-0',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(opened, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('TV grid keeps deterministic two-dimensional DPAD movement', (
     tester,
   ) async {

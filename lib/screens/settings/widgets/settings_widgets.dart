@@ -336,6 +336,21 @@ abstract final class SettingsRows {
     title: 'Restore from Backup',
     subtitle: 'Import services and addons from a backup file',
   );
+  static const syncAndMigrate = SettingsRowContent(
+    icon: Icons.sync_alt_rounded,
+    title: 'Sync and Migrate',
+    subtitle: 'Move an encrypted profile backup through WebDAV',
+  );
+  static const createWebDavBackup = SettingsRowContent(
+    icon: Icons.cloud_upload_outlined,
+    title: 'Save backup to WebDAV',
+    subtitle: 'Create, upload, and verify an encrypted profile package',
+  );
+  static const restoreWebDavBackup = SettingsRowContent(
+    icon: Icons.cloud_download_outlined,
+    title: 'Restore backup from WebDAV',
+    subtitle: 'Choose an encrypted profile package on your server',
+  );
   static const exportDiagnosticLogs = SettingsRowContent(
     icon: Icons.bug_report_outlined,
     title: 'Export Diagnostic Logs',

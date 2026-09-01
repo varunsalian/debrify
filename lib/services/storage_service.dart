@@ -1753,9 +1753,7 @@ class StorageService {
 
   static Future<void> setLaunchAnimation(String value) async {
     final prefs = await ProfilePreferences.instance();
-    final normalized = _launchAnimationValues.contains(value)
-        ? value
-        : 'trace';
+    final normalized = _launchAnimationValues.contains(value) ? value : 'trace';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -7292,11 +7290,13 @@ class StorageService {
     await prefs.setBool(_webDavShowVideosOnlyKey, value);
   }
 
-  static Future<void> clearWebDav() async {
+  static Future<void> clearWebDav({
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     if (ProfileCollectionResourceFacade.active) {
       await ProfileCollectionResourceFacade.replace(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
-        feature: ProfileFeature.cloud,
+        feature: feature,
         items: const <ResourceCollectionItem>[],
       );
     }
@@ -7313,11 +7313,12 @@ class StorageService {
   static Future<List<WebDavConfig>> getWebDavServers({
     bool forSettings = true,
     bool forRemoteTransfer = false,
+    ProfileFeature feature = ProfileFeature.cloud,
   }) async {
     if (ProfileCollectionResourceFacade.active) {
       final rows = await ProfileCollectionResourceFacade.read(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
-        feature: ProfileFeature.cloud,
+        feature: feature,
         forSettings: forSettings,
         forRemoteTransfer: forRemoteTransfer,
       );
@@ -7361,7 +7362,7 @@ class StorageService {
               await SecretVault.getString(prefs, _webDavPasswordKey) ?? '',
         );
         servers.add(config);
-        await saveWebDavServers(servers);
+        await saveWebDavServers(servers, feature: feature);
         await setSelectedWebDavServerId(config.id);
       }
     }
@@ -7370,8 +7371,9 @@ class StorageService {
   }
 
   static Future<List<WebDavConfig>> saveWebDavServers(
-    List<WebDavConfig> servers,
-  ) async {
+    List<WebDavConfig> servers, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     if (ProfileCollectionResourceFacade.active) {
       final expectedScope = ProfileRuntime.scope.value;
       if (expectedScope == null) throw StateError('No visible profile scope');
@@ -7381,7 +7383,7 @@ class StorageService {
       final prefs = await ProfilePreferences.instance();
       final rows = await ProfileCollectionResourceFacade.replaceAndRead(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
-        feature: ProfileFeature.cloud,
+        feature: feature,
         items: <ResourceCollectionItem>[
           for (final server in servers)
             ResourceCollectionItem(
@@ -7430,8 +7432,12 @@ class StorageService {
 
   static Future<WebDavConfig?> getSelectedWebDavServer({
     bool forSettings = true,
+    ProfileFeature feature = ProfileFeature.cloud,
   }) async {
-    final servers = await getWebDavServers(forSettings: forSettings);
+    final servers = await getWebDavServers(
+      forSettings: forSettings,
+      feature: feature,
+    );
     if (servers.isEmpty) return null;
     final selectedId = await getSelectedWebDavServerId();
     if (selectedId != null && selectedId.isNotEmpty) {
@@ -7443,12 +7449,15 @@ class StorageService {
     return servers.first;
   }
 
-  static Future<WebDavConfig> upsertWebDavServer(WebDavConfig config) async {
+  static Future<WebDavConfig> upsertWebDavServer(
+    WebDavConfig config, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
         ? ProfileRuntime.scope.value
         : null;
     final selectionPrefs = await ProfilePreferences.instance();
-    final servers = (await getWebDavServers()).toList();
+    final servers = (await getWebDavServers(feature: feature)).toList();
     final priorResourceIds = <String>{
       for (final server in servers)
         if (server.connectionResourceId != null) server.connectionResourceId!,
@@ -7475,7 +7484,7 @@ class StorageService {
       );
       servers[index] = persisted;
     }
-    final saved = await saveWebDavServers(servers);
+    final saved = await saveWebDavServers(servers, feature: feature);
     final WebDavConfig canonical;
     final sourceResourceId = persisted.connectionResourceId;
     if (sourceResourceId != null) {
@@ -7501,17 +7510,20 @@ class StorageService {
     return canonical;
   }
 
-  static Future<void> deleteWebDavServer(String id) async {
+  static Future<void> deleteWebDavServer(
+    String id, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
         ? ProfileRuntime.scope.value
         : null;
     final selectionPrefs = await ProfilePreferences.instance();
-    final servers = (await getWebDavServers()).toList();
+    final servers = (await getWebDavServers(feature: feature)).toList();
     if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
       throw StateError('Profile changed while deleting a WebDAV connection');
     }
     servers.removeWhere((server) => server.id == id);
-    final saved = await saveWebDavServers(servers);
+    final saved = await saveWebDavServers(servers, feature: feature);
     final selected = selectionPrefs.getString(_webDavSelectedServerIdKey);
     if (selected == id) {
       if (saved.isEmpty) {

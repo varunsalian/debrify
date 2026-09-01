@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/playlist_view_mode.dart';
-import '../../utils/tv_keys.dart';
+import '../../models/profiles/profile_policy.dart';
 import '../../models/webdav_item.dart';
 import '../../screens/video_player/models/playlist_entry.dart';
 import '../../services/analytics_service.dart';
@@ -19,18 +19,67 @@ import '../../theme/app_theme_scope.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
+import '../../utils/tv_keys.dart';
 import '../../widgets/cloud/cloud_file_row.dart';
 import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_theme.dart';
 import '../settings/webdav_settings_page.dart';
 
+enum WebDavPickerMode { browse, selectFolder, selectBackup }
+
+final class WebDavPickerResult {
+  const WebDavPickerResult({
+    required this.config,
+    required this.path,
+    this.item,
+  });
+
+  final WebDavConfig config;
+  final String path;
+  final WebDavItem? item;
+}
+
+/// Injectable listing boundary used by picker widget tests. Production keeps
+/// the same storage/profile facade and hardened WebDAV service by default.
+class WebDavFilesDataSource {
+  const WebDavFilesDataSource({this.feature = ProfileFeature.cloud});
+
+  final ProfileFeature feature;
+
+  Future<List<WebDavConfig>> loadConfigs() =>
+      WebDavService.getConfigs(feature: feature);
+
+  Future<WebDavConfig?> loadSelectedConfig() =>
+      WebDavService.getConfig(feature: feature);
+
+  Future<bool> loadShowVideosOnly() => StorageService.getWebDavShowVideosOnly();
+
+  Future<List<WebDavItem>> listDirectory(WebDavConfig config, String path) =>
+      WebDavService.listDirectory(config: config, path: path, feature: feature);
+
+  Future<void> selectConfig(String id) =>
+      StorageService.setSelectedWebDavServerId(id);
+}
+
 class WebDavFilesScreen extends StatefulWidget {
-  const WebDavFilesScreen({super.key, this.isPushedRoute = false});
+  const WebDavFilesScreen({
+    super.key,
+    this.isPushedRoute = false,
+    this.pickerMode = WebDavPickerMode.browse,
+    this.dataSource = const WebDavFilesDataSource(),
+  });
 
   /// True when opened as a pushed route (from the Cloud hub) rather than as a
   /// nav tab — registers a pushed-route back handler so system/remote Back
   /// folds up the folder stack before popping, and shows a root Back button.
   final bool isPushedRoute;
+
+  /// A dedicated migration picker. Folder mode exposes an explicit
+  /// DPAD-focusable "Choose this folder" action; backup mode selects only
+  /// plausible Debrify JSON packages. Browse mode retains the media browser's
+  /// existing play/download/delete behavior.
+  final WebDavPickerMode pickerMode;
+  final WebDavFilesDataSource dataSource;
 
   @override
   State<WebDavFilesScreen> createState() => _WebDavFilesScreenState();
@@ -48,6 +97,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   final _serverDropdownFocusNode = FocusNode(
     debugLabel: 'webdav-server-dropdown',
   );
+  final _chooseFolderFocusNode = FocusNode(debugLabel: 'webdav-choose-folder');
 
   WebDavConfig? _config;
   List<WebDavConfig> _configs = [];
@@ -64,12 +114,17 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   bool _searchActive = false;
   VoidCallback? _tvContentFocusHandler;
 
+  bool get _isPicker => widget.pickerMode != WebDavPickerMode.browse;
+  bool get _usesPushedNavigation => widget.isPushedRoute || _isPicker;
+
   @override
   void initState() {
     super.initState();
-    AnalyticsService.screenView('webdav_files');
+    AnalyticsService.screenView(
+      _isPicker ? 'webdav_migrate_picker' : 'webdav_files',
+    );
     _loadSettingsAndRoot();
-    if (widget.isPushedRoute) {
+    if (_usesPushedNavigation) {
       // Pushed from the Cloud hub — system/remote Back should fold the folder
       // stack before popping, matching the other provider screens.
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
@@ -88,7 +143,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
 
   @override
   void dispose() {
-    if (widget.isPushedRoute) {
+    if (_usesPushedNavigation) {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('webdav');
@@ -108,13 +163,16 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     _searchFocusNode.dispose();
     _searchToggleFocusNode.dispose();
     _serverDropdownFocusNode.dispose();
+    _chooseFolderFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _loadSettingsAndRoot() async {
-    final configs = await WebDavService.getConfigs();
-    final config = await WebDavService.getConfig();
-    final showVideosOnly = await StorageService.getWebDavShowVideosOnly();
+    final configs = await widget.dataSource.loadConfigs();
+    final config = await widget.dataSource.loadSelectedConfig();
+    final showVideosOnly = _isPicker
+        ? false
+        : await widget.dataSource.loadShowVideosOnly();
     if (!mounted) return;
     setState(() {
       _configs = configs;
@@ -147,10 +205,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       _error = '';
     });
     try {
-      final rawItems = await WebDavService.listDirectory(
-        config: config,
-        path: path,
-      );
+      final rawItems = await widget.dataSource.listDirectory(config, path);
       if (!mounted) return;
       setState(() {
         if (replaceStack) _stack.clear();
@@ -184,6 +239,10 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   void _focusFirstItem() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (widget.pickerMode == WebDavPickerMode.selectFolder) {
+        _chooseFolderFocusNode.requestFocus();
+        return;
+      }
       if (_items.isNotEmpty) {
         _firstItemFocusNode.requestFocus();
       }
@@ -228,13 +287,26 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }
 
   List<WebDavItem> _filterVisible(List<WebDavItem> items) {
-    final filtered = _showVideosOnly
-        ? items
-              .where(
-                (item) => item.isDirectory || FileUtils.isVideoFile(item.name),
-              )
-              .toList()
-        : List<WebDavItem>.from(items);
+    final List<WebDavItem> filtered = switch (widget.pickerMode) {
+      WebDavPickerMode.selectFolder =>
+        items.where((item) => item.isDirectory).toList(),
+      WebDavPickerMode.selectBackup =>
+        items
+            .where(
+              (item) =>
+                  item.isDirectory || item.name.toLowerCase().endsWith('.json'),
+            )
+            .toList(),
+      WebDavPickerMode.browse =>
+        _showVideosOnly
+            ? items
+                  .where(
+                    (item) =>
+                        item.isDirectory || FileUtils.isVideoFile(item.name),
+                  )
+                  .toList()
+            : List<WebDavItem>.from(items),
+    };
     if (_query.trim().isEmpty) return filtered;
     final q = _query.toLowerCase();
     return filtered
@@ -273,15 +345,17 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }
 
   Future<void> _openSettings() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const WebDavSettingsPage()));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WebDavSettingsPage(feature: widget.dataSource.feature),
+      ),
+    );
     if (!mounted) return;
     await _loadSettingsAndRoot();
   }
 
   Future<void> _selectConfig(String id) async {
-    await StorageService.setSelectedWebDavServerId(id);
+    await widget.dataSource.selectConfig(id);
     WebDavConfig? selected;
     for (final config in _configs) {
       if (config.id == id) {
@@ -319,6 +393,22 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     }
     _stack.add((path: _currentPath, title: _currentTitle));
     _loadPath(item.path, title: item.name);
+  }
+
+  void _chooseCurrentFolder() {
+    final config = _config;
+    if (config == null) return;
+    Navigator.of(
+      context,
+    ).pop(WebDavPickerResult(config: config, path: _currentPath));
+  }
+
+  void _chooseBackup(WebDavItem item) {
+    final config = _config;
+    if (config == null || item.isDirectory) return;
+    Navigator.of(
+      context,
+    ).pop(WebDavPickerResult(config: config, path: item.path, item: item));
   }
 
   Future<void> _playItem(WebDavItem item) async {
@@ -643,6 +733,25 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         child: Column(
           children: [
             _buildToolbar(app),
+            if (_isPicker &&
+                _config != null &&
+                WebDavService.isInsecureConfig(_config!))
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: app.shape.br(12),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: const Text(
+                  'Insecure HTTP: your WebDAV username, password, and backup '
+                  'travel without transport encryption.',
+                ),
+              ),
             Expanded(child: _buildContent()),
           ],
         ),
@@ -664,7 +773,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
           // Show Back when inside a folder (fold up) OR when pushed from the
           // Cloud hub (so the root has a visible Back-to-hub on desktop). A
           // single handler folds the stack first, then pops the route at root.
-          if (_stack.isNotEmpty || widget.isPushedRoute)
+          if (_stack.isNotEmpty || _usesPushedNavigation)
             Focus(
               onKeyEvent: (node, event) {
                 if (event is KeyDownEvent &&
@@ -783,7 +892,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
             },
             child: DropdownButtonFormField<String>(
               focusNode: _serverDropdownFocusNode,
-              value: _config?.id,
+              initialValue: _config?.id,
               isExpanded: true,
               dropdownColor: app.cloud.menuSurface,
               decoration: InputDecoration(
@@ -821,7 +930,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }
 
   void _focusToolbarLeading() {
-    if (_stack.isNotEmpty) {
+    if (_stack.isNotEmpty || _usesPushedNavigation) {
       _backButtonFocusNode.requestFocus();
       return;
     }
@@ -921,9 +1030,40 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         ),
       );
     }
+    if (widget.pickerMode == WebDavPickerMode.selectFolder) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                focusNode: _chooseFolderFocusNode,
+                onPressed: _chooseCurrentFolder,
+                icon: const Icon(Icons.drive_folder_upload_rounded),
+                label: Text(
+                  _currentPath.isEmpty
+                      ? 'Choose server root'
+                      : 'Choose this folder',
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _items.isEmpty
+                ? const Center(child: Text('No subfolders'))
+                : _buildItemList(),
+          ),
+        ],
+      );
+    }
     if (_items.isEmpty) {
       return const Center(child: Text('No files found'));
     }
+    return _buildItemList();
+  }
+
+  Widget _buildItemList() {
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -935,6 +1075,26 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   Widget _buildItemCard(WebDavItem item, int index) {
     final isVideo = !item.isDirectory && FileUtils.isVideoFile(item.name);
     final canPlay = item.isDirectory || isVideo;
+
+    if (_isPicker) {
+      return CloudFileRow(
+        kind: item.isDirectory ? CloudRowKind.folder : CloudRowKind.file,
+        title: item.name,
+        meta: _subtitleFor(item),
+        onTap: item.isDirectory
+            ? () => _openFolder(item)
+            : widget.pickerMode == WebDavPickerMode.selectBackup
+            ? () => _chooseBackup(item)
+            : null,
+        actions: const <CloudRowAction>[],
+        focusNode: index == 0 ? _firstItemFocusNode : null,
+        upFocusNode: index == 0
+            ? widget.pickerMode == WebDavPickerMode.selectFolder
+                  ? _chooseFolderFocusNode
+                  : _serverDropdownFocusNode
+            : null,
+      );
+    }
 
     // Same action set the old Open/Play pills + ⋮ menu offered; the row's tap
     // now carries Open (folders) / Play (videos).
@@ -982,7 +1142,8 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       actions: actions,
       focusNode: index == 0 ? _firstItemFocusNode : null,
       upFocusNode: index == 0 ? _serverDropdownFocusNode : null,
-      onNavigateLeft: MainPageBridge.focusTvSidebar == null
+      onNavigateLeft:
+          _usesPushedNavigation || MainPageBridge.focusTvSidebar == null
           ? null
           : () => MainPageBridge.focusTvSidebar?.call(),
     );

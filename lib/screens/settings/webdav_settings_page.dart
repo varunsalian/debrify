@@ -29,7 +29,9 @@ void _focusAndReveal(FocusNode target) {
 }
 
 class WebDavSettingsPage extends StatefulWidget {
-  const WebDavSettingsPage({super.key});
+  const WebDavSettingsPage({super.key, this.feature = ProfileFeature.cloud});
+
+  final ProfileFeature feature;
 
   @override
   State<WebDavSettingsPage> createState() => _WebDavSettingsPageState();
@@ -84,9 +86,13 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Future<void> _load() async {
-    final servers = await StorageService.getWebDavServers(forSettings: true);
+    final servers = await StorageService.getWebDavServers(
+      forSettings: true,
+      feature: widget.feature,
+    );
     final selected = await StorageService.getSelectedWebDavServer(
       forSettings: true,
+      feature: widget.feature,
     );
     final enabled = await StorageService.getWebDavEnabled();
     final hidden = await StorageService.getWebDavHiddenFromNav();
@@ -151,24 +157,33 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     );
     try {
       final authorization = await ProfileAsyncAuthorization.capture(
-        ProfileFeature.cloud,
+        widget.feature,
       );
       final WebDavConfig savedConfig;
       if (authorization == null) {
-        await WebDavService.testConnection(config);
-        savedConfig = await StorageService.upsertWebDavServer(config);
+        await WebDavService.testConnection(config, feature: widget.feature);
+        savedConfig = await StorageService.upsertWebDavServer(
+          config,
+          feature: widget.feature,
+        );
       } else {
         await authorization.runIfCurrent(
-          () => WebDavService.testConnection(config),
+          () => WebDavService.testConnection(config, feature: widget.feature),
         );
         // Revalidate after the network await and execute the write inside the
         // initiating profile scope. A profile switch/revocation cannot redirect
         // this credential into the newly visible profile.
         savedConfig = await authorization.runIfCurrent(
-          () => StorageService.upsertWebDavServer(config),
+          () => StorageService.upsertWebDavServer(
+            config,
+            feature: widget.feature,
+          ),
         );
       }
-      final servers = await StorageService.getWebDavServers(forSettings: true);
+      final servers = await StorageService.getWebDavServers(
+        forSettings: true,
+        feature: widget.feature,
+      );
       if (!mounted) return;
       setState(() {
         _servers = servers;
@@ -189,11 +204,18 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   Future<void> _disconnect() async {
     if (_editingReadOnly) return;
     if (_editingId != null) {
-      await StorageService.deleteWebDavServer(_editingId!);
+      await StorageService.deleteWebDavServer(
+        _editingId!,
+        feature: widget.feature,
+      );
     }
-    final servers = await StorageService.getWebDavServers(forSettings: true);
+    final servers = await StorageService.getWebDavServers(
+      forSettings: true,
+      feature: widget.feature,
+    );
     final selected = await StorageService.getSelectedWebDavServer(
       forSettings: true,
+      feature: widget.feature,
     );
     if (!mounted) return;
     setState(() {
@@ -306,10 +328,39 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                       hintText: 'https://example.com/remote.php/dav/files/me',
                       prefixIcon: const Icon(Icons.link_rounded),
                       textInputAction: TextInputAction.next,
+                      onChanged: (_) => setState(() {}),
                       onSubmitted: (_) => _usernameFocusNode.requestFocus(),
                       onUpArrow: () => _focusAndReveal(_nameFocusNode),
                       onDownArrow: () => _focusAndReveal(_usernameFocusNode),
                     ),
+                    if (WebDavService.isInsecureUrl(_urlController.text)) ...[
+                      const SizedBox(height: 8),
+                      Semantics(
+                        liveRegion: true,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 18,
+                              color: t.warning,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Insecure HTTP — your WebDAV username, '
+                                'password, and files travel without transport '
+                                'encryption.',
+                                style: TextStyle(
+                                  color: t.warning,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TvTextField(
                       controller: _usernameController,
@@ -397,7 +448,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                             subtitle: Text(
                               server.credentialsRedacted
                                   ? 'Shared connection • credentials hidden'
-                                  : server.baseUrl,
+                                  : '${WebDavService.isInsecureConfig(server) ? 'Insecure HTTP • ' : ''}${server.baseUrl}',
                             ),
                             trailing: IconButton(
                               onPressed: server.connectionReadOnly

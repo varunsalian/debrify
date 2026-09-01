@@ -64,6 +64,7 @@ class SettingsTvLayout extends StatefulWidget {
   final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
+  final Future<void> Function() onOpenSyncAndMigrate;
   final Future<void> Function()? onExportDiagnosticLogs;
   final Future<void> Function() onDangerAction;
   final String appVersion;
@@ -173,6 +174,7 @@ class SettingsTvLayout extends StatefulWidget {
     this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
+    required this.onOpenSyncAndMigrate,
     this.onExportDiagnosticLogs,
     required this.onDangerAction,
     required this.appVersion,
@@ -330,6 +332,13 @@ const List<_Category> _kCategories = [
     'Who can use this device',
     'One device, many viewers.',
     'Switch between people, add someone new, and shape their access.',
+  ),
+  _Category(
+    Icons.sync_alt_rounded,
+    'Sync and Migrate',
+    'Encrypted WebDAV transfer',
+    'Move your profile securely.',
+    'Save or restore an encrypted profile backup through your WebDAV server.',
   ),
   _Category(
     Icons.storage_rounded,
@@ -1214,7 +1223,20 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 10: // Data & Backup
+      case 10: // Sync and Migrate
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.syncAndMigrate,
+                onTap: widget.onOpenSyncAndMigrate,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 11: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -1285,7 +1307,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ];
         }
-      case 11: // About (Updates + Support merged — matches the phone layout)
+      case 12: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -1353,7 +1375,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 12: // Danger Zone
+      case 13: // Danger Zone
         return [
           SettingsSection(
             title: '',

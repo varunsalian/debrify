@@ -637,6 +637,92 @@ void main() {
   });
 
   test(
+    'WebDAV migration reads use backupRestore independently of cloud',
+    () async {
+      final saved = await StorageService.upsertWebDavServer(
+        const WebDavConfig(
+          id: 'migration-dav',
+          name: 'Migration DAV',
+          baseUrl: 'https://dav.invalid/files',
+          username: 'migration-user',
+          password: 'migration-password',
+        ),
+      );
+      final member = (await registry.getProfile(memberId))!;
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      await registry.updateProfile(
+        id: memberId,
+        policy: ProfilePolicy(
+          enabled: member.policy.enabled.toSet()..remove(ProfileFeature.cloud),
+        ),
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+      await ConnectionResourceService(registry: registry, cipher: cipher).grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: memberId,
+        resourceId: saved.connectionResourceId!,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+      await registry.setActiveProfile(memberId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+      );
+
+      await expectLater(
+        StorageService.getWebDavServers(forSettings: false),
+        throwsA(isA<ResourceAuthorizationException>()),
+      );
+      final migrationServers = await StorageService.getWebDavServers(
+        forSettings: false,
+        feature: ProfileFeature.backupRestore,
+      );
+      expect(migrationServers, hasLength(1));
+      expect(migrationServers.single.password, 'migration-password');
+      expect(
+        (await StorageService.getSelectedWebDavServer(
+          forSettings: false,
+          feature: ProfileFeature.backupRestore,
+        ))?.connectionResourceId,
+        saved.connectionResourceId,
+      );
+
+      final createdForMigration = await StorageService.upsertWebDavServer(
+        const WebDavConfig(
+          id: 'new-migration-dav',
+          name: 'New migration destination',
+          baseUrl: 'https://new-dav.invalid/files',
+          username: 'new-user',
+          password: 'new-password',
+        ),
+        feature: ProfileFeature.backupRestore,
+      );
+      expect(createdForMigration.connectionResourceId, isNotNull);
+      expect(createdForMigration.password, 'new-password');
+      expect(
+        await StorageService.getWebDavServers(
+          forSettings: false,
+          feature: ProfileFeature.backupRestore,
+        ),
+        hasLength(2),
+      );
+
+      await StorageService.deleteWebDavServer(
+        createdForMigration.id,
+        feature: ProfileFeature.backupRestore,
+      );
+      expect(
+        await StorageService.getWebDavServers(
+          forSettings: false,
+          feature: ProfileFeature.backupRestore,
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'a shared WebDAV connection does not block unrelated mutations',
     () async {
       final shared = await StorageService.upsertWebDavServer(
@@ -780,10 +866,7 @@ void main() {
     // The reader casts url non-null, so ONE such resource threw for the whole
     // collection and the IPTV page never left its spinner. Migration is a
     // one-way door, so these devices are only reachable from the read side.
-    await ConnectionResourceService(
-      registry: registry,
-      cipher: cipher,
-    ).create(
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: await ProfileAuthorizationContext.capture(registry),
       type: ConnectionResourceType.iptvXtream,
       label: 'Panel',
@@ -797,9 +880,7 @@ void main() {
       },
     );
 
-    final playlists = await StorageService.getIptvPlaylists(
-      forSettings: false,
-    );
+    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final panel = playlists.singleWhere((p) => p.name == 'Panel');
     expect(panel.url, '');
     expect(panel.serverUrl, 'https://panel.invalid:8080');
@@ -810,10 +891,7 @@ void main() {
     // The other kind that stores `url: ''` on purpose: an M3U imported from a
     // file keeps its body in `content` (see the IPTV settings page). It hits
     // the same strip as Xtream, so the repair must recognise it too.
-    await ConnectionResourceService(
-      registry: registry,
-      cipher: cipher,
-    ).create(
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: await ProfileAuthorizationContext.capture(registry),
       type: ConnectionResourceType.iptvM3u,
       label: 'From file',
@@ -825,9 +903,7 @@ void main() {
       },
     );
 
-    final playlists = await StorageService.getIptvPlaylists(
-      forSettings: false,
-    );
+    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final imported = playlists.singleWhere((p) => p.name == 'From file');
     expect(imported.url, '');
     expect(imported.isLocalFile, isTrue);
@@ -836,10 +912,7 @@ void main() {
   test('a row missing both url and serverUrl is not papered over', () async {
     // The repair is deliberately narrow: genuine corruption must still
     // surface rather than being silently turned into a blank provider.
-    await ConnectionResourceService(
-      registry: registry,
-      cipher: cipher,
-    ).create(
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: await ProfileAuthorizationContext.capture(registry),
       type: ConnectionResourceType.iptvM3u,
       label: 'Broken',

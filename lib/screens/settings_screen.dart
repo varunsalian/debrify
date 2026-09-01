@@ -92,6 +92,7 @@ import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
 import 'settings/sidebar_customization_page.dart';
 import 'settings/profile_backup_flows.dart';
+import 'settings/sync_and_migrate_page.dart';
 import 'settings/profile_appearance_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -886,6 +887,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       downloadLocationSubtitle: _downloadLocationSubtitle,
       onCreateBackup: _createBackup,
       onRestoreBackup: _restoreBackup,
+      onOpenSyncAndMigrate: _openSyncAndMigrate,
       onExportDiagnosticLogs: _diagnosticExportVisible
           ? _exportDiagnosticLogs
           : null,
@@ -1002,6 +1004,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       downloadLocationSubtitle: _downloadLocationSubtitle,
       onCreateBackup: _createBackup,
       onRestoreBackup: _restoreBackup,
+      onOpenSyncAndMigrate: _openSyncAndMigrate,
       onExportDiagnosticLogs: _diagnosticExportVisible
           ? _exportDiagnosticLogs
           : null,
@@ -2217,6 +2220,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
         toggleValue: () => _tvKeyboardEnabled,
         onToggle: _toggleTvKeyboard,
+      ),
+
+      nav(
+        SettingsRows.syncAndMigrate,
+        'Sync and Migrate',
+        _openSyncAndMigrate,
+        keywords: const [
+          'webdav',
+          'cloud backup',
+          'migration',
+          'transfer',
+          'save backup',
+          'restore backup',
+          'apple tv',
+          'tvos',
+          'encrypted',
+        ],
       ),
 
       // Downloads
@@ -4769,6 +4789,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).restoreProfileBackup();
   }
 
+  Future<void> _openSyncAndMigrate() async {
+    if (ProfileRuntime.mode != ProfileRuntimeMode.profileCommitted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sync and Migrate becomes available after Profiles setup.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    if (!await _ensureProfileFeature(ProfileFeature.backupRestore)) return;
+    if (!mounted) return;
+    await pushSettingsPage(
+      context,
+      SyncAndMigratePage(
+        onRestored: () async {
+          await _loadSummaries();
+          MainPageBridge.notifyIntegrationChanged();
+        },
+      ),
+    );
+  }
+
   Future<void> _createBackup() async {
     if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
       await _createProfileBackup();
@@ -6795,6 +6841,16 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
         'profile can reach.',
   ),
   SettingsCategoryDefinition(
+    icon: Icons.sync_alt_rounded,
+    label: 'Sync and Migrate',
+    subtitle: 'Encrypted WebDAV transfer',
+    eyebrow: 'Sync and Migrate',
+    title: 'Move your profile securely.',
+    description:
+        'Save or restore an encrypted profile backup through your WebDAV '
+        'server.',
+  ),
+  SettingsCategoryDefinition(
     icon: Icons.storage_rounded,
     label: 'Data & Backup',
     subtitle: 'Downloads, backup & restore',
@@ -6852,6 +6908,7 @@ class _SettingsLayout extends StatelessWidget {
   final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
+  final Future<void> Function() onOpenSyncAndMigrate;
   final Future<void> Function()? onExportDiagnosticLogs;
   final Future<void> Function() onDangerAction;
   final String appVersion;
@@ -6942,6 +6999,7 @@ class _SettingsLayout extends StatelessWidget {
     this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
+    required this.onOpenSyncAndMigrate,
     this.onExportDiagnosticLogs,
     required this.onDangerAction,
     required this.appVersion,
@@ -7306,6 +7364,16 @@ class _SettingsLayout extends StatelessWidget {
           ],
         );
       case 10:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.syncAndMigrate,
+              onTap: onOpenSyncAndMigrate,
+            ),
+          ],
+        );
+      case 11:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7363,7 +7431,7 @@ class _SettingsLayout extends StatelessWidget {
             ],
           ],
         );
-      case 11:
+      case 12:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7418,7 +7486,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 12:
+      case 13:
         return SettingsSection(
           title: '',
           accentColor: t.danger,
@@ -7686,6 +7754,16 @@ class _SettingsLayout extends StatelessWidget {
                     ],
                   ),
                 ],
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Sync and Migrate',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.syncAndMigrate,
+                      onTap: onOpenSyncAndMigrate,
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 24),
                 SettingsSection(
                   title: 'Data & Backup',

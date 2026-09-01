@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
+import '../../models/webdav_item.dart';
 import '../../services/backup_restore_service.dart';
 import '../../services/download_service.dart';
 import '../../services/profiles/connection_resource_service.dart';
@@ -13,6 +17,7 @@ import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/legacy_backup_adapter.dart';
 import '../../services/profiles/portable_profile_package.dart';
 import '../../services/profiles/profile_app_lifecycle_participant.dart';
+import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_database_snapshot.dart';
@@ -21,8 +26,13 @@ import '../../services/profiles/profile_package_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/profiles/profile_runtime.dart';
+import '../../services/webdav_backup_transport.dart';
+import '../../services/webdav_protocol_client.dart';
+import '../../services/webdav_service.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tvos_device.dart';
 import '../../widgets/tv_text_field.dart';
+import '../webdav/webdav_files_screen.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Successful profile restore metadata needed by onboarding completion.
@@ -40,10 +50,17 @@ class ProfileBackupRestoreResult {
   final ProfileGraphRestoreReport? graphReport;
 }
 
+const int _lowMemoryTvosRestoreLimit = 32 * 1024 * 1024;
+
+enum _ProfileBackupDestination { localFile, webDav }
+
+enum _ProfileBackupSource { localFile, webDav }
+
 /// The profile backup/restore user flows, extracted from the settings screen
-/// so the Profiles hub can offer them at its first level. Behavior is
-/// identical to the settings-screen originals; [onRestored] replaces the
-/// screen-specific refresh the settings page used to run inline.
+/// so the Profiles hub can offer them at its first level. The original local
+/// file behavior stays intact, while WebDAV supplies a second transport;
+/// [onRestored] replaces the screen-specific refresh the settings page used to
+/// run inline.
 class ProfileBackupFlows {
   const ProfileBackupFlows(
     this.context, {
@@ -57,7 +74,9 @@ class ProfileBackupFlows {
 
   Future<void> createProfileBackup() async {
     try {
-      await _createProfileBackupUnchecked();
+      await _createProfileBackupUnchecked(
+        destination: _ProfileBackupDestination.localFile,
+      );
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -66,8 +85,24 @@ class ProfileBackupFlows {
     }
   }
 
-  Future<void> _createProfileBackupUnchecked() async {
-    if (PlatformUtil.isTvOS) {
+  Future<void> createWebDavProfileBackup() async {
+    try {
+      await _createProfileBackupUnchecked(
+        destination: _ProfileBackupDestination.webDav,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_profileBackupError(error, creating: true))),
+      );
+    }
+  }
+
+  Future<void> _createProfileBackupUnchecked({
+    required _ProfileBackupDestination destination,
+  }) async {
+    if (destination == _ProfileBackupDestination.localFile &&
+        PlatformUtil.isTvOS) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -77,9 +112,49 @@ class ProfileBackupFlows {
       );
       return;
     }
+    if (destination == _ProfileBackupDestination.webDav &&
+        PlatformUtil.isTvOS &&
+        TvosDevice.isLowMemoryCached) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Backup packaging is deferred on this low-memory Apple TV. Use '
+            'Remote transfer or create the backup on another enrolled device.',
+          ),
+          duration: Duration(seconds: 7),
+        ),
+      );
+      return;
+    }
+
+    final WebDavPickerResult? webDavTarget;
+    final ProfileAsyncAuthorization? migrateAuthorization;
+    if (destination == _ProfileBackupDestination.webDav) {
+      webDavTarget = await Navigator.of(context).push<WebDavPickerResult>(
+        MaterialPageRoute(
+          builder: (_) => const WebDavFilesScreen(
+            isPushedRoute: true,
+            pickerMode: WebDavPickerMode.selectFolder,
+            dataSource: WebDavFilesDataSource(
+              feature: ProfileFeature.backupRestore,
+            ),
+          ),
+        ),
+      );
+      if (webDavTarget == null || !context.mounted) return;
+      migrateAuthorization = await _captureWebDavAuthorization(
+        webDavTarget.config,
+      );
+    } else {
+      webDavTarget = null;
+      migrateAuthorization = null;
+    }
     final registry = ProfileBootstrap.registry;
     final authorization = await ProfileAuthorizationContext.capture(registry);
-    final actor = await authorization.validate(registry);
+    final actor = await _runIfCurrent(
+      migrateAuthorization,
+      () => authorization.validate(registry),
+    );
     if (!actor.allows(ProfileFeature.backupRestore)) {
       throw StateError('This profile is not allowed to create backups');
     }
@@ -164,21 +239,24 @@ class ProfileBackupFlows {
       resources: resourceService,
     );
     Future<PortableProfilePackage> export({required bool compact}) =>
-        allProfiles
-        ? service.exportAllProfiles(
-            context: authorization,
-            includeSecrets: true,
-            compactDatabaseSnapshots: compact,
-          )
-        : service.exportProfile(
-            context: authorization,
-            scope: ProfileRuntime.capture(),
-            includeSecrets: true,
-            sanitized: false,
-            compactDatabaseSnapshots: compact,
-          );
+        _runIfCurrent(
+          migrateAuthorization,
+          () => allProfiles
+              ? service.exportAllProfiles(
+                  context: authorization,
+                  includeSecrets: true,
+                  compactDatabaseSnapshots: compact,
+                )
+              : service.exportProfile(
+                  context: authorization,
+                  scope: ProfileRuntime.capture(),
+                  includeSecrets: true,
+                  sanitized: false,
+                  compactDatabaseSnapshots: compact,
+                ),
+        );
 
-    late PortableProfilePackage package;
+    PortableProfilePackage? package;
     Uint8List? encodedBytes;
     var compactRetryRequired = false;
     await _profileBackupProgress<void>('Packaging profile data…', (
@@ -190,7 +268,7 @@ class ProfileBackupFlows {
       setStage('Encrypting backup — this can take a minute…');
       try {
         encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
-          package,
+          package!,
           password,
         );
       } catch (error) {
@@ -213,7 +291,7 @@ class ProfileBackupFlows {
       );
     }
     final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
-      package.omissions,
+      package!.omissions,
     );
     if (debrifyTvOmission?.isEmpty == false) {
       final continueWithoutChannels = await _confirmDebrifyTvOmission(
@@ -222,27 +300,67 @@ class ProfileBackupFlows {
       );
       if (!continueWithoutChannels) return;
     }
-    final bytes =
-        encodedBytes ??
-        await _profileBackupProgress<Uint8List>(
-          'Encrypting backup — this can take a minute…',
-          (_) => PortableProfilePackage.encodeEncryptedBytes(package, password),
-        );
-    final databaseCachesCompacted = package.omissions.containsKey(
+    encodedBytes ??= await _profileBackupProgress<Uint8List>(
+      'Encrypting backup — this can take a minute…',
+      (_) => PortableProfilePackage.encodeEncryptedBytes(package!, password),
+    );
+    final databaseCachesCompacted = package!.omissions.containsKey(
       'rebuildableDatabaseCachesOmitted',
     );
-    final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    final saved = await saveBackupFile(
-      fileName: allProfiles
-          ? 'debrify-profiles-$stamp.json'
-          : 'debrify-profile-$stamp.json',
-      bytes: bytes,
-    );
-    if (!context.mounted || saved == null) return;
+    // Nothing below needs the plaintext export graph. Clear the captured
+    // reference explicitly before any local-file or WebDAV I/O so a large
+    // database snapshot can be collected on memory-constrained tvOS devices.
+    package = null;
+    late final String destinationLabel;
+    if (destination == _ProfileBackupDestination.localFile) {
+      final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+      final saved = await saveBackupFile(
+        fileName: allProfiles
+            ? 'debrify-profiles-$stamp.json'
+            : 'debrify-profile-$stamp.json',
+        bytes: encodedBytes!,
+      );
+      if (saved == null) return;
+      destinationLabel = 'saved';
+    } else {
+      final target = webDavTarget!;
+      final stagingDirectory = await _createPrivateStagingDirectory('upload');
+      try {
+        final stagedFile = File(
+          p.join(stagingDirectory.path, 'profile-backup.json'),
+        );
+        await stagedFile.writeAsBytes(encodedBytes!, flush: true);
+        // The transport reads from disk. Drop the encrypted envelope reference
+        // before the network transfer as well.
+        encodedBytes = null;
+        final uploaded = await _profileBackupProgress(
+          'Uploading and verifying backup…',
+          (_) => _runIfCurrentAsOutbound(
+            migrateAuthorization,
+            () => WebDavBackupTransport().uploadVerified(
+              config: target.config,
+              directoryPath: target.path,
+              stagedFile: stagedFile,
+              scratchDirectory: stagingDirectory,
+              fileNamePrefix: allProfiles
+                  ? 'debrify-profiles'
+                  : 'debrify-profile',
+              beforeSend: ProfileAsyncAuthorization.currentOutboundBarrier,
+            ),
+          ),
+        );
+        destinationLabel =
+            'uploaded to ${target.config.name}/${uploaded.remotePath}';
+      } finally {
+        await _deletePrivateStagingDirectory(stagingDirectory);
+      }
+    }
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved'
+          '${allProfiles ? 'All-profile backup' : 'Profile backup'} '
+          '$destinationLabel'
           '${debrifyTvOmission?.isEmpty == false
               ? '. Debrify TV was excluded as confirmed; restore it from a channel ZIP or Remote.'
               : databaseCachesCompacted
@@ -254,6 +372,49 @@ class ProfileBackupFlows {
             : const Duration(seconds: 4),
       ),
     );
+  }
+
+  Future<ProfileAsyncAuthorization?> _captureWebDavAuthorization(
+    WebDavConfig config,
+  ) async {
+    if (ProfileRuntime.isProfileCommitted &&
+        (config.connectionResourceId == null ||
+            config.connectionResourceRevision == null)) {
+      throw StateError('The selected WebDAV connection is no longer valid');
+    }
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.backupRestore,
+      resourceId: config.connectionResourceId,
+      resourceAuthorizationRevision: config.connectionResourceRevision,
+    );
+    if (ProfileRuntime.isProfileCommitted && authorization == null) {
+      throw StateError('Profile backup authorization is unavailable');
+    }
+    return authorization;
+  }
+
+  Future<T> _runIfCurrent<T>(
+    ProfileAsyncAuthorization? authorization,
+    Future<T> Function() body,
+  ) => authorization == null ? body() : authorization.runIfCurrent(body);
+
+  Future<T> _runIfCurrentAsOutbound<T>(
+    ProfileAsyncAuthorization? authorization,
+    Future<T> Function() body,
+  ) => authorization == null
+      ? body()
+      : authorization.runIfCurrentAsOutbound(body);
+
+  Future<Directory> _createPrivateStagingDirectory(String purpose) async {
+    final root = await getTemporaryDirectory();
+    await root.create(recursive: true);
+    return root.createTemp('debrify-migrate-$purpose-');
+  }
+
+  Future<void> _deletePrivateStagingDirectory(Directory directory) async {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
   }
 
   Future<bool> _confirmDebrifyTvOmission(
@@ -360,7 +521,23 @@ class ProfileBackupFlows {
 
   Future<ProfileBackupRestoreResult?> restoreProfileBackup() async {
     try {
-      return await _restoreProfileBackupUnchecked();
+      return await _restoreProfileBackupUnchecked(
+        source: _ProfileBackupSource.localFile,
+      );
+    } catch (error) {
+      if (!context.mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_profileBackupError(error, creating: false))),
+      );
+      return null;
+    }
+  }
+
+  Future<ProfileBackupRestoreResult?> restoreWebDavProfileBackup() async {
+    try {
+      return await _restoreProfileBackupUnchecked(
+        source: _ProfileBackupSource.webDav,
+      );
     } catch (error) {
       if (!context.mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -375,13 +552,19 @@ class ProfileBackupFlows {
       return error.message;
     }
     if (error is StateError) return error.message;
+    if (error is WebDavException ||
+        error is WebDavBackupVerificationException) {
+      return error.toString();
+    }
     return creating
         ? 'Could not create the profile backup'
         : 'Profile restore failed; existing data is unchanged';
   }
 
-  Future<ProfileBackupRestoreResult?> _restoreProfileBackupUnchecked() async {
-    if (PlatformUtil.isTvOS) {
+  Future<ProfileBackupRestoreResult?> _restoreProfileBackupUnchecked({
+    required _ProfileBackupSource source,
+  }) async {
+    if (source == _ProfileBackupSource.localFile && PlatformUtil.isTvOS) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -391,20 +574,80 @@ class ProfileBackupFlows {
       );
       return null;
     }
-    final pick = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Choose a Debrify backup',
-      type: FileType.any,
-      withData: false,
+
+    if (source == _ProfileBackupSource.localFile) {
+      final pick = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choose a Debrify backup',
+        type: FileType.any,
+        withData: false,
+      );
+      if (pick == null || pick.files.isEmpty) return null;
+      final file = pick.files.single;
+      if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
+        throw const FormatException('Backup exceeds the supported size limit');
+      }
+      final path = file.path;
+      if (path == null) {
+        throw const FormatException('Selected backup is not locally readable');
+      }
+      return _restoreProfileBackupFromPath(path);
+    }
+
+    final target = await Navigator.of(context).push<WebDavPickerResult>(
+      MaterialPageRoute(
+        builder: (_) => const WebDavFilesScreen(
+          isPushedRoute: true,
+          pickerMode: WebDavPickerMode.selectBackup,
+          dataSource: WebDavFilesDataSource(
+            feature: ProfileFeature.backupRestore,
+          ),
+        ),
+      ),
     );
-    if (pick == null || pick.files.isEmpty) return null;
-    final file = pick.files.single;
-    if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
-      throw const FormatException('Backup exceeds the supported size limit');
+    if (target == null || !context.mounted) return null;
+    final migrateAuthorization = await _captureWebDavAuthorization(
+      target.config,
+    );
+    final maxBytes = PlatformUtil.isTvOS && TvosDevice.isLowMemoryCached
+        ? _lowMemoryTvosRestoreLimit
+        : PortableProfilePackage.maxEnvelopeBytes;
+    if ((target.item?.sizeBytes ?? 0) > maxBytes) {
+      throw const FormatException(
+        'This backup is too large to restore safely on this Apple TV',
+      );
     }
-    final path = file.path;
-    if (path == null) {
-      throw const FormatException('Selected backup is not locally readable');
+    final stagingDirectory = await _createPrivateStagingDirectory('restore');
+    try {
+      final stagedFile = File(
+        p.join(stagingDirectory.path, 'profile-backup.json'),
+      );
+      await _profileBackupProgress(
+        'Downloading backup…',
+        (_) => _runIfCurrentAsOutbound(
+          migrateAuthorization,
+          () => WebDavService.downloadToFile(
+            config: target.config,
+            path: target.path,
+            destination: stagedFile,
+            maxBytes: maxBytes,
+            feature: ProfileFeature.backupRestore,
+            beforeSend: ProfileAsyncAuthorization.currentOutboundBarrier,
+          ),
+        ),
+      );
+      return await _restoreProfileBackupFromPath(
+        stagedFile.path,
+        migrateAuthorization: migrateAuthorization,
+      );
+    } finally {
+      await _deletePrivateStagingDirectory(stagingDirectory);
     }
+  }
+
+  Future<ProfileBackupRestoreResult?> _restoreProfileBackupFromPath(
+    String path, {
+    ProfileAsyncAuthorization? migrateAuthorization,
+  }) async {
     final probe = await _profileBackupProgress(
       'Reading backup…',
       (_) => PortableProfilePackage.probeFile(path),
@@ -515,9 +758,12 @@ class ProfileBackupFlows {
     if (graphRestore) {
       final report = await _profileBackupProgress(
         'Importing profiles — this can take a few minutes…',
-        (_) => coordinator.restoreDeviceGraph(
-          package: package,
-          authorization: authorization,
+        (_) => _runIfCurrent(
+          migrateAuthorization,
+          () => coordinator.restoreDeviceGraph(
+            package: package,
+            authorization: authorization,
+          ),
         ),
       );
       final result = ProfileBackupRestoreResult.deviceGraph(
@@ -543,11 +789,14 @@ class ProfileBackupFlows {
     }
     final report = await _profileBackupProgress(
       'Restoring — verifying and staging data, this can take a few minutes…',
-      (_) => coordinator.restore(
-        package: package,
-        destinationProfileId: profile.id,
-        authorization: authorization,
-        completeOnboarding: completingOnboarding,
+      (_) => _runIfCurrent(
+        migrateAuthorization,
+        () => coordinator.restore(
+          package: package,
+          destinationProfileId: profile.id,
+          authorization: authorization,
+          completeOnboarding: completingOnboarding,
+        ),
       ),
     );
     final result = ProfileBackupRestoreResult.singleProfile(

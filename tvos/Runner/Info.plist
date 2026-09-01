@@ -49,6 +49,11 @@
 	<true/>
 	<key>FLTAssetsPath</key>
 	<string>flutter_assets</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
