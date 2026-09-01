@@ -212,6 +212,23 @@ void main() {
     },
   );
 
+  test('Android low-resolution rendering is strictly TV-only', () {
+    final activity = File(
+      'android/app/src/main/kotlin/com/debrify/app/MainActivity.kt',
+    ).readAsStringSync();
+    final renderScale = activity.substring(
+      activity.indexOf('private fun computeRenderScale('),
+      activity.indexOf('/** Rewrites the viewport metrics'),
+    );
+    expect(renderScale, contains('if (!isTelevision()) return'));
+    expect(
+      renderScale.indexOf('if (!isTelevision()) return'),
+      lessThan(renderScale.indexOf('"tv_low_res_render"')),
+      reason:
+          'A transferred TV preference must not resize a phone Flutter surface.',
+    );
+  });
+
   test('native subtitle fonts follow the active profile scope', () {
     final fontManager = File(
       'android/app/src/main/kotlin/com/debrify/app/util/'

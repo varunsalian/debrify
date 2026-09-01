@@ -758,7 +758,11 @@ class MainActivity : FlutterActivity() {
 
     private fun computeRenderScale(gpuCapable: Boolean) {
         renderScale = 1.0f
-        val auto = isTelevision() && !gpuCapable
+        // A TV profile can be restored or transferred onto a phone with its
+        // render-quality preference intact. The preference must never opt a
+        // non-TV Flutter surface into the TV-only fixed-buffer path.
+        if (!isTelevision()) return
+        val auto = !gpuCapable
         // Pref = future Settings escape hatch ("sharper picture vs faster
         // navigation"); absent → the automatic weak-GPU decision.
         val enabled = com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(

@@ -49,6 +49,7 @@ class _GateFocusable extends StatelessWidget {
   final Widget Function(BuildContext context, bool hasFocus) builder;
 
   const _GateFocusable({
+    super.key,
     required this.autofocus,
     required this.onFocus,
     required this.onPressed,
@@ -141,13 +142,11 @@ class _KeyLegend extends StatelessWidget {
         ),
       ],
     );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        item('OK', 'Open profile'),
-        const SizedBox(width: 16),
-        item('← →', 'Choose'),
-      ],
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 16,
+      runSpacing: 8,
+      children: [item('OK', 'Open profile'), item('← →', 'Choose')],
     );
   }
 }
@@ -1266,6 +1265,9 @@ class _ProfileStageCardsGateScreenState
     return Scaffold(
       backgroundColor: _stageGround,
       body: AnimatedContainer(
+        key: const ValueKey('stage-root'),
+        width: double.infinity,
+        height: double.infinity,
         duration: const Duration(milliseconds: 450),
         curve: Curves.easeOut,
         decoration: BoxDecoration(
@@ -1278,9 +1280,13 @@ class _ProfileStageCardsGateScreenState
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
+              // Shape matters more than an arbitrary desktop breakpoint.
+              // In particular, phones around 600 logical pixels wide in
+              // landscape need the horizontal stage rather than a portrait
+              // grid that starts below the fold.
               final wide =
-                  constraints.maxWidth >= 700 &&
-                  constraints.maxWidth >= constraints.maxHeight;
+                  constraints.maxWidth >= 480 &&
+                  constraints.maxWidth >= constraints.maxHeight * 1.18;
               return wide ? _wide(constraints) : _grid(constraints);
             },
           ),
@@ -1291,97 +1297,224 @@ class _ProfileStageCardsGateScreenState
 
   // Landscape: one centred row on the stage floor; the focused card grows.
   Widget _wide(BoxConstraints constraints) {
+    if (constraints.maxHeight < 500) {
+      return _compactLandscape(constraints);
+    }
+
     // Base size leaves headroom for the focused card's 1.16x growth — on a
     // 540-logical TV the growth must come from the budget, not from clamping
     // against the row slot (which would widen text while barely growing the
     // card).
     final cardHeight = (constraints.maxHeight * .38).clamp(180.0, 331.0);
     final grownHeight = cardHeight * 1.16;
-    return Column(
-      children: [
-        const Spacer(flex: 2),
-        _StageHeader(wash: _wash, greeting: _greeting(), wide: true),
-        const Spacer(flex: 2),
-        Flexible(
-          flex: 10,
-          child: Center(
-            child: SizedBox(
-              height: grownHeight,
-              child: Center(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  clipBehavior: Clip.none,
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (var i = 0; i < widget.profiles.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 13),
-                          child: _card(
-                            i,
-                            baseHeight: cardHeight,
-                            growWhenFocused: true,
-                            dimWhenUnfocused: true,
-                          ),
-                        ),
+    const verticalPadding = 18.0;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(vertical: verticalPadding),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: (constraints.maxHeight - verticalPadding * 2).clamp(
+            0.0,
+            double.infinity,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _StageHeader(wash: _wash, greeting: _greeting(), wide: true),
+            const SizedBox(height: 20),
+            _landscapeCardRail(
+              cardHeight: cardHeight,
+              grownHeight: grownHeight,
+              horizontalPadding: 48,
+            ),
+            if (widget.onManage != null) ...[
+              const SizedBox(height: 20),
+              _managePill(),
+            ],
+            if (PlatformUtil.isTelevision) ...[
+              const SizedBox(height: 14),
+              const _KeyLegend(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Short landscape windows (most notably phones) cannot afford to stack a
+  /// header, portrait cards and actions vertically. Keep the introduction and
+  /// Manage action in a compact left rail and give the cards the full height
+  /// of the right-hand stage instead.
+  Widget _compactLandscape(BoxConstraints constraints) {
+    const paneGap = 18.0;
+    final outerPadding = (constraints.maxHeight * .045).clamp(8.0, 16.0);
+    final leftWidth = (constraints.maxWidth * .32).clamp(180.0, 260.0);
+    final availableHeight = (constraints.maxHeight - outerPadding * 2).clamp(
+      0.0,
+      double.infinity,
+    );
+    final cardHeight = (availableHeight * .68).clamp(0.0, 240.0);
+    final grownHeight = cardHeight * 1.16;
+
+    return Padding(
+      padding: EdgeInsets.all(outerPadding),
+      child: Row(
+        children: [
+          SizedBox(
+            width: leftWidth,
+            height: availableHeight,
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: availableHeight),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _StageHeader(
+                      wash: _wash,
+                      greeting: _greeting(),
+                      wide: false,
+                      compact: true,
+                    ),
+                    if (widget.onManage != null) ...[
+                      const SizedBox(height: 18),
+                      _managePill(),
                     ],
-                  ),
+                    if (PlatformUtil.isTelevision) ...[
+                      const SizedBox(height: 14),
+                      const _KeyLegend(),
+                    ],
+                  ],
                 ),
               ),
             ),
           ),
+          const SizedBox(width: paneGap),
+          Expanded(
+            child: _landscapeCardRail(
+              cardHeight: cardHeight,
+              grownHeight: grownHeight,
+              horizontalPadding: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _landscapeCardRail({
+    required double cardHeight,
+    required double grownHeight,
+    required double horizontalPadding,
+  }) {
+    return SizedBox(
+      height: grownHeight,
+      child: Center(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < widget.profiles.length; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  child: _card(
+                    i,
+                    baseHeight: cardHeight,
+                    growWhenFocused: true,
+                    dimWhenUnfocused: true,
+                  ),
+                ),
+            ],
+          ),
         ),
-        const SizedBox(height: 20),
-        if (widget.onManage != null) _managePill(),
-        const Spacer(flex: 1),
-        const _KeyLegend(),
-        const SizedBox(height: 16),
-      ],
+      ),
     );
   }
 
   // Portrait / touch: an evenly-lit grid. Focus reads as rim + bloom only —
   // on a device in your hand nobody gets dimmed.
   Widget _grid(BoxConstraints constraints) {
-    final threeUp = constraints.maxWidth >= 600;
-    final columns = threeUp ? 3 : 2;
-    final gutter = threeUp ? 24.0 : 16.0;
-    final margin = threeUp ? 44.0 : 24.0;
-    final cardWidth =
-        ((constraints.maxWidth - 2 * margin - (columns - 1) * gutter) /
-                columns)
-            .clamp(110.0, 240.0);
-    final cardHeight = cardWidth * (threeUp ? 1.4 : 1.28);
+    final tablet = constraints.maxWidth >= 600;
+    final count = widget.profiles.length;
+    final margin = (constraints.maxWidth * .06).clamp(16.0, 44.0);
+    final gutter = (constraints.maxWidth * .04).clamp(12.0, 24.0);
+    final availableWidth = (constraints.maxWidth - margin * 2).clamp(
+      0.0,
+      double.infinity,
+    );
+    final minimumCardWidth = tablet ? 160.0 : 120.0;
+    final fittingColumns =
+        ((availableWidth + gutter) / (minimumCardWidth + gutter)).floor().clamp(
+          1,
+          tablet ? 3 : 2,
+        );
+    // Never reserve empty columns for a short roster, and collapse to a
+    // single column on unusually narrow split-screen windows.
+    final columns = fittingColumns.clamp(1, count < 1 ? 1 : count);
+    final aspect = tablet ? 1.4 : 1.28;
+    final rawCardWidth = (availableWidth - (columns - 1) * gutter) / columns;
+    var cardWidth = rawCardWidth > 240.0 ? 240.0 : rawCardWidth;
+    if (count == 1) {
+      // A single profile is the front door, not one half of an imaginary
+      // two-column grid. Give it presence while preserving room for the
+      // greeting and action on short portrait windows.
+      final byWidth = availableWidth * (tablet ? .62 : .72);
+      final byHeight = constraints.maxHeight * .44 / aspect;
+      final maxWidth = tablet ? 260.0 : 250.0;
+      cardWidth = byWidth < byHeight ? byWidth : byHeight;
+      if (cardWidth > maxWidth) cardWidth = maxWidth;
+      if (cardWidth > availableWidth) cardWidth = availableWidth;
+    }
+    final cardHeight = cardWidth * aspect;
+    final verticalPadding = tablet ? 26.0 : 20.0;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(margin, 26, margin, 30),
-      child: Column(
-        children: [
-          _StageHeader(wash: _wash, greeting: _greeting(), wide: false),
-          const SizedBox(height: 26),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: gutter,
-            runSpacing: gutter,
-            children: [
-              for (var i = 0; i < widget.profiles.length; i++)
-                SizedBox(
-                  width: cardWidth,
-                  height: cardHeight,
-                  child: _card(
-                    i,
-                    baseHeight: cardHeight,
-                    growWhenFocused: false,
-                    dimWhenUnfocused: false,
-                  ),
-                ),
-            ],
+      padding: EdgeInsets.fromLTRB(
+        margin,
+        verticalPadding,
+        margin,
+        verticalPadding,
+      ),
+      child: ConstrainedBox(
+        // Centre the header + cards block in the viewport when it doesn't
+        // fill it — a short roster otherwise huddles under the greeting with
+        // the whole stage floor empty beneath it.
+        constraints: BoxConstraints(
+          minHeight: (constraints.maxHeight - verticalPadding * 2).clamp(
+            0.0,
+            double.infinity,
           ),
-          if (widget.onManage != null) ...[
-            const SizedBox(height: 24),
-            _managePill(),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _StageHeader(wash: _wash, greeting: _greeting(), wide: false),
+            const SizedBox(height: 26),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: gutter,
+              runSpacing: gutter,
+              children: [
+                for (var i = 0; i < widget.profiles.length; i++)
+                  SizedBox(
+                    width: cardWidth,
+                    height: cardHeight,
+                    child: _card(
+                      i,
+                      baseHeight: cardHeight,
+                      growWhenFocused: false,
+                      dimWhenUnfocused: false,
+                    ),
+                  ),
+              ],
+            ),
+            if (widget.onManage != null) ...[
+              const SizedBox(height: 24),
+              _managePill(),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1394,6 +1527,7 @@ class _ProfileStageCardsGateScreenState
   }) {
     final p = widget.profiles[index];
     return _GateFocusable(
+      key: ValueKey('stage-profile-${p.id}'),
       autofocus: index == 0,
       onFocus: () => setState(() => _focusedIndex = index),
       onPressed: () => widget.onSelected(p),
@@ -1464,11 +1598,13 @@ class _StageHeader extends StatelessWidget {
   final Color wash;
   final String greeting;
   final bool wide;
+  final bool compact;
 
   const _StageHeader({
     required this.wash,
     required this.greeting,
     required this.wide,
+    this.compact = false,
   });
 
   @override
@@ -1499,7 +1635,7 @@ class _StageHeader extends StatelessWidget {
         "Who's watching?",
         textAlign: TextAlign.center,
         style: TextStyle(
-          fontSize: wide ? 38 : 29,
+          fontSize: compact ? 25 : (wide ? 38 : 29),
           fontWeight: FontWeight.w800,
           letterSpacing: -1.2,
           color: Colors.white,
@@ -1560,9 +1696,7 @@ class _StageCard extends StatelessWidget {
                   ),
                   const BoxShadow(color: Color(0x66000000), blurRadius: 30),
                 ]
-              : const [
-                  BoxShadow(color: Color(0x55000000), blurRadius: 18),
-                ],
+              : const [BoxShadow(color: Color(0x55000000), blurRadius: 18)],
         ),
         // Metrics come from the width that actually laid out: a grid slot's
         // tight constraints override the container's own width, and on short

@@ -2,6 +2,7 @@ import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/screens/profiles/profile_gate_looks.dart';
 import 'package:debrify/screens/profiles/profile_wall_screen.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,10 +89,7 @@ void main() {
     });
 
     test('unknown stored ids fall back to the default label', () {
-      expect(
-        ProfileGateStyle.labelFor('style-from-the-future'),
-        'Stage Cards',
-      );
+      expect(ProfileGateStyle.labelFor('style-from-the-future'), 'Stage Cards');
     });
   });
 
@@ -167,6 +165,92 @@ void main() {
         size: const Size(360, 740),
       );
       expect(find.text('Meera'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a single phone profile gets a full-size card', (tester) async {
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: [household.first],
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        size: const Size(393, 852),
+      );
+
+      final cardSize = tester.getSize(
+        find.byKey(const ValueKey('stage-profile-p1')),
+      );
+      final rootSize = tester.getSize(
+        find.byKey(const ValueKey('stage-root')),
+      );
+      expect(rootSize, const Size(393, 852));
+      expect(cardSize.width, greaterThanOrEqualTo(240));
+      expect(cardSize.height, greaterThanOrEqualTo(300));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a landscape phone uses the compact side-by-side stage', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        size: const Size(568, 320),
+      );
+
+      final firstCard = tester.getRect(
+        find.byKey(const ValueKey('stage-profile-p1')),
+      );
+      final manage = tester.getRect(find.text('Manage profiles'));
+      expect(firstCard.top, greaterThanOrEqualTo(0));
+      expect(firstCard.bottom, lessThanOrEqualTo(320));
+      expect(manage.top, greaterThanOrEqualTo(0));
+      expect(manage.bottom, lessThanOrEqualTo(320));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a short TV wraps its key legend inside the compact rail', (
+      tester,
+    ) async {
+      PlatformUtil.debugSetAndroidTvCached(true);
+      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        size: const Size(720, 480),
+      );
+
+      expect(find.text('Open profile'), findsOneWidget);
+      expect(find.text('Choose'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('an unusually narrow split-screen falls back to one column', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ProfileStageCardsGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        size: const Size(220, 600),
+        textScale: 1.3,
+      );
+
+      expect(find.text('Meera'), findsOneWidget);
+      expect(find.text('Kiran'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
