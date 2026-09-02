@@ -8,7 +8,11 @@ import 'profile_runtime.dart';
 import 'profile_registry.dart';
 
 typedef ProfileCredentialRead = ({bool handled, String? value});
-typedef ProfileCredentialPresence = ({bool handled, bool configured});
+typedef ProfileCredentialPresence = ({
+  bool handled,
+  bool configured,
+  bool pending,
+});
 typedef ProfileCredentialResourceAuthority = ({
   String resourceId,
   int resourceAuthorizationRevision,
@@ -202,6 +206,7 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.use,
       feature: field.feature,
     );
+    if (resource.secretPending) return null;
     return (
       resourceId: resource.id,
       resourceAuthorizationRevision: resource.authorizationRevision,
@@ -222,6 +227,10 @@ class ProfileCredentialFacade {
       field.slot,
     );
     if (resourceId == null) return (handled: true, value: null);
+    final resource = await registry.getResource(resourceId);
+    if (resource?.secretPending == true) {
+      return (handled: true, value: null);
+    }
     final secret = await _service(registry).resolveSecretForUse(
       context: context,
       resourceId: resourceId,
@@ -238,7 +247,7 @@ class ProfileCredentialFacade {
     if (field == null ||
         !ProfileRuntime.isInitialized ||
         ProfileRuntime.mode != ProfileRuntimeMode.profileCommitted) {
-      return (handled: false, configured: false);
+      return (handled: false, configured: false, pending: false);
     }
     final registry = ProfileBootstrap.registry;
     final context = await ProfileAuthorizationContext.capture(registry);
@@ -246,17 +255,22 @@ class ProfileCredentialFacade {
       context.profileId,
       field.slot,
     );
-    if (resourceId == null) return (handled: true, configured: false);
+    if (resourceId == null) {
+      return (handled: true, configured: false, pending: false);
+    }
     try {
-      await _service(registry).authorize(
+      final resource = await _service(registry).authorize(
         context: context,
         resourceId: resourceId,
         permission: ResourcePermission.use,
         feature: field.feature,
       );
-      return (handled: true, configured: true);
+      if (resource.secretPending) {
+        return (handled: true, configured: false, pending: true);
+      }
+      return (handled: true, configured: true, pending: false);
     } on ResourceAuthorizationException {
-      return (handled: true, configured: false);
+      return (handled: true, configured: false, pending: false);
     }
   }
 
@@ -278,6 +292,10 @@ class ProfileCredentialFacade {
       field.slot,
     );
     if (resourceId == null) return (handled: true, value: null);
+    final resource = await registry.getResource(resourceId);
+    if (resource?.secretPending == true) {
+      return (handled: true, value: null);
+    }
     try {
       final secret = await _service(registry).resolveSecretForUse(
         context: context,

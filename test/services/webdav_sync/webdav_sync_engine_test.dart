@@ -391,6 +391,144 @@ void main() {
     },
   );
 
+  test(
+    'poisoned pending FK target is quarantined before fresh network state',
+    () async {
+      final diagnostics = <String>[];
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      final poisonedResources = WebDavSyncResourcesDocument(
+        resources: <String, WebDavSyncResourceEntry>{
+          'r-poison': WebDavSyncResourceEntry(
+            metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: now.millisecondsSinceEpoch,
+                originDeviceId: 'device-a',
+              ),
+              value: null,
+            ),
+          ),
+        },
+        grants:
+            <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{
+              'profile-circle':
+                  <String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>{
+                    'r-poison': WebDavSyncCircleLeaf<WebDavSyncGrantValue>(
+                      stamp: WebDavSyncStamp(
+                        normalizedTimeMs: now.millisecondsSinceEpoch + 1,
+                        originDeviceId: 'device-b',
+                      ),
+                      value: const WebDavSyncGrantValue(permissions: 1),
+                    ),
+                  },
+            },
+        settings: const {},
+        bindings: const {},
+      );
+      states.state = WebDavSyncEngineState(
+        circleToLocalProfiles: const <String, String>{
+          'profile-circle': 'local-profile',
+        },
+        circleToLocalResources: const <String, String>{
+          'r-poison': 'local-poison',
+        },
+        pendingCircleApply: WebDavSyncPendingCircleApply(
+          profiles: circleLocal.profiles,
+          resources: poisonedResources,
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+
+      await runFixture(
+        context(resources: const <String, String>{'r-poison': 'local-poison'}),
+      );
+
+      expect(
+        diagnostics,
+        contains('Quarantined an invalid pending WebDAV circle target'),
+      );
+      expect(circleLocal.circleReplayFlags, everyElement(isFalse));
+      expect(states.state.pendingCircleApply, isNull);
+      expect(transport.events, contains('read:root'));
+    },
+  );
+
+  test(
+    'persisted zero-admin target is quarantined and fresh state proceeds',
+    () async {
+      final diagnostics = <String>[];
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      final zeroAdmin = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Demoted',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-b',
+            role: UserProfileRole.member,
+          ),
+        },
+      );
+      states.state = WebDavSyncEngineState(
+        circleToLocalProfiles: const <String, String>{
+          'profile-circle': 'local-profile',
+        },
+        circleToLocalResources: const <String, String>{},
+        pendingCircleApply: WebDavSyncPendingCircleApply(
+          profiles: zeroAdmin,
+          resources: _circleResources(
+            const <String, WebDavSyncResourceEntry>{},
+          ),
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+
+      await runFixture(context());
+
+      expect(
+        diagnostics,
+        contains('Quarantined an invalid pending WebDAV circle target'),
+      );
+      expect(circleLocal.circleReplayFlags, everyElement(isFalse));
+      expect(states.state.pendingCircleApply, isNull);
+      expect(transport.events, contains('read:root'));
+    },
+  );
+
   test('foreign circle maps are durable before registry apply', () async {
     final circleLocal = _FakeCircleLocalAdapter(
       <String, Object?>{'theme': 'dark'},
@@ -452,7 +590,7 @@ void main() {
   });
 
   test(
-    'heartbeat-stale circle sections still merge profile deletions',
+    'heartbeat-stale circle sections still merge with admin preservation',
     () async {
       final staleTime = now.subtract(const Duration(days: 31));
       final circleLocal = _FakeCircleLocalAdapter(
@@ -507,18 +645,18 @@ void main() {
             .profiles
             .profiles['profile-circle']!
             .value,
-        isNull,
+        isNotNull,
       );
       expect(transport.events, contains('read:section:device-b:profiles'));
-      expect(states.state.pendingActiveProfileDeletion, 'local-profile');
+      expect(states.state.pendingActiveProfileDeletion, isNull);
       expect(
         circleLocal.appliedRequests.single.deferredActiveCircleProfileId,
-        'profile-circle',
+        isNull,
       );
       expect(
         circleLocal.events,
-        isNot(contains('read:local-profile')),
-        reason: 'a retained tombstone mapping has no hot generation to read',
+        contains('read:local-profile'),
+        reason: 'the deterministically retained admin remains hot-readable',
       );
     },
   );
@@ -1574,14 +1712,14 @@ WebDavSyncCircleLeaf<WebDavSyncProfileValue> _circleProfileLeaf({
   required String name,
   required int time,
   required String origin,
+  UserProfileRole role = UserProfileRole.admin,
 }) => WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
   stamp: WebDavSyncStamp(normalizedTimeMs: time, originDeviceId: origin),
   value: WebDavSyncProfileValue(
     name: name,
-    role: UserProfileRole.admin,
+    role: role,
     policy: Map<String, Object?>.from(
-      jsonDecode(ProfilePolicy.allAllowedFor(UserProfileRole.admin).encode())
-          as Map,
+      jsonDecode(ProfilePolicy.allAllowedFor(role).encode()) as Map,
     ),
     enabled: true,
     lockOnResume: false,

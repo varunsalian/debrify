@@ -19,6 +19,16 @@ typedef WebDavSyncTombstoneDebugSink =
 typedef WebDavSyncRegistryTombstoneDebugSink =
     FutureOr<void> Function(Set<WebDavSyncRegistryRecordId> records);
 
+final class WebDavSyncRegistryTombstoneOutboxTarget {
+  const WebDavSyncRegistryTombstoneOutboxTarget({
+    required this.namespaceId,
+    required this.deviceId,
+  });
+
+  final String namespaceId;
+  final String deviceId;
+}
+
 enum WebDavSyncRegistryRecordKind { profile, resource, grant, setting, binding }
 
 /// A registry leaf expressed only in local IDs. [ownerProfileId] and the
@@ -453,6 +463,57 @@ abstract final class WebDavSyncTombstoneRecorder {
         return false;
       }
     }, marksMutation: false);
+  }
+
+  /// Captures the exact namespace/device destination before a registry delete
+  /// enters its SQL transaction. A debug sink acts as a bound destination so
+  /// transaction/outbox tests exercise the production ordering.
+  static Future<WebDavSyncRegistryTombstoneOutboxTarget?>
+  registryOutboxTarget() async {
+    if (_registryDebugSink != null) {
+      return const WebDavSyncRegistryTombstoneOutboxTarget(
+        namespaceId: '__debug_registry_outbox__',
+        deviceId: '__debug_device__',
+      );
+    }
+    return ProfilePreferences.synchronizeExternalMutation(() async {
+      try {
+        final snapshot = await _bindingStore.load();
+        final binding = _bindingForTombstones(snapshot);
+        if (binding == null) return null;
+        final namespace = snapshot.namespaceFor(binding);
+        if (namespace == null) return null;
+        return WebDavSyncRegistryTombstoneOutboxTarget(
+          namespaceId: namespace.id,
+          deviceId: namespace.deviceId,
+        );
+      } catch (_) {
+        // Devices with no readable binding remain on the existing fail-soft
+        // path; a confirmed binding always returns a target and must enqueue.
+        return null;
+      }
+    }, marksMutation: false);
+  }
+
+  /// Moves one already-committed SQL outbox batch into the file-backed store.
+  /// Errors deliberately propagate so the registry retains the row for retry.
+  static Future<void> drainRegistryOutboxBatch({
+    required WebDavSyncRegistryTombstoneOutboxTarget target,
+    required Set<WebDavSyncRegistryRecordId> records,
+    required int timeMs,
+  }) async {
+    if (records.isEmpty) return;
+    final sink = _registryDebugSink;
+    if (target.namespaceId == '__debug_registry_outbox__' && sink != null) {
+      await sink(Set<WebDavSyncRegistryRecordId>.unmodifiable(records));
+      return;
+    }
+    await _registryRepository.record(
+      target.namespaceId,
+      deviceId: target.deviceId,
+      records: records,
+      nowMs: timeMs,
+    );
   }
 
   /// Records circle-registry leaves before their SQL rows disappear. This is

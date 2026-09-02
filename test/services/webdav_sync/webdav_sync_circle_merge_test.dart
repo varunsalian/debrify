@@ -187,6 +187,103 @@ void main() {
     },
   );
 
+  test('concurrent admin demotions preserve the same highest stable admin', () {
+    final oldA = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+      stamp: a,
+      value: _managingAdmin('A'),
+    );
+    final oldB = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+      stamp: a,
+      value: _managingAdmin('B'),
+    );
+    final demotedA = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+      stamp: newer,
+      value: _member('A'),
+    );
+    final demotedB = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+      stamp: newer,
+      value: _member('B'),
+    );
+    final documents = <WebDavSyncProfilesDocument>[
+      _profiles({'p-a': oldA, 'p-b': demotedB}),
+      _profiles({'p-a': demotedA, 'p-b': oldB}),
+    ];
+
+    for (final order in <List<int>>[
+      <int>[0, 1],
+      <int>[1, 0],
+    ]) {
+      final merged = WebDavSyncCircleMerge.mergeProfiles(
+        order.map((index) => documents[index]),
+      );
+      expect(merged.profiles['p-a']!.value!.role, UserProfileRole.member);
+      expect(merged.profiles['p-b'], same(oldB));
+      WebDavSyncCircleMerge.validateApplicableState(
+        profiles: merged,
+        resources: _resources(const <String, WebDavSyncResourceEntry>{}),
+      );
+    }
+  });
+
+  test(
+    'resource tombstone suppresses a newer offline grant in every order',
+    () {
+      final live = WebDavSyncResourcesDocument(
+        resources: <String, WebDavSyncResourceEntry>{
+          'r-a': _resourceEntry(a, 'p-a', 'A'),
+        },
+        grants:
+            <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{
+              'p-a': <String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>{
+                'r-a': WebDavSyncCircleLeaf<WebDavSyncGrantValue>(
+                  stamp: newer,
+                  value: const WebDavSyncGrantValue(permissions: 1),
+                ),
+              },
+            },
+        settings: const {},
+        bindings: const {},
+      );
+      final deleted = _resources(<String, WebDavSyncResourceEntry>{
+        'r-a': const WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 150,
+              originDeviceId: 'device-a',
+            ),
+            value: null,
+          ),
+        ),
+      });
+      final profiles =
+          _profiles(<String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'p-a': WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+              stamp: a,
+              value: _managingAdmin('A'),
+            ),
+          });
+
+      String? expectedDigest;
+      for (final documents in <List<WebDavSyncResourcesDocument>>[
+        <WebDavSyncResourcesDocument>[live, deleted],
+        <WebDavSyncResourcesDocument>[deleted, live],
+      ]) {
+        final applicable = WebDavSyncCircleMerge.deriveApplicableResources(
+          profiles: profiles,
+          resources: WebDavSyncCircleMerge.mergeResources(documents),
+        );
+        expect(applicable.resources['r-a']!.metadata.value, isNull);
+        expect(applicable.grants['p-a']!['r-a']!.value, isNull);
+        WebDavSyncCircleMerge.validateApplicableState(
+          profiles: profiles,
+          resources: applicable,
+        );
+        expectedDigest ??= applicable.semanticDigest;
+        expect(applicable.semanticDigest, expectedDigest);
+      }
+    },
+  );
+
   test('strict decoders require exact keys and enforce profile bounds', () {
     expect(
       () => WebDavSyncProfilesDocument.fromJson({
@@ -272,6 +369,34 @@ WebDavSyncProfileValue _profile(String name) => WebDavSyncProfileValue(
   name: name,
   role: UserProfileRole.admin,
   policy: const {
+    'schemaVersion': ProfilePolicy.currentSchemaVersion,
+    'enabled': <String>[],
+  },
+  enabled: true,
+  lockOnResume: false,
+  setupComplete: true,
+  lifecycle: UserProfileLifecycle.active,
+  pin: const WebDavSyncProfilePin(resetRequired: false),
+);
+
+WebDavSyncProfileValue _managingAdmin(String name) => WebDavSyncProfileValue(
+  name: name,
+  role: UserProfileRole.admin,
+  policy: const <String, Object?>{
+    'schemaVersion': ProfilePolicy.currentSchemaVersion,
+    'enabled': <String>['manageProfiles'],
+  },
+  enabled: true,
+  lockOnResume: false,
+  setupComplete: true,
+  lifecycle: UserProfileLifecycle.active,
+  pin: const WebDavSyncProfilePin(resetRequired: false),
+);
+
+WebDavSyncProfileValue _member(String name) => WebDavSyncProfileValue(
+  name: name,
+  role: UserProfileRole.member,
+  policy: const <String, Object?>{
     'schemaVersion': ProfilePolicy.currentSchemaVersion,
     'enabled': <String>[],
   },

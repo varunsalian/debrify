@@ -304,6 +304,143 @@ void main() {
     },
   );
 
+  test(
+    'ownership transfer and decrypt failure ignore stale secret leaves',
+    () async {
+      final diagnostics = <String>[];
+      adapter = ProfileWebDavSyncLocalAdapter(
+        registry,
+        diagnostic: diagnostics.add,
+      );
+      session = await adapter.beginCycle();
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      final nextOwner = await registry.createProfile(
+        id: 'next-owner',
+        name: 'Next Owner',
+        role: UserProfileRole.member,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final resource = await service.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.realDebrid,
+        label: 'Transferred RD',
+        publicConfig: const <String, Object?>{},
+        secretConfig: const <String, Object?>{'apiKey': 'only-valid-secret'},
+      );
+      final maps = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: <String, String>{
+          'p-active': activeId,
+          'p-next': nextOwner.id,
+        },
+        circleToLocalResources: <String, String>{'r-shared': resource.id},
+      );
+      final beforeTransfer = await adapter.buildCircleState(
+        session,
+        WebDavSyncCircleBuildRequest(
+          identityMaps: maps,
+          deviceId: 'device-active-owner',
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          localNowMs: 1000,
+          clockOffsetMs: 0,
+          serverNowMs: 1000,
+        ),
+      );
+      await service.transferOwnership(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        resourceId: resource.id,
+        newOwnerProfileId: nextOwner.id,
+      );
+      final expected = await registry.getSealedResourceSecret(resource.id);
+      final underOldActiveOwner = await adapter.buildCircleState(
+        session,
+        WebDavSyncCircleBuildRequest(
+          identityMaps: maps,
+          deviceId: 'device-active-owner',
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          localNowMs: 1100,
+          clockOffsetMs: 0,
+          serverNowMs: 1100,
+          previousProfiles: beforeTransfer.profiles,
+          previousResources: beforeTransfer.resources,
+        ),
+      );
+      final transferredEntry =
+          underOldActiveOwner.resources.resources['r-shared']!;
+      expect(transferredEntry.metadata.value!.ownerCircleProfileId, 'p-next');
+      expect(
+        transferredEntry.secretConfig!.value!.ownerCircleProfileId,
+        'p-active',
+      );
+
+      await adapter.applyCircleState(
+        session,
+        WebDavSyncCircleApplyRequest(
+          identityMaps: maps,
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          profiles: underOldActiveOwner.profiles,
+          resources: underOldActiveOwner.resources,
+        ),
+      );
+      expect(
+        (await registry.getSealedResourceSecret(resource.id))?.envelope,
+        expected?.envelope,
+      );
+      expect(diagnostics, <String>[
+        'Ignored an attachment-incompatible synced resource secret',
+      ]);
+
+      diagnostics.clear();
+      final corrupt = WebDavSyncResourcesDocument(
+        resources: <String, WebDavSyncResourceEntry>{
+          'r-shared': WebDavSyncResourceEntry(
+            metadata: transferredEntry.metadata,
+            secretConfig: WebDavSyncCircleLeaf<WebDavSyncResourceSecretConfig>(
+              stamp: _stamp(1200, origin: 'device-next-owner'),
+              value: WebDavSyncResourceSecretConfig(
+                semanticDigest: List<String>.filled(64, '0').join(),
+                type: ConnectionResourceType.realDebrid,
+                ownerCircleProfileId: 'p-next',
+                publicSchemaVersion: 1,
+                payloadVersion: ConnectionResourceService.secretPayloadVersion,
+                envelope: base64Encode(const <int>[1, 2, 3]),
+              ),
+            ),
+          ),
+        },
+        grants: underOldActiveOwner.resources.grants,
+        settings: underOldActiveOwner.resources.settings,
+        bindings: underOldActiveOwner.resources.bindings,
+      );
+      await adapter.applyCircleState(
+        session,
+        WebDavSyncCircleApplyRequest(
+          identityMaps: maps,
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          profiles: underOldActiveOwner.profiles,
+          resources: corrupt,
+        ),
+      );
+
+      expect(
+        (await registry.getSealedResourceSecret(resource.id))?.envelope,
+        expected?.envelope,
+      );
+      expect(diagnostics, <String>[
+        'Ignored an unreadable synced resource secret',
+      ]);
+    },
+  );
+
   test('metadata apply preserves local-only PIN failure state', () async {
     final actor = await ProfileAuthorizationContext.capture(registry);
     final hash = List<int>.filled(32, 3);

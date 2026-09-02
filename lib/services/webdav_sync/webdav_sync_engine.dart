@@ -227,6 +227,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required WebDavSyncTrigger? trigger,
     required _CycleInstrumentation instrumentation,
   }) async {
+    if (_localAdapter is WebDavSyncRegistryTombstoneOutboxDrainer) {
+      try {
+        await (_localAdapter as WebDavSyncRegistryTombstoneOutboxDrainer)
+            .drainRegistryTombstoneOutbox();
+      } catch (error) {
+        _diagnostic('Deferred WebDAV registry tombstone outbox drain', error);
+      }
+    }
     if (context == null ||
         !context.isComplete ||
         (!context.active && !allowPreActivation)) {
@@ -278,35 +286,55 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       if (circleAdapter == null) {
         throw StateError('WebDAV sync circle apply adapter is unavailable');
       }
-      final phaseStarted = instrumentation.startPhase();
       try {
-        session = await _localAdapter.beginCycle();
-        final deferredLocalId = state.pendingActiveProfileDeletion;
-        final deferredCircleId = deferredLocalId == null
-            ? null
-            : identityMaps.localToCircleProfiles[deferredLocalId];
-        await circleAdapter.applyCircleState(
-          session,
-          WebDavSyncCircleApplyRequest(
-            identityMaps: identityMaps,
-            circleId: root.document.circleId,
-            circleKey: root.key,
-            profiles: pendingCircle.profiles,
-            resources: pendingCircle.resources,
-            deferredActiveCircleProfileId: deferredCircleId,
-          ),
-          replayingPending: true,
+        WebDavSyncCircleMerge.validateApplicableState(
+          profiles: pendingCircle.profiles,
+          resources: pendingCircle.resources,
         );
+      } on WebDavSyncDeterministicCircleValidationException catch (error) {
         state = await _stateRepository.update(
           namespaceId,
           (current) => current.copyWith(
-            circleProfilesBaseline: pendingCircle.profiles,
-            circleResourcesBaseline: pendingCircle.resources,
             clearPendingCircleApply: true,
+            clearPendingActiveProfileDeletion: true,
           ),
         );
-      } finally {
-        instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
+        _diagnostic(
+          'Quarantined an invalid pending WebDAV circle target',
+          error,
+        );
+      }
+      if (state.pendingCircleApply != null) {
+        final phaseStarted = instrumentation.startPhase();
+        try {
+          session = await _localAdapter.beginCycle();
+          final deferredLocalId = state.pendingActiveProfileDeletion;
+          final deferredCircleId = deferredLocalId == null
+              ? null
+              : identityMaps.localToCircleProfiles[deferredLocalId];
+          await circleAdapter.applyCircleState(
+            session,
+            WebDavSyncCircleApplyRequest(
+              identityMaps: identityMaps,
+              circleId: root.document.circleId,
+              circleKey: root.key,
+              profiles: pendingCircle.profiles,
+              resources: pendingCircle.resources,
+              deferredActiveCircleProfileId: deferredCircleId,
+            ),
+            replayingPending: true,
+          );
+          state = await _stateRepository.update(
+            namespaceId,
+            (current) => current.copyWith(
+              circleProfilesBaseline: pendingCircle.profiles,
+              circleResourcesBaseline: pendingCircle.resources,
+              clearPendingCircleApply: true,
+            ),
+          );
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
+        }
       }
     }
     final pendingProfiles = state.profiles.entries
@@ -526,11 +554,20 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               ...peerCircle.profiles,
             ],
           );
-          final mergedResources = WebDavSyncCircleMerge.mergeResources(
+          final mergedResourceWinners = WebDavSyncCircleMerge.mergeResources(
             <WebDavSyncResourcesDocument>[
               built.resources,
               ...peerCircle.resources,
             ],
+          );
+          final mergedResources =
+              WebDavSyncCircleMerge.deriveApplicableResources(
+                profiles: mergedProfiles,
+                resources: mergedResourceWinners,
+              );
+          WebDavSyncCircleMerge.validateApplicableState(
+            profiles: mergedProfiles,
+            resources: mergedResources,
           );
           final activeCircleId =
               identityMaps.localToCircleProfiles[session.scope.profileId];

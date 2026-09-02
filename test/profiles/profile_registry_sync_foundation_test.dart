@@ -108,7 +108,7 @@ void main() {
     },
   );
 
-  test('fresh v7 schema and v6 upgrade have exact defaults/backfill', () async {
+  test('fresh v8 schema and v6 upgrade have exact defaults/backfill', () async {
     var db = await raw();
     Future<Map<String, Map<String, Object?>>> columns(String table) async => {
       for (final row in await db.rawQuery('PRAGMA table_info($table)'))
@@ -131,6 +131,7 @@ void main() {
       (await columns('connection_resources'))['secret_pending']!['dflt_value'],
       '0',
     );
+    expect(await columns('webdav_sync_tombstone_outbox'), contains('id'));
     await db.close();
 
     await registry.close();
@@ -143,6 +144,9 @@ void main() {
         .replaceAll('      secret_pending INTEGER NOT NULL DEFAULT 0,\n', '')
         .replaceAll('      updated_at_ms INTEGER NOT NULL DEFAULT 0,\n', '');
     for (final statement in ProfileRegistry.debugSchemaStatements) {
+      if (statement.contains('webdav_sync_tombstone_outbox')) {
+        continue;
+      }
       await db.execute(withoutV7(statement));
     }
     await db.insert('user_profiles', <String, Object?>{
@@ -202,6 +206,7 @@ void main() {
       (await db.rawQuery('PRAGMA user_version')).single['user_version'],
       ProfileRegistry.schemaVersion,
     );
+    expect(await columns('webdav_sync_tombstone_outbox'), contains('id'));
     await db.close();
   });
 
@@ -673,6 +678,61 @@ void main() {
   });
 
   test(
+    'fresh peer accepts a managing grant retained by a child downgrade',
+    () async {
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          profiles: <SyncedRegistryProfileRecord>[
+            SyncedRegistryProfileRecord(
+              id: 'surviving-admin',
+              name: 'Surviving Admin',
+              role: UserProfileRole.admin,
+              policy: ProfilePolicy.allAllowedFor(UserProfileRole.admin),
+              enabled: true,
+              lockOnResume: false,
+              setupComplete: true,
+              updatedAtMs: 10,
+            ),
+            SyncedRegistryProfileRecord(
+              id: 'downgraded-child',
+              name: 'Downgraded Child',
+              role: UserProfileRole.child,
+              policy: ProfilePolicy.defaultsFor(UserProfileRole.child),
+              enabled: true,
+              lockOnResume: false,
+              setupComplete: true,
+              updatedAtMs: 11,
+            ),
+          ],
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: resource('retained-grant-resource', 'surviving-admin'),
+              updatedAtMs: 12,
+            ),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: 'downgraded-child',
+              resourceId: 'retained-grant-resource',
+              permissions:
+                  ResourcePermission.use.bit | ResourcePermission.manage.bit,
+              updatedAtMs: 13,
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        (await registry.getGrant(
+          'downgraded-child',
+          'retained-grant-resource',
+        ))?.permissions,
+        ResourcePermission.use.bit | ResourcePermission.manage.bit,
+      );
+    },
+  );
+
+  test(
     'sync delta refuses active deletion and preserves admin invariant',
     () async {
       final first = await admin('first-admin');
@@ -861,6 +921,116 @@ void main() {
       );
     },
   );
+
+  test(
+    'rolled-back collection delete leaves no tombstone outbox row',
+    () async {
+      final owner = await admin();
+      await registry.insertResource(
+        resource: resource(
+          'rollback-resource',
+          owner.id,
+          type: ConnectionResourceType.webDav,
+        ),
+        sealedSecretPayload: 'secret',
+        secretPayloadVersion: 1,
+        ownerPermissions: allPermissions(),
+      );
+      captureRegistryTombstones();
+
+      await expectLater(
+        registry.replaceOwnedResourceCollection(
+          ownerProfileId: owner.id,
+          types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+          replacements: <PreparedConnectionResource>[
+            PreparedConnectionResource(
+              resource: resource(
+                'invalid-replacement',
+                owner.id,
+                authorizationRevision: 2,
+                type: ConnectionResourceType.webDav,
+              ),
+              sealedSecretPayload: 'replacement-secret',
+              secretPayloadVersion: 1,
+            ),
+          ],
+          ownerPermissions: allPermissions(),
+        ),
+        throwsStateError,
+      );
+
+      expect(await registry.getResource('rollback-resource'), isNotNull);
+      expect(tombstoneBatches, isEmpty);
+      final db = await raw();
+      expect(await db.query('webdav_sync_tombstone_outbox'), isEmpty);
+      await db.close();
+    },
+  );
+
+  test(
+    'failed tombstone drain retains and retries the committed outbox',
+    () async {
+      final owner = await admin();
+      await registry.insertResource(
+        resource: resource('drain-resource', owner.id),
+        sealedSecretPayload: 'secret',
+        secretPayloadVersion: 1,
+        ownerPermissions: allPermissions(),
+        bindingSlot: 'provider.realDebrid',
+      );
+      WebDavSyncTombstoneRecorder.debugInstall(
+        registrySink: (_) => throw StateError('simulated drain failure'),
+      );
+
+      await registry.unbindResource(owner.id, 'provider.realDebrid');
+      var db = await raw();
+      expect(await db.query('webdav_sync_tombstone_outbox'), hasLength(1));
+      await db.close();
+
+      captureRegistryTombstones();
+      await registry.drainWebDavSyncTombstoneOutbox();
+
+      expect(
+        tombstoneBatches.single.single.kind,
+        WebDavSyncRegistryRecordKind.binding,
+      );
+      db = await raw();
+      expect(await db.query('webdav_sync_tombstone_outbox'), isEmpty);
+      await db.close();
+    },
+  );
+
+  test('bound outbox insert failure aborts the registry delete', () async {
+    final owner = await admin();
+    await registry.insertResource(
+      resource: resource('insert-failure-resource', owner.id),
+      sealedSecretPayload: 'secret',
+      secretPayloadVersion: 1,
+      ownerPermissions: allPermissions(),
+      bindingSlot: 'provider.realDebrid',
+    );
+    captureRegistryTombstones();
+    final db = await raw();
+    await db.execute('''
+      CREATE TRIGGER fail_tombstone_outbox_insert
+      BEFORE INSERT ON webdav_sync_tombstone_outbox
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated outbox failure');
+      END
+    ''');
+    await db.close();
+
+    await expectLater(
+      registry.unbindResource(owner.id, 'provider.realDebrid'),
+      throwsA(anything),
+    );
+
+    expect(
+      await registry.getBoundResourceId(owner.id, 'provider.realDebrid'),
+      'insert-failure-resource',
+    );
+    expect(tombstoneBatches, isEmpty);
+  });
 
   test(
     'restore redundant-default prune captures its dependent leaves',

@@ -46,7 +46,11 @@ class ProfileCollectionResourceFacade {
       final canReveal =
           !readOnly && grant.allows(ResourcePermission.revealSecret);
       Map<String, dynamic> secret;
-      if (forRemoteTransfer) {
+      if (resource.secretPending && !forSettings) {
+        continue;
+      } else if (resource.secretPending) {
+        secret = _redactedSettingsRecord(resource);
+      } else if (forRemoteTransfer) {
         if (!grant.allows(ResourcePermission.writeRemote)) continue;
         secret = await service.resolveSecretForUse(
           context: context,
@@ -82,7 +86,9 @@ class ProfileCollectionResourceFacade {
         '_connectionResourceId': resource.id,
         '_connectionResourceRevision': resource.authorizationRevision,
         '_connectionResourceReadOnly': readOnly,
-        '_connectionResourceCredentialsRedacted': forSettings && !canReveal,
+        '_connectionResourceCredentialsRedacted':
+            forSettings && (!canReveal || resource.secretPending),
+        '_connectionResourceSecretPending': resource.secretPending,
       });
     }
     // Close the collection-level race after the final item. Callers that do

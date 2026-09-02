@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/indexer_manager_config.dart';
@@ -11,6 +12,7 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
+import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -190,6 +192,112 @@ void main() {
           feature: ProfileFeature.cloud,
         ),
         throwsA(isA<ResourceAuthorizationException>()),
+      );
+    },
+  );
+
+  test(
+    'secret-pending resource is visible in settings but not selectable',
+    () async {
+      const resourceId = 'pending-webdav';
+      final pending = ConnectionResource(
+        id: resourceId,
+        type: ConnectionResourceType.webDav,
+        label: 'Pending DAV',
+        ownerProfileId: adminId,
+        publicConfig: const <String, dynamic>{'schemaVersion': 1},
+        publicSchemaVersion: 1,
+        authorizationRevision: 1,
+        enabled: true,
+        secretPending: true,
+      );
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(resource: pending, updatedAtMs: 10),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: adminId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.values.fold<int>(
+                0,
+                (mask, permission) => mask | permission.bit,
+              ),
+              updatedAtMs: 11,
+            ),
+          ],
+          bindings: <SyncedRegistryBindingRecord>[
+            SyncedRegistryBindingRecord(
+              profileId: adminId,
+              slot: 'provider.webDav.legacy',
+              resourceId: resourceId,
+              updatedAtMs: 12,
+            ),
+          ],
+        ),
+      );
+
+      final presence = await ProfileCredentialFacade.isConfigured(
+        'webdav_base_url',
+      );
+      expect(presence.configured, isFalse);
+      expect(presence.pending, isTrue);
+      expect(
+        await ProfileCollectionResourceFacade.read(
+          types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+          feature: ProfileFeature.cloud,
+        ),
+        isEmpty,
+      );
+      final settings = await ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+        feature: ProfileFeature.cloud,
+        forSettings: true,
+      );
+      expect(settings.single['_connectionResourceSecretPending'], isTrue);
+      expect(settings.single['_connectionResourceCredentialsRedacted'], isTrue);
+
+      const secret = <String, dynamic>{
+        'baseUrl': 'https://dav.invalid/files',
+        'username': 'owner',
+        'password': 'secret',
+      };
+      final sealed = await cipher.seal(
+        utf8.encode(jsonEncode(secret)),
+        associatedData: ConnectionResourceService.associatedDataForSecret(
+          resourceId: resourceId,
+          type: ConnectionResourceType.webDav,
+          ownerProfileId: adminId,
+          publicSchemaVersion: 1,
+          payloadVersion: ConnectionResourceService.secretPayloadVersion,
+        ),
+      );
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: pending,
+              updatedAtMs: 12,
+              sealedSecretPayload: sealed,
+              secretPayloadVersion:
+                  ConnectionResourceService.secretPayloadVersion,
+            ),
+          ],
+        ),
+      );
+
+      final completed = await ProfileCredentialFacade.isConfigured(
+        'webdav_base_url',
+      );
+      expect(completed.configured, isTrue);
+      expect(completed.pending, isFalse);
+      expect(
+        (await ProfileCollectionResourceFacade.read(
+          types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+          feature: ProfileFeature.cloud,
+        )).single['baseUrl'],
+        'https://dav.invalid/files',
       );
     },
   );

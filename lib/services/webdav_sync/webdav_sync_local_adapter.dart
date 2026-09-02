@@ -14,6 +14,7 @@ import '../profiles/profile_preferences.dart';
 import '../profiles/profile_registry.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
+import '../diagnostic_log.dart';
 import 'webdav_sync_active_profile_refresh.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
@@ -147,18 +148,34 @@ abstract interface class WebDavSyncCircleLocalAdapter {
   });
 }
 
+/// Optional registry-backed hook used to publish only tombstones whose SQL
+/// deletions have committed.
+abstract interface class WebDavSyncRegistryTombstoneOutboxDrainer {
+  Future<void> drainRegistryTombstoneOutbox();
+}
+
 /// ProfilePreferences-backed adapter used once M5 arms the engine.
 final class ProfileWebDavSyncLocalAdapter
-    implements WebDavSyncLocalAdapter, WebDavSyncCircleLocalAdapter {
+    implements
+        WebDavSyncLocalAdapter,
+        WebDavSyncCircleLocalAdapter,
+        WebDavSyncRegistryTombstoneOutboxDrainer {
   ProfileWebDavSyncLocalAdapter(
     this.registry, {
     WebDavSyncActiveProfileRefresher? activeProfileRefresher,
+    void Function(String message)? diagnostic,
   }) : _activeProfileRefresher =
            activeProfileRefresher ??
-           const DefaultWebDavSyncActiveProfileRefresher();
+           const DefaultWebDavSyncActiveProfileRefresher(),
+       _diagnostic = diagnostic ?? _recordRedactedDiagnostic;
 
   final ProfileRegistry registry;
   final WebDavSyncActiveProfileRefresher _activeProfileRefresher;
+  final void Function(String message) _diagnostic;
+
+  @override
+  Future<void> drainRegistryTombstoneOutbox() =>
+      registry.drainWebDavSyncTombstoneOutbox();
 
   @override
   Future<WebDavSyncLocalSession> beginCycle() async {
@@ -658,6 +675,7 @@ final class ProfileWebDavSyncLocalAdapter
       int? secretVersion;
       var clearSecret = false;
       var localSecretMatches = false;
+      var ignoredSecret = false;
       final secretLeaf = entry.value.secretConfig;
       final secret = secretLeaf?.value;
       if (secret != null &&
@@ -704,12 +722,18 @@ final class ProfileWebDavSyncLocalAdapter
         } catch (_) {
           sealedSecret = null;
           secretVersion = null;
-          clearSecret = true;
+          ignoredSecret = true;
+          _diagnostic('Ignored an unreadable synced resource secret');
         }
-      } else if (secretLeaf != null) {
-        // A winning null leaf or an authenticated but attachment-incompatible
-        // secret is deletion evidence for the local credential.
+      } else if (secretLeaf?.value == null && secretLeaf != null) {
+        // Only an explicit winning null leaf is deletion evidence. A live leaf
+        // attached to different metadata can be a stale pre-transfer envelope.
         clearSecret = true;
+      } else if (secretLeaf != null) {
+        ignoredSecret = true;
+        _diagnostic(
+          'Ignored an attachment-incompatible synced resource secret',
+        );
       }
       final incoming = ConnectionResource(
         id: localResourceId,
@@ -725,6 +749,7 @@ final class ProfileWebDavSyncLocalAdapter
       final current = currentResources[localResourceId];
       final secretNeedsApply =
           secretLeaf != null &&
+          !ignoredSecret &&
           (clearSecret ? current?.secretPending != true : !localSecretMatches);
       if (current != null &&
           _sameResourceMetadata(current, incoming) &&
@@ -1011,5 +1036,14 @@ final class ProfileWebDavSyncLocalAdapter
         ProfileRuntime.scope.value != scope) {
       throw StateError('Profile session changed during WebDAV sync');
     }
+  }
+
+  static void _recordRedactedDiagnostic(String message) {
+    DiagnosticLog.instance.recordEvent(
+      source: 'webdav_sync',
+      event: 'resource_secret_leaf_ignored',
+      level: DiagnosticLevel.warning,
+      fields: <String, Object?>{'reason': DiagnosticLabel(message)},
+    );
   }
 }

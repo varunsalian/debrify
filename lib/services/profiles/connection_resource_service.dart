@@ -319,6 +319,11 @@ class ConnectionResourceService {
       permission: permission,
       feature: feature,
     );
+    if (authorized.secretPending) {
+      throw const ResourceAuthorizationException(
+        'Resource credentials are pending owner sign-in',
+      );
+    }
     final secret = await _openSecret(resourceId);
     await _revalidateResource(
       context: context,

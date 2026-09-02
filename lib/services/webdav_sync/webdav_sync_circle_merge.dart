@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math';
 
+import '../../models/profiles/profile_policy.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_hot_models.dart';
@@ -95,6 +97,16 @@ final class WebDavSyncProfilesBuildInput {
   profiles;
   final List<WebDavSyncCircleDeletion> deletions;
   final WebDavSyncProfilesDocument? previous;
+}
+
+final class WebDavSyncDeterministicCircleValidationException
+    implements Exception {
+  const WebDavSyncDeterministicCircleValidationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// Pure record-level rebuild and merge for the two circle-wide sections.
@@ -275,14 +287,31 @@ abstract final class WebDavSyncCircleMerge {
   static WebDavSyncProfilesDocument mergeProfiles(
     Iterable<WebDavSyncProfilesDocument> documents,
   ) {
+    final inputs = documents.toList(growable: false);
     final result = <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{};
-    for (final document in documents) {
+    for (final document in inputs) {
       for (final entry in document.profiles.entries) {
         final old = result[entry.key];
         if (old == null || _compareLeaf(entry.value, old) > 0) {
           result[entry.key] = entry.value;
         }
       }
+    }
+    if (!result.values.any(_isManagingAdminLeaf)) {
+      MapEntry<String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>? survivor;
+      for (final document in inputs) {
+        for (final entry in document.profiles.entries) {
+          if (!_isManagingAdminLeaf(entry.value)) continue;
+          final current = survivor;
+          if (current == null ||
+              _compareStamp(entry.value.stamp, current.value.stamp) > 0 ||
+              (_compareStamp(entry.value.stamp, current.value.stamp) == 0 &&
+                  entry.key.compareTo(current.key) > 0)) {
+            survivor = entry;
+          }
+        }
+      }
+      if (survivor != null) result[survivor.key] = survivor.value;
     }
     if (result.length > WebDavSyncLimits.maxMapEntries) {
       throw StateError('WebDAV sync profiles exceed their safe limit');
@@ -333,6 +362,167 @@ abstract final class WebDavSyncCircleMerge {
       throw StateError('WebDAV sync resources exceed their safe limit');
     }
     return result;
+  }
+
+  /// Removes live child winners that cannot exist after the merged parent
+  /// winners are applied. Tombstones retain the rejected leaf's stamp so the
+  /// projection is deterministic and remains deletion-shaped for local rows.
+  static WebDavSyncResourcesDocument deriveApplicableResources({
+    required WebDavSyncProfilesDocument profiles,
+    required WebDavSyncResourcesDocument resources,
+  }) {
+    final liveProfiles = profiles.profiles.entries
+        .where((entry) => entry.value.value != null)
+        .map((entry) => entry.key)
+        .toSet();
+    final applicableResources = <String, WebDavSyncResourceEntry>{};
+    for (final entry in resources.resources.entries) {
+      final metadata = entry.value.metadata;
+      if (metadata.value != null &&
+          !liveProfiles.contains(metadata.value!.ownerCircleProfileId)) {
+        applicableResources[entry.key] = WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: metadata.stamp,
+            value: null,
+          ),
+          secretConfig: entry.value.secretConfig == null
+              ? null
+              : WebDavSyncCircleLeaf<WebDavSyncResourceSecretConfig>(
+                  stamp: entry.value.secretConfig!.stamp,
+                  value: null,
+                ),
+        );
+      } else {
+        applicableResources[entry.key] = entry.value;
+      }
+    }
+    final liveResources = applicableResources.entries
+        .where((entry) => entry.value.metadata.value != null)
+        .map((entry) => entry.key)
+        .toSet();
+    final grants = _suppressNested<WebDavSyncGrantValue>(
+      resources.grants,
+      keep: (profileId, resourceId, _) =>
+          liveProfiles.contains(profileId) &&
+          liveResources.contains(resourceId),
+    );
+    final settings = _suppressNested<WebDavSyncSettingsValue>(
+      resources.settings,
+      keep: (profileId, resourceId, _) =>
+          liveProfiles.contains(profileId) &&
+          liveResources.contains(resourceId) &&
+          grants[profileId]?[resourceId]?.value != null,
+    );
+    final bindings = _suppressNested<WebDavSyncBindingValue>(
+      resources.bindings,
+      keep: (profileId, _, value) =>
+          liveProfiles.contains(profileId) &&
+          liveResources.contains(value.circleResourceId) &&
+          grants[profileId]?[value.circleResourceId]?.value != null,
+    );
+    return WebDavSyncResourcesDocument(
+      resources: Map<String, WebDavSyncResourceEntry>.unmodifiable(
+        applicableResources,
+      ),
+      grants: _freezeNested(grants),
+      settings: _freezeNested(settings),
+      bindings: _freezeNested(bindings),
+    );
+  }
+
+  /// Deterministically simulates the relational projection before a target is
+  /// journaled or replayed. Failures here never depend on device-local rows.
+  static void validateApplicableState({
+    required WebDavSyncProfilesDocument profiles,
+    required WebDavSyncResourcesDocument resources,
+  }) {
+    if (!profiles.profiles.values.any(_isManagingAdminLeaf)) {
+      throw const WebDavSyncDeterministicCircleValidationException(
+        'Circle target has no enabled managing Admin',
+      );
+    }
+    final liveProfiles = profiles.profiles.entries
+        .where((entry) => entry.value.value != null)
+        .map((entry) => entry.key)
+        .toSet();
+    final liveResources = <String>{};
+    for (final entry in resources.resources.entries) {
+      final metadata = entry.value.metadata.value;
+      if (metadata == null) continue;
+      if (!liveProfiles.contains(metadata.ownerCircleProfileId)) {
+        throw const WebDavSyncDeterministicCircleValidationException(
+          'Circle resource owner is unavailable',
+        );
+      }
+      liveResources.add(entry.key);
+    }
+    for (final outer in resources.grants.entries) {
+      for (final inner in outer.value.entries) {
+        if (inner.value.value != null &&
+            (!liveProfiles.contains(outer.key) ||
+                !liveResources.contains(inner.key))) {
+          throw const WebDavSyncDeterministicCircleValidationException(
+            'Circle grant parent is unavailable',
+          );
+        }
+      }
+    }
+    for (final outer in resources.settings.entries) {
+      for (final inner in outer.value.entries) {
+        if (inner.value.value != null &&
+            (!liveProfiles.contains(outer.key) ||
+                !liveResources.contains(inner.key) ||
+                resources.grants[outer.key]?[inner.key]?.value == null)) {
+          throw const WebDavSyncDeterministicCircleValidationException(
+            'Circle settings parent is unavailable',
+          );
+        }
+      }
+    }
+    for (final outer in resources.bindings.entries) {
+      for (final inner in outer.value.entries) {
+        final value = inner.value.value;
+        if (value != null &&
+            (!liveProfiles.contains(outer.key) ||
+                !liveResources.contains(value.circleResourceId) ||
+                resources.grants[outer.key]?[value.circleResourceId]?.value ==
+                    null)) {
+          throw const WebDavSyncDeterministicCircleValidationException(
+            'Circle binding parent is unavailable',
+          );
+        }
+      }
+    }
+  }
+
+  static Map<String, Map<String, WebDavSyncCircleLeaf<T>>> _suppressNested<T>(
+    Map<String, Map<String, WebDavSyncCircleLeaf<T>>> source, {
+    required bool Function(String profileId, String key, T value) keep,
+  }) => <String, Map<String, WebDavSyncCircleLeaf<T>>>{
+    for (final outer in source.entries)
+      outer.key: <String, WebDavSyncCircleLeaf<T>>{
+        for (final inner in outer.value.entries)
+          inner.key:
+              inner.value.value == null ||
+                  keep(outer.key, inner.key, inner.value.value as T)
+              ? inner.value
+              : WebDavSyncCircleLeaf<T>(stamp: inner.value.stamp, value: null),
+      },
+  };
+
+  static bool _isManagingAdminLeaf(
+    WebDavSyncCircleLeaf<WebDavSyncProfileValue> leaf,
+  ) {
+    final value = leaf.value;
+    if (value == null ||
+        !value.enabled ||
+        value.role != UserProfileRole.admin) {
+      return false;
+    }
+    return ProfilePolicy.decode(
+      jsonEncode(value.policy),
+      value.role,
+    ).allows(value.role, ProfileFeature.manageProfiles);
   }
 
   static Map<String, Map<String, WebDavSyncCircleLeaf<T>>> _rebuildNested<T>(

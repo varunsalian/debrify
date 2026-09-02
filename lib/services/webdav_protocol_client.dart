@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:xml/xml.dart';
 
 /// Credentials consumed by the profile-independent WebDAV protocol layer.
 ///
@@ -408,6 +409,10 @@ final class WebDavProtocolClient {
         path: path,
         depth: 0,
         collection: collection,
+        body:
+            '<?xml version="1.0" encoding="utf-8" ?>'
+            '<D:propfind xmlns:D="DAV:"><D:prop><D:getetag/>'
+            '<D:getlastmodified/><D:getcontentlength/></D:prop></D:propfind>',
         beforeSend: beforeSend,
       );
       if (response.statusCode == HttpStatus.notFound) {
@@ -415,6 +420,15 @@ final class WebDavProtocolClient {
         await _discard(response);
         return WebDavExistenceResult(exists: false, metadata: metadata);
       }
+      await _throwUnlessAccepted(response, _isSuccess);
+      final metadata = _metadata(response);
+      final requestedUri =
+          response.request?.url ?? uriForPath(path, collection: collection);
+      final bytes = await _readBounded(response, defaultSmallDocumentLimit);
+      return WebDavExistenceResult(
+        exists: true,
+        metadata: _metadataWithDavValidator(metadata, bytes, requestedUri),
+      );
     }
     final metadata = await _finishMetadata(response, accepted: _isSuccess);
     return WebDavExistenceResult(exists: true, metadata: metadata);
@@ -462,6 +476,89 @@ final class WebDavProtocolClient {
     body: _RequestBody.bytes(Uint8List.fromList(utf8.encode(body))),
     beforeSend: beforeSend,
   );
+
+  static WebDavResponseMetadata _metadataWithDavValidator(
+    WebDavResponseMetadata metadata,
+    Uint8List bytes,
+    Uri requestedUri,
+  ) {
+    // Best-effort enrichment: existence was already proven by the 2xx/207
+    // status. A body without parseable DAV properties simply yields no
+    // validator (the remote-change poll then reports disabledNoValidators),
+    // preserving the M1 `exists` contract for minimal servers.
+    final XmlDocument document;
+    try {
+      document = XmlDocument.parse(utf8.decode(bytes));
+    } on Exception {
+      return metadata;
+    }
+    XmlElement? target;
+    for (final response in document.descendants.whereType<XmlElement>().where(
+      (element) => element.name.local == 'response',
+    )) {
+      final href = _directChildText(response, 'href');
+      if (href == null || !_sameDavTarget(requestedUri, href)) continue;
+      target = response;
+      break;
+    }
+    if (target == null) return metadata;
+    XmlElement? properties;
+    for (final propstat in target.children.whereType<XmlElement>().where(
+      (element) => element.name.local == 'propstat',
+    )) {
+      final status = _directChildText(propstat, 'status');
+      if (status == null || !RegExp(r'\s2\d\d(?:\s|$)').hasMatch(status)) {
+        continue;
+      }
+      properties = propstat.children.whereType<XmlElement>().firstWhere(
+        (element) => element.name.local == 'prop',
+        orElse: () => XmlElement(XmlName('prop')),
+      );
+      break;
+    }
+    if (properties == null) return metadata;
+    final etag = _directChildText(properties, 'getetag')?.trim();
+    final lastModified = _directChildText(
+      properties,
+      'getlastmodified',
+    )?.trim();
+    final contentLength = _directChildText(
+      properties,
+      'getcontentlength',
+    )?.trim();
+    final headers = <String, String>{
+      ...metadata.headers,
+      if (lastModified != null && lastModified.isNotEmpty)
+        HttpHeaders.lastModifiedHeader: lastModified,
+      if (contentLength != null && int.tryParse(contentLength) != null)
+        HttpHeaders.contentLengthHeader: contentLength,
+    };
+    return WebDavResponseMetadata(
+      statusCode: metadata.statusCode,
+      uri: metadata.uri,
+      headers: Map<String, String>.unmodifiable(headers),
+      serverDate: metadata.serverDate,
+      etag: etag == null || etag.isEmpty ? null : etag,
+    );
+  }
+
+  static String? _directChildText(XmlElement parent, String localName) {
+    for (final child in parent.children.whereType<XmlElement>()) {
+      if (child.name.local == localName) return child.innerText;
+    }
+    return null;
+  }
+
+  static bool _sameDavTarget(Uri requested, String href) {
+    final parsed = Uri.tryParse(href.trim());
+    if (parsed == null) return false;
+    final resolved = requested.resolveUri(parsed);
+    return resolved.scheme == requested.scheme &&
+        resolved.host == requested.host &&
+        resolved.port == requested.port &&
+        resolved.path == requested.path &&
+        resolved.query == requested.query;
+  }
 
   Future<WebDavResponseMetadata> deletePath({
     required String path,

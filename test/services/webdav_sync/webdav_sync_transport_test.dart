@@ -126,6 +126,47 @@ void main() {
     },
   );
 
+  test('405 HEAD probe reads the target DAV property validator', () async {
+    var requests = 0;
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((request) async {
+        requests++;
+        if (request.method == 'HEAD') return http.Response('', 405);
+        expect(request.method, 'PROPFIND');
+        expect(request.headers['depth'], '0');
+        expect(request.body, contains('<D:getetag/>'));
+        expect(request.body, contains('<D:getlastmodified/>'));
+        expect(request.body, contains('<D:getcontentlength/>'));
+        return http.Response('''<?xml version="1.0" encoding="utf-8"?>
+          <D:multistatus xmlns:D="DAV:">
+            <D:response>
+              <D:href>/dav/Family/debrify-sync/devices/device-b/manifest.enc</D:href>
+              <D:propstat>
+                <D:prop>
+                  <D:getetag>"dav-revision-3"</D:getetag>
+                  <D:getlastmodified>Tue, 01 Sep 2026 00:00:00 GMT</D:getlastmodified>
+                  <D:getcontentlength>42</D:getcontentlength>
+                </D:prop>
+                <D:status>HTTP/1.1 200 OK</D:status>
+              </D:propstat>
+            </D:response>
+          </D:multistatus>''', 207);
+      }),
+    );
+
+    final result = await transport.probeManifest('device-b');
+
+    expect(requests, 2);
+    expect(result.exists, isTrue);
+    expect(
+      result.validator,
+      const WebDavSyncManifestValidator.etag('"dav-revision-3"'),
+    );
+    transport.close();
+  });
+
   test(
     'missing manifest probe is a change hint rather than an error',
     () async {

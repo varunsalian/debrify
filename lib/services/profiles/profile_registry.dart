@@ -23,7 +23,7 @@ import 'tvos_recovery_limits.dart';
 class ProfileRegistry {
   ProfileRegistry._(this._db);
 
-  static const int schemaVersion = 7;
+  static const int schemaVersion = 8;
   final Database _db;
   Future<void> _recoveryCheckpoint = Future<void>.value();
   Future<void> Function()? authorityWillChangeCallback;
@@ -40,6 +40,7 @@ class ProfileRegistry {
     'profile_data_generations',
     'profile_restore_journal',
     'profile_restore_resources',
+    'webdav_sync_tombstone_outbox',
     // After their parents: the snapshot import replays inserts in list order
     // with foreign keys on.
     'resource_secret_chunks',
@@ -138,6 +139,7 @@ class ProfileRegistry {
           await _addRestoreResourceSettingsColumns(database);
         }
         if (oldVersion < 7) await _addRegistrySyncColumns(database);
+        if (oldVersion < 8) await _createWebDavSyncTombstoneOutbox(database);
       },
     );
     return ProfileRegistry._(db);
@@ -206,6 +208,18 @@ class ProfileRegistry {
     await db.execute(
       'ALTER TABLE connection_resources '
       'ADD COLUMN secret_pending INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  /// v8: committed registry deletions wait here until their file-backed
+  /// WebDAV tombstones are durable. CREATE TABLE keeps the SQLite 3.9 floor.
+  static Future<void> _createWebDavSyncTombstoneOutbox(
+    DatabaseExecutor db,
+  ) async {
+    await db.execute(
+      _schemaStatements.firstWhere(
+        (statement) => statement.contains('webdav_sync_tombstone_outbox'),
+      ),
     );
   }
 
@@ -312,6 +326,13 @@ class ProfileRegistry {
       stage TEXT NOT NULL,
       payload_json TEXT NOT NULL,
       updated_at_ms INTEGER NOT NULL
+    )''',
+    '''CREATE TABLE IF NOT EXISTS webdav_sync_tombstone_outbox (
+      id INTEGER PRIMARY KEY,
+      namespace_id TEXT NOT NULL,
+      origin_device_id TEXT NOT NULL,
+      records_json TEXT NOT NULL,
+      created_at_ms INTEGER NOT NULL
     )''',
     '''CREATE TABLE profile_data_generations (
       profile_id TEXT NOT NULL,
@@ -622,6 +643,45 @@ class ProfileRegistry {
 
   Future<void> close() => _db.close();
 
+  /// Drains only rows whose registry deletion transaction has committed.
+  /// Recording is idempotent; a crash after the file write but before the row
+  /// delete safely repeats the same tombstones on the next drain.
+  Future<void> drainWebDavSyncTombstoneOutbox() async {
+    final rows = await _db.query('webdav_sync_tombstone_outbox', orderBy: 'id');
+    for (final row in rows) {
+      final decoded = jsonDecode(row['records_json']! as String);
+      if (decoded is! List) {
+        throw const FormatException('Invalid registry tombstone outbox row');
+      }
+      final records = decoded.map(WebDavSyncRegistryRecordId.fromJson).toSet();
+      await WebDavSyncTombstoneRecorder.drainRegistryOutboxBatch(
+        target: WebDavSyncRegistryTombstoneOutboxTarget(
+          namespaceId: row['namespace_id']! as String,
+          deviceId: row['origin_device_id']! as String,
+        ),
+        records: records,
+        timeMs: row['created_at_ms']! as int,
+      );
+      await _db.delete(
+        'webdav_sync_tombstone_outbox',
+        where: 'id = ?',
+        whereArgs: <Object>[row['id']!],
+      );
+    }
+  }
+
+  Future<void> _finishRegistryDelete() async {
+    try {
+      await drainWebDavSyncTombstoneOutbox();
+    } catch (error) {
+      debugPrint(
+        'WebDAV registry tombstone outbox drain deferred '
+        '(${error.runtimeType})',
+      );
+    }
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+  }
+
   Future<String> exportRecoverySnapshot() async {
     final tables = <String, Object?>{};
     // One transaction across every table: a secret's marker row and its
@@ -680,11 +740,12 @@ class ProfileRegistry {
       // A table this snapshot's schema had not grown yet is EMPTY, not
       // missing — the v4 snapshot on an updated device predates the chunk
       // tables and must still boot.
-      if (snapshotSchema < 5 &&
-          const <String>{
-            'resource_secret_chunks',
-            'restore_secret_chunks',
-          }.contains(table)) {
+      if ((snapshotSchema < 5 &&
+              const <String>{
+                'resource_secret_chunks',
+                'restore_secret_chunks',
+              }.contains(table)) ||
+          (snapshotSchema < 8 && table == 'webdav_sync_tombstone_outbox')) {
         continue;
       }
       throw FormatException('Recovery snapshot is missing $table');
@@ -1291,7 +1352,7 @@ class ProfileRegistry {
         whereArgs: <Object>[id],
       );
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   Future<UserProfile> updateProfile({
@@ -1644,7 +1705,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
     return revoked;
   }
 
@@ -1789,7 +1850,7 @@ class ProfileRegistry {
         whereArgs: <Object>[id],
       );
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   /// Connection kinds that are PERSONAL and therefore excluded from the
@@ -2227,7 +2288,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   /// Atomically changes resource ownership together with the secret envelope
@@ -2387,7 +2448,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId, slot],
       );
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   Future<List<ConnectionResource>> listGrantedResources(
@@ -2822,21 +2883,6 @@ class ProfileRegistry {
         if (item.permissions < 0 || item.permissions & ~knownPermissions != 0) {
           throw ArgumentError('Synced grant permissions are invalid');
         }
-        final target = await txn.query(
-          'user_profiles',
-          columns: const <String>['role'],
-          where: 'id = ?',
-          whereArgs: <Object>[item.profileId],
-          limit: 1,
-        );
-        if (target.isNotEmpty &&
-            target.single['role'] == UserProfileRole.child.name &&
-            item.permissions &
-                    ~(ResourcePermission.use.bit |
-                        ResourcePermission.download.bit) !=
-                0) {
-          throw StateError('Child resource permission ceiling exceeded');
-        }
         await _compatUpsert(
           txn,
           table: 'profile_resource_grants',
@@ -3239,7 +3285,7 @@ class ProfileRegistry {
       }
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   Future<ProfileResourceGrant?> getGrant(
@@ -3641,7 +3687,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId],
       );
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   /// Atomically lets the active borrower reduce its own authority. This is
@@ -3718,7 +3764,7 @@ class ProfileRegistry {
         <Object>[DateTime.now().millisecondsSinceEpoch, profileId],
       );
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   Future<void> bindResource({
@@ -4819,7 +4865,7 @@ class ProfileRegistry {
       );
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await _finishRegistryDelete();
   }
 
   static bool _isDefaultSeedGrantOrigin(Object? encoded) {
@@ -5576,9 +5622,9 @@ class ProfileRegistry {
   static String _registryBindingKey(String profileId, String slot) =>
       '$profileId\u0000$slot';
 
-  /// Best-effort by construction: sync journaling must never turn an ordinary
-  /// local delete into a registry failure. The recorder itself marks a bound
-  /// sync degraded when durable persistence fails.
+  /// Enqueues the complete deletion cascade in the same SQL transaction as
+  /// the rows it describes. Unbound registries skip the outbox; once bound,
+  /// an INSERT failure aborts the deletion transaction.
   static Future<void> _recordRegistryDeleteCascade(
     DatabaseExecutor db, {
     Set<String> profileIds = const <String>{},
@@ -5594,53 +5640,48 @@ class ProfileRegistry {
         bindingKeys.isEmpty) {
       return;
     }
-    try {
-      if (!await WebDavSyncTombstoneRecorder.shouldRecordRegistryRecords()) {
-        return;
+    final target = await WebDavSyncTombstoneRecorder.registryOutboxTarget();
+    if (target == null) return;
+    final records = <WebDavSyncRegistryRecordId>{
+      ...await _registryRecordInventory(db),
+      ...mergedBaselineRecords,
+    };
+    final expandedResourceIds = <String>{...resourceIds};
+    for (final record in records) {
+      if (record.kind == WebDavSyncRegistryRecordKind.resource &&
+          profileIds.contains(record.ownerProfileId)) {
+        expandedResourceIds.add(record.resourceId!);
       }
-      final records = <WebDavSyncRegistryRecordId>{
-        ...await _registryRecordInventory(db),
-        ...mergedBaselineRecords,
-      };
-      final expandedResourceIds = <String>{...resourceIds};
-      for (final record in records) {
-        if (record.kind == WebDavSyncRegistryRecordKind.resource &&
-            profileIds.contains(record.ownerProfileId)) {
-          expandedResourceIds.add(record.resourceId!);
-        }
-      }
-      final selected = records.where((record) {
-        final profileId = record.profileId;
-        final resourceId = record.resourceId;
-        final grantKey = profileId == null || resourceId == null
-            ? null
-            : _registryGrantKey(profileId, resourceId);
-        return switch (record.kind) {
-          WebDavSyncRegistryRecordKind.profile => profileIds.contains(
-            profileId,
-          ),
-          WebDavSyncRegistryRecordKind.resource => expandedResourceIds.contains(
-            resourceId,
-          ),
-          WebDavSyncRegistryRecordKind.grant ||
-          WebDavSyncRegistryRecordKind.setting =>
-            profileIds.contains(profileId) ||
-                expandedResourceIds.contains(resourceId) ||
-                grantKeys.contains(grantKey),
-          WebDavSyncRegistryRecordKind.binding =>
-            profileIds.contains(profileId) ||
-                expandedResourceIds.contains(resourceId) ||
-                grantKeys.contains(grantKey) ||
-                bindingKeys.contains(
-                  _registryBindingKey(profileId!, record.slot!),
-                ),
-        };
-      });
-      await WebDavSyncTombstoneRecorder.recordRegistryRecords(selected);
-    } catch (_) {
-      // The local registry remains the authority on an unbound/degraded
-      // device. Tombstone capture is deliberately fail-soft.
     }
+    final selected = records
+        .where((record) {
+          final profileId = record.profileId;
+          final resourceId = record.resourceId;
+          final grantKey = profileId == null || resourceId == null
+              ? null
+              : _registryGrantKey(profileId, resourceId);
+          return switch (record.kind) {
+            WebDavSyncRegistryRecordKind.profile => profileIds.contains(
+              profileId,
+            ),
+            WebDavSyncRegistryRecordKind.resource =>
+              expandedResourceIds.contains(resourceId),
+            WebDavSyncRegistryRecordKind.grant ||
+            WebDavSyncRegistryRecordKind.setting =>
+              profileIds.contains(profileId) ||
+                  expandedResourceIds.contains(resourceId) ||
+                  grantKeys.contains(grantKey),
+            WebDavSyncRegistryRecordKind.binding =>
+              profileIds.contains(profileId) ||
+                  expandedResourceIds.contains(resourceId) ||
+                  grantKeys.contains(grantKey) ||
+                  bindingKeys.contains(
+                    _registryBindingKey(profileId!, record.slot!),
+                  ),
+          };
+        })
+        .toList(growable: false);
+    await _enqueueRegistryTombstones(db, target, selected);
   }
 
   static Future<void> _recordRegistryBorrowerRevocation(
@@ -5649,46 +5690,58 @@ class ProfileRegistry {
     Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
         const <WebDavSyncRegistryRecordId>[],
   }) async {
-    try {
-      if (!await WebDavSyncTombstoneRecorder.shouldRecordRegistryRecords()) {
-        return;
-      }
-      final records = <WebDavSyncRegistryRecordId>{
-        ...await _registryRecordInventory(db),
-        ...mergedBaselineRecords,
-      };
-      final ownedResourceIds = records
-          .where(
-            (record) =>
-                record.kind == WebDavSyncRegistryRecordKind.resource &&
-                record.ownerProfileId == ownerProfileId,
-          )
-          .map((record) => record.resourceId!)
-          .toSet();
-      final revokedGrantKeys = records
-          .where(
-            (record) =>
-                record.kind == WebDavSyncRegistryRecordKind.grant &&
-                ownedResourceIds.contains(record.resourceId) &&
-                record.profileId != ownerProfileId,
-          )
-          .map(
-            (record) =>
-                _registryGrantKey(record.profileId!, record.resourceId!),
-          )
-          .toSet();
-      final selected = records.where((record) {
-        final profileId = record.profileId;
-        final resourceId = record.resourceId;
-        if (profileId == null || resourceId == null) return false;
-        return revokedGrantKeys.contains(
-          _registryGrantKey(profileId, resourceId),
-        );
-      });
-      await WebDavSyncTombstoneRecorder.recordRegistryRecords(selected);
-    } catch (_) {
-      // See [_recordRegistryDeleteCascade].
-    }
+    final target = await WebDavSyncTombstoneRecorder.registryOutboxTarget();
+    if (target == null) return;
+    final records = <WebDavSyncRegistryRecordId>{
+      ...await _registryRecordInventory(db),
+      ...mergedBaselineRecords,
+    };
+    final ownedResourceIds = records
+        .where(
+          (record) =>
+              record.kind == WebDavSyncRegistryRecordKind.resource &&
+              record.ownerProfileId == ownerProfileId,
+        )
+        .map((record) => record.resourceId!)
+        .toSet();
+    final revokedGrantKeys = records
+        .where(
+          (record) =>
+              record.kind == WebDavSyncRegistryRecordKind.grant &&
+              ownedResourceIds.contains(record.resourceId) &&
+              record.profileId != ownerProfileId,
+        )
+        .map(
+          (record) => _registryGrantKey(record.profileId!, record.resourceId!),
+        )
+        .toSet();
+    final selected = records
+        .where((record) {
+          final profileId = record.profileId;
+          final resourceId = record.resourceId;
+          if (profileId == null || resourceId == null) return false;
+          return revokedGrantKeys.contains(
+            _registryGrantKey(profileId, resourceId),
+          );
+        })
+        .toList(growable: false);
+    await _enqueueRegistryTombstones(db, target, selected);
+  }
+
+  static Future<void> _enqueueRegistryTombstones(
+    DatabaseExecutor db,
+    WebDavSyncRegistryTombstoneOutboxTarget target,
+    List<WebDavSyncRegistryRecordId> records,
+  ) async {
+    if (records.isEmpty) return;
+    await db.insert('webdav_sync_tombstone_outbox', <String, Object?>{
+      'namespace_id': target.namespaceId,
+      'origin_device_id': target.deviceId,
+      'records_json': jsonEncode(
+        records.map((record) => record.toJson()).toList(growable: false),
+      ),
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
   }
 
   static Future<List<WebDavSyncRegistryRecordId>> _registryRecordInventory(
