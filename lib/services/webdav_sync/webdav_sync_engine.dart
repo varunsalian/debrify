@@ -22,6 +22,7 @@ enum WebDavSyncTrigger {
   periodic,
   manual,
   localChange,
+  remoteChange,
 }
 
 enum WebDavSyncCycleDisposition {
@@ -152,13 +153,15 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     WebDavSyncSectionCache? sectionCache,
     DateTime Function()? clock,
     WebDavSyncDiagnostic? diagnostic,
+    this.readConcurrency = 4,
   }) : _stateRepository = stateRepository,
        _localAdapter = localAdapter,
        _transportFactory = transportFactory,
        _codec = codec ?? WebDavSyncCodec(),
        _sectionCache = sectionCache ?? WebDavSyncSectionCache(),
        _clock = clock ?? DateTime.now,
-       _diagnostic = diagnostic ?? _ignoreDiagnostic;
+       _diagnostic = diagnostic ?? _ignoreDiagnostic,
+       assert(readConcurrency >= 1 && readConcurrency <= 4);
 
   static const Duration staleManifestCutoff = Duration(days: 30);
   static const Duration tombstoneHorizon = Duration(days: 90);
@@ -170,6 +173,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   final WebDavSyncSectionCache _sectionCache;
   final DateTime Function() _clock;
   final WebDavSyncDiagnostic _diagnostic;
+  final int readConcurrency;
   final Lock _cycleLock = Lock();
   @visibleForTesting
   int get debugSectionCacheEntries => _sectionCache.entryCount;
@@ -200,6 +204,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       final report = await _runCycle(
         context,
         allowPreActivation: allowPreActivation,
+        trigger: trigger,
         instrumentation: instrumentation,
       );
       instrumentation.disposition = report.disposition.name;
@@ -215,6 +220,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   Future<WebDavSyncCycleReport> _runCycle(
     WebDavSyncCycleContext? context, {
     required bool allowPreActivation,
+    required WebDavSyncTrigger? trigger,
     required _CycleInstrumentation instrumentation,
   }) async {
     if (context == null ||
@@ -361,7 +367,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         );
       }
       final serverNowMs = clockDecision.serverNowMs!;
-      final manifests = await _readManifests(
+      final manifestReads = await _readManifests(
         transport: transport,
         context: context,
         deviceIds: listing.deviceIds,
@@ -369,6 +375,10 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         serverNowMs: serverNowMs,
         instrumentation: instrumentation,
       );
+      final manifests = <String, WebDavSyncManifest>{
+        for (final entry in manifestReads.entries)
+          entry.key: entry.value.manifest,
+      };
       final verifiedOwnManifest = manifests[deviceId];
       if (verifiedOwnManifest != null &&
           (state.ownManifest == null ||
@@ -393,6 +403,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             peerHighWater,
             currentDeviceIds: listing.deviceIds,
           ),
+          peerManifestValidators:
+              Map<String, WebDavSyncManifestValidator>.unmodifiable(
+                <String, WebDavSyncManifestValidator>{
+                  for (final entry in manifestReads.entries)
+                    if (entry.key != deviceId && entry.value.validator != null)
+                      entry.key: entry.value.validator!,
+                },
+              ),
           currentDeviceIds: Set<String>.unmodifiable(manifests.keys),
         ),
       );
@@ -578,6 +596,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           lastPushMs: push.sectionsPushed > 0
               ? serverNowMs
               : current.lastPushMs,
+          lastRemoteChangeMs: trigger == WebDavSyncTrigger.remoteChange
+              ? serverNowMs
+              : current.lastRemoteChangeMs,
         );
       });
       await _collectUnreferencedOwnSections(
@@ -665,7 +686,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     }
   }
 
-  Future<Map<String, WebDavSyncManifest>> _readManifests({
+  Future<Map<String, _ManifestRead>> _readManifests({
     required WebDavSyncTransport transport,
     required WebDavSyncCycleContext context,
     required List<String> deviceIds,
@@ -676,50 +697,69 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     if (deviceIds.length > WebDavSyncLimits.maxPeers) {
       throw StateError('WebDAV sync peer count exceeds its limit');
     }
-    final result = <String, WebDavSyncManifest>{};
-    for (final deviceId in deviceIds) {
-      final phaseStarted = instrumentation.startPhase();
-      try {
-        instrumentation.requestStarted();
-        final read = await transport.readManifest(deviceId);
-        instrumentation.received(read.bytes.length);
-        final payload = await _codec.openDocument(
-          key: context.root!.key,
-          encoded: read.bytes,
-          circleId: context.root!.document.circleId,
-          deviceId: deviceId,
-          logicalName: 'manifest',
-          schemaVersion: WebDavSyncManifest.schemaVersion,
-          maxBytes: WebDavSyncLimits.maxManifestBytes,
-        );
-        final manifest = WebDavSyncManifest.fromJson(payload);
-        if (manifest.deviceId != deviceId ||
-            manifest.circleId != context.root!.document.circleId) {
-          throw const FormatException('WebDAV sync manifest identity mismatch');
-        }
-        if (!WebDavSyncClockPolicy.acceptsRemoteTimestamp(
-          timestampMs: manifest.updatedAtMs,
-          serverNowMs: serverNowMs,
-        )) {
-          _diagnostic('Ignored a future-dated WebDAV sync manifest', null);
-          continue;
-        }
-        final highWater = state.peerManifestHighWater[deviceId];
-        if (highWater != null && manifest.updatedAtMs < highWater) {
-          _diagnostic('Ignored a regressed WebDAV sync manifest', null);
-          continue;
-        }
-        result[deviceId] = manifest;
-      } on WebDavException catch (error) {
-        if (error.kind != WebDavErrorKind.notFound) rethrow;
-        _diagnostic('Ignored a removed WebDAV sync peer', error);
-      } on Exception catch (error) {
-        _diagnostic('Ignored an invalid WebDAV sync peer manifest', error);
-      } finally {
-        instrumentation.finishPhase(_CyclePhase.manifests, phaseStarted);
-      }
+    final sortedDeviceIds = List<String>.from(deviceIds)..sort();
+    final phaseStarted = instrumentation.startPhase();
+    late final List<_ManifestRead?> reads;
+    try {
+      reads = await _mapConcurrentOrdered<String, _ManifestRead?>(
+        sortedDeviceIds,
+        limit: readConcurrency,
+        operation: (deviceId) async {
+          try {
+            instrumentation.requestStarted();
+            final read = await transport.readManifest(deviceId);
+            instrumentation.received(read.bytes.length);
+            final payload = await _codec.openDocument(
+              key: context.root!.key,
+              encoded: read.bytes,
+              circleId: context.root!.document.circleId,
+              deviceId: deviceId,
+              logicalName: 'manifest',
+              schemaVersion: WebDavSyncManifest.schemaVersion,
+              maxBytes: WebDavSyncLimits.maxManifestBytes,
+            );
+            final manifest = WebDavSyncManifest.fromJson(payload);
+            if (manifest.deviceId != deviceId ||
+                manifest.circleId != context.root!.document.circleId) {
+              throw const FormatException(
+                'WebDAV sync manifest identity mismatch',
+              );
+            }
+            if (!WebDavSyncClockPolicy.acceptsRemoteTimestamp(
+              timestampMs: manifest.updatedAtMs,
+              serverNowMs: serverNowMs,
+            )) {
+              _diagnostic('Ignored a future-dated WebDAV sync manifest', null);
+              return null;
+            }
+            final highWater = state.peerManifestHighWater[deviceId];
+            if (highWater != null && manifest.updatedAtMs < highWater) {
+              _diagnostic('Ignored a regressed WebDAV sync manifest', null);
+              return null;
+            }
+            return _ManifestRead(
+              manifest: manifest,
+              validator: WebDavSyncManifestValidator.fromMetadata(
+                read.metadata,
+              ),
+            );
+          } on WebDavException catch (error) {
+            if (error.kind != WebDavErrorKind.notFound) rethrow;
+            _diagnostic('Ignored a removed WebDAV sync peer', error);
+            return null;
+          } on Exception catch (error) {
+            _diagnostic('Ignored an invalid WebDAV sync peer manifest', error);
+            return null;
+          }
+        },
+      );
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.manifests, phaseStarted);
     }
-    return result;
+    return <String, _ManifestRead>{
+      for (var index = 0; index < sortedDeviceIds.length; index++)
+        if (reads[index] != null) sortedDeviceIds[index]: reads[index]!,
+    };
   }
 
   Future<_PeerProfileData> _readProfilePeerData({
@@ -730,72 +770,108 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required int serverNowMs,
     required _CycleInstrumentation instrumentation,
   }) async {
-    final hot = <WebDavSyncHotDocument>[];
-    final tombstones = <WebDavSyncTombstoneDocument>[];
-    for (final entry in manifests.entries) {
-      final manifest = entry.value;
-      final stale =
-          serverNowMs - manifest.updatedAtMs >
-          staleManifestCutoff.inMilliseconds;
-      final hotRef = manifest.section('hot/$circleProfileId');
-      if (!stale &&
-          hotRef != null &&
-          (hotRef.schemaVersion == 1 ||
-              hotRef.schemaVersion == WebDavSyncHotDocument.schemaVersion) &&
-          hotRef.size <= WebDavSyncLimits.maxHotDocumentBytes) {
-        try {
-          final document = await _readHotSection(
-            transport,
-            root,
-            entry.key,
-            hotRef,
-            circleProfileId,
-            instrumentation,
-          );
-          hot.add(document);
-          if (hotRef.schemaVersion == 1) {
-            _diagnostic('Read a legacy WebDAV sync hot section', null);
-          }
-        } on WebDavException catch (error) {
-          if (error.kind != WebDavErrorKind.notFound) rethrow;
-          _diagnostic('Ignored a removed WebDAV sync hot section', error);
-        } on Exception catch (error) {
-          _diagnostic('Ignored an invalid WebDAV sync hot section', error);
-        }
-      }
-      final tombstoneRef = manifest.section('tombstones/$circleProfileId');
-      // Tombstones deliberately ignore manifest heartbeat age.
-      if (tombstoneRef != null &&
-          tombstoneRef.schemaVersion ==
-              WebDavSyncTombstoneDocument.schemaVersion &&
-          tombstoneRef.size <= WebDavSyncLimits.maxTombstoneDocumentBytes) {
-        try {
-          tombstones.add(
-            await _readTombstoneSection(
-              transport,
-              root,
-              entry.key,
-              tombstoneRef,
-              circleProfileId,
-              instrumentation,
+    final entries = manifests.entries.toList(growable: false)
+      ..sort((left, right) => left.key.compareTo(right.key));
+    final phaseStarted = instrumentation.startPhase();
+    late final List<_PeerProfileData> peers;
+    try {
+      peers =
+          await _mapConcurrentOrdered<
+            MapEntry<String, WebDavSyncManifest>,
+            _PeerProfileData
+          >(
+            entries,
+            limit: readConcurrency,
+            operation: (entry) => _readOnePeerProfileData(
+              transport: transport,
+              root: root,
+              deviceId: entry.key,
+              manifest: entry.value,
+              circleProfileId: circleProfileId,
+              serverNowMs: serverNowMs,
+              instrumentation: instrumentation,
             ),
           );
-        } on WebDavException catch (error) {
-          if (error.kind != WebDavErrorKind.notFound) rethrow;
-          _diagnostic('Ignored a removed WebDAV sync tombstone section', error);
-        } on Exception catch (error) {
-          _diagnostic(
-            'Ignored an invalid WebDAV sync tombstone section',
-            error,
-          );
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.sections, phaseStarted);
+    }
+    return _PeerProfileData(
+      hotDocuments: List<WebDavSyncHotDocument>.unmodifiable(
+        peers.expand((peer) => peer.hotDocuments),
+      ),
+      tombstoneDocuments: List<WebDavSyncTombstoneDocument>.unmodifiable(
+        peers.expand((peer) => peer.tombstoneDocuments),
+      ),
+    );
+  }
+
+  Future<_PeerProfileData> _readOnePeerProfileData({
+    required WebDavSyncTransport transport,
+    required OpenedWebDavSyncRoot root,
+    required String deviceId,
+    required WebDavSyncManifest manifest,
+    required String circleProfileId,
+    required int serverNowMs,
+    required _CycleInstrumentation instrumentation,
+  }) async {
+    WebDavSyncHotDocument? hot;
+    WebDavSyncTombstoneDocument? tombstone;
+    final stale =
+        serverNowMs - manifest.updatedAtMs > staleManifestCutoff.inMilliseconds;
+    final hotRef = manifest.section('hot/$circleProfileId');
+    if (!stale &&
+        hotRef != null &&
+        (hotRef.schemaVersion == 1 ||
+            hotRef.schemaVersion == WebDavSyncHotDocument.schemaVersion) &&
+        hotRef.size <= WebDavSyncLimits.maxHotDocumentBytes) {
+      try {
+        hot = await _readHotSection(
+          transport,
+          root,
+          deviceId,
+          hotRef,
+          circleProfileId,
+          instrumentation,
+        );
+        if (hotRef.schemaVersion == 1) {
+          _diagnostic('Read a legacy WebDAV sync hot section', null);
         }
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
+        _diagnostic('Ignored a removed WebDAV sync hot section', error);
+      } on Exception catch (error) {
+        _diagnostic('Ignored an invalid WebDAV sync hot section', error);
+      }
+    }
+    final tombstoneRef = manifest.section('tombstones/$circleProfileId');
+    // Tombstones deliberately ignore manifest heartbeat age.
+    if (tombstoneRef != null &&
+        tombstoneRef.schemaVersion ==
+            WebDavSyncTombstoneDocument.schemaVersion &&
+        tombstoneRef.size <= WebDavSyncLimits.maxTombstoneDocumentBytes) {
+      try {
+        tombstone = await _readTombstoneSection(
+          transport,
+          root,
+          deviceId,
+          tombstoneRef,
+          circleProfileId,
+          instrumentation,
+        );
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
+        _diagnostic('Ignored a removed WebDAV sync tombstone section', error);
+      } on Exception catch (error) {
+        _diagnostic('Ignored an invalid WebDAV sync tombstone section', error);
       }
     }
     return _PeerProfileData(
-      hotDocuments: List<WebDavSyncHotDocument>.unmodifiable(hot),
-      tombstoneDocuments: List<WebDavSyncTombstoneDocument>.unmodifiable(
-        tombstones,
-      ),
+      hotDocuments: hot == null
+          ? const <WebDavSyncHotDocument>[]
+          : <WebDavSyncHotDocument>[hot],
+      tombstoneDocuments: tombstone == null
+          ? const <WebDavSyncTombstoneDocument>[]
+          : <WebDavSyncTombstoneDocument>[tombstone],
     );
   }
 
@@ -820,20 +896,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       return cached;
     }
     _removeCached(cacheKey);
-    final phaseStarted = instrumentation.startPhase();
-    late final Object? payload;
-    try {
-      payload = await _readAndOpenSection(
-        transport: transport,
-        root: root,
-        deviceId: deviceId,
-        reference: reference,
-        maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
-        instrumentation: instrumentation,
-      );
-    } finally {
-      instrumentation.finishPhase(_CyclePhase.sections, phaseStarted);
-    }
+    final payload = await _readAndOpenSection(
+      transport: transport,
+      root: root,
+      deviceId: deviceId,
+      reference: reference,
+      maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+      instrumentation: instrumentation,
+    );
     if (payload is! Map || payload['version'] != reference.schemaVersion) {
       throw const FormatException('WebDAV sync hot schema claim mismatch');
     }
@@ -869,20 +939,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       return cached;
     }
     _removeCached(cacheKey);
-    final phaseStarted = instrumentation.startPhase();
-    late final Object? payload;
-    try {
-      payload = await _readAndOpenSection(
-        transport: transport,
-        root: root,
-        deviceId: deviceId,
-        reference: reference,
-        maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
-        instrumentation: instrumentation,
-      );
-    } finally {
-      instrumentation.finishPhase(_CyclePhase.sections, phaseStarted);
-    }
+    final payload = await _readAndOpenSection(
+      transport: transport,
+      root: root,
+      deviceId: deviceId,
+      reference: reference,
+      maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+      instrumentation: instrumentation,
+    );
     final document = WebDavSyncTombstoneDocument.fromJson(payload);
     if (document.circleProfileId != circleProfileId ||
         document.semanticDigest != reference.semanticDigest) {
@@ -1402,6 +1466,13 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   static void _ignoreDiagnostic(String _, Object? __) {}
 }
 
+final class _ManifestRead {
+  const _ManifestRead({required this.manifest, required this.validator});
+
+  final WebDavSyncManifest manifest;
+  final WebDavSyncManifestValidator? validator;
+}
+
 final class _PeerProfileData {
   const _PeerProfileData({
     required this.hotDocuments,
@@ -1410,6 +1481,29 @@ final class _PeerProfileData {
 
   final List<WebDavSyncHotDocument> hotDocuments;
   final List<WebDavSyncTombstoneDocument> tombstoneDocuments;
+}
+
+Future<List<R>> _mapConcurrentOrdered<T, R>(
+  List<T> input, {
+  required int limit,
+  required Future<R> Function(T value) operation,
+}) async {
+  if (input.isEmpty) return <R>[];
+  final results = List<R?>.filled(input.length, null);
+  var nextIndex = 0;
+
+  Future<void> worker() async {
+    while (nextIndex < input.length) {
+      final index = nextIndex++;
+      results[index] = await operation(input[index]);
+    }
+  }
+
+  final workerCount = input.length < limit ? input.length : limit;
+  await Future.wait<void>(
+    List<Future<void>>.generate(workerCount, (_) => worker()),
+  );
+  return List<R>.generate(input.length, (index) => results[index] as R);
 }
 
 final class _CachedSection {

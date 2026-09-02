@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 // Flutter's test SDK supplies fake_async transitively for deterministic timers.
 // ignore: depend_on_referenced_packages
 import 'package:fake_async/fake_async.dart';
@@ -289,6 +292,283 @@ void main() {
     });
   });
 
+  test('changed validator starts exactly one remote-change cycle', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      var storedValidator = const WebDavSyncManifestValidator.etag('"v1"');
+      final runner = _Runner()
+        ..onRun = (trigger) {
+          if (trigger == WebDavSyncTrigger.remoteChange) {
+            storedValidator = const WebDavSyncManifestValidator.etag('"v2"');
+          }
+        };
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v2"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: <String, WebDavSyncManifestValidator>{
+            'device-b': storedValidator,
+          },
+        ),
+      );
+
+      async.elapse(const Duration(minutes: 3));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 1);
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.remoteChange,
+      ]);
+      scheduler.dispose();
+    });
+  });
+
+  test('unchanged validators start no polling cycles', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      async.elapse(const Duration(minutes: 5));
+      async.flushMicrotasks();
+
+      expect(transport.probedDeviceIds, hasLength(5));
+      expect(runner.runs, 0);
+      scheduler.dispose();
+    });
+  });
+
+  test('no-validator server disables poll but periodic sync continues', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: null,
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{},
+        ),
+      );
+
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(scheduler.pollState, WebDavSyncPollState.disabledNoValidators);
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(minutes: 14));
+      async.flushMicrotasks();
+      expect(runner.triggers, <WebDavSyncTrigger?>[WebDavSyncTrigger.periodic]);
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      scheduler.dispose();
+    });
+  });
+
+  test('429 poll failures back off to fifteen minutes and success resets', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..failuresRemaining = 5;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      void advanceTo(int seconds) {
+        async.elapse(Duration(seconds: seconds) - async.elapsed);
+        async.flushMicrotasks();
+      }
+
+      advanceTo(60);
+      expect(scheduler.pollState, WebDavSyncPollState.pausedBackoff);
+      advanceTo(120);
+      advanceTo(180);
+      advanceTo(240);
+      advanceTo(480);
+      advanceTo(960);
+      advanceTo(1860);
+      expect(transport.probeSeconds, <int>[60, 120, 240, 480, 960, 1860]);
+      expect(scheduler.pollState, WebDavSyncPollState.active);
+
+      advanceTo(1920);
+      expect(transport.probeSeconds.last, 1920);
+      expect(
+        runner.triggers.where(
+          (trigger) => trigger == WebDavSyncTrigger.remoteChange,
+        ),
+        isEmpty,
+      );
+      scheduler.dispose();
+    });
+  });
+
+  test('remote polling pauses in background and resumes cleanly', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: _Runner(),
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      scheduler.pauseRemotePolling();
+      async.elapse(const Duration(minutes: 5));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
+
+      scheduler.resumeRemotePolling();
+      async.elapse(const Duration(seconds: 59));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      scheduler.dispose();
+    });
+  });
+
+  test('poll skips a running cycle and never probes unknown device IDs', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final blocked = Completer<void>();
+      final runner = _Runner()..blocker = blocked;
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+          'unknown-device': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"new"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+
+      runner.blocker = null;
+      blocked.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      expect(transport.probedDeviceIds, isNot(contains('unknown-device')));
+      scheduler.dispose();
+    });
+  });
+
   test('every raw preference key consumed by the hot builder is admitted', () {
     final source = File(
       'lib/services/webdav_sync/webdav_sync_hot_merge.dart',
@@ -319,6 +599,7 @@ void main() {
 final class _Runner implements WebDavSyncCycleRunner {
   int runs = 0;
   Completer<void>? blocker;
+  void Function(WebDavSyncTrigger? trigger)? onRun;
   final List<WebDavSyncTrigger?> triggers = <WebDavSyncTrigger?>[];
 
   @override
@@ -329,6 +610,7 @@ final class _Runner implements WebDavSyncCycleRunner {
   }) async {
     runs++;
     triggers.add(trigger);
+    onRun?.call(trigger);
     await blocker?.future;
     return const WebDavSyncCycleReport(
       disposition: WebDavSyncCycleDisposition.completed,
@@ -349,4 +631,66 @@ final class _Gate implements WebDavSyncRuntimeGate {
 
   @override
   bool get tvOsLowMemory => lowMemory;
+}
+
+final class _PollTransport implements WebDavSyncTransport {
+  _PollTransport({required this.clock, required this.probes});
+
+  final DateTime Function() clock;
+  final Map<String, WebDavSyncManifestProbe> probes;
+  final List<String> probedDeviceIds = <String>[];
+  final List<int> probeSeconds = <int>[];
+  int failuresRemaining = 0;
+
+  @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) async {
+    probedDeviceIds.add(deviceId);
+    probeSeconds.add(clock().difference(DateTime.utc(2026, 9, 1)).inSeconds);
+    if (failuresRemaining > 0) {
+      failuresRemaining--;
+      throw const WebDavException(
+        kind: WebDavErrorKind.transient,
+        message: 'rate limited',
+        statusCode: HttpStatus.tooManyRequests,
+      );
+    }
+    return probes[deviceId]!;
+  }
+
+  @override
+  Future<void> ensureOwnLayout(String deviceId) => throw UnimplementedError();
+
+  @override
+  Future<WebDavSyncPeerListing> listDeviceIds() => throw UnimplementedError();
+
+  @override
+  Future<WebDavBytesResult> readManifest(String deviceId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<WebDavBytesResult> readRootMarker() => throw UnimplementedError();
+
+  @override
+  Future<WebDavBytesResult> readSection(
+    String deviceId,
+    WebDavSyncSectionReference reference, {
+    required int maxBytes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<WebDavResponseMetadata> writeManifest(
+    String deviceId,
+    Uint8List bytes,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<WebDavResponseMetadata> writeSection(
+    String deviceId,
+    String contentHash,
+    Uint8List bytes, {
+    required int maxBytes,
+  }) => throw UnimplementedError();
+
+  @override
+  void close() {}
 }

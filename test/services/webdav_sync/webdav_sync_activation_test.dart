@@ -919,6 +919,10 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
   }
 
   @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) =>
+      throw UnimplementedError();
+
+  @override
   Future<WebDavBytesResult> readRootMarker() async {
     events.add('read:root');
     final value = marker;

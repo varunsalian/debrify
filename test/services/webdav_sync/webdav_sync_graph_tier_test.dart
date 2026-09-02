@@ -1228,6 +1228,10 @@ final class _FakeForgetTransport implements WebDavSyncActivationTransport {
   }
 
   @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) =>
+      throw UnimplementedError();
+
+  @override
   Future<WebDavBytesResult> readSection(
     String deviceId,
     WebDavSyncSectionReference reference, {

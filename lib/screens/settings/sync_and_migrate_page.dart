@@ -13,6 +13,7 @@ import '../../services/webdav_sync/webdav_sync_feature.dart';
 import '../../services/webdav_sync/webdav_sync_graph_tier.dart';
 import '../../services/webdav_sync/webdav_sync_models.dart';
 import '../../services/webdav_sync/webdav_sync_runtime.dart';
+import '../../services/webdav_sync/webdav_sync_scheduler.dart';
 import '../../services/webdav_sync/webdav_sync_setup_authorization.dart';
 import '../../services/webdav_sync/webdav_sync_setup_service.dart';
 import '../../widgets/tv_text_field.dart';
@@ -717,6 +718,11 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
                       ' • ${_runtimeStatus!.peerCount} device record${_runtimeStatus!.peerCount == 1 ? '' : 's'}',
             style: const TextStyle(fontSize: 12.5),
           ),
+          const SizedBox(height: 8),
+          Text(
+            _pollStatusMessage(_runtimeStatus!),
+            style: const TextStyle(fontSize: 12.5),
+          ),
         ],
         if (active &&
             _runtimeStatus != null &&
@@ -749,6 +755,19 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
   static String _formatSyncTime(int milliseconds) => DateFormat.yMd()
       .add_jm()
       .format(DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal());
+
+  static String _pollStatusMessage(WebDavSyncRuntimeStatus status) =>
+      switch (status.pollState) {
+        WebDavSyncPollState.active when status.lastRemoteChangeMs != null =>
+          'Checking for changes every minute • Last remote change '
+              '${_formatSyncTime(status.lastRemoteChangeMs!)}',
+        WebDavSyncPollState.active => 'Checking for changes every minute',
+        WebDavSyncPollState.pausedBackoff =>
+          'Checking for changes paused; syncing continues every 15 min',
+        WebDavSyncPollState.disabledNoValidators =>
+          'Server does not report changes; syncing every 15 min',
+        WebDavSyncPollState.gated => 'Checking for changes is currently paused',
+      };
 
   static String? _clockStatusMessage(WebDavSyncRuntimeStatus status) {
     final paused = switch (status.clockPauseReason) {

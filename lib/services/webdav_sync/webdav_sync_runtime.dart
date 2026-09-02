@@ -86,6 +86,8 @@ final class WebDavSyncRuntimeStatus {
     required this.deviceClockWarning,
     required this.clockPauseReason,
     this.lastPushMs,
+    this.lastRemoteChangeMs,
+    this.pollState = WebDavSyncPollState.gated,
     this.localStateMissing = false,
     this.pruneBlockingProfiles = const <String>[],
     this.safetyCleanupBlocked = false,
@@ -98,6 +100,8 @@ final class WebDavSyncRuntimeStatus {
   final bool deviceClockWarning;
   final WebDavSyncClockPauseReason? clockPauseReason;
   final int? lastPushMs;
+  final int? lastRemoteChangeMs;
+  final WebDavSyncPollState pollState;
   final bool localStateMissing;
   final List<String> pruneBlockingProfiles;
   final bool safetyCleanupBlocked;
@@ -326,7 +330,8 @@ final class WebDavSyncRuntime
           localStateMissing: true,
         );
       }
-      final active = (await bindingStore.load()).activeBinding;
+      final stored = await bindingStore.load();
+      final active = stored.activeBinding;
       if (active == null) {
         MainPageBridge.setWebDavGraphChangePending(false);
         return const WebDavSyncRuntimeStatus(
@@ -357,6 +362,10 @@ final class WebDavSyncRuntime
       MainPageBridge.setWebDavGraphChangePending(
         state.pendingGraphDigest != null,
       );
+      final ownDeviceId = stored.namespaceFor(active)?.deviceId;
+      final peerCount = state.currentDeviceIds
+          .where((deviceId) => deviceId != ownDeviceId)
+          .length;
       final blockingIds = state.prunePendingProfileIds.toList()..sort();
       final blockingNames = <String>[];
       if (blockingIds.isNotEmpty) {
@@ -375,12 +384,16 @@ final class WebDavSyncRuntime
       }
       return WebDavSyncRuntimeStatus(
         lastSuccessfulSyncMs: state.lastSuccessfulSyncMs,
-        peerCount: state.currentDeviceIds.length,
+        peerCount: peerCount,
         pendingGraphDigest: state.pendingGraphDigest,
         adminPruneBlocked: state.prunePendingProfileIds.isNotEmpty,
         deviceClockWarning: state.deviceClockWarning,
         clockPauseReason: state.lastClockPauseReason,
         lastPushMs: state.lastPushMs,
+        lastRemoteChangeMs: state.lastRemoteChangeMs,
+        pollState: peerCount == 0
+            ? WebDavSyncPollState.gated
+            : (_scheduler?.pollState ?? WebDavSyncPollState.gated),
         pruneBlockingProfiles: List<String>.unmodifiable(blockingNames),
         safetyCleanupBlocked: state.safetyProtectedProfileIds.isNotEmpty,
       );
@@ -561,9 +574,11 @@ final class WebDavSyncRuntime
     final scheduler = _scheduler;
     if (scheduler == null) return;
     if (state == AppLifecycleState.resumed) {
+      scheduler.resumeRemotePolling();
       unawaited(_signalAutomatically(WebDavSyncTrigger.foreground));
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      scheduler.pauseRemotePolling();
       unawaited(_signalAutomatically(WebDavSyncTrigger.background));
     }
   }
@@ -647,7 +662,10 @@ final class WebDavSyncRuntime
       _graphTimer = null;
       return;
     }
-    _scheduler!.arm(_activeContext);
+    _scheduler!.arm(
+      _activeContext,
+      remotePollContextProvider: _cycleRunner!.remotePollContext,
+    );
     ProfilePreferences.webDavSyncLocalChangeSink = _onLocalProfileChange;
     _graphTimer?.cancel();
     _graphTimer = Timer.periodic(WebDavSyncGraphTier.cadence, (_) {
@@ -970,6 +988,36 @@ final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
   final WebDavSyncSectionCache _sectionCache = WebDavSyncSectionCache();
 
   void clearSectionCache() => _sectionCache.clear();
+
+  Future<WebDavSyncRemotePollContext?> remotePollContext() async {
+    final stored = await bindingStore.load();
+    final binding = stored.activeBinding;
+    if (binding == null || binding.lifecycle != WebDavSyncLifecycle.active) {
+      return null;
+    }
+    final namespace = stored.namespaceFor(binding);
+    if (namespace == null) return null;
+    final state = await stateRepository.load(namespace.id);
+    if (state.blocksAllPushes) return null;
+    final peerDeviceIds =
+        state.currentDeviceIds
+            .where((deviceId) => deviceId != namespace.deviceId)
+            .toList()
+          ..sort();
+    if (peerDeviceIds.isEmpty) return null;
+    final secrets = await bindingStore.readSecrets(binding);
+    return WebDavSyncRemotePollContext(
+      transport: ProtocolWebDavSyncTransport(
+        location: binding.location,
+        credentials: WebDavCredentials(
+          username: secrets.username,
+          password: secrets.password,
+        ),
+      ),
+      peerDeviceIds: List<String>.unmodifiable(peerDeviceIds),
+      validators: state.peerManifestValidators,
+    );
+  }
 
   @override
   Future<WebDavSyncCycleReport> runCycle(

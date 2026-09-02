@@ -287,6 +287,10 @@ final class _FileTransport
       throw UnimplementedError();
 
   @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) =>
+      throw UnimplementedError();
+
+  @override
   Future<WebDavBytesResult> readRootMarker() => throw UnimplementedError();
 
   @override

@@ -63,6 +63,86 @@ void main() {
     transport.close();
   });
 
+  test('manifest probe uses HEAD and prefers ETag', () async {
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((request) async {
+        expect(request.method, 'HEAD');
+        expect(
+          request.url.path,
+          '/dav/Family/debrify-sync/devices/device-b/manifest.enc',
+        );
+        return http.Response(
+          '',
+          200,
+          headers: const <String, String>{
+            'etag': '"revision-2"',
+            'last-modified': 'Tue, 01 Sep 2026 00:00:00 GMT',
+            'content-length': '42',
+          },
+        );
+      }),
+    );
+
+    final result = await transport.probeManifest('device-b');
+
+    expect(result.exists, isTrue);
+    expect(
+      result.validator,
+      const WebDavSyncManifestValidator.etag('"revision-2"'),
+    );
+    transport.close();
+  });
+
+  test(
+    'manifest probe falls back to modified time and content length',
+    () async {
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient(
+          (_) async => http.Response(
+            '',
+            200,
+            headers: const <String, String>{
+              'last-modified': 'Tue, 01 Sep 2026 00:00:00 GMT',
+              'content-length': '42',
+            },
+          ),
+        ),
+      );
+
+      final result = await transport.probeManifest('device-b');
+
+      expect(
+        result.validator,
+        const WebDavSyncManifestValidator.metadata(
+          lastModified: 'Tue, 01 Sep 2026 00:00:00 GMT',
+          contentLength: 42,
+        ),
+      );
+      transport.close();
+    },
+  );
+
+  test(
+    'missing manifest probe is a change hint rather than an error',
+    () async {
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((_) async => http.Response('', 404)),
+      );
+
+      final result = await transport.probeManifest('device-b');
+
+      expect(result.exists, isFalse);
+      expect(result.validator, isNull);
+      transport.close();
+    },
+  );
+
   test('root commit is create-only and accepts exactly 201', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),

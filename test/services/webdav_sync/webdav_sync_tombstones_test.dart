@@ -15,6 +15,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -377,6 +378,7 @@ void main() {
   test('graph and bootstrap cadence state round-trips with strict digests', () {
     final source = WebDavSyncEngineState(
       lastPushMs: 50,
+      lastRemoteChangeMs: 75,
       lastGraphCheckMs: 100,
       lastBootstrapCheckMs: 200,
       appliedGraphDigest: 'a' * 64,
@@ -384,6 +386,9 @@ void main() {
       publishedBootstrapDatabaseDigest: 'c' * 64,
       declinedGraphDigests: <String>{'d' * 64},
       currentDeviceIds: const <String>{'device-a', 'device-b'},
+      peerManifestValidators: const <String, WebDavSyncManifestValidator>{
+        'device-b': WebDavSyncManifestValidator.etag('"revision-1"'),
+      },
       deviceClockWarning: true,
       lastClockPauseReason: WebDavSyncClockPauseReason.offsetOutlier,
     );
@@ -392,10 +397,15 @@ void main() {
 
     expect(restored.lastGraphCheckMs, 100);
     expect(restored.lastPushMs, 50);
+    expect(restored.lastRemoteChangeMs, 75);
     expect(restored.lastBootstrapCheckMs, 200);
     expect(restored.publishedBootstrapDatabaseDigest, 'c' * 64);
     expect(restored.deviceClockWarning, isTrue);
     expect(restored.currentDeviceIds, const <String>{'device-a', 'device-b'});
+    expect(
+      restored.peerManifestValidators['device-b'],
+      const WebDavSyncManifestValidator.etag('"revision-1"'),
+    );
     expect(
       restored.lastClockPauseReason,
       WebDavSyncClockPauseReason.offsetOutlier,

@@ -10,6 +10,7 @@ import 'webdav_sync_adoption_models.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_models.dart';
+import 'webdav_sync_transport.dart';
 
 final class WebDavSyncPendingApply {
   const WebDavSyncPendingApply({
@@ -172,9 +173,11 @@ final class WebDavSyncEngineState {
     this.profiles = const <String, WebDavSyncProfileEngineState>{},
     this.pendingLocalProfiles = const <String, WebDavSyncProfileEngineState>{},
     this.peerManifestHighWater = const <String, int>{},
+    this.peerManifestValidators = const <String, WebDavSyncManifestValidator>{},
     this.currentDeviceIds = const <String>{},
     this.lastSuccessfulSyncMs,
     this.lastPushMs,
+    this.lastRemoteChangeMs,
     this.ownManifest,
     this.schemaRatchet = 1,
     this.appliedGraphDigest,
@@ -196,9 +199,11 @@ final class WebDavSyncEngineState {
   final Map<String, WebDavSyncProfileEngineState> profiles;
   final Map<String, WebDavSyncProfileEngineState> pendingLocalProfiles;
   final Map<String, int> peerManifestHighWater;
+  final Map<String, WebDavSyncManifestValidator> peerManifestValidators;
   final Set<String> currentDeviceIds;
   final int? lastSuccessfulSyncMs;
   final int? lastPushMs;
+  final int? lastRemoteChangeMs;
   final WebDavSyncManifest? ownManifest;
   final int schemaRatchet;
   final String? appliedGraphDigest;
@@ -228,9 +233,11 @@ final class WebDavSyncEngineState {
     Map<String, WebDavSyncProfileEngineState>? profiles,
     Map<String, WebDavSyncProfileEngineState>? pendingLocalProfiles,
     Map<String, int>? peerManifestHighWater,
+    Map<String, WebDavSyncManifestValidator>? peerManifestValidators,
     Set<String>? currentDeviceIds,
     int? lastSuccessfulSyncMs,
     int? lastPushMs,
+    int? lastRemoteChangeMs,
     WebDavSyncManifest? ownManifest,
     int? schemaRatchet,
     String? appliedGraphDigest,
@@ -256,9 +263,12 @@ final class WebDavSyncEngineState {
     profiles: profiles ?? this.profiles,
     pendingLocalProfiles: pendingLocalProfiles ?? this.pendingLocalProfiles,
     peerManifestHighWater: peerManifestHighWater ?? this.peerManifestHighWater,
+    peerManifestValidators:
+        peerManifestValidators ?? this.peerManifestValidators,
     currentDeviceIds: currentDeviceIds ?? this.currentDeviceIds,
     lastSuccessfulSyncMs: lastSuccessfulSyncMs ?? this.lastSuccessfulSyncMs,
     lastPushMs: lastPushMs ?? this.lastPushMs,
+    lastRemoteChangeMs: lastRemoteChangeMs ?? this.lastRemoteChangeMs,
     ownManifest: ownManifest ?? this.ownManifest,
     schemaRatchet: schemaRatchet ?? this.schemaRatchet,
     appliedGraphDigest: appliedGraphDigest ?? this.appliedGraphDigest,
@@ -297,11 +307,17 @@ final class WebDavSyncEngineState {
           entry.key: entry.value.toJson(),
       },
     'peerManifestHighWater': peerManifestHighWater,
+    if (peerManifestValidators.isNotEmpty)
+      'peerManifestValidators': <String, Object?>{
+        for (final entry in peerManifestValidators.entries)
+          entry.key: entry.value.toJson(),
+      },
     if (currentDeviceIds.isNotEmpty)
       'currentDeviceIds': currentDeviceIds.toList()..sort(),
     if (lastSuccessfulSyncMs != null)
       'lastSuccessfulSyncMs': lastSuccessfulSyncMs,
     if (lastPushMs != null) 'lastPushMs': lastPushMs,
+    if (lastRemoteChangeMs != null) 'lastRemoteChangeMs': lastRemoteChangeMs,
     if (ownManifest != null) 'ownManifest': ownManifest!.toJson(),
     'schemaRatchet': schemaRatchet,
     if (appliedGraphDigest != null) 'appliedGraphDigest': appliedGraphDigest,
@@ -330,10 +346,14 @@ final class WebDavSyncEngineState {
     final rawPendingLocalProfiles =
         json['pendingLocalProfiles'] ?? const <String, Object?>{};
     final rawPeerHighWater = json['peerManifestHighWater'] as Map;
+    final rawPeerValidators =
+        json['peerManifestValidators'] ?? const <String, Object?>{};
     if (rawProfiles.length > WebDavSyncLimits.maxMapEntries ||
         rawPendingLocalProfiles is! Map ||
         rawPendingLocalProfiles.length > WebDavSyncLimits.maxMapEntries ||
-        rawPeerHighWater.length > WebDavSyncLimits.maxMapEntries) {
+        rawPeerHighWater.length > WebDavSyncLimits.maxMapEntries ||
+        rawPeerValidators is! Map ||
+        rawPeerValidators.length > WebDavSyncLimits.maxMapEntries) {
       throw const FormatException('WebDAV sync engine state exceeds its limit');
     }
     Map<String, String>? optionalMap(String key) {
@@ -377,6 +397,15 @@ final class WebDavSyncEngineState {
       }
       peerHighWater[entry.key as String] = entry.value as int;
     }
+    final peerValidators = <String, WebDavSyncManifestValidator>{};
+    for (final entry in rawPeerValidators.entries) {
+      if (entry.key is! String ||
+          !_safeSyncIdentifier.hasMatch(entry.key as String)) {
+        throw const FormatException('Invalid WebDAV manifest validator state');
+      }
+      peerValidators[entry.key as String] =
+          WebDavSyncManifestValidator.fromJson(entry.value);
+    }
     final pendingLocalProfiles = <String, WebDavSyncProfileEngineState>{};
     for (final entry in rawPendingLocalProfiles.entries) {
       if (entry.key is! String ||
@@ -409,6 +438,15 @@ final class WebDavSyncEngineState {
             lastPush < 0 ||
             lastPush > WebDavSyncLimits.maxTimestampMs)) {
       throw const FormatException('Invalid WebDAV sync push timestamp');
+    }
+    final lastRemoteChange = json['lastRemoteChangeMs'];
+    if (lastRemoteChange != null &&
+        (lastRemoteChange is! int ||
+            lastRemoteChange < 0 ||
+            lastRemoteChange > WebDavSyncLimits.maxTimestampMs)) {
+      throw const FormatException(
+        'Invalid WebDAV sync remote-change timestamp',
+      );
     }
     final deviceClockWarning = json['deviceClockWarning'] ?? false;
     if (deviceClockWarning is! bool) {
@@ -520,9 +558,12 @@ final class WebDavSyncEngineState {
             pendingLocalProfiles,
           ),
       peerManifestHighWater: Map<String, int>.unmodifiable(peerHighWater),
+      peerManifestValidators:
+          Map<String, WebDavSyncManifestValidator>.unmodifiable(peerValidators),
       currentDeviceIds: currentDeviceIds,
       lastSuccessfulSyncMs: successful as int?,
       lastPushMs: lastPush as int?,
+      lastRemoteChangeMs: lastRemoteChange as int?,
       ownManifest: json['ownManifest'] == null
           ? null
           : WebDavSyncManifest.fromJson(json['ownManifest']),

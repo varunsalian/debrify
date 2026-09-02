@@ -151,6 +151,17 @@ void main() {
     },
   );
 
+  test('remote-change cycle records its successful pull time', () async {
+    final report = await engine.runCycle(
+      context(),
+      allowPreActivation: true,
+      trigger: WebDavSyncTrigger.remoteChange,
+    );
+
+    expect(report.disposition, WebDavSyncCycleDisposition.completed);
+    expect(states.state.lastRemoteChangeMs, now.millisecondsSinceEpoch);
+  });
+
   test('cycle emits one complete redacted instrumentation event', () async {
     final directory = await Directory.systemTemp.createTemp(
       'debrify-webdav-cycle-diagnostics-',
@@ -370,6 +381,7 @@ void main() {
     );
     await runFixture(context());
     expect(states.state.currentDeviceIds, <String>{'device-a', 'device-b'});
+    expect(states.state.peerManifestValidators['device-b'], isNotNull);
 
     transport.manifests.remove('device-b');
     await runFixture(context());
@@ -377,6 +389,97 @@ void main() {
     expect(states.state.currentDeviceIds, <String>{'device-a'});
     expect(states.state.peerManifestHighWater, contains('device-b'));
   });
+
+  test(
+    'four-peer concurrent reads match sequential merged output and writes',
+    () async {
+      final source = _FakeTransport(marker: marker, serverDate: now);
+      for (var index = 0; index < 4; index++) {
+        await source.addPeer(
+          codec: codec,
+          root: root,
+          deviceId: 'device-peer-$index',
+          manifestTime: now,
+          hot: _document(scalars: <String, Object>{'peer_$index': index}),
+          tombstones: const WebDavSyncTombstoneDocument(
+            circleProfileId: 'profile-circle',
+            items: <String, WebDavSyncTombstone>{},
+          ),
+        );
+      }
+
+      _FakeTransport cloneTransport() {
+        final clone = _FakeTransport(marker: marker, serverDate: now)
+          ..readDelay = const Duration(milliseconds: 1);
+        clone.manifests.addAll(<String, Uint8List>{
+          for (final entry in source.manifests.entries)
+            entry.key: Uint8List.fromList(entry.value),
+        });
+        clone.sections.addAll(<String, Uint8List>{
+          for (final entry in source.sections.entries)
+            entry.key: Uint8List.fromList(entry.value),
+        });
+        return clone;
+      }
+
+      WebDavSyncCodec deterministicCodec() {
+        var nonce = 0;
+        return WebDavSyncCodec(
+          randomBytes: (length) => Uint8List.fromList(
+            List<int>.generate(length, (_) => nonce++ & 0xff),
+          ),
+        );
+      }
+
+      Future<
+        ({
+          _MemoryStateRepository state,
+          _FakeLocalAdapter local,
+          _FakeTransport transport,
+          WebDavSyncCycleReport report,
+        })
+      >
+      runWithConcurrency(int concurrency) async {
+        final state = _MemoryStateRepository();
+        final local = _FakeLocalAdapter(<String, Object?>{'theme': 'dark'});
+        final transport = cloneTransport();
+        final comparisonEngine = WebDavSyncEngine(
+          stateRepository: state,
+          localAdapter: local,
+          transportFactory: (_) => transport,
+          codec: deterministicCodec(),
+          clock: () => now,
+          readConcurrency: concurrency,
+        );
+        final report = await comparisonEngine.runCycle(
+          context(),
+          allowPreActivation: true,
+        );
+        return (
+          state: state,
+          local: local,
+          transport: transport,
+          report: report,
+        );
+      }
+
+      final sequential = await runWithConcurrency(1);
+      final concurrent = await runWithConcurrency(4);
+
+      expect(concurrent.report.disposition, sequential.report.disposition);
+      expect(concurrent.local.preferences, sequential.local.preferences);
+      expect(
+        concurrent.state.state.ownManifest!.toJson(),
+        sequential.state.state.ownManifest!.toJson(),
+      );
+      expect(
+        concurrent.transport.manifests['device-a'],
+        orderedEquals(sequential.transport.manifests['device-a']!),
+      );
+      expect(concurrent.transport.maxConcurrentReads, inInclusiveRange(2, 4));
+      expect(sequential.transport.maxConcurrentReads, 1);
+    },
+  );
 
   test('section cache survives construction of a new cycle engine', () async {
     await transport.addPeer(
@@ -1206,6 +1309,9 @@ class _FakeTransport implements WebDavSyncTransport {
   final Set<String> listedWithoutManifest = <String>{};
   WebDavException? rootError;
   int factories = 0;
+  Duration readDelay = Duration.zero;
+  int activeReads = 0;
+  int maxConcurrentReads = 0;
 
   int get writeCount =>
       events.where((event) => event.startsWith('write:')).length;
@@ -1217,6 +1323,26 @@ class _FakeTransport implements WebDavSyncTransport {
     headers: const <String, String>{},
     serverDate: serverDate,
   );
+
+  WebDavResponseMetadata _manifestMetadata(String deviceId) =>
+      WebDavResponseMetadata(
+        statusCode: 200,
+        uri: Uri.parse('https://example.test/dav'),
+        headers: <String, String>{'etag': '"$deviceId"'},
+        serverDate: serverDate,
+        etag: '"$deviceId"',
+      );
+
+  Future<void> _trackRead() async {
+    if (readDelay == Duration.zero) return;
+    activeReads++;
+    if (activeReads > maxConcurrentReads) maxConcurrentReads = activeReads;
+    try {
+      await Future<void>.delayed(readDelay);
+    } finally {
+      activeReads--;
+    }
+  }
 
   @override
   Future<WebDavBytesResult> readRootMarker() async {
@@ -1251,7 +1377,25 @@ class _FakeTransport implements WebDavSyncTransport {
         message: 'peer manifest is missing',
       );
     }
-    return WebDavBytesResult(bytes: bytes, metadata: _metadata);
+    await _trackRead();
+    return WebDavBytesResult(
+      bytes: bytes,
+      metadata: _manifestMetadata(deviceId),
+    );
+  }
+
+  @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) async {
+    final bytes = manifests[deviceId];
+    return WebDavSyncManifestProbe(
+      exists: bytes != null,
+      validator: bytes == null
+          ? null
+          : WebDavSyncManifestValidator.metadata(
+              lastModified: HttpDate.format(serverDate!.toUtc()),
+              contentLength: bytes.length,
+            ),
+    );
   }
 
   @override
@@ -1267,6 +1411,7 @@ class _FakeTransport implements WebDavSyncTransport {
         message: 'peer section connection dropped',
       );
     }
+    await _trackRead();
     return WebDavBytesResult(
       bytes: sections['$deviceId:${reference.contentHash}']!,
       metadata: _metadata,

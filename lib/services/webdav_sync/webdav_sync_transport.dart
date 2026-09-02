@@ -20,12 +20,122 @@ final class WebDavSyncPeerListing {
   final WebDavResponseMetadata metadata;
 }
 
+/// Cheap server metadata used only to decide whether a full, authenticated
+/// manifest read is worthwhile. ETags take precedence over the metadata pair.
+final class WebDavSyncManifestValidator {
+  const WebDavSyncManifestValidator.etag(this.etag)
+    : lastModified = null,
+      contentLength = null;
+
+  const WebDavSyncManifestValidator.metadata({
+    required this.lastModified,
+    required this.contentLength,
+  }) : etag = null;
+
+  final String? etag;
+  final String? lastModified;
+  final int? contentLength;
+
+  static WebDavSyncManifestValidator? fromMetadata(
+    WebDavResponseMetadata metadata,
+  ) {
+    final etag = metadata.etag?.trim();
+    if (etag != null && etag.isNotEmpty) {
+      return WebDavSyncManifestValidator.etag(etag);
+    }
+    final lastModified = _header(
+      metadata.headers,
+      HttpHeaders.lastModifiedHeader,
+    )?.trim();
+    final rawLength = _header(
+      metadata.headers,
+      HttpHeaders.contentLengthHeader,
+    )?.trim();
+    final contentLength = rawLength == null ? null : int.tryParse(rawLength);
+    if (lastModified == null ||
+        lastModified.isEmpty ||
+        contentLength == null ||
+        contentLength < 0) {
+      return null;
+    }
+    return WebDavSyncManifestValidator.metadata(
+      lastModified: lastModified,
+      contentLength: contentLength,
+    );
+  }
+
+  Map<String, Object?> toJson() => etag != null
+      ? <String, Object?>{'etag': etag}
+      : <String, Object?>{
+          'lastModified': lastModified,
+          'contentLength': contentLength,
+        };
+
+  factory WebDavSyncManifestValidator.fromJson(Object? source) {
+    if (source is! Map) {
+      throw const FormatException('Invalid WebDAV manifest validator');
+    }
+    final etag = source['etag'];
+    final lastModified = source['lastModified'];
+    final contentLength = source['contentLength'];
+    if (etag is String &&
+        etag.trim().isNotEmpty &&
+        lastModified == null &&
+        contentLength == null) {
+      return WebDavSyncManifestValidator.etag(etag.trim());
+    }
+    if (etag == null &&
+        lastModified is String &&
+        lastModified.trim().isNotEmpty &&
+        contentLength is int &&
+        contentLength >= 0) {
+      return WebDavSyncManifestValidator.metadata(
+        lastModified: lastModified.trim(),
+        contentLength: contentLength,
+      );
+    }
+    throw const FormatException('Invalid WebDAV manifest validator');
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is WebDavSyncManifestValidator &&
+      other.etag == etag &&
+      other.lastModified == lastModified &&
+      other.contentLength == contentLength;
+
+  @override
+  int get hashCode => Object.hash(etag, lastModified, contentLength);
+
+  static String? _header(Map<String, String> headers, String name) {
+    final direct = headers[name];
+    if (direct != null) return direct;
+    final lowerName = name.toLowerCase();
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == lowerName) return entry.value;
+    }
+    return null;
+  }
+}
+
+final class WebDavSyncManifestProbe {
+  const WebDavSyncManifestProbe({
+    required this.exists,
+    required this.validator,
+  });
+
+  final bool exists;
+  final WebDavSyncManifestValidator? validator;
+}
+
 abstract interface class WebDavSyncTransport {
   Future<WebDavBytesResult> readRootMarker();
 
   Future<WebDavSyncPeerListing> listDeviceIds();
 
   Future<WebDavBytesResult> readManifest(String deviceId);
+
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId);
 
   Future<WebDavBytesResult> readSection(
     String deviceId,
@@ -191,6 +301,20 @@ final class ProtocolWebDavSyncTransport
     return _client.getBytes(
       path: _join(_devices, '$deviceId/manifest.enc'),
       maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+  }
+
+  @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) async {
+    _validateDeviceId(deviceId);
+    final result = await _client.exists(
+      path: _join(_devices, '$deviceId/manifest.enc'),
+    );
+    return WebDavSyncManifestProbe(
+      exists: result.exists,
+      validator: result.exists
+          ? WebDavSyncManifestValidator.fromMetadata(result.metadata)
+          : null,
     );
   }
 

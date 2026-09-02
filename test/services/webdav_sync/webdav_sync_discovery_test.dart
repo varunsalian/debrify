@@ -403,6 +403,10 @@ final class _FakeDiscoveryTransport implements WebDavSyncTransport {
       WebDavBytesResult(bytes: manifests[deviceId]!, metadata: _metadata);
 
   @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) =>
+      throw UnimplementedError();
+
+  @override
   Future<WebDavBytesResult> readSection(
     String deviceId,
     WebDavSyncSectionReference reference, {
