@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,7 @@ void main() {
 
   tearDown(() async {
     WebDavSyncTombstoneRecorder.debugReset();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
   });
@@ -75,6 +77,36 @@ void main() {
       registrySink: (records) => tombstoneBatches.add(records),
     );
   }
+
+  test(
+    'local registry writes schedule sync but remote apply does not loop',
+    () async {
+      final keys = <String>[];
+      ProfilePreferences.webDavSyncLocalChangeSink = (_, key) => keys.add(key);
+
+      await admin();
+      expect(keys, <String>[ProfilePreferences.webDavSyncRegistryLogicalKey]);
+      keys.clear();
+
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          profiles: <SyncedRegistryProfileRecord>[
+            SyncedRegistryProfileRecord(
+              id: 'remote-member',
+              name: 'Remote member',
+              role: UserProfileRole.member,
+              policy: ProfilePolicy.defaultsFor(UserProfileRole.member),
+              enabled: true,
+              lockOnResume: false,
+              setupComplete: true,
+              updatedAtMs: 1,
+            ),
+          ],
+        ),
+      );
+      expect(keys, isEmpty);
+    },
+  );
 
   test('fresh v7 schema and v6 upgrade have exact defaults/backfill', () async {
     var db = await raw();
@@ -606,6 +638,39 @@ void main() {
       await db.close();
     },
   );
+
+  test('synced profile creation never seeds default resource grants', () async {
+    final owner = await admin();
+    await registry.insertResource(
+      resource: resource('preexisting-shareable', owner.id),
+      sealedSecretPayload: 'secret',
+      secretPayloadVersion: 1,
+      ownerPermissions: allPermissions(),
+    );
+
+    await registry.applySyncedRegistryDelta(
+      SyncedRegistryDelta(
+        profiles: <SyncedRegistryProfileRecord>[
+          SyncedRegistryProfileRecord(
+            id: 'remote-member',
+            name: 'Remote member',
+            role: UserProfileRole.member,
+            policy: ProfilePolicy.defaultsFor(UserProfileRole.member),
+            enabled: true,
+            lockOnResume: false,
+            setupComplete: true,
+            updatedAtMs: 500,
+          ),
+        ],
+      ),
+    );
+
+    expect(await registry.getProfile('remote-member'), isNotNull);
+    expect(
+      await registry.getGrant('remote-member', 'preexisting-shareable'),
+      isNull,
+    );
+  });
 
   test(
     'sync delta refuses active deletion and preserves admin invariant',

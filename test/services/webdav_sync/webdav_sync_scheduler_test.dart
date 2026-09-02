@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:debrify/services/webdav_protocol_client.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
@@ -53,6 +54,21 @@ void main() {
 
     expect(report.disposition, WebDavSyncCycleDisposition.inactive);
     expect(runner.runs, 0);
+  });
+
+  test('scheduler admits only the dedicated registry synthetic key', () {
+    expect(
+      WebDavSyncScheduler.admitsLocalChangeKey(
+        ProfilePreferences.webDavSyncRegistryLogicalKey,
+      ),
+      isTrue,
+    );
+    expect(
+      WebDavSyncScheduler.admitsLocalChangeKey(
+        'remote_webdav_sync_registry_other',
+      ),
+      isFalse,
+    );
   });
 
   test(

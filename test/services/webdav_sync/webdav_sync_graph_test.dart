@@ -54,6 +54,38 @@ void main() {
         throwsStateError,
       );
     });
+
+    test('mints foreign local IDs and retains deleted circle mappings', () {
+      var localIndex = 0;
+      final plan = WebDavSyncGraphIdentityPlanner.ensureIncludingCircleIds(
+        localProfileIds: const <String>['local-profile'],
+        localResourceIds: const <String>[],
+        liveCircleProfileIds: const <String>['p-existing', 'p-foreign'],
+        liveCircleResourceIds: const <String>['r-foreign'],
+        currentCircleToLocalProfiles: const <String, String>{
+          'p-existing': 'local-profile',
+          'p-deleted': 'deleted-local-profile',
+        },
+        currentCircleToLocalResources: const <String, String>{
+          'r-deleted': 'deleted-local-resource',
+        },
+        mintLocal: (kind) => 'minted-$kind-${localIndex++}',
+      );
+
+      expect(
+        plan.maps.circleToLocalProfiles['p-deleted'],
+        'deleted-local-profile',
+      );
+      expect(
+        plan.maps.circleToLocalResources['r-deleted'],
+        'deleted-local-resource',
+      );
+      expect(plan.maps.circleToLocalProfiles['p-foreign'], 'minted-profile-0');
+      expect(
+        plan.maps.circleToLocalResources['r-foreign'],
+        'minted-resource-1',
+      );
+    });
   });
 
   test('graph semantic digest excludes package creation time', () async {

@@ -20,6 +20,7 @@ class ProfileLockController {
   Timer? _timer;
   UserProfile? _profile;
   bool _playbackActive = false;
+  final Set<String> _lockOnNextResume = <String>{};
 
   bool get hasActivatedProfile => _profile != null;
   bool get isUnlocked => _profile != null && lockedProfileId.value == null;
@@ -47,7 +48,18 @@ class ProfileLockController {
 
   void onResume() {
     final profile = _profile;
-    if (profile?.lockOnResume == true && profile!.hasPin) lock();
+    if (profile == null) return;
+    final oneShot = _lockOnNextResume.remove(profile.id);
+    if (!profile.hasPin) return;
+    if (oneShot || profile.lockOnResume) lock();
+  }
+
+  /// A synchronized PIN replacement must not interrupt the current unlocked
+  /// session. The new verifier takes effect at the next foreground boundary.
+  void armLockOnNextResume(String profileId) {
+    if (profileId.isNotEmpty && _lockOnNextResume.add(profileId)) {
+      _publishPrivacy();
+    }
   }
 
   void lock() {
@@ -83,6 +95,7 @@ class ProfileLockController {
   void dispose() {
     _timer?.cancel();
     _profile = null;
+    _lockOnNextResume.clear();
     lockedProfileId.value = null;
     authorityRevision.value++;
     _publishPrivacy();
@@ -104,7 +117,9 @@ class ProfileLockController {
             // closed until the committed gate publishes an unlocked profile.
             'sensitive': !isUnlocked,
             'protectOnBackground':
-                profile?.lockOnResume == true && profile?.hasPin == true,
+                profile?.hasPin == true &&
+                (profile?.lockOnResume == true ||
+                    _lockOnNextResume.contains(profile?.id)),
           })
           .catchError((_) {}),
     );

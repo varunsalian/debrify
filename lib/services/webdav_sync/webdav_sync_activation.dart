@@ -9,6 +9,7 @@ import '../profiles/profile_preferences.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_clock.dart';
+import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
@@ -47,6 +48,8 @@ final class WebDavSyncSeedMaterial {
     this.preferenceMutationToken,
     this.originalProfileTombstones =
         const <String, Map<String, WebDavSyncTombstone>>{},
+    this.circleProfiles,
+    this.circleResources,
   });
 
   final WebDavSyncIdentityMaps identityMaps;
@@ -58,6 +61,8 @@ final class WebDavSyncSeedMaterial {
   final Future<void> Function() beforeRootCommit;
   final ProfilePreferenceMutationToken? preferenceMutationToken;
   final Map<String, Map<String, WebDavSyncTombstone>> originalProfileTombstones;
+  final WebDavSyncProfilesDocument? circleProfiles;
+  final WebDavSyncResourcesDocument? circleResources;
 
   Future<T> commitIfPreferencesUnchanged<T>(Future<T> Function() operation) {
     final token = preferenceMutationToken;
@@ -118,6 +123,8 @@ abstract interface class WebDavSyncSeedSource {
     required int localNowMs,
     required int serverNowMs,
     required int clockOffsetMs,
+    String? circleId,
+    WebDavSyncCircleKey? circleKey,
   });
 }
 
@@ -145,7 +152,12 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     required int localNowMs,
     required int serverNowMs,
     required int clockOffsetMs,
+    String? circleId,
+    WebDavSyncCircleKey? circleKey,
   }) async {
+    if ((circleId == null) != (circleKey == null)) {
+      throw ArgumentError('WebDAV sync circle seed context is incomplete');
+    }
     final mutationToken = await ProfilePreferences.captureMutationToken();
     return _prepare(
       namespaceId: namespaceId,
@@ -154,6 +166,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
       localNowMs: localNowMs,
       serverNowMs: serverNowMs,
       clockOffsetMs: clockOffsetMs,
+      circleId: circleId,
+      circleKey: circleKey,
       mutationToken: mutationToken,
     );
   }
@@ -165,6 +179,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     required int localNowMs,
     required int serverNowMs,
     required int clockOffsetMs,
+    required String? circleId,
+    required WebDavSyncCircleKey? circleKey,
     required ProfilePreferenceMutationToken mutationToken,
   }) async {
     var state = await _stateRepository.load(namespaceId);
@@ -218,6 +234,43 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     final seededStates = <String, WebDavSyncProfileEngineState>{};
     final originalTombstones = <String, Map<String, WebDavSyncTombstone>>{};
     final session = await _localAdapter.beginCycle();
+    WebDavSyncBuiltCircleState? circle;
+    if (_localAdapter is WebDavSyncCircleLocalAdapter) {
+      circle = await (_localAdapter as WebDavSyncCircleLocalAdapter)
+          .buildCircleState(
+            session,
+            WebDavSyncCircleBuildRequest(
+              identityMaps: plan.maps,
+              deviceId: deviceId,
+              circleId: circleId,
+              circleKey: circleKey,
+              localNowMs: localNowMs,
+              clockOffsetMs: clockOffsetMs,
+              serverNowMs: serverNowMs,
+              previousProfiles: state.circleProfilesBaseline,
+              previousResources: state.circleResourcesBaseline,
+            ),
+          );
+      sections
+        ..add(
+          WebDavSyncSeedSection(
+            name: 'profiles',
+            schemaVersion: WebDavSyncProfilesDocument.schemaVersion,
+            payload: circle.profiles.toJson(),
+            semanticDigest: circle.profiles.semanticDigest,
+            maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+          ),
+        )
+        ..add(
+          WebDavSyncSeedSection(
+            name: 'resources',
+            schemaVersion: WebDavSyncResourcesDocument.schemaVersion,
+            payload: circle.resources.toJson(),
+            semanticDigest: circle.resources.semanticDigest,
+            maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
+          ),
+        );
+    }
     for (final mapping in plan.maps.circleToLocalProfiles.entries) {
       final prior =
           state.profiles[mapping.key] ?? const WebDavSyncProfileEngineState();
@@ -279,7 +332,10 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     }
     if (sections.length < 4 ||
         !sections.any((section) => section.name == 'bootstrap') ||
-        !sections.any((section) => section.name == 'graph')) {
+        !sections.any((section) => section.name == 'graph') ||
+        circle != null &&
+            (!sections.any((section) => section.name == 'profiles') ||
+                !sections.any((section) => section.name == 'resources'))) {
       throw StateError('WebDAV sync refuses an incomplete seed manifest');
     }
     return WebDavSyncSeedMaterial(
@@ -298,6 +354,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
           Map<String, Map<String, WebDavSyncTombstone>>.unmodifiable(
             originalTombstones,
           ),
+      circleProfiles: circle?.profiles,
+      circleResources: circle?.resources,
       beforeRootCommit: () async {
         await authorization.validate(registry);
         final currentProfiles = await registry.listProfiles(
@@ -573,6 +631,8 @@ final class WebDavSyncNewRootInitializer {
         localNowMs: localNowMs,
         serverNowMs: clockDecision.serverNowMs!,
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+        circleId: circleId,
+        circleKey: root.key,
       );
       // A prior attempt may have committed the candidate marker immediately
       // before the process stopped, or another initializer may have won while

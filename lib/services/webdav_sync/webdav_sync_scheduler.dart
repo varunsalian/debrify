@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../profiles/profile_preference_portability.dart';
+import '../profiles/profile_preferences.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_transport.dart';
@@ -157,6 +158,7 @@ final class WebDavSyncScheduler {
       logicalKey == WebDavSyncHotMerge.explicitlyWatchedSeriesPreference ||
       logicalKey == WebDavSyncHotMerge.playlistPreference ||
       logicalKey == WebDavSyncHotMerge.playlistFavoritesPreference ||
+      logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
       logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
 
   void _scheduleLocalChange() {

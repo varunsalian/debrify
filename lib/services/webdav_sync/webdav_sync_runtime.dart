@@ -575,11 +575,52 @@ final class WebDavSyncRuntime
     if (scheduler == null) return;
     if (state == AppLifecycleState.resumed) {
       scheduler.resumeRemotePolling();
-      unawaited(_signalAutomatically(WebDavSyncTrigger.foreground));
+      unawaited(_handleForeground());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       scheduler.pauseRemotePolling();
       unawaited(_signalAutomatically(WebDavSyncTrigger.background));
+    }
+  }
+
+  Future<void> _handleForeground() async {
+    String? namespaceBefore;
+    String? pendingBefore;
+    try {
+      final binding = (await bindingStore.load()).activeBinding;
+      namespaceBefore = binding?.namespaceId;
+      if (namespaceBefore != null) {
+        pendingBefore = (await stateStore.load(
+          namespaceBefore,
+        )).pendingActiveProfileDeletion;
+      }
+    } catch (_) {
+      // A malformed/unavailable binding must not interrupt foregrounding.
+    }
+    await _signalAutomatically(WebDavSyncTrigger.foreground);
+    // A tombstone first observed by the cycle above is deliberately handled
+    // on the next foreground. That boundary leaves a durable recovery point
+    // between merge/apply and the user-visible replacement switch.
+    if (_playbackActive || namespaceBefore == null || pendingBefore == null) {
+      return;
+    }
+    final callback = MainPageBridge.retireProfileFromSync;
+    if (callback == null) return;
+    try {
+      final stored = await bindingStore.load();
+      final binding = stored.activeBinding;
+      if (binding == null || binding.namespaceId != namespaceBefore) return;
+      final state = await stateStore.load(binding.namespaceId);
+      final profileId = state.pendingActiveProfileDeletion;
+      if (profileId != pendingBefore || !await callback(profileId!)) return;
+      await stateStore.update(
+        binding.namespaceId,
+        (current) => current.pendingActiveProfileDeletion == profileId
+            ? current.copyWith(clearPendingActiveProfileDeletion: true)
+            : current,
+      );
+    } catch (_) {
+      // The durable marker remains for a later idle foreground.
     }
   }
 

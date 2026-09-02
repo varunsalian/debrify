@@ -65,6 +65,76 @@ abstract final class WebDavSyncGraphIdentityPlanner {
     );
   }
 
+  /// Extends an authenticated maps for live circle records first observed
+  /// from another device. Existing mappings never move; local IDs are minted
+  /// only for foreign circle IDs that need a registry row.
+  static WebDavSyncGraphIdentityPlan ensureIncludingCircleIds({
+    required Iterable<String> localProfileIds,
+    required Iterable<String> localResourceIds,
+    required Iterable<String> liveCircleProfileIds,
+    required Iterable<String> liveCircleResourceIds,
+    Map<String, String>? currentCircleToLocalProfiles,
+    Map<String, String>? currentCircleToLocalResources,
+    String Function(String kind)? mintCircle,
+    String Function(String kind)? mintLocal,
+  }) {
+    final retainedLocalProfiles = <String>{
+      ...localProfileIds,
+      ...?currentCircleToLocalProfiles?.values,
+    };
+    final retainedLocalResources = <String>{
+      ...localResourceIds,
+      ...?currentCircleToLocalResources?.values,
+    };
+    final base = ensure(
+      // Circle-record tombstones need their old local-to-circle identity even
+      // after the SQL parent disappeared. Routine graph planning may drop a
+      // deleted local row; circle sync retains that mapping indefinitely.
+      localProfileIds: retainedLocalProfiles,
+      localResourceIds: retainedLocalResources,
+      currentCircleToLocalProfiles: currentCircleToLocalProfiles,
+      currentCircleToLocalResources: currentCircleToLocalResources,
+      mint: mintCircle,
+    ).maps;
+    final profiles = Map<String, String>.from(base.circleToLocalProfiles);
+    final resources = Map<String, String>.from(base.circleToLocalResources);
+    final localFactory = mintLocal ?? _mintLocalId;
+    final claimedLocalIds = <String>{...profiles.values, ...resources.values};
+
+    for (final circleId in liveCircleProfileIds.toSet()) {
+      if (resources.containsKey(circleId)) {
+        throw StateError('WebDAV sync circle identity kinds conflict');
+      }
+      if (profiles.containsKey(circleId)) continue;
+      String localId;
+      do {
+        localId = localFactory('profile');
+      } while (!claimedLocalIds.add(localId) ||
+          profiles.containsKey(localId) ||
+          resources.containsKey(localId));
+      profiles[circleId] = localId;
+    }
+    for (final circleId in liveCircleResourceIds.toSet()) {
+      if (profiles.containsKey(circleId)) {
+        throw StateError('WebDAV sync circle identity kinds conflict');
+      }
+      if (resources.containsKey(circleId)) continue;
+      String localId;
+      do {
+        localId = localFactory('resource');
+      } while (!claimedLocalIds.add(localId) ||
+          profiles.containsKey(localId) ||
+          resources.containsKey(localId));
+      resources[circleId] = localId;
+    }
+    return WebDavSyncGraphIdentityPlan(
+      maps: WebDavSyncIdentityMaps(
+        circleToLocalProfiles: profiles,
+        circleToLocalResources: resources,
+      ),
+    );
+  }
+
   static Map<String, String> _retainAndMint({
     required String kind,
     required Set<String> localIds,
@@ -107,6 +177,13 @@ abstract final class WebDavSyncGraphIdentityPlanner {
     return '${kind == 'profile' ? 'p' : 'r'}-${hex.substring(0, 8)}-'
         '${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
         '${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
+  static String _mintLocalId(String kind) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(12, (_) => random.nextInt(256));
+    return '${kind == 'profile' ? 'profile' : 'resource'}-'
+        '${base64UrlEncode(bytes).replaceAll('=', '')}';
   }
 }
 

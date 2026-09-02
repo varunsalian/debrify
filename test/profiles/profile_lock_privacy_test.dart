@@ -77,6 +77,26 @@ void main() {
     );
     expect(ProfileLockController.instance.lockedProfileId.value, original.id);
   });
+
+  test('PIN sync preserves this session and locks exactly once on resume', () {
+    final profile = _profile(lockOnResume: false, hasPin: true);
+    ProfileLockController.instance.activate(profile, unlocked: true);
+
+    ProfileLockController.instance.armLockOnNextResume(profile.id);
+    expect(ProfileLockController.instance.isUnlocked, isTrue);
+    expect(
+      ProfileLockController.instance.refreshProfileIfCurrent(profile),
+      isTrue,
+    );
+    expect(ProfileLockController.instance.isUnlocked, isTrue);
+
+    ProfileLockController.instance.onResume();
+    expect(ProfileLockController.instance.lockedProfileId.value, profile.id);
+
+    ProfileLockController.instance.unlock(profile);
+    ProfileLockController.instance.onResume();
+    expect(ProfileLockController.instance.isUnlocked, isTrue);
+  });
 }
 
 UserProfile _profile({required bool lockOnResume, required bool hasPin}) {

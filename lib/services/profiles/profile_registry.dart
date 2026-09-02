@@ -14,6 +14,7 @@ import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
 import '../webdav_sync/webdav_sync_tombstones.dart';
 import 'profile_lock_controller.dart';
+import 'profile_preferences.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'tvos_profile_recovery_store.dart';
@@ -880,7 +881,9 @@ class ProfileRegistry {
     caseSensitive: false,
   );
 
-  Future<void> checkpointTvOsRecovery() async {
+  Future<void> checkpointTvOsRecovery({
+    bool webDavSyncRegistryChange = false,
+  }) async {
     if (TvOsProfileRecoveryStore.supported) {
       final prior = _recoveryCheckpoint;
       final checkpoint = () async {
@@ -895,6 +898,16 @@ class ProfileRegistry {
       await checkpoint;
     }
     await authorityChangedCallback?.call();
+    if (webDavSyncRegistryChange) {
+      final localProfileId =
+          ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+          ? ProfileRuntime.capture().profileId
+          : '';
+      ProfilePreferences.notifyWebDavSyncLocalChange(
+        localProfileId,
+        ProfilePreferences.webDavSyncRegistryLogicalKey,
+      );
+    }
   }
 
   Future<UserProfile> createProfile({
@@ -959,7 +972,7 @@ class ProfileRegistry {
       });
       await _seedDefaultGrantsForProfile(txn, profileId, now);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -1278,7 +1291,7 @@ class ProfileRegistry {
         whereArgs: <Object>[id],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<UserProfile> updateProfile({
@@ -1336,7 +1349,7 @@ class ProfileRegistry {
       );
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(id))!;
   }
 
@@ -1378,7 +1391,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Staging profile is unavailable');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(id))!;
   }
 
@@ -1414,7 +1427,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Active profile is unavailable');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -1460,7 +1473,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Active profile is unavailable');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -1498,7 +1511,7 @@ class ProfileRegistry {
       if (changed != 1) throw StateError('Profile does not exist');
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<void> enableProfile(
@@ -1524,7 +1537,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Disabled profile does not exist');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<ProfileDeletionDependencies> deletionDependencies(String id) async {
@@ -1631,7 +1644,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return revoked;
   }
 
@@ -1776,7 +1789,7 @@ class ProfileRegistry {
         whereArgs: <Object>[id],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Connection kinds that are PERSONAL and therefore excluded from the
@@ -1953,7 +1966,7 @@ class ProfileRegistry {
         whereArgs: <Object>[resource.ownerProfileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Columns [_decodeResource] needs — everything EXCEPT the sealed payload.
@@ -2102,7 +2115,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Deletes an owned connection as one disposition transaction. Active jobs
@@ -2214,7 +2227,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Atomically changes resource ownership together with the secret envelope
@@ -2352,7 +2365,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<void> unbindResource(
@@ -2374,7 +2387,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId, slot],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<List<ConnectionResource>> listGrantedResources(
@@ -2458,6 +2471,32 @@ class ProfileRegistry {
     'profile_resource_settings',
     orderBy: 'profile_id, resource_id',
   );
+
+  /// Transactionally consistent profile fields used by the circle-level
+  /// profiles document. Authentication churn may change [updatedAtMs], so the
+  /// document builder must still preserve its prior stamp when these
+  /// serialized fields are byte-identical.
+  Future<List<RegistrySyncProfileProjection>> readProfileSyncProjection() =>
+      _db.transaction((txn) async {
+        final rows = await txn.query('user_profiles', orderBy: 'id');
+        return rows
+            .map(
+              (row) => RegistrySyncProfileProjection(
+                profile: _decodeProfile(row),
+                pin: ProfilePinRecord(
+                  hash: row['pin_hash'] as Uint8List?,
+                  salt: row['pin_salt'] as Uint8List?,
+                  paramsJson: row['pin_params_json'] as String?,
+                  resetRequired: row['pin_reset_required'] == 1,
+                  recoveryHash: row['recovery_hash'] as Uint8List?,
+                  recoverySalt: row['recovery_salt'] as Uint8List?,
+                  recoveryParamsJson: row['recovery_params_json'] as String?,
+                ),
+                updatedAtMs: row['updated_at_ms']! as int,
+              ),
+            )
+            .toList(growable: false);
+      });
 
   /// One transactionally consistent registry projection for the circle-level
   /// sync document builder. Operational models deliberately remain free of
@@ -2554,6 +2593,9 @@ class ProfileRegistry {
       if ((payload == null) != (item.secretPayloadVersion == null)) {
         throw ArgumentError('Synced secret payload is incomplete');
       }
+      if (item.clearSecret && payload != null) {
+        throw ArgumentError('Synced secret cannot be set and cleared');
+      }
       if (payload != null) _guardTvOsEnvelopeBound(payload);
     }
     await authorityWillChangeCallback?.call();
@@ -2637,15 +2679,15 @@ class ProfileRegistry {
           'policy_schema_version': item.policy.schemaVersion,
           'lifecycle_state': item.lifecycle.name,
           'profile_setup_complete': item.setupComplete ? 1 : 0,
-          'pin_reset_required': pin.resetRequired ? 1 : 0,
-          'pin_hash': pin.hash,
-          'pin_salt': pin.salt,
-          'pin_params_json': pin.paramsJson,
-          'failed_pin_attempts': 0,
-          'locked_until_ms': null,
-          'recovery_hash': pin.recoveryHash,
-          'recovery_salt': pin.recoverySalt,
-          'recovery_params_json': pin.recoveryParamsJson,
+          if (item.applyPin) 'pin_reset_required': pin.resetRequired ? 1 : 0,
+          if (item.applyPin) 'pin_hash': pin.hash,
+          if (item.applyPin) 'pin_salt': pin.salt,
+          if (item.applyPin) 'pin_params_json': pin.paramsJson,
+          if (item.applyPin) 'failed_pin_attempts': 0,
+          if (item.applyPin) 'locked_until_ms': null,
+          if (item.applyPin) 'recovery_hash': pin.recoveryHash,
+          if (item.applyPin) 'recovery_salt': pin.recoverySalt,
+          if (item.applyPin) 'recovery_params_json': pin.recoveryParamsJson,
           'lock_on_resume': item.lockOnResume ? 1 : 0,
           'inactivity_timeout_minutes': item.inactivityTimeoutMinutes,
           'updated_at_ms': item.updatedAtMs,
@@ -2690,14 +2732,27 @@ class ProfileRegistry {
           columns: const <String>[
             'authorization_revision',
             'sealed_secret_payload',
+            'type',
+            'owner_profile_id',
+            'public_config_json',
           ],
           where: 'id = ?',
           whereArgs: <Object>[item.resource.id],
           limit: 1,
         );
+        final existingPublicSchema = existing.isEmpty
+            ? null
+            : (jsonDecode(existing.single['public_config_json']! as String)
+                      as Map)['schemaVersion']
+                  as int?;
         final hasLocalSecret =
+            !item.clearSecret &&
             existing.isNotEmpty &&
-            existing.single['sealed_secret_payload'] != null;
+            existing.single['sealed_secret_payload'] != null &&
+            existing.single['type'] == item.resource.type.name &&
+            existing.single['owner_profile_id'] ==
+                item.resource.ownerProfileId &&
+            existingPublicSchema == schema;
         final payload = item.sealedSecretPayload;
         final nextRevision = existing.isEmpty
             ? 1
@@ -3184,7 +3239,7 @@ class ProfileRegistry {
       }
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<ProfileResourceGrant?> getGrant(
@@ -3287,7 +3342,7 @@ class ProfileRegistry {
         },
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<void> upsertGrant({
@@ -3425,7 +3480,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Repairs grants written by profile builds that shared singleton
@@ -3521,7 +3576,7 @@ class ProfileRegistry {
       return count;
     });
     if (repaired != 0) {
-      await checkpointTvOsRecovery();
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     } else {
       // Balance the pre-mutation fail-closed callback when a concurrent
       // change made every preflight repair unnecessary or ambiguous.
@@ -3586,7 +3641,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Atomically lets the active borrower reduce its own authority. This is
@@ -3663,7 +3718,7 @@ class ProfileRegistry {
         <Object>[DateTime.now().millisecondsSinceEpoch, profileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<void> bindResource({
@@ -3708,7 +3763,7 @@ class ProfileRegistry {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<String?> getBoundResourceId(String profileId, String slot) async {
@@ -4063,7 +4118,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Profile does not exist');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Replaces the unlocked active profile's PIN only when the credential the
@@ -4142,7 +4197,7 @@ class ProfileRegistry {
         changed = count == 1;
       });
       if (!changed) throw StateError('PIN authorization changed');
-      await checkpointTvOsRecovery();
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     } catch (error, stackTrace) {
       // `authorityWillChangeCallback` denies native readers before the
       // transaction. Any rejection or publication failure must republish the
@@ -4253,7 +4308,9 @@ class ProfileRegistry {
           ) ==
           1;
     });
-    if (changed) await checkpointTvOsRecovery();
+    if (changed) {
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    }
     return changed;
   }
 
@@ -4338,7 +4395,9 @@ class ProfileRegistry {
           ) ==
           1;
     });
-    if (changed) await checkpointTvOsRecovery();
+    if (changed) {
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: replacing);
+    }
     return changed;
   }
 
@@ -4386,7 +4445,9 @@ class ProfileRegistry {
           ) ==
           1;
     });
-    if (changed) await checkpointTvOsRecovery();
+    if (changed) {
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    }
     return changed;
   }
 
@@ -4758,7 +4819,7 @@ class ProfileRegistry {
       );
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   static bool _isDefaultSeedGrantOrigin(Object? encoded) {
@@ -5090,7 +5151,7 @@ class ProfileRegistry {
         whereArgs: <Object>[operationId, stagedGeneration],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -6027,6 +6088,10 @@ class SyncedRegistryProfileRecord {
   final bool setupComplete;
   final UserProfileLifecycle lifecycle;
   final ProfilePinRecord pin;
+
+  /// False for a metadata-only profile update so local failure/lockout state
+  /// remains device-local when the singular wire credential is unchanged.
+  final bool applyPin;
   final int updatedAtMs;
 
   const SyncedRegistryProfileRecord({
@@ -6041,6 +6106,7 @@ class SyncedRegistryProfileRecord {
     required this.setupComplete,
     this.lifecycle = UserProfileLifecycle.active,
     this.pin = const ProfilePinRecord(),
+    this.applyPin = true,
     required this.updatedAtMs,
   });
 }
@@ -6050,12 +6116,14 @@ class SyncedRegistryResourceRecord {
   final int updatedAtMs;
   final String? sealedSecretPayload;
   final int? secretPayloadVersion;
+  final bool clearSecret;
 
   const SyncedRegistryResourceRecord({
     required this.resource,
     required this.updatedAtMs,
     this.sealedSecretPayload,
     this.secretPayloadVersion,
+    this.clearSecret = false,
   });
 }
 
@@ -6114,6 +6182,18 @@ class RegistrySyncProjection {
     required this.grants,
     required this.settings,
     required this.bindings,
+  });
+}
+
+class RegistrySyncProfileProjection {
+  final UserProfile profile;
+  final ProfilePinRecord pin;
+  final int updatedAtMs;
+
+  const RegistrySyncProfileProjection({
+    required this.profile,
+    required this.pin,
+    required this.updatedAtMs,
   });
 }
 

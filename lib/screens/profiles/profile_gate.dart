@@ -17,9 +17,11 @@ import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_remote_lease.dart';
+import '../../services/profiles/profile_registry.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import '../../services/watched_status_service.dart';
+import '../../services/webdav_sync/webdav_sync_tombstones.dart';
 import 'manage_profiles_screen.dart';
 import 'profile_gate_looks.dart';
 import 'profile_picker_screen.dart';
@@ -36,6 +38,28 @@ bool shouldAutoEnterSoleProfile(
   return !profile.hasPin && !profile.pinResetRequired;
 }
 
+@visibleForTesting
+Future<bool> switchThenDeleteSyncedProfile({
+  required ProfileLifecycleCoordinator lifecycle,
+  required ProfileRegistry registry,
+  required String retiredProfileId,
+  required String replacementProfileId,
+}) async {
+  final switched = await lifecycle.switchTo(
+    replacementProfileId,
+    unlock: (_) async => true,
+  );
+  if (!switched) return false;
+  await registry.applySyncedRegistryDelta(
+    SyncedRegistryDelta(
+      deletes: <WebDavSyncRegistryRecordId>{
+        WebDavSyncRegistryRecordId.profile(retiredProfileId),
+      },
+    ),
+  );
+  return true;
+}
+
 class ProfileGate extends StatefulWidget {
   final Widget child;
 
@@ -50,6 +74,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   UserProfile? _pinTarget;
   bool _pinForManagement = false;
   bool _entered = false;
+  String? _pendingSyncedRetirement;
 
   /// Guards the one retry [_load] gets when it fails before the gate has any
   /// profiles to paint. Cleared on every success.
@@ -76,6 +101,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
       ProfileLockController.instance.lockedProfileId.addListener(_lockChanged);
       MainPageBridge.showProfilePicker = _showPicker;
       MainPageBridge.switchProfile = _showPickerFor;
+      MainPageBridge.retireProfileFromSync = _retireProfileFromSync;
       unawaited(_load(allowSingleProfileAutoEnter: true));
     } else {
       _pins = null;
@@ -101,6 +127,9 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     }
     if (MainPageBridge.switchProfile == _showPickerFor) {
       MainPageBridge.switchProfile = null;
+    }
+    if (MainPageBridge.retireProfileFromSync == _retireProfileFromSync) {
+      MainPageBridge.retireProfileFromSync = null;
     }
     _lifecycle?.dispose();
     super.dispose();
@@ -131,7 +160,10 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     try {
       await ProfileGateStyle.warm();
       await ProfileGateAlwaysAsk.warm();
-      profiles = await ProfileBootstrap.registry.listProfiles();
+      final retiredId = _pendingSyncedRetirement;
+      profiles = (await ProfileBootstrap.registry.listProfiles())
+          .where((profile) => profile.id != retiredId)
+          .toList(growable: false);
     } catch (e) {
       debugPrint('ProfileGate: profile load failed — $e');
       // On the FIRST load there is no cached list to fall back on, so giving
@@ -197,6 +229,29 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
 
   void _showPicker() {
     unawaited(_openPicker());
+  }
+
+  Future<bool> _retireProfileFromSync(String profileId) async {
+    if (!mounted || !_committed) return false;
+    final existing = await ProfileBootstrap.registry.getProfile(profileId);
+    if (existing == null) return true;
+    if (ProfileRuntime.capture().profileId != profileId) {
+      await ProfileBootstrap.registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          deletes: <WebDavSyncRegistryRecordId>{
+            WebDavSyncRegistryRecordId.profile(profileId),
+          },
+        ),
+      );
+      return await ProfileBootstrap.registry.getProfile(profileId) == null;
+    }
+    _pendingSyncedRetirement = profileId;
+    await _openPicker();
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile no longer available')),
+    );
+    return false;
   }
 
   Future<void> _showPickerFor(String profileId) async {
@@ -287,12 +342,18 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
 
   Future<void> _activate(UserProfile profile) async {
     final currentId = ProfileRuntime.capture().profileId;
+    final retiredId = _pendingSyncedRetirement;
     if (profile.id != currentId) {
-      final switched = await _lifecycle!.switchTo(
-        profile.id,
-        unlock: (_) async => true,
-      );
+      final switched = retiredId != null && retiredId != profile.id
+          ? await switchThenDeleteSyncedProfile(
+              lifecycle: _lifecycle!,
+              registry: ProfileBootstrap.registry,
+              retiredProfileId: retiredId,
+              replacementProfileId: profile.id,
+            )
+          : await _lifecycle!.switchTo(profile.id, unlock: (_) async => true);
       if (!switched || !mounted) return;
+      if (retiredId != null) _pendingSyncedRetirement = null;
     }
     // Mirror BEFORE the frame that reveals the child tree: build-path gates
     // (nav, rows) must never render one frame under the previous profile's

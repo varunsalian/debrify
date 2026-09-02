@@ -7,6 +7,7 @@ import 'package:synchronized/synchronized.dart';
 import '../../utils/app_storage.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_adoption_models.dart';
+import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_models.dart';
@@ -67,6 +68,34 @@ final class WebDavSyncPendingApply {
       localProfileId: localProfileId,
       values: Map<String, Object>.unmodifiable(values),
       target: WebDavSyncHotDocument.fromJson(json['target']),
+    );
+  }
+}
+
+final class WebDavSyncPendingCircleApply {
+  const WebDavSyncPendingCircleApply({
+    required this.profiles,
+    required this.resources,
+  });
+
+  final WebDavSyncProfilesDocument profiles;
+  final WebDavSyncResourcesDocument resources;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'profiles': profiles.toJson(),
+    'resources': resources.toJson(),
+  };
+
+  factory WebDavSyncPendingCircleApply.fromJson(Object? source) {
+    final json = _map(source, 'pending circle apply');
+    if (json.length != 2 ||
+        !json.containsKey('profiles') ||
+        !json.containsKey('resources')) {
+      throw const FormatException('Invalid WebDAV sync pending circle apply');
+    }
+    return WebDavSyncPendingCircleApply(
+      profiles: WebDavSyncProfilesDocument.fromJson(json['profiles']),
+      resources: WebDavSyncResourcesDocument.fromJson(json['resources']),
     );
   }
 }
@@ -172,6 +201,12 @@ final class WebDavSyncEngineState {
     this.lastClockPauseReason,
     this.profiles = const <String, WebDavSyncProfileEngineState>{},
     this.pendingLocalProfiles = const <String, WebDavSyncProfileEngineState>{},
+    this.circleProfilesBaseline,
+    this.circleResourcesBaseline,
+    this.pendingCircleApply,
+    this.lastPushedProfilesDigest,
+    this.lastPushedResourcesDigest,
+    this.pendingActiveProfileDeletion,
     this.peerManifestHighWater = const <String, int>{},
     this.peerManifestValidators = const <String, WebDavSyncManifestValidator>{},
     this.currentDeviceIds = const <String>{},
@@ -198,6 +233,12 @@ final class WebDavSyncEngineState {
   final WebDavSyncClockPauseReason? lastClockPauseReason;
   final Map<String, WebDavSyncProfileEngineState> profiles;
   final Map<String, WebDavSyncProfileEngineState> pendingLocalProfiles;
+  final WebDavSyncProfilesDocument? circleProfilesBaseline;
+  final WebDavSyncResourcesDocument? circleResourcesBaseline;
+  final WebDavSyncPendingCircleApply? pendingCircleApply;
+  final String? lastPushedProfilesDigest;
+  final String? lastPushedResourcesDigest;
+  final String? pendingActiveProfileDeletion;
   final Map<String, int> peerManifestHighWater;
   final Map<String, WebDavSyncManifestValidator> peerManifestValidators;
   final Set<String> currentDeviceIds;
@@ -232,6 +273,14 @@ final class WebDavSyncEngineState {
     bool clearClockPauseReason = false,
     Map<String, WebDavSyncProfileEngineState>? profiles,
     Map<String, WebDavSyncProfileEngineState>? pendingLocalProfiles,
+    WebDavSyncProfilesDocument? circleProfilesBaseline,
+    WebDavSyncResourcesDocument? circleResourcesBaseline,
+    WebDavSyncPendingCircleApply? pendingCircleApply,
+    bool clearPendingCircleApply = false,
+    String? lastPushedProfilesDigest,
+    String? lastPushedResourcesDigest,
+    String? pendingActiveProfileDeletion,
+    bool clearPendingActiveProfileDeletion = false,
     Map<String, int>? peerManifestHighWater,
     Map<String, WebDavSyncManifestValidator>? peerManifestValidators,
     Set<String>? currentDeviceIds,
@@ -262,6 +311,20 @@ final class WebDavSyncEngineState {
         : (lastClockPauseReason ?? this.lastClockPauseReason),
     profiles: profiles ?? this.profiles,
     pendingLocalProfiles: pendingLocalProfiles ?? this.pendingLocalProfiles,
+    circleProfilesBaseline:
+        circleProfilesBaseline ?? this.circleProfilesBaseline,
+    circleResourcesBaseline:
+        circleResourcesBaseline ?? this.circleResourcesBaseline,
+    pendingCircleApply: clearPendingCircleApply
+        ? null
+        : (pendingCircleApply ?? this.pendingCircleApply),
+    lastPushedProfilesDigest:
+        lastPushedProfilesDigest ?? this.lastPushedProfilesDigest,
+    lastPushedResourcesDigest:
+        lastPushedResourcesDigest ?? this.lastPushedResourcesDigest,
+    pendingActiveProfileDeletion: clearPendingActiveProfileDeletion
+        ? null
+        : (pendingActiveProfileDeletion ?? this.pendingActiveProfileDeletion),
     peerManifestHighWater: peerManifestHighWater ?? this.peerManifestHighWater,
     peerManifestValidators:
         peerManifestValidators ?? this.peerManifestValidators,
@@ -306,6 +369,18 @@ final class WebDavSyncEngineState {
         for (final entry in pendingLocalProfiles.entries)
           entry.key: entry.value.toJson(),
       },
+    if (circleProfilesBaseline != null)
+      'circleProfilesBaseline': circleProfilesBaseline!.toJson(),
+    if (circleResourcesBaseline != null)
+      'circleResourcesBaseline': circleResourcesBaseline!.toJson(),
+    if (pendingCircleApply != null)
+      'pendingCircleApply': pendingCircleApply!.toJson(),
+    if (lastPushedProfilesDigest != null)
+      'lastPushedProfilesDigest': lastPushedProfilesDigest,
+    if (lastPushedResourcesDigest != null)
+      'lastPushedResourcesDigest': lastPushedResourcesDigest,
+    if (pendingActiveProfileDeletion != null)
+      'pendingActiveProfileDeletion': pendingActiveProfileDeletion,
     'peerManifestHighWater': peerManifestHighWater,
     if (peerManifestValidators.isNotEmpty)
       'peerManifestValidators': <String, Object?>{
@@ -356,10 +431,10 @@ final class WebDavSyncEngineState {
         rawPeerValidators.length > WebDavSyncLimits.maxMapEntries) {
       throw const FormatException('WebDAV sync engine state exceeds its limit');
     }
-    Map<String, String>? optionalMap(String key) {
+    Map<String, String>? optionalMap(String key, {required int maxEntries}) {
       final raw = json[key];
       if (raw == null) return null;
-      if (raw is! Map || raw.length > WebDavSyncLimits.maxMapEntries) {
+      if (raw is! Map || raw.length > maxEntries) {
         throw const FormatException('Invalid WebDAV sync identity map');
       }
       final result = <String, String>{};
@@ -426,6 +501,24 @@ final class WebDavSyncEngineState {
       pendingLocalProfiles[entry.key as String] = profile;
     }
     final successful = json['lastSuccessfulSyncMs'];
+
+    String? circleDigest(String key) {
+      final value = json[key];
+      if (value == null) return null;
+      if (value is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(value)) {
+        throw const FormatException('Invalid WebDAV sync circle digest');
+      }
+      return value;
+    }
+
+    final pendingActiveProfileDeletion = json['pendingActiveProfileDeletion'];
+    if (pendingActiveProfileDeletion != null &&
+        (pendingActiveProfileDeletion is! String ||
+            !_safeSyncIdentifier.hasMatch(pendingActiveProfileDeletion))) {
+      throw const FormatException(
+        'Invalid WebDAV sync pending active profile deletion',
+      );
+    }
     if (successful != null &&
         (successful is! int ||
             successful < 0 ||
@@ -545,8 +638,14 @@ final class WebDavSyncEngineState {
     }
 
     return WebDavSyncEngineState(
-      circleToLocalProfiles: optionalMap('circleToLocalProfiles'),
-      circleToLocalResources: optionalMap('circleToLocalResources'),
+      circleToLocalProfiles: optionalMap(
+        'circleToLocalProfiles',
+        maxEntries: WebDavSyncLimits.maxMapEntries,
+      ),
+      circleToLocalResources: optionalMap(
+        'circleToLocalResources',
+        maxEntries: WebDavSyncLimits.maxRecordsPerHotDocument,
+      ),
       clock: WebDavSyncClockState.fromJson(json['clock']),
       deviceClockWarning: deviceClockWarning,
       lastClockPauseReason: lastClockPauseReason,
@@ -557,6 +656,20 @@ final class WebDavSyncEngineState {
           Map<String, WebDavSyncProfileEngineState>.unmodifiable(
             pendingLocalProfiles,
           ),
+      circleProfilesBaseline: json['circleProfilesBaseline'] == null
+          ? null
+          : WebDavSyncProfilesDocument.fromJson(json['circleProfilesBaseline']),
+      circleResourcesBaseline: json['circleResourcesBaseline'] == null
+          ? null
+          : WebDavSyncResourcesDocument.fromJson(
+              json['circleResourcesBaseline'],
+            ),
+      pendingCircleApply: json['pendingCircleApply'] == null
+          ? null
+          : WebDavSyncPendingCircleApply.fromJson(json['pendingCircleApply']),
+      lastPushedProfilesDigest: circleDigest('lastPushedProfilesDigest'),
+      lastPushedResourcesDigest: circleDigest('lastPushedResourcesDigest'),
+      pendingActiveProfileDeletion: pendingActiveProfileDeletion as String?,
       peerManifestHighWater: Map<String, int>.unmodifiable(peerHighWater),
       peerManifestValidators:
           Map<String, WebDavSyncManifestValidator>.unmodifiable(peerValidators),
@@ -665,7 +778,9 @@ final class WebDavSyncEngineStateStore
 
   static const String valueKey = 'm4Engine';
   static const int _fileVersion = 1;
-  static const int _maxFileBytes = 64 * 1024 * 1024;
+  // A crash window can hold the last-applied and pending 256 MiB resources
+  // documents at once. The section limits still police each document.
+  static const int _maxFileBytes = 520 * 1024 * 1024;
   static const Map<String, Object> _fileMarker = <String, Object>{
     'version': _fileVersion,
     'storage': 'file',

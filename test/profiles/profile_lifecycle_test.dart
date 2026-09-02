@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/screens/profiles/profile_gate.dart';
+import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -135,6 +137,39 @@ void main() {
       'initialize:$secondId',
       'activate:$secondId',
     ]);
+    lifecycle.dispose();
+  });
+
+  test('synced active deletion lands only after replacement switch', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    final replacementId = (await registry.createProfile(
+      name: 'Replacement Admin',
+      role: UserProfileRole.admin,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    )).id;
+    final participant = _RecordingParticipant();
+    final lifecycle = ProfileLifecycleCoordinator(
+      registry: registry,
+      participants: <ProfileLifecycleParticipant>[participant],
+    );
+
+    expect(await registry.getProfile(firstId), isNotNull);
+    expect(
+      await switchThenDeleteSyncedProfile(
+        lifecycle: lifecycle,
+        registry: registry,
+        retiredProfileId: firstId,
+        replacementProfileId: replacementId,
+      ),
+      isTrue,
+    );
+
+    expect(participant.candidateCapture?.profileId, replacementId);
+    expect(ProfileRuntime.capture().profileId, replacementId);
+    expect((await registry.activeProfile())?.id, replacementId);
+    expect(await registry.getProfile(firstId), isNull);
     lifecycle.dispose();
   });
 }

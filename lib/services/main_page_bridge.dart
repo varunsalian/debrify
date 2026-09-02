@@ -64,6 +64,10 @@ class MainPageBridge {
   static VoidCallback? showProfilePicker;
   static ValueChanged<String>? switchProfile;
 
+  /// Gate-owned handoff for a circle tombstone targeting the active profile.
+  /// Returns true only after the retired row is physically gone.
+  static Future<bool> Function(String profileId)? retireProfileFromSync;
+
   /// Re-reads the ACTIVE profile's policy into MainPage's tab gating and the
   /// ProfilePolicyGuard sync mirror. Editing screens call this after saving
   /// the signed-in profile — that path never crosses the gate, which is what

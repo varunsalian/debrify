@@ -159,6 +159,8 @@ void main() {
       );
       expect(states.state.ownManifest, isNotNull);
       expect(states.state.ownManifest!.sections, hasLength(4));
+      expect(seeds.seenCircleId, isNotNull);
+      expect(seeds.seenCircleKey, isNotNull);
     },
   );
 
@@ -706,6 +708,8 @@ void main() {
     );
 
     expect(result.manifest.sections, hasLength(4));
+    expect(seeds.seenCircleId, 'existing-circle');
+    expect(seeds.seenCircleKey, isNotNull);
     expect(states.state.ownManifest, result.manifest);
     final rootReads = transport.events
         .asMap()
@@ -769,6 +773,8 @@ WebDavSyncManifest _manifest({
 final class _FakeSeedSource implements WebDavSyncSeedSource {
   List<String>? events;
   bool guardPreferences = false;
+  String? seenCircleId;
+  WebDavSyncCircleKey? seenCircleKey;
 
   final maps = WebDavSyncIdentityMaps(
     circleToLocalProfiles: const <String, String>{
@@ -785,7 +791,11 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
     required int localNowMs,
     required int serverNowMs,
     required int clockOffsetMs,
+    String? circleId,
+    WebDavSyncCircleKey? circleKey,
   }) async {
+    seenCircleId = circleId;
+    seenCircleKey = circleKey;
     Future<WebDavSyncSeedMaterial> build(
       ProfilePreferenceMutationToken? mutationToken,
     ) async => WebDavSyncSeedMaterial(

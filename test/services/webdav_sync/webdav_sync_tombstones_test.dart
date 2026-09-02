@@ -10,6 +10,7 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
@@ -430,6 +431,37 @@ void main() {
   });
 
   test('graph and bootstrap cadence state round-trips with strict digests', () {
+    const stamp = WebDavSyncStamp(
+      normalizedTimeMs: 42,
+      originDeviceId: 'device-a',
+    );
+    const circleProfiles = WebDavSyncProfilesDocument(
+      profiles: <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+        'circle-profile': WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+          stamp: stamp,
+          value: null,
+        ),
+      },
+    );
+    const circleResources = WebDavSyncResourcesDocument(
+      resources: <String, WebDavSyncResourceEntry>{
+        'circle-resource': WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: stamp,
+            value: null,
+          ),
+        ),
+      },
+      grants:
+          <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{},
+      settings:
+          <
+            String,
+            Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+          >{},
+      bindings:
+          <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>>{},
+    );
     final source = WebDavSyncEngineState(
       lastPushMs: 50,
       lastRemoteChangeMs: 75,
@@ -445,6 +477,15 @@ void main() {
       },
       deviceClockWarning: true,
       lastClockPauseReason: WebDavSyncClockPauseReason.offsetOutlier,
+      circleProfilesBaseline: circleProfiles,
+      circleResourcesBaseline: circleResources,
+      pendingCircleApply: const WebDavSyncPendingCircleApply(
+        profiles: circleProfiles,
+        resources: circleResources,
+      ),
+      lastPushedProfilesDigest: 'e' * 64,
+      lastPushedResourcesDigest: 'f' * 64,
+      pendingActiveProfileDeletion: 'local-retired-profile',
     );
 
     final restored = WebDavSyncEngineState.fromJson(source.toJson());
@@ -464,6 +505,18 @@ void main() {
       restored.lastClockPauseReason,
       WebDavSyncClockPauseReason.offsetOutlier,
     );
+    expect(restored.circleProfilesBaseline?.toJson(), circleProfiles.toJson());
+    expect(
+      restored.circleResourcesBaseline?.toJson(),
+      circleResources.toJson(),
+    );
+    expect(restored.pendingCircleApply?.toJson(), {
+      'profiles': circleProfiles.toJson(),
+      'resources': circleResources.toJson(),
+    });
+    expect(restored.lastPushedProfilesDigest, 'e' * 64);
+    expect(restored.lastPushedResourcesDigest, 'f' * 64);
+    expect(restored.pendingActiveProfileDeletion, 'local-retired-profile');
     expect(
       () => WebDavSyncEngineState.fromJson(<String, Object?>{
         ...source.toJson(),

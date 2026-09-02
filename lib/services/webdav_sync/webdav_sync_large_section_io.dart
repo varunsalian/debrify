@@ -42,7 +42,9 @@ final class WebDavSyncLargeSectionIo {
   }) async {
     final WebDavSyncFileTransport? fileTransport =
         transport is WebDavSyncFileTransport &&
-            (logicalName == 'bootstrap' || logicalName == 'graph')
+            (logicalName == 'bootstrap' ||
+                logicalName == 'graph' ||
+                logicalName == 'resources')
         ? transport as WebDavSyncFileTransport
         : null;
     if (fileTransport == null) {
@@ -54,7 +56,10 @@ final class WebDavSyncLargeSectionIo {
         schemaVersion: schemaVersion,
         payload: payload,
         maxBytes: maxBytes,
-        runInBackground: logicalName == 'bootstrap' || logicalName == 'graph',
+        runInBackground:
+            logicalName == 'bootstrap' ||
+            logicalName == 'graph' ||
+            logicalName == 'resources',
       );
       final reference = _reference(
         logicalName: logicalName,
@@ -78,7 +83,10 @@ final class WebDavSyncLargeSectionIo {
         logicalName: logicalName,
         schemaVersion: schemaVersion,
         maxBytes: maxBytes,
-        runInBackground: logicalName == 'bootstrap' || logicalName == 'graph',
+        runInBackground:
+            logicalName == 'bootstrap' ||
+            logicalName == 'graph' ||
+            logicalName == 'resources',
       );
       return reference;
     }

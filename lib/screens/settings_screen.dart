@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/profiles/profile_policy.dart';
+import '../models/profiles/connection_resource.dart';
 import '../models/profiles/user_profile.dart';
 import '../services/main_page_bridge.dart';
 import '../services/external_player_service.dart';
@@ -215,6 +216,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _webDavStatus = 'Not connected';
   String _webDavCaption = 'Tap to connect';
 
+  bool _iptvCredentialsPending = false;
+
   bool _traktConnected = false;
   String _traktStatus = 'Not connected';
   String _traktCaption = 'Tap to connect';
@@ -391,6 +394,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getDebrifyTvPlayerStyle(),
       StorageService.getPlayLoaderStyle(),
       _activeProfileMayExportDiagnostics(),
+      _pendingCredentialTypes(),
     ]);
 
     if (!mounted) return;
@@ -428,8 +432,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final detailTheme = results[30] as String;
     final parentsGuideStyle = results[31] as String;
     final tvHeroArtworkQuality = results[32] as TvHeroArtworkQuality;
-    // Appended at the END of the Future.wait above, so no existing index
-    // moves. The list holds 33 entries (0..32) as of b525f2dc.
+    // Later summary fields stay appended at the END of the Future.wait above,
+    // so the long-established indices 0..32 never move.
     final playerDockStyle = results[33] as String;
     final playerDockPalette = results[34] as String;
     final playerDockSize = results[35] as String;
@@ -439,6 +443,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final debrifyTvPlayerStyle = results[39] as String;
     final playLoaderStyle = results[40] as String;
     final diagnosticExportVisible = results[41] as bool;
+    final pendingCredentialTypes = results[42] as Set<ConnectionResourceType>;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -559,6 +564,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
           '${indexerManagers.length} engine${indexerManagers.length == 1 ? '' : 's'} configured';
     }
 
+    void pending(Set<ConnectionResourceType> types, void Function() apply) {
+      if (pendingCredentialTypes.any(types.contains)) apply();
+    }
+
+    const pendingCaption = 'credentials pending owner sign-in';
+    _iptvCredentialsPending = pendingCredentialTypes.any(
+      const {
+        ConnectionResourceType.iptvM3u,
+        ConnectionResourceType.iptvXtream,
+        ConnectionResourceType.xmltv,
+      }.contains,
+    );
+    pending(const {ConnectionResourceType.realDebrid}, () {
+      _realDebridConnected = true;
+      _realDebridStatus = 'Attention';
+      _realDebridCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.torbox}, () {
+      _torboxConnected = true;
+      _torboxStatus = 'Attention';
+      _torboxCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.premiumize}, () {
+      _premiumizeConnected = true;
+      _premiumizeStatus = 'Attention';
+      _premiumizeCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.allDebrid}, () {
+      _allDebridConnected = true;
+      _allDebridStatus = 'Attention';
+      _allDebridCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.pikpak}, () {
+      _pikpakConnected = true;
+      _pikpakStatus = 'Attention';
+      _pikpakCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.webDav}, () {
+      _webDavConnected = true;
+      _webDavStatus = 'Attention';
+      _webDavCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.trakt}, () {
+      _traktConnected = true;
+      _traktStatus = 'Attention';
+      _traktCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.simkl}, () {
+      _simklConnected = true;
+      _simklStatus = 'Attention';
+      _simklCaption = pendingCaption;
+    });
+    pending(const {ConnectionResourceType.mdblist}, () {
+      _mdblistConnected = true;
+      _mdblistStatus = 'Attention';
+      _mdblistCaption = pendingCaption;
+    });
+    pending(
+      const {ConnectionResourceType.jackett, ConnectionResourceType.prowlarr},
+      () {
+        _indexerManagersConfigured = true;
+        _indexerManagersStatus = 'Attention';
+        _indexerManagersCaption = pendingCaption;
+      },
+    );
+
     _appVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
     _currentVersionName = packageInfo.version;
     _isAndroidTv = isAndroidTv;
@@ -640,6 +711,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
     }
+  }
+
+  Future<Set<ConnectionResourceType>> _pendingCredentialTypes() async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return const <ConnectionResourceType>{};
+    }
+    final scope = ProfileRuntime.capture();
+    final resources = await ProfileBootstrap.registry.listGrantedResources(
+      scope.profileId,
+    );
+    if (ProfileRuntime.scope.value != scope) {
+      return const <ConnectionResourceType>{};
+    }
+    return resources
+        .where((resource) => resource.secretPending)
+        .map((resource) => resource.type)
+        .toSet();
   }
 
   Future<void> _loadSupportConfig() async {
@@ -802,8 +890,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ConnectionInfo get _iptvInfo => ConnectionInfo(
     title: 'IPTV',
     connected: true,
-    status: 'Active',
-    caption: 'M3U playlist channels',
+    status: _iptvCredentialsPending ? 'Attention' : 'Active',
+    caption: _iptvCredentialsPending
+        ? 'credentials pending owner sign-in'
+        : 'M3U playlist channels',
     onTap: _openIptvSettings,
   );
   ConnectionInfo get _traktInfo => ConnectionInfo(

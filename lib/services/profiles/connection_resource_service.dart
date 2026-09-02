@@ -59,7 +59,7 @@ class ConnectionResourceService {
       );
     }
     final id = _newId();
-    final aad = _associatedData(
+    final aad = associatedDataForSecret(
       resourceId: id,
       type: type,
       ownerProfileId: owner.id,
@@ -162,7 +162,7 @@ class ConnectionResourceService {
       final publicConfig = _normalizePublicConfig(item.type, item.publicConfig);
       final sealed = await cipher.seal(
         utf8.encode(jsonEncode(item.secretConfig)),
-        associatedData: _associatedData(
+        associatedData: associatedDataForSecret(
           resourceId: replacementId,
           type: item.type,
           ownerProfileId: owner.id,
@@ -354,7 +354,7 @@ class ConnectionResourceService {
     }
     final sealed = await cipher.seal(
       utf8.encode(jsonEncode(secretConfig)),
-      associatedData: _associatedData(
+      associatedData: associatedDataForSecret(
         resourceId: resource.id,
         type: resource.type,
         ownerProfileId: resource.ownerProfileId,
@@ -389,7 +389,7 @@ class ConnectionResourceService {
     if (sealed == null) throw StateError('Resource secret is unavailable');
     final opened = await cipher.open(
       sealed.envelope,
-      associatedData: _associatedData(
+      associatedData: associatedDataForSecret(
         resourceId: sealed.resourceId,
         type: sealed.type,
         ownerProfileId: sealed.ownerProfileId,
@@ -701,7 +701,7 @@ class ConnectionResourceService {
     final secret = await _openSecret(resourceId);
     final sealed = await cipher.seal(
       utf8.encode(jsonEncode(secret)),
-      associatedData: _associatedData(
+      associatedData: associatedDataForSecret(
         resourceId: resource.id,
         type: resource.type,
         ownerProfileId: newOwnerProfileId,
@@ -879,7 +879,10 @@ class ConnectionResourceService {
     );
   }
 
-  static List<int> _associatedData({
+  /// Canonical local-vault attachment data. Circle sync reseals an imported
+  /// canonical secret through this same binding so it cannot be attached to a
+  /// different local resource, owner, type, or schema.
+  static List<int> associatedDataForSecret({
     required String resourceId,
     required ConnectionResourceType type,
     required String ownerProfileId,

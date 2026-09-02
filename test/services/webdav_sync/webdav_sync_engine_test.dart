@@ -2,12 +2,16 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:debrify/models/profiles/connection_resource.dart';
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/services/diagnostic_log.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
@@ -302,6 +306,297 @@ void main() {
       );
       expect(transport.events.first, 'read:root');
       expect(states.state.profiles['profile-circle']!.pendingApply, isNull);
+    },
+  );
+
+  test(
+    'circle apply journals exact target and replays before network after crash',
+    () async {
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        activeProfileId: 'local-profile',
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      )..failNextCircleApply = true;
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+
+      await expectLater(runFixture(context()), throwsStateError);
+      final journaled = states.state.pendingCircleApply;
+      expect(journaled, isNotNull);
+      final exactTarget = WebDavSyncCodec.canonicalJson(journaled!.toJson());
+      expect(transport.events, isNot(contains('write:manifest')));
+
+      transport.events.clear();
+      await runFixture(context());
+
+      expect(circleLocal.circleReplayFlags, <bool>[false, true, false]);
+      expect(circleLocal.appliedCircleJson[1], exactTarget);
+      expect(transport.events.first, 'read:root');
+      expect(states.state.pendingCircleApply, isNull);
+    },
+  );
+
+  test('foreign circle maps are durable before registry apply', () async {
+    final circleLocal = _FakeCircleLocalAdapter(
+      <String, Object?>{'theme': 'dark'},
+      profiles: _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Local',
+            time: now.millisecondsSinceEpoch - 1,
+            origin: 'device-a',
+          ),
+        },
+      ),
+    );
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+      profiles: _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'foreign-profile': _circleProfileLeaf(
+            name: 'Foreign',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-b',
+          ),
+        },
+      ),
+    );
+    circleLocal.beforeCircleApply = (request) {
+      final localId =
+          request.identityMaps.circleToLocalProfiles['foreign-profile'];
+      expect(localId, isNotNull);
+      expect(
+        states.state.circleToLocalProfiles?['foreign-profile'],
+        localId,
+        reason: 'the mapping must commit before registry apply begins',
+      );
+    };
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: circleLocal,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+
+    await runFixture(context());
+
+    expect(states.state.circleToLocalProfiles, contains('foreign-profile'));
+    expect(
+      circleLocal.appliedRequests.single.profiles.profiles,
+      contains('foreign-profile'),
+    );
+  });
+
+  test(
+    'heartbeat-stale circle sections still merge profile deletions',
+    () async {
+      final staleTime = now.subtract(const Duration(days: 31));
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        activeProfileId: 'local-profile',
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: staleTime.millisecondsSinceEpoch - 1,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: staleTime,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: staleTime.millisecondsSinceEpoch,
+                originDeviceId: 'device-b',
+              ),
+              value: null,
+            ),
+          },
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+
+      await runFixture(context());
+
+      expect(
+        circleLocal
+            .appliedRequests
+            .single
+            .profiles
+            .profiles['profile-circle']!
+            .value,
+        isNull,
+      );
+      expect(transport.events, contains('read:section:device-b:profiles'));
+      expect(states.state.pendingActiveProfileDeletion, 'local-profile');
+      expect(
+        circleLocal.appliedRequests.single.deferredActiveCircleProfileId,
+        'profile-circle',
+      );
+      expect(
+        circleLocal.events,
+        isNot(contains('read:local-profile')),
+        reason: 'a retained tombstone mapping has no hot generation to read',
+      );
+    },
+  );
+
+  test(
+    'two-device circle merge publishes one reference and a later owner secret',
+    () async {
+      final stamp = WebDavSyncStamp(
+        normalizedTimeMs: now.millisecondsSinceEpoch,
+        originDeviceId: 'device-b',
+      );
+      final metadata = WebDavSyncResourceMetadata(
+        type: ConnectionResourceType.realDebrid,
+        label: 'Shared RD',
+        ownerCircleProfileId: 'profile-circle',
+        publicConfig: const <String, Object?>{'schemaVersion': 1},
+        publicSchemaVersion: 1,
+        enabled: true,
+      );
+      final metadataOnly = _circleResources(<String, WebDavSyncResourceEntry>{
+        'resource-circle': WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: stamp,
+            value: metadata,
+          ),
+        ),
+      });
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+        resources: metadataOnly,
+        localResourceIds: const <String>{'local-resource'},
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        resources: metadataOnly,
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      final mappedContext = context(
+        resources: const <String, String>{'resource-circle': 'local-resource'},
+      );
+
+      await runFixture(mappedContext);
+      expect(
+        circleLocal
+            .appliedRequests
+            .single
+            .resources
+            .resources['resource-circle']!
+            .secretConfig,
+        isNull,
+      );
+
+      circleLocal.resources = _circleResources(
+        <String, WebDavSyncResourceEntry>{
+          'resource-circle': WebDavSyncResourceEntry(
+            metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+              stamp: stamp,
+              value: metadata,
+            ),
+            secretConfig: WebDavSyncCircleLeaf<WebDavSyncResourceSecretConfig>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: now.millisecondsSinceEpoch,
+                originDeviceId: 'device-a',
+              ),
+              value: WebDavSyncResourceSecretConfig(
+                semanticDigest: 'a' * 64,
+                type: ConnectionResourceType.realDebrid,
+                ownerCircleProfileId: 'profile-circle',
+                publicSchemaVersion: 1,
+                payloadVersion: 1,
+                envelope: base64Encode(const <int>[1]),
+              ),
+            ),
+          ),
+        },
+      );
+      await runFixture(mappedContext);
+
+      expect(
+        circleLocal
+            .appliedRequests
+            .last
+            .resources
+            .resources['resource-circle']!
+            .secretConfig!
+            .value,
+        isNotNull,
+      );
+      final manifest = states.state.ownManifest!;
+      expect(
+        manifest.sections.where((section) => section.name == 'profiles'),
+        hasLength(1),
+      );
+      expect(
+        manifest.sections.where((section) => section.name == 'resources'),
+        hasLength(1),
+      );
     },
   );
 
@@ -1211,6 +1506,49 @@ Map<String, Object?> _legacyHotJson({
   };
 }
 
+WebDavSyncProfilesDocument _circleProfiles(
+  Map<String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>> profiles,
+) => WebDavSyncProfilesDocument(profiles: profiles);
+
+WebDavSyncResourcesDocument _circleResources(
+  Map<String, WebDavSyncResourceEntry> resources,
+) => WebDavSyncResourcesDocument(
+  resources: resources,
+  grants:
+      const <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{},
+  settings:
+      const <
+        String,
+        Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+      >{},
+  bindings:
+      const <
+        String,
+        Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
+      >{},
+);
+
+WebDavSyncCircleLeaf<WebDavSyncProfileValue> _circleProfileLeaf({
+  required String name,
+  required int time,
+  required String origin,
+}) => WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+  stamp: WebDavSyncStamp(normalizedTimeMs: time, originDeviceId: origin),
+  value: WebDavSyncProfileValue(
+    name: name,
+    role: UserProfileRole.admin,
+    policy: Map<String, Object?>.from(
+      jsonDecode(ProfilePolicy.allAllowedFor(UserProfileRole.admin).encode())
+          as Map,
+    ),
+    enabled: true,
+    lockOnResume: false,
+    setupComplete: true,
+    lifecycle: UserProfileLifecycle.active,
+    pin: const WebDavSyncProfilePin(resetRequired: false),
+  ),
+);
+
 final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
   WebDavSyncEngineState state = const WebDavSyncEngineState();
   int loads = 0;
@@ -1233,10 +1571,11 @@ final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
   }
 }
 
-final class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
-  _FakeLocalAdapter(this.preferences);
+class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
+  _FakeLocalAdapter(this.preferences, {this.activeProfileId = 'active'});
 
   Map<String, Object?> preferences;
+  final String activeProfileId;
   final List<Map<String, Object>> applied = <Map<String, Object>>[];
   final List<String> events = <String>[];
   bool failNextApply = false;
@@ -1249,7 +1588,11 @@ final class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
   Future<WebDavSyncLocalSession> beginCycle() async {
     events.add('begin');
     return WebDavSyncLocalSession(
-      ProfileScope(profileId: 'active', dataGeneration: 1, sessionEpoch: 1),
+      ProfileScope(
+        profileId: activeProfileId,
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      ),
       revalidate: () {
         if (!sessionValid) throw StateError('simulated profile switch');
       },
@@ -1292,6 +1635,76 @@ final class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     applied.add(Map<String, Object>.from(values));
     preferences = Map<String, Object?>.from(values);
     afterApply?.call();
+  }
+}
+
+final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
+    implements WebDavSyncCircleLocalAdapter {
+  _FakeCircleLocalAdapter(
+    super.preferences, {
+    super.activeProfileId,
+    required this.profiles,
+    this.localResourceIds = const <String>{},
+    this.resources = const WebDavSyncResourcesDocument(
+      resources: <String, WebDavSyncResourceEntry>{},
+      grants:
+          <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{},
+      settings:
+          <
+            String,
+            Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+          >{},
+      bindings:
+          <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>>{},
+    ),
+  });
+
+  WebDavSyncProfilesDocument profiles;
+  WebDavSyncResourcesDocument resources;
+  final Set<String> localResourceIds;
+  bool failNextCircleApply = false;
+  void Function(WebDavSyncCircleApplyRequest request)? beforeCircleApply;
+  final List<bool> circleReplayFlags = <bool>[];
+  final List<WebDavSyncCircleApplyRequest> appliedRequests =
+      <WebDavSyncCircleApplyRequest>[];
+  final List<String> appliedCircleJson = <String>[];
+
+  @override
+  Future<WebDavSyncCircleInventory> readCircleInventory(
+    WebDavSyncLocalSession session,
+  ) async => WebDavSyncCircleInventory(
+    localProfileIds: const <String>{'local-profile'},
+    localResourceIds: localResourceIds,
+  );
+
+  @override
+  Future<WebDavSyncBuiltCircleState> buildCircleState(
+    WebDavSyncLocalSession session,
+    WebDavSyncCircleBuildRequest request,
+  ) async =>
+      WebDavSyncBuiltCircleState(profiles: profiles, resources: resources);
+
+  @override
+  Future<void> applyCircleState(
+    WebDavSyncLocalSession session,
+    WebDavSyncCircleApplyRequest request, {
+    bool replayingPending = false,
+  }) async {
+    circleReplayFlags.add(replayingPending);
+    appliedRequests.add(request);
+    appliedCircleJson.add(
+      WebDavSyncCodec.canonicalJson(
+        WebDavSyncPendingCircleApply(
+          profiles: request.profiles,
+          resources: request.resources,
+        ).toJson(),
+      ),
+    );
+    beforeCircleApply?.call(request);
+    if (failNextCircleApply) {
+      failNextCircleApply = false;
+      throw StateError('simulated circle apply crash');
+    }
   }
 }
 
@@ -1456,6 +1869,8 @@ class _FakeTransport implements WebDavSyncTransport {
     required WebDavSyncTombstoneDocument tombstones,
     int hotSchemaVersion = WebDavSyncHotDocument.schemaVersion,
     Object? hotPayload,
+    WebDavSyncProfilesDocument? profiles,
+    WebDavSyncResourcesDocument? resources,
   }) async {
     Future<WebDavSyncSectionReference> addSection(
       String name,
@@ -1500,6 +1915,24 @@ class _FakeTransport implements WebDavSyncTransport {
       WebDavSyncLimits.maxTombstoneDocumentBytes,
       WebDavSyncTombstoneDocument.schemaVersion,
     );
+    final profileRef = profiles == null
+        ? null
+        : await addSection(
+            'profiles',
+            profiles.toJson(),
+            profiles.semanticDigest,
+            WebDavSyncLimits.maxHotDocumentBytes,
+            WebDavSyncProfilesDocument.schemaVersion,
+          );
+    final resourceRef = resources == null
+        ? null
+        : await addSection(
+            'resources',
+            resources.toJson(),
+            resources.semanticDigest,
+            WebDavSyncLimits.maxGraphDocumentBytes,
+            WebDavSyncResourcesDocument.schemaVersion,
+          );
     final manifest = WebDavSyncManifest(
       circleId: root.document.circleId,
       deviceId: deviceId,
@@ -1508,7 +1941,12 @@ class _FakeTransport implements WebDavSyncTransport {
       graphSchemaClaim: 1,
       profileMap: const <String, String>{},
       resourceMap: const <String, String>{},
-      sections: <WebDavSyncSectionReference>[hotRef, tombstoneRef],
+      sections: <WebDavSyncSectionReference>[
+        hotRef,
+        tombstoneRef,
+        if (profileRef != null) profileRef,
+        if (resourceRef != null) resourceRef,
+      ],
     );
     manifests[deviceId] = await codec.sealDocument(
       key: root.key,

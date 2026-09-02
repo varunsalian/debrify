@@ -2594,7 +2594,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: CheckboxListTile(
           value: _selectedResources.contains(resource.id),
           title: Text(resource.label),
-          subtitle: Text(resource.type.name),
+          subtitle: Text(
+            resource.secretPending
+                ? 'credentials pending owner sign-in'
+                : resource.type.name,
+          ),
           secondary:
               widget.profile != null &&
                   resource.ownerProfileId != widget.profile!.id &&

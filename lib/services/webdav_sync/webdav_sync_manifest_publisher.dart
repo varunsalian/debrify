@@ -143,6 +143,8 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
         localNowMs: localNowMs,
         serverNowMs: clockDecision.serverNowMs!,
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+        circleId: root.document.circleId,
+        circleKey: root.key,
       );
       _requireCompleteSeed(material);
       await transport.ensureOwnLayout(namespace.deviceId);
@@ -222,6 +224,10 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
                 material.identityMaps.circleToLocalResources,
             clock: clockDecision.state,
             profiles: material.profileStatesForCommit(current.profiles),
+            circleProfilesBaseline: material.circleProfiles,
+            circleResourcesBaseline: material.circleResources,
+            lastPushedProfilesDigest: material.circleProfiles?.semanticDigest,
+            lastPushedResourcesDigest: material.circleResources?.semanticDigest,
             currentDeviceIds: Set<String>.unmodifiable(<String>{
               ...current.currentDeviceIds,
               namespace.deviceId,
@@ -249,9 +255,14 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
 
   static void _requireCompleteSeed(WebDavSyncSeedMaterial material) {
     final names = material.sections.map((section) => section.name).toSet();
+    final hasCircleProfiles = material.circleProfiles != null;
+    final hasCircleResources = material.circleResources != null;
     if (material.sections.isEmpty ||
         !names.contains(WebDavSyncGraphKind.bootstrap.logicalName) ||
         !names.contains(WebDavSyncGraphKind.graph.logicalName) ||
+        hasCircleProfiles != hasCircleResources ||
+        hasCircleProfiles &&
+            (!names.contains('profiles') || !names.contains('resources')) ||
         material.identityMaps.circleToLocalProfiles.keys.any(
           (circleId) =>
               !names.contains('hot/$circleId') ||
