@@ -1,13 +1,17 @@
 # Debrify Cross-Device Sync over WebDAV — Implementation Plan
 
-Addenda (2026-09-02): §11 plans silent per-record sync for connections,
-addons, and profiles; §12 plans near-real-time propagation (on-write push +
-cheap remote poll) and cycle-speed work; §13 is the immediate v1 correctness
-repair for scalar-setting provenance. All three are PLANNED, not started.
-§13 is the recommended next step and blocks further cross-device soak; §12
-follows it and remains independent of §11. Sections 1–10 describe v1 as
-implemented, except where §13 explicitly supersedes the original whole-scalar
-conflict rule.
+Addenda status (2026-09-03): §13 (scalar provenance repair), §12
+(near-real-time propagation), and §11 (silent per-record sync for
+connections, addons, and profiles) are all IMPLEMENTED on `webdav-sync`,
+in that order. The graph tier is now bootstrap-only. §11 shipped with the
+design-round corrections recorded in the git history (registry v7 shape,
+(profile, slot) binding keys, applySyncedRegistryDelta, nullable stamped
+leaves as tombstones, owner-scoped secrets under the full existing reveal
+authorization); where §11's original text conflicts, the shipped code is
+authoritative. Remaining manual gates: the physical Koofr cross-device
+re-test and the deferred provider-compat checks from the v1 status below.
+Sections 1–10 describe v1 as implemented, except where §13 explicitly
+supersedes the original whole-scalar conflict rule.
 
 Status: M1–M6 IMPLEMENTED on `webdav-sync` (2026-09-02); automated acceptance
 gates, the simulated phone/Mi Box/tvOS/desktop convergence matrix, and a
@@ -1450,8 +1454,10 @@ resource hardening while retaining the named physical-device manual gates.
 
 ## 11. v2 — Silent per-record sync for connections, addons, and profiles
 
-Status: PLANNED (2026-09-02). Not started. Depends on the v1 review fixes
-landing first (see "Preconditions").
+Status: IMPLEMENTED 2026-09-03 (tasks A/B/C on `webdav-sync`) with the
+design-round corrections summarized in the header. Preconditions 1-2 were
+already fixed in-tree before the tasks ran; precondition 5 was subsumed by
+the graph trim.
 
 ### 11.1 Product goal
 
@@ -1683,12 +1689,12 @@ Must land before v2 starts:
 
 ## 12. v2 — Near-real-time propagation and cycle speed
 
-Status: PLANNED (2026-09-02). Not started. Independent of §11 — it touches
-the scheduler, a transport probe, and instrumentation only; no additional
-merge, wire, clock, crypto, activation, or adoption change after §13. It is
-smaller than §11 and is the recommended follow-up once the immediate §13
-correctness repair lands. Written against the working tree of 2026-09-02;
-line references are to that tree.
+Status: IMPLEMENTED 2026-09-03 on `webdav-sync` (D12-1..D12-4). One
+deliberate deviation: the local-change debounce is a coalescing window that
+opens at the FIRST write of a burst (a resetting trailing debounce would
+starve pushes under steady playback saves). D12-4's read-back removal was
+NOT executed — the §12.10 physical-trace gate was not met, so the read-back
+stays. Line references below are to the pre-implementation tree.
 
 ### 12.1 Product goal
 
@@ -1930,15 +1936,19 @@ path.
 
 ### 12.10 Measurements
 
-(Filled in during D12-1: provider, peer count, per-phase milliseconds,
-request count, bytes — one idle cycle and one cycle with a pushed change.)
+(Instrumentation shipped with D12-1: every cycle logs one redacted
+diagnostic event — trigger, peer count, per-phase ms, request count, bytes
+up/down, disposition. The real-provider trace still needs a physical
+device + Koofr session; until it is pasted here the D12-4 read-back change
+stays unexecuted by rule.)
 
 ---
 
 ## 13. v1 correctness repair — per-setting scalar provenance
 
-Status: PLANNED (2026-09-02). **Immediate next step; blocks further physical
-cross-device soak and must land before §12.** This is a hot-model/merge repair,
+Status: IMPLEMENTED 2026-09-03 on `webdav-sync` (hot schema v2, per-key
+stamped scalar entries, in-memory v1 translation, first post-upgrade publish
+rewrites v2). The physical Koofr regression repeat remains the manual gate. This is a hot-model/merge repair,
 not a provider-settings UI change and not part of §11's resource/profile work.
 
 ### 13.1 Confirmed failure
