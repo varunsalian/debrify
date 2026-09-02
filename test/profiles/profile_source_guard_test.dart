@@ -15,6 +15,9 @@ void main() {
         'lib/services/profiles/profile_data_generation.dart': 5,
         'lib/services/profiles/native_profile_projection.dart': 3,
         'lib/services/profiles/device_key_provider.dart': 5,
+        // Adoption must enumerate and atomically project whole scoped stores;
+        // the exact count keeps any additional raw access review-visible.
+        'lib/services/webdav_sync/webdav_sync_adoption_operations.dart': 2,
         // These two perform reviewed whole-store durability/reset operations;
         // neither exposes a generic preference API to feature code.
         'lib/services/profiles/profile_registry.dart': 2,

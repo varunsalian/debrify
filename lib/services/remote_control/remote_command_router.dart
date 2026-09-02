@@ -65,6 +65,8 @@ import '../profiles/device_key_provider.dart';
 import '../profiles/profile_cleanup_ledger.dart';
 import '../profiles/profile_data_generation.dart';
 import '../../services/backup_restore_service.dart';
+import '../webdav_sync/webdav_sync_binding_store.dart';
+import '../webdav_sync/webdav_sync_models.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback =
@@ -1553,6 +1555,11 @@ class RemoteCommandRouter {
     }
     final receivingDuringOnboarding =
         !(await StorageService.isInitialSetupComplete());
+    final syncBinding = (await WebDavSyncBindingStore().load()).activeBinding;
+    final webDavSyncOwnsProfileGraph =
+        syncBinding?.circleId != null &&
+        (syncBinding!.lifecycle == WebDavSyncLifecycle.active ||
+            syncBinding.lifecycle == WebDavSyncLifecycle.error);
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) {
       RemoteTransferDiagnostics.record(
@@ -1584,6 +1591,7 @@ class RemoteCommandRouter {
         'cacheCompacted': rebuildableCachesOmitted,
         'debrifyTvChannelsOmitted': debrifyTvOmission?.channels ?? 0,
         'debrifyTvHashesOmitted': debrifyTvOmission?.savedHashes ?? 0,
+        'webDavSyncActive': webDavSyncOwnsProfileGraph,
       },
     );
     final confirmed =
@@ -1609,7 +1617,14 @@ class RemoteCommandRouter {
               '${rebuildableCachesOmitted ? '\n\nRebuildable catalog and EPG '
                         'caches were compacted for transport. Playlists, '
                         'favorites, history, numbering, and settings are '
-                        'included.' : ''}',
+                        'included.' : ''}'
+              '${webDavSyncOwnsProfileGraph ? '\n\nWebDAV Sync already owns '
+                        'this device profile set. These imported profiles '
+                        'will start outside that sync set and a later Admin '
+                        'profile update could send duplicates to every '
+                        'device. Prefer connecting the sending device to the '
+                        'same WebDAV folder. Continue only if this is '
+                        'intentional.' : ''}',
             ),
             actions: <Widget>[
               TextButton(
@@ -1619,7 +1634,11 @@ class RemoteCommandRouter {
               FilledButton(
                 autofocus: true,
                 onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Import profiles'),
+                child: Text(
+                  webDavSyncOwnsProfileGraph
+                      ? 'Import anyway'
+                      : 'Import profiles',
+                ),
               ),
             ],
           ),

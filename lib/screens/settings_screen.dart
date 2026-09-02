@@ -7370,6 +7370,7 @@ class _SettingsLayout extends StatelessWidget {
             SettingsTile.spec(
               SettingsRows.syncAndMigrate,
               onTap: onOpenSyncAndMigrate,
+              trailing: const WebDavSyncPendingBadge(),
             ),
           ],
         );
@@ -7761,6 +7762,7 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsTile.spec(
                       SettingsRows.syncAndMigrate,
                       onTap: onOpenSyncAndMigrate,
+                      trailing: const WebDavSyncPendingBadge(),
                     ),
                   ],
                 ),

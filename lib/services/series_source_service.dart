@@ -3,6 +3,8 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profiles/profile_preferences.dart';
+import 'webdav_sync/webdav_sync_hot_merge.dart';
+import 'webdav_sync/webdav_sync_tombstones.dart';
 
 /// Represents a bound torrent source for a series.
 /// When set, episode playback skips torrent search and uses this source directly.
@@ -216,7 +218,17 @@ class SeriesSourceService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
-    sources.removeWhere((s) => s.torrentHash == torrentHash);
+    final removed = sources
+        .where((source) => source.torrentHash == torrentHash)
+        .toList(growable: false);
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      removed
+          .where((source) => !source.isLocal)
+          .map(
+            (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
+          ),
+    );
+    sources.removeWhere((source) => source.torrentHash == torrentHash);
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
     } else {
@@ -231,6 +243,17 @@ class SeriesSourceService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
+    final removed = sources.where(
+      (candidate) => candidate.bindingKey == source.bindingKey,
+    );
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      removed
+          .where((source) => !source.isLocal)
+          .map(
+            (candidate) =>
+                WebDavSyncRecordKey.source(imdbId, candidate.bindingKey),
+          ),
+    );
     sources.removeWhere((s) => s.bindingKey == source.bindingKey);
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
@@ -242,6 +265,14 @@ class SeriesSourceService {
   /// Remove all sources for a series.
   static Future<void> removeAllSources(String imdbId) async {
     final prefs = await ProfilePreferences.instance();
+    final sources = await getSources(imdbId);
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      sources
+          .where((source) => !source.isLocal)
+          .map(
+            (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
+          ),
+    );
     await prefs.remove('$_prefix$imdbId');
   }
 
@@ -251,6 +282,18 @@ class SeriesSourceService {
     List<SeriesSource> sources,
   ) async {
     final prefs = await ProfilePreferences.instance();
+    final existing = await getSources(imdbId);
+    final retained = sources.map((source) => source.bindingKey).toSet();
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      existing
+          .where(
+            (source) =>
+                !source.isLocal && !retained.contains(source.bindingKey),
+          )
+          .map(
+            (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
+          ),
+    );
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
     } else {

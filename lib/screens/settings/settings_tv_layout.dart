@@ -1232,6 +1232,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.syncAndMigrate,
                 onTap: widget.onOpenSyncAndMigrate,
                 focusNode: _paneNodes[0],
+                trailing: const WebDavSyncPendingBadge(),
               ),
             ],
           ),

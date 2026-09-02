@@ -30,6 +30,9 @@ import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 import 'tracking_scrobble_preferences.dart';
+import 'playlist_dedupe_key.dart';
+import 'webdav_sync/webdav_sync_hot_merge.dart';
+import 'webdav_sync/webdav_sync_tombstones.dart';
 
 /// Which ambient-trailer surface a sound/volume preference belongs to.
 ///
@@ -2533,7 +2536,7 @@ class StorageService {
     // Keep max 50 items
     if (items.length > 50) items = items.sublist(0, 50);
 
-    await prefs.setString(_continueWatchingKey, jsonEncode(items));
+    await _saveContinueWatchingItems(items, tombstoneRemovals: false);
   }
 
   /// Remove a continue watching entry by IMDB ID.
@@ -2549,17 +2552,43 @@ class StorageService {
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+      final before = items.length;
       items.removeWhere(
         (e) => (e['imdbId'] as String?)?.trim().toLowerCase() == normalized,
       );
-      await prefs.setString(_continueWatchingKey, jsonEncode(items));
+      if (items.length == before) return;
+      await _saveContinueWatchingItems(items);
     } catch (_) {}
   }
 
   /// Clear all continue watching items.
   static Future<void> clearContinueWatching() async {
+    await _saveContinueWatchingItems(const <Map<String, dynamic>>[]);
+  }
+
+  static Future<void> _saveContinueWatchingItems(
+    List<Map<String, dynamic>> items, {
+    bool tombstoneRemovals = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_continueWatchingKey);
+    if (tombstoneRemovals) {
+      final previous = await getContinueWatchingItems();
+      final retained = <String>{
+        for (final item in items)
+          if ((item['imdbId']?.toString().trim().toLowerCase() ?? '')
+              .isNotEmpty)
+            item['imdbId'].toString().trim().toLowerCase(),
+      };
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        previous
+            .map(
+              (item) => item['imdbId']?.toString().trim().toLowerCase() ?? '',
+            )
+            .where((id) => id.isNotEmpty && !retained.contains(id))
+            .map(WebDavSyncRecordKey.continueWatching),
+      );
+    }
+    await prefs.setString(_continueWatchingKey, jsonEncode(items));
   }
 
   /// Movies finished locally by the Debrify player. This intentionally stays
@@ -2613,6 +2642,9 @@ class StorageService {
     final finished = await _getFinishedMovieIds();
     if (!finished.remove(normalized)) return;
 
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
+      WebDavSyncRecordKey.finishedMovie(normalized),
+    });
     final prefs = await ProfilePreferences.instance();
     if (finished.isEmpty) {
       await prefs.remove(_finishedMoviesKey);
@@ -2640,6 +2672,11 @@ class StorageService {
     final ids = await getExplicitlyWatchedSeriesIds();
     final changed = watched ? ids.add(normalized) : ids.remove(normalized);
     if (!changed) return;
+    if (!watched) {
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
+        WebDavSyncRecordKey.explicitlyWatchedSeries(normalized),
+      });
+    }
     final prefs = await ProfilePreferences.instance();
     if (ids.isEmpty) {
       await prefs.remove(_explicitlyWatchedSeriesKey);
@@ -2683,7 +2720,7 @@ class StorageService {
     for (final key in keysToRemove) {
       map.remove(key);
     }
-    await _savePlaybackStateMap(map);
+    await _savePlaybackStateMap(map, recordDeletions: true);
     // Series finished-episode markers share this map, so clearing a Continue
     // Watching item must also invalidate derived series completion.
     localCompletionRevision.value++;
@@ -2692,9 +2729,70 @@ class StorageService {
     );
   }
 
-  static Future<void> _savePlaybackStateMap(Map<String, dynamic> map) async {
+  static Future<void> _savePlaybackStateMap(
+    Map<String, dynamic> map, {
+    bool recordDeletions = false,
+  }) async {
     final prefs = await ProfilePreferences.instance();
+    if (recordDeletions &&
+        await WebDavSyncTombstoneRecorder.shouldRecordForCurrentProfile()) {
+      final previous = await _getPlaybackStateMap();
+      final retained = _webDavPlaybackRecordKeys(map);
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        _webDavPlaybackRecordKeys(previous).difference(retained),
+      );
+    }
     await prefs.setString(_playbackStateKey, jsonEncode(map));
+  }
+
+  static Set<String> _webDavPlaybackRecordKeys(Map<String, dynamic> map) {
+    final keys = <String>{};
+    for (final entry in map.entries) {
+      final value = entry.value;
+      if (value is! Map) continue;
+      final record = Map<String, dynamic>.from(value);
+      final seasons = record['seasons'];
+      final finished = record['finishedEpisodes'];
+      if (seasons is Map || finished is Map || record['type'] == 'series') {
+        keys.add(WebDavSyncRecordKey.playbackMeta(entry.key));
+        void addEpisodes(Object? source, {required bool completion}) {
+          if (source is! Map) return;
+          for (final seasonEntry in source.entries) {
+            final season = int.tryParse(seasonEntry.key.toString());
+            if (season == null || season < 0 || seasonEntry.value is! Map) {
+              continue;
+            }
+            for (final episodeEntry in (seasonEntry.value as Map).entries) {
+              final episode = int.tryParse(episodeEntry.key.toString());
+              if (episode == null ||
+                  episode < 0 ||
+                  episodeEntry.value is! Map) {
+                continue;
+              }
+              keys.add(
+                completion
+                    ? WebDavSyncRecordKey.playbackFinished(
+                        entry.key,
+                        season,
+                        episode,
+                      )
+                    : WebDavSyncRecordKey.playbackEpisode(
+                        entry.key,
+                        season,
+                        episode,
+                      ),
+              );
+            }
+          }
+        }
+
+        addEpisodes(seasons, completion: false);
+        addEpisodes(finished, completion: true);
+      } else {
+        keys.add(WebDavSyncRecordKey.playback(entry.key));
+      }
+    }
+    return keys;
   }
 
   /// Save playback state for series content
@@ -2870,7 +2968,7 @@ class StorageService {
       'S${season}E$episode aliases=$aliasesChanged',
     );
 
-    await _savePlaybackStateMap(map);
+    await _savePlaybackStateMap(map, recordDeletions: true);
     localCompletionRevision.value++;
   }
 
@@ -2930,7 +3028,7 @@ class StorageService {
     }
 
     if (!changed) return;
-    await _savePlaybackStateMap(map);
+    await _savePlaybackStateMap(map, recordDeletions: true);
     localCompletionRevision.value++;
     debugPrint('StorageService: unmarkSeriesAsFinished imdbId="$normalized"');
   }
@@ -3820,14 +3918,18 @@ class StorageService {
     }
 
     if (keysToRemove.isNotEmpty) {
-      await _savePlaybackStateMap(map);
+      await _savePlaybackStateMap(map, recordDeletions: true);
     }
   }
 
   /// Clear all playback-related data (series and video states, track prefs, legacy resume)
   static Future<void> clearAllPlaybackData() async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_playbackStateKey);
+    await _savePlaybackStateMap(<String, dynamic>{}, recordDeletions: true);
+    final finishedMovies = await _getFinishedMovieIds();
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      finishedMovies.map(WebDavSyncRecordKey.finishedMovie),
+    );
     await prefs.remove(_finishedMoviesKey);
     await prefs.remove(localSeriesCompletionStateKey);
     await prefs.remove(localSeriesCalendarCheckedAtKey);
@@ -3947,7 +4049,7 @@ class StorageService {
 
     // Save the updated map if anything was removed
     if (keysToRemove.isNotEmpty) {
-      await _savePlaybackStateMap(map);
+      await _savePlaybackStateMap(map, recordDeletions: true);
       // Finished episodes live in this same map. Re-derive local series
       // completion so watched badges and Continue Watching update immediately.
       localCompletionRevision.value++;
@@ -4190,8 +4292,8 @@ class StorageService {
     try {
       final List<dynamic> list = await decodeJsonAsync(raw) as List<dynamic>;
       return list
-          .where((entry) => entry is Map)
-          .map((entry) => Map<String, dynamic>.from(entry as Map))
+          .whereType<Map>()
+          .map((entry) => Map<String, dynamic>.from(entry))
           .toList();
     } catch (_) {
       return <Map<String, dynamic>>[];
@@ -4225,74 +4327,19 @@ class StorageService {
     List<Map<String, dynamic>> items,
   ) async {
     final prefs = await ProfilePreferences.instance();
+    final previous = await getPlaylistItemsRaw();
+    final retained = items.map(computePlaylistDedupeKey).toSet();
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      previous
+          .map(computePlaylistDedupeKey)
+          .where((key) => !retained.contains(key))
+          .map(WebDavSyncRecordKey.playlistItem),
+    );
     await prefs.setString(_playlistKey, jsonEncode(items));
   }
 
-  static String computePlaylistDedupeKey(Map<String, dynamic> item) {
-    final providerRaw = (item['provider'] as String?) ?? 'realdebrid';
-    final provider = providerRaw.toLowerCase();
-    if (provider == 'webdav') {
-      final server = (item['webdavServerId'] ?? item['webdavBaseUrl'] ?? '')
-          .toString();
-      final path = (item['webdavPath'] ?? item['webdavFolderPath'] ?? '')
-          .toString();
-      if (server.isNotEmpty && path.isNotEmpty) {
-        return '$provider|server:${server.toLowerCase()}|path:$path';
-      }
-    }
-    final String? torrentHash = item['torrent_hash'] as String?;
-    if (torrentHash != null && torrentHash.isNotEmpty) {
-      return '$provider|hash:${torrentHash.toLowerCase()}';
-    }
-    final dynamic torboxIdRaw = item['torboxTorrentId'];
-    if (torboxIdRaw != null) {
-      final String torboxId = torboxIdRaw.toString();
-      final dynamic singleFileId = item['torboxFileId'];
-      if (singleFileId != null) {
-        final fileKey = 'torbox:$torboxId:file:${singleFileId.toString()}';
-        return '$provider|${fileKey.toLowerCase()}';
-      }
-      final dynamic multiFileIds = item['torboxFileIds'];
-      if (multiFileIds is List && multiFileIds.isNotEmpty) {
-        final joined = multiFileIds.map((e) => e.toString()).join(',');
-        final filesKey = 'torbox:$torboxId:files:$joined';
-        return '$provider|${filesKey.toLowerCase()}';
-      }
-      return '$provider|torbox:${torboxId.toLowerCase()}';
-    }
-    // PikPak file ID based key
-    final dynamic pikpakFileId = item['pikpakFileId'];
-    if (pikpakFileId != null) {
-      return '$provider|pikpak:file:${pikpakFileId.toString().toLowerCase()}';
-    }
-    final dynamic pikpakFileIds = item['pikpakFileIds'];
-    if (pikpakFileIds is List && pikpakFileIds.isNotEmpty) {
-      final joined = pikpakFileIds.map((e) => e.toString()).join(',');
-      return '$provider|pikpak:files:${joined.toLowerCase()}';
-    }
-    // Premiumize cloud-browser items are keyed by cloud item id (they have no
-    // torrent hash, unlike items added from search).
-    final dynamic premiumizeItemId = item['premiumizeItemId'];
-    if (premiumizeItemId != null && premiumizeItemId.toString().isNotEmpty) {
-      return '$provider|premiumize:item:${premiumizeItemId.toString().toLowerCase()}';
-    }
-    final dynamic premiumizeItemIds = item['premiumizeItemIds'];
-    if (premiumizeItemIds is List && premiumizeItemIds.isNotEmpty) {
-      final joined = premiumizeItemIds.map((e) => e.toString()).join(',');
-      return '$provider|premiumize:items:${joined.toLowerCase()}';
-    }
-    final String? rdId = (item['rdTorrentId'] as String?);
-    if (rdId != null && rdId.isNotEmpty) {
-      return '$provider|rd:${rdId.toLowerCase()}';
-    }
-    final String source =
-        (item['restrictedLink'] as String?)?.trim() ??
-        (item['url'] as String?)?.trim() ??
-        '';
-    final String title = (item['title'] as String?)?.trim() ?? '';
-    final legacyKey = '$source|$title'.toLowerCase();
-    return '$provider|$legacyKey';
-  }
+  static String computePlaylistDedupeKey(Map<String, dynamic> item) =>
+      PlaylistDedupeKey.compute(item);
 
   /// Add a new playlist item if it does not already exist.
   /// Expected item shape (MVP): { url, title, restrictedLink, rdTorrentId }
@@ -4435,13 +4482,16 @@ class StorageService {
   }
 
   static Future<void> clearPlaylist() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_playlistKey);
+    await savePlaylistItemsRaw(const <Map<String, dynamic>>[]);
   }
 
   /// Clear all playlist-related metadata (view modes, favorites, poster overrides)
   static Future<void> clearAllPlaylistMetadata() async {
     final prefs = await ProfilePreferences.instance();
+    final favorites = await getPlaylistFavoriteKeys();
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      favorites.map(WebDavSyncRecordKey.playlistFavorite),
+    );
     await prefs.remove(_playlistViewModesKey);
     await prefs.remove(_playlistFavoritesKey);
     await prefs.remove(_playlistPosterOverridesKey);
@@ -4888,6 +4938,10 @@ class StorageService {
     if (isFavorited) {
       favorites[dedupeKey] = true;
     } else {
+      if (!favorites.containsKey(dedupeKey)) return;
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
+        WebDavSyncRecordKey.playlistFavorite(dedupeKey),
+      });
       favorites.remove(dedupeKey);
     }
 
@@ -6742,7 +6796,7 @@ class StorageService {
     }
 
     if (purged > 0) {
-      await _savePlaybackStateMap(playback);
+      await _savePlaybackStateMap(playback, recordDeletions: true);
       localCompletionRevision.value++;
       debugPrint(
         'StorageService: purged $purged unwatched resume ghost(s) from playback state',
@@ -6887,7 +6941,7 @@ class StorageService {
                       !newlyCompletedMovieIds.contains(imdbId);
                 })
                 .toList();
-            await prefs.setString(_continueWatchingKey, jsonEncode(items));
+            await _saveContinueWatchingItems(items);
           }
         } catch (_) {
           // Leave malformed legacy data untouched; the normal CW reader also
@@ -6904,7 +6958,9 @@ class StorageService {
     for (final resumeKey in completedMovieResumeKeys) {
       await removeVideoResume(resumeKey);
     }
-    if (playbackChanged) await _savePlaybackStateMap(playback);
+    if (playbackChanged) {
+      await _savePlaybackStateMap(playback, recordDeletions: true);
+    }
     await prefs.setInt(
       _playbackCompletionMigrationGenerationKey,
       _currentPlaybackCompletionMigrationGeneration,

@@ -1623,6 +1623,7 @@ class _SearchScreenState extends State<SearchScreen>
       MdblistService.instance.playbackRevision.addListener(
         _onMdblistPlaybackRevision,
       );
+      MainPageBridge.addPlaylistChangeListener(_loadPlaylistFavorites);
     }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
@@ -2156,6 +2157,7 @@ class _SearchScreenState extends State<SearchScreen>
       _onMdblistPlaybackRevision,
     );
     if (!widget.searchMode && !widget.discoverMode) {
+      MainPageBridge.removePlaylistChangeListener(_loadPlaylistFavorites);
       MainPageBridge.unregisterCatalogDetailOpenHandler(
         _openPendingCatalogDetail,
       );

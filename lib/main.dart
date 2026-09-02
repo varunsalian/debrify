@@ -41,6 +41,7 @@ import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/profiles/profile_bootstrap.dart';
+import 'services/profiles/profile_database_adoption_gate.dart';
 import 'services/profiles/profile_migration_service.dart';
 import 'services/profiles/profile_native_lock_bridge.dart';
 import 'services/profiles/profile_registry.dart';
@@ -103,6 +104,7 @@ import 'utils/tvos_device.dart';
 import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
+import 'services/webdav_sync/webdav_sync_runtime.dart';
 
 /// Flutter's default image cache (1000 images / 100 MB) is far too large for a
 /// 2 GB Android TV box — a screenful of full-res posters plus offscreen ones
@@ -230,6 +232,9 @@ String _describeStartupFailure(Object error, StackTrace stackTrace) {
 
 Future<void> _mainUnchecked(List<String> launchArguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Reinstall an interrupted WebDAV adoption's process-wide database barrier
+  // before any startup service has a chance to open profile-owned bytes.
+  await ProfileDatabaseAdoptionGate.restorePersisted();
   await DiagnosticLog.instance.initialize();
   // On a release tvOS build, Dart's print() lands on stdout, which the device
   // console does not carry — so Flutter errors, and anything we log while
@@ -558,6 +563,9 @@ Future<void> _continueApplicationStartup() async {
   // Linux vault unlock; both must receive the same native lock authority as a
   // normal bootstrap.
   ProfileNativeLockBridge.initialize();
+  // Resume a crash-interrupted CircleAdoption before any profile database or
+  // preference warm can observe a half-copied target generation.
+  await WebDavSyncRuntime.instance.initialize();
   // These initializers may touch profile-sensitive state and therefore start
   // only after the immutable runtime mode and active scope are installed.
   unawaited(AnalyticsService.init());
@@ -715,6 +723,7 @@ Future<void> _continueApplicationStartup() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  unawaited(WebDavSyncRuntime.instance.signalLaunch());
   // Desktop scheduled recordings (Tier 1: fire while the app is running).
   // Arms stored timers + late-joins anything already in its window; no-op on
   // non-desktop platforms.

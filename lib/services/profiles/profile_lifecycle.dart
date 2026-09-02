@@ -29,9 +29,42 @@ class ProfileLifecycleCoordinator {
   Future<bool> switchTo(
     String targetProfileId, {
     Future<bool> Function(UserProfile target)? unlock,
+    Future<void> Function()? afterDeactivateBeforeCommit,
+    Future<void> Function()? afterCommitBeforeInitialize,
   }) => _switchLock.synchronized(() async {
     final current = ProfileRuntime.capture();
-    if (current.profileId == targetProfileId) return true;
+    if (current.profileId == targetProfileId) {
+      if (afterDeactivateBeforeCommit == null &&
+          afterCommitBeforeInitialize == null) {
+        return true;
+      }
+      switching.value = true;
+      try {
+        for (final participant in participants) {
+          await participant.prepareDeactivate(current);
+        }
+        await afterDeactivateBeforeCommit?.call();
+        await afterCommitBeforeInitialize?.call();
+        for (final participant in participants) {
+          await participant.initializeCandidate(current);
+        }
+        for (final participant in participants) {
+          await participant.didActivate(current);
+        }
+        return true;
+      } catch (_) {
+        for (final participant in participants.reversed) {
+          try {
+            await participant.rollback(current);
+          } catch (_) {
+            // Preserve the adoption/copy error while restoring every service.
+          }
+        }
+        rethrow;
+      } finally {
+        switching.value = false;
+      }
+    }
     final target = await registry.getProfile(targetProfileId);
     if (target == null ||
         !target.isEnabled ||
@@ -61,9 +94,14 @@ class ProfileLifecycleCoordinator {
       for (final participant in participants) {
         await participant.prepareDeactivate(current);
       }
+      // Adoption uses this drained, still-pre-commit edge to finish replacing
+      // the target's database bytes. A failure here can safely abort back to
+      // the current profile rather than exposing a half-copied target.
+      await afterDeactivateBeforeCommit?.call();
       await registry.commitActivation(targetProfileId: target.id);
       committed = true;
       ProfileRuntime.publish(candidate);
+      await afterCommitBeforeInitialize?.call();
       // Candidate warming touches process-global caches and controllers. Do it
       // only after registry and runtime authority agree on the target; no
       // observer can see B's state while A is still authoritative.

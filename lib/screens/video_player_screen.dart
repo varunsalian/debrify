@@ -27,6 +27,7 @@ import '../services/tvos_decode_remedy.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/profiles/profile_lock_controller.dart';
 import '../services/tracking_source_policy.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -10774,6 +10775,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Save the current state before disposing
     _saveResume();
+    // Every in-app player route converges here, including callers that push
+    // VideoPlayerScreen directly. The sync trigger is debounced, so the async
+    // resume write above settles before its hot-state snapshot is built.
+    MainPageBridge.notifyContentPlaybackStopped();
 
     // Cancel any ongoing PikPak retry operations
     _pikPakRetryId++;

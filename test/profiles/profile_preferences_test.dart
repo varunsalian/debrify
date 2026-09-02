@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -16,6 +18,7 @@ void main() {
       'p.two.g.1.theme': 'red',
     });
     ProfileRuntime.debugReset();
+    ProfilePreferences.debugResetMutationTracking();
   });
 
   tearDown(ProfileRuntime.debugReset);
@@ -371,6 +374,57 @@ void main() {
       );
     });
 
+    test('sync batch refuses unsafe growth before its first write', () async {
+      ProfileRuntime.initializeCommitted(scopeOne());
+      final sync = await ProfilePreferences.forCapturedScope(
+        scopeOne(),
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+
+      expect(
+        await sync.applySyncBatch(<String, Object>{
+          'bulk': filler(ProfilePreferenceBudget.limitBytes),
+          'language': 'fr',
+        }, authorizationBarrier: () {}),
+        isFalse,
+      );
+      final raw = await SharedPreferences.getInstance();
+      expect(raw.getString('p.one.g.1.bulk'), isNull);
+      expect(raw.getString('p.one.g.1.language'), isNull);
+      expect(raw.getString('p.one.g.1.theme'), 'blue');
+    });
+
+    test(
+      'sync batch rechecks headroom immediately before each write',
+      () async {
+        ProfileRuntime.initializeCommitted(scopeOne());
+        final sync = await ProfilePreferences.forCapturedScope(
+          scopeOne(),
+          CapturedProfilePreferenceAccess.syncApply,
+        );
+        final raw = await SharedPreferences.getInstance();
+        var barriers = 0;
+
+        final wrote = await sync.applySyncBatch(
+          const <String, Object>{'language': 'fr'},
+          authorizationBarrier: () {
+            barriers++;
+            if (barriers == 2) {
+              unawaited(
+                raw.setString(
+                  'another_writer_bulk',
+                  filler(ProfilePreferenceBudget.emergencyLimitBytes),
+                ),
+              );
+            }
+          },
+        );
+
+        expect(wrote, isFalse);
+        expect(raw.getString('p.one.g.1.language'), isNull);
+      },
+    );
+
     test('off tvOS every write behaves exactly as before', () async {
       ProfilePreferenceBudget.debugEnforcedOverride = false;
       ProfileRuntime.initializeCommitted(scopeOne());
@@ -402,6 +456,235 @@ void main() {
     await expectLater(
       projection.setString('theme', 'red'),
       throwsA(isA<StateError>()),
+    );
+  });
+
+  test('sync batch refreshes only keys whose stored value changed', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    Set<String>? refreshed;
+
+    expect(
+      await sync.applySyncBatch(
+        const <String, Object>{'theme': 'blue', 'language': 'en'},
+        authorizationBarrier: () {},
+        afterApply: (appliedScope, changedKeys) async {
+          expect(appliedScope, scope);
+          refreshed = changedKeys;
+        },
+      ),
+      isTrue,
+    );
+
+    expect(refreshed, <String>{'language'});
+  });
+
+  test(
+    'sync batch refuses a target captured before a newer local write',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      late ProfilePreferenceMutationToken token;
+      await ProfilePreferences.captureMutationSnapshot((captured) async {
+        token = captured;
+      });
+      final ordinary = await ProfilePreferences.instance();
+      await ordinary.setString('theme', 'new-local-value');
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      var journaled = false;
+
+      await expectLater(
+        sync.applySyncBatch(
+          const <String, Object>{'theme': 'stale-sync-value'},
+          authorizationBarrier: () {},
+          expectedMutationToken: token,
+          beforeWrite: () async => journaled = true,
+        ),
+        throwsA(isA<ProfilePreferenceMutationConflict>()),
+      );
+
+      expect(journaled, isFalse);
+      expect(ordinary.getString('theme'), 'new-local-value');
+    },
+  );
+
+  test('snapshot rejects atomic list mutation without deadlocking', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final prefs = await ProfilePreferences.instance();
+
+    await ProfilePreferences.captureMutationSnapshot((_) async {
+      expect(
+        () => prefs.mutateStringListAtomically(
+          'favorites',
+          (_) => const <String>['one'],
+        ),
+        throwsStateError,
+      );
+    }).timeout(const Duration(seconds: 1));
+  });
+
+  test('sync batch skips cache publication for an unchanged target', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    var refreshed = false;
+
+    expect(
+      await sync.applySyncBatch(
+        const <String, Object>{'theme': 'blue'},
+        authorizationBarrier: () {},
+        afterApply: (_, _) async => refreshed = true,
+      ),
+      isTrue,
+    );
+
+    expect(refreshed, isFalse);
+  });
+
+  test(
+    'pending replay republishes caches after values already landed',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      Set<String>? refreshed;
+
+      expect(
+        await sync.applySyncBatch(
+          const <String, Object>{'theme': 'blue'},
+          authorizationBarrier: () {},
+          replayCommittedTarget: true,
+          afterApply: (_, changedKeys) async => refreshed = changedKeys,
+        ),
+        isTrue,
+      );
+
+      expect(refreshed, <String>{'theme'});
+    },
+  );
+
+  test(
+    'sync batch does not treat equal int and double values as unchanged',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final raw = await SharedPreferences.getInstance();
+      await raw.setInt(scope.preferenceKey('scale'), 1);
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      Set<String>? refreshed;
+
+      expect(
+        await sync.applySyncBatch(
+          const <String, Object>{'scale': 1.0},
+          authorizationBarrier: () {},
+          afterApply: (_, changedKeys) async => refreshed = changedKeys,
+        ),
+        isTrue,
+      );
+
+      expect(raw.getDouble(scope.preferenceKey('scale')), 1.0);
+      expect(refreshed, <String>{'scale'});
+    },
+  );
+
+  test('sync batch stops after its authorization barrier is revoked', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    var barriers = 0;
+    void barrier() {
+      barriers++;
+      if (barriers == 3) {
+        ProfileRuntime.publish(
+          ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
+        );
+      }
+      if (ProfileRuntime.scope.value != scope) {
+        throw StateError('profile switched');
+      }
+    }
+
+    await expectLater(
+      sync.applySyncBatch(const <String, Object>{
+        'theme': 'green',
+        'language': 'en',
+      }, authorizationBarrier: barrier),
+      throwsStateError,
+    );
+    final raw = await SharedPreferences.getInstance();
+    expect(raw.getString('p.one.g.1.theme'), 'green');
+    expect(raw.getString('p.one.g.1.language'), isNull);
+  });
+
+  test('sync batch rejects non-finite doubles before writing', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+
+    await expectLater(
+      sync.applySyncBatch(<String, Object>{
+        'bad': double.nan,
+      }, authorizationBarrier: () {}),
+      throwsArgumentError,
+    );
+    expect(
+      (await SharedPreferences.getInstance()).containsKey('p.one.g.1.bad'),
+      isFalse,
     );
   });
 }

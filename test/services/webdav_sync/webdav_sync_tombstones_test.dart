@@ -1,0 +1,480 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  late WebDavSyncBindingStore bindingStore;
+  late WebDavSyncEngineStateStore engineStore;
+  late Directory stateDirectory;
+
+  setUp(() async {
+    ProfileRuntime.debugReset();
+    ProfilePreferences.debugResetMutationTracking();
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.filled(32, 4)),
+    );
+    bindingStore = WebDavSyncBindingStore(
+      randomBytes: (length) =>
+          Uint8List.fromList(List<int>.generate(length, (index) => index)),
+    );
+    stateDirectory = await Directory.systemTemp.createTemp(
+      'debrify-webdav-sync-state-',
+    );
+    engineStore = WebDavSyncEngineStateStore(
+      bindingStore: bindingStore,
+      directoryProvider: () async => stateDirectory,
+    );
+    WebDavSyncTombstoneRecorder.debugInstall(
+      bindingStore: bindingStore,
+      stateRepository: engineStore,
+    );
+  });
+
+  tearDown(() async {
+    ProfileRuntime.debugReset();
+    WebDavSyncTombstoneRecorder.debugReset();
+    DeviceKeyProvider.debugReset();
+    if (await stateDirectory.exists()) {
+      await stateDirectory.delete(recursive: true);
+    }
+  });
+
+  test(
+    'an unbound oversized delete set is ignored without inspection',
+    () async {
+      var enumerated = false;
+
+      await WebDavSyncTombstoneRecorder.recordForProfile(
+        'local-profile',
+        () sync* {
+          enumerated = true;
+          for (
+            var index = 0;
+            index <= WebDavSyncLimits.maxTombstonesPerProfile;
+            index++
+          ) {
+            yield 'key-$index';
+          }
+        }(),
+      );
+
+      expect(enumerated, isFalse);
+    },
+  );
+
+  test('recorder is inert before Active and mapped afterwards', () async {
+    const config = WebDavConfig(
+      id: 'server',
+      name: 'Server',
+      baseUrl: 'https://example.test/dav',
+      username: 'alice',
+      password: 'secret',
+    );
+    final binding = await bindingStore.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
+      config: config,
+      syncPassphrase: 'circle-secret',
+    );
+    final key = WebDavSyncRecordKey.finishedMovie('tt1');
+
+    await WebDavSyncTombstoneRecorder.recordForProfile(
+      'local-profile',
+      <String>{key},
+    );
+    expect((await engineStore.load(binding.namespaceId)).profiles, isEmpty);
+
+    final verified = await bindingStore.markRootVerified(
+      bindingId: binding.id,
+      root: WebDavSyncRootDocument(
+        circleId: 'circle-1',
+        createdAt: DateTime.utc(2026, 9, 1),
+        schemaFloor: 1,
+        kdfSalt: Uint8List(16),
+      ),
+      markerBytes: const <int>[1, 2, 3],
+    );
+    await bindingStore.setLifecycle(verified.id, WebDavSyncLifecycle.active);
+    await bindingStore.promoteStaged(verified.id);
+    final namespaceId = 'circle:circle-1';
+
+    final unmappedKey = WebDavSyncRecordKey.finishedMovie('tt-unmapped');
+    await WebDavSyncTombstoneRecorder.recordForProfile(
+      'local-profile',
+      <String>{unmappedKey},
+    );
+    var state = await engineStore.load(namespaceId);
+    expect(
+      state.pendingLocalProfiles['local-profile']!.tombstones,
+      contains(unmappedKey),
+    );
+
+    await engineStore.update(
+      namespaceId,
+      (state) => state.copyWith(
+        circleToLocalProfiles: const <String, String>{
+          'profile-circle': 'local-profile',
+        },
+        circleToLocalResources: const <String, String>{},
+      ),
+    );
+
+    await WebDavSyncTombstoneRecorder.recordForProfile(
+      'local-profile',
+      <String>{key},
+    );
+    state = await engineStore.load(namespaceId);
+    final tombstone = state.profiles['profile-circle']!.tombstones[key]!;
+
+    expect(tombstone.rawLocalTime, isTrue);
+    expect(tombstone.pendingPublication, isTrue);
+
+    await bindingStore.markError(verified.id, 'temporary authentication error');
+    final errorKey = WebDavSyncRecordKey.finishedMovie('tt-error');
+    await WebDavSyncTombstoneRecorder.recordForProfile(
+      'local-profile',
+      <String>{errorKey},
+    );
+    expect(
+      (await engineStore.load(
+        namespaceId,
+      )).profiles['profile-circle']!.tombstones,
+      contains(errorKey),
+    );
+  });
+
+  test('engine state is file-backed and missing state fails closed', () async {
+    const config = WebDavConfig(
+      id: 'server',
+      name: 'Server',
+      baseUrl: 'https://example.test/dav',
+      username: 'alice',
+      password: 'secret',
+    );
+    final binding = await bindingStore.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
+      config: config,
+      syncPassphrase: 'circle-secret',
+    );
+    await engineStore.update(
+      binding.namespaceId,
+      (state) => state.copyWith(
+        circleToLocalProfiles: const <String, String>{
+          'profile-circle': 'local-profile',
+        },
+        circleToLocalResources: const <String, String>{},
+      ),
+    );
+
+    final snapshot = await bindingStore.load();
+    final marker = snapshot
+        .namespaces[binding.namespaceId]!
+        .values[WebDavSyncEngineStateStore.valueKey];
+    expect(marker, <String, Object>{'version': 1, 'storage': 'file'});
+    expect(marker.toString(), isNot(contains('local-profile')));
+    final files = await stateDirectory
+        .list(recursive: true)
+        .where((entity) => entity is File && entity.path.endsWith('.json'))
+        .cast<File>()
+        .toList();
+    expect(files, hasLength(1));
+    expect(await files.single.readAsString(), contains('local-profile'));
+    expect(
+      (await engineStore.load(binding.namespaceId)).circleToLocalProfiles,
+      const <String, String>{'profile-circle': 'local-profile'},
+    );
+
+    final verified = await bindingStore.markRootVerified(
+      bindingId: binding.id,
+      root: WebDavSyncRootDocument(
+        circleId: 'circle-file-state',
+        createdAt: DateTime.utc(2026, 9, 1),
+        schemaFloor: 1,
+        kdfSalt: Uint8List(16),
+      ),
+      markerBytes: const <int>[4, 5, 6],
+    );
+    expect(
+      (await engineStore.load(verified.namespaceId)).circleToLocalProfiles,
+      const <String, String>{'profile-circle': 'local-profile'},
+    );
+
+    await files.single.delete();
+    await expectLater(
+      engineStore.load(verified.namespaceId),
+      throwsA(isA<WebDavSyncEngineStateMissingException>()),
+    );
+
+    await engineStore.initializeMissingForReconnect(verified.namespaceId);
+    final reconnected = await engineStore.load(verified.namespaceId);
+    expect(reconnected.hasAuthenticatedMaps, isFalse);
+    await expectLater(
+      engineStore.initializeMissingForReconnect(verified.namespaceId),
+      throwsStateError,
+    );
+  });
+
+  test(
+    'a full tombstone journal degrades sync without blocking local deletion',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'circle-limit',
+      );
+      final tombstones = <String, WebDavSyncTombstone>{
+        for (
+          var index = 0;
+          index < WebDavSyncLimits.maxTombstonesPerProfile;
+          index++
+        )
+          'key-$index': WebDavSyncTombstone(
+            key: 'key-$index',
+            stamp: const WebDavSyncStamp(
+              normalizedTimeMs: 1,
+              originDeviceId: 'device-a',
+            ),
+            rawLocalTime: true,
+          ),
+      };
+      await engineStore.update(
+        binding.namespaceId,
+        (state) => state.copyWith(
+          circleToLocalProfiles: const <String, String>{
+            'profile-circle': 'local-profile',
+          },
+          circleToLocalResources: const <String, String>{},
+          profiles: <String, WebDavSyncProfileEngineState>{
+            'profile-circle': WebDavSyncProfileEngineState(
+              tombstones: tombstones,
+            ),
+          },
+        ),
+      );
+
+      await WebDavSyncTombstoneRecorder.recordForProfile(
+        'local-profile',
+        const <String>{'one-too-many'},
+      );
+
+      final state = await engineStore.load(binding.namespaceId);
+      expect(
+        state.profiles['profile-circle']!.tombstones,
+        hasLength(WebDavSyncLimits.maxTombstonesPerProfile),
+      );
+      expect(
+        state.profiles['profile-circle']!.tombstones,
+        isNot(contains('one-too-many')),
+      );
+      final degraded = (await bindingStore.load()).activeBinding!;
+      expect(degraded.lifecycle, WebDavSyncLifecycle.error);
+      expect(degraded.errorMessage, contains('safe limit'));
+    },
+  );
+
+  test('playback deletion keys match the merge parser guards', () async {
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(
+        profileId: 'local-profile',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      ),
+    );
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      WebDavSyncHotMerge.playbackPreference,
+      jsonEncode(<String, Object?>{
+        'series-alias': <String, Object?>{
+          'type': 'series',
+          'imdbId': 'tt-guard',
+          'seasons': <String, Object?>{
+            '-1': <String, Object?>{
+              '1': <String, Object?>{'positionMs': 1},
+            },
+            '1': <String, Object?>{
+              '-1': <String, Object?>{'positionMs': 1},
+              '2': 'not-an-episode-map',
+              '3': <String, Object?>{'positionMs': 1},
+            },
+          },
+        },
+      }),
+    );
+    final recorded = <String>{};
+    WebDavSyncTombstoneRecorder.debugInstall(
+      sink: (_, keys) => recorded.addAll(keys),
+    );
+
+    await StorageService.clearPlaybackStateByImdbId('tt-guard');
+
+    expect(
+      recorded,
+      contains(WebDavSyncRecordKey.playbackMeta('series-alias')),
+    );
+    expect(
+      recorded,
+      contains(WebDavSyncRecordKey.playbackEpisode('series-alias', 1, 3)),
+    );
+    expect(
+      recorded,
+      isNot(
+        contains(WebDavSyncRecordKey.playbackEpisode('series-alias', -1, 1)),
+      ),
+    );
+    expect(
+      recorded,
+      isNot(
+        contains(WebDavSyncRecordKey.playbackEpisode('series-alias', 1, -1)),
+      ),
+    );
+    expect(
+      recorded,
+      isNot(
+        contains(WebDavSyncRecordKey.playbackEpisode('series-alias', 1, 2)),
+      ),
+    );
+  });
+
+  test('graph and bootstrap cadence state round-trips with strict digests', () {
+    final source = WebDavSyncEngineState(
+      lastGraphCheckMs: 100,
+      lastBootstrapCheckMs: 200,
+      appliedGraphDigest: 'a' * 64,
+      pendingGraphDigest: 'b' * 64,
+      publishedBootstrapDatabaseDigest: 'c' * 64,
+      declinedGraphDigests: <String>{'d' * 64},
+      currentDeviceIds: const <String>{'device-a', 'device-b'},
+      deviceClockWarning: true,
+      lastClockPauseReason: WebDavSyncClockPauseReason.offsetOutlier,
+    );
+
+    final restored = WebDavSyncEngineState.fromJson(source.toJson());
+
+    expect(restored.lastGraphCheckMs, 100);
+    expect(restored.lastBootstrapCheckMs, 200);
+    expect(restored.publishedBootstrapDatabaseDigest, 'c' * 64);
+    expect(restored.deviceClockWarning, isTrue);
+    expect(restored.currentDeviceIds, const <String>{'device-a', 'device-b'});
+    expect(
+      restored.lastClockPauseReason,
+      WebDavSyncClockPauseReason.offsetOutlier,
+    );
+    expect(
+      () => WebDavSyncEngineState.fromJson(<String, Object?>{
+        ...source.toJson(),
+        'publishedBootstrapDatabaseDigest': 'not-a-digest',
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test(
+    'engine state rejects oversized profile and peer maps before parsing',
+    () {
+      final oversized = <String, Object?>{
+        for (var index = 0; index <= WebDavSyncLimits.maxMapEntries; index++)
+          'id-$index': <String, Object?>{},
+      };
+
+      expect(
+        () => WebDavSyncEngineState.fromJson(<String, Object?>{
+          'version': 1,
+          'profiles': oversized,
+          'peerManifestHighWater': const <String, int>{},
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => WebDavSyncEngineState.fromJson(<String, Object?>{
+          'version': 1,
+          'profiles': const <String, Object?>{},
+          'peerManifestHighWater': <String, int>{
+            for (
+              var index = 0;
+              index <= WebDavSyncLimits.maxMapEntries;
+              index++
+            )
+              'peer-$index': index,
+          },
+        }),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test('peer history stays bounded while retaining currently listed peers', () {
+    final source = <String, int>{
+      for (var index = 0; index <= WebDavSyncLimits.maxMapEntries; index++)
+        'peer-${index.toString().padLeft(4, '0')}': index,
+    };
+
+    final bounded = boundedPeerManifestHighWater(
+      source,
+      currentDeviceIds: const <String>['peer-0000'],
+    );
+
+    expect(bounded, hasLength(WebDavSyncLimits.maxMapEntries));
+    expect(bounded, contains('peer-0000'));
+    expect(bounded, isNot(contains('peer-0001')));
+  });
+
+  test('declined graph history stays bounded and retains the newest', () {
+    final source = <String>{
+      for (var index = 0; index < WebDavSyncLimits.maxMapEntries; index++)
+        index.toRadixString(16).padLeft(64, '0'),
+    };
+    final newest = 'f' * 64;
+
+    final bounded = boundedDeclinedGraphDigests(source, newest);
+
+    expect(bounded, hasLength(WebDavSyncLimits.maxMapEntries));
+    expect(bounded, contains(newest));
+    expect(bounded, isNot(contains('0' * 64)));
+  });
+}
+
+Future<WebDavSyncBinding> _activateBinding(
+  WebDavSyncBindingStore store, {
+  required String circleId,
+}) async {
+  const config = WebDavConfig(
+    id: 'server',
+    name: 'Server',
+    baseUrl: 'https://example.test/dav',
+    username: 'alice',
+    password: 'secret',
+  );
+  final staged = await store.stageBinding(
+    location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
+    config: config,
+    syncPassphrase: 'circle-secret',
+  );
+  final verified = await store.markRootVerified(
+    bindingId: staged.id,
+    root: WebDavSyncRootDocument(
+      circleId: circleId,
+      createdAt: DateTime.utc(2026, 9, 1),
+      schemaFloor: 1,
+      kdfSalt: Uint8List(16),
+    ),
+    markerBytes: const <int>[1, 2, 3],
+  );
+  await store.setLifecycle(verified.id, WebDavSyncLifecycle.active);
+  await store.promoteStaged(verified.id);
+  return (await store.load()).activeBinding!;
+}

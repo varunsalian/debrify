@@ -1401,7 +1401,10 @@ class VideoPlayerLauncher {
         ? await _launchWithDeoVR(context, args)
         : await _launchWithExternalPlayer(context, args);
 
-    if (!launched) return false;
+    if (!launched) {
+      MainPageBridge.notifyContentPlaybackStopped();
+      return false;
+    }
 
     // Control returns to Flutter without a route ever being pushed, so
     // RouteAware can't tell screens when playback ended — same signal the
@@ -2069,7 +2072,10 @@ class VideoPlayerLauncher {
     _armedReturnObserver = observer;
     binding.addObserver(observer);
     Timer(_externalReturnArmTimeout, () {
-      if (!observer.wasCovered) finish(notify: false);
+      if (!observer.wasCovered) {
+        finish(notify: false);
+        MainPageBridge.notifyContentPlaybackStopped();
+      }
     });
   }
 

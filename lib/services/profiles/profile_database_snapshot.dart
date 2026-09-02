@@ -151,6 +151,7 @@ class ProfileDatabaseSnapshot {
   static Future<ProfileDatabaseSnapshotExport> export(
     ProfileScope scope, {
     bool compact = false,
+    Map<String, String> resourceIdProjection = const <String, String>{},
   }) async {
     final attachmentCap = debugExportBudgetOverride ?? maxAttachmentBytes;
     final budget = debugExportBudgetOverride ?? maxExportRawBytes;
@@ -188,6 +189,16 @@ class ProfileDatabaseSnapshot {
           'Portable user library data is too large to back up '
           '(${(total / (1024 * 1024)).ceil()} MB)',
         );
+      }
+
+      if (resourceIdProjection.isNotEmpty) {
+        for (final entry in snapshots.entries) {
+          await _remapDatabaseFile(
+            entry.value,
+            entry.key,
+            resourceIdProjection,
+          );
+        }
       }
 
       final result = <String, Object?>{};
@@ -426,78 +437,86 @@ class ProfileDatabaseSnapshot {
     for (final name in databaseNames) {
       final file = scope.fileIn(documents, 'documents', name);
       if (!await file.exists()) continue;
-      final db = await openDatabase(file.path, singleInstance: false);
-      try {
-        final tables = (await db.query(
-          'sqlite_master',
-          columns: const <String>['name'],
-          where: "type = 'table'",
-        )).map((row) => row['name']).whereType<String>().toSet();
-        await db.transaction((txn) async {
-          for (final entry in resourceIds.entries) {
-            if (name == debrifyTvDatabaseName) {
-              for (final table in const <String>{
-                'iptv_list_channels',
-                'iptv_watch_history',
-              }.where(tables.contains)) {
-                await txn.update(
-                  table,
-                  <String, Object?>{'playlist_id': entry.value},
-                  where: 'playlist_id = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
-              if (tables.contains('iptv_category_channel_orders')) {
-                await txn.update(
-                  'iptv_category_channel_orders',
-                  <String, Object?>{'source_id': entry.value},
-                  where: 'source_id = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
-            } else if (name == 'iptv_catalog.db') {
-              if (tables.contains('category_manual_orders')) {
-                await txn.update(
-                  'category_manual_orders',
-                  <String, Object?>{
-                    'catalog_key': IptvCatalogKey.forLocalCategoryOrder(
-                      entry.value,
-                    ),
-                  },
-                  where: 'catalog_key = ?',
-                  whereArgs: <Object>[
-                    IptvCatalogKey.forLocalCategoryOrder(entry.key),
-                  ],
-                );
-              }
-              if (tables.contains('channel_number_aliases')) {
-                await txn.update(
-                  'channel_number_aliases',
-                  <String, Object?>{'source_key': entry.value},
-                  where: 'source_key = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
-              if (tables.contains('channel_number_namespaces')) {
-                await txn.update(
-                  'channel_number_namespaces',
-                  <String, Object?>{'active_source_key': entry.value},
-                  where: 'active_source_key = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
+      await _remapDatabaseFile(file, name, resourceIds);
+    }
+  }
+
+  static Future<void> _remapDatabaseFile(
+    File file,
+    String name,
+    Map<String, String> resourceIds,
+  ) async {
+    final db = await openDatabase(file.path, singleInstance: false);
+    try {
+      final tables = (await db.query(
+        'sqlite_master',
+        columns: const <String>['name'],
+        where: "type = 'table'",
+      )).map((row) => row['name']).whereType<String>().toSet();
+      await db.transaction((txn) async {
+        for (final entry in resourceIds.entries) {
+          if (name == debrifyTvDatabaseName) {
+            for (final table in const <String>{
+              'iptv_list_channels',
+              'iptv_watch_history',
+            }.where(tables.contains)) {
+              await txn.update(
+                table,
+                <String, Object?>{'playlist_id': entry.value},
+                where: 'playlist_id = ?',
+                whereArgs: <Object>[entry.key],
+              );
+            }
+            if (tables.contains('iptv_category_channel_orders')) {
+              await txn.update(
+                'iptv_category_channel_orders',
+                <String, Object?>{'source_id': entry.value},
+                where: 'source_id = ?',
+                whereArgs: <Object>[entry.key],
+              );
+            }
+          } else if (name == 'iptv_catalog.db') {
+            if (tables.contains('category_manual_orders')) {
+              await txn.update(
+                'category_manual_orders',
+                <String, Object?>{
+                  'catalog_key': IptvCatalogKey.forLocalCategoryOrder(
+                    entry.value,
+                  ),
+                },
+                where: 'catalog_key = ?',
+                whereArgs: <Object>[
+                  IptvCatalogKey.forLocalCategoryOrder(entry.key),
+                ],
+              );
+            }
+            if (tables.contains('channel_number_aliases')) {
+              await txn.update(
+                'channel_number_aliases',
+                <String, Object?>{'source_key': entry.value},
+                where: 'source_key = ?',
+                whereArgs: <Object>[entry.key],
+              );
+            }
+            if (tables.contains('channel_number_namespaces')) {
+              await txn.update(
+                'channel_number_namespaces',
+                <String, Object?>{'active_source_key': entry.value},
+                where: 'active_source_key = ?',
+                whereArgs: <Object>[entry.key],
+              );
             }
           }
-        });
-        await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
-        final integrity = await db.rawQuery('PRAGMA integrity_check');
-        if (!_integrityOk(integrity)) {
-          throw const FormatException('Remapped database is corrupt');
         }
-      } finally {
-        await db.close();
-        await _removeCompanions(file);
+      });
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+      final integrity = await db.rawQuery('PRAGMA integrity_check');
+      if (!_integrityOk(integrity)) {
+        throw const FormatException('Remapped database is corrupt');
       }
+    } finally {
+      await db.close();
+      await _removeCompanions(file);
     }
   }
 

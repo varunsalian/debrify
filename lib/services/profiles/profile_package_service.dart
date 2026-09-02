@@ -13,6 +13,18 @@ import 'profile_scope.dart';
 import 'portable_profile_package.dart';
 import 'sanitized_profile_preferences.dart';
 
+final class ProfileGraphPackageExport {
+  const ProfileGraphPackageExport({
+    required this.package,
+    required this.profileBackupIdsByLocalId,
+    required this.resourceBackupIdsByLocalId,
+  });
+
+  final PortableProfilePackage package;
+  final Map<String, String> profileBackupIdsByLocalId;
+  final Map<String, String> resourceBackupIdsByLocalId;
+}
+
 class ProfilePackageService {
   final ProfileRegistry registry;
   final ConnectionResourceService resources;
@@ -21,6 +33,28 @@ class ProfilePackageService {
     required this.registry,
     required this.resources,
   });
+
+  /// Portable preference projection reused by recurring WebDAV hot sync.
+  ///
+  /// Backup restore deliberately retains explicit nulls so unsafe destination
+  /// values can be cleared once. Recurring sync callers must drop those nulls
+  /// and represent deletion only with tombstones.
+  static Future<Map<String, Object?>> exportPortablePreferences(
+    ProfileScope scope, {
+    bool includeCredentialEngineSettings = true,
+    bool dropNulls = false,
+  }) async {
+    final values = await _exportPreferences(
+      scope,
+      sanitized: false,
+      includeCredentialEngineSettings: includeCredentialEngineSettings,
+    );
+    if (!dropNulls) return values;
+    return <String, Object?>{
+      for (final entry in values.entries)
+        if (entry.value != null) entry.key: entry.value,
+    };
+  }
 
   Future<PortableProfilePackage> exportProfile({
     required ProfileAuthorizationContext context,
@@ -175,13 +209,51 @@ class ProfilePackageService {
   }
 
   /// [compactDatabaseSnapshots] removes rebuildable IPTV catalog caches and
-  /// omits Debrify TV channels together with their saved hash pools. It is used
-  /// when a remote graph would otherwise exceed the transport budget; callers
-  /// must obtain explicit user consent before saving or sending that package.
+  /// omits Debrify TV channels together with their saved hash pools. Manual
+  /// backup callers obtain explicit consent; WebDAV Sync also accepts these
+  /// two named omissions when the automatic size fallback needs them and
+  /// discloses that limitation on its setup page.
   Future<PortableProfilePackage> exportAllProfiles({
     required ProfileAuthorizationContext context,
     required bool includeSecrets,
     bool compactDatabaseSnapshots = false,
+    bool includeDatabases = true,
+    bool includePreferences = true,
+  }) async => (await _exportAllProfiles(
+    context: context,
+    includeSecrets: includeSecrets,
+    compactDatabaseSnapshots: compactDatabaseSnapshots,
+    includeDatabases: includeDatabases,
+    includePreferences: includePreferences,
+  )).package;
+
+  /// Full graph export plus the local-to-backup identity correlation needed by
+  /// WebDAV Sync. The optional projection rewrites resource IDs inside SQLite
+  /// snapshots before they leave the device.
+  Future<ProfileGraphPackageExport> exportAllProfilesForSync({
+    required ProfileAuthorizationContext context,
+    required Map<String, String> profileIdProjection,
+    required Map<String, String> resourceIdProjection,
+    required bool includeDatabases,
+    required bool includePreferences,
+  }) => _exportAllProfiles(
+    context: context,
+    includeSecrets: true,
+    compactDatabaseSnapshots: false,
+    includeDatabases: includeDatabases,
+    includePreferences: includePreferences,
+    profileIdProjection: profileIdProjection,
+    resourceIdProjection: resourceIdProjection,
+  );
+
+  Future<ProfileGraphPackageExport> _exportAllProfiles({
+    required ProfileAuthorizationContext context,
+    required bool includeSecrets,
+    required bool compactDatabaseSnapshots,
+    required bool includeDatabases,
+    required bool includePreferences,
+    Map<String, String> profileIdProjection = const <String, String>{},
+    Map<String, String> resourceIdProjection = const <String, String>{},
   }) async {
     final actor = await context.validate(registry);
     if (actor.role != UserProfileRole.admin ||
@@ -192,16 +264,24 @@ class ProfilePackageService {
     if (!includeSecrets) {
       throw StateError('Comprehensive backups must include connection secrets');
     }
-    final profiles = await registry.listProfiles(includeDisabled: true);
+    final profiles = (await registry.listProfiles(
+      includeDisabled: true,
+    )).toList(growable: false);
+    _sortByProjectedIdentity(
+      profiles,
+      localId: (profile) => profile.id,
+      projection: profileIdProjection,
+      label: 'profile',
+    );
     final profileBackupIds = <String, String>{};
     final profileRecords = <Map<String, dynamic>>[];
     final sections = <String, dynamic>{};
+    final resourceBackupIds = <String, String>{};
     final compactedDatabases = <String>[];
     var debrifyTvOmission = const DebrifyTvBackupOmission.none();
     for (var index = 0; index < profiles.length; index++) {
       final profile = profiles[index];
       final backupId = 'profile-$index';
-      final sectionId = '$backupId-preferences';
       profileBackupIds[profile.id] = backupId;
       final pinRecord = await _exportPinRecord(
         profile.id,
@@ -219,45 +299,57 @@ class ProfilePackageService {
         'disabled': !profile.isEnabled,
         'lockOnResume': profile.lockOnResume,
         'inactivityTimeoutMinutes': profile.inactivityTimeoutMinutes,
-        'preferencesSection': sectionId,
+        if (includePreferences) 'preferencesSection': '$backupId-preferences',
       });
       final scope = ProfileScope(
         profileId: profile.id,
         dataGeneration: profile.visibleDataGeneration,
         sessionEpoch: 0,
       );
-      sections[sectionId] = await PortableProfilePackage.buildSection(
-        await _exportPreferences(
+      if (includePreferences) {
+        sections['$backupId-preferences'] =
+            await PortableProfilePackage.buildSection(
+              await _exportPreferences(
+                scope,
+                sanitized: false,
+                includeCredentialEngineSettings: true,
+              ),
+            );
+      }
+      if (includeDatabases) {
+        final databaseExport = await ProfileDatabaseSnapshot.export(
           scope,
-          sanitized: false,
-          includeCredentialEngineSettings: true,
-        ),
-      );
-      final databaseExport = await ProfileDatabaseSnapshot.export(
-        scope,
-        compact: compactDatabaseSnapshots,
-      );
-      compactedDatabases.addAll(
-        databaseExport.compacted
-            .where(
-              (entry) => entry != ProfileDatabaseSnapshot.debrifyTvDatabaseName,
-            )
-            .map((entry) => '${profile.name}: $entry'),
-      );
-      debrifyTvOmission += databaseExport.debrifyTvOmission;
-      if (databaseExport.attachments.isNotEmpty) {
-        final databaseSectionId = '$backupId-databases';
-        profileRecords.last['databasesSection'] = databaseSectionId;
-        sections[databaseSectionId] = await PortableProfilePackage.buildSection(
-          databaseExport.attachments,
+          compact: compactDatabaseSnapshots,
+          resourceIdProjection: resourceIdProjection,
         );
+        compactedDatabases.addAll(
+          databaseExport.compacted
+              .where(
+                (entry) =>
+                    entry != ProfileDatabaseSnapshot.debrifyTvDatabaseName,
+              )
+              .map((entry) => '${profile.name}: $entry'),
+        );
+        debrifyTvOmission += databaseExport.debrifyTvOmission;
+        if (databaseExport.attachments.isNotEmpty) {
+          final databaseSectionId = '$backupId-databases';
+          profileRecords.last['databasesSection'] = databaseSectionId;
+          sections[databaseSectionId] =
+              await PortableProfilePackage.buildSection(
+                databaseExport.attachments,
+              );
+        }
       }
       final portableFiles = await ProfilePortableFiles.export(scope);
       if (portableFiles.isNotEmpty) {
+        final orderedPortableFiles = Map<String, Object?>.fromEntries(
+          portableFiles.entries.toList()
+            ..sort((left, right) => left.key.compareTo(right.key)),
+        );
         final filesSectionId = '$backupId-files';
         profileRecords.last['filesSection'] = filesSectionId;
         sections[filesSectionId] = await PortableProfilePackage.buildSection(
-          portableFiles,
+          orderedPortableFiles,
         );
       }
       final portableAvatar = await ProfilePortableFiles.exportAvatar(
@@ -273,12 +365,50 @@ class ProfilePackageService {
     final bindings = await registry.listAllResourceBindings();
     final profileSettings = await registry.listAllResourceSettings();
     final resourceRecords = <Map<String, dynamic>>[];
-    final allResources = await registry.listAllResourcesIncludingDisabled();
+    final allResources = (await registry.listAllResourcesIncludingDisabled())
+        .toList(growable: false);
+    _sortByProjectedIdentity(
+      allResources,
+      localId: (resource) => resource.id,
+      projection: resourceIdProjection,
+      label: 'resource',
+    );
     for (var index = 0; index < allResources.length; index++) {
       final resource = allResources[index];
       final ownerBackupId = profileBackupIds[resource.ownerProfileId];
       if (ownerBackupId == null) continue;
       final backupId = 'resource-$index';
+      resourceBackupIds[resource.id] = backupId;
+      final resourceGrants = <Map<String, dynamic>>[
+        for (final grant in grants)
+          if (grant['resource_id'] == resource.id &&
+              profileBackupIds[grant['profile_id']] != null)
+            <String, dynamic>{
+              'profileBackupId': profileBackupIds[grant['profile_id']]!,
+              'permissions': grant['permissions'],
+            },
+      ]..sort(_compareProfileReferences);
+      final resourceBindings = <Map<String, dynamic>>[
+        for (final binding in bindings)
+          if (binding['resource_id'] == resource.id &&
+              profileBackupIds[binding['profile_id']] != null)
+            <String, dynamic>{
+              'profileBackupId': profileBackupIds[binding['profile_id']]!,
+              'slot': binding['slot'],
+            },
+      ]..sort(_compareProfileReferences);
+      final resourceSettings = <Map<String, dynamic>>[
+        for (final settings in profileSettings)
+          if (settings['resource_id'] == resource.id &&
+              profileBackupIds[settings['profile_id']] != null)
+            <String, dynamic>{
+              'profileBackupId': profileBackupIds[settings['profile_id']]!,
+              'enabled': settings['enabled'] == 1,
+              'values': Map<String, dynamic>.from(
+                jsonDecode(settings['settings_json']! as String) as Map,
+              ),
+            },
+      ]..sort(_compareProfileReferences);
       resourceRecords.add(<String, dynamic>{
         'backupId': backupId,
         'sourceResourceId': resource.id,
@@ -291,36 +421,9 @@ class ProfilePackageService {
           context: context,
           resourceId: resource.id,
         ),
-        'grants': <Map<String, dynamic>>[
-          for (final grant in grants)
-            if (grant['resource_id'] == resource.id &&
-                profileBackupIds[grant['profile_id']] != null)
-              <String, dynamic>{
-                'profileBackupId': profileBackupIds[grant['profile_id']]!,
-                'permissions': grant['permissions'],
-              },
-        ],
-        'bindings': <Map<String, dynamic>>[
-          for (final binding in bindings)
-            if (binding['resource_id'] == resource.id &&
-                profileBackupIds[binding['profile_id']] != null)
-              <String, dynamic>{
-                'profileBackupId': profileBackupIds[binding['profile_id']]!,
-                'slot': binding['slot'],
-              },
-        ],
-        'profileSettings': <Map<String, dynamic>>[
-          for (final settings in profileSettings)
-            if (settings['resource_id'] == resource.id &&
-                profileBackupIds[settings['profile_id']] != null)
-              <String, dynamic>{
-                'profileBackupId': profileBackupIds[settings['profile_id']]!,
-                'enabled': settings['enabled'] == 1,
-                'values': Map<String, dynamic>.from(
-                  jsonDecode(settings['settings_json']! as String) as Map,
-                ),
-              },
-        ],
+        'grants': resourceGrants,
+        'bindings': resourceBindings,
+        'profileSettings': resourceSettings,
       });
     }
     final package = PortableProfilePackage(
@@ -346,7 +449,50 @@ class ProfilePackageService {
       },
     );
     await context.validate(registry);
-    return package;
+    return ProfileGraphPackageExport(
+      package: package,
+      profileBackupIdsByLocalId: Map<String, String>.unmodifiable(
+        profileBackupIds,
+      ),
+      resourceBackupIdsByLocalId: Map<String, String>.unmodifiable(
+        resourceBackupIds,
+      ),
+    );
+  }
+
+  static void _sortByProjectedIdentity<T>(
+    List<T> values, {
+    required String Function(T value) localId,
+    required Map<String, String> projection,
+    required String label,
+  }) {
+    if (projection.isEmpty && values.isEmpty) return;
+    if (projection.length != values.length ||
+        values.any((value) => !projection.containsKey(localId(value)))) {
+      if (projection.isNotEmpty) {
+        throw StateError(
+          'WebDAV sync $label identity projection is incomplete',
+        );
+      }
+      return;
+    }
+    values.sort(
+      (left, right) =>
+          projection[localId(left)]!.compareTo(projection[localId(right)]!),
+    );
+  }
+
+  static int _compareProfileReferences(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+  ) {
+    final byProfile = (left['profileBackupId'] as String).compareTo(
+      right['profileBackupId'] as String,
+    );
+    if (byProfile != 0) return byProfile;
+    return (left['slot'] as String? ?? '').compareTo(
+      right['slot'] as String? ?? '',
+    );
   }
 
   /// PIN hashes travel with the profile (product call 2026-08-17: restored
@@ -391,8 +537,13 @@ class ProfilePackageService {
   }) async {
     final raw = await SharedPreferences.getInstance();
     final preferences = <String, Object?>{};
-    for (final physical in raw.getKeys()) {
-      if (!physical.startsWith(scope.preferencePrefix)) continue;
+    final physicalKeys =
+        raw
+            .getKeys()
+            .where((key) => key.startsWith(scope.preferencePrefix))
+            .toList()
+          ..sort();
+    for (final physical in physicalKeys) {
       final logical = physical.substring(scope.preferencePrefix.length);
       final value = raw.get(physical);
       if (sanitized

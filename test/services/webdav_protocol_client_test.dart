@@ -155,6 +155,43 @@ void main() {
     ]);
   });
 
+  test('existing collection metadata survives MKCOL 405 success', () async {
+    handler = (request) async {
+      expect(request.method, 'MKCOL');
+      request.response
+        ..statusCode = HttpStatus.methodNotAllowed
+        ..headers.set(HttpHeaders.etagHeader, '"collection-etag"')
+        ..headers.set(HttpHeaders.dateHeader, 'Tue, 01 Sep 2026 12:00:00 GMT');
+      await request.response.close();
+    };
+
+    final result = await client.ensureCollection('already-there');
+
+    expect(result!.statusCode, HttpStatus.methodNotAllowed);
+    expect(result.etag, '"collection-etag"');
+    expect(result.serverDate, DateTime.utc(2026, 9, 1, 12));
+  });
+
+  test('malformed HTTP Date metadata is treated as unavailable', () async {
+    client.close();
+    client = WebDavProtocolClient(
+      endpoint: Uri.parse('https://example.test/dav'),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient(
+        (_) async => http.Response(
+          'payload',
+          HttpStatus.ok,
+          headers: const <String, String>{'date': 'not-an-http-date'},
+        ),
+      ),
+    );
+
+    final result = await client.getBytes(path: 'backup.json', maxBytes: 1024);
+
+    expect(utf8.decode(result.bytes), 'payload');
+    expect(result.metadata.serverDate, isNull);
+  });
+
   test('uploadFile streams a file and enforces its byte cap', () async {
     final source = File('${tempDirectory.path}/source.bin');
     await source.writeAsBytes(List<int>.generate(8192, (index) => index % 251));
@@ -322,13 +359,23 @@ void main() {
       if (request.method == 'HEAD') {
         request.response.statusCode = HttpStatus.methodNotAllowed;
       } else {
-        request.response.statusCode = HttpStatus.multiStatus;
+        request.response
+          ..statusCode = HttpStatus.multiStatus
+          ..headers.set(HttpHeaders.etagHeader, '"file-etag"')
+          ..headers.set(
+            HttpHeaders.dateHeader,
+            'Tue, 01 Sep 2026 12:00:00 GMT',
+          );
       }
       await request.drain<void>();
       await request.response.close();
     };
 
-    expect(await client.exists(path: 'backup.json'), isTrue);
+    final result = await client.exists(path: 'backup.json');
+    expect(result.exists, isTrue);
+    expect(result.metadata.statusCode, HttpStatus.multiStatus);
+    expect(result.metadata.etag, '"file-etag"');
+    expect(result.metadata.serverDate, DateTime.utc(2026, 9, 1, 12));
     expect(seen, <String>[
       'HEAD /dav/backup.json:null',
       'PROPFIND /dav/backup.json:0',
@@ -344,7 +391,7 @@ void main() {
             : HttpStatus.unauthorized;
         await request.response.close();
       };
-      expect(await client.exists(path: 'missing'), isFalse);
+      expect((await client.exists(path: 'missing')).exists, isFalse);
       await expectLater(
         client.exists(path: 'private'),
         throwsA(

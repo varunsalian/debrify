@@ -38,6 +38,45 @@ final Color kSettingsDim2 = Colors.white.withValues(alpha: 0.28);
 /// edge-to-edge on TV/desktop.
 const double kSettingsMaxWidth = 720;
 
+class WebDavSyncPendingBadge extends StatelessWidget {
+  const WebDavSyncPendingBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: MainPageBridge.webDavGraphChangePending,
+      builder: (context, pending, _) {
+        if (!pending) {
+          return Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color:
+                IconTheme.of(context).color ??
+                AppThemeScope.of(context).settings.dim2,
+          );
+        }
+        final settings = AppThemeScope.of(context).settings;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: settings.warning.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            'UPDATE',
+            style: TextStyle(
+              color: settings.warning,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Uniform monochrome initials chip for a connection provider ("RD", "JP").
 /// Replaces the old per-provider colored gradient icon boxes — status is
 /// carried by the dot/text instead, keeping the chrome calm like Stremio.
@@ -340,6 +379,11 @@ abstract final class SettingsRows {
     icon: Icons.sync_alt_rounded,
     title: 'Sync and Migrate',
     subtitle: 'Move an encrypted profile backup through WebDAV',
+  );
+  static const enableWebDavSync = SettingsRowContent(
+    icon: Icons.sync_rounded,
+    title: 'Enable WebDAV Sync',
+    subtitle: 'Keep supported profile state in one WebDAV folder',
   );
   static const createWebDavBackup = SettingsRowContent(
     icon: Icons.cloud_upload_outlined,
@@ -2166,14 +2210,23 @@ class _SettingsTileState extends State<SettingsTile> {
                       ],
                     ),
                   ),
-                  widget.trailing ??
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 20,
+                  if (widget.trailing case final trailing?)
+                    IconTheme.merge(
+                      data: IconThemeData(
                         color: inverse
                             ? foreground.withValues(alpha: 0.42)
                             : t.dim2,
                       ),
+                      child: trailing,
+                    )
+                  else
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: inverse
+                          ? foreground.withValues(alpha: 0.42)
+                          : t.dim2,
+                    ),
                 ],
               ),
             ),

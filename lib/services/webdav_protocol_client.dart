@@ -96,6 +96,13 @@ final class WebDavFileResult {
   final WebDavResponseMetadata metadata;
 }
 
+final class WebDavExistenceResult {
+  const WebDavExistenceResult({required this.exists, required this.metadata});
+
+  final bool exists;
+  final WebDavResponseMetadata metadata;
+}
+
 /// Low-level WebDAV transport with no profile/session dependency.
 ///
 /// All requests disable the platform client's redirect handling. One redirect
@@ -194,10 +201,11 @@ final class WebDavProtocolClient {
     final base = normalizedEndpoint.pathSegments.where(
       (segment) => segment.isNotEmpty,
     );
-    return normalizedEndpoint.replace(
-      pathSegments: <String>[...base, ...relative, if (collection) ''],
-      fragment: '',
-    );
+    return normalizedEndpoint
+        .replace(
+          pathSegments: <String>[...base, ...relative, if (collection) ''],
+        )
+        .removeFragment();
   }
 
   Map<String, String> get authorizationHeaders =>
@@ -377,7 +385,7 @@ final class WebDavProtocolClient {
     }
   }
 
-  Future<bool> exists({
+  Future<WebDavExistenceResult> exists({
     required String path,
     bool collection = false,
     Future<void> Function()? beforeSend,
@@ -389,8 +397,9 @@ final class WebDavProtocolClient {
       beforeSend: beforeSend,
     );
     if (response.statusCode == HttpStatus.notFound) {
+      final metadata = _metadata(response);
       await _discard(response);
-      return false;
+      return WebDavExistenceResult(exists: false, metadata: metadata);
     }
     if (response.statusCode == HttpStatus.methodNotAllowed ||
         response.statusCode == HttpStatus.notImplemented) {
@@ -402,12 +411,13 @@ final class WebDavProtocolClient {
         beforeSend: beforeSend,
       );
       if (response.statusCode == HttpStatus.notFound) {
+        final metadata = _metadata(response);
         await _discard(response);
-        return false;
+        return WebDavExistenceResult(exists: false, metadata: metadata);
       }
     }
-    await _finishMetadata(response, accepted: _isSuccess);
-    return true;
+    final metadata = await _finishMetadata(response, accepted: _isSuccess);
+    return WebDavExistenceResult(exists: true, metadata: metadata);
   }
 
   Future<WebDavBytesResult> propfind({
@@ -467,14 +477,14 @@ final class WebDavProtocolClient {
     return _finishMetadata(response, accepted: _isSuccess);
   }
 
-  Future<void> ensureCollection(
+  Future<WebDavResponseMetadata?> ensureCollection(
     String path, {
     Future<void> Function()? beforeSend,
   }) async {
     final normalized = _normalizeRelativePath(
       path,
     ).replaceAll(RegExp(r'/+$'), '');
-    if (normalized.isEmpty) return;
+    if (normalized.isEmpty) return null;
     final segments = _relativeSegments(normalized);
     if (segments.length > maxPathSegments) {
       throw const WebDavException(
@@ -483,8 +493,8 @@ final class WebDavProtocolClient {
       );
     }
 
-    Future<void> createAt(int count) async {
-      if (count <= 0) return;
+    Future<WebDavResponseMetadata?> createAt(int count) async {
+      if (count <= 0) return null;
       final partial = segments.take(count).join('/');
       var response = await _sendFollowingRedirects(
         method: 'MKCOL',
@@ -494,12 +504,14 @@ final class WebDavProtocolClient {
       );
       if (_isSuccess(response.statusCode) ||
           response.statusCode == HttpStatus.methodNotAllowed) {
-        await _discard(response);
-        return;
+        return _finishMetadata(
+          response,
+          accepted: (status) =>
+              _isSuccess(status) || status == HttpStatus.methodNotAllowed,
+        );
       }
       if (response.statusCode != HttpStatus.conflict) {
-        await _finishMetadata(response, accepted: _isSuccess);
-        return;
+        return _finishMetadata(response, accepted: _isSuccess);
       }
       await _discard(response);
       await createAt(count - 1);
@@ -509,14 +521,14 @@ final class WebDavProtocolClient {
         headers: authorizationHeaders,
         beforeSend: beforeSend,
       );
-      await _finishMetadata(
+      return _finishMetadata(
         response,
         accepted: (status) =>
             _isSuccess(status) || status == HttpStatus.methodNotAllowed,
       );
     }
 
-    await createAt(segments.length);
+    return createAt(segments.length);
   }
 
   Future<http.StreamedResponse> _sendFollowingRedirects({
@@ -753,7 +765,7 @@ final class WebDavProtocolClient {
     if (rawDate != null) {
       try {
         serverDate = HttpDate.parse(rawDate).toUtc();
-      } on FormatException {
+      } on Exception {
         serverDate = null;
       }
     }
@@ -825,7 +837,7 @@ final class WebDavProtocolClient {
         message: 'Enter a valid HTTP or HTTPS WebDAV server URL',
       );
     }
-    return uri.replace(fragment: '');
+    return uri.removeFragment();
   }
 
   static List<String> _relativeSegments(String path) {

@@ -8,6 +8,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'profiles/profile_storage_paths.dart';
+import 'profiles/profile_database_adoption_gate.dart';
 import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
@@ -622,9 +623,12 @@ class IptvCatalogDb {
   /// Cost here is bounded and independent of channel count: only DDL runs.
   /// Row-touching upgrades live in [ensureMigrations], which callers that need
   /// migrated data await separately.
-  static Future<void> open() {
-    if (_db != null) return Future.value();
-    return _opening ??= _openWithRecovery().whenComplete(() => _opening = null);
+  static Future<void> open() async {
+    await ProfileDatabaseAdoptionGate.waitUntilReleased();
+    if (_db != null) return;
+    await (_opening ??= _openWithRecovery().whenComplete(
+      () => _opening = null,
+    ));
   }
 
   /// [_open] with one delete-and-recreate retry. A catalog database that

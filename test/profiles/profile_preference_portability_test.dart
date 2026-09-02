@@ -19,6 +19,17 @@ void main() {
     }
   });
 
+  test('MDBList checkpoint remains portable for explicit backup restore', () {
+    const key = 'mdblist_sync_checkpoint_v1';
+    const value = '{"server_time":20}';
+
+    expect(ProfilePreferencePortability.allowsKey(key), isTrue);
+    expect(ProfilePreferencePortability.prepareValue(key, value), (
+      include: true,
+      value: value,
+    ));
+  });
+
   test('credentials, device grants, and executable templates are rejected', () {
     for (final key in const <String>{
       'provider_api_key',

@@ -7,6 +7,7 @@ import 'package:synchronized/synchronized.dart';
 import 'profiles/profile_storage_paths.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_scope.dart';
+import 'profiles/profile_database_adoption_gate.dart';
 
 typedef _DatabaseScope = ({String key, ProfileScope? scope});
 
@@ -38,22 +39,19 @@ class DebrifyTvDatabase {
   /// Production reads must use [runScoped] so [closeScope] cannot close the
   /// handle while an operation is using it.
   @visibleForTesting
-  Future<Database> get database {
+  Future<Database> get database async {
     final active = Zone.current[_operationZoneKey] as Database?;
-    if (active != null) return Future<Database>.value(active);
+    if (active != null) return active;
+    await ProfileDatabaseAdoptionGate.waitUntilReleased();
     final override = debugDatabaseOverride;
-    if (override != null) {
-      return Future<Database>.value(override);
-    }
+    if (override != null) return override;
     final requested = _requestedScope();
     if (_deactivatedScopeKeys.contains(requested.key)) {
-      return Future<Database>.error(
-        StateError('Debrify TV database scope is deactivated'),
-      );
+      throw StateError('Debrify TV database scope is deactivated');
     }
     final opened = _db;
     if (opened != null && _dbScopeKey == requested.key) {
-      return Future<Database>.value(opened);
+      return opened;
     }
     return _scopeLock.synchronized(() => _databaseLocked(requested));
   }
@@ -244,6 +242,7 @@ class DebrifyTvDatabase {
     final active = Zone.current[_operationZoneKey] as Database?;
     if (active != null) return action(active);
 
+    await ProfileDatabaseAdoptionGate.waitUntilReleased();
     final override = debugDatabaseOverride;
     if (override != null) {
       return runZoned(

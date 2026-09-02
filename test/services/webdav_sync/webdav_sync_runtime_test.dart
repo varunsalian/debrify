@@ -1,0 +1,191 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_database_adoption_gate.dart';
+import 'package:debrify/services/profiles/profile_registry.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_feature.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
+import 'package:debrify/utils/app_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('one authentication failure does not disable a healthy binding', () {
+    final tracker = WebDavSyncAuthenticationFailureTracker();
+
+    expect(tracker.recordFailure('binding-a'), isFalse);
+    expect(tracker.recordFailure('binding-a'), isFalse);
+    expect(tracker.recordFailure('binding-a'), isTrue);
+  });
+
+  test('a successful cycle resets the consecutive failure count', () {
+    final tracker = WebDavSyncAuthenticationFailureTracker();
+
+    expect(tracker.recordFailure('binding-a'), isFalse);
+    expect(tracker.recordFailure('binding-a'), isFalse);
+    tracker.recordSuccess('binding-a');
+    expect(tracker.recordFailure('binding-a'), isFalse);
+  });
+
+  test('corrupt persisted sync state cannot trap startup in a loop', () async {
+    final fixture = await _openRuntimeFixture('corrupt-state');
+    addTearDown(fixture.dispose);
+    final runtime = WebDavSyncRuntime.instance;
+    final prefs = await SharedPreferences.getInstance();
+    const corrupt =
+        '{"version":2,"bindings":{},"namespaces":{},"future":"kept"}';
+    await prefs.setString(WebDavSyncBindingStore.storageKey, corrupt);
+    await ProfileDatabaseAdoptionGate.hold();
+
+    await runtime.initialize().timeout(const Duration(seconds: 3));
+
+    expect(ProfileDatabaseAdoptionGate.isHeld, isFalse);
+    expect((await runtime.status()).localStateMissing, isTrue);
+    expect(prefs.getString(WebDavSyncBindingStore.storageKey), corrupt);
+  });
+
+  test(
+    'rollback runtime releases a purged adoption journal for recovery UI',
+    () async {
+      final fixture = await _openRuntimeFixture('missing-journal');
+      addTearDown(fixture.dispose);
+
+      final runtime = WebDavSyncRuntime.instance;
+      const config = WebDavConfig(
+        id: 'server',
+        name: 'Server',
+        baseUrl: 'https://example.test/dav',
+        username: 'alice',
+        password: 'secret',
+      );
+      var binding = await runtime.bindingStore.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
+        config: config,
+        syncPassphrase: 'circle-secret',
+      );
+      binding = await runtime.bindingStore.markRootVerified(
+        bindingId: binding.id,
+        root: WebDavSyncRootDocument(
+          circleId: 'circle-one',
+          createdAt: DateTime.utc(2026, 9, 1),
+          schemaFloor: 1,
+          kdfSalt: Uint8List(16),
+        ),
+        markerBytes: const <int>[1, 2, 3],
+      );
+      await runtime.bindingStore.activateAndPromoteStaged(binding.id);
+      await runtime.stateStore.update(
+        binding.namespaceId,
+        (state) => state.copyWith(
+          circleToLocalProfiles: <String, String>{
+            'profile-circle': fixture.adminId,
+          },
+          circleToLocalResources: const <String, String>{},
+        ),
+      );
+      final journals = await fixture.support
+          .list(recursive: true)
+          .where((entity) => entity is File && entity.path.endsWith('.json'))
+          .cast<File>()
+          .toList();
+      expect(journals, isNotEmpty);
+      for (final journal in journals) {
+        await journal.delete();
+      }
+      await ProfileDatabaseAdoptionGate.hold();
+
+      await runtime.initialize().timeout(const Duration(seconds: 3));
+
+      expect(ProfileDatabaseAdoptionGate.isHeld, isFalse);
+      final recovered = (await runtime.bindingStore.load()).activeBinding!;
+      expect(recovered.lifecycle, WebDavSyncLifecycle.error);
+      expect(recovered.requiresStateReconnect, isTrue);
+    },
+  );
+}
+
+final class _RuntimeFixture {
+  const _RuntimeFixture({
+    required this.temporary,
+    required this.support,
+    required this.registry,
+    required this.adminId,
+  });
+
+  final Directory temporary;
+  final Directory support;
+  final ProfileRegistry registry;
+  final String adminId;
+
+  Future<void> dispose() async {
+    WebDavSyncRuntime.instance.debugResetInitialization();
+    WebDavSyncFeature.debugOverride = null;
+    ProfileDatabaseAdoptionGate.debugReset();
+    ProfileRuntime.debugReset();
+    ProfileBootstrap.debugInstallRegistry(null);
+    DeviceKeyProvider.debugReset();
+    AppStorage.debugReset();
+    await registry.close();
+    await temporary.delete(recursive: true);
+  }
+}
+
+Future<_RuntimeFixture> _openRuntimeFixture(String label) async {
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+  WebDavSyncRuntime.instance.debugResetInitialization();
+  ProfileDatabaseAdoptionGate.debugReset();
+  ProfileRuntime.debugReset();
+  SharedPreferences.setMockInitialValues(const <String, Object>{});
+  final temporary = await Directory.systemTemp.createTemp(
+    'webdav-sync-runtime-$label-',
+  );
+  final documents = Directory(p.join(temporary.path, 'documents'));
+  final support = Directory(p.join(temporary.path, 'support'));
+  final cache = Directory(p.join(temporary.path, 'cache'));
+  await documents.create(recursive: true);
+  await support.create(recursive: true);
+  await cache.create(recursive: true);
+  AppStorage.debugOverride(
+    documents: documents,
+    support: support,
+    cache: cache,
+  );
+  final registry = await ProfileRegistry.open(
+    path: p.join(support.path, 'profiles.db'),
+  );
+  final admin = await registry.createProfile(
+    name: 'Admin',
+    role: UserProfileRole.admin,
+  );
+  await registry.commitBootstrap(
+    activeProfileId: admin.id,
+    migratedLegacyInstall: false,
+  );
+  ProfileBootstrap.debugInstallRegistry(registry);
+  ProfileRuntime.initializeCommitted(
+    ProfileScope(profileId: admin.id, dataGeneration: 1, sessionEpoch: 1),
+  );
+  DeviceKeyProvider.debugInstallCipher(
+    MemoryDeviceSecretCipher(List<int>.filled(32, 7)),
+  );
+  WebDavSyncFeature.debugOverride = false;
+  return _RuntimeFixture(
+    temporary: temporary,
+    support: support,
+    registry: registry,
+    adminId: admin.id,
+  );
+}

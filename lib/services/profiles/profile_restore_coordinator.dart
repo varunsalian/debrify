@@ -54,6 +54,7 @@ class ProfileGraphRestoreReport {
   final int bindingsImported;
   final int pinResetsRequired;
   final List<String> importedProfileIds;
+  final Map<String, String> importedResourceIdsByBackupId;
 
   const ProfileGraphRestoreReport({
     required this.profilesImported,
@@ -62,6 +63,7 @@ class ProfileGraphRestoreReport {
     required this.bindingsImported,
     required this.pinResetsRequired,
     required this.importedProfileIds,
+    this.importedResourceIdsByBackupId = const <String, String>{},
   });
 }
 
@@ -113,7 +115,7 @@ class ProfileRestoreCoordinator {
           name.length > 80 ||
           roleName is! String ||
           policySource is! String ||
-          sectionId is! String) {
+          (sectionId != null && sectionId is! String)) {
         throw const FormatException('Invalid imported profile');
       }
       final matchingRole = UserProfileRole.values.where(
@@ -123,12 +125,14 @@ class ProfileRestoreCoordinator {
         throw FormatException('Unknown imported role $roleName');
       }
       final role = matchingRole.first;
-      final section = package.sections[sectionId];
-      if (section is! Map || section['values'] is! Map) {
+      final section = sectionId == null ? null : package.sections[sectionId];
+      if (sectionId != null && (section is! Map || section['values'] is! Map)) {
         throw const FormatException('Imported profile settings are missing');
       }
       final values = _normalizePreferenceValues(
-        section['values'] as Map,
+        sectionId == null
+            ? const <String, Object?>{}
+            : section!['values'] as Map,
         resourceIds: restoreResourceIds.bySourceId,
         includeCredentialEngineSettings: true,
         rejectDisallowedKeys:
@@ -518,6 +522,9 @@ class ProfileRestoreCoordinator {
         pinResetsRequired: pinResetsRequired,
         importedProfileIds: List<String>.unmodifiable(
           parsedProfiles.map((profile) => profile.id),
+        ),
+        importedResourceIdsByBackupId: Map<String, String>.unmodifiable(
+          restoreResourceIds.byBackupId,
         ),
       );
     } catch (_) {

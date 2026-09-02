@@ -1,0 +1,1279 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
+
+import '../webdav_protocol_client.dart';
+import 'webdav_sync_clock.dart';
+import 'webdav_sync_codec.dart';
+import 'webdav_sync_engine_state.dart';
+import 'webdav_sync_hot_merge.dart';
+import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_local_adapter.dart';
+import 'webdav_sync_setup_service.dart';
+import 'webdav_sync_transport.dart';
+
+enum WebDavSyncCycleDisposition {
+  inactive,
+  adoptionBlocked,
+  clockPaused,
+  seedRepairRequired,
+  completed,
+}
+
+final class WebDavSyncCycleReport {
+  const WebDavSyncCycleReport({
+    required this.disposition,
+    this.peerCount = 0,
+    this.profilesApplied = 0,
+    this.sectionsPushed = 0,
+    this.deviceClockWarning = false,
+    this.clockPauseReason,
+  });
+
+  final WebDavSyncCycleDisposition disposition;
+  final int peerCount;
+  final int profilesApplied;
+  final int sectionsPushed;
+  final bool deviceClockWarning;
+  final WebDavSyncClockPauseReason? clockPauseReason;
+}
+
+/// Bounded cache shared by successive production engine instances. Transport
+/// credentials remain cycle-local, while authenticated immutable sections can
+/// survive the runner's per-cycle client construction.
+final class WebDavSyncSectionCache {
+  static const int entryLimit = 32;
+  static const int byteLimit = 4 * 1024 * 1024;
+
+  final Map<String, _CachedSection> _entries = <String, _CachedSection>{};
+  int _bytes = 0;
+
+  int get entryCount => _entries.length;
+  int get byteCount => _bytes;
+
+  Object? take(String key) {
+    final cached = _entries.remove(key);
+    if (cached == null) return null;
+    _entries[key] = cached;
+    return cached.value;
+  }
+
+  void remove(String key) {
+    final removed = _entries.remove(key);
+    if (removed != null) _bytes -= removed.encodedBytes;
+  }
+
+  void put(String key, Object value, int encodedBytes) {
+    remove(key);
+    if (encodedBytes <= 0 || encodedBytes > byteLimit) return;
+    while (_entries.isNotEmpty &&
+        (_entries.length >= entryLimit || _bytes + encodedBytes > byteLimit)) {
+      remove(_entries.keys.first);
+    }
+    _entries[key] = _CachedSection(value: value, encodedBytes: encodedBytes);
+    _bytes += encodedBytes;
+  }
+
+  void clear() {
+    _entries.clear();
+    _bytes = 0;
+  }
+}
+
+final class WebDavSyncCycleContext {
+  const WebDavSyncCycleContext({
+    required this.namespaceId,
+    required this.deviceId,
+    required this.markerPin,
+    required this.root,
+    required this.circleToLocalProfiles,
+    required this.circleToLocalResources,
+    this.wireProfileMap = const <String, String>{},
+    this.wireResourceMap = const <String, String>{},
+    this.active = false,
+  });
+
+  final String? namespaceId;
+  final String? deviceId;
+  final Uint8List? markerPin;
+  final OpenedWebDavSyncRoot? root;
+  final Map<String, String>? circleToLocalProfiles;
+  final Map<String, String>? circleToLocalResources;
+
+  /// Graph backup IDs -> circle IDs; these are wire identities, never local
+  /// profile or resource IDs. M5 supplies them when graph activation lands.
+  final Map<String, String> wireProfileMap;
+  final Map<String, String> wireResourceMap;
+  final bool active;
+
+  bool get isComplete =>
+      namespaceId != null &&
+      deviceId != null &&
+      markerPin != null &&
+      markerPin!.isNotEmpty &&
+      root != null &&
+      circleToLocalProfiles != null &&
+      circleToLocalResources != null;
+}
+
+typedef WebDavSyncTransportFactory =
+    WebDavSyncTransport Function(WebDavSyncCycleContext context);
+
+typedef WebDavSyncDiagnostic = void Function(String message, Object? error);
+
+abstract interface class WebDavSyncCycleRunner {
+  Future<WebDavSyncCycleReport> runCycle(
+    WebDavSyncCycleContext? context, {
+    bool allowPreActivation = false,
+  });
+}
+
+/// Dormant until M5 supplies an active, root-authenticated context and both ID
+/// maps. Merely constructing this engine never schedules work.
+final class WebDavSyncEngine implements WebDavSyncCycleRunner {
+  WebDavSyncEngine({
+    required WebDavSyncEngineStateRepository stateRepository,
+    required WebDavSyncLocalAdapter localAdapter,
+    required WebDavSyncTransportFactory transportFactory,
+    WebDavSyncCodec? codec,
+    WebDavSyncSectionCache? sectionCache,
+    DateTime Function()? clock,
+    WebDavSyncDiagnostic? diagnostic,
+  }) : _stateRepository = stateRepository,
+       _localAdapter = localAdapter,
+       _transportFactory = transportFactory,
+       _codec = codec ?? WebDavSyncCodec(),
+       _sectionCache = sectionCache ?? WebDavSyncSectionCache(),
+       _clock = clock ?? DateTime.now,
+       _diagnostic = diagnostic ?? _ignoreDiagnostic;
+
+  static const Duration staleManifestCutoff = Duration(days: 30);
+  static const Duration tombstoneHorizon = Duration(days: 90);
+  static const Duration unreferencedSectionRetention = Duration(days: 7);
+  final WebDavSyncEngineStateRepository _stateRepository;
+  final WebDavSyncLocalAdapter _localAdapter;
+  final WebDavSyncTransportFactory _transportFactory;
+  final WebDavSyncCodec _codec;
+  final WebDavSyncSectionCache _sectionCache;
+  final DateTime Function() _clock;
+  final WebDavSyncDiagnostic _diagnostic;
+  final Lock _cycleLock = Lock();
+  @visibleForTesting
+  int get debugSectionCacheEntries => _sectionCache.entryCount;
+
+  @visibleForTesting
+  int get debugSectionCacheBytes => _sectionCache.byteCount;
+
+  @override
+  Future<WebDavSyncCycleReport> runCycle(
+    WebDavSyncCycleContext? context, {
+    bool allowPreActivation = false,
+  }) => _cycleLock.synchronized(() async {
+    if (context == null ||
+        !context.isComplete ||
+        (!context.active && !allowPreActivation)) {
+      return const WebDavSyncCycleReport(
+        disposition: WebDavSyncCycleDisposition.inactive,
+      );
+    }
+    final namespaceId = context.namespaceId!;
+    final deviceId = context.deviceId!;
+    final root = context.root!;
+    final markerPin = context.markerPin!;
+    final identityMaps = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: context.circleToLocalProfiles!,
+      circleToLocalResources: context.circleToLocalResources!,
+    );
+    if (root.document.circleId.isEmpty) {
+      throw StateError('WebDAV sync root context is invalid');
+    }
+
+    var state = await _stateRepository.load(namespaceId);
+    if (state.blocksAllPushes) {
+      return const WebDavSyncCycleReport(
+        disposition: WebDavSyncCycleDisposition.adoptionBlocked,
+      );
+    }
+    final persistedManifest = state.ownManifest;
+    if (persistedManifest != null &&
+        (persistedManifest.circleId != root.document.circleId ||
+            persistedManifest.deviceId != deviceId)) {
+      throw StateError('WebDAV sync local manifest identity is invalid');
+    }
+    if (context.active && !allowPreActivation && state.ownManifest == null) {
+      throw StateError('Active WebDAV sync requires a verified local manifest');
+    }
+    _validatePersistedMaps(state, identityMaps);
+    state = await _persistMapsIfNeeded(namespaceId, state, identityMaps);
+    state = await _promotePendingLocalTombstones(
+      namespaceId,
+      state,
+      identityMaps,
+    );
+
+    WebDavSyncLocalSession? session;
+    final pendingProfiles = state.profiles.entries
+        .where((entry) => entry.value.pendingApply != null)
+        .toList(growable: false);
+    if (pendingProfiles.isNotEmpty) {
+      session = await _localAdapter.beginCycle();
+      for (final entry in pendingProfiles) {
+        final pending = entry.value.pendingApply!;
+        if (context.circleToLocalProfiles![entry.key] !=
+            pending.localProfileId) {
+          throw StateError('WebDAV sync pending apply mapping changed');
+        }
+        await _localAdapter.applyProfile(
+          session,
+          pending.localProfileId,
+          pending.values,
+          replayingPending: true,
+        );
+        await _stateRepository.update(namespaceId, (current) {
+          final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+            current.profiles,
+          );
+          final profile =
+              profiles[entry.key] ?? const WebDavSyncProfileEngineState();
+          profiles[entry.key] = profile.copyWith(
+            baseline: pending.target,
+            clearPendingApply: true,
+          );
+          return current.copyWith(
+            profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+              profiles,
+            ),
+          );
+        });
+      }
+      state = await _stateRepository.load(namespaceId);
+    }
+
+    final transport = _transportFactory(context);
+    try {
+      final rootRead = await _readRequiredRoot(transport);
+      if (!_bytesEqual(markerPin, rootRead.bytes)) {
+        throw const WebDavSyncRootChangedException();
+      }
+      final listing = await transport.listDeviceIds();
+      final localNowMs = _clock().toUtc().millisecondsSinceEpoch;
+      final clockDecision = WebDavSyncClockPolicy.observe(
+        prior: state.clock,
+        localNowMs: localNowMs,
+        serverDate: rootRead.metadata.serverDate ?? listing.metadata.serverDate,
+      );
+      state = await _stateRepository.update(
+        namespaceId,
+        (current) => current.copyWith(
+          clock: clockDecision.state,
+          deviceClockWarning: clockDecision.deviceClockWarning,
+          lastClockPauseReason: clockDecision.pauseReason,
+          clearClockPauseReason: clockDecision.pauseReason == null,
+        ),
+      );
+      if (!clockDecision.mayPublish) {
+        return WebDavSyncCycleReport(
+          disposition: WebDavSyncCycleDisposition.clockPaused,
+          peerCount: listing.deviceIds.length,
+          deviceClockWarning: clockDecision.deviceClockWarning,
+          clockPauseReason: clockDecision.pauseReason,
+        );
+      }
+      // A missing manifest inside an existing own-device directory is safe to
+      // repair from the persisted references below. If the directory itself
+      // disappeared, those referenced content-addressed sections disappeared
+      // with it; publishing only a replacement manifest would create a
+      // permanently broken seed. Ask the graph tier to rebuild every section.
+      if (state.ownManifest != null && !listing.deviceIds.contains(deviceId)) {
+        return WebDavSyncCycleReport(
+          disposition: WebDavSyncCycleDisposition.seedRepairRequired,
+          peerCount: listing.deviceIds.length,
+          deviceClockWarning: clockDecision.deviceClockWarning,
+        );
+      }
+      final serverNowMs = clockDecision.serverNowMs!;
+      final manifests = await _readManifests(
+        transport: transport,
+        context: context,
+        deviceIds: listing.deviceIds,
+        state: state,
+        serverNowMs: serverNowMs,
+      );
+      final verifiedOwnManifest = manifests[deviceId];
+      if (verifiedOwnManifest != null &&
+          (state.ownManifest == null ||
+              verifiedOwnManifest.updatedAtMs >=
+                  state.ownManifest!.updatedAtMs)) {
+        state = await _stateRepository.update(
+          namespaceId,
+          (current) => current.copyWith(ownManifest: verifiedOwnManifest),
+        );
+      }
+      final peerHighWater = Map<String, int>.from(state.peerManifestHighWater);
+      for (final entry in manifests.entries) {
+        final prior = peerHighWater[entry.key] ?? 0;
+        if (entry.value.updatedAtMs > prior) {
+          peerHighWater[entry.key] = entry.value.updatedAtMs;
+        }
+      }
+      state = await _stateRepository.update(
+        namespaceId,
+        (current) => current.copyWith(
+          peerManifestHighWater: boundedPeerManifestHighWater(
+            peerHighWater,
+            currentDeviceIds: listing.deviceIds,
+          ),
+          currentDeviceIds: Set<String>.unmodifiable(manifests.keys),
+        ),
+      );
+
+      session ??= await _localAdapter.beginCycle();
+      final profileResults = <String, _ProfileCycleResult>{};
+      var profilesApplied = 0;
+      for (final mapping in identityMaps.circleToLocalProfiles.entries) {
+        final circleProfileId = mapping.key;
+        final localProfileId = mapping.value;
+        final peerData = await _readProfilePeerData(
+          transport: transport,
+          root: root,
+          manifests: manifests,
+          circleProfileId: circleProfileId,
+          serverNowMs: serverNowMs,
+        );
+        final localSnapshot = await _localAdapter.readProfile(
+          session,
+          localProfileId,
+        );
+        final profileState =
+            state.profiles[circleProfileId] ??
+            const WebDavSyncProfileEngineState();
+        final built = WebDavSyncHotMerge.build(
+          WebDavSyncBuildInput(
+            circleProfileId: circleProfileId,
+            deviceId: deviceId,
+            rawPreferences: localSnapshot.rawPreferences,
+            portablePreferences: localSnapshot.portablePreferences,
+            identityMaps: identityMaps,
+            localNowMs: localNowMs,
+            clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+            serverNowMs: serverNowMs,
+            previous: profileState.baseline,
+          ),
+        );
+        final normalizedLocalTombstones = _normalizeLocalTombstones(
+          profileState.tombstones,
+          clockDecision,
+          identityMaps,
+          currentRecordKeys: built.document.watchState.records.keys.toSet(),
+        );
+        final localTombstoneDocument = WebDavSyncTombstoneDocument(
+          circleProfileId: circleProfileId,
+          items: normalizedLocalTombstones,
+        );
+        identityMaps.assertContainsNoLocalIds(localTombstoneDocument.toJson());
+        final lastSuccess = state.lastSuccessfulSyncMs;
+        final dormantSince =
+            lastSuccess != null &&
+                serverNowMs - lastSuccess >= tombstoneHorizon.inMilliseconds
+            ? lastSuccess
+            : null;
+        final merged = WebDavSyncHotMerge.clampForPublication(
+          WebDavSyncHotMerge.merge(
+            local: built.document,
+            peers: peerData.hotDocuments,
+            tombstoneDocuments: <WebDavSyncTombstoneDocument>[
+              localTombstoneDocument,
+              ...peerData.tombstoneDocuments,
+            ],
+            nowMs: serverNowMs,
+            tombstoneHorizon: tombstoneHorizon,
+            dormantSinceMs: dormantSince,
+          ),
+          serverNowMs: serverNowMs,
+        );
+        final values = WebDavSyncHotMerge.materializePreferences(
+          document: merged.document,
+          identityMaps: identityMaps,
+          localRichRecords: built.localRichRecords,
+          localPortableRecords: built.document.watchState.records,
+          protectedPreferenceKeys: built.protectedPreferenceKeys,
+        );
+        final pending = WebDavSyncPendingApply(
+          localProfileId: localProfileId,
+          values: values,
+          target: merged.document,
+        );
+        await _localAdapter.applyProfile(
+          session,
+          localProfileId,
+          values,
+          expectedMutationToken: localSnapshot.mutationToken,
+          beforeWrite: () => _stateRepository.update(namespaceId, (current) {
+            final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+              current.profiles,
+            );
+            final currentProfile =
+                profiles[circleProfileId] ??
+                const WebDavSyncProfileEngineState();
+            profiles[circleProfileId] = currentProfile.copyWith(
+              pendingApply: pending,
+            );
+            return current.copyWith(
+              profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                profiles,
+              ),
+            );
+          }),
+        );
+        await _stateRepository.update(namespaceId, (current) {
+          final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+            current.profiles,
+          );
+          final currentProfile =
+              profiles[circleProfileId] ?? const WebDavSyncProfileEngineState();
+          profiles[circleProfileId] = currentProfile.copyWith(
+            baseline: merged.document,
+            clearPendingApply: true,
+          );
+          return current.copyWith(
+            profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+              profiles,
+            ),
+          );
+        });
+        profilesApplied++;
+        profileResults[circleProfileId] = _ProfileCycleResult(
+          document: merged.document,
+          tombstones: merged.tombstones,
+          originalLocalTombstones: profileState.tombstones,
+        );
+      }
+
+      state = await _stateRepository.load(namespaceId);
+      if (state.blocksAllPushes) {
+        return WebDavSyncCycleReport(
+          disposition: WebDavSyncCycleDisposition.adoptionBlocked,
+          peerCount: manifests.length,
+          profilesApplied: profilesApplied,
+          deviceClockWarning: clockDecision.deviceClockWarning,
+        );
+      }
+      final push = await _pushChanged(
+        transport: transport,
+        context: context,
+        session: session,
+        root: root,
+        identityMaps: identityMaps,
+        state: state,
+        profiles: profileResults,
+        serverNowMs: serverNowMs,
+        clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+        repairManifest: verifiedOwnManifest == null,
+      );
+      state = await _stateRepository.update(namespaceId, (current) {
+        final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+          current.profiles,
+        );
+        for (final entry in push.publishedProfiles.entries) {
+          final currentProfile =
+              profiles[entry.key] ?? const WebDavSyncProfileEngineState();
+          final cycleResult = profileResults[entry.key]!;
+          profiles[entry.key] = currentProfile.copyWith(
+            tombstones: _mergePublishedTombstones(
+              current: currentProfile.tombstones,
+              originalLocal: cycleResult.originalLocalTombstones,
+              published: entry.value.tombstones,
+            ),
+            lastPushedHotDigest: entry.value.hotDigest,
+            lastPushedTombstoneDigest: entry.value.tombstoneDigest,
+          );
+        }
+        return current.copyWith(
+          profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+            profiles,
+          ),
+          ownManifest: push.manifest ?? current.ownManifest,
+          lastSuccessfulSyncMs: serverNowMs,
+        );
+      });
+      await _collectUnreferencedOwnSections(
+        transport: transport,
+        session: session,
+        deviceId: deviceId,
+        manifest: state.ownManifest,
+        serverNowMs: serverNowMs,
+      );
+      return WebDavSyncCycleReport(
+        disposition: WebDavSyncCycleDisposition.completed,
+        peerCount: manifests.length,
+        profilesApplied: profilesApplied,
+        sectionsPushed: push.sectionsPushed,
+        deviceClockWarning: clockDecision.deviceClockWarning,
+      );
+    } finally {
+      transport.close();
+    }
+  });
+
+  Future<void> _collectUnreferencedOwnSections({
+    required WebDavSyncTransport transport,
+    required WebDavSyncLocalSession session,
+    required String deviceId,
+    required WebDavSyncManifest? manifest,
+    required int serverNowMs,
+  }) async {
+    final gcTransport = transport is WebDavSyncSectionGcTransport
+        ? transport as WebDavSyncSectionGcTransport
+        : null;
+    if (gcTransport == null || manifest == null) return;
+    final referenced = manifest.sections
+        .map((section) => section.contentHash)
+        .toSet();
+    final cutoff = serverNowMs - unreferencedSectionRetention.inMilliseconds;
+    session.validate();
+    late final List<WebDavSyncStoredSection> stored;
+    try {
+      stored = await gcTransport.listOwnSections(deviceId);
+    } on WebDavException catch (error) {
+      if (error.kind == WebDavErrorKind.authentication) rethrow;
+      _diagnostic('Deferred WebDAV sync section cleanup', error);
+      return;
+    }
+    for (final section in stored) {
+      if (referenced.contains(section.contentHash) ||
+          section.lastModifiedMs > cutoff) {
+        continue;
+      }
+      session.validate();
+      try {
+        await gcTransport.deleteOwnSection(deviceId, section.contentHash);
+      } on WebDavException catch (error) {
+        if (error.kind == WebDavErrorKind.authentication) rethrow;
+        _diagnostic('Deferred one WebDAV sync section deletion', error);
+      }
+    }
+  }
+
+  static Future<WebDavBytesResult> _readRequiredRoot(
+    WebDavSyncTransport transport,
+  ) async {
+    try {
+      return await transport.readRootMarker();
+    } on WebDavException catch (error) {
+      if (error.kind == WebDavErrorKind.notFound) {
+        throw const WebDavSyncRootMissingException();
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, WebDavSyncManifest>> _readManifests({
+    required WebDavSyncTransport transport,
+    required WebDavSyncCycleContext context,
+    required List<String> deviceIds,
+    required WebDavSyncEngineState state,
+    required int serverNowMs,
+  }) async {
+    if (deviceIds.length > WebDavSyncLimits.maxPeers) {
+      throw StateError('WebDAV sync peer count exceeds its limit');
+    }
+    final result = <String, WebDavSyncManifest>{};
+    for (final deviceId in deviceIds) {
+      try {
+        final read = await transport.readManifest(deviceId);
+        final payload = await _codec.openDocument(
+          key: context.root!.key,
+          encoded: read.bytes,
+          circleId: context.root!.document.circleId,
+          deviceId: deviceId,
+          logicalName: 'manifest',
+          schemaVersion: WebDavSyncManifest.schemaVersion,
+          maxBytes: WebDavSyncLimits.maxManifestBytes,
+        );
+        final manifest = WebDavSyncManifest.fromJson(payload);
+        if (manifest.deviceId != deviceId ||
+            manifest.circleId != context.root!.document.circleId) {
+          throw const FormatException('WebDAV sync manifest identity mismatch');
+        }
+        if (!WebDavSyncClockPolicy.acceptsRemoteTimestamp(
+          timestampMs: manifest.updatedAtMs,
+          serverNowMs: serverNowMs,
+        )) {
+          _diagnostic('Ignored a future-dated WebDAV sync manifest', null);
+          continue;
+        }
+        final highWater = state.peerManifestHighWater[deviceId];
+        if (highWater != null && manifest.updatedAtMs < highWater) {
+          _diagnostic('Ignored a regressed WebDAV sync manifest', null);
+          continue;
+        }
+        result[deviceId] = manifest;
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
+        _diagnostic('Ignored a removed WebDAV sync peer', error);
+      } on Exception catch (error) {
+        _diagnostic('Ignored an invalid WebDAV sync peer manifest', error);
+      }
+    }
+    return result;
+  }
+
+  Future<_PeerProfileData> _readProfilePeerData({
+    required WebDavSyncTransport transport,
+    required OpenedWebDavSyncRoot root,
+    required Map<String, WebDavSyncManifest> manifests,
+    required String circleProfileId,
+    required int serverNowMs,
+  }) async {
+    final hot = <WebDavSyncHotDocument>[];
+    final tombstones = <WebDavSyncTombstoneDocument>[];
+    for (final entry in manifests.entries) {
+      final manifest = entry.value;
+      final stale =
+          serverNowMs - manifest.updatedAtMs >
+          staleManifestCutoff.inMilliseconds;
+      final hotRef = manifest.section('hot/$circleProfileId');
+      if (!stale &&
+          hotRef != null &&
+          hotRef.schemaVersion == WebDavSyncHotDocument.schemaVersion &&
+          hotRef.size <= WebDavSyncLimits.maxHotDocumentBytes) {
+        try {
+          hot.add(
+            await _readHotSection(
+              transport,
+              root,
+              entry.key,
+              hotRef,
+              circleProfileId,
+            ),
+          );
+        } on WebDavException catch (error) {
+          if (error.kind != WebDavErrorKind.notFound) rethrow;
+          _diagnostic('Ignored a removed WebDAV sync hot section', error);
+        } on Exception catch (error) {
+          _diagnostic('Ignored an invalid WebDAV sync hot section', error);
+        }
+      }
+      final tombstoneRef = manifest.section('tombstones/$circleProfileId');
+      // Tombstones deliberately ignore manifest heartbeat age.
+      if (tombstoneRef != null &&
+          tombstoneRef.schemaVersion ==
+              WebDavSyncTombstoneDocument.schemaVersion &&
+          tombstoneRef.size <= WebDavSyncLimits.maxTombstoneDocumentBytes) {
+        try {
+          tombstones.add(
+            await _readTombstoneSection(
+              transport,
+              root,
+              entry.key,
+              tombstoneRef,
+              circleProfileId,
+            ),
+          );
+        } on WebDavException catch (error) {
+          if (error.kind != WebDavErrorKind.notFound) rethrow;
+          _diagnostic('Ignored a removed WebDAV sync tombstone section', error);
+        } on Exception catch (error) {
+          _diagnostic(
+            'Ignored an invalid WebDAV sync tombstone section',
+            error,
+          );
+        }
+      }
+    }
+    return _PeerProfileData(
+      hotDocuments: List<WebDavSyncHotDocument>.unmodifiable(hot),
+      tombstoneDocuments: List<WebDavSyncTombstoneDocument>.unmodifiable(
+        tombstones,
+      ),
+    );
+  }
+
+  Future<WebDavSyncHotDocument> _readHotSection(
+    WebDavSyncTransport transport,
+    OpenedWebDavSyncRoot root,
+    String deviceId,
+    WebDavSyncSectionReference reference,
+    String circleProfileId,
+  ) async {
+    final cacheKey = _sectionCacheKey(
+      root.document.circleId,
+      deviceId,
+      reference,
+      'hot',
+    );
+    final cached = _cached(cacheKey);
+    if (cached is WebDavSyncHotDocument &&
+        cached.circleProfileId == circleProfileId &&
+        cached.semanticDigest == reference.semanticDigest) {
+      _requireHotPublicationBounds(cached, reference.updatedAtMs);
+      return cached;
+    }
+    _removeCached(cacheKey);
+    final payload = await _readAndOpenSection(
+      transport: transport,
+      root: root,
+      deviceId: deviceId,
+      reference: reference,
+      maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+    );
+    final document = WebDavSyncHotDocument.fromJson(payload);
+    if (document.circleProfileId != circleProfileId ||
+        document.semanticDigest != reference.semanticDigest) {
+      throw const FormatException('WebDAV sync hot section digest mismatch');
+    }
+    _requireHotPublicationBounds(document, reference.updatedAtMs);
+    _cache(cacheKey, document, reference.size);
+    return document;
+  }
+
+  Future<WebDavSyncTombstoneDocument> _readTombstoneSection(
+    WebDavSyncTransport transport,
+    OpenedWebDavSyncRoot root,
+    String deviceId,
+    WebDavSyncSectionReference reference,
+    String circleProfileId,
+  ) async {
+    final cacheKey = _sectionCacheKey(
+      root.document.circleId,
+      deviceId,
+      reference,
+      'tombstones',
+    );
+    final cached = _cached(cacheKey);
+    if (cached is WebDavSyncTombstoneDocument &&
+        cached.circleProfileId == circleProfileId &&
+        cached.semanticDigest == reference.semanticDigest) {
+      _requireTombstonePublicationBounds(cached, reference.updatedAtMs);
+      return cached;
+    }
+    _removeCached(cacheKey);
+    final payload = await _readAndOpenSection(
+      transport: transport,
+      root: root,
+      deviceId: deviceId,
+      reference: reference,
+      maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+    );
+    final document = WebDavSyncTombstoneDocument.fromJson(payload);
+    if (document.circleProfileId != circleProfileId ||
+        document.semanticDigest != reference.semanticDigest) {
+      throw const FormatException(
+        'WebDAV sync tombstone section digest mismatch',
+      );
+    }
+    _requireTombstonePublicationBounds(document, reference.updatedAtMs);
+    _cache(cacheKey, document, reference.size);
+    return document;
+  }
+
+  Future<Object?> _readAndOpenSection({
+    required WebDavSyncTransport transport,
+    required OpenedWebDavSyncRoot root,
+    required String deviceId,
+    required WebDavSyncSectionReference reference,
+    required int maxBytes,
+  }) async {
+    final read = await transport.readSection(
+      deviceId,
+      reference,
+      maxBytes: maxBytes,
+    );
+    if (read.bytes.length != reference.size ||
+        contentHashOf(read.bytes) != reference.contentHash) {
+      throw const FormatException('WebDAV sync section content mismatch');
+    }
+    return _codec.openDocument(
+      key: root.key,
+      encoded: read.bytes,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: reference.name,
+      schemaVersion: reference.schemaVersion,
+      maxBytes: maxBytes,
+    );
+  }
+
+  Future<_PushResult> _pushChanged({
+    required WebDavSyncTransport transport,
+    required WebDavSyncCycleContext context,
+    required WebDavSyncLocalSession session,
+    required OpenedWebDavSyncRoot root,
+    required WebDavSyncIdentityMaps identityMaps,
+    required WebDavSyncEngineState state,
+    required Map<String, _ProfileCycleResult> profiles,
+    required int serverNowMs,
+    required int clockOffsetMs,
+    required bool repairManifest,
+  }) async {
+    final deviceId = context.deviceId!;
+    final changed = <_SealedSection>[];
+    final published = <String, _PublishedProfile>{};
+    for (final entry in profiles.entries) {
+      final profileState =
+          state.profiles[entry.key] ?? const WebDavSyncProfileEngineState();
+      final hotDigest = entry.value.document.semanticDigest;
+      final publishedTombstones = <String, WebDavSyncTombstone>{
+        for (final tombstone in entry.value.tombstones.entries)
+          tombstone.key: tombstone.value.copyWith(
+            firstPublishedAtMs:
+                tombstone.value.firstPublishedAtMs ?? serverNowMs,
+            rawLocalTime: false,
+          ),
+      };
+      final tombstoneDocument = WebDavSyncTombstoneDocument(
+        circleProfileId: entry.key,
+        items: Map<String, WebDavSyncTombstone>.unmodifiable(
+          publishedTombstones,
+        ),
+      );
+      final tombstoneDigest = tombstoneDocument.semanticDigest;
+      if (profileState.lastPushedHotDigest != hotDigest) {
+        changed.add(
+          await _sealSection(
+            root: root,
+            deviceId: deviceId,
+            name: 'hot/${entry.key}',
+            schemaVersion: WebDavSyncHotDocument.schemaVersion,
+            payload: entry.value.document.toJson(),
+            semanticDigest: hotDigest,
+            updatedAtMs: serverNowMs,
+            maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+          ),
+        );
+      }
+      if (profileState.lastPushedTombstoneDigest != tombstoneDigest) {
+        changed.add(
+          await _sealSection(
+            root: root,
+            deviceId: deviceId,
+            name: 'tombstones/${entry.key}',
+            schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
+            payload: tombstoneDocument.toJson(),
+            semanticDigest: tombstoneDigest,
+            updatedAtMs: serverNowMs,
+            maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+          ),
+        );
+      }
+      published[entry.key] = _PublishedProfile(
+        hotDigest: hotDigest,
+        tombstoneDigest: tombstoneDigest,
+        tombstones: Map<String, WebDavSyncTombstone>.unmodifiable(
+          publishedTombstones,
+        ),
+      );
+    }
+    if (changed.isEmpty && !repairManifest) {
+      return _PushResult(
+        sectionsPushed: 0,
+        publishedProfiles: const <String, _PublishedProfile>{},
+      );
+    }
+
+    session.validate();
+    await transport.ensureOwnLayout(deviceId);
+    for (final section in changed) {
+      session.validate();
+      try {
+        await transport.writeSection(
+          deviceId,
+          section.reference.contentHash,
+          section.bytes,
+          maxBytes: _maxBytesFor(section.reference.name),
+        );
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
+      }
+      final readBack = await transport.readSection(
+        deviceId,
+        section.reference,
+        maxBytes: _maxBytesFor(section.reference.name),
+      );
+      if (!_bytesEqual(readBack.bytes, section.bytes)) {
+        throw StateError('WebDAV sync section read-back verification failed');
+      }
+    }
+
+    final sections = <String, WebDavSyncSectionReference>{
+      for (final section
+          in state.ownManifest?.sections ??
+              const <WebDavSyncSectionReference>[])
+        section.name: section,
+      for (final section in changed) section.reference.name: section.reference,
+    };
+    if (sections.isEmpty) {
+      throw StateError('WebDAV sync refuses to publish an empty manifest');
+    }
+    final priorManifest = state.ownManifest;
+    final manifest = WebDavSyncManifest(
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      updatedAtMs: serverNowMs,
+      clockOffsetMs: clockOffsetMs,
+      graphSchemaClaim: priorManifest?.graphSchemaClaim ?? 1,
+      profileMap: context.wireProfileMap.isNotEmpty
+          ? context.wireProfileMap
+          : (priorManifest?.profileMap ?? const <String, String>{}),
+      resourceMap: context.wireResourceMap.isNotEmpty
+          ? context.wireResourceMap
+          : (priorManifest?.resourceMap ?? const <String, String>{}),
+      sections: List<WebDavSyncSectionReference>.unmodifiable(
+        sections.values.toList()..sort((a, b) => a.name.compareTo(b.name)),
+      ),
+    );
+    identityMaps.assertContainsNoLocalIds(manifest.toJson());
+    final manifestBytes = await _codec.sealDocument(
+      key: root.key,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: 'manifest',
+      schemaVersion: WebDavSyncManifest.schemaVersion,
+      payload: manifest.toJson(),
+      maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+    // Sections are immutable litter until the manifest points at them. The
+    // pinned marker and captured profile scope must both still be current at
+    // this final commit.
+    final commitRoot = await _readRequiredRoot(transport);
+    if (!_bytesEqual(context.markerPin!, commitRoot.bytes)) {
+      throw const WebDavSyncRootChangedException();
+    }
+    session.validate();
+    await transport.writeManifest(deviceId, manifestBytes);
+    final manifestReadBack = await transport.readManifest(deviceId);
+    if (!_bytesEqual(manifestReadBack.bytes, manifestBytes)) {
+      throw StateError('WebDAV sync manifest read-back verification failed');
+    }
+    final opened = await _codec.openDocument(
+      key: root.key,
+      encoded: manifestReadBack.bytes,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: 'manifest',
+      schemaVersion: WebDavSyncManifest.schemaVersion,
+      maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+    final verifiedManifest = WebDavSyncManifest.fromJson(opened);
+    return _PushResult(
+      sectionsPushed: changed.length,
+      manifest: verifiedManifest,
+      publishedProfiles: Map<String, _PublishedProfile>.unmodifiable(published),
+    );
+  }
+
+  Future<_SealedSection> _sealSection({
+    required OpenedWebDavSyncRoot root,
+    required String deviceId,
+    required String name,
+    required int schemaVersion,
+    required Object payload,
+    required String semanticDigest,
+    required int updatedAtMs,
+    required int maxBytes,
+  }) async {
+    final bytes = await _codec.sealDocument(
+      key: root.key,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: name,
+      schemaVersion: schemaVersion,
+      payload: payload,
+      maxBytes: maxBytes,
+    );
+    return _SealedSection(
+      bytes: bytes,
+      reference: WebDavSyncSectionReference(
+        name: name,
+        contentHash: contentHashOf(bytes),
+        semanticDigest: semanticDigest,
+        updatedAtMs: updatedAtMs,
+        schemaVersion: schemaVersion,
+        size: bytes.length,
+      ),
+    );
+  }
+
+  Future<WebDavSyncEngineState> _persistMapsIfNeeded(
+    String namespaceId,
+    WebDavSyncEngineState state,
+    WebDavSyncIdentityMaps maps,
+  ) {
+    if (state.circleToLocalProfiles != null &&
+        state.circleToLocalResources != null) {
+      return Future<WebDavSyncEngineState>.value(state);
+    }
+    return _stateRepository.update(
+      namespaceId,
+      (current) => current.copyWith(
+        circleToLocalProfiles: maps.circleToLocalProfiles,
+        circleToLocalResources: maps.circleToLocalResources,
+      ),
+    );
+  }
+
+  Future<WebDavSyncEngineState> _promotePendingLocalTombstones(
+    String namespaceId,
+    WebDavSyncEngineState state,
+    WebDavSyncIdentityMaps maps,
+  ) {
+    if (state.pendingLocalProfiles.isEmpty) {
+      return Future<WebDavSyncEngineState>.value(state);
+    }
+    return _stateRepository.update(namespaceId, (current) {
+      final pending = Map<String, WebDavSyncProfileEngineState>.from(
+        current.pendingLocalProfiles,
+      );
+      final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+        current.profiles,
+      );
+      var changed = false;
+      for (final mapping in maps.circleToLocalProfiles.entries) {
+        final local = pending.remove(mapping.value);
+        if (local == null) continue;
+        changed = true;
+        final profile =
+            profiles[mapping.key] ?? const WebDavSyncProfileEngineState();
+        final tombstones = Map<String, WebDavSyncTombstone>.from(
+          profile.tombstones,
+        );
+        for (final entry in local.tombstones.entries) {
+          final existing = tombstones[entry.key];
+          if (existing == null || _tombstoneIsNewer(entry.value, existing)) {
+            tombstones[entry.key] = entry.value;
+          }
+        }
+        profiles[mapping.key] = profile.copyWith(
+          tombstones: Map<String, WebDavSyncTombstone>.unmodifiable(tombstones),
+        );
+      }
+      if (!changed) return current;
+      return current.copyWith(
+        profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+          profiles,
+        ),
+        pendingLocalProfiles:
+            Map<String, WebDavSyncProfileEngineState>.unmodifiable(pending),
+      );
+    });
+  }
+
+  static bool _tombstoneIsNewer(
+    WebDavSyncTombstone left,
+    WebDavSyncTombstone right,
+  ) =>
+      left.stamp.normalizedTimeMs > right.stamp.normalizedTimeMs ||
+      left.stamp.normalizedTimeMs == right.stamp.normalizedTimeMs &&
+          left.stamp.originDeviceId.compareTo(right.stamp.originDeviceId) > 0;
+
+  static void _validatePersistedMaps(
+    WebDavSyncEngineState state,
+    WebDavSyncIdentityMaps maps,
+  ) {
+    final profiles = state.circleToLocalProfiles;
+    final resources = state.circleToLocalResources;
+    if (profiles != null && !_mapEquals(profiles, maps.circleToLocalProfiles) ||
+        resources != null &&
+            !_mapEquals(resources, maps.circleToLocalResources)) {
+      throw StateError('WebDAV sync authenticated identity maps changed');
+    }
+  }
+
+  static Map<String, WebDavSyncTombstone> _normalizeLocalTombstones(
+    Map<String, WebDavSyncTombstone> source,
+    WebDavSyncClockDecision clock,
+    WebDavSyncIdentityMaps identityMaps, {
+    required Set<String> currentRecordKeys,
+  }) {
+    final result = <String, WebDavSyncTombstone>{};
+    for (final entry in source.entries) {
+      final wireKey = WebDavSyncRecordKey.projectLocalTombstoneKey(
+        entry.key,
+        identityMaps,
+      );
+      if (wireKey == null) continue;
+      if (entry.value.rawLocalTime && currentRecordKeys.contains(wireKey)) {
+        continue;
+      }
+      final normalized =
+          (entry.value.rawLocalTime
+                  ? entry.value.copyWith(
+                      stamp: WebDavSyncStamp(
+                        normalizedTimeMs: clock.normalizeLocalTimestamp(
+                          entry.value.stamp.normalizedTimeMs,
+                        ),
+                        originDeviceId: entry.value.stamp.originDeviceId,
+                      ),
+                      rawLocalTime: false,
+                    )
+                  : entry.value)
+              .copyWithKey(wireKey);
+      final prior = result[wireKey];
+      if (prior == null || _compareTombstoneStamp(normalized, prior) > 0) {
+        result[wireKey] = normalized;
+      }
+    }
+    return Map<String, WebDavSyncTombstone>.unmodifiable(result);
+  }
+
+  static int _compareTombstoneStamp(
+    WebDavSyncTombstone left,
+    WebDavSyncTombstone right,
+  ) {
+    final time = left.stamp.normalizedTimeMs.compareTo(
+      right.stamp.normalizedTimeMs,
+    );
+    if (time != 0) return time;
+    return left.stamp.originDeviceId.compareTo(right.stamp.originDeviceId);
+  }
+
+  static Map<String, WebDavSyncTombstone> _mergePublishedTombstones({
+    required Map<String, WebDavSyncTombstone> current,
+    required Map<String, WebDavSyncTombstone> originalLocal,
+    required Map<String, WebDavSyncTombstone> published,
+  }) {
+    final result = Map<String, WebDavSyncTombstone>.from(published);
+    for (final entry in current.entries) {
+      final original = originalLocal[entry.key];
+      final changedDuringCycle =
+          original == null ||
+          entry.value.stamp.normalizedTimeMs !=
+              original.stamp.normalizedTimeMs ||
+          entry.value.rawLocalTime != original.rawLocalTime;
+      if (changedDuringCycle) result[entry.key] = entry.value;
+    }
+    return Map<String, WebDavSyncTombstone>.unmodifiable(result);
+  }
+
+  Object? _cached(String key) {
+    return _sectionCache.take(key);
+  }
+
+  void _removeCached(String key) => _sectionCache.remove(key);
+
+  void _cache(String key, Object value, int encodedBytes) =>
+      _sectionCache.put(key, value, encodedBytes);
+
+  static String _sectionCacheKey(
+    String circleId,
+    String deviceId,
+    WebDavSyncSectionReference reference,
+    String kind,
+  ) =>
+      '$circleId:$deviceId:${reference.name}:${reference.schemaVersion}:'
+      '${reference.contentHash}:${reference.size}:${reference.updatedAtMs}:$kind';
+
+  static int _maxBytesFor(String name) => name.startsWith('tombstones/')
+      ? WebDavSyncLimits.maxTombstoneDocumentBytes
+      : WebDavSyncLimits.maxHotDocumentBytes;
+
+  static void _requireHotPublicationBounds(
+    WebDavSyncHotDocument document,
+    int publishedAtMs,
+  ) {
+    final stamps = <WebDavSyncStamp>[
+      document.scalars.stamp,
+      document.watchState.stamp,
+      ...document.watchState.records.values.map((entry) => entry.stamp),
+      ...document.watchState.orders.values.map((entry) => entry.stamp),
+    ];
+    if (stamps.any((stamp) => stamp.normalizedTimeMs > publishedAtMs)) {
+      throw const FormatException(
+        'WebDAV sync hot section contains a future publication stamp',
+      );
+    }
+  }
+
+  static void _requireTombstonePublicationBounds(
+    WebDavSyncTombstoneDocument document,
+    int publishedAtMs,
+  ) {
+    if (document.items.values.any(
+      (item) =>
+          item.stamp.normalizedTimeMs > publishedAtMs ||
+          item.firstPublishedAtMs! > publishedAtMs,
+    )) {
+      throw const FormatException(
+        'WebDAV sync tombstone section contains a future publication stamp',
+      );
+    }
+  }
+
+  static bool _mapEquals(Map<String, String> left, Map<String, String> right) =>
+      left.length == right.length &&
+      left.entries.every((entry) => right[entry.key] == entry.value);
+
+  static bool _bytesEqual(List<int> left, List<int> right) {
+    var difference = left.length ^ right.length;
+    final length = left.length > right.length ? left.length : right.length;
+    for (var index = 0; index < length; index++) {
+      difference |=
+          (index < left.length ? left[index] : 0) ^
+          (index < right.length ? right[index] : 0);
+    }
+    return difference == 0;
+  }
+
+  static void _ignoreDiagnostic(String _, Object? __) {}
+}
+
+final class _PeerProfileData {
+  const _PeerProfileData({
+    required this.hotDocuments,
+    required this.tombstoneDocuments,
+  });
+
+  final List<WebDavSyncHotDocument> hotDocuments;
+  final List<WebDavSyncTombstoneDocument> tombstoneDocuments;
+}
+
+final class _CachedSection {
+  const _CachedSection({required this.value, required this.encodedBytes});
+
+  final Object value;
+  final int encodedBytes;
+}
+
+final class _ProfileCycleResult {
+  const _ProfileCycleResult({
+    required this.document,
+    required this.tombstones,
+    required this.originalLocalTombstones,
+  });
+
+  final WebDavSyncHotDocument document;
+  final Map<String, WebDavSyncTombstone> tombstones;
+  final Map<String, WebDavSyncTombstone> originalLocalTombstones;
+}
+
+final class _SealedSection {
+  const _SealedSection({required this.bytes, required this.reference});
+
+  final Uint8List bytes;
+  final WebDavSyncSectionReference reference;
+}
+
+final class _PublishedProfile {
+  const _PublishedProfile({
+    required this.hotDigest,
+    required this.tombstoneDigest,
+    required this.tombstones,
+  });
+
+  final String hotDigest;
+  final String tombstoneDigest;
+  final Map<String, WebDavSyncTombstone> tombstones;
+}
+
+final class _PushResult {
+  const _PushResult({
+    required this.sectionsPushed,
+    required this.publishedProfiles,
+    this.manifest,
+  });
+
+  final int sectionsPushed;
+  final WebDavSyncManifest? manifest;
+  final Map<String, _PublishedProfile> publishedProfiles;
+}

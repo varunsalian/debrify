@@ -128,14 +128,27 @@ class ProfilePreferenceBudget {
         ? entryFootprint(key, preferences.get(key))
         : 0;
     final delta = entryFootprint(key, value) - replaced;
+    return admitsProjectedDelta(
+      currentBytes: delta <= 0 ? 0 : measure(preferences),
+      deltaBytes: delta,
+    );
+  }
+
+  /// Applies the same policy to a caller-computed projection. This lets a
+  /// multi-key transaction prove its final sequence before its first native
+  /// write instead of discovering the limit after a partial batch.
+  static bool admitsProjectedDelta({
+    required int currentBytes,
+    required int deltaBytes,
+  }) {
     // Shrinking and same-size writes skip the scan entirely, so the common
     // rewrite-in-place case costs nothing.
-    if (delta <= 0) return true;
-    final projected = measure(preferences) + delta;
+    if (deltaBytes <= 0) return true;
+    final projected = currentBytes + deltaBytes;
     if (projected <= limitBytes) return true;
     // Above the limit only bulk growth is refused; settings and credentials
     // keep saving until the emergency ceiling.
-    if (delta < smallWriteBytes && projected <= emergencyLimitBytes) {
+    if (deltaBytes < smallWriteBytes && projected <= emergencyLimitBytes) {
       _reportSaturationOnce(projected);
       return true;
     }

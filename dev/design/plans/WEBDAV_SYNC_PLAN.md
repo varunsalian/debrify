@@ -1,23 +1,50 @@
 # Debrify Cross-Device Sync over WebDAV — Implementation Plan
 
-Status: M1 + M2 IMPLEMENTED on `webdav-sync` (2026-09-01); automated
-acceptance gates pass. The version-pinned real-Nextcloud and physical-tvOS
-checks remain manual release gates. M3–M6 are PLANNED + LOCKED. This plan was
-revised through TWELVE review rounds — rounds 1–3, 5–8 and 10–12 external,
-rounds 4 and 9 self; round 9 was the pre-lock consistency sweep, after which
-the user locked the design. Rounds 10–12 arrived post-lock and refined ONLY
-the M1/M2 acceptance criteria (§8) — the architecture is unchanged and stays
-locked. There is no freeze claim: every later invariant below gets encoded as
-an M4/M5 test before it is trusted.
+Addenda (2026-09-02): §11 plans silent per-record sync for connections,
+addons, and profiles; §12 plans near-real-time propagation (on-write push +
+cheap remote poll) and cycle-speed work; §13 is the immediate v1 correctness
+repair for scalar-setting provenance. All three are PLANNED, not started.
+§13 is the recommended next step and blocks further cross-device soak; §12
+follows it and remains independent of §11. Sections 1–10 describe v1 as
+implemented, except where §13 explicitly supersedes the original whole-scalar
+conflict rule.
+
+Status: M1–M6 IMPLEMENTED on `webdav-sync` (2026-09-02); automated acceptance
+gates, the simulated phone/Mi Box/tvOS/desktop convergence matrix, and a
+real-provider Koofr M1/M2 smoke test pass. M3/M4 remained dark until M5
+completed activation, adoption, and the graph tier; the rollout now defaults
+on with an emergency dart-define override. The version-pinned Nextcloud 34.0.3,
+physical-tvOS, and physical cross-device soak checks remain explicitly deferred
+manual compatibility gates; none is claimed as tested. The twelve reviewed
+architecture rounds remain the
+safety baseline, with a product-flow amendment and dependency-boundary review
+on 2026-09-01:
+selecting a WebDAV folder is the single setup action; the app automatically
+initializes or connects to the sync data found there. “Circle”, “seed”,
+“join”, and “enrollment” are internal protocol terms, never user-facing
+concepts. Every later invariant below is encoded as a test in its owning
+milestone before it is trusted.
+
+**Known correctness blocker (physical Koofr Mac ↔ Android, 2026-09-02):**
+ordinary scalar preferences currently share one provenance stamp. Android
+therefore republished a stale `default_torrent_provider_v1 = none` 15 seconds
+after macOS published `torbox`, and the newer whole-section stamp made the
+stale value win permanently. This was verified from the authenticated remote
+hot documents, not inferred from UI state. §13 replaces whole-scalar
+arbitration with per-setting provenance before this work is considered ready
+to ship.
+
 Goal: everything the app considers "the user's state" — profiles, connections,
 addons, playlists, favorites, settings, watch progress, source bindings —
 follows the user across devices, via a user-supplied WebDAV server, encrypted
-client-side, with no Debrify-run infrastructure. **Honest carve-out (round-6):
-`debrify_tv.db` contents — Debrify TV channels, IPTV lists/favorites/watch
-history, IPTV `video_resume` — transfer at JOIN and survive refreshes via
-carry-forward, but do NOT sync continuously in v1. The UI must say so (§6);
-this goal line must not oversell it. Playlists and playlist favorites are
-prefs (`user_playlist_v1`, `playlist_favorites_v1`) and DO hot-sync.
+client-side, with no Debrify-run infrastructure. **Honest database carve-out
+(2026-09-02):** IPTV source credentials, favorites, watch history, resume,
+manual order and numbering state transfer in the bootstrap, but each device
+rebuilds its IPTV channel catalogue and EPG cache. Debrify TV channels and
+their saved hash pools do not transfer in v1. None of this database state
+syncs continuously after first connection. The UI must say so (§6); this goal
+line must not oversell it. Playlists and playlist favorites are prefs
+(`user_playlist_v1`, `playlist_favorites_v1`) and DO hot-sync.
 
 Design priorities, in order: **low bug surface → durability → few days**.
 Almost every hard problem is solved by machinery that already shipped and
@@ -34,14 +61,17 @@ already produces the complete, fought-over definition of "everything":
 all profiles + PIN hashes + avatars + policies, all connection resources with
 sealed secrets, per-profile portable preferences, DB snapshots, portable
 files. Its omissions list is the right sync exclusion list (device keys,
-pairings, OS grants, local paths, caches, download binaries) **with one
-verified exception**: `DebrifyTvBackupOmission` (dropped `tv_channels` +
-`tv_cached_torrents`) is durable user data, not cache. Rules:
+pairings, OS grants, local paths, caches, download binaries). Rules:
 
-- Sync graph exports NEVER use `compactDatabaseSnapshots`.
-- If an export reports any DB omission or oversized skip, the graph push is
-  **refused** and the previous graph section stays — a partial graph is
-  never published.
+- Full database snapshots are preferred. If their raw total exceeds the
+  portable-package budget, the existing bounded fallback removes only IPTV
+  catalogue/EPG cache tables and Debrify TV channels/hash pools from scratch
+  snapshots. IPTV credentials travel as encrypted connection resources and
+  durable IPTV tables remain in the compact snapshot.
+- Only the validated `rebuildableDatabaseCachesOmitted` and
+  `debrifyTvChannelsOmitted` records are accepted. Any unknown/malformed
+  omission or a package still oversized after compaction **refuses** the push
+  and keeps the prior graph section.
 
 `ProfilePreferencePortability` already classifies every pref: credentials
 blocked (travel as sealed resources instead), device-local blocked,
@@ -50,9 +80,40 @@ stripped of local pins but **kept**. We invent no new taxonomy. Ever.
 
 ### D2 — Adoption, not merge, for the graph
 Cross-device profile identity is the only genuinely hard problem, so we
-delete it: **a circle has one seed**. The first device uploads its graph;
-every device that joins **adopts** it with explicit consent. We never merge
-two pre-existing profile registries.
+delete it: internally, **a sync folder has one seed graph**. The first device
+uploads its graph; later devices adopt it when needed. We never merge two
+pre-existing profile registries.
+
+**Product model (user decision 2026-09-01): the selected WebDAV folder is the
+sync identity.** The user never chooses “start” versus “join”, names a circle,
+or handles an enrollment code. After folder selection the app probes the
+hidden `debrify-sync/circle.json.enc` marker:
+
+- **unbound device + definitive 404** → show the resolved server + normalized
+  folder and explicitly confirm that no existing Debrify sync was found there;
+  after confirmation, prepare a new encrypted sync set locally and let the
+  final integrated flow initialize it using the root-last M5 commit below;
+- **unbound device + marker exists** → verify the sync passphrase, require at
+  least one authentic complete bootstrap-bearing manifest, and continue
+  toward connection to that same sync set automatically;
+- **already-bound device + matching pinned marker** → continue normally;
+- **already-bound device + 404 or different marker bytes** → hard sync-root
+  error; never recreate, replace, or reinterpret the folder as new;
+- authentication, network, malformed-response, or any other error → stop and
+  explain the error; never reinterpret it as an empty folder.
+
+Folder detection itself is non-destructive. **First connection to an existing
+root always requires replacement consent and a probe-verified safety backup:**
+the first-connection prune set is the snapshot of every local profile, and an
+initialized device always has at least one managing Admin, so that set is not
+empty in v1. There is no vague “meaningful data” or nominal empty-set shortcut.
+Creating a new root from this device's current graph does not replace local
+data and therefore needs no replacement prompt. Later graph refreshes use the
+separate graph-changed prompt. M3 implements configuration, wire formats,
+lifecycle state, and marker verification/pinning for an already-committed
+root, but it never publishes an empty root or manifest. M5 validates an
+authentic bootstrap-bearing manifest and performs both new-root commit and
+destructive graph adoption after all prerequisites exist.
 
 **VERIFIED: `restoreDeviceGraph` is ADDITIVE, not a replace.**
 `publishProfileGraphRestore`
@@ -274,16 +335,23 @@ push, and — round-6, so a joiner doesn't inherit a months-stale library —
 **at most daily when the DB files' content has changed** since the last
 bootstrap (checked during an Admin-session cycle, off the graph cadence).
 A later join therefore never restores a profile set that no longer exists
-nor a badly stale snapshot. **Join flow = adopt bootstrap → immediately auto-apply the latest
-graph revision (with copy-forward) → hot merge** — never a stale bootstrap
-alone. Ongoing channel/favorites DB sync is v2 scope.
+nor a badly stale snapshot while a publishing Admin device is active. Calendar
+age alone does not invalidate the recovery base: §5 explicitly permits a
+30+ day dormant bootstrap when it is the newest complete one, then repairs it
+immediately with eligible graph/hot/tombstone state. **Join flow = adopt
+bootstrap → immediately auto-apply the latest eligible graph revision (with
+copy-forward) → hot merge** — never a stale bootstrap alone. Ongoing
+channel/favorites DB sync is v2 scope.
 
-The trick that makes hot merge cheap: the concurrent-edit data **already has
-intrinsic per-record timestamps** — `playback_state_v1` entries carry
-`updatedAt` (LWW resolution already exists at `lib/services/storage_service.dart:3407`),
-`SeriesSource` carries `boundAt`. Scalar settings don't conflict in practice,
-so they get sub-section LWW with honest provenance (§4.1). No mutation-site
-sweep, no per-key timestamp retrofit.
+The trick that makes most hot merge cheap: concurrent-edit records **already
+have intrinsic timestamps** — `playback_state_v1` entries carry `updatedAt`
+(LWW resolution already exists at `lib/services/storage_service.dart:3407`),
+and `SeriesSource` carries `boundAt`. The original design assumed scalar
+settings did not conflict in practice and gave the entire scalar map one
+stamp. The physical Koofr failure above disproved that assumption: changing
+or rebuilding any scalar can lend fresh provenance to every stale scalar in
+the map. §13 therefore adds per-setting provenance; no ordinary setting may
+win merely because another key changed on the same device.
 
 ---
 
@@ -296,14 +364,15 @@ sweep, no per-key timestamp retrofit.
 | Encrypted envelope | `lib/services/profiles/portable_profile_package.dart:534` Argon2id(19MB, it=2 — sub-second) + AES-GCM, off-isolate, `probeFile`/`decryptFile` | at-rest crypto, reused as-is for the graph; small additive `sealSyncDocument`/`openSyncDocument` for hot docs using the same primitives + own AAD, but with a **circle-fixed KDF salt** (stored in `circle.json`) + per-file random AEAD nonces, so the key derives ONCE per cycle — the stock format's per-file random salt would force one 19MB Argon2id run per peer × section on every pull, colliding with the tvOS low-memory gate |
 | Pref portability policy | `lib/services/profiles/profile_preference_portability.dart` | hot doc contents = `_exportPreferences` output — which is **private today** (`lib/services/profiles/profile_package_service.dart:387`); expose it additively (round-7). **Null rule (round-7):** `prepareValue` deliberately exports device-sealed IPTV execution state and malformed blobs as EXPLICIT NULLS (`profile_preference_portability.dart:51`) so a one-shot RESTORE clears them — but a recurring merge honoring nulls would erase local device state every cycle. The doc builder therefore DROPS null-valued entries; hot deletion travels only as tombstones |
 | WebDAV client (protocol layer only) | `lib/services/webdav_service.dart` (PROPFIND, DELETE, basic auth) | transport; only PUT/MKCOL/GET-bytes are new. **NOT reused: `_authorize`** — it gates on the ACTIVE profile's `ProfileFeature.cloud` grant, which would break sync under non-admin/kid sessions. The engine holds its OWN device-level transport credentials (§5) |
-| Credential storage | **`DeviceKeyProvider` (round-7 — supersedes round-6's SecretVault choice, which was WRONG):** the repo already ships a platform-native secret store — the `debrify/device_secret` channel backed by Android Keystore AEAD (`android/.../security/DeviceSecretCipherPlugin.kt`), Apple Keychain including a tvOS implementation (`tvos/Runner/AppDelegate.swift`), Windows DPAPI (`windows/runner/flutter_window.cpp:105`), and a Linux passphrase-wrapped vault (`lib/services/profiles/device_key_provider.dart:10`). The connection-resource secrets inside the very graph packages sync ships are ALREADY sealed with it; `SecretVault`'s "OS keystores unavailable" header is stale in scope | circle passphrase + engine transport credentials sealed via `DeviceKeyProvider.cipher` with sync-specific AAD. Two encoded caveats: the **Linux vault can be LOCKED** — the cycle defers until unlock, exactly as profile resources already do; and sealed values are **device-bound, non-exportable** — correct, since these secrets must never travel. `SecretVault` (obfuscation-grade, `lib/services/secret_vault.dart:12`) is NOT used for sync secrets |
+| Credential storage | **`DeviceKeyProvider` (round-7 — supersedes round-6's SecretVault choice, which was WRONG):** the repo already ships a platform-native secret store — the `debrify/device_secret` channel backed by Android Keystore AEAD (`android/.../security/DeviceSecretCipherPlugin.kt`), Apple Keychain including a tvOS implementation (`tvos/Runner/AppDelegate.swift`), Windows DPAPI (`windows/runner/flutter_window.cpp:105`), and a Linux passphrase-wrapped vault (`lib/services/profiles/device_key_provider.dart:10`). The connection-resource secrets inside the very graph packages sync ships are ALREADY sealed with it; `SecretVault`'s "OS keystores unavailable" header is stale in scope | sync passphrase (the internal circle key) + engine transport credentials sealed via `DeviceKeyProvider.cipher` with sync-specific AAD. Two encoded caveats: the **Linux vault can be LOCKED** — the cycle defers until unlock, exactly as profile resources already do; and sealed values are **device-bound, non-exportable** — correct, since these secrets must never travel. `SecretVault` (obfuscation-grade, `lib/services/secret_vault.dart:12`) is NOT used for sync secrets |
 | Single-flight + scope-capture patterns | remote fast path (`_applyingRemotePayload` guard, captured authorization) | engine concurrency discipline |
 | Admin authorization for graph ops | remote receiver's pattern for `ConfigCommand.profileGraph` (`lib/services/remote_control/remote_command_router.dart:1088`) | graph build/apply authorization |
 
 **Not reusable (verified):** there is no stable per-install device ID —
 `RemoteControlState._generateDeviceId` regenerates per start
 (`:206`/`:305`) and `SecretVault`'s hardware ID is private to the vault.
-The engine **mints and persists its own sync device UUID** at enrollment.
+The engine **mints and persists its own sync device UUID** when sync is
+enabled for a folder.
 
 ---
 
@@ -311,9 +380,9 @@ The engine **mints and persists its own sync device UUID** at enrollment.
 
 ```
 <user-chosen folder>/debrify-sync/
-  circle.json.enc                     # IMMUTABLE after seed: circle id, created-at,
-                                      #   schema floor, circle KDF salt, key-check
-  pre-join-backups/                   # automatic safety backups, not synced
+  circle.json.enc                     # IMMUTABLE final initialization commit:
+                                      #   circle id, created-at, schema floor,
+                                      #   circle KDF salt, key-check
   devices/<deviceId>/manifest.enc     # THE commit record: clockOffsetMs vs server
                                       #   Date + circleId maps (profiles+resources)
                                       #   for the current graph revision + this
@@ -323,6 +392,62 @@ The engine **mints and persists its own sync device UUID** at enrollment.
                                       #   schemaVersion, size}
   devices/<deviceId>/sections/<contentHash>.enc   # immutable, content-addressed blobs
 ```
+
+Automatic pre-adoption safety backups are local, not part of this server
+layout. They are written under app support in
+`webdav-sync/pre-join-backups/`, encrypted with the sync passphrase, and are
+never synced. The same bounded database fallback applies when a full package
+cannot fit: IPTV caches rebuild and omitted Debrify TV channels are not part
+of that recovery point. On physical tvOS, app support maps to purgeable
+Caches, so this is a verified transaction recovery point rather than a
+permanent archive; users still need normal M2 WebDAV backups for durable
+recovery.
+
+This layout is deliberately hidden implementation detail. Selecting the same
+WebDAV endpoint and exact folder path is sufficient to discover it; users do
+not browse into `debrify-sync/` or copy IDs between devices.
+
+**The root marker is committed LAST, never first.** New-folder activation in
+M5 is one ordered operation:
+
+1. Generate the root metadata/key and profile/resource circle IDs locally.
+2. Build, seal, upload, and hash-verify the initial `bootstrap`, `graph`, and
+   hot/tombstone sections.
+3. Upload the seed device's manifest last and read-back verify it.
+4. Reconfirm the marker is a definitive 404, then create `circle.json.enc`
+   with `If-None-Match: *`. Only **201 Created** proves ownership; 412 follows
+   the winner, while 204 or any ambiguous success is a hard unsafe-server
+   error and never activates this candidate. After 201, read the marker back
+   byte-for-byte and pin the accepted bytes locally.
+
+Until step 4 succeeds, uploaded device objects are uncommitted orphans and no
+client may treat the folder as a sync set. A peer directory participates only
+when its manifest authenticates under the pinned root key and declares the
+same circle ID; pre-root/racing or malicious directories are ignored with a
+privacy-log diagnostic. If another marker wins concurrently, this initializer
+abandons its candidate root, cleans its own orphan directory when safe, and
+follows the existing-root path. If the app crashes before step 4, the folder
+still has no committed root and a later attempt may initialize it. The
+candidate device ID is persisted before upload and reused on retry, so one
+device does not create a fresh orphan on every attempt; when that initializer
+returns, it cleans only its own losing/cancelled candidate directory. If it
+never returns, the unauthenticatable directory is accepted v1 server litter
+and remains ignored. No other device garbage-collects it: cross-device delete
+based on an authentication failure would violate per-device ownership and
+amplify a malicious/corrupt server response into data loss. Conversely, a
+committed marker with no authentic, complete bootstrap-bearing manifest is
+corrupt or incomplete and fails loudly—another device never silently seeds
+it. **An empty manifest is never published.**
+
+**M3 freezes the root wire format before M4/M5 depend on it.** The bounded
+outer envelope exposes only the canonical format/version plus Argon2id
+algorithm, salt, and bounded parameters needed to derive the key; that entire
+header is included in AEAD AAD. The encrypted body contains the circle ID,
+created-at, schema floor, and key-check. Section/manifest AAD remains generic
+but binds root/circle ID, deviceId, logical section name, and schema version.
+M3 ships golden-vector, wrong-passphrase, tamper, unsafe-KDF-bound, and
+forward-version rejection tests for this format; later milestones may add
+section schemas without changing the immutable root envelope.
 
 - **Each device writes only its own directory.** No cross-device write
   conflicts exist, on any server, with any (broken) ETag semantics.
@@ -374,34 +499,52 @@ nor a backward-jumping server clock can bury genuine edits. Version vectors
 deferred to v2 unless practice proves this insufficient. Server-side
 rollback of a peer's manifest is detected cheaply: remember each peer's
 last-seen manifest timestamp, ignore regressions, log to privacy log.
-Transport: Basic credentials go only to the enrolled origin — the sync
+Transport: Basic credentials go only to the selected server origin — the sync
 client never follows cross-origin or scheme-downgrade redirects (M1), and
 explicit `http://` endpoints are permitted but labeled insecure wherever
 a server is configured or chosen — the WebDAV config UI from M1, the
-Migrate destination picker in M2, enrollment in M3 (round-11 fixed the
-"at enrollment only" wording, which would have shipped M1+M2 unlabeled).
+Migrate destination picker in M2, and sync-folder setup in M3 (round-11 fixed
+the earlier wording, which would have shipped M1+M2 unlabeled).
 
 ---
 
 ## 4. Merge semantics (the one new module — pure Dart, exhaustively unit-testable)
 
-The hot doc has **two independently-stamped sub-parts** (round-3 fix):
-`scalars` and `watchState`, each with its own semantic digest and its own
-`updatedAt` that advances ONLY when that digest changes. A playback write
-therefore never restamps unchanged settings — without this, a device that
-missed a settings update would republish its stale scalars under a fresh
-timestamp after any unrelated playback change, silently reverting the
-newer settings. **Cycle order is pull → merge → apply → push**, so a device
-always merges the world before publishing.
+**Milestone boundary:** M4 implements this module and its engine integration
+against an injected root context plus authenticated profile AND resource maps
+(`circleProfileId ↔ localProfileId`, `circleResourceId ↔ localResourceId`).
+Both maps are required inputs: absence means inactive/no-op, never “use a
+local ID temporarily.” M4's
+integration tests use fixtures, but no production pull/apply/push trigger is
+armed until M5 creates or restores the real maps and activates the binding.
+M5 may invoke the builders explicitly inside its bounded seed/adoption
+transaction before activation; that is not a scheduled M4 cycle. This order
+is intentional because M5's graph adoption must finish with the hot merge
+already available.
+
+The hot doc has two independent semantic domains (round-3 fix): `scalars`
+and `watchState`. `watchState` retains its section digest/stamp plus its
+record stamps. **After §13, every scalar entry also carries its own stamp;
+the outer scalar digest is dirty-detection/integrity metadata only and never
+arbitrates a key.** The implemented legacy-v1 shape gives the whole scalar
+map one `updatedAt`. Splitting it from playback prevented a playback write
+from restamping settings, but did not prevent setting A (or a reconstructed
+local scalar map) from restamping stale setting B. That narrower failure was
+confirmed on physical devices and §13 supersedes the whole-scalar rule.
+**Cycle order remains pull → merge → apply → push**, so a device always
+merges the world before publishing.
 
 Given local state + all peers' hot docs for a profile:
 
-1. **Scalars: sub-section LWW with key-union.** Winner = newest
-   `scalars.updatedAt` (adjusted, deviceId tiebreak); keys absent from the
-   winner but present in other docs are retained from the newest doc
-   containing them (protects new-in-schema keys from being dropped by an
-   older writer's win). Documented trade: two devices editing settings
-   within one debounce window → newest wins. Benign, re-doable.
+1. **Scalars: per-key LWW with key-union (§13).** Every portable scalar is
+   `{value, stamp}`. An unchanged key preserves its exact normalized time and
+   origin across rebuilds/rebroadcasts; only a locally changed key receives a
+   new stamp. Winner for each key is the deterministic total order already
+   used elsewhere: `(normalizedTime, originDeviceId, valueHash)`. Keys absent
+   from one doc remain eligible from another, protecting new-in-schema keys.
+   Two devices genuinely editing the same setting resolve newest-per-key;
+   editing different settings unions both changes. A whole-map digest change
+   can trigger publication but can never transfer freshness between keys.
    **Null rule (round-7): docs never carry nulls** — the builder drops
    null-valued entries at build (§2 pref-portability row explains why they
    exist at all), and apply NEVER removes a key because a doc nulls or
@@ -533,7 +676,8 @@ Given local state + all peers' hot docs for a profile:
    last-ACCEPTED offset by more than 24h is an outlier: that cycle neither
    stamps, publishes, nor advances the high-water mark, and the new offset
    is accepted only once it repeats on consecutive cycles. A genuinely
-   re-set RTC or fresh enrollment passes immediately or within two cycles;
+   re-set RTC or fresh sync-folder setup passes immediately or within two
+   cycles;
    a one-off server glitch never poisons a single stamp.
    A device measuring |offset| > 24h still shows the "check this device's
    clock" warning in the status card.
@@ -597,13 +741,43 @@ automatically.
 
 Device-wide service (not profile-scoped), flag-gated (`webdav_sync_enabled`),
 single-flight, serialized **pull→merge→apply→push** cycle. Identified by its
-own minted-and-persisted sync device UUID (see §2 — no existing ID is
-stable).
+own minted-and-persisted **per-root-binding** sync device UUID (see §2 — no
+existing ID is stable).
 
-**Transport authority is engine-owned (round-3 fix):** at enrollment the
-engine copies the chosen WebDAV endpoint + credentials into device-level
-sealed storage (`DeviceKeyProvider`, §2 — round-7) and performs all sync
-HTTP with them directly.
+**Lifecycle is explicit and persisted:** `unconfigured` → `configured`
+(normalized endpoint/folder + sealed secrets) → either `awaitingSeedCommit`
+(definitive 404 with no prior pin) or `rootVerified` (matching authenticated
+marker) → `awaitingAdoption` when the existing graph needs local mapping or
+prune consent → `active`; any stage may enter `error` without pretending to
+sync. Only `active` may schedule ordinary M4 cycles or display “Last synced”.
+The only pre-active data mutations are M5's bounded activation transaction:
+seed sections/manifest/root-last writes for a new folder, or the explicitly
+consented adoption apply for an existing one. M3 implements these states and
+existing-root marker verification, but cannot transition a new or unmapped
+binding to `active`. M4 implements the ordinary cycle behind this gate. M5
+validates peer/bootstrap data, performs seed commit/adoption, establishes the
+identity maps, and owns the transition to `active`.
+
+All root-specific state is namespaced by the authenticated circle ID: marker
+pin, per-root device UUID, profile/resource maps, last-pushed digests,
+tombstones, peer/clock high-water marks, schema ratchet, declined revisions,
+and pending apply/adoption records. Before a marker exists, candidate state is
+isolated by a fingerprint of the normalized endpoint + folder and is never
+mixed into an active namespace. **Change sync folder** stages and validates a
+new isolated binding while the old cycle is paused, then switches the active
+pointer only after M5 completes seed/adoption. It never carries old root state
+into the new folder and never deletes the old server data; an inactive old
+namespace may be retained for an explicit return, but its former `active`
+state is not trusted after local adoption into another root. Returning first
+revalidates the marker and every mapped local profile/resource target; missing
+or changed targets go through `awaitingAdoption` again. Updating only the
+WebDAV password changes transport credentials inside the same binding and
+does not reset sync identity.
+
+**Transport authority is engine-owned (round-3 fix):** when sync is enabled
+for a chosen folder, the engine copies the WebDAV endpoint + credentials into
+device-level sealed storage (`DeviceKeyProvider`, §2 — round-7) and performs
+all sync HTTP with them directly.
 It never runs `WebDavService._authorize` — that path gates on the ACTIVE
 profile's `ProfileFeature.cloud` grant and would break sync whenever a kid
 or ungranted profile is active. Profile-facing WebDAV features are
@@ -618,15 +792,16 @@ transfer is ADDITIVE — profiles it creates land outside the circle
 mapping, and the next Admin push would mint circle IDs for them and
 propagate the duplicated set circle-wide. On sync-enabled devices an
 incoming legacy graph transfer raises a warning naming that consequence
-and recommending the circle instead.
+and recommending WebDAV Sync instead.
 
-Triggers: app launch (post-unlock), foreground, playback stop (hot push),
-app background (hot push), every 15 min while active, manual "Sync now".
-Debounce 45s. Suppressed during active playback on TV and under the tvOS
-low-memory gate. Graph section rebuild at most every 6h or on manual sync —
-hot docs are the frequent traffic (and with DB snapshots AND preference
-sections both out of the refresh graph — §1 D3, rounds 2+8 — ordinary
-watching, favoriting, and settings tweaks never dirty it).
+M4 implements these triggers: app launch (post-unlock), foreground, playback
+stop (hot push), app background (hot push), every 15 min while active, manual
+"Sync now". They remain unarmed until M5 establishes mappings and transitions
+the binding to `active`. Debounce 45s. Suppressed during active playback on TV
+and under the tvOS low-memory gate. Graph section rebuild at most every 6h or
+on manual sync — hot docs are the frequent traffic (and with DB snapshots AND
+preference sections both out of the refresh graph — §1 D3, rounds 2+8 —
+ordinary watching, favoriting, and settings tweaks never dirty it).
 
 **Graph revision arbitration:** the winning graph is the newest by the
 **graph SECTION's own `updatedAt`** from each manifest's section list
@@ -672,7 +847,15 @@ profiles that the rollback is about to delete.
 **Retention & dormancy (round-3 revision):** manifests idle for more than
 30 days are excluded from the hot union. Tombstones expire at 90 days, and
 `staleManifestCutoff (30d) < tombstoneHorizon (90d)` keeps a dormant
-device's SERVER doc from resurrecting deletions. **Tombstones are
+device's SERVER doc from resurrecting deletions. **Bootstrap discovery is
+explicitly EXEMPT from the 30-day cutoff:** within the bounded peer set, M5
+examines every authentic manifest regardless of heartbeat age and selects the
+newest complete, hash-verified bootstrap by the bootstrap SECTION's
+`updatedAt` (deviceId tie-break). A dormant bootstrap is a recovery base, not
+a member of the hot union; connection immediately follows it with the latest
+eligible graph and the ordinary hot/tombstone merge. Thus a healthy folder
+with only a 30+ day dormant bootstrap publisher remains connectable, while its
+stale hot records still cannot overrule active peers. **Tombstones are
 REPLICATED (round-5):** at each push, every device unions all live
 tombstones it has seen into its OWN tombstones section — they're tiny,
 additive, and the union converges so digests settle. Without this, a
@@ -695,8 +878,11 @@ manifest's age (the cutoff exists to mute stale STATE; a stale device's
 tombstones are precisely what must not be muted, else a sole publisher
 going quiet at day 30 strands them before any peer pulls); (c) **Forget
 device first materializes** the forgotten device's unexpired tombstones
-into the actor's own section, then deletes the directory. Its LOCAL copy is handled
-by the **dormant-rejoin rule**: a device whose `lastSuccessfulSync` is
+into the actor's own section AND, before deleting a sole bootstrap publisher,
+publishes and verifies an authentic current bootstrap+graph in the actor's own
+manifest. If either continuity step fails, Forget device refuses. It then
+deletes the directory. Its LOCAL copy is handled by the **dormant-rejoin
+rule**: a device whose `lastSuccessfulSync` is
 older than the tombstone horizon adopts the merged peer state as base and
 overlays only local records stamped AFTER `lastSuccessfulSync` (its genuine
 offline activity). Records from before dormancy were already published
@@ -715,62 +901,107 @@ snackbar for routine cycles. Diagnostics to the privacy log.
 **Settings → Sync and Migrate — its OWN top-level settings section (user
 decision 2026-09-01), phone + TV DPAD page.** Sync never nests inside the
 existing Backup & Restore page, and that page is not modified. The section
-has two halves: **Sync** (the circle — everything below) and **Migrate**
-(one-shot WebDAV backup/restore, M2). Contents:
-- Server: pick from existing `WebDavConfig` list (reuse; creds already
-  sealed as connection resources) + folder selection via a dedicated
-  DPAD-safe picker MODE (round-10: the existing WebDAV screen is a media
-  browser whose taps PLAY files —
-  `lib/screens/webdav/webdav_files_screen.dart:977` — it gains a picker
-  mode; it is not reusable as-is). Enrollment copies the endpoint into
-  engine-owned storage (§5).
-- **Start a circle** (this device seeds): choose passphrase (min 8, matches
-  backup rules) → engine writes `circle.json.enc` **create-only (round-6):**
-  attempt `If-None-Match: *`, but never trust the server honored it — read
-  back and byte-verify. A mismatch means another device seeded
-  concurrently; abort THIS seed and offer to join the existing circle
-  (two racing seeds would silently fork the "immutable" circle root).
-  **Round-7 — read-back alone still leaves a small two-writer race on
-  servers that ignore `If-None-Match`, and capability can't be probed
-  reliably (refusing such servers would kill rclone/dufs setups —
-  rejected). So every device PINS the `circle.json.enc` bytes it
-  seeded/joined with and re-verifies them on each cycle's first GET: a
-  racing fork becomes a loud "another circle exists on this server" hard
-  error one cycle later, never a silent split** → first
-  bootstrap/graph/hot push. Requires an Admin session.
-- **Join a circle**: Admin session required (adoption calls
-  `restoreDeviceGraph`) → enter passphrase → key-check against
-  `circle.json.enc` → explicit consent screen: *"Replace this device's
-  profiles & connections with the circle's? Local profiles on this device
-  will be removed."* → automatic safety backup (below; **probe-verified by decrypt-check before
-  any destructive step runs** — round-7) → CircleAdoption of the bootstrap
-  → auto-apply latest graph revision (copy-forward included) → hot merge.
-- **Pre-adoption safety net:** before adoption, the engine automatically
-  writes ONE full local `deviceGraph` backup to `pre-join-backups/` (or
-  local file), **encrypted with the circle passphrase** — invariant 15
-  carves out this one sanctioned reuse: the backup lives in the same trust
-  domain (same server, same owner) and the alternative is either an extra
-  passphrase prompt at the worst moment or an unrecoverable backup.
-  Per-orphan one-tap exports are NOT possible — `exportProfile`
-  hard-requires the acting profile to BE the exported profile, and child
-  profiles cannot hold backupRestore at all. Restoring an individual
-  pre-circle profile from the safety backup is a manual flow in v1;
-  automated carry-in is the v2 union-merge feature.
-- Status card: last sync, per-device list (from manifests), Sync now,
-  clock warnings, "waits for an Admin session" / prune-pending block when
-  applicable, and the v1 carve-out stated plainly (round-6): *"Live TV
-  channels, IPTV lists, favorites & history transfer when a device joins —
-  they don't sync continuously yet."* The UI never promises what §1's
-  carve-out excludes.
-- **Forget device** (round-3 rename): first materializes the device's
-  unexpired tombstones into the actor's own section (§5, round-6), then
-  deletes the device's server directory and drops it from the union —
-  presented explicitly as bookkeeping for an already-decommissioned device. It is NOT revocation: an installed device
-  still holds the WebDAV credentials and circle key. The dialog says so and
-  points to real revocation (change the WebDAV password on the server;
-  circle re-key is a v2 feature).
-- Graph-changed prompt: quiet badge + dialog on next app open, never
-  mid-playback; declined revisions never re-prompt (§5).
+has two halves: **Sync** (shown as “WebDAV Sync” where qualification is
+needed) and **Migrate** (one-shot WebDAV backup/restore, M2). The words
+“circle”, “seed”, “join”, and “enrollment” do not appear in product copy.
+
+**Sync half — one folder-driven setup path:**
+
+- The sole primary action is **Enable WebDAV Sync** (or **Change sync
+  folder** after setup). It requires an Admin session. The user picks an
+  existing `WebDavConfig`, then the exact folder using the dedicated
+  DPAD-safe picker mode. The existing WebDAV screen is a media browser whose
+  taps play files (`lib/screens/webdav/webdav_files_screen.dart:977`), so it
+  gains a picker mode; it is not reused as-is. The engine copies the selected
+  endpoint, normalized folder path, and credentials into its device-owned
+  sealed storage (§5). Changing folders pauses the old binding, stages a new
+  isolated one, and never carries mappings/digests/tombstones across roots or
+  deletes the old server folder.
+- The app probes `<selected folder>/debrify-sync/circle.json.enc`. On a
+  definitive 404 **for a binding that has never pinned a marker**, it first
+  shows the resolved server and normalized folder path with: *“No existing
+  Debrify sync was found in this folder. Continuing will create a new sync
+  here.”* The actions are Back and Continue—not start/join modes. After
+  confirmation it asks the user to **Create sync passphrase** and prepares
+  initialization. In the completed M5 flow it continues automatically through
+  seed upload and the root-last commit. If the marker exists, it asks for
+  **Sync passphrase**, verifies the key-check plus at least one
+  authentic complete bootstrap-bearing manifest, and continues toward
+  connection to that same sync set. A 404 after this binding already has a pin
+  means **Sync data is missing** and is a
+  hard error, never initialization. All other errors are also shown as errors.
+  There is no separate create/join choice, sync name, or invitation code.
+- The sync passphrase remains the one unavoidable extra input. The folder
+  identifies which sync set to use; the passphrase decrypts it. It follows
+  the backup minimum of 8 characters, is sealed locally with
+  `DeviceKeyProvider`, is never uploaded in plaintext, and is never derived
+  from the WebDAV password. WebDAV app passwords can legitimately differ by
+  device or be rotated without changing the encrypted sync identity.
+- **Hidden initialization safety:** M5 uploads and verifies the initial
+  sections and non-empty seed manifest first, then writes the marker LAST with
+  a final 404 preflight + `If-None-Match: *`. Only 201 Created is accepted;
+  412 follows the concurrent winner, while 204/ambiguity fails loudly and
+  never activates. A post-201 byte mismatch also abandons the candidate.
+  Because some WebDAV servers ignore the precondition, every active device
+  pins the accepted marker bytes and verifies them on each cycle's first GET.
+  A deletion or racing replacement becomes a loud sync-root error, never a
+  silent fork or automatic reset.
+- **Existing local data:** finding an existing marker changes nothing by
+  itself. **First connection to an existing root always shows** one explicit
+  prompt: *“Use the sync data from this folder? Existing profiles and
+  connections on this device will be replaced.”* Every initialized device has
+  a managing Admin and first connection snapshots/prunes every local profile,
+  so v1 has no genuine empty-prune silent path. Before any destructive step,
+  automatically write and decrypt-probe one recoverable local `deviceGraph`
+  safety backup under app support, encrypted with the sync passphrase. It may
+  use only the named database fallback above when the full graph exceeds the
+  envelope budget. On tvOS that location is purgeable Caches, so the UI must
+  not present it as a permanent backup; durable user backups remain the
+  separate M2 WebDAV action.
+  Then run the guarded internal CircleAdoption flow: bootstrap → latest graph
+  revision → hot merge. Per-orphan one-tap exports remain impossible because
+  `exportProfile` requires the acting profile to be the exported profile and
+  child profiles cannot hold `backupRestore`; restoring an individual old
+  profile is manual in v1, while union carry-in remains v2.
+- **Status follows the persisted lifecycle, not optimistic connectivity.** M3
+  may show Configured, Folder verified, Ready to initialize, or Error, plus
+  actions to re-enter the sync passphrase or WebDAV password. It never shows
+  Last synced. M4 supplies cycle/clock/peer telemetry behind the activation
+  gate. Once M5 reaches Active, the UI exposes Last sync, Sync now,
+  retry/clock state, Admin/prune blockers, graph-change prompts, the device
+  list, and Forget device. Graph prompts remain a quiet badge + next-open
+  dialog, never mid-playback; declined revisions do not re-prompt (§5).
+- **Forget device** remains advanced bookkeeping, not setup and not
+  revocation. It requires an Admin session, first materializes the forgotten
+  device's unexpired tombstones, and ensures the actor's own verified
+  bootstrap+graph will keep future connections possible before deleting that
+  server directory (§5). Failure refuses the deletion. The dialog explains
+  that an installed device still has the credentials and sync key; real v1
+  revocation means changing the WebDAV password on the server, while sync
+  re-keying is v2.
+- The v1 carve-out stays visible: *“IPTV sources, favorites, history and
+  resume state transfer. Each device rebuilds its channel and guide caches.
+  Debrify TV channels do not transfer yet.”* iOS and tvOS use the same flow;
+  tvOS uses the DPAD picker and Keychain-backed `DeviceKeyProvider`, needs no
+  document picker, and still observes the low-memory/playback gates.
+
+**Deliberate limits of automatic detection:** it checks only the exact
+normalized folder selected by the user; it does not scan parents, siblings,
+or the whole WebDAV account. Access to the same folder plus the sync
+passphrase is what connects devices. Possession of both is sufficient in
+v1—there is no separate device-approval ceremony—and changing only the
+WebDAV password does not rotate the sync encryption key. Creating a new sync
+set also requires reliable WebDAV create semantics: a server returning 204 or
+another ambiguous result for the create-only root cannot initialize that
+folder safely (though it may still connect to an already-committed root).
+
+M3 delivers the setup component, local pending-binding state, root wire format,
+and marker verification/pinning for an already-committed folder behind the
+feature flag. It does not validate peer data or write a new root/manifest. M4
+delivers the inactive hot-state engine against fixture/injected maps. M5
+validates bootstrap-bearing manifests, completes the same single user flow,
+commits or adopts the root, establishes real mappings, and is the first
+milestone allowed to expose Active sync or profile replacement.
 
 **Migrate half (M2):** "Save backup to WebDAV" + restore-from-WebDAV
 browser — living HERE in **Sync and Migrate**, NOT on the Backup & Restore
@@ -778,7 +1009,8 @@ page (user decision 2026-09-01; the existing Backup & Restore page stays
 untouched). Fixes TV backup (no `ACTION_CREATE_DOCUMENT` there) and
 exercises the full write path before sync ships. This means the Sync and
 Migrate section EXISTS from M2, with only the Migrate half populated; the
-Sync half arrives with M3's enrollment + status card.
+Sync UI foundation lands behind the flag in M3 and becomes user-visible only
+when M5 can complete and activate the flow.
 
 ---
 
@@ -791,8 +1023,12 @@ Sync half arrives with M3's enrollment + status card.
 - Reader supports `[floor..current]`; a **newer** section is skipped and
   preserved — never deleted, never overwritten, never blocks other sections.
 - Graph revisions BELOW the ratchet are never applied (§5); hot-doc scalar
-  merges use key-union (§4.1) so an older writer's win cannot drop
-  newer-schema keys.
+  merges use key-union + per-key provenance (§4.1/§13), so an older writer's
+  win cannot drop newer-schema keys or lend freshness to an unrelated stale
+  key. The §13 reader accepts legacy whole-stamped hot documents and expands
+  their entries with the legacy parent stamp; writers publish the new schema.
+  A still-running legacy writer can reintroduce whole-map arbitration, so all
+  devices in a test circle must be upgraded before §13 is declared verified.
 - Old devices keep pushing their own sections under their own directory —
   per-device dirs mean skew can never clobber newer data on the server.
 - Graph payloads inherit `PortableProfilePackage` versioning
@@ -800,19 +1036,96 @@ Sync half arrives with M3's enrollment + status card.
 
 ---
 
-## 8. Milestones (each independently shippable, tested, flag-gated)
+## 8. Milestones (independently testable and flag-gated)
+
+A partial engine slice is not exposed as “working sync” before it moves user
+data safely. M3's setup foundation and M4's hot engine stay behind the gate;
+M5 is the first milestone that can establish mappings, commit/adopt a root,
+and transition a binding to Active. **This deliberately gives up incremental
+user-visible delivery:** M3/M4 are engineering checkpoints, and
+resume-everywhere is not demoable as a shipped feature until M5. The identity
+map dependency makes that safer than exposing a temporary incompatible format.
 
 | # | Deliverable | New code | Days |
 | --- | --- | --- | --- |
 | M1 | WebDAV protocol client: `putBytes`/`uploadFile` (streamed from disk) with MKCOL-on-409 for parents, `getBytes` (capped)/`downloadToFile` (streamed), `exists`; typed error contract; **transport hardening (round-6):** the sync client sets `followRedirects = false` and refuses cross-origin / scheme-downgrade redirects (the current client follows redirects with `dart:io` defaults, which replay the Basic credentials at the new location; `_baseUri` upgrades only scheme-LESS URLs — an explicit `http://` goes out as-is, `lib/services/webdav_service.dart:186`); explicit `http://` stays allowed but is labeled insecure in the WebDAV server config UI from M1 onward (round-11; LAN Nextcloud/rclone reality — hard-requiring HTTPS was rejected); full acceptance criteria below (rounds 10–11) | ~400 LoC protocol client + tests | 1–1.5 |
 | M2 | Backup to/restore from WebDAV (phone + TV UI) — lands in the NEW **Settings → Sync and Migrate** section ("Migrate" half), NOT on the Backup & Restore page (§6); acceptance criteria below (round-10) | transport-neutral backup entry points + picker mode + new settings section | 1.5–2 |
-| M3 | Engine core: circle create/join enrollment (create-only seed + read-back verify + **local `circle.json` pin re-verified each cycle**), engine-owned transport creds + **passphrase sealed via `DeviceKeyProvider` with sync AAD (round-7; Linux locked-vault deferral)**, sync device UUID, layout, manifest protocol, semantic digests + ID canonicalization, `sealSyncDocument` (circle-fixed salt), clockOffset capture + server-`Date` monotonic high-water mark + **offset-delta damping**, **input bounds: doc/manifest size caps, peer-count cap, deviceId charset restricted for server paths, pinned hash algorithms (round-7)**, status UI skeleton | engine service + enrollment UI | 3 |
-| M4 | Hot-state sync: deletion-path audit (**normative** — ships a test matching audited APIs to helper call sites) → tombstone helpers + replication + pending-until-published, two-part hot doc with `origin` stamps, merge module (pure functions, heavy unit tests: LWW + key-union + deterministic tie-break, alias-keyed playback unions + order stamps, completion diff-stamping, tombstones + cutoff exemption, dormant-rejoin, last-pushed dirty compare + convergence-stops-traffic, publish-time clamp, CW re-cap, **null-dropping doc build + never-delete-on-null apply, tombstone horizon from first publication — round-7**; **playlist per-item union by `computePlaylistDedupeKey` + diff-stamps + tombstones + order value, lossy-twin projection-equality rule — round-8**), `_exportPreferences` exposed additively, **scope-captured BATCH apply op (one tvOS checkpoint + one native projection — round-7) guarded by a persisted pending-apply target (round-8)**, triggers | merge module + helpers + glue | 5–5.5 |
-| M5 | Graph tier: `includeDatabases` + `includePreferences` flags (structure-only refresh graphs — round-8) + restore-report resource-ID map (additive coordinator changes), omission-refusal rule, **pref carry-forward with resource-ref remap at refresh (round-8)**, **mode-scoped prune guards (join = snapshot-gated, refresh = pair-gated — round-8)**, CircleAdoption flow in round-7 order (**intent + pre-restore snapshot + probe-verified backup** → restore → phase record → drained DB copy-forward with **temp+rename placement and `IptvCatalogDb.closeScope()`** → remap → local-state carry-forward (DB-file-excluding) → handoff with **target open-gate** → grant-revoking + artifact-detaching mapped prune, quarantine + **graph-push block while prune-pending**; crash recovery = current-minus-snapshot rollback), circle IDs for profiles AND resources minted by any pusher, **graph arbitration by section time, heartbeat by manifest time (round-7)**, bootstrap regeneration triggers (profile-set change + daily-if-changed), join = bootstrap→latest-graph, prompted refresh + declined-revision persistence + derived schema ratchet, Forget device (tombstone materialization first) | flows + glue | 5–5.5 |
-| M6 | Device-matrix hardening: phone ↔ Mi Box ↔ tvOS ↔ desktop passes, tvOS memory/path audit (sync state in Caches-safe paths; passphrase + creds sealed via `DeviceKeyProvider` — on tvOS that IS the Keychain after all, round-7 superseding round-6's SecretVault wording; nothing added to the 768KB recovery snapshot), soak | fixes | 1–1.5 |
+| M3 | Folder-binding foundation: one Enable Sync component behind the flag; persisted lifecycle states; exact-folder probe where only an **unbound** 404 creates local `awaitingSeedCommit` state, while a pinned 404/replacement is a hard error; existing-root passphrase/key-check verification + local marker pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + sync passphrase sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-folder staging; frozen bounded root/manifest envelope codecs (`sealSyncDocument`/`openSyncDocument`, outer authenticated KDF header, circle-fixed salt, random nonces, bound AAD) and golden/tamper/version tests; foundational status. **M3 publishes no root, manifest, hot data, or graph.** | binding service + single setup component + codec tests | 1.5–2 |
+| M4 | **Inactive hot-state engine** requiring an injected root context + authenticated profile AND resource circle↔local maps—absence is no-op and local IDs are never used on wire: peer discovery + peer-count/doc-size bounds; server-`Date` clockOffset capture, monotonic high-water mark, offset-delta damping, and normalized-time arbitration; hot-document semantic digests; deletion-path audit (**normative** — ships a test matching audited APIs to helper call sites) → tombstone helpers + replication + pending-until-published; two-part hot doc with `origin` stamps; merge module (pure functions, heavy unit tests: LWW + key-union + deterministic tie-break, alias-keyed playback unions + order stamps, completion diff-stamping, tombstones + cutoff exemption, dormant-rejoin, last-pushed dirty compare + convergence-stops-traffic, publish-time clamp, CW re-cap, **null-dropping doc build + never-delete-on-null apply, tombstone horizon from first publication — round-7**; **playlist per-item union by `computePlaylistDedupeKey` + diff-stamps + tombstones + order value, lossy-twin projection-equality rule — round-8**); `_exportPreferences` exposed additively; **scope-captured BATCH apply op (one tvOS checkpoint + one native projection — round-7) guarded by a persisted pending-apply target (round-8)**; trigger plumbing remains unarmed until M5, whose bounded seed/adoption transaction may invoke builders explicitly | merge module + helpers + gated glue | 5.5–6 |
+| M5 | **Activation + graph tier.** New folder: mint circle IDs; build/seal/upload/hash-verify initial bootstrap, graph, hot/tombstone sections; write/read-verify a non-empty seed manifest; recheck marker 404; create immutable root LAST with `If-None-Match: *` (**accept only 201; 412 follows winner; 204/ambiguity hard-fails**); read-back/pin bytes. Existing folder: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph work: profile/resource ID minting, embedded-reference canonicalization, graph semantic digests; `includeDatabases` + `includePreferences` flags + restore-report resource-ID map; fail-closed omission allowlist with bounded IPTV-cache/Debrify-TV fallback; pref carry-forward/remap; mode-scoped prune guards; full crash-ordered CircleAdoption (**intent + snapshot + verified backup** → restore → maps → drained/temp+rename DB copy-forward including `IptvCatalogDb.closeScope()` → remap → local-state carry-forward → gated handoff → mapped prune/quarantine); graph arbitration/ratchet, bootstrap regeneration, prompted refresh, device list + Forget device (**tombstone materialization + verified bootstrap continuity before delete**). Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
+| M6 | Device-matrix hardening: simulated phone ↔ Mi Box ↔ tvOS ↔ desktop convergence; bounded/LRU hot-section cache; disk-staged large WebDAV transfer and integrity verification; tvOS memory/path audit (Keychain-backed `DeviceKeyProvider`, nothing in the 768KB recovery snapshot, playback/low-memory suppression, and fail-closed recovery when Caches-backed engine state is purged); explicit scenarios for unbound-vs-pinned 404, resolved-path new-root warning, marker deletion/replacement, crash before root-last commit + accepted ownerless litter, concurrent initializers, 30+ day bootstrap discovery, bootstrap-less-marker rejection, mandatory first-connection consent, wrong passphrase, folder rebind isolation, and M4 remaining inactive without mappings. Physical-device soak remains a manual gate. | fixes + matrix tests | 1–1.5 |
+
+Post-M6 correctness work is tracked separately in §13. Although M4's original
+whole-scalar implementation passed its fixture matrix, the physical Koofr
+failure invalidates that scalar acceptance assumption; WebDAV sync is not
+ship-ready until §13's per-setting convergence gates pass.
+
+### M3–M6 boundary acceptance gates
+
+- M3 on an unbound 404 performs read-only WebDAV probing and writes only
+  local pending-binding state; the fake-server log proves it sends no MKCOL,
+  PUT, MOVE, or DELETE and creates neither root nor empty manifest. UI tests
+  require the resolved server + normalized path and the explicit “no existing
+  sync; continuing creates one here” confirmation; Back creates no candidate.
+- M3 persists lifecycle state and the exact accepted marker bytes. After a
+  restart, a pinned 404, changed bytes, or wrong passphrase is an error and
+  cannot enter `awaitingSeedCommit`.
+- Root/manifest envelope golden vectors prove deterministic parsing, bounded
+  KDF parameters, authenticated outer header, random nonce use, wrong-key and
+  tamper rejection, and explicit newer-version rejection without rewrite.
+- Change-folder tests prove every root-scoped field is isolated and that a
+  failed/cancelled staged binding resumes the previous active binding without
+  touching either server folder. After a completed switch, returning to the
+  old namespace cannot reuse its former Active state without marker + mapping
+  target revalidation.
+- M4 with missing root context, profile map, or resource map performs zero
+  network, local apply, timestamping, tombstone expiry, and manifest writes.
+  Fixtures prove no serialized path or payload ever contains a local profile
+  or resource ID.
+- M5 new-folder tests assert wire order: all bounded/hash-verified sections →
+  non-empty read-back-verified seed manifest → final marker-404 preflight →
+  create-only root returning 201 → root read-back pin. A 204/ambiguous response
+  never activates; failure/crash before the last step leaves no accepted root.
+  Restart reuses the persisted candidate device ID and cleans only that
+  device's orphan. A never-returning creator's directory remains ignored
+  accepted litter; peers issue no cross-device cleanup request.
+- Concurrent-initializer tests cover both compliant preconditions and a fake
+  server that ignores `If-None-Match`; a losing candidate never becomes
+  Active and follows the winning-root path (including prune consent).
+- M5 refuses Active when a marker has no authentic recoverable
+  bootstrap-bearing manifest, when adoption's required backup fails its
+  decrypt probe, carries an unknown/malformed omission, or whenever any
+  adoption phase/map remains unresolved. An oversized fixture proves the two
+  named database omissions retain IPTV credentials and durable state.
+- A connection test with every bootstrap-bearing manifest idle for more than
+  30 days still selects the newest complete bootstrap, then applies only the
+  graph/hot/tombstone records eligible under their own freshness rules.
+- First connection to every existing root prompts and verifies the safety
+  backup before adoption; only new-root seeding has no replacement prompt.
+  Forget-device refuses unless tombstone and bootstrap continuity are both
+  verified first.
+- M6's automated device matrix runs the same encrypted merge across phone,
+  Mi Box, tvOS, and desktop fixtures, then proves convergence stops writes.
+  Playback and tvOS low-memory gates suppress automatic and interactive heavy
+  work; bounded section-cache tests cover eviction and authenticated metadata
+  revalidation.
+- Large graph/bootstrap network bodies upload and download through private
+  scratch files with bounded size/hash verification and `finally` cleanup.
+  **Honest memory limit:** v1 AEAD/JSON and the file-backed engine journal still
+  decode one bounded document in memory (graph documents cap at 256 MiB;
+  engine state caps at 64 MiB). This is bounded, not fully streaming crypto.
+- Physical tvOS stores the engine journal and automatic safety backup in
+  purgeable Caches because its sandbox does not provide writable durable app
+  support. A missing journal never invents maps or resumes sync: it marks the
+  binding as needing attention and requires marker/passphrase re-verification
+  plus the normal consented adoption flow. A purged automatic safety backup is
+  an accepted platform limitation and is not a substitute for an M2 backup.
+- Koofr M1/M2 has a recorded real-provider smoke pass. Nextcloud 34.0.3,
+  physical-tvOS, and physical multi-device soak remain deferred manual checks
+  in `docs/architecture/webdav-m1-m2-manual-gate.md`.
 
 ### M1/M2 acceptance criteria (rounds 10–12 — implementation-spec reviews;
-the design lock is untouched)
+unchanged by the later M3–M5 product-flow and boundary corrections)
 
 **M1 — the protocol client is a real client, not three functions:**
 - Verbs take `(endpoint, credentials)` DIRECTLY — no `_authorize` inside
@@ -830,8 +1143,8 @@ the design lock is untouched)
   (manifests, hot docs) with explicit caps.
 - Conditional requests + response metadata are first-class: PUT accepts
   `If-None-Match: *` / `If-Match`, 412 maps to a typed precondition
-  result, and every response surfaces `Date` and `ETag` — M3's
-  create-only seed and clock-offset capture both depend on them.
+  result, and every response surfaces `Date` and `ETag` — M5's root-last
+  create-only commit and M4's clock-offset capture depend on them.
 - Redirects: collection URLs are normalized with trailing slashes (avoids
   the routine Apache/Nextcloud 301), then at most ONE same-origin,
   same-scheme redirect hop is followed; anything else — cross-origin,
@@ -854,11 +1167,11 @@ the design lock is untouched)
   response (bad XML). **`exists` returns false ONLY on 404** — mapping
   401/403 to false would read as "not there" and trigger
   create/overwrite logic against a misconfigured server.
-- The insecure-`http://` label ships HERE, not at M3 enrollment: M1+M2
+- The insecure-`http://` label ships HERE, not at M3 folder setup: M1+M2
   are independently shippable and can already send Basic credentials to
   an explicit `http://` endpoint. **Its M1 surface is the existing WebDAV
   server configuration UI (round-11); M2 repeats it in the Migrate
-  destination picker; M3 enrollment inherits it.**
+  destination picker; M3 folder setup inherits it.**
 - Testing: automated tests run against a local fake WebDAV server (CI);
   the real-Nextcloud check is a **documented, version-pinned MANUAL gate**
   run before shipping M1/M2 (round-11 decision — a Dockerized-Nextcloud
@@ -879,7 +1192,7 @@ the design lock is untouched)
   (round-12): because M2 ships alone, a device test proves that a
   representative package AND a near-limit synthetic package either
   complete safely on tvOS or are refused/compacted BEFORE memory
-  pressure; the broader memory audit stays in M6.**
+  pressure; M6 records the remaining bounded-buffer limitations explicitly.**
 - **Authorization lifecycle (round-11):** `backupRestore` permission AND
   the selected WebDAV connection resource's grant are captured (via the
   profile facade — M2 is profile-facing, exactly where that gating
@@ -906,8 +1219,9 @@ the design lock is untouched)
   reports the mismatch and leaves the object untouched (round-12:
   auto-DELETE could otherwise destroy a pre-existing valid backup that
   the failed upload never actually replaced).** A temp-upload/MOVE commit
-  was considered and TRIMMED — that atomicity belongs to M3's manifest
-  protocol, not manual backups.
+  was considered and TRIMMED — sync's content-addressed/manifest-last and
+  M5 root-last commit protocols provide that durability where it is needed;
+  manual backups do not grow the same machinery.
 - **Temp hygiene + regression (round-11):** all staging uses private
   temporary storage with `finally` cleanup on EVERY exit — success,
   cancellation, wrong passphrase, oversize, network failure; and
@@ -918,13 +1232,17 @@ the design lock is untouched)
   registry, DPAD focus wiring, and their tests (the nav-index-audit
   lesson).
 
-**Total v1: ~17–19 focused days** (round-6 re-estimate 16–18 up from 13–15:
+**Total v1: ~17–20 focused days** (round-6 re-estimate 16–18 up from 13–15:
 the crash-ordered adoption flow, local-state carry-forward, prune
 containment, tombstone delivery guarantees, and determinism hardening are
 real scope, not polish; rounds 7–8 were line-level deltas absorbed within
-it; round-10's honest M1/M2 criteria add the final day). M1+M2 is the
-first shippable slice (~3 days); M3+M4 is the daily-value core; M5+M6
-completes "everything".
+it; round-10's honest M1/M2 criteria add the final day). The 2026-09-01
+simplification reduces M3's UI/state-machine scope but moves clock, semantic
+merge, graph-ID work, and the actual root commit to M4/M5 rather than deleting
+safety work. M1+M2 is the first shippable slice (~3 days); M3 is the hidden
+binding/codec foundation; M4 is an inactive but fully tested hot-data engine;
+M5 activates the single folder-driven flow; M6 completes automated matrix and
+resource hardening while retaining the named physical-device manual gates.
 
 ### Explicitly deferred to v2 (do not scope-creep into v1)
 - Silent graph steady-state: per-category **set-reconcile** diff apply through
@@ -932,10 +1250,12 @@ completes "everything".
   and the concurrent-Admin lost-edit trade).
 - **Ongoing `debrify_tv.db` sync** (channels, IPTV favorites/lists, TV
   history): needs record-level treatment, not snapshot replace. v1 carries
-  it at join and preserves it across refreshes via copy-forward.
-- **Circle re-key** (rotate passphrase → true device revocation).
-- **Union merge at join**: automate carrying a joining device's unique
-  profiles into the circle as additional profiles. NOTE: **identity merge**
+  it on first full connection and preserves it across refreshes via
+  copy-forward.
+- **Sync re-key** (rotate passphrase → true device revocation).
+- **Union carry-in on first connection**: automate carrying a connecting
+  device's unique profiles into the shared graph as additional profiles.
+  NOTE: **identity merge**
   (deciding two same-named profiles are the same person and combining their
   settings/histories) stays permanently out of scope.
 - Key retention beyond one cycle (once-per-cycle derivation via the
@@ -971,9 +1291,13 @@ completes "everything".
    are BLOCKED while any profile is prune-pending** — export includes
    disabled profiles, so withheld circle IDs alone contain nothing
    (round-6).
-2. **Never publish a partial graph**: compact mode never used for sync;
-   any export omission/skip refuses the push and keeps the prior section.
-   **Hot docs share the posture (round-9): a doc exceeding the M3 size
+2. **Never publish an unreviewed partial graph**: full database snapshots are
+   preferred; the bounded size fallback may remove only rebuildable IPTV
+   catalogue/EPG rows and Debrify TV channels/hash pools. The two omission
+   records are structurally validated; every unknown omission or post-compact
+   oversize refuses the push and keeps the prior section. IPTV credentials
+   remain encrypted graph resources and durable IPTV tables remain attached.
+   **Hot docs share the posture (round-9): a doc exceeding the M4 size
    caps refuses the push and keeps the prior section + status warning —
    never a truncated doc.** And nothing pushes at all while an adoption
    intent is unresolved.
@@ -985,22 +1309,45 @@ completes "everything".
    refreshes is carry-forward (DBs + ALL pref keys with resource-ref
    remap), never the restore path. Bootstrap keeps everything and is
    regenerated when the profile set changes (+ daily-if-changed).
-4. **Adoption model**: never attempt to merge two pre-existing registries.
-   Joining always chooses: adopt circle, or (first device only) seed it.
-   The pre-adoption full-graph backup is always written first.
+4. **Folder-driven connection, internal adoption model:** never ask the user
+   to choose start versus join and never attempt to merge two pre-existing
+   registries. An UNBOUND definitive 404 creates local pending setup only;
+   before that, UI shows the resolved server/path and explicitly says no sync
+   exists there and continuing creates one. M5 uploads and verifies the full
+   seed + non-empty manifest, then commits the marker LAST. An existing marker
+   connects only after passphrase and an authentic complete bootstrap-bearing
+   manifest are verified. A BOUND 404 or marker-byte change is always a hard
+   error, never reinitialization. Marker detection is non-destructive. Every
+   first connection to an existing root requires explicit replacement consent
+   and the verified pre-adoption recoverable-graph backup (with only the named
+   database fallback allowed)—the snapshot contains at least the device's
+   managing Admin, so v1 has no empty-prune shortcut.
 5. **Per-device server dirs only** — no device ever writes another's files
    (Forget-device cleanup of a removed device's directory is the sole,
-   explicit exception).
-6. **Manifest-last, content-addressed, hash-verified** — the commit protocol.
-   Never overwrite a section blob in place. Dirty detection compares
+   guarded exception). A pre-root candidate's persisted device ID is reused
+   and only that device may clean its losing/cancelled directory. If it never
+   returns, the ignored directory is accepted server litter; peers never turn
+   authentication failure into cross-device deletion.
+6. **Root-last initialization; manifest-last ordinary commits;
+   content-addressed and hash-verified throughout.** Never publish an empty
+   manifest and never expose the immutable root marker before a complete seed
+   manifest is uploaded and read-back verified. Root ownership requires a
+   final 404 preflight, create-only PUT, **201 Created**, and byte-identical
+   read-back; 204/ambiguity never activates. A pre-root/racing peer
+   directory participates only if it authenticates under the pinned root and
+   declares the same circle ID. Never overwrite a section blob in place.
+   Dirty detection compares
    SEMANTIC digests of canonical plaintext with circle-ID normalization,
    never sealed bytes and never local IDs — **against the device's own
    last-PUSHED digest only**. The adopted-digest echo-kill is REMOVED
    (round-6): every device republishes its merged union so state outlives
    its original author's manifest; convergence, not suppression, ends the
-   traffic. Every device **pins its `circle.json.enc` bytes** and
-   re-verifies them on each cycle's first GET — a forked circle root is a
-   loud hard error, never a silent split (round-7).
+   traffic. Every device **pins its `circle.json.enc` bytes** and re-verifies
+   them on each cycle's first GET — missing or changed bytes are a loud hard
+   error, never a silent split or automatic reset (round-7). M3 freezes the
+   bounded root envelope: its canonical outer KDF header is authenticated as
+   AAD and its encrypted body owns circle ID/schema/key-check; M4/M5 never
+   mutate or reinterpret that root format.
 7. **Skew never destroys**: unknown/newer sections preserved and skipped;
    graph revisions below the schema ratchet never applied; scalar merges
    key-union so older winners can't drop newer keys.
@@ -1047,23 +1394,673 @@ completes "everything".
     add nor remove tracker gating the app doesn't have.)
 13. **Credentials only ever travel inside the encrypted graph package** —
     hot docs are portability-filtered prefs, which already exclude them.
-    Sync transport creds + circle passphrase are engine-owned,
+    Sync transport creds + sync passphrase are engine-owned,
     device-level, sealed **via `DeviceKeyProvider` (platform keystore —
     round-7), never SecretVault**; a locked Linux vault defers the cycle.
 14. **LAN-only servers degrade silently.**
-15. Backup passphrase and circle passphrase are separate concepts in UI copy
+15. Backup passphrase and sync passphrase are separate concepts in UI copy
     (same rules, different lifetime); never auto-reuse one as the other —
     **single sanctioned exception: the automatic pre-adoption safety backup
-    encrypts with the circle passphrase** (same trust domain; the
+    encrypts with the sync passphrase** (same trust domain; the
     alternative is an unrecoverable backup or a hostile extra prompt).
 16. **"Forget device" is bookkeeping, not revocation** — the UI must say so.
+    Before deletion it materializes tombstones and guarantees at least one
+    other authentic bootstrap-bearing manifest (publishing/verifying the
+    actor's own if needed); otherwise it refuses.
+17. **No authenticated profile AND resource circle↔local maps means no hot
+    sync.** M4 never puts a local profile/resource ID on the wire and never
+    arms production triggers by itself; missing maps are inactive/no-op. M5
+    creates/restores both maps, completes seed/adoption, and alone transitions
+    the binding to Active.
+18. **Root state never crosses folders.** Marker pins, per-root device IDs,
+    mappings, digests, tombstones, peer/clock state, ratchets, declined
+    revisions, and pending operations are namespaced by authenticated circle
+    ID. Change-folder stages an isolated binding and switches only after safe
+    M5 activation. A retained old binding must revalidate its marker and all
+    mapped local targets before reactivation; password rotation within the
+    same pinned root changes only credentials.
+19. **Bootstrap discovery ignores heartbeat dormancy.** The 30-day cutoff
+    excludes stale manifests only from the hot union; it never makes a valid
+    encrypted folder unconnectable. M5 searches the bounded authentic manifest
+    set regardless of age, chooses the newest complete/hash-verified bootstrap
+    by section time + deviceId, then immediately applies graph/hot/tombstone
+    data under each tier's normal freshness rules.
+20. **Scalar provenance is per setting, never per map (§13).** A local change
+    to one portable preference must not restamp another key, and a device
+    rebuilding or republishing its scalar projection must preserve every
+    unchanged key's time + origin verbatim. The outer scalar digest may decide
+    whether bytes need publishing, but it has no conflict-resolution authority.
+    Legacy whole-stamped documents are migration inputs only; all physical
+    devices in a circle must run the repaired reader/writer before soak results
+    count.
 
-## 10. Open product decisions (small, non-blocking — defaults chosen)
+## 10. Remaining product decisions (small, non-blocking — defaults chosen)
 
-- Naming: the settings entry is FIXED — "**Sync and Migrate**" (user
-  decision 2026-09-01, no longer open). Within it, the circle feature's
-  branding defaults to "**Sync Circle**" (vs "Device Sync") — still open.
+- Naming is FIXED (user decision 2026-09-01): the settings entry is **Sync
+  and Migrate**, the feature is **WebDAV Sync** where qualification is
+  useful, and the primary action is **Enable WebDAV Sync**. “Circle”,
+  “seed”, “join”, and “enrollment” are implementation vocabulary only and
+  must not appear in UI copy.
 - Prompted graph refresh cadence: badge quietly + ask on next open (default),
   vs modal immediately.
 - Tombstone horizon 90 days / stale-manifest cutoff 30 days (defaults) —
   any pair works while cutoff < horizon.
+
+---
+
+## 11. v2 — Silent per-record sync for connections, addons, and profiles
+
+Status: PLANNED (2026-09-02). Not started. Depends on the v1 review fixes
+landing first (see "Preconditions").
+
+### 11.1 Product goal
+
+The user's model is: **whatever is in the sync folder is the truth, resolved
+per record by timestamp, and users never see a merge.** v1 already delivers
+this for watch progress, continue watching, finished marks, playlists,
+favorites, and series source bindings; §13 completes the same guarantee for
+portable scalar settings. v2 extends the rule to the two record classes that
+today live in the prompted graph tier:
+
+1. **Connections and addons** — debrid keys, Stremio addons, IPTV/WebDAV
+   endpoints, their grants and per-profile settings.
+2. **Profiles** — create, rename, avatar, policy, PIN, lock settings, delete.
+
+After v2 the prompted graph tier carries **only database snapshots** (full,
+or bounded-compacted per §1 D1)
+(`debrify_tv.db`, IPTV catalog) and profile bootstrap for first connection.
+Structural edits stop minting prompted revisions. Ongoing database sync
+remains v3 (see 11.8).
+
+Explicit non-goals carried from §8: identity merge of same-named profiles,
+sync re-key, union carry-in on first connection.
+
+### 11.2 Why v1 prompts, and what v2 changes
+
+v1 applies the graph by **adoption (replace)** because the registry has no
+per-record timestamps and no deletion markers for resources. "Newest wins"
+therefore only exists at whole-graph granularity, and replacing a whole graph
+is destructive, so it asks. Two side effects follow:
+
+- A pending remote revision blocks local structural publication until it is
+  applied or declined (`webdav_sync_graph_tier.dart` checks remote change
+  before `identitiesChanged`). Two devices adding different connections
+  concurrently: the second to accept loses its own.
+- Without tombstones, a connection deleted on one device is resurrected by
+  a device that has not synced yet.
+
+v2 fixes both by giving these records the same three properties the hot tier
+already relies on: **per-record `updatedAt`**, **tombstones on delete**, and
+**circle-stable identity via the existing identity maps**.
+
+### 11.3 Current shape (verified 2026-09-02)
+
+- `ConnectionResource` (`lib/models/profiles/connection_resource.dart:56`):
+  id, type, label, ownerProfileId, publicConfig, publicSchemaVersion,
+  authorizationRevision, enabled. **No timestamp.**
+- Registry tables involved (`profile_registry.dart:237-282`):
+  `connection_resources`, `profile_resource_grants`,
+  `profile_resource_settings`, `profile_connection_bindings`, plus
+  `resource_secret_chunks` (sealed per device via `DeviceKeyProvider`).
+- Secrets are revealable only by the owning profile
+  (`revealOwnedSecretForProfileBackup`); the graph tier sidesteps this by
+  requiring an Admin session and exporting registry-wide.
+- `UserProfile` (`lib/models/profiles/user_profile.dart:5`) **already has**
+  `createdAt`, `updatedAt`, `disabledAt`, PIN state, policy, role, lifecycle.
+- The hot document is per profile (`WebDavSyncHotDocument.circleProfileId`).
+  Resources are registry-wide with an owner, so they need a **new
+  circle-wide section**, not a field on the per-profile document.
+- Identity maps (`localToCircleResources` / `circleToLocalResources`) already
+  translate random per-device resource IDs for the hot tier. Reused as-is.
+- Registry + connection service are ~6.3k lines; every write path in them is
+  a stamp site.
+
+### 11.4 Design
+
+**Timestamps.** Add `updatedAtMs` to `connection_resources`,
+`profile_resource_grants`, `profile_resource_settings`, and
+`profile_connection_bindings`. Bumped by the registry writer, never by
+callers. Stamps are device-local wall time, clamped for publication by the
+existing server-clock policy (`clampForPublication`) exactly like playback
+records.
+
+**New hot section: `resources`.** Circle-wide, one per publishing device,
+merged across all device manifests. Records:
+
+- `resource` keyed by circle resource ID: type, label, ownerCircleProfileId,
+  publicConfig, publicSchemaVersion, enabled, `updatedAt`, plus an
+  encrypted `secretConfig` envelope (see Secrets).
+- `grant` keyed by (circle profile, circle resource): permissions,
+  `updatedAt`.
+- `setting` keyed by (circle profile, circle resource): enabled, settings
+  map, `updatedAt`.
+- `binding` keyed by (circle profile, circle resource): `updatedAt`.
+
+Merge rule: last-writer-wins per record on `updatedAt`, tie-broken by origin
+device ID, identical to `_tombstoneBeatsRecord`. Tombstones for all four
+record kinds, recorded at the registry delete chokepoints and covered by the
+tombstone audit (which must become an all-sites assertion — v1 review
+finding).
+
+**New hot section: `profiles`.** Circle-wide. Record per circle profile:
+name, avatarKey, role, policy, lockOnResume, inactivityTimeoutMinutes,
+setupComplete, lifecycle, `updatedAt` (already present locally). PIN carried
+as the sealed verifier + recovery-code hash set, not plaintext. Tombstone on
+delete.
+
+**Secrets on the hot path.** Two options; pick (a):
+
+- (a) **Owner-scoped publication.** A device publishes `secretConfig` only
+  for resources owned by the active profile at cycle time; other resources
+  publish metadata only. Receiving devices adopt metadata immediately and
+  mark the resource `secretPending` until a cycle from the owner's session
+  supplies it. Keeps the existing "owner reveals" invariant; no new
+  authority.
+- (b) Admin-scoped reveal — adds a new reveal authority to the registry.
+  Rejected for v2: wider blast radius on the credential-security invariants.
+
+Secret envelopes reuse the M3 sealed-document codec under the sync key; the
+server never sees plaintext.
+
+**Apply side.** Merged records are applied through the **existing registry
+writers** (`prepareConnectionResource` / `StagedGraphResource` paths used by
+adoption), never by raw SQL, so grants, settings, bindings, and secret chunks
+stay consistent and `authorizationRevision` bumps as today. Foreign IDs are
+minted into the identity maps on first sight; the adoption remap helper
+(`remapResourceReferences`) is reused for the preference keys that embed
+resource IDs (playlist view modes, Stremio TV favorites, startup channel —
+v1 review finding #8 must be fixed first so these are mapped at all).
+
+**Profile lifecycle on remote change.**
+- Remote create: registry insert, empty databases, no bootstrap needed.
+- Remote rename/avatar/policy/lock: in-place update; if that profile is the
+  active session, re-evaluate policy immediately.
+- Remote PIN change: replace verifier; if the profile is currently unlocked
+  on this device, **do not** force a lock mid-session — lock on next resume.
+- Remote delete while signed in: finish the current cycle, then route to
+  the gate on next foreground with the standard "profile no longer
+  available" copy. Never mid-playback (existing TV gate).
+- A locally created profile that has never been published is never pruned
+  by a remote apply (tombstones, not absence, drive deletion).
+
+**Graph tier after v2.** Refresh graphs are removed. The bootstrap section
+remains for first connection and daily DB-content regeneration. The
+"remote change → prompt" path only fires for bootstrap database replacement,
+which no longer happens in steady state.
+
+### 11.5 Effort
+
+| Piece | Days | Notes |
+|---|---|---|
+| Timestamps on 4 registry tables + all write sites | 1.5 | widest edit; mechanical |
+| `resources` hot section: models, codec, merge, tombstones | 2 | pure-Dart, exhaustively testable like hot_merge |
+| Owner-scoped secret publish + `secretPending` apply | 1.5 | the one real design decision |
+| Apply via registry writers + identity-map minting | 1 | reuses adoption helpers |
+| **Connections + addons subtotal** | **6** | |
+| `profiles` hot section + merge + tombstones | 1.5 | timestamps already exist |
+| Remote lifecycle handling (PIN, delete-while-active, policy) | 1.5 | gate/lifecycle code |
+| **Profiles subtotal** | **3** | |
+| Tombstone audit → all-sites assertion | 1 | v1 review finding |
+| Convergence matrix extended to new records | 1 | existing 4-device harness |
+| Remove refresh graph path; bootstrap-only graph tier | 0.5 | deletion |
+| **Cross-cutting subtotal** | **2.5** | |
+| **Total** | **~11.5 working days** | 2–2.5 calendar weeks |
+
+Order: connections first (it builds the section/tombstone machinery),
+profiles second, graph-tier trim last.
+
+### 11.6 Regression exposure
+
+**Connections and addons — medium-high.**
+- Every registry write site touched. Guarded by the profiles isolation suite
+  and `profile_source_guard_test`; expect them to catch stamp omissions.
+- Tombstone rule extends to a new record class; the v1 audit test cannot
+  catch a missed site (text-slicing), hence the audit rewrite is in scope.
+- Owner-only secret reveal is a credential-security invariant; option (a)
+  preserves it, but `secretPending` is a new UI/runtime state that must not
+  be confused with "connection broken".
+- Hot merge itself is pure functions with strong tests; low risk there.
+
+**Profiles — medium.**
+- Fewer write sites and timestamps exist, but remote delete and PIN change
+  touch the gate/lifecycle code where the app has historically had the
+  subtlest bugs (see `project_settings_double_focus`, import blank-screen
+  RCA, revision drift invariant).
+- Same-profile `switchTo` not republishing scope (v1 review, plausible) must
+  be resolved first or remote apply on the active profile races it.
+
+**Shared.**
+- Identity-map minting on first sight of a foreign record is new; a bug
+  here duplicates resources circle-wide. Covered by the convergence matrix.
+- No change to the wire envelope, clock policy, transport, or activation.
+
+### 11.7 Preconditions (from the 2026-09-02 v1 review)
+
+Must land before v2 starts:
+1. Startup-gate hangs (`main.dart:237` unconditional re-hold;
+   `webdav_sync_runtime.dart:469` StateError with no journal).
+2. Tombstone recorder ordering (`webdav_sync_tombstones.dart:46` limits
+   before no-binding short-circuit; `:29` scope check after return).
+3. StringList portable preferences rejected by the scalar gate
+   (`webdav_sync_hot_merge.dart:326`).
+4. Composite-string preference remap (`webdav_sync_hot_merge.dart:193`) —
+   v2 relies on `remapResourceReferences` for these keys.
+5. Publish-before-check reorder in `maintain()` so local structural edits
+   are never blocked by a pending remote revision (also removes the
+   concurrent-Admin lost-edit trade in the interim).
+6. §13 per-setting scalar provenance, including legacy-hot-document upgrade
+   and the physical Koofr Mac ↔ Android convergence gate.
+
+### 11.8 Still deferred after v2
+
+- Ongoing `debrify_tv.db` / IPTV catalog sync: whole SQLite files with no
+  row-level change tracking. Silent sync needs per-row stamps in those
+  tables or accepts file-level LWW (loses data under concurrent use).
+- Sync re-key / true device revocation.
+- Union carry-in of a joiner's unique profiles; identity merge permanently
+  out.
+
+### 11.9 Acceptance gates
+
+- Add a Real-Debrid key on device A; device B has it, with secret, within
+  one cycle of B's owner-profile session, with no prompt.
+- Delete a connection on A; it does not resurrect on B after B's next cycle
+  from a stale state.
+- Concurrent add of different connections on A and B: both exist on both
+  after two cycles.
+- Rename/PIN/policy change on A applies on B in place; an unlocked session
+  on B is not interrupted, and locks on next resume.
+- Delete a profile on A while B is signed into it: B finishes the cycle,
+  reaches the gate on next foreground, never mid-playback.
+- Refresh graph revisions are never minted; the "apply change" prompt fires
+  only for bootstrap database replacement.
+- Tombstone audit enumerates every `prefs.remove` / registry delete site
+  for synced keys and fails on a new unguarded one.
+- 4-device convergence matrix passes with `resources` and `profiles`
+  sections included.
+
+---
+
+## 12. v2 — Near-real-time propagation and cycle speed
+
+Status: PLANNED (2026-09-02). Not started. Independent of §11 — it touches
+the scheduler, a transport probe, and instrumentation only; no additional
+merge, wire, clock, crypto, activation, or adoption change after §13. It is
+smaller than §11 and is the recommended follow-up once the immediate §13
+correctness repair lands. Written against the working tree of 2026-09-02;
+line references are to that tree.
+
+### 12.1 Product goal
+
+A change made on one device shows up on the others within about a minute,
+without anyone pressing "Sync now", and a cycle is cheap enough to run that
+often. v1 as built is correct but batch-shaped: it syncs on lifecycle edges
+and on a 15-minute timer. §12 keeps every v1 invariant and adds two
+triggers plus the measurement needed to make the cycle itself fast.
+
+Target after §12, both devices in the foreground on the home screen:
+
+- a local edit is pushed within ~10 s of the last write;
+- a peer's push is visible locally within the poll period (60 s) plus one
+  cycle;
+- an idle cycle costs a handful of small requests and no section transfer.
+
+### 12.2 Why v1 is slow to propagate (verified 2026-09-02)
+
+- `WebDavSyncScheduler` (`webdav_sync_scheduler.dart:28-29`): triggers are
+  `launch`, `foreground`, `playbackStopped`, `background`, `periodic`
+  (15 min), `manual`; every non-manual trigger shares one 45 s debounce.
+  All are wired (`main.dart:726`, `webdav_sync_runtime.dart:553-572`).
+- **No trigger fires on a local write.** A favorite, playlist edit,
+  settings change, or watch-progress save never reaches the scheduler; only
+  playback stop and app background push. A TV or desktop parked on the home
+  screen pushes nothing for up to 15 minutes.
+- **Pull is polling by nature** (WebDAV cannot notify) and the only poll is
+  the 15-minute periodic cycle, so a peer sees a change only when its own
+  next cycle runs.
+- Cycle cost, in execution order (`webdav_sync_engine.dart:169`): root
+  marker GET + pin compare → `listDeviceIds` PROPFIND → one manifest GET per
+  device, sequential (`_readManifests`, `:571-584`) → per mapped profile,
+  peer section GETs (content-addressed; unchanged sections come from
+  `_sectionCache`) → merge/apply → for every changed own section a PUT
+  followed by a full GET read-back and byte compare (`_pushChanged`,
+  `:880-897`) → manifest PUT + read-back (`:945`). Everything is
+  sequential.
+- Not a cost: the Argon2id root open is cached across cycles, keyed by
+  binding revision + marker bytes (`webdav_sync_runtime.dart:720-732`), and
+  runs off-thread.
+- No per-cycle timing exists, so "slow" cannot yet be attributed to a
+  step. D12-1 fixes that first.
+
+### 12.3 Design
+
+**D12-1 — Instrument before optimizing.** Each cycle records one redacted
+`DiagnosticLog.instance.recordEvent` line: trigger, peer count, per-phase
+wall time (root, list, manifests, sections, merge/apply, seal, push,
+read-back, total), request count, bytes up/down, disposition. The Koofr
+trace with at least one peer is pasted into §12.10 before D12-4's verify
+change is decided.
+
+**D12-2 — Local-change trigger.** New `WebDavSyncTrigger.localChange`.
+Source: the single ordinary-write chokepoint `ProfilePreferences._write`
+(`profile_preferences.dart:640`) — after a successful write with
+`_capturedAccess == null`, `_scope != null`, and a `logicalKey`, notify a
+static `WebDavSyncLocalChangeSink` with (scope, key). Captured-scope
+writes (migration, restore, creation, `syncApply`) never notify, so the
+engine's own applies cannot trigger a cycle. The tombstone recorder
+(`WebDavSyncTombstoneRecorder.recordForProfile`,
+`webdav_sync_tombstones.dart:51`) notifies the same sink for deletes. The
+sink is synchronous, non-blocking, never throws, and adds no `await` to the
+write path.
+
+Key filter, reusing existing classification only: notify when
+`ProfilePreferencePortability.allowsKey`
+(`profile_preference_portability.dart:14`) admits the key OR the key is one
+the hot builder reads raw — the constants at
+`webdav_sync_hot_merge.dart:487-494` (`playbackPreference`,
+`continueWatchingPreference`, `finishedMoviesPreference`,
+`playlistPreference`, `playlistFavoritesPreference`, `seriesSourcePrefix`,
+and the rest of that block). A test asserts every key the builder reads is
+admitted by the filter, so the two cannot drift.
+
+Coalescing lives in the scheduler, not the sink: a trailing debounce of
+**10 s** (`localChangeDebounce`) collapses bursts; while playback is active
+on any platform the debounce is **60 s** (`playbackDebounce`), so progress
+saves become at most one push per minute. `localChange` is exempt from the
+shared 45 s lifecycle debounce (as `manual` is) and subject to every
+existing gate (`playbackActiveOnTelevision`, `tvOsLowMemory`, `_running`).
+A notification that arrives while a cycle is running sets
+`_dirtyDuringRun`; when the cycle finishes, the scheduler schedules one
+follow-up `localChange` after the debounce, so an edit made mid-cycle is
+not deferred to the 15-minute timer.
+
+**D12-3 — Remote-change poll.** New `WebDavSyncTrigger.remoteChange` and a
+poll timer with period **60 s** (`remotePollPeriod`), armed together with
+the scheduler, paused on `AppLifecycleState.paused`/`detached` and resumed
+on `resumed` (the runtime already receives these,
+`webdav_sync_runtime.dart:553`). Each tick:
+
+1. Skip when `peerCount == 0`, when any existing gate holds, or when a
+   cycle is running.
+2. For each peer device ID known from the last cycle, call a new
+   `WebDavSyncTransport.probeManifest(deviceId)`, implemented with the M1
+   `exists()` HEAD (PROPFIND depth-0 fallback,
+   `webdav_protocol_client.dart:388`) on `devices/<id>/manifest.enc`.
+   Validators, in preference order: `ETag`; else `Last-Modified` +
+   `Content-Length` from the response headers.
+3. Compare to the validator stored per peer in engine state after the last
+   full read. Any difference, or a 404 for a previously seen peer, signals
+   `remoteChange`, which runs the ordinary full cycle. Nothing else changes:
+   the cycle still hash-verifies everything it reads; the validator only
+   decides whether to look.
+4. Probes are concurrent (bounded 4). A probe error never surfaces as a
+   sync error: on 429/5xx/network failure the poll backs off exponentially,
+   capped at the 15-minute period, and the status card shows "checking
+   paused". A server that returns neither `ETag` nor `Last-Modified`
+   disables the poll for that binding (status: "server does not report
+   changes; syncing every 15 min").
+
+New device directories are still discovered only by the full cycles
+(lifecycle + 15 min); joining is rare and that latency is accepted.
+
+**D12-4 — Cycle speed, measurement-gated.**
+
+- Read peer manifests and peer sections concurrently, bounded 4, results
+  merged in a deterministic order. Same outputs as sequential; the
+  convergence matrix proves it.
+- **Section read-back (user decision; default chosen):** replace the full
+  GET read-back of each pushed section with the metadata the PUT already
+  returns plus one HEAD — accept when the PUT's `ETag` equals the HEAD's
+  `ETag` (when both are present) and `Content-Length` equals the bytes
+  sent. Keep the **manifest** read-back byte-for-byte (`:945`): it is small
+  and it is the commit record. Sections are content-addressed and
+  AEAD-sealed, so a mangled section can never be misread as valid by a
+  peer; the read-back only bought earlier detection by the pusher. Execute
+  this item only if the D12-1 trace shows read-back ≥ 30 % of hot-cycle
+  time on the real provider; otherwise leave it and record the numbers in
+  §12.10.
+
+**Status surface.** `WebDavSyncRuntimeStatus` (`webdav_sync_runtime.dart:79`)
+gains `lastPushMs`, `lastRemoteChangeMs`, and a `pollState` enum (active,
+pausedBackoff, disabledNoValidators, gated). The existing status card shows
+one extra line. No new page, no frequency setting.
+
+### 12.4 Non-goals (do not build)
+
+- No server-side notification: no WebSocket, long-poll, or push service.
+- No new file in the server layout (no heartbeat/beacon object).
+- No change beyond §13's already-landed scalar repair to the merge module,
+  hot/graph wire format, clock policy, crypto, activation, adoption, or the
+  graph tier's 6 h cadence (§11 owns the graph tier).
+- No new key taxonomy: the D12-2 filter reuses `allowsKey` and the
+  builder's own constants; the only key-specific behavior is the playback
+  debounce.
+- No OS background execution: the poll runs only while the app is in the
+  foreground. The 15-minute periodic and lifecycle triggers are unchanged
+  and remain the safety net.
+- No user-facing "sync frequency" control. Emergency override follows the
+  existing `DEBRIFY_WEBDAV_SYNC` dart-define pattern
+  (`webdav_sync_feature.dart`) with `DEBRIFY_WEBDAV_SYNC_POLL` (default
+  true).
+
+### 12.5 Effort
+
+| Piece | Days | Notes |
+|---|---|---|
+| D12-1 per-cycle instrumentation + Koofr trace | 0.5 | additive; one log line |
+| D12-2 sink in `_write` + tombstone recorder, filter drift test, scheduler coalescing + dirty-rerun | 1 | scheduler is pure Dart, unit-testable |
+| D12-3 `probeManifest`, poll timer, gates, backoff, validator state, status fields + card line | 1.5 | fake-server tests for ETag / no-ETag / 429 |
+| D12-4 concurrent peer reads | 0.5 | bounded `Future.wait` |
+| D12-4 section verify via PUT ETag + HEAD (only if the trace justifies it) | 0.5 | manifest read-back kept |
+| Convergence matrix: "edit → peer sees it within poll period" | 1 | existing 4-device harness |
+| **Total** | **~5 working days** | 4.5 without the verify change |
+
+Order: D12-1 → D12-2 → D12-3 → D12-4. D12-2 alone already removes the
+"nothing pushes until playback stops" gap and is worth shipping on its own.
+
+### 12.6 Regression exposure
+
+**`_write` (D12-2) — medium.** It is the hottest write path in the app and
+the profiles isolation suite pins its behavior. The sink adds one
+synchronous, exception-swallowing call after the existing native projection
+and tvOS checkpoint; it must not add an `await`. Captured-scope exclusion is
+load-bearing: if `syncApply` writes ever notified, every remote apply would
+schedule a local push — a no-op by last-pushed digest compare, but a wasted
+cycle. Test: apply N remote records → zero `localChange` signals.
+
+**Poll (D12-3) — low-medium.** More requests per hour: at most `peerCount`
+HEADs per minute while foreground, typically 1–3. Risks are provider rate
+limits (backoff handles them) and servers with unstable `ETag`s (a spurious
+change costs one idle full cycle, which is exactly what D12-1 makes cheap to
+see). The poll never writes and never changes what the cycle trusts.
+
+**Concurrency (D12-4) — low.** Reads only; result order is made
+deterministic before merge. The bound of 4 keeps tvOS memory flat.
+
+**Section verify (D12-4) — the one durability trade.** Loses the pusher's
+immediate detection of a server that stores a corrupted body while
+reporting success. Kept protections: TLS integrity in transit, HEAD length
+check against truncation, AEAD + content-hash verification by every reader,
+manifest read-back unchanged. Gated on measurement so it is not paid for
+without benefit.
+
+### 12.7 Preconditions
+
+None from §11's new resource/profile design. §13 is mandatory first: faster
+on-write pushes would otherwise make the whole-scalar overwrite bug happen
+more quickly and more often. §11.7 items 1 and 2 (startup-gate hang;
+tombstone recorder ordering) are independent bug fixes and should also land
+first because D12-2 hooks the tombstone recorder and D12-3 runs on the startup
+path.
+
+### 12.8 Still deferred after §12
+
+- Sub-10-second propagation (needs a notification channel; out of scope
+  for a dumb-server design).
+- Background (screen-off) sync on mobile.
+- New-device discovery faster than the 15-minute cycle.
+- Making the graph tier (§11) faster than its 6 h cadence.
+
+### 12.9 Acceptance gates
+
+- Add a favorite on device A (foreground, idle): A pushes within
+  `localChangeDebounce` + one cycle, with no user action.
+- Device B (foreground, home screen, idle) reflects A's change within
+  `remotePollPeriod` + one cycle, with no user action. Convergence harness.
+- Ten rapid edits on A produce one push.
+- A write landing during a running cycle is pushed by an automatic
+  follow-up cycle, not by the 15-minute timer.
+- During phone playback, progress saves produce at most one push per
+  `playbackDebounce`; on television, zero pushes during playback (existing
+  gate, asserted).
+- `syncApply` writes never signal `localChange`.
+- Every key read by `WebDavSyncHotMerge.build` is admitted by the
+  local-change filter (drift test).
+- Fake server without `ETag`/`Last-Modified`: poll disabled, status says
+  so, the 15-minute cycle still converges. Fake server returning 429: poll
+  backs off to ≤ 15 min and no error is surfaced.
+- App backgrounded: no probe is sent after the next tick; resumed: poll
+  resumes and the existing foreground cycle runs.
+- Every cycle emits one timing line; the Koofr trace is recorded in §12.10
+  before the D12-4 verify change is started.
+- Concurrent peer reads: convergence matrix output identical to
+  sequential.
+- Full suite and profiles isolation suite: no new failures versus the
+  pre-§12 baseline.
+
+### 12.10 Measurements
+
+(Filled in during D12-1: provider, peer count, per-phase milliseconds,
+request count, bytes — one idle cycle and one cycle with a pushed change.)
+
+---
+
+## 13. v1 correctness repair — per-setting scalar provenance
+
+Status: PLANNED (2026-09-02). **Immediate next step; blocks further physical
+cross-device soak and must land before §12.** This is a hot-model/merge repair,
+not a provider-settings UI change and not part of §11's resource/profile work.
+
+### 13.1 Confirmed failure
+
+The physical Koofr Mac ↔ Android test produced two authentic hot documents for
+the same Admin circle profile:
+
+- macOS published `default_torrent_provider_v1 = torbox` at
+  `1788368335000`;
+- Android published its stale `default_torrent_provider_v1 = none` at
+  `1788368350000`, 15 seconds later;
+- every later merge selected `none`, because all values in an implemented
+  `WebDavSyncScalarPart` borrow the part's single stamp.
+
+The Mac write reached the sync engine and the phone page was freshly loaded;
+this was neither a stale widget nor a failed WebDAV request. The encrypted
+remote documents established the overwrite directly.
+
+Root cause: `WebDavSyncHotMerge.build` hashes the complete portable scalar map.
+If any scalar differs from the prior baseline, it gives the complete map a new
+stamp. `merge` loops by key, but compares each key using that parent stamp.
+Consequently one genuinely changed/reconstructed setting lends fresh
+provenance to every stale setting beside it. The round-3 `scalars` versus
+`watchState` split prevents playback from causing this, but does not isolate
+one scalar setting from another.
+
+### 13.2 Required wire and merge change
+
+Introduce hot-document schema v2. The root marker, circle key, crypto envelope,
+manifest format, paths, profile/resource maps, watch records, tombstones, and
+graph sections do not change.
+
+- Replace the scalar map's single conflict stamp with a bounded map of
+  individually stamped entries: logical preference key → `{value, stamp}`.
+  Reuse `WebDavSyncStamp` and the existing scalar type gate (`bool`, `int`,
+  finite `double`, `String`, `List<String>`). Keep one canonical semantic
+  digest for integrity/dirty detection only.
+- Build each key against the last applied baseline. If its portable value is
+  unchanged, preserve the exact prior normalized time and origin. If it is a
+  genuine local difference, stamp only that key with the current accepted
+  server-normalized time and local device ID. A changed outer digest never
+  restamps an unchanged entry.
+- Merge independently per key using
+  `(normalizedTime, originDeviceId, valueHash)`. Different-key concurrent
+  edits union; same-key edits remain deterministic LWW.
+- Materialize/apply values exactly as today. Null and omission remain
+  non-deleting; scalar removal is not invented here. `mdblist_sync_checkpoint_v1`
+  stays local-only and cannot create or receive a wire stamp.
+- The last-pushed semantic digest still suppresses no-op traffic. After all
+  peers converge, rebuilding/rebroadcasting an identical map must preserve
+  every entry stamp and stop writes.
+
+This deliberately fixes cross-key freshness transfer. It does not add a
+mutation hook to every setting writer: two devices genuinely changing the
+same key while offline are ordered when those local differences are first
+normalized/published, as in v1. True edit-time ordering would require a
+durable per-key mutation journal and is outside this repair.
+
+### 13.3 Existing-folder and rollback behavior
+
+- The new reader accepts schema v1 and v2. A v1 scalar value is translated in
+  memory to a stamped entry inheriting its legacy parent stamp; the source file
+  is never rewritten in place. The next own-device publication writes v2.
+- No folder reset, passphrase change, re-adoption, profile remap, or new root is
+  required. Current v1 winners remain the migration starting point; after both
+  devices upgrade, the user reselects any value already lost during the bug.
+- A legacy client cannot understand v2 and may keep publishing whole-stamped
+  v1 data. New clients may read it for migration, but correctness is not
+  claimed while a legacy peer remains active. The status/diagnostic surface
+  records a legacy-hot peer, and physical acceptance requires every device in
+  the test circle to run the repaired build.
+- Emergency rollback remains boot-safe: an older client skips the newer hot
+  section under §7's newer-section rule, retains its local preferences, and
+  must not fail startup or rewrite the root.
+
+### 13.4 Scope and effort
+
+| Piece | Days | Notes |
+|---|---:|---|
+| Scalar v2 model + bounded v1 reader | 0.25 | no envelope/root change |
+| Per-key build, merge, materialize, digest | 0.25–0.5 | pure Dart |
+| Engine/schema dispatch + legacy-peer diagnostic | 0.25 | no activation change |
+| Regression fixtures + physical Koofr repeat | 0.25–0.5 | both directions |
+| **Total** | **~1–1.5 working days** | focused correctness repair |
+
+Expected production change: roughly 4–6 sync files and 250–400 lines before
+tests. No provider integration, provider credential, profile registry,
+database, playback, playlist, or MDBList behavior is intentionally changed.
+
+### 13.5 Regression exposure
+
+**Medium inside WebDAV hot sync; low outside it.** The risky boundary is the
+hot schema transition and deterministic merge, not the Default Provider UI.
+Specific hazards are accepting malformed/oversized stamped entries, losing a
+new-schema key during v1 translation, accidentally treating null/absence as a
+delete, restamping `List<String>`, or allowing a local-only MDBList checkpoint
+onto the wire. All are pure-model fixtures. Mixed old/new devices remain the
+only operational limitation and are called out rather than silently claimed
+safe.
+
+### 13.6 Acceptance gates
+
+- Exact regression: establish the same scalar baseline on A/B; A changes
+  Default Provider and publishes; B changes a different scalar and publishes
+  later. Both changes survive and both devices converge.
+- Repeat in reverse (Android → macOS) and with `none`, Torbox, Real-Debrid,
+  Premiumize, and AllDebrid values; reopen the page to prove persisted state,
+  not a cached selection.
+- Two devices change different scalar keys offline: union both. Two devices
+  change the same key: deterministic per-key LWW on every merge order.
+- Changing one key leaves every other key's complete stamp byte-identical.
+  Rebuild, restart, peer rebroadcast, and an unrelated `List<String>` change
+  cannot advance it.
+- Legacy v1 golden document reads into per-key entries, converges with v2,
+  and upgrades through a new content-addressed section without touching the
+  root or requiring re-adoption. Newer/malformed schema remains fail-closed.
+- Null/omitted values never delete local state; the MDBList checkpoint remains
+  local-only and does not restamp any scalar. Existing playback, playlist,
+  tombstone, and lossy-twin suites are byte-for-byte behaviorally unchanged.
+- Four-device convergence reaches identical documents and then performs zero
+  further section/manifest writes.
+- Physical Koofr gate: upgraded Mac publishes Default Provider; upgraded
+  Android pulls it, then publishes an unrelated setting without reverting it;
+  repeat Android → Mac. Record authenticated remote value + per-key stamp from
+  both manifests in the test note.

@@ -41,6 +41,15 @@ abstract final class MainTab {
 
 class MainPageBridge {
   static void Function(int index)? switchTab;
+  static final ValueNotifier<bool> webDavGraphChangePending = ValueNotifier(
+    false,
+  );
+
+  static void setWebDavGraphChangePending(bool pending) {
+    if (webDavGraphChangePending.value != pending) {
+      webDavGraphChangePending.value = pending;
+    }
+  }
 
   /// Stable page identities for [switchTab], deep links and the nav — these
   /// are indices into main.dart's `_pages`/`_titles`, NEVER visible-nav
@@ -118,6 +127,39 @@ class MainPageBridge {
   /// labels change. MainPage re-reads the atomic configuration and rebuilds
   /// both sidebar variants without disturbing routing or visibility policy.
   static VoidCallback? sidebarConfigurationChanged;
+
+  /// Reloads the mounted Playlist tab after recurring sync changes its
+  /// profile-backed items or favourites.
+  static final Set<Future<void> Function()> _playlistChangeListeners = {};
+
+  static void addPlaylistChangeListener(Future<void> Function() listener) {
+    _playlistChangeListeners.add(listener);
+  }
+
+  static void removePlaylistChangeListener(Future<void> Function() listener) {
+    _playlistChangeListeners.remove(listener);
+  }
+
+  static Future<void> notifyPlaylistChanged() async {
+    final listeners = List<Future<void> Function()>.from(
+      _playlistChangeListeners,
+    );
+    await Future.wait<void>(
+      listeners.map((listener) async {
+        try {
+          await listener();
+        } catch (error) {
+          // A stale or failed mounted consumer must not prevent the other
+          // playlist surfaces from observing the committed sync revision.
+          debugPrint(
+            'MainPageBridge: playlist refresh listener failed '
+            '(${error.runtimeType})',
+          );
+        }
+      }),
+    );
+  }
+
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;
@@ -365,6 +407,8 @@ class MainPageBridge {
   }
 
   static final Set<VoidCallback> _playerLaunchListeners = {};
+  static final Set<VoidCallback> _contentPlaybackStopListeners = {};
+  static bool _contentPlaybackActive = false;
 
   /// Notified right before the real content player launches (movie/series),
   /// on every path — in-app route, native TV activity, or external app.
@@ -376,12 +420,30 @@ class MainPageBridge {
     _playerLaunchListeners.remove(listener);
   }
 
+  /// Completion signal shared by in-app and external content players.
+  static void addContentPlaybackStopListener(VoidCallback listener) {
+    _contentPlaybackStopListeners.add(listener);
+  }
+
+  static void removeContentPlaybackStopListener(VoidCallback listener) {
+    _contentPlaybackStopListeners.remove(listener);
+  }
+
+  static void notifyContentPlaybackStopped() {
+    if (!_contentPlaybackActive) return;
+    _contentPlaybackActive = false;
+    for (final listener in List.of(_contentPlaybackStopListeners)) {
+      listener();
+    }
+  }
+
   /// [isTrailer] true for a trailer launch: it still hides the auto-launch
   /// overlay, but does NOT fire the content-launch listeners — watching a
   /// trailer must not suppress the ambient trailer backdrop.
   static void notifyPlayerLaunching({bool isTrailer = false}) {
     hideAutoLaunchOverlay?.call();
     if (isTrailer) return;
+    _contentPlaybackActive = true;
     // Copy so a listener removing itself mid-iteration can't break the loop.
     for (final listener in List.of(_playerLaunchListeners)) {
       listener();
@@ -430,11 +492,13 @@ class MainPageBridge {
     for (final listener in List.of(_playbackReturnListeners)) {
       listener();
     }
+    notifyContentPlaybackStopped();
   }
 
   static void notifyAutoLaunchFailed([String? reason]) {
     debugPrint('MainPageBridge: Auto-launch failed: $reason');
     hideAutoLaunchOverlay?.call();
+    notifyContentPlaybackStopped();
   }
 
   // Store a Debrify TV channel ID that should be auto-played when DebrifyTVScreen initializes

@@ -80,6 +80,63 @@ void main() {
       lifecycle.dispose();
     },
   );
+
+  test('post-commit hook runs before candidate initialization', () async {
+    final events = <String>[];
+    final participant = _OrderedParticipant(events);
+    final lifecycle = ProfileLifecycleCoordinator(
+      registry: registry,
+      participants: <ProfileLifecycleParticipant>[participant],
+    );
+
+    expect(
+      await lifecycle.switchTo(
+        secondId,
+        afterCommitBeforeInitialize: () async {
+          events.add('hook:${ProfileRuntime.capture().profileId}');
+        },
+      ),
+      isTrue,
+    );
+    expect(events, <String>[
+      'prepare:$firstId',
+      'hook:$secondId',
+      'initialize:$secondId',
+      'activate:$secondId',
+    ]);
+    lifecycle.dispose();
+  });
+
+  test('pre-commit hook runs after drain and before publication', () async {
+    final events = <String>[];
+    final participant = _OrderedParticipant(events);
+    final lifecycle = ProfileLifecycleCoordinator(
+      registry: registry,
+      participants: <ProfileLifecycleParticipant>[participant],
+    );
+
+    expect(
+      await lifecycle.switchTo(
+        secondId,
+        afterDeactivateBeforeCommit: () async {
+          events.add('precommit:${ProfileRuntime.capture().profileId}');
+          expect((await registry.activeProfile())?.id, firstId);
+        },
+        afterCommitBeforeInitialize: () async {
+          events.add('postcommit:${ProfileRuntime.capture().profileId}');
+        },
+      ),
+      isTrue,
+    );
+    expect(events, <String>[
+      'prepare:$firstId',
+      'precommit:$firstId',
+      'postcommit:$secondId',
+      'initialize:$secondId',
+      'activate:$secondId',
+    ]);
+    lifecycle.dispose();
+  });
 }
 
 class _RecordingParticipant implements ProfileLifecycleParticipant {
@@ -115,6 +172,30 @@ class _FailingParticipant implements ProfileLifecycleParticipant {
 
   @override
   Future<void> didActivate(ProfileScope active) async {}
+
+  @override
+  Future<void> rollback(ProfileScope restored) async {}
+}
+
+class _OrderedParticipant implements ProfileLifecycleParticipant {
+  _OrderedParticipant(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> prepareDeactivate(ProfileScope current) async {
+    events.add('prepare:${current.profileId}');
+  }
+
+  @override
+  Future<void> initializeCandidate(ProfileScope candidate) async {
+    events.add('initialize:${candidate.profileId}');
+  }
+
+  @override
+  Future<void> didActivate(ProfileScope active) async {
+    events.add('activate:${active.profileId}');
+  }
 
   @override
   Future<void> rollback(ProfileScope restored) async {}

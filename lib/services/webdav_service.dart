@@ -298,11 +298,11 @@ class WebDavService {
     await _authorize(config, feature: feature);
     final client = _protocolClient(config);
     try {
-      return await client.exists(
+      return (await client.exists(
         path: path,
         collection: collection,
         beforeSend: beforeSend,
-      );
+      )).exists;
     } finally {
       client.close();
     }

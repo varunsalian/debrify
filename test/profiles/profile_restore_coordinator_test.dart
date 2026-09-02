@@ -1367,10 +1367,22 @@ void main() {
         registry: registry,
         resources: resourceService,
       ).exportAllProfiles(context: authorization, includeSecrets: true);
-      await ProfileRestoreCoordinator(
+      final report = await ProfileRestoreCoordinator(
         registry: registry,
         cipher: cipher,
       ).restoreDeviceGraph(package: package, authorization: authorization);
+
+      for (final record in package.resources) {
+        final backupId = record['backupId']! as String;
+        final restoredId = report.importedResourceIdsByBackupId[backupId];
+        expect(restoredId, isNotNull);
+        expect(
+          (await registry.listAllResourcesIncludingDisabled()).map(
+            (resource) => resource.id,
+          ),
+          contains(restoredId),
+        );
+      }
 
       final imported = (await registry.listProfiles()).singleWhere(
         (profile) => profile.id != profileId,
@@ -1556,6 +1568,79 @@ void main() {
         raw.getString('${prefix}engine_custom_indexer_api_key'),
         'engine-setting-sentinel',
       );
+    },
+  );
+
+  test(
+    'structure-only graph excludes preferences and databases and still restores',
+    () async {
+      final source = ProfileRuntime.capture();
+      final preferences = await ProfilePreferences.instance();
+      await preferences.setString('theme_mode', 'source-only');
+      final sourceDatabase = source.fileIn(
+        documents,
+        'documents',
+        'debrify_tv.db',
+      );
+      await sourceDatabase.parent.create(recursive: true);
+      final database = await openDatabase(
+        sourceDatabase.path,
+        singleInstance: false,
+      );
+      await database.execute('CREATE TABLE proof(value TEXT NOT NULL)');
+      await database.close();
+
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            includeDatabases: false,
+            includePreferences: false,
+          );
+
+      expect(
+        package.profiles,
+        everyElement(isNot(contains('preferencesSection'))),
+      );
+      expect(
+        package.profiles,
+        everyElement(isNot(contains('databasesSection'))),
+      );
+      expect(
+        package.sections.keys,
+        isNot(
+          contains(anyOf(endsWith('-preferences'), endsWith('-databases'))),
+        ),
+      );
+      final decoded = await PortableProfilePackage.decodeAuthenticatedMap(
+        await PortableProfilePackage.withIntegrity(package),
+        allowMissingPreferences: true,
+      );
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: decoded, authorization: authorization);
+
+      expect(report.profilesImported, 1);
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final importedPreferences = await ProfilePreferences.forCapturedScope(
+        ProfileScope(
+          profileId: imported.id,
+          dataGeneration: imported.visibleDataGeneration,
+          sessionEpoch: 0,
+        ),
+        CapturedProfilePreferenceAccess.restore,
+      );
+      expect(importedPreferences.getString('theme_mode'), isNull);
     },
   );
 
