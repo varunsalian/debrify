@@ -81,6 +81,7 @@ final class WebDavSyncRuntimeStatus {
     this.localStateMissing = false,
     this.pruneBlockingProfiles = const <String>[],
     this.safetyCleanupBlocked = false,
+    this.statusHint,
   });
 
   final int? lastSuccessfulSyncMs;
@@ -94,6 +95,7 @@ final class WebDavSyncRuntimeStatus {
   final bool localStateMissing;
   final List<String> pruneBlockingProfiles;
   final bool safetyCleanupBlocked;
+  final String? statusHint;
 }
 
 /// Production owner of WebDAV sync composition and trigger arming.
@@ -373,6 +375,7 @@ final class WebDavSyncRuntime
             : (_scheduler?.pollState ?? WebDavSyncPollState.gated),
         pruneBlockingProfiles: List<String>.unmodifiable(blockingNames),
         safetyCleanupBlocked: state.safetyProtectedProfileIds.isNotEmpty,
+        statusHint: state.statusHint,
       );
     });
   }

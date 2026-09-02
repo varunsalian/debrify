@@ -69,10 +69,16 @@ final class WebDavSyncCircleInventory {
   const WebDavSyncCircleInventory({
     required this.localProfileIds,
     required this.localResourceIds,
+    this.localGrantIds = const <WebDavSyncCircleGrantId>{},
+    this.managingAdminLocalProfileIds = const <String>{},
+    this.localProfileNames = const <String, String>{},
   });
 
   final Set<String> localProfileIds;
   final Set<String> localResourceIds;
+  final Set<WebDavSyncCircleGrantId> localGrantIds;
+  final Set<String> managingAdminLocalProfileIds;
+  final Map<String, String> localProfileNames;
 }
 
 final class WebDavSyncCircleBuildRequest {
@@ -86,7 +92,7 @@ final class WebDavSyncCircleBuildRequest {
     required this.serverNowMs,
     this.previousProfiles,
     this.previousResources,
-    this.suppressedLocalProfileId,
+    this.suppressedLocalProfileIds = const <String>{},
   });
 
   final WebDavSyncIdentityMaps identityMaps;
@@ -98,7 +104,7 @@ final class WebDavSyncCircleBuildRequest {
   final int serverNowMs;
   final WebDavSyncProfilesDocument? previousProfiles;
   final WebDavSyncResourcesDocument? previousResources;
-  final String? suppressedLocalProfileId;
+  final Set<String> suppressedLocalProfileIds;
 }
 
 final class WebDavSyncBuiltCircleState {
@@ -119,6 +125,7 @@ final class WebDavSyncCircleApplyRequest {
     required this.profiles,
     required this.resources,
     this.deferredActiveCircleProfileId,
+    this.deferredAdminCircleProfileId,
   });
 
   final WebDavSyncIdentityMaps identityMaps;
@@ -127,6 +134,7 @@ final class WebDavSyncCircleApplyRequest {
   final WebDavSyncProfilesDocument profiles;
   final WebDavSyncResourcesDocument resources;
   final String? deferredActiveCircleProfileId;
+  final String? deferredAdminCircleProfileId;
 }
 
 /// Optional circle-registry boundary. Keeping it separate preserves the small
@@ -151,7 +159,7 @@ abstract interface class WebDavSyncCircleLocalAdapter {
 /// Optional registry-backed hook used to publish only tombstones whose SQL
 /// deletions have committed.
 abstract interface class WebDavSyncRegistryTombstoneOutboxDrainer {
-  Future<void> drainRegistryTombstoneOutbox();
+  Future<bool> drainRegistryTombstoneOutbox();
 }
 
 /// ProfilePreferences-backed adapter used once M5 arms the engine.
@@ -174,7 +182,7 @@ final class ProfileWebDavSyncLocalAdapter
   final void Function(String message) _diagnostic;
 
   @override
-  Future<void> drainRegistryTombstoneOutbox() =>
+  Future<bool> drainRegistryTombstoneOutbox() =>
       registry.drainWebDavSyncTombstoneOutbox();
 
   @override
@@ -288,6 +296,22 @@ final class ProfileWebDavSyncLocalAdapter
       localResourceIds: Set<String>.unmodifiable(
         resources.resources.map((entry) => entry.resource.id),
       ),
+      localGrantIds: Set<WebDavSyncCircleGrantId>.unmodifiable(
+        resources.grants.map(
+          (entry) => (
+            circleProfileId: entry.profileId,
+            circleResourceId: entry.resourceId,
+          ),
+        ),
+      ),
+      managingAdminLocalProfileIds: Set<String>.unmodifiable(
+        profiles
+            .where((entry) => _isManagingAdmin(entry.profile))
+            .map((entry) => entry.profile.id),
+      ),
+      localProfileNames: Map<String, String>.unmodifiable(<String, String>{
+        for (final entry in profiles) entry.profile.id: entry.profile.name,
+      }),
     );
   }
 
@@ -307,7 +331,9 @@ final class ProfileWebDavSyncLocalAdapter
     final profiles =
         <String, WebDavSyncLocalCircleValue<WebDavSyncProfileValue>>{};
     for (final entry in profileProjection) {
-      if (entry.profile.id == request.suppressedLocalProfileId) continue;
+      if (request.suppressedLocalProfileIds.contains(entry.profile.id)) {
+        continue;
+      }
       final circleId = maps.localToCircleProfiles[entry.profile.id];
       if (circleId == null) {
         throw StateError('WebDAV sync profile mapping is incomplete');
@@ -612,6 +638,7 @@ final class ProfileWebDavSyncLocalAdapter
     for (final entry in request.profiles.profiles.entries) {
       final localId = maps.circleToLocalProfiles[entry.key];
       if (localId == null) continue;
+      if (entry.key == request.deferredAdminCircleProfileId) continue;
       if (entry.value.value == null) {
         if (entry.key != request.deferredActiveCircleProfileId &&
             currentProfiles.containsKey(localId)) {
@@ -973,6 +1000,11 @@ final class ProfileWebDavSyncLocalAdapter
         current.lifecycle == incoming.lifecycle &&
         _samePin(currentPin, incoming.pin);
   }
+
+  static bool _isManagingAdmin(UserProfile profile) =>
+      profile.isEnabled &&
+      profile.role == UserProfileRole.admin &&
+      profile.policy.allows(profile.role, ProfileFeature.manageProfiles);
 
   static bool _sameResourceMetadata(
     ConnectionResource current,

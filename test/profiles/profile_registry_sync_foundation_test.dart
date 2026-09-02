@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -1000,6 +1001,35 @@ void main() {
     },
   );
 
+  test('concurrent tombstone drains serialize through row deletion', () async {
+    final record = WebDavSyncRegistryRecordId.profile('same-profile');
+    final db = await raw();
+    for (final time in <int>[100, 200]) {
+      await db.insert('webdav_sync_tombstone_outbox', <String, Object?>{
+        'namespace_id': 'namespace',
+        'origin_device_id': time == 100 ? 'device-old' : 'device-new',
+        'created_at_ms': time,
+        'records_json': jsonEncode(<Object?>[record.toJson()]),
+      });
+    }
+    await db.close();
+    final repository = _DelayedRegistryTombstoneRepository();
+    WebDavSyncTombstoneRecorder.debugInstall(registryRepository: repository);
+
+    final drains = await Future.wait<bool>(<Future<bool>>[
+      registry.drainWebDavSyncTombstoneOutbox(),
+      registry.drainWebDavSyncTombstoneOutbox(),
+    ]);
+
+    expect(drains, everyElement(isTrue));
+    expect(repository.recordCalls, 2);
+    expect(repository.records[record.storageKey]?.timeMs, 200);
+    expect(repository.records[record.storageKey]?.originDeviceId, 'device-new');
+    final verify = await raw();
+    expect(await verify.query('webdav_sync_tombstone_outbox'), isEmpty);
+    await verify.close();
+  });
+
   test('bound outbox insert failure aborts the registry delete', () async {
     final owner = await admin();
     await registry.insertResource(
@@ -1187,4 +1217,42 @@ void main() {
       expect(await registry.getProfile('later-profile'), isNull);
     },
   );
+}
+
+final class _DelayedRegistryTombstoneRepository
+    implements WebDavSyncRegistryTombstoneRepository {
+  final Map<String, WebDavSyncRegistryRecordTombstone> records =
+      <String, WebDavSyncRegistryRecordTombstone>{};
+  int recordCalls = 0;
+
+  @override
+  Future<Map<String, WebDavSyncRegistryRecordTombstone>> load(
+    String namespaceId,
+  ) async =>
+      Map<String, WebDavSyncRegistryRecordTombstone>.unmodifiable(records);
+
+  @override
+  Future<void> record(
+    String namespaceId, {
+    required String deviceId,
+    required Iterable<WebDavSyncRegistryRecordId> records,
+    required int nowMs,
+  }) async {
+    recordCalls++;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    for (final record in records) {
+      final incoming = WebDavSyncRegistryRecordTombstone(
+        record: record,
+        timeMs: nowMs,
+        originDeviceId: deviceId,
+      );
+      final old = this.records[record.storageKey];
+      if (old == null ||
+          incoming.timeMs > old.timeMs ||
+          incoming.timeMs == old.timeMs &&
+              incoming.originDeviceId.compareTo(old.originDeviceId) > 0) {
+        this.records[record.storageKey] = incoming;
+      }
+    }
+  }
 }

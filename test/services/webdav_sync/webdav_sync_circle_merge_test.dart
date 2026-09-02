@@ -3,6 +3,7 @@ import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -187,42 +188,130 @@ void main() {
     },
   );
 
-  test('concurrent admin demotions preserve the same highest stable admin', () {
-    final oldA = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+  test('admin wire merge is associative and defers the same local admin', () {
+    final oldX = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
       stamp: a,
-      value: _managingAdmin('A'),
+      value: _managingAdmin('X'),
     );
-    final oldB = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+    final oldY = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
       stamp: a,
-      value: _managingAdmin('B'),
+      value: _managingAdmin('Y'),
     );
-    final demotedA = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+    final demotedX = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
       stamp: newer,
-      value: _member('A'),
+      value: _member('X'),
     );
-    final demotedB = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+    final demotedY = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
       stamp: newer,
-      value: _member('B'),
+      value: _member('Y'),
     );
     final documents = <WebDavSyncProfilesDocument>[
-      _profiles({'p-a': oldA, 'p-b': demotedB}),
-      _profiles({'p-a': demotedA, 'p-b': oldB}),
+      _profiles({'x-admin': oldX}),
+      _profiles({'y-admin': oldY}),
+      _profiles({'y-admin': demotedY}),
+      _profiles({'x-admin': demotedX}),
     ];
-
-    for (final order in <List<int>>[
-      <int>[0, 1],
-      <int>[1, 0],
-    ]) {
-      final merged = WebDavSyncCircleMerge.mergeProfiles(
-        order.map((index) => documents[index]),
+    String? expected;
+    for (final order in _permutations(<int>[0, 1, 2, 3])) {
+      final left = WebDavSyncCircleMerge.mergeProfiles(
+        <WebDavSyncProfilesDocument>[
+          WebDavSyncCircleMerge.mergeProfiles(<WebDavSyncProfilesDocument>[
+            WebDavSyncCircleMerge.mergeProfiles(<WebDavSyncProfilesDocument>[
+              documents[order[0]],
+              documents[order[1]],
+            ]),
+            documents[order[2]],
+          ]),
+          documents[order[3]],
+        ],
       );
-      expect(merged.profiles['p-a']!.value!.role, UserProfileRole.member);
-      expect(merged.profiles['p-b'], same(oldB));
+      final paired = WebDavSyncCircleMerge.mergeProfiles(
+        <WebDavSyncProfilesDocument>[
+          WebDavSyncCircleMerge.mergeProfiles(<WebDavSyncProfilesDocument>[
+            documents[order[0]],
+            documents[order[1]],
+          ]),
+          WebDavSyncCircleMerge.mergeProfiles(<WebDavSyncProfilesDocument>[
+            documents[order[2]],
+            documents[order[3]],
+          ]),
+        ],
+      );
+      final encoded = WebDavSyncCodec.canonicalJson(left.toJson());
+      expected ??= encoded;
+      expect(encoded, expected);
+      expect(WebDavSyncCodec.canonicalJson(paired.toJson()), expected);
+      expect(left.profiles['x-admin'], same(demotedX));
+      expect(left.profiles['y-admin'], same(demotedY));
+      expect(
+        WebDavSyncCircleMerge.selectAdminSafetyDeferral(
+          profiles: left,
+          localManagingAdminCircleProfileIds: const <String>{
+            'x-admin',
+            'y-admin',
+          },
+        ),
+        'y-admin',
+      );
       WebDavSyncCircleMerge.validateApplicableState(
-        profiles: merged,
+        profiles: left,
         resources: _resources(const <String, WebDavSyncResourceEntry>{}),
+        localManagingAdminCircleProfileIds: const <String>{
+          'x-admin',
+          'y-admin',
+        },
       );
     }
+  });
+
+  test('live setting accepts a grant that exists only in local inventory', () {
+    final winners = WebDavSyncResourcesDocument(
+      resources: const <String, WebDavSyncResourceEntry>{},
+      grants:
+          const <
+            String,
+            Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>
+          >{},
+      settings:
+          <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>>{
+            'p-local': <String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>{
+              'r-local': WebDavSyncCircleLeaf<WebDavSyncSettingsValue>(
+                stamp: newer,
+                value: const WebDavSyncSettingsValue(
+                  enabled: true,
+                  settings: <String, Object?>{'mode': 'pending'},
+                ),
+              ),
+            },
+          },
+      bindings:
+          const <
+            String,
+            Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
+          >{},
+    );
+    const localGrant = (
+      circleProfileId: 'p-local',
+      circleResourceId: 'r-local',
+    );
+
+    final applicable = WebDavSyncCircleMerge.deriveApplicableResources(
+      profiles: _profiles(const {}),
+      resources: winners,
+      localCircleProfileIds: const <String>{'p-local'},
+      localCircleResourceIds: const <String>{'r-local'},
+      localCircleGrantIds: const <WebDavSyncCircleGrantId>{localGrant},
+    );
+
+    expect(applicable.settings['p-local']!['r-local']!.value, isNotNull);
+    WebDavSyncCircleMerge.validateApplicableState(
+      profiles: _profiles(const {}),
+      resources: applicable,
+      localCircleProfileIds: const <String>{'p-local'},
+      localCircleResourceIds: const <String>{'r-local'},
+      localCircleGrantIds: const <WebDavSyncCircleGrantId>{localGrant},
+      localManagingAdminCircleProfileIds: const <String>{'p-local'},
+    );
   });
 
   test(
@@ -406,3 +495,17 @@ WebDavSyncProfileValue _member(String name) => WebDavSyncProfileValue(
   lifecycle: UserProfileLifecycle.active,
   pin: const WebDavSyncProfilePin(resetRequired: false),
 );
+
+Iterable<List<T>> _permutations<T>(List<T> values) sync* {
+  if (values.length <= 1) {
+    yield List<T>.from(values);
+    return;
+  }
+  for (var index = 0; index < values.length; index++) {
+    final head = values[index];
+    final rest = List<T>.from(values)..removeAt(index);
+    for (final tail in _permutations(rest)) {
+      yield <T>[head, ...tail];
+    }
+  }
+}

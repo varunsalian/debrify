@@ -424,11 +424,18 @@ final class WebDavProtocolClient {
       final metadata = _metadata(response);
       final requestedUri =
           response.request?.url ?? uriForPath(path, collection: collection);
-      final bytes = await _readBounded(response, defaultSmallDocumentLimit);
-      return WebDavExistenceResult(
-        exists: true,
-        metadata: _metadataWithDavValidator(metadata, bytes, requestedUri),
-      );
+      try {
+        final bytes = await _readBounded(response, defaultSmallDocumentLimit);
+        return WebDavExistenceResult(
+          exists: true,
+          metadata: _metadataWithDavValidator(metadata, bytes, requestedUri),
+        );
+      } catch (_) {
+        // The bounded read has already consumed or cancelled this one-shot
+        // response stream. Existence was proven by the successful PROPFIND;
+        // validator enrichment is optional.
+        return WebDavExistenceResult(exists: true, metadata: metadata);
+      }
     }
     final metadata = await _finishMetadata(response, accepted: _isSuccess);
     return WebDavExistenceResult(exists: true, metadata: metadata);

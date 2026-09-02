@@ -207,6 +207,8 @@ final class WebDavSyncEngineState {
     this.lastPushedProfilesDigest,
     this.lastPushedResourcesDigest,
     this.pendingActiveProfileDeletion,
+    this.pendingAdminSafetyProfile,
+    this.statusHint,
     this.peerManifestHighWater = const <String, int>{},
     this.peerManifestValidators = const <String, WebDavSyncManifestValidator>{},
     this.currentDeviceIds = const <String>{},
@@ -235,6 +237,8 @@ final class WebDavSyncEngineState {
   final String? lastPushedProfilesDigest;
   final String? lastPushedResourcesDigest;
   final String? pendingActiveProfileDeletion;
+  final String? pendingAdminSafetyProfile;
+  final String? statusHint;
   final Map<String, int> peerManifestHighWater;
   final Map<String, WebDavSyncManifestValidator> peerManifestValidators;
   final Set<String> currentDeviceIds;
@@ -273,6 +277,10 @@ final class WebDavSyncEngineState {
     String? lastPushedResourcesDigest,
     String? pendingActiveProfileDeletion,
     bool clearPendingActiveProfileDeletion = false,
+    String? pendingAdminSafetyProfile,
+    bool clearPendingAdminSafetyProfile = false,
+    String? statusHint,
+    bool clearStatusHint = false,
     Map<String, int>? peerManifestHighWater,
     Map<String, WebDavSyncManifestValidator>? peerManifestValidators,
     Set<String>? currentDeviceIds,
@@ -312,6 +320,10 @@ final class WebDavSyncEngineState {
     pendingActiveProfileDeletion: clearPendingActiveProfileDeletion
         ? null
         : (pendingActiveProfileDeletion ?? this.pendingActiveProfileDeletion),
+    pendingAdminSafetyProfile: clearPendingAdminSafetyProfile
+        ? null
+        : (pendingAdminSafetyProfile ?? this.pendingAdminSafetyProfile),
+    statusHint: clearStatusHint ? null : (statusHint ?? this.statusHint),
     peerManifestHighWater: peerManifestHighWater ?? this.peerManifestHighWater,
     peerManifestValidators:
         peerManifestValidators ?? this.peerManifestValidators,
@@ -362,6 +374,9 @@ final class WebDavSyncEngineState {
       'lastPushedResourcesDigest': lastPushedResourcesDigest,
     if (pendingActiveProfileDeletion != null)
       'pendingActiveProfileDeletion': pendingActiveProfileDeletion,
+    if (pendingAdminSafetyProfile != null)
+      'pendingAdminSafetyProfile': pendingAdminSafetyProfile,
+    if (statusHint != null) 'statusHint': statusHint,
     'peerManifestHighWater': peerManifestHighWater,
     if (peerManifestValidators.isNotEmpty)
       'peerManifestValidators': <String, Object?>{
@@ -495,6 +510,21 @@ final class WebDavSyncEngineState {
       throw const FormatException(
         'Invalid WebDAV sync pending active profile deletion',
       );
+    }
+    final pendingAdminSafetyProfile = json['pendingAdminSafetyProfile'];
+    if (pendingAdminSafetyProfile != null &&
+        (pendingAdminSafetyProfile is! String ||
+            !_safeSyncIdentifier.hasMatch(pendingAdminSafetyProfile))) {
+      throw const FormatException(
+        'Invalid WebDAV sync pending Admin safety profile',
+      );
+    }
+    final statusHint = json['statusHint'];
+    if (statusHint != null &&
+        (statusHint is! String ||
+            statusHint.isEmpty ||
+            utf8.encode(statusHint).length > 2048)) {
+      throw const FormatException('Invalid WebDAV sync status hint');
     }
     if (successful != null &&
         (successful is! int ||
@@ -648,6 +678,8 @@ final class WebDavSyncEngineState {
       lastPushedProfilesDigest: circleDigest('lastPushedProfilesDigest'),
       lastPushedResourcesDigest: circleDigest('lastPushedResourcesDigest'),
       pendingActiveProfileDeletion: pendingActiveProfileDeletion as String?,
+      pendingAdminSafetyProfile: pendingAdminSafetyProfile as String?,
+      statusHint: statusHint as String?,
       peerManifestHighWater: Map<String, int>.unmodifiable(peerHighWater),
       peerManifestValidators:
           Map<String, WebDavSyncManifestValidator>.unmodifiable(peerValidators),

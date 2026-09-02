@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -26,6 +27,7 @@ class ProfileRegistry {
   static const int schemaVersion = 8;
   final Database _db;
   Future<void> _recoveryCheckpoint = Future<void>.value();
+  static final Lock _tombstoneOutboxDrainLock = Lock();
   Future<void> Function()? authorityWillChangeCallback;
   Future<void> Function()? authorityChangedCallback;
 
@@ -646,29 +648,43 @@ class ProfileRegistry {
   /// Drains only rows whose registry deletion transaction has committed.
   /// Recording is idempotent; a crash after the file write but before the row
   /// delete safely repeats the same tombstones on the next drain.
-  Future<void> drainWebDavSyncTombstoneOutbox() async {
-    final rows = await _db.query('webdav_sync_tombstone_outbox', orderBy: 'id');
-    for (final row in rows) {
-      final decoded = jsonDecode(row['records_json']! as String);
-      if (decoded is! List) {
-        throw const FormatException('Invalid registry tombstone outbox row');
-      }
-      final records = decoded.map(WebDavSyncRegistryRecordId.fromJson).toSet();
-      await WebDavSyncTombstoneRecorder.drainRegistryOutboxBatch(
-        target: WebDavSyncRegistryTombstoneOutboxTarget(
-          namespaceId: row['namespace_id']! as String,
-          deviceId: row['origin_device_id']! as String,
-        ),
-        records: records,
-        timeMs: row['created_at_ms']! as int,
-      );
-      await _db.delete(
-        'webdav_sync_tombstone_outbox',
-        where: 'id = ?',
-        whereArgs: <Object>[row['id']!],
-      );
-    }
-  }
+  Future<bool> drainWebDavSyncTombstoneOutbox() =>
+      _tombstoneOutboxDrainLock.synchronized(() async {
+        final rows = await _db.query(
+          'webdav_sync_tombstone_outbox',
+          orderBy: 'id',
+        );
+        for (final row in rows) {
+          final decoded = jsonDecode(row['records_json']! as String);
+          if (decoded is! List) {
+            throw const FormatException(
+              'Invalid registry tombstone outbox row',
+            );
+          }
+          final records = decoded
+              .map(WebDavSyncRegistryRecordId.fromJson)
+              .toSet();
+          await WebDavSyncTombstoneRecorder.drainRegistryOutboxBatch(
+            target: WebDavSyncRegistryTombstoneOutboxTarget(
+              namespaceId: row['namespace_id']! as String,
+              deviceId: row['origin_device_id']! as String,
+            ),
+            records: records,
+            timeMs: row['created_at_ms']! as int,
+          );
+          await _db.delete(
+            'webdav_sync_tombstone_outbox',
+            where: 'id = ?',
+            whereArgs: <Object>[row['id']!],
+          );
+        }
+        final remaining = Sqflite.firstIntValue(
+          await _db.rawQuery(
+            'SELECT COUNT(*) FROM webdav_sync_tombstone_outbox',
+          ),
+        );
+        return remaining == 0;
+      });
 
   Future<void> _finishRegistryDelete() async {
     try {

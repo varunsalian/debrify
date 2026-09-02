@@ -441,6 +441,61 @@ void main() {
     },
   );
 
+  test('admin safety deferral applies every other profile leaf', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    final retainedId = (await registry.createProfile(
+      id: 'local-retained-admin',
+      name: 'Retained Admin',
+      role: UserProfileRole.admin,
+      policy: ProfilePolicy.allAllowedFor(UserProfileRole.admin),
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    )).id;
+    final request = WebDavSyncCircleApplyRequest(
+      identityMaps: WebDavSyncIdentityMaps(
+        circleToLocalProfiles: <String, String>{
+          'x-admin': activeId,
+          'y-admin': retainedId,
+        },
+        circleToLocalResources: const <String, String>{},
+      ),
+      circleId: circleRoot.document.circleId,
+      circleKey: circleRoot.key,
+      profiles: _profiles(<
+        String,
+        WebDavSyncCircleLeaf<WebDavSyncProfileValue>
+      >{
+        'x-admin': _profileLeaf('Demoted X', 200, role: UserProfileRole.member),
+        'y-admin': _profileLeaf('Demoted Y', 200, role: UserProfileRole.member),
+      }),
+      resources: const WebDavSyncResourcesDocument(
+        resources: <String, WebDavSyncResourceEntry>{},
+        grants:
+            <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{},
+        settings:
+            <
+              String,
+              Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+            >{},
+        bindings:
+            <
+              String,
+              Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
+            >{},
+      ),
+      deferredAdminCircleProfileId: 'y-admin',
+    );
+
+    await adapter.applyCircleState(session, request);
+
+    expect((await registry.getProfile(activeId))?.role, UserProfileRole.member);
+    expect(
+      (await registry.getProfile(retainedId))?.role,
+      UserProfileRole.admin,
+    );
+  });
+
   test('metadata apply preserves local-only PIN failure state', () async {
     final actor = await ProfileAuthorizationContext.capture(registry);
     final hash = List<int>.filled(32, 3);
@@ -532,14 +587,14 @@ WebDavSyncCircleLeaf<WebDavSyncProfileValue> _profileLeaf(
   String name,
   int time, {
   WebDavSyncProfilePin pin = const WebDavSyncProfilePin(resetRequired: false),
+  UserProfileRole role = UserProfileRole.admin,
 }) => WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
   stamp: _stamp(time),
   value: WebDavSyncProfileValue(
     name: name,
-    role: UserProfileRole.admin,
+    role: role,
     policy: Map<String, Object?>.from(
-      jsonDecode(ProfilePolicy.allAllowedFor(UserProfileRole.admin).encode())
-          as Map,
+      jsonDecode(ProfilePolicy.allAllowedFor(role).encode()) as Map,
     ),
     enabled: true,
     lockOnResume: false,

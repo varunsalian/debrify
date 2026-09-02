@@ -114,7 +114,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
             ? status.safetyCleanupBlocked
                   ? 'Safety backup unavailable; kept ${status.pruneBlockingProfiles.join(', ')} on this device'
                   : 'Profile cleanup is pending for ${status.pruneBlockingProfiles.join(', ')}; activity sync continues'
-            : null;
+            : status.statusHint;
       });
     } catch (_) {
       // Active sync remains usable offline; manual Sync now surfaces errors.

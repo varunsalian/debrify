@@ -137,6 +137,45 @@ void main() {
     },
   );
 
+  test('registry tombstone store keeps the newest concurrent stamp', () async {
+    final binding = await _activateBinding(
+      bindingStore,
+      circleId: 'circle-monotonic-registry-tombstones',
+    );
+    final store = WebDavSyncRegistryTombstoneStore(
+      bindingStore: bindingStore,
+      directoryProvider: () async => stateDirectory,
+    );
+    final record = WebDavSyncRegistryRecordId.profile('same-profile');
+
+    await Future.wait<void>(<Future<void>>[
+      store.record(
+        binding.namespaceId,
+        deviceId: 'device-z',
+        records: <WebDavSyncRegistryRecordId>{record},
+        nowMs: 100,
+      ),
+      store.record(
+        binding.namespaceId,
+        deviceId: 'device-a',
+        records: <WebDavSyncRegistryRecordId>{record},
+        nowMs: 200,
+      ),
+      store.record(
+        binding.namespaceId,
+        deviceId: 'device-z',
+        records: <WebDavSyncRegistryRecordId>{record},
+        nowMs: 200,
+      ),
+    ]);
+
+    final persisted = (await store.load(
+      binding.namespaceId,
+    ))[record.storageKey]!;
+    expect(persisted.timeMs, 200);
+    expect(persisted.originDeviceId, 'device-z');
+  });
+
   test('recorded deletes notify only while a sync binding exists', () async {
     final notifications = <(String, String)>[];
     ProfilePreferences.webDavSyncLocalChangeSink = (profileId, key) {
@@ -482,6 +521,8 @@ void main() {
       lastPushedProfilesDigest: 'e' * 64,
       lastPushedResourcesDigest: 'f' * 64,
       pendingActiveProfileDeletion: 'local-retired-profile',
+      pendingAdminSafetyProfile: 'local-admin',
+      statusHint: 'sync kept Local Admin as Admin on this device',
     );
 
     final legacyJson = <String, Object?>{
@@ -519,6 +560,11 @@ void main() {
     expect(restored.lastPushedProfilesDigest, 'e' * 64);
     expect(restored.lastPushedResourcesDigest, 'f' * 64);
     expect(restored.pendingActiveProfileDeletion, 'local-retired-profile');
+    expect(restored.pendingAdminSafetyProfile, 'local-admin');
+    expect(
+      restored.statusHint,
+      'sync kept Local Admin as Admin on this device',
+    );
     expect(restored.toJson(), isNot(contains('lastGraphCheckMs')));
     expect(restored.toJson(), isNot(contains('appliedGraphDigest')));
     expect(restored.toJson(), isNot(contains('pendingGraphDigest')));

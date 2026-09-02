@@ -303,6 +303,62 @@ void main() {
   );
 
   test(
+    'secret-pending PikPak is reported pending and not selectable',
+    () async {
+      const resourceId = 'pending-pikpak';
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: ConnectionResource(
+                id: resourceId,
+                type: ConnectionResourceType.pikpak,
+                label: 'Pending PikPak',
+                ownerProfileId: adminId,
+                publicConfig: const <String, dynamic>{'schemaVersion': 1},
+                publicSchemaVersion: 1,
+                authorizationRevision: 1,
+                enabled: true,
+                secretPending: true,
+              ),
+              updatedAtMs: 10,
+            ),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: adminId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.values.fold<int>(
+                0,
+                (mask, permission) => mask | permission.bit,
+              ),
+              updatedAtMs: 11,
+            ),
+          ],
+          bindings: <SyncedRegistryBindingRecord>[
+            SyncedRegistryBindingRecord(
+              profileId: adminId,
+              slot: 'provider.pikpak',
+              resourceId: resourceId,
+              updatedAtMs: 12,
+            ),
+          ],
+        ),
+      );
+      await StorageService.setPikPakEnabled(true);
+
+      final presence = await ProfileCredentialFacade.isConfigured(
+        'pikpak_email',
+      );
+
+      expect(presence.pending, isTrue);
+      expect(presence.configured, isFalse);
+      expect(await StorageService.hasPikPakCredential(), isFalse);
+      expect(await StorageService.getPikPakEnabled(), isFalse);
+    },
+  );
+
+  test(
     'confirmed IPTV collection removal revokes borrower grants atomically',
     () async {
       await StorageService.setIptvPlaylists(<IptvPlaylist>[

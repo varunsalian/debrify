@@ -382,6 +382,39 @@ void main() {
     ]);
   });
 
+  test('oversized successful PROPFIND still proves existence', () async {
+    client.close();
+    final oversizedBody = List<int>.filled(
+      WebDavProtocolClient.defaultSmallDocumentLimit + 1,
+      120,
+    );
+    final mockClient = MockClient((request) async {
+      if (request.method == 'HEAD') {
+        return http.Response('', HttpStatus.methodNotAllowed, request: request);
+      }
+      return http.Response.bytes(
+        oversizedBody,
+        HttpStatus.multiStatus,
+        request: request,
+      );
+    });
+    addTearDown(mockClient.close);
+    client = WebDavProtocolClient(
+      endpoint: Uri.parse('https://example.test/dav'),
+      credentials: const WebDavCredentials(
+        username: 'alice',
+        password: 'secret',
+      ),
+      client: mockClient,
+    );
+
+    final result = await client.exists(path: 'oversized.xml');
+
+    expect(result.exists, isTrue);
+    expect(result.metadata.statusCode, HttpStatus.multiStatus);
+    expect(result.metadata.etag, isNull);
+  });
+
   test(
     'exists is false only for 404 and preserves authorization failures',
     () async {

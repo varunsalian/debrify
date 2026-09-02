@@ -6975,8 +6975,12 @@ class StorageService {
   // PikPak API Settings
   static Future<bool> getPikPakEnabled() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_pikpakEnabledKey) ?? false;
+    if (!(prefs.getBool(_pikpakEnabledKey) ?? false)) return false;
+    return _credentialConfigured(_pikpakEmailKey, () => getPikPakEmail());
   }
+
+  static Future<bool> hasPikPakCredential() =>
+      _credentialConfigured(_pikpakEmailKey, () => getPikPakEmail());
 
   static Future<void> setPikPakEnabled(bool value) async {
     final prefs = await ProfilePreferences.instance();

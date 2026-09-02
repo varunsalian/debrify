@@ -271,11 +271,16 @@ final class WebDavSyncRegistryTombstoneStore
     final current = await _loadUnlocked(namespaceId);
     final next = Map<String, WebDavSyncRegistryRecordTombstone>.from(current);
     for (final record in records) {
-      next[record.storageKey] = WebDavSyncRegistryRecordTombstone(
+      final incoming = WebDavSyncRegistryRecordTombstone(
         record: record,
         timeMs: nowMs,
         originDeviceId: deviceId,
       );
+      final existing = next[record.storageKey];
+      if (existing == null ||
+          _compareRegistryTombstones(incoming, existing) > 0) {
+        next[record.storageKey] = incoming;
+      }
       if (next.length > _maxRecords) {
         throw StateError('WebDAV registry tombstones exceed their safe limit');
       }
@@ -409,6 +414,16 @@ final class WebDavSyncRegistryTombstoneStore
     if (await previous.exists()) await previous.rename(file.path);
     final temporary = File('${file.path}.next');
     if (await temporary.exists()) await temporary.delete();
+  }
+
+  static int _compareRegistryTombstones(
+    WebDavSyncRegistryRecordTombstone left,
+    WebDavSyncRegistryRecordTombstone right,
+  ) {
+    final time = left.timeMs.compareTo(right.timeMs);
+    return time != 0
+        ? time
+        : left.originDeviceId.compareTo(right.originDeviceId);
   }
 }
 
