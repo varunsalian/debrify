@@ -215,12 +215,8 @@ final class WebDavSyncEngineState {
     this.lastRemoteChangeMs,
     this.ownManifest,
     this.schemaRatchet = 1,
-    this.appliedGraphDigest,
-    this.pendingGraphDigest,
-    this.lastGraphCheckMs,
     this.lastBootstrapCheckMs,
     this.publishedBootstrapDatabaseDigest,
-    this.declinedGraphDigests = const <String>{},
     this.adoption,
     this.prunePendingProfileIds = const <String>{},
     this.safetyProtectedProfileIds = const <String>{},
@@ -247,18 +243,14 @@ final class WebDavSyncEngineState {
   final int? lastRemoteChangeMs;
   final WebDavSyncManifest? ownManifest;
   final int schemaRatchet;
-  final String? appliedGraphDigest;
-  final String? pendingGraphDigest;
-  final int? lastGraphCheckMs;
   final int? lastBootstrapCheckMs;
   final String? publishedBootstrapDatabaseDigest;
-  final Set<String> declinedGraphDigests;
   final WebDavSyncAdoptionRecord? adoption;
   final Set<String> prunePendingProfileIds;
   final Set<String> safetyProtectedProfileIds;
 
   bool get blocksAllPushes => adoption?.blocksPushes ?? false;
-  bool get blocksGraphPushes =>
+  bool get blocksSeedPushes =>
       blocksAllPushes || prunePendingProfileIds.isNotEmpty;
 
   bool get hasAuthenticatedMaps =>
@@ -289,13 +281,8 @@ final class WebDavSyncEngineState {
     int? lastRemoteChangeMs,
     WebDavSyncManifest? ownManifest,
     int? schemaRatchet,
-    String? appliedGraphDigest,
-    String? pendingGraphDigest,
-    bool clearPendingGraph = false,
-    int? lastGraphCheckMs,
     int? lastBootstrapCheckMs,
     String? publishedBootstrapDatabaseDigest,
-    Set<String>? declinedGraphDigests,
     WebDavSyncAdoptionRecord? adoption,
     bool clearAdoption = false,
     Set<String>? prunePendingProfileIds,
@@ -334,16 +321,10 @@ final class WebDavSyncEngineState {
     lastRemoteChangeMs: lastRemoteChangeMs ?? this.lastRemoteChangeMs,
     ownManifest: ownManifest ?? this.ownManifest,
     schemaRatchet: schemaRatchet ?? this.schemaRatchet,
-    appliedGraphDigest: appliedGraphDigest ?? this.appliedGraphDigest,
-    pendingGraphDigest: clearPendingGraph
-        ? null
-        : (pendingGraphDigest ?? this.pendingGraphDigest),
-    lastGraphCheckMs: lastGraphCheckMs ?? this.lastGraphCheckMs,
     lastBootstrapCheckMs: lastBootstrapCheckMs ?? this.lastBootstrapCheckMs,
     publishedBootstrapDatabaseDigest:
         publishedBootstrapDatabaseDigest ??
         this.publishedBootstrapDatabaseDigest,
-    declinedGraphDigests: declinedGraphDigests ?? this.declinedGraphDigests,
     adoption: clearAdoption ? null : (adoption ?? this.adoption),
     prunePendingProfileIds:
         prunePendingProfileIds ?? this.prunePendingProfileIds,
@@ -395,14 +376,10 @@ final class WebDavSyncEngineState {
     if (lastRemoteChangeMs != null) 'lastRemoteChangeMs': lastRemoteChangeMs,
     if (ownManifest != null) 'ownManifest': ownManifest!.toJson(),
     'schemaRatchet': schemaRatchet,
-    if (appliedGraphDigest != null) 'appliedGraphDigest': appliedGraphDigest,
-    if (pendingGraphDigest != null) 'pendingGraphDigest': pendingGraphDigest,
-    if (lastGraphCheckMs != null) 'lastGraphCheckMs': lastGraphCheckMs,
     if (lastBootstrapCheckMs != null)
       'lastBootstrapCheckMs': lastBootstrapCheckMs,
     if (publishedBootstrapDatabaseDigest != null)
       'publishedBootstrapDatabaseDigest': publishedBootstrapDatabaseDigest,
-    'declinedGraphDigests': declinedGraphDigests.toList()..sort(),
     if (adoption != null) 'adoption': adoption!.toJson(),
     'prunePendingProfileIds': prunePendingProfileIds.toList()..sort(),
     if (safetyProtectedProfileIds.isNotEmpty)
@@ -600,7 +577,7 @@ final class WebDavSyncEngineState {
             ).hasMatch(publishedBootstrapDatabaseDigest))) {
       throw const FormatException('Invalid WebDAV sync bootstrap digest');
     }
-    Set<String> digestSet(String key) {
+    void validateLegacyDigestSet(String key) {
       final raw = json[key] ?? const <Object?>[];
       if (raw is! List || raw.length > WebDavSyncLimits.maxMapEntries) {
         throw const FormatException('Invalid WebDAV sync digest state');
@@ -613,8 +590,9 @@ final class WebDavSyncEngineState {
           throw const FormatException('Invalid WebDAV sync digest state');
         }
       }
-      return Set<String>.unmodifiable(result);
     }
+
+    validateLegacyDigestSet('declinedGraphDigests');
 
     Set<String> idSet(String key) {
       final raw = json[key] ?? const <Object?>[];
@@ -681,13 +659,9 @@ final class WebDavSyncEngineState {
           ? null
           : WebDavSyncManifest.fromJson(json['ownManifest']),
       schemaRatchet: schemaRatchet,
-      appliedGraphDigest: appliedGraphDigest as String?,
-      pendingGraphDigest: pendingGraphDigest as String?,
-      lastGraphCheckMs: lastGraphCheckMs as int?,
       lastBootstrapCheckMs: lastBootstrapCheckMs as int?,
       publishedBootstrapDatabaseDigest:
           publishedBootstrapDatabaseDigest as String?,
-      declinedGraphDigests: digestSet('declinedGraphDigests'),
       adoption: json['adoption'] == null
           ? null
           : WebDavSyncAdoptionRecord.fromJson(json['adoption']),
@@ -728,26 +702,6 @@ Map<String, int> boundedPeerManifestHighWater(
     throw StateError('WebDAV sync peer history exceeds its limit');
   }
   return Map<String, int>.unmodifiable(result);
-}
-
-/// Keeps the durable "do not prompt again" journal finite while always
-/// retaining the revision the user just declined. A very old digest may be
-/// prompted again only after more than [WebDavSyncLimits.maxMapEntries]
-/// distinct graph revisions have subsequently been declined.
-Set<String> boundedDeclinedGraphDigests(Set<String> source, String newest) {
-  final result = <String>{...source, newest};
-  if (result.length <= WebDavSyncLimits.maxMapEntries) {
-    return Set<String>.unmodifiable(result);
-  }
-  final removable = result.where((digest) => digest != newest).toList()..sort();
-  for (final digest in removable) {
-    if (result.length <= WebDavSyncLimits.maxMapEntries) break;
-    result.remove(digest);
-  }
-  if (result.length > WebDavSyncLimits.maxMapEntries) {
-    throw StateError('WebDAV sync declined graph history exceeds its limit');
-  }
-  return Set<String>.unmodifiable(result);
 }
 
 abstract interface class WebDavSyncEngineStateRepository {

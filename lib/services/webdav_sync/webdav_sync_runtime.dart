@@ -55,15 +55,6 @@ abstract interface class WebDavSyncActivationController {
 abstract interface class WebDavSyncManagementController {
   Future<WebDavSyncRuntimeStatus> status();
 
-  Future<WebDavSyncGraphTierReport> checkGraph({
-    bool force = false,
-    bool runBootstrapMaintenance = true,
-  });
-
-  Future<void> applyGraph(String semanticDigest);
-
-  Future<void> declineGraph(String semanticDigest);
-
   Future<List<WebDavSyncDeviceSummary>> listDevices();
 
   Future<void> forgetDevice(String deviceId);
@@ -81,7 +72,6 @@ final class WebDavSyncRuntimeStatus {
   const WebDavSyncRuntimeStatus({
     required this.lastSuccessfulSyncMs,
     required this.peerCount,
-    required this.pendingGraphDigest,
     required this.adminPruneBlocked,
     required this.deviceClockWarning,
     required this.clockPauseReason,
@@ -95,7 +85,6 @@ final class WebDavSyncRuntimeStatus {
 
   final int? lastSuccessfulSyncMs;
   final int peerCount;
-  final String? pendingGraphDigest;
   final bool adminPruneBlocked;
   final bool deviceClockWarning;
   final WebDavSyncClockPauseReason? clockPauseReason;
@@ -129,7 +118,7 @@ final class WebDavSyncRuntime
       WebDavSyncOperationCoordinator();
 
   WebDavSyncScheduler? _scheduler;
-  Timer? _graphTimer;
+  Timer? _maintenanceTimer;
   _ProductionCycleRunner? _cycleRunner;
   bool _initialized = false;
   Future<void>? _initializing;
@@ -228,10 +217,9 @@ final class WebDavSyncRuntime
       'the app will continue',
     );
     _disarmScheduler();
-    _graphTimer?.cancel();
-    _graphTimer = null;
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = null;
     _clearCachedRoot();
-    MainPageBridge.setWebDavGraphChangePending(false);
 
     var storeReadable = false;
     var statusPersisted = true;
@@ -286,8 +274,8 @@ final class WebDavSyncRuntime
     _reconfigurationPaused = true;
     _clearCachedRoot();
     _disarmScheduler();
-    _graphTimer?.cancel();
-    _graphTimer = null;
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = null;
   }
 
   @override
@@ -305,11 +293,10 @@ final class WebDavSyncRuntime
     final report = await scheduler.signal(WebDavSyncTrigger.manual);
     if (report.disposition == WebDavSyncCycleDisposition.completed ||
         report.disposition == WebDavSyncCycleDisposition.seedRepairRequired) {
-      // Manual sync must stay interactive: scan immediately for profile and
-      // connection changes, but do not rebuild every profile database merely
-      // because the user changed a hot preference. Structural repair branches
-      // inside the graph tier still publish a complete seed when required.
-      await checkGraph(force: true, runBootstrapMaintenance: false);
+      await _runSeedMaintenance(
+        force:
+            report.disposition == WebDavSyncCycleDisposition.seedRepairRequired,
+      );
     }
     return report;
   }
@@ -319,11 +306,9 @@ final class WebDavSyncRuntime
     await initialize();
     return _operations.run(() async {
       if (_startupRecoveryUnavailable) {
-        MainPageBridge.setWebDavGraphChangePending(false);
         return const WebDavSyncRuntimeStatus(
           lastSuccessfulSyncMs: null,
           peerCount: 0,
-          pendingGraphDigest: null,
           adminPruneBlocked: false,
           deviceClockWarning: false,
           clockPauseReason: null,
@@ -333,11 +318,9 @@ final class WebDavSyncRuntime
       final stored = await bindingStore.load();
       final active = stored.activeBinding;
       if (active == null) {
-        MainPageBridge.setWebDavGraphChangePending(false);
         return const WebDavSyncRuntimeStatus(
           lastSuccessfulSyncMs: null,
           peerCount: 0,
-          pendingGraphDigest: null,
           adminPruneBlocked: false,
           deviceClockWarning: false,
           clockPauseReason: null,
@@ -347,21 +330,16 @@ final class WebDavSyncRuntime
       try {
         state = await stateStore.load(active.namespaceId);
       } on WebDavSyncEngineStateMissingException {
-        MainPageBridge.setWebDavGraphChangePending(false);
         await _recordMissingState(active.namespaceId);
         return const WebDavSyncRuntimeStatus(
           lastSuccessfulSyncMs: null,
           peerCount: 0,
-          pendingGraphDigest: null,
           adminPruneBlocked: false,
           deviceClockWarning: false,
           clockPauseReason: null,
           localStateMissing: true,
         );
       }
-      MainPageBridge.setWebDavGraphChangePending(
-        state.pendingGraphDigest != null,
-      );
       final ownDeviceId = stored.namespaceFor(active)?.deviceId;
       final peerCount = state.currentDeviceIds
           .where((deviceId) => deviceId != ownDeviceId)
@@ -385,7 +363,6 @@ final class WebDavSyncRuntime
       return WebDavSyncRuntimeStatus(
         lastSuccessfulSyncMs: state.lastSuccessfulSyncMs,
         peerCount: peerCount,
-        pendingGraphDigest: state.pendingGraphDigest,
         adminPruneBlocked: state.prunePendingProfileIds.isNotEmpty,
         deviceClockWarning: state.deviceClockWarning,
         clockPauseReason: state.lastClockPauseReason,
@@ -398,55 +375,6 @@ final class WebDavSyncRuntime
         safetyCleanupBlocked: state.safetyProtectedProfileIds.isNotEmpty,
       );
     });
-  }
-
-  @override
-  Future<WebDavSyncGraphTierReport> checkGraph({
-    bool force = false,
-    bool runBootstrapMaintenance = true,
-  }) async {
-    await initialize();
-    _requireInteractiveWorkAllowed();
-    _requireAvailable();
-    final report = await _operations.run(() async {
-      final authorization = await ProfileAuthorizationContext.capture(
-        ProfileBootstrap.registry,
-      );
-      return _graphTier().maintain(
-        authorization: authorization,
-        force: force,
-        runBootstrapMaintenance: runBootstrapMaintenance,
-      );
-    });
-    await _refreshGraphBadge();
-    return report;
-  }
-
-  @override
-  Future<void> applyGraph(String semanticDigest) async {
-    await initialize();
-    _requireInteractiveWorkAllowed();
-    _requireAvailable();
-    await _operations.run(() async {
-      final authorization = await _captureManagingAdmin();
-      await _graphTier().applyRemote(
-        expectedDigest: semanticDigest,
-        authorization: authorization,
-        recaptureAuthorization: _captureManagingAdmin,
-      );
-    });
-    await _refreshGraphBadge();
-  }
-
-  @override
-  Future<void> declineGraph(String semanticDigest) async {
-    await initialize();
-    _requireAvailable();
-    await _operations.run(() async {
-      await _captureManagingAdmin();
-      await _graphTier().decline(semanticDigest);
-    });
-    await _refreshGraphBadge();
   }
 
   @override
@@ -690,8 +618,8 @@ final class WebDavSyncRuntime
   Future<void> _armIfActive() async {
     if (_reconfigurationPaused) {
       _disarmScheduler();
-      _graphTimer?.cancel();
-      _graphTimer = null;
+      _maintenanceTimer?.cancel();
+      _maintenanceTimer = null;
       return;
     }
     final stored = await bindingStore.load();
@@ -699,8 +627,8 @@ final class WebDavSyncRuntime
     if (active == null || active.lifecycle != WebDavSyncLifecycle.active) {
       _clearCachedRoot();
       _disarmScheduler();
-      _graphTimer?.cancel();
-      _graphTimer = null;
+      _maintenanceTimer?.cancel();
+      _maintenanceTimer = null;
       return;
     }
     _scheduler!.arm(
@@ -708,9 +636,9 @@ final class WebDavSyncRuntime
       remotePollContextProvider: _cycleRunner!.remotePollContext,
     );
     ProfilePreferences.webDavSyncLocalChangeSink = _onLocalProfileChange;
-    _graphTimer?.cancel();
-    _graphTimer = Timer.periodic(WebDavSyncGraphTier.cadence, (_) {
-      unawaited(_maintainGraph(force: false));
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = Timer.periodic(WebDavSyncGraphTier.cadence, (_) {
+      unawaited(_maintainSeed(force: false));
     });
   }
 
@@ -723,7 +651,7 @@ final class WebDavSyncRuntime
     _scheduler?.disarm();
   }
 
-  Future<WebDavSyncCycleReport> _signalWithGraph(
+  Future<WebDavSyncCycleReport> _signalWithMaintenance(
     WebDavSyncTrigger trigger,
   ) async {
     final scheduler = _scheduler;
@@ -731,7 +659,7 @@ final class WebDavSyncRuntime
     final report = await scheduler.signal(trigger);
     if (report.disposition == WebDavSyncCycleDisposition.completed ||
         report.disposition == WebDavSyncCycleDisposition.seedRepairRequired) {
-      await _maintainGraph(
+      await _maintainSeed(
         force:
             report.disposition == WebDavSyncCycleDisposition.seedRepairRequired,
       );
@@ -741,7 +669,7 @@ final class WebDavSyncRuntime
 
   Future<void> _signalAutomatically(WebDavSyncTrigger trigger) async {
     try {
-      await _signalWithGraph(trigger);
+      await _signalWithMaintenance(trigger);
     } catch (_) {
       // Routine automatic sync is best effort. The settings status retains
       // errors recorded by the engine/discovery paths; launch, foreground,
@@ -749,20 +677,26 @@ final class WebDavSyncRuntime
     }
   }
 
-  Future<void> _maintainGraph({required bool force}) async {
+  Future<void> _maintainSeed({required bool force}) async {
     if (playbackActiveOnTelevision || tvOsLowMemory) return;
     try {
-      await checkGraph(force: force);
+      await _runSeedMaintenance(force: force);
     } on StateError {
-      // A non-Admin/locked session or a profile switch pauses only the graph
-      // tier. Hot sync and application startup continue normally.
+      // A non-Admin/locked session pauses bootstrap maintenance only.
     } on WebDavException {
       // Routine LAN/offline failures remain settings status, never banners.
     } catch (_) {
-      // Corrupt/replaced roots are persisted by discovery for the settings
-      // card; automatic triggers must not surface them during playback/home.
+      // Automatic maintenance must not surface failures during playback/home.
     }
   }
+
+  Future<void> _runSeedMaintenance({required bool force}) =>
+      _operations.run(() async {
+        final authorization = await ProfileAuthorizationContext.capture(
+          ProfileBootstrap.registry,
+        );
+        await _graphTier().maintain(authorization: authorization, force: force);
+      });
 
   Future<WebDavSyncCycleContext?> _activeContext() async {
     final stored = await bindingStore.load();
@@ -831,22 +765,6 @@ final class WebDavSyncRuntime
     _cycleRunner?.clearSectionCache();
   }
 
-  Future<void> _refreshGraphBadge() async {
-    try {
-      final active = (await bindingStore.load()).activeBinding;
-      if (active == null) {
-        MainPageBridge.setWebDavGraphChangePending(false);
-        return;
-      }
-      final state = await stateStore.load(active.namespaceId);
-      MainPageBridge.setWebDavGraphChangePending(
-        state.pendingGraphDigest != null,
-      );
-    } on WebDavSyncEngineStateMissingException {
-      MainPageBridge.setWebDavGraphChangePending(false);
-    }
-  }
-
   Future<void> _recordMissingState(
     String namespaceId, {
     WebDavSyncStoreSnapshot? snapshot,
@@ -868,8 +786,8 @@ final class WebDavSyncRuntime
   void debugResetInitialization() {
     ProfilePreferences.webDavSyncLocalChangeSink = null;
     _scheduler?.dispose();
-    _graphTimer?.cancel();
-    _graphTimer = null;
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = null;
     _scheduler = null;
     _cycleRunner = null;
     WidgetsBinding.instance.removeObserver(this);

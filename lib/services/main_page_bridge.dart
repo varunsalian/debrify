@@ -41,15 +41,6 @@ abstract final class MainTab {
 
 class MainPageBridge {
   static void Function(int index)? switchTab;
-  static final ValueNotifier<bool> webDavGraphChangePending = ValueNotifier(
-    false,
-  );
-
-  static void setWebDavGraphChangePending(bool pending) {
-    if (webDavGraphChangePending.value != pending) {
-      webDavGraphChangePending.value = pending;
-    }
-  }
 
   /// Stable page identities for [switchTab], deep links and the nav — these
   /// are indices into main.dart's `_pages`/`_titles`, NEVER visible-nav

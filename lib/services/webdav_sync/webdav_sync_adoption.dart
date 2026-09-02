@@ -388,7 +388,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
         if (current.adoption?.adoptionId != record.adoptionId) {
           throw StateError('WebDAV sync adoption journal changed');
         }
-        return current.copyWith(clearAdoption: true, clearPendingGraph: true);
+        return current.copyWith(clearAdoption: true);
       });
     } catch (_) {
       await _operations.holdDatabaseGate();
@@ -657,8 +657,6 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
         (current) => current.copyWith(
           circleToLocalProfiles: record.circleProfileToNewLocal,
           circleToLocalResources: record.circleResourceToNewLocal,
-          appliedGraphDigest: record.graphSemanticDigest,
-          clearPendingGraph: true,
           prunePendingProfileIds: <String>{
             ...current.prunePendingProfileIds,
             ...record.prunePendingProfileIds,

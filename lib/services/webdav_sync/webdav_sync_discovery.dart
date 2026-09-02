@@ -30,6 +30,13 @@ final class WebDavSyncBootstrapUnavailableException implements Exception {
       'This WebDAV sync folder has no authentic, complete bootstrap';
 }
 
+final class WebDavSyncBootstrapUpgradeRequiredException implements Exception {
+  const WebDavSyncBootstrapUpgradeRequiredException();
+
+  @override
+  String toString() => 'Update Debrify before connecting to this sync folder';
+}
+
 final class WebDavSyncDiscoveredGraph {
   const WebDavSyncDiscoveredGraph({
     required this.manifest,
@@ -49,7 +56,6 @@ final class WebDavSyncExistingRootSnapshot {
     required this.serverNowMs,
     required this.manifests,
     required this.bootstrap,
-    required this.latestGraph,
     required this.schemaRatchet,
   });
 
@@ -60,22 +66,17 @@ final class WebDavSyncExistingRootSnapshot {
   final int serverNowMs;
   final Map<String, WebDavSyncManifest> manifests;
   final WebDavSyncDiscoveredGraph bootstrap;
-  final WebDavSyncDiscoveredGraph? latestGraph;
   final int schemaRatchet;
-
-  bool get requiresGraphUpgrade =>
-      schemaRatchet > WebDavSyncGraphBuilder.schemaVersion;
 }
 
-final class WebDavSyncActiveGraphSnapshot {
-  const WebDavSyncActiveGraphSnapshot({
+final class WebDavSyncActiveRootSnapshot {
+  const WebDavSyncActiveRootSnapshot({
     required this.binding,
     required this.namespace,
     required this.root,
     required this.markerBytes,
     required this.serverNowMs,
     required this.manifests,
-    required this.latestGraph,
     required this.schemaRatchet,
   });
 
@@ -85,10 +86,9 @@ final class WebDavSyncActiveGraphSnapshot {
   final Uint8List markerBytes;
   final int serverNowMs;
   final Map<String, WebDavSyncManifest> manifests;
-  final WebDavSyncDiscoveredGraph? latestGraph;
   final int schemaRatchet;
 
-  bool get requiresGraphUpgrade =>
+  bool get requiresBootstrapUpgrade =>
       schemaRatchet > WebDavSyncGraphBuilder.schemaVersion;
 }
 
@@ -96,17 +96,16 @@ abstract interface class WebDavSyncExistingRootDiscoverer {
   Future<WebDavSyncExistingRootSnapshot> discover({required String bindingId});
 }
 
-abstract interface class WebDavSyncActiveGraphDiscoverer {
-  Future<WebDavSyncActiveGraphSnapshot> scanActive({required String bindingId});
+abstract interface class WebDavSyncActiveRootDiscoverer {
+  Future<WebDavSyncActiveRootSnapshot> scanActive({required String bindingId});
 }
 
 /// Authenticates the complete peer set for a pinned existing root and locates
-/// the restore base. Bootstrap selection deliberately ignores heartbeat age;
-/// graph selection retains the ordinary 30-day freshness rule.
+/// the restore base. Bootstrap selection deliberately ignores heartbeat age.
 final class WebDavSyncExistingRootDiscovery
     implements
         WebDavSyncExistingRootDiscoverer,
-        WebDavSyncActiveGraphDiscoverer {
+        WebDavSyncActiveRootDiscoverer {
   WebDavSyncExistingRootDiscovery({
     required WebDavSyncBindingStore bindingStore,
     required WebDavSyncEngineStateRepository stateRepository,
@@ -137,11 +136,10 @@ final class WebDavSyncExistingRootDiscovery
   final DateTime Function() _clock;
   final WebDavSyncDiscoveryDiagnostic _diagnostic;
 
-  /// Scans only the live graph tier for an already-Active binding. Unlike
-  /// first connection this does not download a potentially large bootstrap
-  /// and never changes the binding lifecycle.
+  /// Authenticates manifests for an already-Active binding without reading
+  /// bootstrap or legacy graph section payloads.
   @override
-  Future<WebDavSyncActiveGraphSnapshot> scanActive({
+  Future<WebDavSyncActiveRootSnapshot> scanActive({
     required String bindingId,
   }) async {
     final stored = await _bindingStore.load();
@@ -198,20 +196,10 @@ final class WebDavSyncExistingRootDiscovery
         highWater: state.peerManifestHighWater,
         serverNowMs: clockDecision.serverNowMs!,
       );
-      final graphSelection = WebDavSyncGraphArbitration.selectGraph(
-        manifests: manifests.values,
-        serverNowMs: clockDecision.serverNowMs!,
-        persistedSchemaRatchet: state.schemaRatchet,
+      final schemaRatchet = _bootstrapSchemaRatchet(
+        manifests.values,
+        state.schemaRatchet,
       );
-      final latestGraph =
-          graphSelection.schemaRatchet == WebDavSyncGraphBuilder.schemaVersion
-          ? await _firstComplete(
-              transport: transport,
-              root: root,
-              kind: WebDavSyncGraphKind.graph,
-              candidates: graphSelection.candidates,
-            )
-          : null;
       final highWater = Map<String, int>.from(state.peerManifestHighWater);
       for (final entry in manifests.entries) {
         highWater[entry.key] = max(
@@ -230,21 +218,17 @@ final class WebDavSyncExistingRootDiscovery
             highWater,
             currentDeviceIds: listing.deviceIds,
           ),
-          schemaRatchet: max(
-            current.schemaRatchet,
-            graphSelection.schemaRatchet,
-          ),
+          schemaRatchet: max(current.schemaRatchet, schemaRatchet),
         ),
       );
-      return WebDavSyncActiveGraphSnapshot(
+      return WebDavSyncActiveRootSnapshot(
         binding: binding,
         namespace: namespace,
         root: root,
         markerBytes: Uint8List.fromList(rootRead.bytes),
         serverNowMs: clockDecision.serverNowMs!,
         manifests: Map<String, WebDavSyncManifest>.unmodifiable(manifests),
-        latestGraph: latestGraph,
-        schemaRatchet: graphSelection.schemaRatchet,
+        schemaRatchet: schemaRatchet,
       );
     } on WebDavSyncRootMissingException catch (error) {
       await _bindingStore.markError(binding.id, error);
@@ -319,6 +303,19 @@ final class WebDavSyncExistingRootDiscovery
         serverNowMs: clockDecision.serverNowMs!,
       );
 
+      final schemaRatchet = _bootstrapSchemaRatchet(
+        manifests.values,
+        state.schemaRatchet,
+      );
+      if (schemaRatchet > WebDavSyncGraphBuilder.schemaVersion) {
+        await _stateRepository.update(
+          namespace.id,
+          (current) => current.copyWith(
+            schemaRatchet: max(current.schemaRatchet, schemaRatchet),
+          ),
+        );
+        throw const WebDavSyncBootstrapUpgradeRequiredException();
+      }
       final bootstrap = await _firstComplete(
         transport: transport,
         root: root,
@@ -330,21 +327,6 @@ final class WebDavSyncExistingRootDiscovery
       if (bootstrap == null) {
         throw const WebDavSyncBootstrapUnavailableException();
       }
-
-      final graphSelection = WebDavSyncGraphArbitration.selectGraph(
-        manifests: manifests.values,
-        serverNowMs: clockDecision.serverNowMs!,
-        persistedSchemaRatchet: state.schemaRatchet,
-      );
-      final latestGraph =
-          graphSelection.schemaRatchet == WebDavSyncGraphBuilder.schemaVersion
-          ? await _firstComplete(
-              transport: transport,
-              root: root,
-              kind: WebDavSyncGraphKind.graph,
-              candidates: graphSelection.candidates,
-            )
-          : null;
 
       final highWater = Map<String, int>.from(state.peerManifestHighWater);
       for (final entry in manifests.entries) {
@@ -364,10 +346,7 @@ final class WebDavSyncExistingRootDiscovery
             highWater,
             currentDeviceIds: listing.deviceIds,
           ),
-          schemaRatchet: max(
-            current.schemaRatchet,
-            graphSelection.schemaRatchet,
-          ),
+          schemaRatchet: max(current.schemaRatchet, schemaRatchet),
         ),
       );
       final awaiting = binding.lifecycle == WebDavSyncLifecycle.awaitingAdoption
@@ -384,8 +363,7 @@ final class WebDavSyncExistingRootDiscovery
         serverNowMs: clockDecision.serverNowMs!,
         manifests: Map<String, WebDavSyncManifest>.unmodifiable(manifests),
         bootstrap: bootstrap,
-        latestGraph: latestGraph,
-        schemaRatchet: graphSelection.schemaRatchet,
+        schemaRatchet: schemaRatchet,
       );
     } on WebDavSyncRootMissingException catch (error) {
       await _bindingStore.markError(binding.id, error);
@@ -399,6 +377,20 @@ final class WebDavSyncExistingRootDiscovery
     } finally {
       transport.close();
     }
+  }
+
+  static int _bootstrapSchemaRatchet(
+    Iterable<WebDavSyncManifest> manifests,
+    int persisted,
+  ) {
+    var ratchet = persisted;
+    for (final manifest in manifests) {
+      final bootstrap = manifest.section(
+        WebDavSyncGraphKind.bootstrap.logicalName,
+      );
+      if (bootstrap != null) ratchet = max(ratchet, bootstrap.schemaVersion);
+    }
+    return ratchet;
   }
 
   static Future<WebDavBytesResult> _readRequiredRoot(

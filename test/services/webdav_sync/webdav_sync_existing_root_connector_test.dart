@@ -149,7 +149,19 @@ void main() {
         graphSchemaClaim: 1,
         profileMap: const <String, String>{'profile-backup': 'profile-circle'},
         resourceMap: const <String, String>{},
-        sections: const <WebDavSyncSectionReference>[],
+        sections: kind == WebDavSyncGraphKind.bootstrap
+            ? const <WebDavSyncSectionReference>[
+                WebDavSyncSectionReference(
+                  name: 'graph',
+                  contentHash:
+                      '3333333333333333333333333333333333333333333333333333333333333333',
+                  semanticDigest: _graphDigest,
+                  updatedAtMs: 1,
+                  schemaVersion: 1,
+                  size: 1,
+                ),
+              ]
+            : const <WebDavSyncSectionReference>[],
       ),
       document: OpenedWebDavSyncGraph(
         kind: kind,
@@ -168,11 +180,6 @@ void main() {
         WebDavSyncGraphKind.bootstrap,
         _bootstrapDigest,
         'device-bootstrap',
-      ),
-      latestGraph: discovered(
-        WebDavSyncGraphKind.graph,
-        _graphDigest,
-        'device-graph',
       ),
       schemaRatchet: 1,
     );
@@ -216,42 +223,32 @@ void main() {
     expect((await bindingStore.load()).activeBindingId, isNull);
   });
 
-  test(
-    'bootstrap then graph then seed and hot merge activate in order',
-    () async {
-      var recaptures = 0;
+  test('legacy graph reference is ignored after bootstrap adoption', () async {
+    var recaptures = 0;
 
-      final active = await connector().connect(
-        bindingId: binding.id,
-        authorization: authorization,
-        recaptureAuthorization: () async {
-          recaptures++;
-          return authorization;
-        },
-        replacementConfirmed: true,
-      );
+    final active = await connector().connect(
+      bindingId: binding.id,
+      authorization: authorization,
+      recaptureAuthorization: () async {
+        recaptures++;
+        return authorization;
+      },
+      replacementConfirmed: true,
+    );
 
-      expect(active.lifecycle, WebDavSyncLifecycle.active);
-      expect(events, <String>[
-        'discover',
-        'adopt:firstJoin',
-        'adopt:refresh',
-        'publish',
-        'merge',
-      ]);
-      expect(recaptures, 2);
-      expect(states.state.appliedGraphDigest, _graphDigest);
-      expect((await bindingStore.load()).activeBindingId, binding.id);
-    },
-  );
+    expect(active.lifecycle, WebDavSyncLifecycle.active);
+    expect(events, <String>['discover', 'adopt:firstJoin', 'publish', 'merge']);
+    expect(recaptures, 1);
+    expect(snapshot.bootstrap.manifest.section('graph'), isNotNull);
+    expect((await bindingStore.load()).activeBindingId, binding.id);
+  });
 
-  test('retry after applied graph skips destructive adoption', () async {
+  test('retry after bootstrap adoption skips destructive adoption', () async {
     states.state = WebDavSyncEngineState(
       circleToLocalProfiles: <String, String>{
         'profile-circle': authorization.profileId,
       },
       circleToLocalResources: const <String, String>{},
-      appliedGraphDigest: _graphDigest,
     );
 
     await connector().connect(
@@ -270,7 +267,6 @@ void main() {
         'profile-circle': 'profile-from-an-earlier-circle-session',
       },
       circleToLocalResources: <String, String>{},
-      appliedGraphDigest: _graphDigest,
     );
     var recaptures = 0;
 
@@ -284,14 +280,8 @@ void main() {
       replacementConfirmed: true,
     );
 
-    expect(events, <String>[
-      'discover',
-      'adopt:firstJoin',
-      'adopt:refresh',
-      'publish',
-      'merge',
-    ]);
-    expect(recaptures, 2);
+    expect(events, <String>['discover', 'adopt:firstJoin', 'publish', 'merge']);
+    expect(recaptures, 1);
   });
 
   test('recovery recaptures authorization before later writes', () async {
@@ -300,7 +290,6 @@ void main() {
         'profile-circle': authorization.profileId,
       },
       circleToLocalResources: const <String, String>{},
-      appliedGraphDigest: _graphDigest,
       adoption: _adoptionRecord(),
     );
     var recaptures = 0;
@@ -378,7 +367,6 @@ final class _FakeAdoption implements WebDavSyncAdoptionRunner {
           'profile-circle': 'local-profile',
         },
         circleToLocalResources: const <String, String>{},
-        appliedGraphDigest: request.graphSemanticDigest,
       ),
     );
     return WebDavSyncAdoptionRecord(

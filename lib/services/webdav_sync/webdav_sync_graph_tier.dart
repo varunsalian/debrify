@@ -4,13 +4,11 @@ import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_authorization.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_adoption.dart';
-import 'webdav_sync_adoption_models.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_discovery.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_engine_state.dart';
-import 'webdav_sync_existing_root_connector.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
@@ -23,30 +21,15 @@ import 'webdav_sync_transport.dart';
 enum WebDavSyncGraphTierDisposition {
   unchanged,
   localPublished,
-  remoteChange,
-  remoteDeclined,
   adminRequired,
   updateRequired,
   skipped,
 }
 
-final class WebDavSyncGraphChange {
-  const WebDavSyncGraphChange({
-    required this.semanticDigest,
-    required this.deviceId,
-    required this.updatedAtMs,
-  });
-
-  final String semanticDigest;
-  final String deviceId;
-  final int updatedAtMs;
-}
-
 final class WebDavSyncGraphTierReport {
-  const WebDavSyncGraphTierReport({required this.disposition, this.change});
+  const WebDavSyncGraphTierReport({required this.disposition});
 
   final WebDavSyncGraphTierDisposition disposition;
-  final WebDavSyncGraphChange? change;
 }
 
 final class WebDavSyncDeviceSummary {
@@ -67,13 +50,13 @@ typedef WebDavSyncGraphTransportFactory =
       required WebDavSyncSecrets secrets,
     });
 
-/// Admin-only structure tier: discovers and prompts remote graph revisions,
-/// publishes complete local revisions, and performs guarded device cleanup.
+/// Admin-only maintenance tier for identity reconciliation, complete seed
+/// repair, daily bootstrap regeneration, and guarded device cleanup.
 final class WebDavSyncGraphTier {
   WebDavSyncGraphTier({
     required WebDavSyncBindingStore bindingStore,
     required WebDavSyncEngineStateRepository stateRepository,
-    required WebDavSyncActiveGraphDiscoverer discovery,
+    required WebDavSyncActiveRootDiscoverer discovery,
     required WebDavSyncGraphBuilder graphBuilder,
     required WebDavSyncAdoptionRunner adoption,
     required WebDavSyncSeedPublisher publisher,
@@ -108,7 +91,7 @@ final class WebDavSyncGraphTier {
 
   final WebDavSyncBindingStore _bindingStore;
   final WebDavSyncEngineStateRepository _stateRepository;
-  final WebDavSyncActiveGraphDiscoverer _discovery;
+  final WebDavSyncActiveRootDiscoverer _discovery;
   final WebDavSyncGraphBuilder _graphBuilder;
   final WebDavSyncAdoptionRunner _adoption;
   final WebDavSyncSeedPublisher _publisher;
@@ -130,10 +113,7 @@ final class WebDavSyncGraphTier {
     }
     final active = await _activeBinding();
     var state = await _stateRepository.load(active.namespaceId);
-    // Discovery persists the highest graph schema ever observed. Surface an
-    // upgrade requirement on every settings read, including inside the
-    // six-hour network cadence; otherwise the warning disappears after the
-    // first scan even though this build still cannot interpret the graph.
+    // The legacy field now ratchets bootstrap schema versions only.
     if (state.schemaRatchet > WebDavSyncGraphBuilder.schemaVersion) {
       return const WebDavSyncGraphTierReport(
         disposition: WebDavSyncGraphTierDisposition.updateRequired,
@@ -142,56 +122,23 @@ final class WebDavSyncGraphTier {
     if (state.prunePendingProfileIds.isNotEmpty) {
       await _adoption.retryPendingPrunes(active.namespaceId);
       state = await _stateRepository.load(active.namespaceId);
-      if (state.blocksGraphPushes) {
+      if (state.blocksSeedPushes) {
         return const WebDavSyncGraphTierReport(
           disposition: WebDavSyncGraphTierDisposition.skipped,
         );
       }
     }
     final nowMs = _clock().toUtc().millisecondsSinceEpoch;
-    final lastCheck = state.lastGraphCheckMs;
     final lastBootstrapCheck = state.lastBootstrapCheckMs;
-    final graphDue =
-        force ||
-        lastCheck == null ||
-        nowMs < lastCheck ||
-        nowMs - lastCheck >= cadence.inMilliseconds;
     final bootstrapDue =
         runBootstrapMaintenance &&
         (force ||
             lastBootstrapCheck == null ||
             nowMs < lastBootstrapCheck ||
             nowMs - lastBootstrapCheck >= bootstrapCadence.inMilliseconds);
-    if (!graphDue && !bootstrapDue) {
-      final pending = state.pendingGraphDigest;
-      return WebDavSyncGraphTierReport(
-        disposition: pending == null
-            ? WebDavSyncGraphTierDisposition.skipped
-            : WebDavSyncGraphTierDisposition.remoteChange,
-        change: pending == null
-            ? null
-            : WebDavSyncGraphChange(
-                semanticDigest: pending,
-                deviceId: 'peer',
-                updatedAtMs: lastCheck,
-              ),
-      );
-    }
 
-    final scan = await _discovery.scanActive(bindingId: active.id);
-    state = await _stateRepository.update(
-      active.namespaceId,
-      (current) => current.copyWith(lastGraphCheckMs: nowMs),
-    );
-    if (scan.requiresGraphUpgrade) {
-      return const WebDavSyncGraphTierReport(
-        disposition: WebDavSyncGraphTierDisposition.updateRequired,
-      );
-    }
-
-    // An unresolved adoption remains an explicit graph blocker. Pending
-    // predecessor prunes were retried above before any network publication.
-    if (state.blocksGraphPushes) {
+    // An unresolved adoption or predecessor prune remains a seed blocker.
+    if (state.blocksSeedPushes) {
       return const WebDavSyncGraphTierReport(
         disposition: WebDavSyncGraphTierDisposition.skipped,
       );
@@ -209,66 +156,6 @@ final class WebDavSyncGraphTier {
           resources.map((resource) => resource.id),
           maps.localToCircleResources.keys,
         );
-    WebDavSyncPreparedGraph? local;
-    final candidate = scan.latestGraph;
-    if (candidate != null &&
-        candidate.document.semanticDigest != state.appliedGraphDigest) {
-      final change = _change(candidate);
-      if (!state.declinedGraphDigests.contains(change.semanticDigest)) {
-        var equivalentStructure = false;
-        if (!identitiesChanged) {
-          local = await _graphBuilder.build(
-            kind: WebDavSyncGraphKind.graph,
-            authorization: authorization,
-            identityMaps: maps,
-          );
-          equivalentStructure =
-              WebDavSyncGraphBuilder.structureDigest(
-                candidate.document.package,
-                profileMap: candidate.manifest.profileMap,
-                resourceMap: candidate.manifest.resourceMap,
-              ) ==
-              WebDavSyncGraphBuilder.structureDigest(
-                local.package,
-                profileMap: local.profileMap,
-                resourceMap: local.resourceMap,
-              );
-        }
-        if (!equivalentStructure) {
-          await _stateRepository.update(
-            active.namespaceId,
-            (current) =>
-                current.copyWith(pendingGraphDigest: change.semanticDigest),
-          );
-          return WebDavSyncGraphTierReport(
-            disposition: WebDavSyncGraphTierDisposition.remoteChange,
-            change: change,
-          );
-        }
-        // A legacy writer can give the same graph a different exact payload
-        // digest through local row ordering or portable engine files. Clear a
-        // stale prompt; the canonical local graph is published below.
-        state = await _stateRepository.update(
-          active.namespaceId,
-          (current) => current.copyWith(clearPendingGraph: true),
-        );
-      }
-    }
-
-    if (!scan.manifests.containsKey(scan.namespace.deviceId)) {
-      // The hot engine distinguishes a missing manifest from a missing whole
-      // device directory. Discovery cannot safely prove that the persisted
-      // section references still exist, so rebuild the complete authenticated
-      // seed before advertising this device again.
-      await _publisher.publish(
-        bindingId: active.id,
-        authorization: authorization,
-      );
-      return const WebDavSyncGraphTierReport(
-        disposition: WebDavSyncGraphTierDisposition.localPublished,
-      );
-    }
-
     if (identitiesChanged) {
       await _publisher.publish(
         bindingId: active.id,
@@ -278,25 +165,15 @@ final class WebDavSyncGraphTier {
         disposition: WebDavSyncGraphTierDisposition.localPublished,
       );
     }
-    final ownManifest = state.ownManifest;
-    final ownGraph = ownManifest?.section(
-      WebDavSyncGraphKind.graph.logicalName,
-    );
-    final ownIdentityMapsMatch =
-        ownManifest != null &&
-        _sameSet(
-          ownManifest.profileMap.values,
-          maps.circleToLocalProfiles.keys,
-        ) &&
-        _sameSet(
-          ownManifest.resourceMap.values,
-          maps.circleToLocalResources.keys,
-        );
-    if (ownGraph?.semanticDigest != state.appliedGraphDigest ||
-        !ownIdentityMapsMatch) {
-      // Adoption commits the local maps before this device republishes them.
-      // If publication was interrupted, resume that non-destructive tail
-      // instead of considering the locally-applied graph fully advertised.
+
+    final scan = await _discovery.scanActive(bindingId: active.id);
+    if (scan.requiresBootstrapUpgrade) {
+      return const WebDavSyncGraphTierReport(
+        disposition: WebDavSyncGraphTierDisposition.updateRequired,
+      );
+    }
+    final ownManifest = scan.manifests[scan.namespace.deviceId];
+    if (!_isCompleteOwnManifest(ownManifest, maps)) {
       await _publisher.publish(
         bindingId: active.id,
         authorization: authorization,
@@ -305,18 +182,11 @@ final class WebDavSyncGraphTier {
         disposition: WebDavSyncGraphTierDisposition.localPublished,
       );
     }
-    local ??= await _graphBuilder.build(
-      kind: WebDavSyncGraphKind.graph,
-      authorization: authorization,
-      identityMaps: maps,
-    );
-    if (local.semanticDigest != state.appliedGraphDigest) {
-      await _publisher.publish(
-        bindingId: active.id,
-        authorization: authorization,
-      );
-      return const WebDavSyncGraphTierReport(
-        disposition: WebDavSyncGraphTierDisposition.localPublished,
+    if (state.ownManifest == null ||
+        ownManifest!.updatedAtMs > state.ownManifest!.updatedAtMs) {
+      state = await _stateRepository.update(
+        active.namespaceId,
+        (current) => current.copyWith(ownManifest: ownManifest),
       );
     }
     if (bootstrapDue) {
@@ -325,7 +195,7 @@ final class WebDavSyncGraphTier {
         authorization: authorization,
         identityMaps: maps,
       );
-      final publishedBootstrap = state.ownManifest?.section(
+      final publishedBootstrap = ownManifest!.section(
         WebDavSyncGraphKind.bootstrap.logicalName,
       );
       final databaseDigest =
@@ -349,106 +219,9 @@ final class WebDavSyncGraphTier {
         ),
       );
     }
-    await _stateRepository.update(
-      active.namespaceId,
-      (current) => current.copyWith(clearPendingGraph: true),
+    return const WebDavSyncGraphTierReport(
+      disposition: WebDavSyncGraphTierDisposition.unchanged,
     );
-    return WebDavSyncGraphTierReport(
-      disposition:
-          candidate != null &&
-              state.declinedGraphDigests.contains(
-                candidate.document.semanticDigest,
-              )
-          ? WebDavSyncGraphTierDisposition.remoteDeclined
-          : WebDavSyncGraphTierDisposition.unchanged,
-    );
-  }
-
-  Future<void> applyRemote({
-    required String expectedDigest,
-    required ProfileAuthorizationContext authorization,
-    required WebDavSyncAuthorizationRecapture recaptureAuthorization,
-  }) async {
-    if (!await _isManagingAdmin(authorization)) {
-      throw StateError('WebDAV sync graph refresh requires an Admin');
-    }
-    final active = await _activeBinding();
-    var state = await _stateRepository.load(active.namespaceId);
-    if (state.prunePendingProfileIds.isNotEmpty) {
-      await _adoption.retryPendingPrunes(active.namespaceId);
-      state = await _stateRepository.load(active.namespaceId);
-    }
-    if (state.blocksGraphPushes) {
-      throw StateError(
-        'Finish the pending profile cleanup before applying sync changes',
-      );
-    }
-    final scan = await _discovery.scanActive(bindingId: active.id);
-    if (scan.requiresGraphUpgrade) {
-      throw StateError(
-        'Update Debrify before syncing profiles and connections',
-      );
-    }
-    final graph = scan.latestGraph;
-    if (graph == null || graph.document.semanticDigest != expectedDigest) {
-      throw StateError('The pending WebDAV sync update changed; check again');
-    }
-    if (state.appliedGraphDigest != expectedDigest) {
-      final secrets = await _bindingStore.readSecrets(active);
-      await _adoption.adopt(
-        WebDavSyncAdoptionRequest(
-          namespaceId: active.namespaceId,
-          mode: WebDavSyncAdoptionMode.refresh,
-          package: graph.document.package,
-          graphSemanticDigest: graph.document.semanticDigest,
-          profileMap: graph.manifest.profileMap,
-          resourceMap: graph.manifest.resourceMap,
-          passphrase: secrets.syncPassphrase,
-          authorization: authorization,
-          replacementConfirmed: true,
-        ),
-      );
-    }
-    final refreshedAuthorization = await recaptureAuthorization();
-    final published = await _publisher.publish(
-      bindingId: active.id,
-      authorization: refreshedAuthorization,
-    );
-    final refreshedState = await _stateRepository.load(active.namespaceId);
-    final report = await _cycleRunner.runCycle(
-      WebDavSyncCycleContext(
-        namespaceId: scan.namespace.id,
-        deviceId: scan.namespace.deviceId,
-        markerPin: scan.markerBytes,
-        root: scan.root,
-        circleToLocalProfiles: refreshedState.circleToLocalProfiles,
-        circleToLocalResources: refreshedState.circleToLocalResources,
-        wireProfileMap: published.manifest.profileMap,
-        wireResourceMap: published.manifest.resourceMap,
-        active: true,
-      ),
-    );
-    if (report.disposition != WebDavSyncCycleDisposition.completed) {
-      throw StateError('WebDAV sync graph refresh could not finish its merge');
-    }
-    await _stateRepository.update(
-      active.namespaceId,
-      (current) => current.copyWith(clearPendingGraph: true),
-    );
-  }
-
-  Future<void> decline(String semanticDigest) async {
-    _requireDigest(semanticDigest);
-    final active = await _activeBinding();
-    await _stateRepository.update(active.namespaceId, (current) {
-      return current.copyWith(
-        declinedGraphDigests: boundedDeclinedGraphDigests(
-          current.declinedGraphDigests,
-          semanticDigest,
-        ),
-        clearPendingGraph: current.pendingGraphDigest == semanticDigest,
-      );
-    });
   }
 
   Future<List<WebDavSyncDeviceSummary>> listDevices() async {
@@ -501,22 +274,8 @@ final class WebDavSyncGraphTier {
     if (target == null) {
       throw StateError('The selected sync device no longer exists');
     }
-    final currentState = await _stateRepository.load(active.namespaceId);
-    final latestGraph = scan.latestGraph;
-    if (latestGraph?.manifest.deviceId == deviceId &&
-        latestGraph!.document.semanticDigest !=
-            currentState.appliedGraphDigest &&
-        !currentState.declinedGraphDigests.contains(
-          latestGraph.document.semanticDigest,
-        )) {
-      throw StateError(
-        'Apply or decline this device\'s pending profile update before '
-        'forgetting it',
-      );
-    }
     var bootstrap = own?.section(WebDavSyncGraphKind.bootstrap.logicalName);
-    var graph = own?.section(WebDavSyncGraphKind.graph.logicalName);
-    if (bootstrap == null || graph == null) {
+    if (bootstrap == null) {
       await _publisher.publish(
         bindingId: active.id,
         authorization: authorization,
@@ -528,27 +287,18 @@ final class WebDavSyncGraphTier {
         throw StateError('The selected sync device no longer exists');
       }
       bootstrap = own?.section(WebDavSyncGraphKind.bootstrap.logicalName);
-      graph = own?.section(WebDavSyncGraphKind.graph.logicalName);
-      if (own == null || bootstrap == null || graph == null) {
+      if (own == null || bootstrap == null) {
         throw StateError('Bootstrap continuity could not be published');
       }
     }
     final secrets = await _bindingStore.readSecrets(active);
     final transport = _transportFactory(binding: active, secrets: secrets);
     try {
-      await _verifyGraph(
+      await _verifyBootstrap(
         transport: transport,
         scan: scan,
         manifest: own!,
-        kind: WebDavSyncGraphKind.bootstrap,
         reference: bootstrap,
-      );
-      await _verifyGraph(
-        transport: transport,
-        scan: scan,
-        manifest: own,
-        kind: WebDavSyncGraphKind.graph,
-        reference: graph,
       );
       final marker = await transport.readRootMarker();
       if (!_bytesEqual(scan.markerBytes, marker.bytes)) {
@@ -586,11 +336,10 @@ final class WebDavSyncGraphTier {
     }
   }
 
-  Future<void> _verifyGraph({
+  Future<void> _verifyBootstrap({
     required WebDavSyncTransport transport,
-    required WebDavSyncActiveGraphSnapshot scan,
+    required WebDavSyncActiveRootSnapshot scan,
     required WebDavSyncManifest manifest,
-    required WebDavSyncGraphKind kind,
     required WebDavSyncSectionReference reference,
   }) async {
     final encoded = await WebDavSyncLargeSectionIo(codec: _codec).readVerified(
@@ -604,7 +353,7 @@ final class WebDavSyncGraphTier {
       key: scan.root.key,
       circleId: scan.root.document.circleId,
       deviceId: manifest.deviceId,
-      kind: kind,
+      kind: WebDavSyncGraphKind.bootstrap,
       reference: reference,
       encoded: encoded,
       profileMap: manifest.profileMap,
@@ -641,27 +390,36 @@ final class WebDavSyncGraphTier {
     );
   }
 
-  static WebDavSyncGraphChange _change(WebDavSyncDiscoveredGraph candidate) {
-    final reference = candidate.manifest.section(
-      WebDavSyncGraphKind.graph.logicalName,
-    )!;
-    return WebDavSyncGraphChange(
-      semanticDigest: candidate.document.semanticDigest,
-      deviceId: candidate.manifest.deviceId,
-      updatedAtMs: reference.updatedAtMs,
-    );
-  }
-
   static bool _sameSet(Iterable<String> left, Iterable<String> right) {
     final leftSet = left.toSet();
     final rightSet = right.toSet();
     return leftSet.length == rightSet.length && leftSet.containsAll(rightSet);
   }
 
-  static void _requireDigest(String value) {
-    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(value)) {
-      throw ArgumentError.value(value, 'semanticDigest');
+  static bool _isCompleteOwnManifest(
+    WebDavSyncManifest? manifest,
+    WebDavSyncIdentityMaps maps,
+  ) {
+    if (manifest == null ||
+        manifest.section(WebDavSyncGraphKind.bootstrap.logicalName) == null ||
+        manifest.section('profiles') == null ||
+        manifest.section('resources') == null ||
+        manifest.section(WebDavSyncGraphKind.graph.logicalName) != null ||
+        !_sameSet(
+          manifest.profileMap.values,
+          maps.circleToLocalProfiles.keys,
+        ) ||
+        !_sameSet(
+          manifest.resourceMap.values,
+          maps.circleToLocalResources.keys,
+        )) {
+      return false;
     }
+    return maps.circleToLocalProfiles.keys.every(
+      (circleId) =>
+          manifest.section('hot/$circleId') != null &&
+          manifest.section('tombstones/$circleId') != null,
+    );
   }
 
   static bool _bytesEqual(List<int> left, List<int> right) {

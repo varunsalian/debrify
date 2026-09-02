@@ -10,7 +10,6 @@ import '../../services/webdav_sync/webdav_sync_activation.dart';
 import '../../services/webdav_sync/webdav_sync_clock.dart';
 import '../../services/webdav_sync/webdav_sync_engine.dart';
 import '../../services/webdav_sync/webdav_sync_feature.dart';
-import '../../services/webdav_sync/webdav_sync_graph_tier.dart';
 import '../../services/webdav_sync/webdav_sync_models.dart';
 import '../../services/webdav_sync/webdav_sync_runtime.dart';
 import '../../services/webdav_sync/webdav_sync_scheduler.dart';
@@ -50,9 +49,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
   WebDavSyncActivationController? _syncActivation;
   WebDavSyncBinding? _syncBinding;
   WebDavSyncRuntimeStatus? _runtimeStatus;
-  WebDavSyncGraphChange? _graphChange;
-  String? _graphTierMessage;
-  String? _promptedGraphDigest;
+  String? _syncStateMessage;
   bool _syncBusy = false;
 
   bool get _syncFeatureEnabled =>
@@ -105,39 +102,20 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
         setState(() {
           _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
           _runtimeStatus = status;
-          _graphChange = null;
-          _graphTierMessage =
+          _syncStateMessage =
               'Local sync state was cleared. Verify this folder again to reconnect safely.';
         });
         return;
       }
-      // Opening this interactive page should discover graph changes without
-      // queuing a potentially large daily database snapshot ahead of Sync now.
-      // Automatic maintenance still owns the scheduled bootstrap refresh.
-      final graph = await management.checkGraph(runBootstrapMaintenance: false);
       if (!mounted) return;
       setState(() {
         _runtimeStatus = status;
-        _graphChange = graph.change;
-        _graphTierMessage = switch (graph.disposition) {
-          WebDavSyncGraphTierDisposition.adminRequired =>
-            'Profiles & connections sync waits for an Admin session',
-          WebDavSyncGraphTierDisposition.updateRequired =>
-            'Update Debrify to sync profiles & connections',
-          _ when status.adminPruneBlocked =>
-            status.safetyCleanupBlocked
-                ? 'Safety backup unavailable; kept ${status.pruneBlockingProfiles.join(', ')} on this device'
-                : 'Profile cleanup is pending for ${status.pruneBlockingProfiles.join(', ')}; activity sync continues',
-          _ => null,
-        };
+        _syncStateMessage = status.adminPruneBlocked
+            ? status.safetyCleanupBlocked
+                  ? 'Safety backup unavailable; kept ${status.pruneBlockingProfiles.join(', ')} on this device'
+                  : 'Profile cleanup is pending for ${status.pruneBlockingProfiles.join(', ')}; activity sync continues'
+            : null;
       });
-      final change = graph.change;
-      if (change != null && _promptedGraphDigest != change.semanticDigest) {
-        _promptedGraphDigest = change.semanticDigest;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) unawaited(_reviewGraphChange(change));
-        });
-      }
     } catch (_) {
       // Active sync remains usable offline; manual Sync now surfaces errors.
     }
@@ -403,58 +381,6 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
     if (reloadAfterResume && mounted) await _loadActiveSyncState();
   }
 
-  Future<void> _reviewGraphChange(WebDavSyncGraphChange change) async {
-    final management = _management;
-    if (management == null || _syncBusy || !mounted) return;
-    final decision = await showSettingsDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Profiles & connections changed'),
-        content: const Text(
-          'Another synced device changed profiles or connections. Applying '
-          'the update creates and verifies an encrypted local safety backup '
-          'before replacing this device\'s structure.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep current setup'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Apply update'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || decision == null) return;
-    setState(() => _syncBusy = true);
-    try {
-      if (decision) {
-        await management.applyGraph(change.semanticDigest);
-      } else {
-        await management.declineGraph(change.semanticDigest);
-      }
-      if (!mounted) return;
-      setState(() => _graphChange = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            decision
-                ? 'Profiles and connections were updated.'
-                : 'This profile update will not be shown again.',
-          ),
-        ),
-      );
-      await _loadSyncState();
-    } catch (error) {
-      if (mounted) _showError(error);
-    } finally {
-      if (mounted) setState(() => _syncBusy = false);
-    }
-  }
-
   Future<void> _manageDevices() async {
     final management = _management;
     if (management == null || _syncBusy) return;
@@ -683,14 +609,6 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
                 enabled: !_syncBusy && _syncActivation != null,
                 onTap: _syncNow,
               ),
-            if (active && _graphChange != null)
-              SettingsTile(
-                icon: Icons.account_tree_outlined,
-                title: 'Profiles & connections update',
-                subtitle: 'Review a change from another synced device',
-                enabled: !_syncBusy,
-                onTap: () => _reviewGraphChange(_graphChange!),
-              ),
             if (active && _management != null)
               SettingsTile(
                 icon: Icons.devices_other,
@@ -733,10 +651,10 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
             style: const TextStyle(fontSize: 12.5, color: Colors.amber),
           ),
         ],
-        if (active && _graphTierMessage != null) ...[
+        if (active && _syncStateMessage != null) ...[
           const SizedBox(height: 8),
           Text(
-            _graphTierMessage!,
+            _syncStateMessage!,
             style: const TextStyle(fontSize: 12.5, color: Colors.amber),
           ),
         ],

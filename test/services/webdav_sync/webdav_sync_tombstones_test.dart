@@ -430,7 +430,7 @@ void main() {
     );
   });
 
-  test('graph and bootstrap cadence state round-trips with strict digests', () {
+  test('bootstrap and circle state round-trips with strict digests', () {
     const stamp = WebDavSyncStamp(
       normalizedTimeMs: 42,
       originDeviceId: 'device-a',
@@ -465,12 +465,8 @@ void main() {
     final source = WebDavSyncEngineState(
       lastPushMs: 50,
       lastRemoteChangeMs: 75,
-      lastGraphCheckMs: 100,
       lastBootstrapCheckMs: 200,
-      appliedGraphDigest: 'a' * 64,
-      pendingGraphDigest: 'b' * 64,
       publishedBootstrapDatabaseDigest: 'c' * 64,
-      declinedGraphDigests: <String>{'d' * 64},
       currentDeviceIds: const <String>{'device-a', 'device-b'},
       peerManifestValidators: const <String, WebDavSyncManifestValidator>{
         'device-b': WebDavSyncManifestValidator.etag('"revision-1"'),
@@ -488,9 +484,15 @@ void main() {
       pendingActiveProfileDeletion: 'local-retired-profile',
     );
 
-    final restored = WebDavSyncEngineState.fromJson(source.toJson());
+    final legacyJson = <String, Object?>{
+      ...source.toJson(),
+      'lastGraphCheckMs': 100,
+      'appliedGraphDigest': 'a' * 64,
+      'pendingGraphDigest': 'b' * 64,
+      'declinedGraphDigests': <String>['d' * 64],
+    };
+    final restored = WebDavSyncEngineState.fromJson(legacyJson);
 
-    expect(restored.lastGraphCheckMs, 100);
     expect(restored.lastPushMs, 50);
     expect(restored.lastRemoteChangeMs, 75);
     expect(restored.lastBootstrapCheckMs, 200);
@@ -517,6 +519,10 @@ void main() {
     expect(restored.lastPushedProfilesDigest, 'e' * 64);
     expect(restored.lastPushedResourcesDigest, 'f' * 64);
     expect(restored.pendingActiveProfileDeletion, 'local-retired-profile');
+    expect(restored.toJson(), isNot(contains('lastGraphCheckMs')));
+    expect(restored.toJson(), isNot(contains('appliedGraphDigest')));
+    expect(restored.toJson(), isNot(contains('pendingGraphDigest')));
+    expect(restored.toJson(), isNot(contains('declinedGraphDigests')));
     expect(
       () => WebDavSyncEngineState.fromJson(<String, Object?>{
         ...source.toJson(),
@@ -574,20 +580,6 @@ void main() {
     expect(bounded, hasLength(WebDavSyncLimits.maxMapEntries));
     expect(bounded, contains('peer-0000'));
     expect(bounded, isNot(contains('peer-0001')));
-  });
-
-  test('declined graph history stays bounded and retains the newest', () {
-    final source = <String>{
-      for (var index = 0; index < WebDavSyncLimits.maxMapEntries; index++)
-        index.toRadixString(16).padLeft(64, '0'),
-    };
-    final newest = 'f' * 64;
-
-    final bounded = boundedDeclinedGraphDigests(source, newest);
-
-    expect(bounded, hasLength(WebDavSyncLimits.maxMapEntries));
-    expect(bounded, contains(newest));
-    expect(bounded, isNot(contains('0' * 64)));
   });
 }
 

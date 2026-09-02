@@ -11,9 +11,9 @@ import 'webdav_sync_models.dart';
 typedef WebDavSyncAuthorizationRecapture =
     Future<ProfileAuthorizationContext> Function();
 
-/// Completes first connection to an existing folder. Durable graph adoption
-/// phases are resumed from the engine-state journal, so a retry after a crash
-/// does not restore an already-applied revision again.
+/// Completes first connection to an existing folder. Durable bootstrap
+/// adoption phases are resumed from the engine-state journal, so a retry after
+/// a crash does not restore an already-applied package again.
 final class WebDavSyncExistingRootConnector {
   const WebDavSyncExistingRootConnector({
     required WebDavSyncBindingStore bindingStore,
@@ -62,30 +62,16 @@ final class WebDavSyncExistingRootConnector {
     }
 
     final snapshot = await _discovery.discover(bindingId: bindingId);
-    if (snapshot.requiresGraphUpgrade) {
-      throw StateError(
-        'Update Debrify before syncing profiles and connections',
-      );
-    }
     final secrets = await _bindingStore.readSecrets(snapshot.binding);
     state = await _stateRepository.load(snapshot.namespace.id);
 
     final bootstrapDigest = snapshot.bootstrap.document.semanticDigest;
-    final appliedGraphBelongsToActiveProfiles =
-        state.appliedGraphDigest != null &&
+    final adoptedBootstrapBelongsToActiveProfiles =
         state.hasAuthenticatedMaps &&
         state.circleToLocalProfiles!.containsValue(
           currentAuthorization.profileId,
         );
-    if (state.appliedGraphDigest == null ||
-        !appliedGraphBelongsToActiveProfiles) {
-      if (state.hasAuthenticatedMaps) {
-        if (state.appliedGraphDigest == null) {
-          throw StateError('WebDAV sync adoption state is incomplete');
-        }
-      } else if (state.appliedGraphDigest != null) {
-        throw StateError('WebDAV sync adopted identity maps are missing');
-      }
+    if (!adoptedBootstrapBelongsToActiveProfiles) {
       await _adoption.adopt(
         WebDavSyncAdoptionRequest(
           namespaceId: snapshot.namespace.id,
@@ -94,28 +80,6 @@ final class WebDavSyncExistingRootConnector {
           graphSemanticDigest: bootstrapDigest,
           profileMap: snapshot.bootstrap.manifest.profileMap,
           resourceMap: snapshot.bootstrap.manifest.resourceMap,
-          passphrase: secrets.syncPassphrase,
-          authorization: currentAuthorization,
-          replacementConfirmed: true,
-        ),
-      );
-      currentAuthorization = await recaptureAuthorization();
-      state = await _stateRepository.load(snapshot.namespace.id);
-    } else if (!state.hasAuthenticatedMaps) {
-      throw StateError('WebDAV sync adopted identity maps are missing');
-    }
-
-    final latestGraph = snapshot.latestGraph;
-    if (latestGraph != null &&
-        state.appliedGraphDigest != latestGraph.document.semanticDigest) {
-      await _adoption.adopt(
-        WebDavSyncAdoptionRequest(
-          namespaceId: snapshot.namespace.id,
-          mode: WebDavSyncAdoptionMode.refresh,
-          package: latestGraph.document.package,
-          graphSemanticDigest: latestGraph.document.semanticDigest,
-          profileMap: latestGraph.manifest.profileMap,
-          resourceMap: latestGraph.manifest.resourceMap,
           passphrase: secrets.syncPassphrase,
           authorization: currentAuthorization,
           replacementConfirmed: true,

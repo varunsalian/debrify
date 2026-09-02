@@ -1483,7 +1483,13 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         ),
       );
     }
-    if (changed.isEmpty && !pushResources && !repairManifest) {
+    final dropsLegacyGraph =
+        state.ownManifest?.section(WebDavSyncGraphKind.graph.logicalName) !=
+        null;
+    if (changed.isEmpty &&
+        !pushResources &&
+        !repairManifest &&
+        !dropsLegacyGraph) {
       return _PushResult(
         sectionsPushed: 0,
         publishedProfiles: const <String, _PublishedProfile>{},
@@ -1559,7 +1565,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       for (final section
           in state.ownManifest?.sections ??
               const <WebDavSyncSectionReference>[])
-        section.name: section,
+        if (section.name != WebDavSyncGraphKind.graph.logicalName)
+          section.name: section,
       for (final section in changed) section.reference.name: section.reference,
       if (resourceReference != null) resourceReference.name: resourceReference,
     };
@@ -1572,7 +1579,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       deviceId: deviceId,
       updatedAtMs: serverNowMs,
       clockOffsetMs: clockOffsetMs,
-      graphSchemaClaim: priorManifest?.graphSchemaClaim ?? 1,
+      graphSchemaClaim: WebDavSyncGraphBuilder.schemaVersion,
       profileMap: context.wireProfileMap.isNotEmpty
           ? context.wireProfileMap
           : (priorManifest?.profileMap ?? const <String, String>{}),

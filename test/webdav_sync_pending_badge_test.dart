@@ -1,5 +1,4 @@
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
-import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
@@ -9,10 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('sync badge chevron inherits the focused inverse ink', (
-    tester,
-  ) async {
-    MainPageBridge.setWebDavGraphChangePending(false);
+  testWidgets('sync chevron inherits the focused inverse ink', (tester) async {
     final theme = AppThemes.byId('spotlight');
     await tester.pumpWidget(
       MaterialApp(

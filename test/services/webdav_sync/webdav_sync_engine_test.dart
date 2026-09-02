@@ -267,6 +267,48 @@ void main() {
     },
   );
 
+  test('manifest republish drops a legacy graph reference', () async {
+    await runFixture(context());
+    final current = states.state.ownManifest!;
+    final legacy = WebDavSyncManifest(
+      circleId: current.circleId,
+      deviceId: current.deviceId,
+      updatedAtMs: current.updatedAtMs,
+      clockOffsetMs: current.clockOffsetMs,
+      graphSchemaClaim: current.graphSchemaClaim,
+      profileMap: current.profileMap,
+      resourceMap: current.resourceMap,
+      sections: <WebDavSyncSectionReference>[
+        ...current.sections,
+        WebDavSyncSectionReference(
+          name: 'graph',
+          contentHash: '1' * 64,
+          semanticDigest: '2' * 64,
+          updatedAtMs: current.updatedAtMs,
+          schemaVersion: 1,
+          size: 1,
+        ),
+      ],
+    );
+    states.state = states.state.copyWith(ownManifest: legacy);
+    transport.manifests['device-a'] = await codec.sealDocument(
+      key: root.key,
+      circleId: root.document.circleId,
+      deviceId: 'device-a',
+      logicalName: 'manifest',
+      schemaVersion: WebDavSyncManifest.schemaVersion,
+      payload: legacy.toJson(),
+      maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+    transport.events.clear();
+
+    final report = await runFixture(context());
+
+    expect(report.disposition, WebDavSyncCycleDisposition.completed);
+    expect(transport.events, contains('write:manifest'));
+    expect(states.state.ownManifest!.section('graph'), isNull);
+  });
+
   test(
     'a missing own device directory requests a complete seed repair',
     () async {

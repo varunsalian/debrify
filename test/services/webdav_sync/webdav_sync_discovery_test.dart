@@ -102,14 +102,13 @@ void main() {
       final found = await discovery().discover(bindingId: binding.id);
 
       expect(found.bootstrap.manifest.deviceId, 'sleeping-device');
-      expect(found.latestGraph, isNull);
       expect(found.manifests, hasLength(1));
       expect(found.binding.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
       expect(transport.closed, isTrue);
     },
   );
 
-  test('latest live complete graph follows a dormant bootstrap', () async {
+  test('legacy graph metadata is ignored during bootstrap discovery', () async {
     await transport.addPeer(
       codec: codec,
       root: root,
@@ -123,14 +122,34 @@ void main() {
       deviceId: 'live-device',
       manifestTime: now,
       graphTime: now.subtract(const Duration(minutes: 1)),
+      graphSchemaClaim: 2,
     );
 
     final found = await discovery().discover(bindingId: binding.id);
 
     expect(found.bootstrap.manifest.deviceId, 'bootstrap-device');
-    expect(found.latestGraph?.manifest.deviceId, 'live-device');
     expect(found.schemaRatchet, 1);
     expect(states.state.peerManifestHighWater, hasLength(2));
+    expect(transport.sectionReads, <String>['bootstrap']);
+  });
+
+  test('a future bootstrap schema is ratcheted before adoption', () async {
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'future-bootstrap-device',
+      manifestTime: now,
+      bootstrapTime: now,
+      bootstrapSchemaVersion: 2,
+    );
+
+    await expectLater(
+      discovery().discover(bindingId: binding.id),
+      throwsA(isA<WebDavSyncBootstrapUpgradeRequiredException>()),
+    );
+
+    expect(states.state.schemaRatchet, 2);
+    expect(transport.sectionReads, isEmpty);
   });
 
   test(
@@ -262,7 +281,7 @@ void main() {
     },
   );
 
-  test('active graph scan does not download a dormant bootstrap', () async {
+  test('active maintenance scan downloads no graph or bootstrap', () async {
     await transport.addPeer(
       codec: codec,
       root: root,
@@ -299,8 +318,8 @@ void main() {
 
     final found = await discovery().scanActive(bindingId: binding.id);
 
-    expect(found.latestGraph?.manifest.deviceId, 'live-device');
-    expect(transport.sectionReads, <String>['graph']);
+    expect(found.manifests, hasLength(2));
+    expect(transport.sectionReads, isEmpty);
     expect((await store.load()).activeBindingId, binding.id);
   });
 
@@ -448,6 +467,8 @@ final class _FakeDiscoveryTransport implements WebDavSyncTransport {
     DateTime? graphTime,
     bool corruptBootstrap = false,
     bool malformedBootstrap = false,
+    int bootstrapSchemaVersion = 1,
+    int graphSchemaClaim = 1,
   }) async {
     final references = <WebDavSyncSectionReference>[];
     Future<void> addGraph(WebDavSyncGraphKind kind, DateTime updatedAt) async {
@@ -461,7 +482,9 @@ final class _FakeDiscoveryTransport implements WebDavSyncTransport {
         circleId: root.document.circleId,
         deviceId: deviceId,
         logicalName: kind.logicalName,
-        schemaVersion: 1,
+        schemaVersion: kind == WebDavSyncGraphKind.bootstrap
+            ? bootstrapSchemaVersion
+            : 1,
         payload: payload,
         maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
       );
@@ -473,7 +496,9 @@ final class _FakeDiscoveryTransport implements WebDavSyncTransport {
         contentHash: contentHashOf(encoded),
         semanticDigest: WebDavSyncGraphBuilder.semanticDigest(package),
         updatedAtMs: updatedAt.millisecondsSinceEpoch,
-        schemaVersion: 1,
+        schemaVersion: kind == WebDavSyncGraphKind.bootstrap
+            ? bootstrapSchemaVersion
+            : 1,
         size: encoded.length,
       );
       sections['$deviceId:${reference.contentHash}'] = encoded;
@@ -491,7 +516,7 @@ final class _FakeDiscoveryTransport implements WebDavSyncTransport {
       deviceId: deviceId,
       updatedAtMs: manifestTime.millisecondsSinceEpoch,
       clockOffsetMs: 0,
-      graphSchemaClaim: 1,
+      graphSchemaClaim: graphSchemaClaim,
       profileMap: const <String, String>{'profile-0': 'profile-circle'},
       resourceMap: const <String, String>{},
       sections: references,

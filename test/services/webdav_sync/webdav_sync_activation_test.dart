@@ -13,6 +13,7 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
@@ -145,7 +146,7 @@ void main() {
       expect(transport.events.last, 'close');
       expect(
         transport.events.where((event) => event.startsWith('write:section:')),
-        hasLength(4),
+        hasLength(5),
       );
       final snapshot = await bindingStore.load();
       expect(snapshot.activeBindingId, binding.id);
@@ -158,11 +159,38 @@ void main() {
         isNotEmpty,
       );
       expect(states.state.ownManifest, isNotNull);
-      expect(states.state.ownManifest!.sections, hasLength(4));
+      expect(states.state.ownManifest!.sections, hasLength(5));
+      expect(
+        states.state.ownManifest!.sections.map((section) => section.name),
+        containsAll(<String>[
+          'bootstrap',
+          'profiles',
+          'resources',
+          'hot/profile-circle',
+          'tombstones/profile-circle',
+        ]),
+      );
+      expect(states.state.ownManifest!.section('graph'), isNull);
       expect(seeds.seenCircleId, isNotNull);
       expect(seeds.seenCircleKey, isNotNull);
     },
   );
+
+  test('activation refuses a seed missing a required circle section', () async {
+    seeds.omittedSection = 'resources';
+
+    await expectLater(
+      initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      ),
+      throwsStateError,
+    );
+
+    expect(transport.sections, isEmpty);
+    expect(transport.marker, isNull);
+    expect(transport.manifest, isNull);
+  });
 
   test('ambiguous root success never activates', () async {
     transport.createError = const WebDavException(
@@ -707,7 +735,8 @@ void main() {
       authorization: authorization,
     );
 
-    expect(result.manifest.sections, hasLength(4));
+    expect(result.manifest.sections, hasLength(5));
+    expect(result.manifest.section('graph'), isNull);
     expect(seeds.seenCircleId, 'existing-circle');
     expect(seeds.seenCircleKey, isNotNull);
     expect(states.state.ownManifest, result.manifest);
@@ -773,6 +802,7 @@ WebDavSyncManifest _manifest({
 final class _FakeSeedSource implements WebDavSyncSeedSource {
   List<String>? events;
   bool guardPreferences = false;
+  String? omittedSection;
   String? seenCircleId;
   WebDavSyncCircleKey? seenCircleKey;
 
@@ -802,45 +832,82 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
       identityMaps: maps,
       profileMap: const <String, String>{'profile-0': 'profile-circle'},
       resourceMap: const <String, String>{},
-      sections: const <WebDavSyncSeedSection>[
-        WebDavSyncSeedSection(
-          name: 'bootstrap',
-          schemaVersion: 1,
-          payload: 'bootstrap-payload',
-          semanticDigest:
-              '1111111111111111111111111111111111111111111111111111111111111111',
-          maxBytes: 1024 * 1024,
-        ),
-        WebDavSyncSeedSection(
-          name: 'graph',
-          schemaVersion: 1,
-          payload: 'graph-payload',
-          semanticDigest:
-              '2222222222222222222222222222222222222222222222222222222222222222',
-          maxBytes: 1024 * 1024,
-        ),
-        WebDavSyncSeedSection(
-          name: 'hot/profile-circle',
-          schemaVersion: 1,
-          payload: <String, Object?>{'version': 1},
-          semanticDigest:
-              '3333333333333333333333333333333333333333333333333333333333333333',
-          maxBytes: 1024 * 1024,
-        ),
-        WebDavSyncSeedSection(
-          name: 'tombstones/profile-circle',
-          schemaVersion: 1,
-          payload: <String, Object?>{'version': 1},
-          semanticDigest:
-              '4444444444444444444444444444444444444444444444444444444444444444',
-          maxBytes: 1024 * 1024,
-        ),
-      ],
+      sections: List<WebDavSyncSeedSection>.unmodifiable(
+        const <WebDavSyncSeedSection>[
+          WebDavSyncSeedSection(
+            name: 'bootstrap',
+            schemaVersion: 1,
+            payload: 'bootstrap-payload',
+            semanticDigest:
+                '1111111111111111111111111111111111111111111111111111111111111111',
+            maxBytes: 1024 * 1024,
+          ),
+          WebDavSyncSeedSection(
+            name: 'profiles',
+            schemaVersion: 1,
+            payload: <String, Object?>{
+              'version': 1,
+              'profiles': <String, Object?>{},
+            },
+            semanticDigest:
+                '2222222222222222222222222222222222222222222222222222222222222222',
+            maxBytes: 1024 * 1024,
+          ),
+          WebDavSyncSeedSection(
+            name: 'resources',
+            schemaVersion: 1,
+            payload: <String, Object?>{
+              'version': 1,
+              'resources': <String, Object?>{},
+              'grants': <String, Object?>{},
+              'settings': <String, Object?>{},
+              'bindings': <String, Object?>{},
+            },
+            semanticDigest:
+                '6666666666666666666666666666666666666666666666666666666666666666',
+            maxBytes: 1024 * 1024,
+          ),
+          WebDavSyncSeedSection(
+            name: 'hot/profile-circle',
+            schemaVersion: 1,
+            payload: <String, Object?>{'version': 1},
+            semanticDigest:
+                '3333333333333333333333333333333333333333333333333333333333333333',
+            maxBytes: 1024 * 1024,
+          ),
+          WebDavSyncSeedSection(
+            name: 'tombstones/profile-circle',
+            schemaVersion: 1,
+            payload: <String, Object?>{'version': 1},
+            semanticDigest:
+                '4444444444444444444444444444444444444444444444444444444444444444',
+            maxBytes: 1024 * 1024,
+          ),
+        ].where((section) => section.name != omittedSection),
+      ),
       profileStates: const <String, WebDavSyncProfileEngineState>{},
       bootstrapDatabaseDigest:
           '5555555555555555555555555555555555555555555555555555555555555555',
       beforeRootCommit: () async => events?.add('barrier'),
       preferenceMutationToken: mutationToken,
+      circleProfiles: const WebDavSyncProfilesDocument(
+        profiles: <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{},
+      ),
+      circleResources: const WebDavSyncResourcesDocument(
+        resources: <String, WebDavSyncResourceEntry>{},
+        grants:
+            <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{},
+        settings:
+            <
+              String,
+              Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+            >{},
+        bindings:
+            <
+              String,
+              Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
+            >{},
+      ),
     );
 
     return guardPreferences

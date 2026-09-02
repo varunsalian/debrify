@@ -115,7 +115,7 @@ void main() {
       expect(states.state.adoption, isNull);
       expect(states.state.prunePendingProfileIds, <String>{'old-kid'});
       expect(states.state.blocksAllPushes, isFalse);
-      expect(states.state.blocksGraphPushes, isTrue);
+      expect(states.state.blocksSeedPushes, isTrue);
     },
   );
 
@@ -143,7 +143,7 @@ void main() {
         'old-admin',
         'old-kid',
       });
-      expect(states.state.blocksGraphPushes, isTrue);
+      expect(states.state.blocksSeedPushes, isTrue);
     },
   );
 
@@ -239,7 +239,6 @@ void main() {
         circleToLocalResources: const <String, String>{
           'circle-resource': 'old-resource',
         },
-        pendingGraphDigest: 'a' * 64,
         adoption: WebDavSyncAdoptionRecord(
           adoptionId: 'adoption-1',
           mode: WebDavSyncAdoptionMode.refresh,
@@ -273,7 +272,6 @@ void main() {
       expect(result, isNull);
       expect(operations.profileIds, <String>{'old-admin', 'old-kid'});
       expect(states.state.adoption, isNull);
-      expect(states.state.pendingGraphDigest, isNull);
       expect(events, <String>[
         'gate:hold',
         'active',

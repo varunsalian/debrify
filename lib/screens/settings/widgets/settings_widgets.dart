@@ -43,36 +43,12 @@ class WebDavSyncPendingBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: MainPageBridge.webDavGraphChangePending,
-      builder: (context, pending, _) {
-        if (!pending) {
-          return Icon(
-            Icons.chevron_right_rounded,
-            size: 20,
-            color:
-                IconTheme.of(context).color ??
-                AppThemeScope.of(context).settings.dim2,
-          );
-        }
-        final settings = AppThemeScope.of(context).settings;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: settings.warning.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            'UPDATE',
-            style: TextStyle(
-              color: settings.warning,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-            ),
-          ),
-        );
-      },
+    return Icon(
+      Icons.chevron_right_rounded,
+      size: 20,
+      color:
+          IconTheme.of(context).color ??
+          AppThemeScope.of(context).settings.dim2,
     );
   }
 }

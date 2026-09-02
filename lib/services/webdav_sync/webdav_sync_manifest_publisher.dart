@@ -39,7 +39,7 @@ abstract interface class WebDavSyncSeedPublisher {
   });
 }
 
-/// Publishes this device's complete bootstrap/graph/hot seed after an
+/// Publishes this device's complete bootstrap/circle/hot seed after an
 /// existing-root adoption. The marker is checked both before and after the
 /// manifest commit, and every immutable section plus the manifest is read
 /// back and authenticated before local state can point at it.
@@ -150,7 +150,9 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
       await transport.ensureOwnLayout(namespace.deviceId);
       final references = <WebDavSyncSectionReference>[];
       final sectionIo = WebDavSyncLargeSectionIo(codec: _codec);
-      for (final section in material.sections) {
+      for (final section in material.sections.where(
+        (section) => section.name != WebDavSyncGraphKind.graph.logicalName,
+      )) {
         final reference = await sectionIo.sealWriteVerify(
           transport: transport,
           key: root.key,
@@ -233,10 +235,6 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
               namespace.deviceId,
             }),
             ownManifest: verifiedManifest,
-            appliedGraphDigest: verifiedManifest
-                .section(WebDavSyncGraphKind.graph.logicalName)
-                ?.semanticDigest,
-            clearPendingGraph: true,
             lastBootstrapCheckMs: localNowMs,
             publishedBootstrapDatabaseDigest: material.bootstrapDatabaseDigest,
             lastSuccessfulSyncMs: clockDecision.serverNowMs!,
@@ -259,10 +257,11 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
     final hasCircleResources = material.circleResources != null;
     if (material.sections.isEmpty ||
         !names.contains(WebDavSyncGraphKind.bootstrap.logicalName) ||
-        !names.contains(WebDavSyncGraphKind.graph.logicalName) ||
-        hasCircleProfiles != hasCircleResources ||
-        hasCircleProfiles &&
-            (!names.contains('profiles') || !names.contains('resources')) ||
+        names.contains(WebDavSyncGraphKind.graph.logicalName) ||
+        !hasCircleProfiles ||
+        !hasCircleResources ||
+        !names.contains('profiles') ||
+        !names.contains('resources') ||
         material.identityMaps.circleToLocalProfiles.keys.any(
           (circleId) =>
               !names.contains('hot/$circleId') ||
