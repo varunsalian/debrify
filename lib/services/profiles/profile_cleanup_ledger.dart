@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../utils/app_storage.dart';
+import '../diagnostic_log.dart';
 import 'profile_data_generation.dart';
 import 'profile_registry.dart';
 
@@ -38,7 +40,26 @@ class ProfileCleanupLedger {
         await _write(pending);
         continue;
       }
-      await ProfileDataGenerationManager.deleteAllProfileData(profileId);
+      try {
+        await ProfileDataGenerationManager.deleteAllProfileData(profileId);
+      } on FileSystemException catch (error, stackTrace) {
+        // Windows refuses to remove a tree while any file in it is open or
+        // read-only; OneDrive-redirected Documents folders hit this routinely
+        // (issue #49). The profile is already gone from the registry, so the
+        // leftover files are inert. Keep the entry pending for a later launch
+        // rather than turning housekeeping into a boot failure every start.
+        debugPrint(
+          'Profile cleanup deferred for $profileId: ${error.osError ?? error}',
+        );
+        DiagnosticLog.instance.recordError(
+          source: 'profiles',
+          event: 'cleanup_deferred',
+          error: error,
+          stackTrace: stackTrace,
+          flushImmediately: false,
+        );
+        continue;
+      }
       pending.remove(profileId);
       await _write(pending);
     }
