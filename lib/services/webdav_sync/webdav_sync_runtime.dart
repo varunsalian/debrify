@@ -12,6 +12,7 @@ import '../profiles/profile_bootstrap.dart';
 import '../profiles/profile_database_adoption_gate.dart';
 import '../profiles/profile_lifecycle.dart';
 import '../profiles/profile_package_service.dart';
+import '../profiles/profile_preferences.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../profiles/profile_runtime.dart';
 import '../webdav_protocol_client.dart';
@@ -84,6 +85,7 @@ final class WebDavSyncRuntimeStatus {
     required this.adminPruneBlocked,
     required this.deviceClockWarning,
     required this.clockPauseReason,
+    this.lastPushMs,
     this.localStateMissing = false,
     this.pruneBlockingProfiles = const <String>[],
     this.safetyCleanupBlocked = false,
@@ -95,6 +97,7 @@ final class WebDavSyncRuntimeStatus {
   final bool adminPruneBlocked;
   final bool deviceClockWarning;
   final WebDavSyncClockPauseReason? clockPauseReason;
+  final int? lastPushMs;
   final bool localStateMissing;
   final List<String> pruneBlockingProfiles;
   final bool safetyCleanupBlocked;
@@ -134,6 +137,9 @@ final class WebDavSyncRuntime
   OpenedWebDavSyncRoot? _cachedRoot;
   String? _cachedRootRevision;
   List<int>? _cachedRootMarker;
+
+  @override
+  bool get playbackActive => _playbackActive;
 
   @override
   bool get playbackActiveOnTelevision =>
@@ -217,7 +223,7 @@ final class WebDavSyncRuntime
       'WebDAV sync startup recovery paused (${error.runtimeType}); '
       'the app will continue',
     );
-    _scheduler?.disarm();
+    _disarmScheduler();
     _graphTimer?.cancel();
     _graphTimer = null;
     _clearCachedRoot();
@@ -275,7 +281,7 @@ final class WebDavSyncRuntime
   void pauseForReconfiguration() {
     _reconfigurationPaused = true;
     _clearCachedRoot();
-    _scheduler?.disarm();
+    _disarmScheduler();
     _graphTimer?.cancel();
     _graphTimer = null;
   }
@@ -374,6 +380,7 @@ final class WebDavSyncRuntime
         adminPruneBlocked: state.prunePendingProfileIds.isNotEmpty,
         deviceClockWarning: state.deviceClockWarning,
         clockPauseReason: state.lastClockPauseReason,
+        lastPushMs: state.lastPushMs,
         pruneBlockingProfiles: List<String>.unmodifiable(blockingNames),
         safetyCleanupBlocked: state.safetyProtectedProfileIds.isNotEmpty,
       );
@@ -626,7 +633,7 @@ final class WebDavSyncRuntime
 
   Future<void> _armIfActive() async {
     if (_reconfigurationPaused) {
-      _scheduler?.disarm();
+      _disarmScheduler();
       _graphTimer?.cancel();
       _graphTimer = null;
       return;
@@ -635,16 +642,26 @@ final class WebDavSyncRuntime
     final active = stored.activeBinding;
     if (active == null || active.lifecycle != WebDavSyncLifecycle.active) {
       _clearCachedRoot();
-      _scheduler?.disarm();
+      _disarmScheduler();
       _graphTimer?.cancel();
       _graphTimer = null;
       return;
     }
     _scheduler!.arm(_activeContext);
+    ProfilePreferences.webDavSyncLocalChangeSink = _onLocalProfileChange;
     _graphTimer?.cancel();
     _graphTimer = Timer.periodic(WebDavSyncGraphTier.cadence, (_) {
       unawaited(_maintainGraph(force: false));
     });
+  }
+
+  void _onLocalProfileChange(String _, String logicalKey) {
+    _scheduler?.notifyLocalChange(logicalKey);
+  }
+
+  void _disarmScheduler() {
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
+    _scheduler?.disarm();
   }
 
   Future<WebDavSyncCycleReport> _signalWithGraph(
@@ -790,6 +807,7 @@ final class WebDavSyncRuntime
 
   @visibleForTesting
   void debugResetInitialization() {
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     _scheduler?.dispose();
     _graphTimer?.cancel();
     _graphTimer = null;
@@ -957,13 +975,19 @@ final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
   Future<WebDavSyncCycleReport> runCycle(
     WebDavSyncCycleContext? context, {
     bool allowPreActivation = false,
+    WebDavSyncTrigger? trigger,
   }) => operations.run(
-    () => _runCycle(context, allowPreActivation: allowPreActivation),
+    () => _runCycle(
+      context,
+      allowPreActivation: allowPreActivation,
+      trigger: trigger,
+    ),
   );
 
   Future<WebDavSyncCycleReport> _runCycle(
     WebDavSyncCycleContext? context, {
     required bool allowPreActivation,
+    required WebDavSyncTrigger? trigger,
   }) async {
     if (context == null || context.namespaceId == null) {
       return const WebDavSyncCycleReport(
@@ -1008,6 +1032,7 @@ final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
       final report = await engine.runCycle(
         context,
         allowPreActivation: allowPreActivation,
+        trigger: trigger,
       );
       _authenticationFailures.recordSuccess(binding.id);
       return report;

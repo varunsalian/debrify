@@ -1183,6 +1183,7 @@ final class _FakeCycleRunner implements WebDavSyncCycleRunner {
   Future<WebDavSyncCycleReport> runCycle(
     WebDavSyncCycleContext? context, {
     bool allowPreActivation = false,
+    WebDavSyncTrigger? trigger,
   }) async {
     events.add('merge');
     return const WebDavSyncCycleReport(

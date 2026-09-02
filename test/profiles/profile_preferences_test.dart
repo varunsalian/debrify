@@ -19,9 +19,13 @@ void main() {
     });
     ProfileRuntime.debugReset();
     ProfilePreferences.debugResetMutationTracking();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
   });
 
-  tearDown(ProfileRuntime.debugReset);
+  tearDown(() {
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
+    ProfileRuntime.debugReset();
+  });
 
   test(
     'committed reads and clear are restricted to captured generation',
@@ -54,6 +58,79 @@ void main() {
     expect(prefs.getString('legacy'), 'kept');
     await prefs.setBool('enabled', true);
     expect((await SharedPreferences.getInstance()).getBool('enabled'), isTrue);
+  });
+
+  test('captured and sync-apply writes emit no local-change signals', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final notifications = <String>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (_, key) {
+      notifications.add(key);
+    };
+
+    for (final access in const <CapturedProfilePreferenceAccess>[
+      CapturedProfilePreferenceAccess.migration,
+      CapturedProfilePreferenceAccess.profileCreation,
+      CapturedProfilePreferenceAccess.restore,
+      CapturedProfilePreferenceAccess.connectionGrant,
+      CapturedProfilePreferenceAccess.syncApply,
+    ]) {
+      final captured = await ProfilePreferences.forCapturedScope(scope, access);
+      expect(
+        await captured.setString('captured_${access.name}', 'value'),
+        isTrue,
+      );
+    }
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    expect(
+      await sync.applySyncBatch(<String, Object>{
+        for (var index = 0; index < 10; index++) 'remote_$index': index,
+      }, authorizationBarrier: () {}),
+      isTrue,
+    );
+
+    expect(notifications, isEmpty);
+  });
+
+  test('a successful ordinary portable write emits one local change', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final notifications = <(String, String)>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (profileId, key) {
+      notifications.add((profileId, key));
+    };
+    final prefs = await ProfilePreferences.instance();
+
+    expect(await prefs.setString('language', 'en'), isTrue);
+
+    expect(notifications, <(String, String)>[('one', 'language')]);
+  });
+
+  test('a throwing local-change sink cannot fail its write', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    ProfilePreferences.webDavSyncLocalChangeSink = (_, _) {
+      throw StateError('scheduler failed');
+    };
+    final prefs = await ProfilePreferences.instance();
+
+    expect(await prefs.setString('language', 'fr'), isTrue);
+    expect(prefs.getString('language'), 'fr');
   });
 
   test('Home card orientation is isolated per profile', () async {

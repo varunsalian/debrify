@@ -26,6 +26,7 @@ void main() {
   setUp(() async {
     ProfileRuntime.debugReset();
     ProfilePreferences.debugResetMutationTracking();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     SharedPreferences.setMockInitialValues(const <String, Object>{});
     DeviceKeyProvider.debugInstallCipher(
       MemoryDeviceSecretCipher(List<int>.filled(32, 4)),
@@ -49,6 +50,7 @@ void main() {
 
   tearDown(() async {
     ProfileRuntime.debugReset();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     WebDavSyncTombstoneRecorder.debugReset();
     DeviceKeyProvider.debugReset();
     if (await stateDirectory.exists()) {
@@ -78,6 +80,28 @@ void main() {
       expect(enumerated, isFalse);
     },
   );
+
+  test('recorded deletes notify only while a sync binding exists', () async {
+    final notifications = <(String, String)>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (profileId, key) {
+      notifications.add((profileId, key));
+    };
+    const key = 'movie:tt-local-change';
+
+    await WebDavSyncTombstoneRecorder.recordForProfile(
+      'local-profile',
+      const <String>{key},
+    );
+    expect(notifications, isEmpty);
+
+    await _activateBinding(bindingStore, circleId: 'circle-local-change');
+    await WebDavSyncTombstoneRecorder.recordForProfile(
+      'local-profile',
+      const <String>{key},
+    );
+
+    expect(notifications, <(String, String)>[('local-profile', key)]);
+  });
 
   test('recorder is inert before Active and mapped afterwards', () async {
     const config = WebDavConfig(
@@ -352,6 +376,7 @@ void main() {
 
   test('graph and bootstrap cadence state round-trips with strict digests', () {
     final source = WebDavSyncEngineState(
+      lastPushMs: 50,
       lastGraphCheckMs: 100,
       lastBootstrapCheckMs: 200,
       appliedGraphDigest: 'a' * 64,
@@ -366,6 +391,7 @@ void main() {
     final restored = WebDavSyncEngineState.fromJson(source.toJson());
 
     expect(restored.lastGraphCheckMs, 100);
+    expect(restored.lastPushMs, 50);
     expect(restored.lastBootstrapCheckMs, 200);
     expect(restored.publishedBootstrapDatabaseDigest, 'c' * 64);
     expect(restored.deviceClockWarning, isTrue);

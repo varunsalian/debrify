@@ -168,6 +168,10 @@ abstract final class WebDavSyncTombstoneRecorder {
           binding,
           'WebDAV sync deletion history reached its safe limit',
         );
+        return;
+      }
+      for (final key in normalizedKeys) {
+        ProfilePreferences.notifyWebDavSyncLocalChange(localProfileId, key);
       }
     }, marksMutation: true);
   }

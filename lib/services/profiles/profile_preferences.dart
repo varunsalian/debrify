@@ -10,6 +10,9 @@ import 'profile_scope.dart';
 import 'profile_credential_facade.dart';
 import 'tvos_profile_recovery_store.dart';
 
+typedef WebDavSyncLocalChangeSink =
+    void Function(String localProfileId, String logicalKey);
+
 /// SharedPreferences-compatible facade that applies the captured profile
 /// generation in committed mode and is byte-for-byte legacy-compatible before
 /// migration commits.
@@ -208,6 +211,21 @@ class ProfilePreferences implements SharedPreferences {
   /// callback here avoids coupling this preference facade back to the
   /// projection implementation that already depends on it.
   static Future<void> Function(ProfileScope scope)? nativeProjectionPublisher;
+
+  /// Armed only while recurring WebDAV sync has an active scheduler. The
+  /// callback is deliberately synchronous; preference writes never await sync.
+  static WebDavSyncLocalChangeSink? webDavSyncLocalChangeSink;
+
+  static void notifyWebDavSyncLocalChange(
+    String localProfileId,
+    String logicalKey,
+  ) {
+    try {
+      webDavSyncLocalChangeSink?.call(localProfileId, logicalKey);
+    } catch (_) {
+      // Sync scheduling must never turn a successful local write into failure.
+    }
+  }
 
   static Future<ProfilePreferences> instance() async {
     if (!ProfileRuntime.isInitialized) {
@@ -679,6 +697,12 @@ class ProfilePreferences implements SharedPreferences {
         ProfileRuntime.isInitialized &&
         ProfileRuntime.isProfileCommitted) {
       await TvOsProfileRecoveryStore.checkpointPreferenceMutation();
+    }
+    if (success &&
+        _capturedAccess == null &&
+        scope != null &&
+        logicalKey != null) {
+      notifyWebDavSyncLocalChange(scope.profileId, logicalKey);
     }
     return success;
   }

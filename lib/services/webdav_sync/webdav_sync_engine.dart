@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
+import '../diagnostic_log.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_codec.dart';
@@ -12,6 +13,16 @@ import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_setup_service.dart';
 import 'webdav_sync_transport.dart';
+
+enum WebDavSyncTrigger {
+  launch,
+  foreground,
+  playbackStopped,
+  background,
+  periodic,
+  manual,
+  localChange,
+}
 
 enum WebDavSyncCycleDisposition {
   inactive,
@@ -126,6 +137,7 @@ abstract interface class WebDavSyncCycleRunner {
   Future<WebDavSyncCycleReport> runCycle(
     WebDavSyncCycleContext? context, {
     bool allowPreActivation = false,
+    WebDavSyncTrigger? trigger,
   });
 }
 
@@ -169,7 +181,42 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   Future<WebDavSyncCycleReport> runCycle(
     WebDavSyncCycleContext? context, {
     bool allowPreActivation = false,
-  }) => _cycleLock.synchronized(() async {
+    WebDavSyncTrigger? trigger,
+  }) => _cycleLock.synchronized(
+    () => _runInstrumentedCycle(
+      context,
+      allowPreActivation: allowPreActivation,
+      trigger: trigger,
+    ),
+  );
+
+  Future<WebDavSyncCycleReport> _runInstrumentedCycle(
+    WebDavSyncCycleContext? context, {
+    required bool allowPreActivation,
+    required WebDavSyncTrigger? trigger,
+  }) async {
+    final instrumentation = _CycleInstrumentation(trigger);
+    try {
+      final report = await _runCycle(
+        context,
+        allowPreActivation: allowPreActivation,
+        instrumentation: instrumentation,
+      );
+      instrumentation.disposition = report.disposition.name;
+      return report;
+    } catch (_) {
+      instrumentation.disposition = 'failed';
+      rethrow;
+    } finally {
+      instrumentation.record();
+    }
+  }
+
+  Future<WebDavSyncCycleReport> _runCycle(
+    WebDavSyncCycleContext? context, {
+    required bool allowPreActivation,
+    required _CycleInstrumentation instrumentation,
+  }) async {
     if (context == null ||
         !context.isComplete ||
         (!context.active && !allowPreActivation)) {
@@ -217,46 +264,67 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         .where((entry) => entry.value.pendingApply != null)
         .toList(growable: false);
     if (pendingProfiles.isNotEmpty) {
-      session = await _localAdapter.beginCycle();
-      for (final entry in pendingProfiles) {
-        final pending = entry.value.pendingApply!;
-        if (context.circleToLocalProfiles![entry.key] !=
-            pending.localProfileId) {
-          throw StateError('WebDAV sync pending apply mapping changed');
+      final phaseStarted = instrumentation.startPhase();
+      try {
+        session = await _localAdapter.beginCycle();
+        for (final entry in pendingProfiles) {
+          final pending = entry.value.pendingApply!;
+          if (context.circleToLocalProfiles![entry.key] !=
+              pending.localProfileId) {
+            throw StateError('WebDAV sync pending apply mapping changed');
+          }
+          await _localAdapter.applyProfile(
+            session,
+            pending.localProfileId,
+            pending.values,
+            replayingPending: true,
+          );
+          await _stateRepository.update(namespaceId, (current) {
+            final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+              current.profiles,
+            );
+            final profile =
+                profiles[entry.key] ?? const WebDavSyncProfileEngineState();
+            profiles[entry.key] = profile.copyWith(
+              baseline: pending.target,
+              clearPendingApply: true,
+            );
+            return current.copyWith(
+              profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                profiles,
+              ),
+            );
+          });
         }
-        await _localAdapter.applyProfile(
-          session,
-          pending.localProfileId,
-          pending.values,
-          replayingPending: true,
-        );
-        await _stateRepository.update(namespaceId, (current) {
-          final profiles = Map<String, WebDavSyncProfileEngineState>.from(
-            current.profiles,
-          );
-          final profile =
-              profiles[entry.key] ?? const WebDavSyncProfileEngineState();
-          profiles[entry.key] = profile.copyWith(
-            baseline: pending.target,
-            clearPendingApply: true,
-          );
-          return current.copyWith(
-            profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
-              profiles,
-            ),
-          );
-        });
+        state = await _stateRepository.load(namespaceId);
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
       }
-      state = await _stateRepository.load(namespaceId);
     }
 
     final transport = _transportFactory(context);
     try {
-      final rootRead = await _readRequiredRoot(transport);
+      late final WebDavBytesResult rootRead;
+      var phaseStarted = instrumentation.startPhase();
+      try {
+        rootRead = await _readRequiredRoot(transport, instrumentation);
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.root, phaseStarted);
+      }
       if (!_bytesEqual(markerPin, rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
-      final listing = await transport.listDeviceIds();
+      late final WebDavSyncPeerListing listing;
+      phaseStarted = instrumentation.startPhase();
+      try {
+        instrumentation.requestStarted();
+        listing = await transport.listDeviceIds();
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.list, phaseStarted);
+      }
+      instrumentation.peerCount = listing.deviceIds
+          .where((listedDeviceId) => listedDeviceId != deviceId)
+          .length;
       final localNowMs = _clock().toUtc().millisecondsSinceEpoch;
       final clockDecision = WebDavSyncClockPolicy.observe(
         prior: state.clock,
@@ -299,6 +367,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         deviceIds: listing.deviceIds,
         state: state,
         serverNowMs: serverNowMs,
+        instrumentation: instrumentation,
       );
       final verifiedOwnManifest = manifests[deviceId];
       if (verifiedOwnManifest != null &&
@@ -340,76 +409,99 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           manifests: manifests,
           circleProfileId: circleProfileId,
           serverNowMs: serverNowMs,
+          instrumentation: instrumentation,
         );
-        final localSnapshot = await _localAdapter.readProfile(
-          session,
-          localProfileId,
-        );
-        final profileState =
-            state.profiles[circleProfileId] ??
-            const WebDavSyncProfileEngineState();
-        final built = WebDavSyncHotMerge.build(
-          WebDavSyncBuildInput(
+        final phaseStarted = instrumentation.startPhase();
+        try {
+          final localSnapshot = await _localAdapter.readProfile(
+            session,
+            localProfileId,
+          );
+          final profileState =
+              state.profiles[circleProfileId] ??
+              const WebDavSyncProfileEngineState();
+          final built = WebDavSyncHotMerge.build(
+            WebDavSyncBuildInput(
+              circleProfileId: circleProfileId,
+              deviceId: deviceId,
+              rawPreferences: localSnapshot.rawPreferences,
+              portablePreferences: localSnapshot.portablePreferences,
+              identityMaps: identityMaps,
+              localNowMs: localNowMs,
+              clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+              serverNowMs: serverNowMs,
+              previous: profileState.baseline,
+            ),
+          );
+          final normalizedLocalTombstones = _normalizeLocalTombstones(
+            profileState.tombstones,
+            clockDecision,
+            identityMaps,
+            currentRecordKeys: built.document.watchState.records.keys.toSet(),
+          );
+          final localTombstoneDocument = WebDavSyncTombstoneDocument(
             circleProfileId: circleProfileId,
-            deviceId: deviceId,
-            rawPreferences: localSnapshot.rawPreferences,
-            portablePreferences: localSnapshot.portablePreferences,
-            identityMaps: identityMaps,
-            localNowMs: localNowMs,
-            clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+            items: normalizedLocalTombstones,
+          );
+          identityMaps.assertContainsNoLocalIds(
+            localTombstoneDocument.toJson(),
+          );
+          final lastSuccess = state.lastSuccessfulSyncMs;
+          final dormantSince =
+              lastSuccess != null &&
+                  serverNowMs - lastSuccess >= tombstoneHorizon.inMilliseconds
+              ? lastSuccess
+              : null;
+          final merged = WebDavSyncHotMerge.clampForPublication(
+            WebDavSyncHotMerge.merge(
+              local: built.document,
+              peers: peerData.hotDocuments,
+              tombstoneDocuments: <WebDavSyncTombstoneDocument>[
+                localTombstoneDocument,
+                ...peerData.tombstoneDocuments,
+              ],
+              nowMs: serverNowMs,
+              tombstoneHorizon: tombstoneHorizon,
+              dormantSinceMs: dormantSince,
+            ),
             serverNowMs: serverNowMs,
-            previous: profileState.baseline,
-          ),
-        );
-        final normalizedLocalTombstones = _normalizeLocalTombstones(
-          profileState.tombstones,
-          clockDecision,
-          identityMaps,
-          currentRecordKeys: built.document.watchState.records.keys.toSet(),
-        );
-        final localTombstoneDocument = WebDavSyncTombstoneDocument(
-          circleProfileId: circleProfileId,
-          items: normalizedLocalTombstones,
-        );
-        identityMaps.assertContainsNoLocalIds(localTombstoneDocument.toJson());
-        final lastSuccess = state.lastSuccessfulSyncMs;
-        final dormantSince =
-            lastSuccess != null &&
-                serverNowMs - lastSuccess >= tombstoneHorizon.inMilliseconds
-            ? lastSuccess
-            : null;
-        final merged = WebDavSyncHotMerge.clampForPublication(
-          WebDavSyncHotMerge.merge(
-            local: built.document,
-            peers: peerData.hotDocuments,
-            tombstoneDocuments: <WebDavSyncTombstoneDocument>[
-              localTombstoneDocument,
-              ...peerData.tombstoneDocuments,
-            ],
-            nowMs: serverNowMs,
-            tombstoneHorizon: tombstoneHorizon,
-            dormantSinceMs: dormantSince,
-          ),
-          serverNowMs: serverNowMs,
-        );
-        final values = WebDavSyncHotMerge.materializePreferences(
-          document: merged.document,
-          identityMaps: identityMaps,
-          localRichRecords: built.localRichRecords,
-          localPortableRecords: built.document.watchState.records,
-          protectedPreferenceKeys: built.protectedPreferenceKeys,
-        );
-        final pending = WebDavSyncPendingApply(
-          localProfileId: localProfileId,
-          values: values,
-          target: merged.document,
-        );
-        await _localAdapter.applyProfile(
-          session,
-          localProfileId,
-          values,
-          expectedMutationToken: localSnapshot.mutationToken,
-          beforeWrite: () => _stateRepository.update(namespaceId, (current) {
+          );
+          final values = WebDavSyncHotMerge.materializePreferences(
+            document: merged.document,
+            identityMaps: identityMaps,
+            localRichRecords: built.localRichRecords,
+            localPortableRecords: built.document.watchState.records,
+            protectedPreferenceKeys: built.protectedPreferenceKeys,
+          );
+          final pending = WebDavSyncPendingApply(
+            localProfileId: localProfileId,
+            values: values,
+            target: merged.document,
+          );
+          await _localAdapter.applyProfile(
+            session,
+            localProfileId,
+            values,
+            expectedMutationToken: localSnapshot.mutationToken,
+            beforeWrite: () => _stateRepository.update(namespaceId, (current) {
+              final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                current.profiles,
+              );
+              final currentProfile =
+                  profiles[circleProfileId] ??
+                  const WebDavSyncProfileEngineState();
+              profiles[circleProfileId] = currentProfile.copyWith(
+                pendingApply: pending,
+              );
+              return current.copyWith(
+                profiles:
+                    Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                      profiles,
+                    ),
+              );
+            }),
+          );
+          await _stateRepository.update(namespaceId, (current) {
             final profiles = Map<String, WebDavSyncProfileEngineState>.from(
               current.profiles,
             );
@@ -417,37 +509,24 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 profiles[circleProfileId] ??
                 const WebDavSyncProfileEngineState();
             profiles[circleProfileId] = currentProfile.copyWith(
-              pendingApply: pending,
+              baseline: merged.document,
+              clearPendingApply: true,
             );
             return current.copyWith(
               profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
                 profiles,
               ),
             );
-          }),
-        );
-        await _stateRepository.update(namespaceId, (current) {
-          final profiles = Map<String, WebDavSyncProfileEngineState>.from(
-            current.profiles,
+          });
+          profilesApplied++;
+          profileResults[circleProfileId] = _ProfileCycleResult(
+            document: merged.document,
+            tombstones: merged.tombstones,
+            originalLocalTombstones: profileState.tombstones,
           );
-          final currentProfile =
-              profiles[circleProfileId] ?? const WebDavSyncProfileEngineState();
-          profiles[circleProfileId] = currentProfile.copyWith(
-            baseline: merged.document,
-            clearPendingApply: true,
-          );
-          return current.copyWith(
-            profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
-              profiles,
-            ),
-          );
-        });
-        profilesApplied++;
-        profileResults[circleProfileId] = _ProfileCycleResult(
-          document: merged.document,
-          tombstones: merged.tombstones,
-          originalLocalTombstones: profileState.tombstones,
-        );
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
+        }
       }
 
       state = await _stateRepository.load(namespaceId);
@@ -470,6 +549,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         serverNowMs: serverNowMs,
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
         repairManifest: verifiedOwnManifest == null,
+        instrumentation: instrumentation,
       );
       state = await _stateRepository.update(namespaceId, (current) {
         final profiles = Map<String, WebDavSyncProfileEngineState>.from(
@@ -495,6 +575,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           ),
           ownManifest: push.manifest ?? current.ownManifest,
           lastSuccessfulSyncMs: serverNowMs,
+          lastPushMs: push.sectionsPushed > 0
+              ? serverNowMs
+              : current.lastPushMs,
         );
       });
       await _collectUnreferencedOwnSections(
@@ -503,6 +586,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         deviceId: deviceId,
         manifest: state.ownManifest,
         serverNowMs: serverNowMs,
+        instrumentation: instrumentation,
       );
       return WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.completed,
@@ -514,7 +598,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     } finally {
       transport.close();
     }
-  });
+  }
 
   Future<void> _collectUnreferencedOwnSections({
     required WebDavSyncTransport transport,
@@ -522,6 +606,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required String deviceId,
     required WebDavSyncManifest? manifest,
     required int serverNowMs,
+    required _CycleInstrumentation instrumentation,
   }) async {
     final gcTransport = transport is WebDavSyncSectionGcTransport
         ? transport as WebDavSyncSectionGcTransport
@@ -533,12 +618,16 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     final cutoff = serverNowMs - unreferencedSectionRetention.inMilliseconds;
     session.validate();
     late final List<WebDavSyncStoredSection> stored;
+    var phaseStarted = instrumentation.startPhase();
     try {
+      instrumentation.requestStarted();
       stored = await gcTransport.listOwnSections(deviceId);
     } on WebDavException catch (error) {
       if (error.kind == WebDavErrorKind.authentication) rethrow;
       _diagnostic('Deferred WebDAV sync section cleanup', error);
       return;
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
     }
     for (final section in stored) {
       if (referenced.contains(section.contentHash) ||
@@ -546,20 +635,28 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         continue;
       }
       session.validate();
+      phaseStarted = instrumentation.startPhase();
       try {
+        instrumentation.requestStarted();
         await gcTransport.deleteOwnSection(deviceId, section.contentHash);
       } on WebDavException catch (error) {
         if (error.kind == WebDavErrorKind.authentication) rethrow;
         _diagnostic('Deferred one WebDAV sync section deletion', error);
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
       }
     }
   }
 
   static Future<WebDavBytesResult> _readRequiredRoot(
     WebDavSyncTransport transport,
+    _CycleInstrumentation instrumentation,
   ) async {
+    instrumentation.requestStarted();
     try {
-      return await transport.readRootMarker();
+      final result = await transport.readRootMarker();
+      instrumentation.received(result.bytes.length);
+      return result;
     } on WebDavException catch (error) {
       if (error.kind == WebDavErrorKind.notFound) {
         throw const WebDavSyncRootMissingException();
@@ -574,14 +671,18 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required List<String> deviceIds,
     required WebDavSyncEngineState state,
     required int serverNowMs,
+    required _CycleInstrumentation instrumentation,
   }) async {
     if (deviceIds.length > WebDavSyncLimits.maxPeers) {
       throw StateError('WebDAV sync peer count exceeds its limit');
     }
     final result = <String, WebDavSyncManifest>{};
     for (final deviceId in deviceIds) {
+      final phaseStarted = instrumentation.startPhase();
       try {
+        instrumentation.requestStarted();
         final read = await transport.readManifest(deviceId);
+        instrumentation.received(read.bytes.length);
         final payload = await _codec.openDocument(
           key: context.root!.key,
           encoded: read.bytes,
@@ -614,6 +715,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         _diagnostic('Ignored a removed WebDAV sync peer', error);
       } on Exception catch (error) {
         _diagnostic('Ignored an invalid WebDAV sync peer manifest', error);
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.manifests, phaseStarted);
       }
     }
     return result;
@@ -625,6 +728,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required Map<String, WebDavSyncManifest> manifests,
     required String circleProfileId,
     required int serverNowMs,
+    required _CycleInstrumentation instrumentation,
   }) async {
     final hot = <WebDavSyncHotDocument>[];
     final tombstones = <WebDavSyncTombstoneDocument>[];
@@ -646,6 +750,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             entry.key,
             hotRef,
             circleProfileId,
+            instrumentation,
           );
           hot.add(document);
           if (hotRef.schemaVersion == 1) {
@@ -672,6 +777,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               entry.key,
               tombstoneRef,
               circleProfileId,
+              instrumentation,
             ),
           );
         } on WebDavException catch (error) {
@@ -699,6 +805,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     String deviceId,
     WebDavSyncSectionReference reference,
     String circleProfileId,
+    _CycleInstrumentation instrumentation,
   ) async {
     final cacheKey = _sectionCacheKey(
       root.document.circleId,
@@ -713,13 +820,20 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       return cached;
     }
     _removeCached(cacheKey);
-    final payload = await _readAndOpenSection(
-      transport: transport,
-      root: root,
-      deviceId: deviceId,
-      reference: reference,
-      maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
-    );
+    final phaseStarted = instrumentation.startPhase();
+    late final Object? payload;
+    try {
+      payload = await _readAndOpenSection(
+        transport: transport,
+        root: root,
+        deviceId: deviceId,
+        reference: reference,
+        maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+        instrumentation: instrumentation,
+      );
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.sections, phaseStarted);
+    }
     if (payload is! Map || payload['version'] != reference.schemaVersion) {
       throw const FormatException('WebDAV sync hot schema claim mismatch');
     }
@@ -739,6 +853,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     String deviceId,
     WebDavSyncSectionReference reference,
     String circleProfileId,
+    _CycleInstrumentation instrumentation,
   ) async {
     final cacheKey = _sectionCacheKey(
       root.document.circleId,
@@ -754,13 +869,20 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       return cached;
     }
     _removeCached(cacheKey);
-    final payload = await _readAndOpenSection(
-      transport: transport,
-      root: root,
-      deviceId: deviceId,
-      reference: reference,
-      maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
-    );
+    final phaseStarted = instrumentation.startPhase();
+    late final Object? payload;
+    try {
+      payload = await _readAndOpenSection(
+        transport: transport,
+        root: root,
+        deviceId: deviceId,
+        reference: reference,
+        maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+        instrumentation: instrumentation,
+      );
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.sections, phaseStarted);
+    }
     final document = WebDavSyncTombstoneDocument.fromJson(payload);
     if (document.circleProfileId != circleProfileId ||
         document.semanticDigest != reference.semanticDigest) {
@@ -779,12 +901,15 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required String deviceId,
     required WebDavSyncSectionReference reference,
     required int maxBytes,
+    required _CycleInstrumentation instrumentation,
   }) async {
+    instrumentation.requestStarted();
     final read = await transport.readSection(
       deviceId,
       reference,
       maxBytes: maxBytes,
     );
+    instrumentation.received(read.bytes.length);
     if (read.bytes.length != reference.size ||
         contentHashOf(read.bytes) != reference.contentHash) {
       throw const FormatException('WebDAV sync section content mismatch');
@@ -811,6 +936,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required int serverNowMs,
     required int clockOffsetMs,
     required bool repairManifest,
+    required _CycleInstrumentation instrumentation,
   }) async {
     final deviceId = context.deviceId!;
     final changed = <_SealedSection>[];
@@ -835,32 +961,42 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       );
       final tombstoneDigest = tombstoneDocument.semanticDigest;
       if (profileState.lastPushedHotDigest != hotDigest) {
-        changed.add(
-          await _sealSection(
-            root: root,
-            deviceId: deviceId,
-            name: 'hot/${entry.key}',
-            schemaVersion: WebDavSyncHotDocument.schemaVersion,
-            payload: entry.value.document.toJson(),
-            semanticDigest: hotDigest,
-            updatedAtMs: serverNowMs,
-            maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
-          ),
-        );
+        final phaseStarted = instrumentation.startPhase();
+        try {
+          changed.add(
+            await _sealSection(
+              root: root,
+              deviceId: deviceId,
+              name: 'hot/${entry.key}',
+              schemaVersion: WebDavSyncHotDocument.schemaVersion,
+              payload: entry.value.document.toJson(),
+              semanticDigest: hotDigest,
+              updatedAtMs: serverNowMs,
+              maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+            ),
+          );
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.seal, phaseStarted);
+        }
       }
       if (profileState.lastPushedTombstoneDigest != tombstoneDigest) {
-        changed.add(
-          await _sealSection(
-            root: root,
-            deviceId: deviceId,
-            name: 'tombstones/${entry.key}',
-            schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
-            payload: tombstoneDocument.toJson(),
-            semanticDigest: tombstoneDigest,
-            updatedAtMs: serverNowMs,
-            maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
-          ),
-        );
+        final phaseStarted = instrumentation.startPhase();
+        try {
+          changed.add(
+            await _sealSection(
+              root: root,
+              deviceId: deviceId,
+              name: 'tombstones/${entry.key}',
+              schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
+              payload: tombstoneDocument.toJson(),
+              semanticDigest: tombstoneDigest,
+              updatedAtMs: serverNowMs,
+              maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+            ),
+          );
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.seal, phaseStarted);
+        }
       }
       published[entry.key] = _PublishedProfile(
         hotDigest: hotDigest,
@@ -878,10 +1014,18 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     }
 
     session.validate();
-    await transport.ensureOwnLayout(deviceId);
+    var phaseStarted = instrumentation.startPhase();
+    try {
+      instrumentation.requestStarted();
+      await transport.ensureOwnLayout(deviceId);
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
+    }
     for (final section in changed) {
       session.validate();
+      phaseStarted = instrumentation.startPhase();
       try {
+        instrumentation.requestStarted(bytesUp: section.bytes.length);
         await transport.writeSection(
           deviceId,
           section.reference.contentHash,
@@ -890,14 +1034,23 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         );
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
       }
-      final readBack = await transport.readSection(
-        deviceId,
-        section.reference,
-        maxBytes: _maxBytesFor(section.reference.name),
-      );
-      if (!_bytesEqual(readBack.bytes, section.bytes)) {
-        throw StateError('WebDAV sync section read-back verification failed');
+      phaseStarted = instrumentation.startPhase();
+      try {
+        instrumentation.requestStarted();
+        final readBack = await transport.readSection(
+          deviceId,
+          section.reference,
+          maxBytes: _maxBytesFor(section.reference.name),
+        );
+        instrumentation.received(readBack.bytes.length);
+        if (!_bytesEqual(readBack.bytes, section.bytes)) {
+          throw StateError('WebDAV sync section read-back verification failed');
+        }
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.readBack, phaseStarted);
       }
     }
 
@@ -929,37 +1082,63 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       ),
     );
     identityMaps.assertContainsNoLocalIds(manifest.toJson());
-    final manifestBytes = await _codec.sealDocument(
-      key: root.key,
-      circleId: root.document.circleId,
-      deviceId: deviceId,
-      logicalName: 'manifest',
-      schemaVersion: WebDavSyncManifest.schemaVersion,
-      payload: manifest.toJson(),
-      maxBytes: WebDavSyncLimits.maxManifestBytes,
-    );
+    late final Uint8List manifestBytes;
+    phaseStarted = instrumentation.startPhase();
+    try {
+      manifestBytes = await _codec.sealDocument(
+        key: root.key,
+        circleId: root.document.circleId,
+        deviceId: deviceId,
+        logicalName: 'manifest',
+        schemaVersion: WebDavSyncManifest.schemaVersion,
+        payload: manifest.toJson(),
+        maxBytes: WebDavSyncLimits.maxManifestBytes,
+      );
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.seal, phaseStarted);
+    }
     // Sections are immutable litter until the manifest points at them. The
     // pinned marker and captured profile scope must both still be current at
     // this final commit.
-    final commitRoot = await _readRequiredRoot(transport);
+    late final WebDavBytesResult commitRoot;
+    phaseStarted = instrumentation.startPhase();
+    try {
+      commitRoot = await _readRequiredRoot(transport, instrumentation);
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.root, phaseStarted);
+    }
     if (!_bytesEqual(context.markerPin!, commitRoot.bytes)) {
       throw const WebDavSyncRootChangedException();
     }
     session.validate();
-    await transport.writeManifest(deviceId, manifestBytes);
-    final manifestReadBack = await transport.readManifest(deviceId);
-    if (!_bytesEqual(manifestReadBack.bytes, manifestBytes)) {
-      throw StateError('WebDAV sync manifest read-back verification failed');
+    phaseStarted = instrumentation.startPhase();
+    try {
+      instrumentation.requestStarted(bytesUp: manifestBytes.length);
+      await transport.writeManifest(deviceId, manifestBytes);
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
     }
-    final opened = await _codec.openDocument(
-      key: root.key,
-      encoded: manifestReadBack.bytes,
-      circleId: root.document.circleId,
-      deviceId: deviceId,
-      logicalName: 'manifest',
-      schemaVersion: WebDavSyncManifest.schemaVersion,
-      maxBytes: WebDavSyncLimits.maxManifestBytes,
-    );
+    late final Object? opened;
+    phaseStarted = instrumentation.startPhase();
+    try {
+      instrumentation.requestStarted();
+      final manifestReadBack = await transport.readManifest(deviceId);
+      instrumentation.received(manifestReadBack.bytes.length);
+      if (!_bytesEqual(manifestReadBack.bytes, manifestBytes)) {
+        throw StateError('WebDAV sync manifest read-back verification failed');
+      }
+      opened = await _codec.openDocument(
+        key: root.key,
+        encoded: manifestReadBack.bytes,
+        circleId: root.document.circleId,
+        deviceId: deviceId,
+        logicalName: 'manifest',
+        schemaVersion: WebDavSyncManifest.schemaVersion,
+        maxBytes: WebDavSyncLimits.maxManifestBytes,
+      );
+    } finally {
+      instrumentation.finishPhase(_CyclePhase.readBack, phaseStarted);
+    }
     final verifiedManifest = WebDavSyncManifest.fromJson(opened);
     return _PushResult(
       sectionsPushed: changed.length,
@@ -1281,4 +1460,102 @@ final class _PushResult {
   final int sectionsPushed;
   final WebDavSyncManifest? manifest;
   final Map<String, _PublishedProfile> publishedProfiles;
+}
+
+enum _CyclePhase {
+  root,
+  list,
+  manifests,
+  sections,
+  mergeApply,
+  seal,
+  push,
+  readBack,
+}
+
+final class _CycleInstrumentation {
+  _CycleInstrumentation(this.trigger) : _stopwatch = Stopwatch()..start();
+
+  final WebDavSyncTrigger? trigger;
+  final Stopwatch _stopwatch;
+  int peerCount = 0;
+  int requestCount = 0;
+  int bytesUp = 0;
+  int bytesDown = 0;
+  String disposition = 'failed';
+  int _rootUs = 0;
+  int _listUs = 0;
+  int _manifestsUs = 0;
+  int _sectionsUs = 0;
+  int _mergeApplyUs = 0;
+  int _sealUs = 0;
+  int _pushUs = 0;
+  int _readBackUs = 0;
+
+  int startPhase() => _stopwatch.elapsedMicroseconds;
+
+  void finishPhase(_CyclePhase phase, int startedAtUs) {
+    final elapsedUs = _stopwatch.elapsedMicroseconds - startedAtUs;
+    switch (phase) {
+      case _CyclePhase.root:
+        _rootUs += elapsedUs;
+        break;
+      case _CyclePhase.list:
+        _listUs += elapsedUs;
+        break;
+      case _CyclePhase.manifests:
+        _manifestsUs += elapsedUs;
+        break;
+      case _CyclePhase.sections:
+        _sectionsUs += elapsedUs;
+        break;
+      case _CyclePhase.mergeApply:
+        _mergeApplyUs += elapsedUs;
+        break;
+      case _CyclePhase.seal:
+        _sealUs += elapsedUs;
+        break;
+      case _CyclePhase.push:
+        _pushUs += elapsedUs;
+        break;
+      case _CyclePhase.readBack:
+        _readBackUs += elapsedUs;
+        break;
+    }
+  }
+
+  void requestStarted({int bytesUp = 0}) {
+    requestCount++;
+    this.bytesUp += bytesUp;
+  }
+
+  void received(int byteCount) => bytesDown += byteCount;
+
+  void record() {
+    _stopwatch.stop();
+    DiagnosticLog.instance.recordEvent(
+      source: 'webdav_sync',
+      event: 'cycle',
+      fields: <String, Object?>{
+        'trigger': DiagnosticLabel(trigger?.name ?? 'internal'),
+        'peerCount': peerCount,
+        'rootMs': _milliseconds(_rootUs),
+        'listMs': _milliseconds(_listUs),
+        'manifestsMs': _milliseconds(_manifestsUs),
+        'sectionsMs': _milliseconds(_sectionsUs),
+        'mergeApplyMs': _milliseconds(_mergeApplyUs),
+        'sealMs': _milliseconds(_sealUs),
+        'pushMs': _milliseconds(_pushUs),
+        'readBackMs': _milliseconds(_readBackUs),
+        'totalMs': _stopwatch.elapsedMilliseconds,
+        'requestCount': requestCount,
+        'bytesUp': bytesUp,
+        'bytesDown': bytesDown,
+        'disposition': DiagnosticLabel(disposition),
+      },
+    );
+  }
+
+  static int _milliseconds(int microseconds) =>
+      Duration(microseconds: microseconds).inMilliseconds;
 }

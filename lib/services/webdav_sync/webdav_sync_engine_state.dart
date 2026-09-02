@@ -174,6 +174,7 @@ final class WebDavSyncEngineState {
     this.peerManifestHighWater = const <String, int>{},
     this.currentDeviceIds = const <String>{},
     this.lastSuccessfulSyncMs,
+    this.lastPushMs,
     this.ownManifest,
     this.schemaRatchet = 1,
     this.appliedGraphDigest,
@@ -197,6 +198,7 @@ final class WebDavSyncEngineState {
   final Map<String, int> peerManifestHighWater;
   final Set<String> currentDeviceIds;
   final int? lastSuccessfulSyncMs;
+  final int? lastPushMs;
   final WebDavSyncManifest? ownManifest;
   final int schemaRatchet;
   final String? appliedGraphDigest;
@@ -228,6 +230,7 @@ final class WebDavSyncEngineState {
     Map<String, int>? peerManifestHighWater,
     Set<String>? currentDeviceIds,
     int? lastSuccessfulSyncMs,
+    int? lastPushMs,
     WebDavSyncManifest? ownManifest,
     int? schemaRatchet,
     String? appliedGraphDigest,
@@ -255,6 +258,7 @@ final class WebDavSyncEngineState {
     peerManifestHighWater: peerManifestHighWater ?? this.peerManifestHighWater,
     currentDeviceIds: currentDeviceIds ?? this.currentDeviceIds,
     lastSuccessfulSyncMs: lastSuccessfulSyncMs ?? this.lastSuccessfulSyncMs,
+    lastPushMs: lastPushMs ?? this.lastPushMs,
     ownManifest: ownManifest ?? this.ownManifest,
     schemaRatchet: schemaRatchet ?? this.schemaRatchet,
     appliedGraphDigest: appliedGraphDigest ?? this.appliedGraphDigest,
@@ -297,6 +301,7 @@ final class WebDavSyncEngineState {
       'currentDeviceIds': currentDeviceIds.toList()..sort(),
     if (lastSuccessfulSyncMs != null)
       'lastSuccessfulSyncMs': lastSuccessfulSyncMs,
+    if (lastPushMs != null) 'lastPushMs': lastPushMs,
     if (ownManifest != null) 'ownManifest': ownManifest!.toJson(),
     'schemaRatchet': schemaRatchet,
     if (appliedGraphDigest != null) 'appliedGraphDigest': appliedGraphDigest,
@@ -397,6 +402,13 @@ final class WebDavSyncEngineState {
             successful < 0 ||
             successful > WebDavSyncLimits.maxTimestampMs)) {
       throw const FormatException('Invalid WebDAV sync success timestamp');
+    }
+    final lastPush = json['lastPushMs'];
+    if (lastPush != null &&
+        (lastPush is! int ||
+            lastPush < 0 ||
+            lastPush > WebDavSyncLimits.maxTimestampMs)) {
+      throw const FormatException('Invalid WebDAV sync push timestamp');
     }
     final deviceClockWarning = json['deviceClockWarning'] ?? false;
     if (deviceClockWarning is! bool) {
@@ -510,6 +522,7 @@ final class WebDavSyncEngineState {
       peerManifestHighWater: Map<String, int>.unmodifiable(peerHighWater),
       currentDeviceIds: currentDeviceIds,
       lastSuccessfulSyncMs: successful as int?,
+      lastPushMs: lastPush as int?,
       ownManifest: json['ownManifest'] == null
           ? null
           : WebDavSyncManifest.fromJson(json['ownManifest']),

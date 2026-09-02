@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:debrify/services/diagnostic_log.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
@@ -115,6 +118,7 @@ void main() {
 
       expect(first.disposition, WebDavSyncCycleDisposition.completed);
       expect(first.sectionsPushed, 2);
+      expect(states.state.lastPushMs, now.millisecondsSinceEpoch);
       expect(local.applied, hasLength(1));
       final firstManifestWrite = transport.events.indexOf('write:manifest');
       final lastSectionWrite = transport.events.lastIndexWhere(
@@ -142,9 +146,90 @@ void main() {
 
       expect(second.disposition, WebDavSyncCycleDisposition.completed);
       expect(second.sectionsPushed, 0);
+      expect(states.state.lastPushMs, now.millisecondsSinceEpoch);
       expect(transport.writeCount, writesAfterFirst);
     },
   );
+
+  test('cycle emits one complete redacted instrumentation event', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'debrify-webdav-cycle-diagnostics-',
+    );
+    await DiagnosticLog.instance.initialize(directoryOverride: directory);
+    try {
+      final report = await engine.runCycle(
+        context(),
+        allowPreActivation: true,
+        trigger: WebDavSyncTrigger.localChange,
+      );
+      expect(report.disposition, WebDavSyncCycleDisposition.completed);
+
+      final exported = await DiagnosticLog.instance.exportLastWindow();
+      final events = const LineSplitter()
+          .convert(utf8.decode(exported.bytes))
+          .map((line) => jsonDecode(line) as Map<String, dynamic>)
+          .where((entry) => entry['event'] == 'cycle')
+          .toList(growable: false);
+      expect(events, hasLength(1));
+      final fields = events.single['fields'] as Map<String, dynamic>;
+      expect(
+        fields.keys,
+        unorderedEquals(<String>{
+          'trigger',
+          'peerCount',
+          'rootMs',
+          'listMs',
+          'manifestsMs',
+          'sectionsMs',
+          'mergeApplyMs',
+          'sealMs',
+          'pushMs',
+          'readBackMs',
+          'totalMs',
+          'requestCount',
+          'bytesUp',
+          'bytesDown',
+          'disposition',
+        }),
+      );
+      expect(fields['trigger'], 'localChange');
+      expect(fields['disposition'], 'completed');
+      expect(fields['requestCount'], greaterThan(0));
+      expect(fields['bytesUp'], greaterThan(0));
+      expect(fields['bytesDown'], greaterThan(0));
+      for (final phase in const <String>[
+        'rootMs',
+        'listMs',
+        'manifestsMs',
+        'sectionsMs',
+        'mergeApplyMs',
+        'sealMs',
+        'pushMs',
+        'readBackMs',
+        'totalMs',
+      ]) {
+        expect(fields[phase], isA<int>());
+        expect(fields[phase] as int, greaterThanOrEqualTo(0));
+      }
+
+      final payload = jsonEncode(events.single);
+      for (final privateValue in const <String>[
+        'example.test',
+        '/dav',
+        'theme',
+        'circle-1',
+        'profile-circle',
+        'local-profile',
+        'device-a',
+      ]) {
+        expect(payload, isNot(contains(privateValue)));
+      }
+      expect(payload, isNot(contains('/')));
+    } finally {
+      await DiagnosticLog.instance.dispose();
+      if (await directory.exists()) await directory.delete(recursive: true);
+    }
+  });
 
   test(
     'a missing own manifest is repaired without rewriting sections',

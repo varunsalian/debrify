@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
+// Flutter's test SDK supplies fake_async transitively for deterministic timers.
+// ignore: depend_on_referenced_packages
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -70,14 +74,14 @@ void main() {
 
   test('TV playback and tvOS low-memory gates suppress work', () async {
     final runner = _Runner();
-    final gate = _Gate()..playback = true;
+    final gate = _Gate()..televisionPlayback = true;
     final scheduler = WebDavSyncScheduler(runner: runner, gate: gate);
     addTearDown(scheduler.dispose);
     scheduler.arm(() async => context());
 
     await scheduler.signal(WebDavSyncTrigger.manual);
     gate
-      ..playback = false
+      ..televisionPlayback = false
       ..lowMemory = true;
     await scheduler.signal(WebDavSyncTrigger.manual);
 
@@ -121,17 +125,211 @@ void main() {
     expect(firstReport.disposition, WebDavSyncCycleDisposition.completed);
     expect(runner.runs, 1);
   });
+
+  test('burst of ten local changes runs once after trailing debounce', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      for (var index = 0; index < 10; index++) {
+        scheduler.notifyLocalChange('theme');
+        async.elapse(const Duration(milliseconds: 100));
+      }
+      // The window opens at the FIRST write of the burst, so it fires 10s
+      // after t=0 (not after the last write).
+      async.elapse(const Duration(milliseconds: 8850));
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(milliseconds: 250));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.localChange,
+      ]);
+      scheduler.dispose();
+    });
+  });
+
+  test('a sustained write stream cannot starve the local-change push', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      // Writes every 5s forever; the 10s window must still fire on schedule.
+      for (var index = 0; index < 6; index++) {
+        scheduler.notifyLocalChange('theme');
+        async.elapse(const Duration(seconds: 5));
+        async.flushMicrotasks();
+      }
+      expect(runner.runs, greaterThanOrEqualTo(2));
+      scheduler.dispose();
+    });
+  });
+
+  test('playback uses sixty-second local-change coalescing', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final gate = _Gate()..playback = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: gate,
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 59));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  test('local change during a run schedules exactly one delayed follow-up', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final firstRun = Completer<void>();
+      final runner = _Runner()..blocker = firstRun;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      for (var index = 0; index < 10; index++) {
+        scheduler.notifyLocalChange('theme');
+      }
+      runner.blocker = null;
+      firstRun.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 9));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      scheduler.dispose();
+    });
+  });
+
+  test('local-change cycles respect television and low-memory gates', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final gate = _Gate()..televisionPlayback = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: gate,
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      gate
+        ..televisionPlayback = false
+        ..lowMemory = true;
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+      scheduler.dispose();
+    });
+  });
+
+  test('disarm cancels a pending local-change cycle', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.disarm();
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 0);
+      expect(scheduler.isArmed, isFalse);
+      scheduler.dispose();
+    });
+  });
+
+  test('every raw preference key consumed by the hot builder is admitted', () {
+    final source = File(
+      'lib/services/webdav_sync/webdav_sync_hot_merge.dart',
+    ).readAsStringSync();
+    final block = source.substring(
+      source.indexOf('abstract final class WebDavSyncHotMerge'),
+      source.indexOf('/// Per-device cursor used by MDBList'),
+    );
+    final declarations = RegExp(
+      r"static const String (\w+)\s*=\s*'([^']*)';",
+      multiLine: true,
+    ).allMatches(block);
+    final consumedKeys = <String>[
+      for (final match in declarations)
+        match.group(1)!.endsWith('Prefix')
+            ? '${match.group(2)!}drift-probe'
+            : match.group(2)!,
+    ];
+
+    expect(consumedKeys, hasLength(7));
+    expect(
+      consumedKeys,
+      everyElement(predicate<String>(WebDavSyncScheduler.admitsLocalChangeKey)),
+    );
+  });
 }
 
 final class _Runner implements WebDavSyncCycleRunner {
   int runs = 0;
+  Completer<void>? blocker;
+  final List<WebDavSyncTrigger?> triggers = <WebDavSyncTrigger?>[];
 
   @override
   Future<WebDavSyncCycleReport> runCycle(
     WebDavSyncCycleContext? context, {
     bool allowPreActivation = false,
+    WebDavSyncTrigger? trigger,
   }) async {
     runs++;
+    triggers.add(trigger);
+    await blocker?.future;
     return const WebDavSyncCycleReport(
       disposition: WebDavSyncCycleDisposition.completed,
     );
@@ -140,10 +338,14 @@ final class _Runner implements WebDavSyncCycleRunner {
 
 final class _Gate implements WebDavSyncRuntimeGate {
   bool playback = false;
+  bool televisionPlayback = false;
   bool lowMemory = false;
 
   @override
-  bool get playbackActiveOnTelevision => playback;
+  bool get playbackActive => playback || televisionPlayback;
+
+  @override
+  bool get playbackActiveOnTelevision => televisionPlayback;
 
   @override
   bool get tvOsLowMemory => lowMemory;
