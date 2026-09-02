@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:debrify/services/playlist_dedupe_key.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -141,7 +142,371 @@ void main() {
       'theme': 'new',
       'newSchemaKey': true,
     });
-    expect(merged.scalars.stamp.originDeviceId, 'device-b');
+    expect(merged.scalars.entries['theme']!.stamp.originDeviceId, 'device-b');
+  });
+
+  test('different-key scalar edits survive every merge order and converge', () {
+    final baseline = _buildWithPreferences(
+      maps,
+      'device-seed',
+      const <String, Object?>{
+        'default_torrent_provider_v1': 'none',
+        'theme': 'dark',
+      },
+      now: 100,
+    ).document;
+    final deviceA = _buildWithPreferences(
+      maps,
+      'device-a',
+      const <String, Object?>{
+        'default_torrent_provider_v1': 'torbox',
+        'theme': 'dark',
+      },
+      now: 200,
+      previous: baseline,
+    ).document;
+    final deviceB = _buildWithPreferences(
+      maps,
+      'device-b',
+      const <String, Object?>{
+        'default_torrent_provider_v1': 'none',
+        'theme': 'light',
+      },
+      now: 215,
+      previous: baseline,
+    ).document;
+
+    final results = <WebDavSyncHotDocument>[
+      WebDavSyncHotMerge.merge(
+        local: baseline,
+        peers: <WebDavSyncHotDocument>[deviceA, deviceB],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document,
+      WebDavSyncHotMerge.merge(
+        local: baseline,
+        peers: <WebDavSyncHotDocument>[deviceB, deviceA],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document,
+      WebDavSyncHotMerge.merge(
+        local: deviceA,
+        peers: <WebDavSyncHotDocument>[deviceB],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document,
+      WebDavSyncHotMerge.merge(
+        local: deviceB,
+        peers: <WebDavSyncHotDocument>[deviceA],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document,
+    ];
+
+    for (final result in results) {
+      expect(result.scalars.values, <String, Object>{
+        'default_torrent_provider_v1': 'torbox',
+        'theme': 'light',
+      });
+      expect(
+        result
+            .scalars
+            .entries['default_torrent_provider_v1']!
+            .stamp
+            .originDeviceId,
+        'device-a',
+      );
+      expect(result.scalars.entries['theme']!.stamp.originDeviceId, 'device-b');
+    }
+    expect(
+      results.map((result) => result.semanticDigest).toSet(),
+      hasLength(1),
+    );
+  });
+
+  test('same-key scalar edits choose one winner under every merge order', () {
+    final deviceA = _document(
+      device: 'device-a',
+      scalarTime: 200,
+      scalars: const <String, Object>{'default_torrent_provider_v1': 'torbox'},
+    );
+    final deviceB = _document(
+      device: 'device-b',
+      scalarTime: 200,
+      scalars: const <String, Object>{
+        'default_torrent_provider_v1': 'premiumize',
+      },
+    );
+
+    final results = <WebDavSyncHotDocument>[
+      WebDavSyncHotMerge.merge(
+        local: deviceA,
+        peers: <WebDavSyncHotDocument>[deviceB],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document,
+      WebDavSyncHotMerge.merge(
+        local: deviceB,
+        peers: <WebDavSyncHotDocument>[deviceA],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document,
+    ];
+
+    for (final result in results) {
+      expect(
+        result.scalars.values['default_torrent_provider_v1'],
+        'premiumize',
+      );
+      expect(
+        result
+            .scalars
+            .entries['default_torrent_provider_v1']!
+            .stamp
+            .originDeviceId,
+        'device-b',
+      );
+    }
+    expect(
+      results.first.scalars.semanticDigest,
+      results.last.scalars.semanticDigest,
+    );
+
+    final equalStampA = _document(
+      device: 'same-origin',
+      scalarTime: 200,
+      scalars: const <String, Object>{'theme': 'dark'},
+    );
+    final equalStampB = _document(
+      device: 'same-origin',
+      scalarTime: 200,
+      scalars: const <String, Object>{'theme': 'light'},
+    );
+    final expectedHashWinner =
+        semanticDigestOf('dark').compareTo(semanticDigestOf('light')) > 0
+        ? 'dark'
+        : 'light';
+    for (final pair in <List<WebDavSyncHotDocument>>[
+      <WebDavSyncHotDocument>[equalStampA, equalStampB],
+      <WebDavSyncHotDocument>[equalStampB, equalStampA],
+    ]) {
+      final result = WebDavSyncHotMerge.merge(
+        local: pair.first,
+        peers: <WebDavSyncHotDocument>[pair.last],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 300,
+      ).document;
+      expect(result.scalars.values['theme'], expectedHashWinner);
+    }
+  });
+
+  test(
+    'unchanged scalar stamps survive rebuild restart and peer rebroadcast',
+    () {
+      const initial = <String, Object?>{
+        'default_torrent_provider_v1': 'none',
+        'theme': 'dark',
+        'favorite_genres': <String>['crime'],
+      };
+      const providerChanged = <String, Object?>{
+        'default_torrent_provider_v1': 'torbox',
+        'theme': 'dark',
+        'favorite_genres': <String>['crime'],
+      };
+      final baseline = _buildWithPreferences(
+        maps,
+        'device-a',
+        initial,
+        now: 100,
+      ).document;
+      final changed = _buildWithPreferences(
+        maps,
+        'device-a',
+        providerChanged,
+        now: 200,
+        previous: baseline,
+      ).document;
+
+      expect(
+        changed.scalars.semanticDigest,
+        isNot(baseline.scalars.semanticDigest),
+      );
+      expect(_stampBytes(changed, 'theme'), _stampBytes(baseline, 'theme'));
+      expect(
+        _stampBytes(changed, 'favorite_genres'),
+        _stampBytes(baseline, 'favorite_genres'),
+      );
+      expect(
+        changed
+            .scalars
+            .entries['default_torrent_provider_v1']!
+            .stamp
+            .normalizedTimeMs,
+        200,
+      );
+
+      final restored = WebDavSyncProfileEngineState.fromJson(
+        WebDavSyncProfileEngineState(baseline: changed).toJson(),
+      ).baseline!;
+      final rebuilt = _buildWithPreferences(
+        maps,
+        'device-a',
+        providerChanged,
+        now: 300,
+        previous: restored,
+      ).document;
+      expect(
+        WebDavSyncCodec.canonicalJson(rebuilt.toJson()),
+        WebDavSyncCodec.canonicalJson(changed.toJson()),
+      );
+
+      final merged = WebDavSyncHotMerge.merge(
+        local: rebuilt,
+        peers: <WebDavSyncHotDocument>[changed],
+        tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+        nowMs: 400,
+      ).document;
+      final rebroadcast = _buildWithPreferences(
+        maps,
+        'device-b',
+        providerChanged,
+        now: 400,
+        previous: merged,
+      ).document;
+      for (final key in providerChanged.keys) {
+        expect(_stampBytes(rebroadcast, key), _stampBytes(changed, key));
+      }
+
+      final listChanged = _buildWithPreferences(
+        maps,
+        'device-b',
+        const <String, Object?>{
+          'default_torrent_provider_v1': 'torbox',
+          'theme': 'dark',
+          'favorite_genres': <String>['crime', 'drama'],
+        },
+        now: 500,
+        previous: rebroadcast,
+      ).document;
+      expect(
+        _stampBytes(listChanged, 'default_torrent_provider_v1'),
+        _stampBytes(changed, 'default_torrent_provider_v1'),
+      );
+      expect(_stampBytes(listChanged, 'theme'), _stampBytes(changed, 'theme'));
+      expect(
+        listChanged.scalars.entries['favorite_genres']!.stamp.toJson(),
+        <String, Object?>{'time': 500, 'origin': 'device-b'},
+      );
+    },
+  );
+
+  test('v1 scalar fixture translates per key and converges with v2', () {
+    final legacyJson = _legacyHotJson(
+      device: 'legacy-device',
+      scalarTime: 100,
+      scalars: const <String, Object>{
+        'default_torrent_provider_v1': 'none',
+        'theme': 'dark',
+      },
+    );
+    final legacyBytes = WebDavSyncCodec.canonicalJson(legacyJson);
+    final migrated = WebDavSyncHotDocument.fromJson(jsonDecode(legacyBytes));
+
+    expect(legacyJson['version'], 1);
+    expect(WebDavSyncCodec.canonicalJson(legacyJson), legacyBytes);
+    expect(migrated.toJson()['version'], WebDavSyncHotDocument.schemaVersion);
+    for (final value in migrated.scalars.entries.values) {
+      expect(value.stamp.toJson(), <String, Object?>{
+        'time': 100,
+        'origin': 'legacy-device',
+      });
+    }
+    final scalarJson = migrated.toJson()['scalars']! as Map;
+    expect(scalarJson, isNot(contains('stamp')));
+    expect((scalarJson['values'] as Map)['theme'], contains('stamp'));
+
+    final v2 = _buildWithPreferences(
+      maps,
+      'device-b',
+      const <String, Object?>{
+        'default_torrent_provider_v1': 'torbox',
+        'theme': 'dark',
+      },
+      now: 200,
+      previous: migrated,
+    ).document;
+    final forward = WebDavSyncHotMerge.merge(
+      local: migrated,
+      peers: <WebDavSyncHotDocument>[v2],
+      tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+      nowMs: 300,
+    ).document;
+    final reverse = WebDavSyncHotMerge.merge(
+      local: v2,
+      peers: <WebDavSyncHotDocument>[migrated],
+      tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+      nowMs: 300,
+    ).document;
+
+    expect(forward.scalars.values, <String, Object>{
+      'default_torrent_provider_v1': 'torbox',
+      'theme': 'dark',
+    });
+    expect(forward.semanticDigest, reverse.semanticDigest);
+  });
+
+  test('v3 and malformed stamped scalar documents fail closed', () {
+    final valid = _document(
+      device: 'device-a',
+      scalarTime: 100,
+      scalars: const <String, Object>{'theme': 'dark'},
+    ).toJson();
+    final v3 = Map<String, Object?>.from(valid)..['version'] = 3;
+    final malformedScalars = Map<String, Object?>.from(valid);
+    malformedScalars['scalars'] = <String, Object?>{
+      'semanticDigest': semanticDigestOf(const <String, Object>{
+        'theme': 'dark',
+      }),
+      'values': const <String, Object>{'theme': 'dark'},
+    };
+    final invalidType = Map<String, Object?>.from(valid);
+    invalidType['scalars'] = <String, Object?>{
+      'semanticDigest': semanticDigestOf(const <String, Object>{
+        'favorite_genres': <Object>[1],
+      }),
+      'values': <String, Object?>{
+        'favorite_genres': <String, Object?>{
+          'stamp': _stamp(100, 'device-a').toJson(),
+          'value': <Object>[1],
+        },
+      },
+    };
+    final oversizedV1 = _legacyHotJson(
+      device: 'legacy-device',
+      scalarTime: 100,
+      scalars: <String, Object>{
+        for (
+          var index = 0;
+          index <= WebDavSyncLimits.maxRecordsPerHotDocument;
+          index++
+        )
+          'setting_$index': true,
+      },
+    );
+
+    expect(() => WebDavSyncHotDocument.fromJson(v3), throwsFormatException);
+    expect(
+      () => WebDavSyncHotDocument.fromJson(malformedScalars),
+      throwsFormatException,
+    );
+    expect(
+      () => WebDavSyncHotDocument.fromJson(invalidType),
+      throwsFormatException,
+    );
+    expect(
+      () => WebDavSyncHotDocument.fromJson(oversizedV1),
+      throwsFormatException,
+    );
   });
 
   test('watch records union deeply and ties resolve deterministically', () {
@@ -409,8 +774,12 @@ void main() {
     expect(built.document.scalars.values, <String, Object>{
       'default_torrent_provider_v1': 'torbox',
     });
-    expect(built.document.scalars.stamp, previous.scalars.stamp);
+    expect(
+      built.document.scalars.entries['default_torrent_provider_v1']!.stamp,
+      previous.scalars.entries['default_torrent_provider_v1']!.stamp,
+    );
     expect(built.protectedPreferenceKeys, contains(checkpoint));
+    expect(jsonEncode(built.document.toJson()), isNot(contains(checkpoint)));
   });
 
   test('legacy hot documents cannot apply an MDBList checkpoint', () {
@@ -797,6 +1166,40 @@ void main() {
     expect(merged.document.watchState.records, contains(newKey));
   });
 
+  test('dormant scalar suppression applies independently per entry', () {
+    final baseline = _buildWithPreferences(
+      maps,
+      'device-a',
+      const <String, Object?>{'theme': 'dark', 'language': 'en'},
+      now: 100,
+    ).document;
+    final local = _buildWithPreferences(
+      maps,
+      'device-a',
+      const <String, Object?>{'theme': 'dark', 'language': 'fr'},
+      now: 300,
+      previous: baseline,
+    ).document;
+    final peer = _document(
+      device: 'device-b',
+      scalarTime: 150,
+      scalars: const <String, Object>{'theme': 'light', 'language': 'en'},
+    );
+
+    final merged = WebDavSyncHotMerge.merge(
+      local: local,
+      peers: <WebDavSyncHotDocument>[peer],
+      tombstoneDocuments: const <WebDavSyncTombstoneDocument>[],
+      nowMs: 400,
+      dormantSinceMs: 200,
+    ).document;
+
+    expect(merged.scalars.values, <String, Object>{
+      'theme': 'light',
+      'language': 'fr',
+    });
+  });
+
   test('dormant device retains an order-only edit after last success', () {
     final firstKey = WebDavSyncRecordKey.playlistItem('first');
     final secondKey = WebDavSyncRecordKey.playlistItem('second');
@@ -906,14 +1309,18 @@ void main() {
       document: WebDavSyncHotDocument(
         circleProfileId: 'profile-circle',
         scalars: WebDavSyncScalarPart(
-          stamp: const WebDavSyncStamp(
-            normalizedTimeMs: future,
-            originDeviceId: 'device-a',
-          ),
           semanticDigest: semanticDigestOf(const <String, Object>{
             'theme': 'dark',
           }),
-          values: const <String, Object>{'theme': 'dark'},
+          entries: const <String, WebDavSyncStampedValue>{
+            'theme': WebDavSyncStampedValue(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: future,
+                originDeviceId: 'device-a',
+              ),
+              value: 'dark',
+            ),
+          },
         ),
         watchState: WebDavSyncWatchPart(
           stamp: const WebDavSyncStamp(
@@ -961,7 +1368,10 @@ void main() {
       serverNowMs: now,
     );
 
-    expect(clamped.document.scalars.stamp.normalizedTimeMs, now);
+    expect(
+      clamped.document.scalars.entries['theme']!.stamp.normalizedTimeMs,
+      now,
+    );
     expect(clamped.document.watchState.stamp.normalizedTimeMs, now);
     expect(
       clamped.document.watchState.records.values.single.stamp.normalizedTimeMs,
@@ -981,6 +1391,7 @@ WebDavSyncBuiltHotState _buildWithPreferences(
   String device,
   Map<String, Object?> preferences, {
   required int now,
+  WebDavSyncHotDocument? previous,
 }) => WebDavSyncHotMerge.build(
   WebDavSyncBuildInput(
     circleProfileId: 'profile-circle',
@@ -991,6 +1402,7 @@ WebDavSyncBuiltHotState _buildWithPreferences(
     localNowMs: now,
     clockOffsetMs: 0,
     serverNowMs: now,
+    previous: previous,
   ),
 );
 
@@ -1015,9 +1427,14 @@ WebDavSyncHotDocument _document({
   return WebDavSyncHotDocument(
     circleProfileId: 'profile-circle',
     scalars: WebDavSyncScalarPart(
-      stamp: _stamp(scalarTime, device),
       semanticDigest: scalarDigest,
-      values: scalars,
+      entries: <String, WebDavSyncStampedValue>{
+        for (final entry in scalars.entries)
+          entry.key: WebDavSyncStampedValue(
+            stamp: _stamp(scalarTime, device),
+            value: entry.value,
+          ),
+      },
     ),
     watchState: WebDavSyncWatchPart(
       stamp: _stamp(scalarTime, device),
@@ -1033,3 +1450,26 @@ WebDavSyncStampedValue _value(int time, String device, Object? value) =>
 
 WebDavSyncStamp _stamp(int time, String device) =>
     WebDavSyncStamp(normalizedTimeMs: time, originDeviceId: device);
+
+String _stampBytes(WebDavSyncHotDocument document, String key) =>
+    WebDavSyncCodec.canonicalJson(
+      document.scalars.entries[key]!.stamp.toJson(),
+    );
+
+Map<String, Object?> _legacyHotJson({
+  required String device,
+  required int scalarTime,
+  required Map<String, Object> scalars,
+}) {
+  final emptyWatch = _document(device: device).watchState;
+  return <String, Object?>{
+    'version': 1,
+    'circleProfileId': 'profile-circle',
+    'scalars': <String, Object?>{
+      'stamp': _stamp(scalarTime, device).toJson(),
+      'semanticDigest': semanticDigestOf(scalars),
+      'values': scalars,
+    },
+    'watchState': emptyWatch.toJson(),
+  };
+}

@@ -529,6 +529,7 @@ abstract final class WebDavSyncHotMerge {
     }
 
     final scalarValues = <String, Object>{};
+    final scalarEntries = <String, WebDavSyncStampedValue>{};
     final protected = <String>{};
     for (final entry in input.rawPreferences.entries) {
       if (_hotLocalOnlyScalarKeys.contains(entry.key) ||
@@ -554,22 +555,14 @@ abstract final class WebDavSyncHotMerge {
       } else {
         throw FormatException('Unsupported portable preference ${entry.key}');
       }
+      final old = previous?.scalars.entries[entry.key];
+      scalarEntries[entry.key] = WebDavSyncStampedValue(
+        stamp: old != null && _equalJson(old.value, wire) ? old.stamp : stamp(),
+        value: wire,
+      );
     }
     input.identityMaps.assertContainsNoLocalIds(scalarValues);
     final scalarDigest = semanticDigestOf(scalarValues);
-    // Older hot documents may already contain a now-local-only checkpoint.
-    // Compare the same projection on both sides so removing that field during
-    // an upgrade does not manufacture a newer timestamp for every setting.
-    final previousScalarDigest = previous == null
-        ? null
-        : semanticDigestOf(<String, Object>{
-            for (final entry in previous.scalars.values.entries)
-              if (!_hotLocalOnlyScalarKeys.contains(entry.key))
-                entry.key: entry.value,
-          });
-    final scalarStamp = previousScalarDigest == scalarDigest
-        ? previous!.scalars.stamp
-        : stamp();
 
     final portableRecords = <String, Object?>{};
     final richRecords = <String, Object?>{};
@@ -688,9 +681,10 @@ abstract final class WebDavSyncHotMerge {
     final document = WebDavSyncHotDocument(
       circleProfileId: input.circleProfileId,
       scalars: WebDavSyncScalarPart(
-        stamp: scalarStamp,
         semanticDigest: scalarDigest,
-        values: Map<String, Object>.unmodifiable(scalarValues),
+        entries: Map<String, WebDavSyncStampedValue>.unmodifiable(
+          scalarEntries,
+        ),
       ),
       watchState: WebDavSyncWatchPart(
         stamp: watchStamp,
@@ -719,7 +713,9 @@ abstract final class WebDavSyncHotMerge {
     final suppressDormantLocal = dormantSinceMs != null && peerDocs.isNotEmpty;
     final docs = <WebDavSyncHotDocument>[
       if (!suppressDormantLocal ||
-          local.scalars.stamp.normalizedTimeMs > dormantSinceMs ||
+          local.scalars.entries.values.any(
+            (entry) => entry.stamp.normalizedTimeMs > dormantSinceMs,
+          ) ||
           local.watchState.records.values.any(
             (entry) => entry.stamp.normalizedTimeMs > dormantSinceMs,
           ) ||
@@ -758,28 +754,20 @@ abstract final class WebDavSyncHotMerge {
       );
     }
 
-    final scalarValues = <String, Object>{};
-    final scalarSources = <String, WebDavSyncScalarPart>{};
+    final scalarValues = <String, WebDavSyncStampedValue>{};
     for (final doc in docs) {
-      if (suppressDormantLocal &&
-          identical(doc, local) &&
-          doc.scalars.stamp.normalizedTimeMs <= dormantSinceMs) {
-        continue;
-      }
-      for (final entry in doc.scalars.values.entries) {
+      for (final entry in doc.scalars.entries.entries) {
         // Ignore checkpoints from older clients that published this
         // device-local cursor before it was excluded from hot sync.
         if (_hotLocalOnlyScalarKeys.contains(entry.key)) continue;
-        final prior = scalarSources[entry.key];
-        if (prior == null ||
-            _comparePart(
-                  doc.scalars,
-                  entry.value,
-                  prior,
-                  scalarValues[entry.key],
-                ) >
-                0) {
-          scalarSources[entry.key] = doc.scalars;
+        // The former part-level dormant filter now applies to each entry.
+        if (suppressDormantLocal &&
+            identical(doc, local) &&
+            entry.value.stamp.normalizedTimeMs <= dormantSinceMs) {
+          continue;
+        }
+        final prior = scalarValues[entry.key];
+        if (prior == null || _compareValue(entry.value, prior) > 0) {
           scalarValues[entry.key] = entry.value;
         }
       }
@@ -789,10 +777,10 @@ abstract final class WebDavSyncHotMerge {
         'Merged WebDAV sync scalar values exceed their safe limit',
       );
     }
-    final scalarStamp = scalarSources.isEmpty
-        ? local.scalars.stamp
-        : _newestStamp(scalarSources.values.map((entry) => entry.stamp));
-    final scalarDigest = semanticDigestOf(scalarValues);
+    final scalarDigest = semanticDigestOf(<String, Object>{
+      for (final entry in scalarValues.entries)
+        entry.key: entry.value.value as Object,
+    });
 
     final records = <String, WebDavSyncStampedValue>{};
     for (final doc in docs) {
@@ -872,9 +860,10 @@ abstract final class WebDavSyncHotMerge {
       document: WebDavSyncHotDocument(
         circleProfileId: local.circleProfileId,
         scalars: WebDavSyncScalarPart(
-          stamp: scalarStamp,
           semanticDigest: scalarDigest,
-          values: Map<String, Object>.unmodifiable(scalarValues),
+          entries: Map<String, WebDavSyncStampedValue>.unmodifiable(
+            scalarValues,
+          ),
         ),
         watchState: WebDavSyncWatchPart(
           stamp: watchStamp,
@@ -914,6 +903,13 @@ abstract final class WebDavSyncHotMerge {
           value: entry.value.value,
         ),
     };
+    final scalarValues = <String, WebDavSyncStampedValue>{
+      for (final entry in source.document.scalars.entries.entries)
+        entry.key: WebDavSyncStampedValue(
+          stamp: stamp(entry.value.stamp),
+          value: entry.value.value,
+        ),
+    };
     final orders = <String, WebDavSyncOrderValue>{
       for (final entry in source.document.watchState.orders.entries)
         entry.key: WebDavSyncOrderValue(
@@ -932,9 +928,8 @@ abstract final class WebDavSyncHotMerge {
     final document = WebDavSyncHotDocument(
       circleProfileId: source.document.circleProfileId,
       scalars: WebDavSyncScalarPart(
-        stamp: stamp(source.document.scalars.stamp),
         semanticDigest: source.document.scalars.semanticDigest,
-        values: source.document.scalars.values,
+        entries: Map<String, WebDavSyncStampedValue>.unmodifiable(scalarValues),
       ),
       watchState: WebDavSyncWatchPart(
         stamp: stamp(source.document.watchState.stamp),
@@ -1380,17 +1375,6 @@ abstract final class WebDavSyncHotMerge {
       });
     result.addAll(extras.map((entry) => entry.value));
     return result;
-  }
-
-  static int _comparePart(
-    WebDavSyncScalarPart left,
-    Object leftValue,
-    WebDavSyncScalarPart right,
-    Object? rightValue,
-  ) {
-    final stamp = _compareStamp(left.stamp, right.stamp);
-    if (stamp != 0) return stamp;
-    return semanticDigestOf(leftValue).compareTo(semanticDigestOf(rightValue));
   }
 
   static int _compareValue(

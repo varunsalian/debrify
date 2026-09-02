@@ -636,18 +636,21 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       final hotRef = manifest.section('hot/$circleProfileId');
       if (!stale &&
           hotRef != null &&
-          hotRef.schemaVersion == WebDavSyncHotDocument.schemaVersion &&
+          (hotRef.schemaVersion == 1 ||
+              hotRef.schemaVersion == WebDavSyncHotDocument.schemaVersion) &&
           hotRef.size <= WebDavSyncLimits.maxHotDocumentBytes) {
         try {
-          hot.add(
-            await _readHotSection(
-              transport,
-              root,
-              entry.key,
-              hotRef,
-              circleProfileId,
-            ),
+          final document = await _readHotSection(
+            transport,
+            root,
+            entry.key,
+            hotRef,
+            circleProfileId,
           );
+          hot.add(document);
+          if (hotRef.schemaVersion == 1) {
+            _diagnostic('Read a legacy WebDAV sync hot section', null);
+          }
         } on WebDavException catch (error) {
           if (error.kind != WebDavErrorKind.notFound) rethrow;
           _diagnostic('Ignored a removed WebDAV sync hot section', error);
@@ -705,8 +708,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     );
     final cached = _cached(cacheKey);
     if (cached is WebDavSyncHotDocument &&
-        cached.circleProfileId == circleProfileId &&
-        cached.semanticDigest == reference.semanticDigest) {
+        cached.circleProfileId == circleProfileId) {
       _requireHotPublicationBounds(cached, reference.updatedAtMs);
       return cached;
     }
@@ -718,9 +720,12 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       reference: reference,
       maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
     );
+    if (payload is! Map || payload['version'] != reference.schemaVersion) {
+      throw const FormatException('WebDAV sync hot schema claim mismatch');
+    }
     final document = WebDavSyncHotDocument.fromJson(payload);
     if (document.circleProfileId != circleProfileId ||
-        document.semanticDigest != reference.semanticDigest) {
+        semanticDigestOf(payload) != reference.semanticDigest) {
       throw const FormatException('WebDAV sync hot section digest mismatch');
     }
     _requireHotPublicationBounds(document, reference.updatedAtMs);
@@ -1173,7 +1178,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     int publishedAtMs,
   ) {
     final stamps = <WebDavSyncStamp>[
-      document.scalars.stamp,
+      ...document.scalars.entries.values.map((entry) => entry.stamp),
       document.watchState.stamp,
       ...document.watchState.records.values.map((entry) => entry.stamp),
       ...document.watchState.orders.values.map((entry) => entry.stamp),

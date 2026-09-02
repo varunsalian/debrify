@@ -328,6 +328,69 @@ void main() {
     );
   });
 
+  test('hot manifest gate reads v1 and silently skips v3', () async {
+    final diagnostics = <String>[];
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      sectionCache: sectionCache,
+      clock: () => now,
+      diagnostic: (message, _) => diagnostics.add(message),
+    );
+    final legacyPayload = _legacyHotJson(
+      device: 'legacy-device',
+      scalarTime: now.millisecondsSinceEpoch - 1,
+      scalars: const <String, Object>{'legacyPeerOnly': true},
+    );
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'legacy-device',
+      manifestTime: now,
+      hot: _document(),
+      hotSchemaVersion: 1,
+      hotPayload: legacyPayload,
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+    );
+    final v3Payload = Map<String, Object?>.from(
+      _document(
+        scalars: const <String, Object>{'newerPeerOnly': true},
+      ).toJson(),
+    )..['version'] = 3;
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'newer-device',
+      manifestTime: now,
+      hot: _document(),
+      hotSchemaVersion: 3,
+      hotPayload: v3Payload,
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+    );
+
+    await runFixture(context());
+
+    expect(local.applied.last['legacyPeerOnly'], isTrue);
+    expect(local.applied.last, isNot(contains('newerPeerOnly')));
+    expect(
+      transport.events,
+      contains('read:section:legacy-device:hot/profile-circle'),
+    );
+    expect(
+      transport.events,
+      isNot(contains('read:section:newer-device:hot/profile-circle')),
+    );
+    expect(diagnostics, <String>['Read a legacy WebDAV sync hot section']);
+  });
+
   test(
     'stale hot data is excluded but its tombstones remain eligible',
     () async {
@@ -915,12 +978,17 @@ WebDavSyncHotDocument _document({
   return WebDavSyncHotDocument(
     circleProfileId: 'profile-circle',
     scalars: WebDavSyncScalarPart(
-      stamp: const WebDavSyncStamp(
-        normalizedTimeMs: 0,
-        originDeviceId: 'device-b',
-      ),
       semanticDigest: semanticDigestOf(scalars),
-      values: scalars,
+      entries: <String, WebDavSyncStampedValue>{
+        for (final entry in scalars.entries)
+          entry.key: WebDavSyncStampedValue(
+            stamp: const WebDavSyncStamp(
+              normalizedTimeMs: 0,
+              originDeviceId: 'device-b',
+            ),
+            value: entry.value,
+          ),
+      },
     ),
     watchState: WebDavSyncWatchPart(
       stamp: WebDavSyncStamp(
@@ -932,6 +1000,27 @@ WebDavSyncHotDocument _document({
       orders: const <String, WebDavSyncOrderValue>{},
     ),
   );
+}
+
+Map<String, Object?> _legacyHotJson({
+  required String device,
+  required int scalarTime,
+  required Map<String, Object> scalars,
+}) {
+  final emptyWatch = _document().watchState;
+  return <String, Object?>{
+    'version': 1,
+    'circleProfileId': 'profile-circle',
+    'scalars': <String, Object?>{
+      'stamp': WebDavSyncStamp(
+        normalizedTimeMs: scalarTime,
+        originDeviceId: device,
+      ).toJson(),
+      'semanticDigest': semanticDigestOf(scalars),
+      'values': scalars,
+    },
+    'watchState': emptyWatch.toJson(),
+  };
 }
 
 final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
@@ -1135,19 +1224,22 @@ class _FakeTransport implements WebDavSyncTransport {
     required DateTime manifestTime,
     required WebDavSyncHotDocument hot,
     required WebDavSyncTombstoneDocument tombstones,
+    int hotSchemaVersion = WebDavSyncHotDocument.schemaVersion,
+    Object? hotPayload,
   }) async {
     Future<WebDavSyncSectionReference> addSection(
       String name,
       Object payload,
       String semanticDigest,
       int maxBytes,
+      int schemaVersion,
     ) async {
       final bytes = await codec.sealDocument(
         key: root.key,
         circleId: root.document.circleId,
         deviceId: deviceId,
         logicalName: name,
-        schemaVersion: 1,
+        schemaVersion: schemaVersion,
         payload: payload,
         maxBytes: maxBytes,
       );
@@ -1158,22 +1250,25 @@ class _FakeTransport implements WebDavSyncTransport {
         contentHash: hash,
         semanticDigest: semanticDigest,
         updatedAtMs: manifestTime.millisecondsSinceEpoch,
-        schemaVersion: 1,
+        schemaVersion: schemaVersion,
         size: bytes.length,
       );
     }
 
+    final resolvedHotPayload = hotPayload ?? hot.toJson();
     final hotRef = await addSection(
       'hot/profile-circle',
-      hot.toJson(),
-      hot.semanticDigest,
+      resolvedHotPayload,
+      semanticDigestOf(resolvedHotPayload),
       WebDavSyncLimits.maxHotDocumentBytes,
+      hotSchemaVersion,
     );
     final tombstoneRef = await addSection(
       'tombstones/profile-circle',
       tombstones.toJson(),
       tombstones.semanticDigest,
       WebDavSyncLimits.maxTombstoneDocumentBytes,
+      WebDavSyncTombstoneDocument.schemaVersion,
     );
     final manifest = WebDavSyncManifest(
       circleId: root.document.circleId,

@@ -103,45 +103,80 @@ final class WebDavSyncOrderValue {
 
 final class WebDavSyncScalarPart {
   const WebDavSyncScalarPart({
-    required this.stamp,
     required this.semanticDigest,
-    required this.values,
+    required this.entries,
   });
 
-  final WebDavSyncStamp stamp;
   final String semanticDigest;
-  final Map<String, Object> values;
+  final Map<String, WebDavSyncStampedValue> entries;
+
+  Map<String, Object> get values =>
+      Map<String, Object>.unmodifiable(<String, Object>{
+        for (final entry in entries.entries)
+          entry.key: entry.value.value as Object,
+      });
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'stamp': stamp.toJson(),
     'semanticDigest': semanticDigest,
-    'values': values,
+    'values': <String, Object?>{
+      for (final entry in entries.entries) entry.key: entry.value.toJson(),
+    },
   };
 
   factory WebDavSyncScalarPart.fromJson(Object? source) {
     final json = _object(source, 'scalar part');
-    _onlyKeys(json, const <String>{'stamp', 'semanticDigest', 'values'});
+    _onlyKeys(json, const <String>{'semanticDigest', 'values'});
     final rawValues = _object(json['values'], 'scalar values');
     if (rawValues.length > WebDavSyncLimits.maxRecordsPerHotDocument) {
       throw const FormatException('Too many WebDAV sync scalar values');
     }
-    final values = <String, Object>{};
+    final values = <String, WebDavSyncStampedValue>{};
+    for (final entry in rawValues.entries) {
+      final key = _logicalKey(entry.key, 'scalar key');
+      final stamped = WebDavSyncStampedValue.fromJson(entry.value);
+      final value = _jsonPreferenceValue(stamped.value);
+      if (value == null) {
+        throw const FormatException('WebDAV sync scalar values cannot be null');
+      }
+      values[key] = WebDavSyncStampedValue(stamp: stamped.stamp, value: value);
+    }
+    final digest = _digest(json['semanticDigest'], 'scalar digest');
+    final part = WebDavSyncScalarPart(
+      semanticDigest: digest,
+      entries: Map<String, WebDavSyncStampedValue>.unmodifiable(values),
+    );
+    if (semanticDigestOf(part.values) != digest) {
+      throw const FormatException('WebDAV sync scalar digest mismatch');
+    }
+    return part;
+  }
+
+  factory WebDavSyncScalarPart._fromLegacyJson(Object? source) {
+    final json = _object(source, 'legacy scalar part');
+    _onlyKeys(json, const <String>{'stamp', 'semanticDigest', 'values'});
+    final stamp = WebDavSyncStamp.fromJson(json['stamp']);
+    final rawValues = _object(json['values'], 'legacy scalar values');
+    if (rawValues.length > WebDavSyncLimits.maxRecordsPerHotDocument) {
+      throw const FormatException('Too many WebDAV sync scalar values');
+    }
+    final values = <String, WebDavSyncStampedValue>{};
+    final semanticValues = <String, Object>{};
     for (final entry in rawValues.entries) {
       final key = _logicalKey(entry.key, 'scalar key');
       final value = _jsonPreferenceValue(entry.value);
       if (value == null) {
         throw const FormatException('WebDAV sync scalar values cannot be null');
       }
-      values[key] = value;
+      values[key] = WebDavSyncStampedValue(stamp: stamp, value: value);
+      semanticValues[key] = value;
     }
     final digest = _digest(json['semanticDigest'], 'scalar digest');
-    if (semanticDigestOf(values) != digest) {
+    if (semanticDigestOf(semanticValues) != digest) {
       throw const FormatException('WebDAV sync scalar digest mismatch');
     }
     return WebDavSyncScalarPart(
-      stamp: WebDavSyncStamp.fromJson(json['stamp']),
       semanticDigest: digest,
-      values: Map<String, Object>.unmodifiable(values),
+      entries: Map<String, WebDavSyncStampedValue>.unmodifiable(values),
     );
   }
 }
@@ -218,7 +253,7 @@ final class WebDavSyncHotDocument {
     required this.watchState,
   });
 
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   final String circleProfileId;
   final WebDavSyncScalarPart scalars;
@@ -241,12 +276,15 @@ final class WebDavSyncHotDocument {
       'scalars',
       'watchState',
     });
-    if (json['version'] != schemaVersion) {
+    final version = json['version'];
+    if (version != 1 && version != schemaVersion) {
       throw const FormatException('Unsupported WebDAV sync hot schema');
     }
     return WebDavSyncHotDocument(
       circleProfileId: _syncId(json['circleProfileId'], 'profile ID'),
-      scalars: WebDavSyncScalarPart.fromJson(json['scalars']),
+      scalars: version == 1
+          ? WebDavSyncScalarPart._fromLegacyJson(json['scalars'])
+          : WebDavSyncScalarPart.fromJson(json['scalars']),
       watchState: WebDavSyncWatchPart.fromJson(json['watchState']),
     );
   }
