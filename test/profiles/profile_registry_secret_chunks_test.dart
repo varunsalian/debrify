@@ -77,6 +77,10 @@ void main() {
     options: OpenDatabaseOptions(singleInstance: false),
   );
 
+  String withoutV7Columns(String statement) => statement
+      .replaceAll('      secret_pending INTEGER NOT NULL DEFAULT 0,\n', '')
+      .replaceAll('      updated_at_ms INTEGER NOT NULL DEFAULT 0,\n', '');
+
   test('an oversized envelope spills to chunks and round-trips', () async {
     await insert('res-big', bigEnvelope);
 
@@ -205,10 +209,10 @@ void main() {
         dbPath,
         options: OpenDatabaseOptions(singleInstance: false),
       );
-      for (final statement in ProfileRegistry.debugSchemaStatements) {
+      for (final current in ProfileRegistry.debugSchemaStatements) {
         // v4 predates the chunk tables — build everything except them.
-        if (statement.contains('_secret_chunks')) continue;
-        await db.execute(statement);
+        if (current.contains('_secret_chunks')) continue;
+        await db.execute(withoutV7Columns(current));
       }
       final now = DateTime.now().millisecondsSinceEpoch;
       await db.insert('user_profiles', <String, Object?>{
@@ -295,7 +299,8 @@ void main() {
       dbPath,
       options: OpenDatabaseOptions(singleInstance: false),
     );
-    for (final statement in ProfileRegistry.debugSchemaStatements) {
+    for (final current in ProfileRegistry.debugSchemaStatements) {
+      final statement = withoutV7Columns(current);
       final v5Statement =
           statement.contains('CREATE TABLE profile_restore_resources')
           ? statement.replaceAll(

@@ -62,6 +62,7 @@ class ConnectionResource {
   final int publicSchemaVersion;
   final int authorizationRevision;
   final bool enabled;
+  final bool secretPending;
 
   const ConnectionResource({
     required this.id,
@@ -72,6 +73,7 @@ class ConnectionResource {
     this.publicSchemaVersion = 1,
     required this.authorizationRevision,
     required this.enabled,
+    this.secretPending = false,
   });
 }
 

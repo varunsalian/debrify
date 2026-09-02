@@ -82,6 +82,60 @@ void main() {
     },
   );
 
+  test(
+    'registry tombstones are durable and keep local record identity',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'circle-registry-tombstones',
+      );
+      final registryStore = WebDavSyncRegistryTombstoneStore(
+        bindingStore: bindingStore,
+        directoryProvider: () async => stateDirectory,
+      );
+      WebDavSyncTombstoneRecorder.debugInstall(
+        bindingStore: bindingStore,
+        stateRepository: engineStore,
+        registryRepository: registryStore,
+      );
+      final records = <WebDavSyncRegistryRecordId>{
+        WebDavSyncRegistryRecordId.profile('local-profile'),
+        WebDavSyncRegistryRecordId.resource(
+          'local-resource',
+          ownerProfileId: 'local-profile',
+        ),
+        WebDavSyncRegistryRecordId.grant('local-profile', 'local-resource'),
+      };
+
+      await WebDavSyncTombstoneRecorder.recordRegistryRecords(records);
+
+      var persisted =
+          await WebDavSyncTombstoneRecorder.loadRegistryRecordTombstones();
+      expect(persisted.values.map((item) => item.record).toSet(), records);
+      expect(persisted.values.every((item) => item.timeMs > 0), isTrue);
+      final snapshot = await bindingStore.load();
+      expect(
+        snapshot
+            .namespaces[binding.namespaceId]!
+            .values[WebDavSyncRegistryTombstoneStore.valueKey],
+        const <String, Object>{'version': 1, 'storage': 'file'},
+      );
+
+      WebDavSyncTombstoneRecorder.debugReset();
+      WebDavSyncTombstoneRecorder.debugInstall(
+        bindingStore: bindingStore,
+        stateRepository: engineStore,
+        registryRepository: WebDavSyncRegistryTombstoneStore(
+          bindingStore: bindingStore,
+          directoryProvider: () async => stateDirectory,
+        ),
+      );
+      persisted =
+          await WebDavSyncTombstoneRecorder.loadRegistryRecordTombstones();
+      expect(persisted.values.map((item) => item.record).toSet(), records);
+    },
+  );
+
   test('recorded deletes notify only while a sync binding exists', () async {
     final notifications = <(String, String)>[];
     ProfilePreferences.webDavSyncLocalChangeSink = (profileId, key) {

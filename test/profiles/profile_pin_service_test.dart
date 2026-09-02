@@ -492,7 +492,15 @@ void main() {
               statement
                   .replaceAll('recovery_hash BLOB,', '')
                   .replaceAll('recovery_salt BLOB,', '')
-                  .replaceAll('recovery_params_json TEXT,', ''),
+                  .replaceAll('recovery_params_json TEXT,', '')
+                  .replaceAll(
+                    '      secret_pending INTEGER NOT NULL DEFAULT 0,\n',
+                    '',
+                  )
+                  .replaceAll(
+                    '      updated_at_ms INTEGER NOT NULL DEFAULT 0,\n',
+                    '',
+                  ),
             );
           }
         },
