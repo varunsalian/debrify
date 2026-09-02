@@ -987,6 +987,9 @@ void main() {
       var db = await raw();
       expect(await db.query('webdav_sync_tombstone_outbox'), hasLength(1));
       await db.close();
+      final pendingSnapshot = await registry.readCircleSyncProjection();
+      expect(pendingSnapshot.outboxRowCount, 1);
+      expect(pendingSnapshot.registry.bindings, isEmpty);
 
       captureRegistryTombstones();
       await registry.drainWebDavSyncTombstoneOutbox();
@@ -998,6 +1001,7 @@ void main() {
       db = await raw();
       expect(await db.query('webdav_sync_tombstone_outbox'), isEmpty);
       await db.close();
+      expect((await registry.readCircleSyncProjection()).outboxRowCount, 0);
     },
   );
 

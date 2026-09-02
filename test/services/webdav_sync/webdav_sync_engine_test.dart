@@ -452,6 +452,136 @@ void main() {
     },
   );
 
+  test(
+    'deletion committed after drain cannot publish its stale circle leaf',
+    () async {
+      final diagnostics = <String>[];
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Stale local profile',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      var deletionCommitted = false;
+      circleLocal.beforeCircleSnapshot = () async {
+        if (deletionCommitted) return;
+        deletionCommitted = true;
+        circleLocal.registryOutboxRowCount = 1;
+        circleLocal.outboxDrainError = StateError('simulated drain failure');
+        try {
+          await circleLocal.drainRegistryTombstoneOutbox();
+        } catch (_) {}
+      };
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+
+      final raced = await runFixture(context());
+
+      expect(raced.disposition, WebDavSyncCycleDisposition.completed);
+      expect(raced.statusHint, contains('deletion history'));
+      expect(circleLocal.outboxDrainCalls, 2);
+      expect(circleLocal.appliedRequests, isEmpty);
+      expect(states.state.circleProfilesBaseline, isNull);
+      expect(
+        states.state.ownManifest!.sections.map((section) => section.name),
+        isNot(contains('profiles')),
+      );
+      expect(
+        diagnostics,
+        contains(
+          'Deferred WebDAV circle publication because the registry snapshot '
+          'has pending tombstones',
+        ),
+      );
+
+      circleLocal
+        ..beforeCircleSnapshot = null
+        ..outboxDrainError = null
+        ..outboxDrained = true
+        ..registryOutboxRowCount = 0
+        ..profiles = _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: now.millisecondsSinceEpoch,
+                originDeviceId: 'device-a',
+              ),
+              value: null,
+            ),
+          },
+        );
+
+      final recovered = await runFixture(context());
+
+      expect(recovered.disposition, WebDavSyncCycleDisposition.completed);
+      expect(recovered.statusHint, isNot(contains('deletion history')));
+      expect(circleLocal.appliedRequests, hasLength(1));
+      expect(
+        circleLocal
+            .appliedRequests
+            .single
+            .profiles
+            .profiles['profile-circle']!
+            .value,
+        isNull,
+      );
+      expect(
+        states.state.ownManifest!.sections.map((section) => section.name),
+        contains('profiles'),
+      );
+    },
+  );
+
+  test(
+    'unavailable mapped profile does not abort remaining hot sync',
+    () async {
+      final diagnostics = <String>[];
+      final twoProfileLocal = _FakeLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        unavailableProfileIds: const <String>{'local-deleted'},
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: twoProfileLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+
+      final report = await runFixture(
+        context(
+          profiles: const <String, String>{
+            'deleted-circle': 'local-deleted',
+            'profile-circle': 'local-profile',
+          },
+        ),
+      );
+
+      expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      expect(report.profilesApplied, 1);
+      expect(twoProfileLocal.applied, hasLength(1));
+      expect(twoProfileLocal.events, contains('read:local-deleted'));
+      expect(twoProfileLocal.events, contains('apply:local-profile'));
+      expect(
+        diagnostics,
+        contains('Skipped an unavailable mapped WebDAV sync profile'),
+      );
+    },
+  );
+
   test('pending setting accepts its grant from local inventory', () async {
     final diagnostics = <String>[];
     const localGrant = (
@@ -2044,10 +2174,15 @@ final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
 }
 
 class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
-  _FakeLocalAdapter(this.preferences, {this.activeProfileId = 'active'});
+  _FakeLocalAdapter(
+    this.preferences, {
+    this.activeProfileId = 'active',
+    this.unavailableProfileIds = const <String>{},
+  });
 
   Map<String, Object?> preferences;
   final String activeProfileId;
+  final Set<String> unavailableProfileIds;
   final List<Map<String, Object>> applied = <Map<String, Object>>[];
   final List<String> events = <String>[];
   bool failNextApply = false;
@@ -2077,6 +2212,9 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     String localProfileId,
   ) async {
     events.add('read:$localProfileId');
+    if (unavailableProfileIds.contains(localProfileId)) {
+      throw WebDavSyncMappedProfileUnavailable();
+    }
     return WebDavSyncLocalProfileSnapshot(
       localProfileId: localProfileId,
       rawPreferences: Map<String, Object?>.from(preferences),
@@ -2149,6 +2287,8 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
   bool outboxDrained = true;
   Object? outboxDrainError;
   int outboxDrainCalls = 0;
+  int registryOutboxRowCount = 0;
+  Future<void> Function()? beforeCircleSnapshot;
   bool failNextCircleApply = false;
   void Function(WebDavSyncCircleApplyRequest request)? beforeCircleApply;
   final List<bool> circleReplayFlags = <bool>[];
@@ -2175,10 +2315,12 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
     WebDavSyncCircleBuildRequest request,
   ) async {
     buildRequests.add(request);
+    await beforeCircleSnapshot?.call();
     if (!honorProfileSuppression || request.suppressedLocalProfileIds.isEmpty) {
       return WebDavSyncBuiltCircleState(
         profiles: profiles,
         resources: resources,
+        registryOutboxRowCount: registryOutboxRowCount,
       );
     }
     final unsuppressed = <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
@@ -2195,6 +2337,7 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
             _circleProfiles(unsuppressed),
           ]),
       resources: resources,
+      registryOutboxRowCount: registryOutboxRowCount,
     );
   }
 

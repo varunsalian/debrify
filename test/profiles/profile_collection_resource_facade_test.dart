@@ -16,7 +16,9 @@ import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/screens/settings/provider_settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -357,6 +359,51 @@ void main() {
       expect(await StorageService.getPikPakEnabled(), isFalse);
     },
   );
+
+  test('PikPak selection requires authentication and a ready secret', () async {
+    await StorageService.setPikPakEmail('ready@example.test');
+    await StorageService.setPikPakAccessToken('access-token');
+    await StorageService.setPikPakRefreshToken('refresh-token');
+    final authenticated = await PikPakApiService.instance.isAuthenticated();
+    final readyPresence = await ProfileCredentialFacade.isConfigured(
+      'pikpak_email',
+    );
+
+    expect(authenticated, isTrue);
+    expect(readyPresence.pending, isFalse);
+    expect(
+      pikPakProviderIsSelectable(
+        isAuthenticated: authenticated,
+        secretPending: readyPresence.pending,
+      ),
+      isTrue,
+    );
+    expect(
+      pikPakProviderIsSelectable(
+        isAuthenticated: authenticated,
+        secretPending: true,
+      ),
+      isFalse,
+      reason: 'authenticated but pending must not be selectable',
+    );
+
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+    await StorageService.setPikPakEmail('restored@example.test');
+    final restoredAuthentication = await PikPakApiService.instance
+        .isAuthenticated();
+
+    expect(await StorageService.getPikPakEmail(), 'restored@example.test');
+    expect(restoredAuthentication, isFalse);
+    expect(
+      pikPakProviderIsSelectable(
+        isAuthenticated: restoredAuthentication,
+        secretPending: false,
+      ),
+      isFalse,
+      reason: 'a restored email without tokens is not authentication',
+    );
+  });
 
   test(
     'confirmed IPTV collection removal revokes borrower grants atomically',

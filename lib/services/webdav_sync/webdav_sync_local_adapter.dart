@@ -47,6 +47,11 @@ final class WebDavSyncLocalProfileSnapshot {
   final ProfilePreferenceMutationToken? mutationToken;
 }
 
+final class WebDavSyncMappedProfileUnavailable extends StateError {
+  WebDavSyncMappedProfileUnavailable()
+    : super('A mapped WebDAV sync profile is unavailable');
+}
+
 abstract interface class WebDavSyncLocalAdapter {
   Future<WebDavSyncLocalSession> beginCycle();
 
@@ -111,10 +116,12 @@ final class WebDavSyncBuiltCircleState {
   const WebDavSyncBuiltCircleState({
     required this.profiles,
     required this.resources,
+    this.registryOutboxRowCount = 0,
   });
 
   final WebDavSyncProfilesDocument profiles;
   final WebDavSyncResourcesDocument resources;
+  final int registryOutboxRowCount;
 }
 
 final class WebDavSyncCircleApplyRequest {
@@ -206,7 +213,7 @@ final class ProfileWebDavSyncLocalAdapter
     final profile = await registry.getProfile(localProfileId);
     _validateSession(session);
     if (profile == null) {
-      throw StateError('A mapped WebDAV sync profile is unavailable');
+      throw WebDavSyncMappedProfileUnavailable();
     }
     final scope = ProfileScope(
       profileId: profile.id,
@@ -249,7 +256,7 @@ final class ProfileWebDavSyncLocalAdapter
     final profile = await registry.getProfile(localProfileId);
     _validateSession(session);
     if (profile == null) {
-      throw StateError('A mapped WebDAV sync profile is unavailable');
+      throw WebDavSyncMappedProfileUnavailable();
     }
     // Read the visible generation immediately before apply. Adoption and
     // profile refresh can replace it between the cycle's read and write.
@@ -321,8 +328,9 @@ final class ProfileWebDavSyncLocalAdapter
     WebDavSyncCircleBuildRequest request,
   ) async {
     _validateSession(session);
-    final profileProjection = await registry.readProfileSyncProjection();
-    final registryProjection = await registry.readRegistrySyncProjection();
+    final circleProjection = await registry.readCircleSyncProjection();
+    final profileProjection = circleProjection.profiles;
+    final registryProjection = circleProjection.registry;
     final tombstones =
         await WebDavSyncTombstoneRecorder.loadRegistryRecordTombstones();
     _validateSession(session);
@@ -607,6 +615,7 @@ final class ProfileWebDavSyncLocalAdapter
     return WebDavSyncBuiltCircleState(
       profiles: profileDocument,
       resources: resourceDocument,
+      registryOutboxRowCount: circleProjection.outboxRowCount,
     );
   }
 

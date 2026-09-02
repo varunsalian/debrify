@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/analytics_service.dart';
+import '../../services/pikpak_api_service.dart';
+import '../../services/profiles/profile_credential_facade.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+
+@visibleForTesting
+bool pikPakProviderIsSelectable({
+  required bool isAuthenticated,
+  required bool secretPending,
+}) => isAuthenticated && !secretPending;
 
 /// Provider settings page for configuring default torrent provider.
 class ProviderSettingsPage extends StatefulWidget {
@@ -61,7 +69,11 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final rdConfigured = await StorageService.hasRealDebridCredential();
     final premiumizeConfigured = await StorageService.hasPremiumizeCredential();
     final allDebridConfigured = await StorageService.hasAllDebridCredential();
-    final pikpakConfigured = await StorageService.hasPikPakCredential();
+    final pikpakAuthenticated = await PikPakApiService.instance
+        .isAuthenticated();
+    final pikpakPresence = await ProfileCredentialFacade.isConfigured(
+      'pikpak_email',
+    );
 
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
@@ -74,7 +86,10 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final rdAvailable = rdEnabled && rdConfigured;
     final premiumizeAvailable = premiumizeEnabled && premiumizeConfigured;
     final allDebridAvailable = allDebridEnabled && allDebridConfigured;
-    final pikpakAvailable = pikpakConfigured;
+    final pikpakAvailable = pikPakProviderIsSelectable(
+      isAuthenticated: pikpakAuthenticated,
+      secretPending: pikpakPresence.pending,
+    );
 
     // Load current setting
     var currentProvider = await StorageService.getDefaultTorrentProvider();

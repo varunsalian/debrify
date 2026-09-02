@@ -553,6 +553,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
 
       session ??= await _localAdapter.beginCycle();
       _CircleCycleResult? circleResult;
+      circlePublication:
       if (circleAdapter != null && circlePublicationAllowed) {
         final peerCircle = await _readCirclePeerData(
           transport: transport,
@@ -619,6 +620,19 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               },
             ),
           );
+          if (built.registryOutboxRowCount != 0) {
+            circlePublicationAllowed = false;
+            state = await _stateRepository.update(
+              namespaceId,
+              (current) => current.copyWith(statusHint: _outboxStatusHint),
+            );
+            _diagnostic(
+              'Deferred WebDAV circle publication because the registry '
+              'snapshot has pending tombstones',
+              null,
+            );
+            break circlePublication;
+          }
           final mergedProfiles = WebDavSyncCircleMerge.mergeProfiles(
             <WebDavSyncProfilesDocument>[
               built.profiles,
@@ -743,10 +757,19 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         );
         final phaseStarted = instrumentation.startPhase();
         try {
-          final localSnapshot = await _localAdapter.readProfile(
-            session,
-            localProfileId,
-          );
+          late final WebDavSyncLocalProfileSnapshot localSnapshot;
+          try {
+            localSnapshot = await _localAdapter.readProfile(
+              session,
+              localProfileId,
+            );
+          } on WebDavSyncMappedProfileUnavailable catch (error) {
+            _diagnostic(
+              'Skipped an unavailable mapped WebDAV sync profile',
+              error,
+            );
+            continue;
+          }
           final profileState =
               state.profiles[circleProfileId] ??
               const WebDavSyncProfileEngineState();

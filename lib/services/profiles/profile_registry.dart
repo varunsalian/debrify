@@ -2554,112 +2554,138 @@ class ProfileRegistry {
   /// document builder must still preserve its prior stamp when these
   /// serialized fields are byte-identical.
   Future<List<RegistrySyncProfileProjection>> readProfileSyncProjection() =>
-      _db.transaction((txn) async {
-        final rows = await txn.query('user_profiles', orderBy: 'id');
-        return rows
-            .map(
-              (row) => RegistrySyncProfileProjection(
-                profile: _decodeProfile(row),
-                pin: ProfilePinRecord(
-                  hash: row['pin_hash'] as Uint8List?,
-                  salt: row['pin_salt'] as Uint8List?,
-                  paramsJson: row['pin_params_json'] as String?,
-                  resetRequired: row['pin_reset_required'] == 1,
-                  recoveryHash: row['recovery_hash'] as Uint8List?,
-                  recoverySalt: row['recovery_salt'] as Uint8List?,
-                  recoveryParamsJson: row['recovery_params_json'] as String?,
-                ),
-                updatedAtMs: row['updated_at_ms']! as int,
-              ),
-            )
-            .toList(growable: false);
-      });
+      _db.transaction(_readProfileSyncProjection);
 
   /// One transactionally consistent registry projection for the circle-level
   /// sync document builder. Operational models deliberately remain free of
   /// database provenance; the timestamps live only on these sync rows.
   Future<RegistrySyncProjection> readRegistrySyncProjection() =>
+      _db.transaction(_readRegistrySyncProjection);
+
+  /// The exact registry snapshot used for circle publication, together with
+  /// the outbox state from that same SQL transaction.
+  Future<RegistryCircleSyncProjection> readCircleSyncProjection() =>
       _db.transaction((txn) async {
-        final resources = await txn.query(
-          'connection_resources',
-          columns: <String>[..._resourceRowColumns, 'updated_at_ms'],
-          orderBy: 'id',
+        final profiles = await _readProfileSyncProjection(txn);
+        final registry = await _readRegistrySyncProjection(txn);
+        final outboxRowCount = Sqflite.firstIntValue(
+          await txn.rawQuery(
+            'SELECT COUNT(*) FROM webdav_sync_tombstone_outbox',
+          ),
         );
-        final grants = await txn.query(
-          'profile_resource_grants',
-          columns: const <String>[
-            'profile_id',
-            'resource_id',
-            'permissions',
-            'updated_at_ms',
-          ],
-          orderBy: 'profile_id, resource_id',
-        );
-        final settings = await txn.query(
-          'profile_resource_settings',
-          columns: const <String>[
-            'profile_id',
-            'resource_id',
-            'enabled',
-            'settings_json',
-            'updated_at_ms',
-          ],
-          orderBy: 'profile_id, resource_id',
-        );
-        final bindings = await txn.query(
-          'profile_connection_bindings',
-          columns: const <String>[
-            'profile_id',
-            'slot',
-            'resource_id',
-            'updated_at_ms',
-          ],
-          orderBy: 'profile_id, slot',
-        );
-        return RegistrySyncProjection(
-          resources: resources
-              .map(
-                (row) => RegistrySyncResourceProjection(
-                  resource: _decodeResource(row),
-                  updatedAtMs: row['updated_at_ms']! as int,
-                ),
-              )
-              .toList(growable: false),
-          grants: grants
-              .map(
-                (row) => RegistrySyncGrantProjection(
-                  profileId: row['profile_id']! as String,
-                  resourceId: row['resource_id']! as String,
-                  permissions: row['permissions']! as int,
-                  updatedAtMs: row['updated_at_ms']! as int,
-                ),
-              )
-              .toList(growable: false),
-          settings: settings
-              .map(
-                (row) => RegistrySyncSettingsProjection(
-                  profileId: row['profile_id']! as String,
-                  resourceId: row['resource_id']! as String,
-                  enabled: row['enabled'] == 1,
-                  settings: Map<String, dynamic>.from(
-                    jsonDecode(row['settings_json']! as String) as Map,
-                  ),
-                  updatedAtMs: row['updated_at_ms']! as int,
-                ),
-              )
-              .toList(growable: false),
-          bindings: bindings
-              .map(
-                (row) => RegistrySyncBindingProjection(
-                  profileId: row['profile_id']! as String,
-                  slot: row['slot']! as String,
-                  resourceId: row['resource_id']! as String,
-                  updatedAtMs: row['updated_at_ms']! as int,
-                ),
-              )
-              .toList(growable: false),
+        return RegistryCircleSyncProjection(
+          profiles: profiles,
+          registry: registry,
+          outboxRowCount: outboxRowCount ?? 0,
         );
       });
+
+  Future<List<RegistrySyncProfileProjection>> _readProfileSyncProjection(
+    DatabaseExecutor db,
+  ) async {
+    final rows = await db.query('user_profiles', orderBy: 'id');
+    return rows
+        .map(
+          (row) => RegistrySyncProfileProjection(
+            profile: _decodeProfile(row),
+            pin: ProfilePinRecord(
+              hash: row['pin_hash'] as Uint8List?,
+              salt: row['pin_salt'] as Uint8List?,
+              paramsJson: row['pin_params_json'] as String?,
+              resetRequired: row['pin_reset_required'] == 1,
+              recoveryHash: row['recovery_hash'] as Uint8List?,
+              recoverySalt: row['recovery_salt'] as Uint8List?,
+              recoveryParamsJson: row['recovery_params_json'] as String?,
+            ),
+            updatedAtMs: row['updated_at_ms']! as int,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<RegistrySyncProjection> _readRegistrySyncProjection(
+    DatabaseExecutor db,
+  ) async {
+    final resources = await db.query(
+      'connection_resources',
+      columns: <String>[..._resourceRowColumns, 'updated_at_ms'],
+      orderBy: 'id',
+    );
+    final grants = await db.query(
+      'profile_resource_grants',
+      columns: const <String>[
+        'profile_id',
+        'resource_id',
+        'permissions',
+        'updated_at_ms',
+      ],
+      orderBy: 'profile_id, resource_id',
+    );
+    final settings = await db.query(
+      'profile_resource_settings',
+      columns: const <String>[
+        'profile_id',
+        'resource_id',
+        'enabled',
+        'settings_json',
+        'updated_at_ms',
+      ],
+      orderBy: 'profile_id, resource_id',
+    );
+    final bindings = await db.query(
+      'profile_connection_bindings',
+      columns: const <String>[
+        'profile_id',
+        'slot',
+        'resource_id',
+        'updated_at_ms',
+      ],
+      orderBy: 'profile_id, slot',
+    );
+    return RegistrySyncProjection(
+      resources: resources
+          .map(
+            (row) => RegistrySyncResourceProjection(
+              resource: _decodeResource(row),
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+      grants: grants
+          .map(
+            (row) => RegistrySyncGrantProjection(
+              profileId: row['profile_id']! as String,
+              resourceId: row['resource_id']! as String,
+              permissions: row['permissions']! as int,
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+      settings: settings
+          .map(
+            (row) => RegistrySyncSettingsProjection(
+              profileId: row['profile_id']! as String,
+              resourceId: row['resource_id']! as String,
+              enabled: row['enabled'] == 1,
+              settings: Map<String, dynamic>.from(
+                jsonDecode(row['settings_json']! as String) as Map,
+              ),
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+      bindings: bindings
+          .map(
+            (row) => RegistrySyncBindingProjection(
+              profileId: row['profile_id']! as String,
+              slot: row['slot']! as String,
+              resourceId: row['resource_id']! as String,
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
 
   /// Applies a fully merged circle-registry delta without staged-graph or
   /// restore journals. The caller supplies merge provenance; this writer owns
@@ -6251,6 +6277,18 @@ class RegistrySyncProjection {
     required this.grants,
     required this.settings,
     required this.bindings,
+  });
+}
+
+class RegistryCircleSyncProjection {
+  final List<RegistrySyncProfileProjection> profiles;
+  final RegistrySyncProjection registry;
+  final int outboxRowCount;
+
+  const RegistryCircleSyncProjection({
+    required this.profiles,
+    required this.registry,
+    required this.outboxRowCount,
   });
 }
 
