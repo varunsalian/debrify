@@ -37,43 +37,68 @@ void main() {
     );
   });
 
-  test('section PUT metadata rejects empty ETag and size contradictions', () {
-    final uri = Uri.parse('https://example.test/dav/section.enc');
+  test(
+    'section PUT metadata rejects empty ETag and stored-size contradictions',
+    () {
+      final uri = Uri.parse('https://example.test/dav/section.enc');
 
-    expect(
-      () => validateWebDavSyncSectionWriteMetadata(
-        WebDavResponseMetadata(
-          statusCode: 201,
-          uri: uri,
-          headers: const <String, String>{'etag': ''},
+      expect(
+        () => validateWebDavSyncSectionWriteMetadata(
+          WebDavResponseMetadata(
+            statusCode: 201,
+            uri: uri,
+            headers: const <String, String>{'etag': ''},
+          ),
+          expectedBytes: 42,
         ),
-        expectedBytes: 42,
-      ),
-      throwsStateError,
-    );
-    expect(
-      () => validateWebDavSyncSectionWriteMetadata(
-        WebDavResponseMetadata(
-          statusCode: 201,
-          uri: uri,
-          headers: const <String, String>{'content-length': '41'},
+        throwsStateError,
+      );
+      expect(
+        () => validateWebDavSyncSectionWriteMetadata(
+          WebDavResponseMetadata(
+            statusCode: 201,
+            uri: uri,
+            headers: const <String, String>{'content-range': 'bytes 0-40/41'},
+          ),
+          expectedBytes: 42,
         ),
-        expectedBytes: 42,
-      ),
-      throwsStateError,
-    );
-    expect(
-      () => validateWebDavSyncSectionWriteMetadata(
-        WebDavResponseMetadata(
-          statusCode: 201,
-          uri: uri,
-          headers: const <String, String>{'content-range': 'bytes 0-40/41'},
-        ),
-        expectedBytes: 42,
-      ),
-      throwsStateError,
-    );
-  });
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'large section PUT accepts a 201 text body with Content-Length 2',
+    () async {
+      final bytes = Uint8List(64 * 1024);
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((request) async {
+          expect(request.method, 'PUT');
+          expect(request.bodyBytes, hasLength(bytes.length));
+          return http.Response(
+            'OK',
+            201,
+            headers: const <String, String>{'content-length': '2'},
+          );
+        }),
+      );
+
+      final metadata = await transport.writeSection(
+        'device-a',
+        'a' * 64,
+        bytes,
+        maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
+      );
+      validateWebDavSyncSectionWriteMetadata(
+        metadata,
+        expectedBytes: bytes.length,
+      );
+
+      transport.close();
+    },
+  );
 
   test('peer discovery returns only bounded safe collection IDs', () async {
     final client = MockClient((request) async {

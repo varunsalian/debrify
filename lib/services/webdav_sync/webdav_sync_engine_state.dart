@@ -284,16 +284,21 @@ final class WebDavSyncProfileEngineState {
     bool clearPendingApply = false,
     Map<String, WebDavSyncTombstone>? tombstones,
     String? lastPushedHotDigest,
+    bool clearLastPushedHotDigest = false,
     String? lastPushedTombstoneDigest,
+    bool clearLastPushedTombstoneDigest = false,
   }) => WebDavSyncProfileEngineState(
     baseline: baseline ?? this.baseline,
     pendingApply: clearPendingApply
         ? null
         : (pendingApply ?? this.pendingApply),
     tombstones: tombstones ?? this.tombstones,
-    lastPushedHotDigest: lastPushedHotDigest ?? this.lastPushedHotDigest,
-    lastPushedTombstoneDigest:
-        lastPushedTombstoneDigest ?? this.lastPushedTombstoneDigest,
+    lastPushedHotDigest: clearLastPushedHotDigest
+        ? null
+        : (lastPushedHotDigest ?? this.lastPushedHotDigest),
+    lastPushedTombstoneDigest: clearLastPushedTombstoneDigest
+        ? null
+        : (lastPushedTombstoneDigest ?? this.lastPushedTombstoneDigest),
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -441,7 +446,9 @@ final class WebDavSyncEngineState {
     WebDavSyncPendingCircleApply? pendingCircleApply,
     bool clearPendingCircleApply = false,
     String? lastPushedProfilesDigest,
+    bool clearLastPushedProfilesDigest = false,
     String? lastPushedResourcesDigest,
+    bool clearLastPushedResourcesDigest = false,
     WebDavSyncPendingActiveProfile? pendingActiveProfile,
     bool clearPendingActiveProfileDeletion = false,
     String? pendingAdminSafetyProfile,
@@ -480,10 +487,12 @@ final class WebDavSyncEngineState {
     pendingCircleApply: clearPendingCircleApply
         ? null
         : (pendingCircleApply ?? this.pendingCircleApply),
-    lastPushedProfilesDigest:
-        lastPushedProfilesDigest ?? this.lastPushedProfilesDigest,
-    lastPushedResourcesDigest:
-        lastPushedResourcesDigest ?? this.lastPushedResourcesDigest,
+    lastPushedProfilesDigest: clearLastPushedProfilesDigest
+        ? null
+        : (lastPushedProfilesDigest ?? this.lastPushedProfilesDigest),
+    lastPushedResourcesDigest: clearLastPushedResourcesDigest
+        ? null
+        : (lastPushedResourcesDigest ?? this.lastPushedResourcesDigest),
     pendingActiveProfile: clearPendingActiveProfileDeletion
         ? null
         : (pendingActiveProfile ?? this.pendingActiveProfile),

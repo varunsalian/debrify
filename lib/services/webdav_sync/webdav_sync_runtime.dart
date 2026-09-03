@@ -1252,6 +1252,16 @@ final class WebDavSyncAuthenticationFailureTracker {
 
 typedef WebDavSyncHttpClientFactory = http.Client Function();
 
+final class WebDavSyncHttpClientBorrow {
+  const WebDavSyncHttpClientBorrow({
+    required this.client,
+    required this.generation,
+  });
+
+  final http.Client client;
+  final int generation;
+}
+
 /// Owns the one reusable protocol client for the currently armed binding.
 /// Per-cycle transports borrow it and therefore cannot close it themselves.
 final class WebDavSyncBindingHttpClientOwner {
@@ -1261,25 +1271,86 @@ final class WebDavSyncBindingHttpClientOwner {
   final WebDavSyncHttpClientFactory _clientFactory;
   String? _bindingId;
   http.Client? _client;
+  int _generation = 0;
 
-  http.Client clientFor(String bindingId) {
+  int get generation => _generation;
+
+  WebDavSyncHttpClientBorrow borrow(String bindingId) {
     retainBinding(bindingId);
-    return _client ??= _clientFactory();
+    final client = _client ??= _clientFactory();
+    return WebDavSyncHttpClientBorrow(
+      client: _WebDavSyncGenerationClient(
+        owner: this,
+        delegate: client,
+        generation: _generation,
+      ),
+      generation: _generation,
+    );
+  }
+
+  WebDavSyncHttpClientBorrow? borrowIfGeneration(
+    String bindingId,
+    int generation,
+  ) {
+    if (generation != _generation) return null;
+    return borrow(bindingId);
   }
 
   void retainBinding(String bindingId) {
-    if (_bindingId != null && _bindingId != bindingId) close();
+    if (_bindingId == bindingId) return;
+    final previous = _client;
+    _client = null;
     _bindingId = bindingId;
+    _generation++;
+    previous?.close();
   }
 
-  void close() {
-    _client?.close();
+  bool isGenerationCurrent(int generation) => generation == _generation;
+
+  bool _owns(http.Client client, int generation) =>
+      generation == _generation && identical(client, _client);
+
+  void close({int? ifGeneration}) {
+    if (ifGeneration != null && ifGeneration != _generation) return;
+    final previous = _client;
     _client = null;
     _bindingId = null;
+    _generation++;
+    previous?.close();
   }
 
   @visibleForTesting
   bool get debugHasClient => _client != null;
+}
+
+final class _WebDavSyncGenerationClient extends http.BaseClient {
+  _WebDavSyncGenerationClient({
+    required WebDavSyncBindingHttpClientOwner owner,
+    required http.Client delegate,
+    required int generation,
+  }) : _owner = owner,
+       _delegate = delegate,
+       _generation = generation;
+
+  final WebDavSyncBindingHttpClientOwner _owner;
+  final http.Client _delegate;
+  final int _generation;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (!_owner._owns(_delegate, _generation)) {
+      throw http.ClientException(
+        'WebDAV sync HTTP client generation is stale',
+        request.url,
+      );
+    }
+    return _delegate.send(request);
+  }
+
+  @override
+  void close() {
+    // The binding owner alone closes the underlying shared client.
+  }
 }
 
 final class _ProductionCycleRunner
@@ -1310,6 +1381,7 @@ final class _ProductionCycleRunner
   void closeCycleTransports() => _httpClientOwner.close();
 
   Future<WebDavSyncRemotePollContext?> remotePollContext() async {
+    final clientGeneration = _httpClientOwner.generation;
     final stored = await bindingStore.load();
     final binding = stored.activeBinding;
     if (binding == null || binding.lifecycle != WebDavSyncLifecycle.active) {
@@ -1326,6 +1398,11 @@ final class _ProductionCycleRunner
           ..sort();
     if (peerDeviceIds.isEmpty) return null;
     final secrets = await bindingStore.readSecrets(binding);
+    final borrow = _httpClientOwner.borrowIfGeneration(
+      binding.id,
+      clientGeneration,
+    );
+    if (borrow == null) return null;
     return WebDavSyncRemotePollContext(
       transport: ProtocolWebDavSyncTransport(
         location: binding.location,
@@ -1333,10 +1410,12 @@ final class _ProductionCycleRunner
           username: secrets.username,
           password: secrets.password,
         ),
-        client: _httpClientOwner.clientFor(binding.id),
+        client: borrow.client,
       ),
       peerDeviceIds: List<String>.unmodifiable(peerDeviceIds),
       validators: state.peerManifestValidators,
+      clientGeneration: borrow.generation,
+      isClientGenerationCurrent: _httpClientOwner.isGenerationCurrent,
     );
   }
 
@@ -1358,6 +1437,7 @@ final class _ProductionCycleRunner
     required bool allowPreActivation,
     required WebDavSyncTrigger? trigger,
   }) async {
+    final clientGeneration = _httpClientOwner.generation;
     if (context == null || context.namespaceId == null) {
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
@@ -1385,6 +1465,15 @@ final class _ProductionCycleRunner
       );
     }
     final secrets = await bindingStore.readSecrets(binding);
+    final borrow = _httpClientOwner.borrowIfGeneration(
+      binding.id,
+      clientGeneration,
+    );
+    if (borrow == null) {
+      return const WebDavSyncCycleReport(
+        disposition: WebDavSyncCycleDisposition.inactive,
+      );
+    }
     final engine = WebDavSyncEngine(
       stateRepository: stateRepository,
       localAdapter: localAdapter,
@@ -1395,7 +1484,7 @@ final class _ProductionCycleRunner
           username: secrets.username,
           password: secrets.password,
         ),
-        client: _httpClientOwner.clientFor(binding.id),
+        client: borrow.client,
       ),
       diagnostic: recordWebDavSyncDiagnostic,
     );

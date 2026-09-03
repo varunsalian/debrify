@@ -142,26 +142,6 @@ void validateWebDavSyncSectionWriteMetadata(
     throw StateError('WebDAV sync section PUT returned an empty ETag');
   }
 
-  // Content-Length normally frames the PUT response body, not the stored
-  // resource. A positive value on a bodyless response is the only form that
-  // can safely be treated as an echo of the uploaded representation size.
-  final contentLength = _responseHeader(
-    metadata.headers,
-    HttpHeaders.contentLengthHeader,
-  );
-  final responseContentType = _responseHeader(
-    metadata.headers,
-    HttpHeaders.contentTypeHeader,
-  );
-  if (contentLength != null && responseContentType == null) {
-    final parsed = int.tryParse(contentLength.trim());
-    if (parsed != null && parsed > 0 && parsed != expectedBytes) {
-      throw StateError(
-        'WebDAV sync section PUT returned a contradictory Content-Length',
-      );
-    }
-  }
-
   // Some object-backed WebDAV servers expose the stored/uploaded size under
   // an explicit response header. Those values do describe the resource and
   // therefore must agree with the bytes whose hash names the section.

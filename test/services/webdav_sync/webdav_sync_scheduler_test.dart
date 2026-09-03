@@ -8,12 +8,14 @@ import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 // Flutter's test SDK supplies fake_async transitively for deterministic timers.
 // ignore: depend_on_referenced_packages
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   late Uint8List marker;
@@ -65,6 +67,72 @@ void main() {
     scheduler.disarm();
 
     expect(runner.transportCloses, 1);
+  });
+
+  test('disarm during an in-flight poll cannot touch the rearmed client', () {
+    fakeAsync((async) {
+      final clients = <_PollClient>[];
+      final owner = WebDavSyncBindingHttpClientOwner(
+        clientFactory: () {
+          final client = _PollClient();
+          clients.add(client);
+          return client;
+        },
+      );
+      final staleBorrow = owner.borrow('binding-a');
+      final runner = _Runner()..onTransportClose = owner.close;
+      final staleTransport = _PollTransport(
+        clock: () => DateTime.utc(2026, 9, 1).add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final pendingContext = Completer<WebDavSyncRemotePollContext?>();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => DateTime.utc(2026, 9, 1).add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () => pendingContext.future,
+      );
+      async.elapse(idlePollPeriod);
+      async.flushMicrotasks();
+
+      scheduler.disarm();
+      final rearmedBorrow = owner.borrow('binding-a');
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => null,
+      );
+      pendingContext.complete(
+        WebDavSyncRemotePollContext(
+          transport: staleTransport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+          clientGeneration: staleBorrow.generation,
+          isClientGenerationCurrent: owner.isGenerationCurrent,
+        ),
+      );
+      async.flushMicrotasks();
+
+      expect(staleTransport.probedDeviceIds, isEmpty);
+      expect(clients, hasLength(2));
+      expect(clients.first.closeCalls, 1);
+      expect(clients.last.closeCalls, 0);
+      expect(owner.isGenerationCurrent(rearmedBorrow.generation), isTrue);
+
+      scheduler.disarm();
+      expect(clients.last.closeCalls, 1);
+      scheduler.dispose();
+      expect(clients.last.closeCalls, 1);
+    });
   });
 
   test('scheduler admits only the dedicated registry synthetic key', () {
@@ -932,13 +1000,17 @@ final class _Runner
     implements WebDavSyncCycleRunner, WebDavSyncCycleTransportOwner {
   int runs = 0;
   int transportCloses = 0;
+  void Function()? onTransportClose;
   Completer<void>? blocker;
   void Function(WebDavSyncTrigger? trigger)? onRun;
   bool requestFollowUpOnNextRun = false;
   final List<WebDavSyncTrigger?> triggers = <WebDavSyncTrigger?>[];
 
   @override
-  void closeCycleTransports() => transportCloses++;
+  void closeCycleTransports() {
+    transportCloses++;
+    onTransportClose?.call();
+  }
 
   @override
   Future<WebDavSyncCycleReport> runCycle(
@@ -956,6 +1028,20 @@ final class _Runner
       disposition: WebDavSyncCycleDisposition.completed,
       localChangeFollowUp: followUp,
     );
+  }
+}
+
+final class _PollClient extends http.BaseClient {
+  int closeCalls = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  void close() {
+    closeCalls++;
+    super.close();
   }
 }
 

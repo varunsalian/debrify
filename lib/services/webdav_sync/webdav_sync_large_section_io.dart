@@ -26,9 +26,8 @@ final class WebDavSyncLargeSectionIo {
   final WebDavSyncScratchCleaner _scratchCleaner;
 
   /// Seals and commits one immutable section. Production transports stage it
-  /// under the writable cache root so the upload body does not require a
-  /// second large memory buffer. The PUT response metadata is checked when
-  /// present; readers perform the full hash, AEAD, and semantic verification.
+  /// under the writable cache root and stream both directions, so the upload
+  /// body and verification download never coexist as large memory buffers.
   Future<WebDavSyncSectionReference> sealWriteVerify({
     required WebDavSyncTransport transport,
     required WebDavSyncCircleKey key,
@@ -108,9 +107,8 @@ final class WebDavSyncLargeSectionIo {
         updatedAtMs: updatedAtMs,
         maxBytes: maxBytes,
       );
-      WebDavResponseMetadata? metadata;
       try {
-        metadata = await fileTransport.writeSectionFile(
+        await fileTransport.writeSectionFile(
           deviceId,
           staged.contentHash,
           upload,
@@ -119,12 +117,28 @@ final class WebDavSyncLargeSectionIo {
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
       }
-      if (metadata != null) {
-        validateWebDavSyncSectionWriteMetadata(
-          metadata,
-          expectedBytes: staged.size,
-        );
+      final download = File('${scratch.path}/read-back.enc');
+      final result = await fileTransport.readSectionToFile(
+        deviceId,
+        staged,
+        download,
+        maxBytes: maxBytes,
+      );
+      if (result.bytesWritten != staged.size ||
+          await _sha256File(download) != staged.contentHash) {
+        throw StateError('WebDAV sync section read-back verification failed');
       }
+      final verified = await _readBounded(download, maxBytes);
+      await _codec.openDocument(
+        key: key,
+        encoded: verified,
+        circleId: circleId,
+        deviceId: deviceId,
+        logicalName: logicalName,
+        schemaVersion: schemaVersion,
+        maxBytes: maxBytes,
+        runInBackground: true,
+      );
       return staged;
     } catch (error) {
       operationFailure = error;
@@ -247,7 +261,16 @@ final class WebDavSyncLargeSectionIo {
     } on WebDavException catch (error) {
       if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
     }
-    if (metadata != null) {
+    if (_requiresReadBack(reference.name)) {
+      final readBack = await transport.readSection(
+        deviceId,
+        reference,
+        maxBytes: maxBytes,
+      );
+      if (!_bytesEqual(encoded, readBack.bytes)) {
+        throw StateError('WebDAV sync section read-back verification failed');
+      }
+    } else if (metadata != null) {
       validateWebDavSyncSectionWriteMetadata(
         metadata,
         expectedBytes: reference.size,
@@ -300,4 +323,21 @@ final class WebDavSyncLargeSectionIo {
     schemaVersion: schemaVersion,
     size: encoded.length,
   );
+
+  static bool _requiresReadBack(String logicalName) =>
+      logicalName == 'bootstrap' ||
+      logicalName == 'graph' ||
+      logicalName == 'profiles' ||
+      logicalName == 'resources';
+
+  static bool _bytesEqual(List<int> left, List<int> right) {
+    var difference = left.length ^ right.length;
+    final length = left.length > right.length ? left.length : right.length;
+    for (var index = 0; index < length; index++) {
+      difference |=
+          (index < left.length ? left[index] : 0) ^
+          (index < right.length ? right[index] : 0);
+    }
+    return difference == 0;
+  }
 }

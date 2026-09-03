@@ -206,6 +206,114 @@ void main() {
     );
   });
 
+  test(
+    'hot PUT has no GET while profiles and resources PUTs read back',
+    () async {
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+
+      final report = await runFixture(context());
+
+      expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      final manifest = states.state.ownManifest!;
+      final hot = manifest.section('hot/profile-circle')!;
+      final profiles = manifest.section('profiles')!;
+      final resources = manifest.section('resources')!;
+      final hotWrite = transport.events.indexOf(
+        'write:section:${hot.contentHash}',
+      );
+      final profilesWrite = transport.events.indexOf(
+        'write:section:${profiles.contentHash}',
+      );
+      final resourcesWrite = transport.events.indexOf(
+        'write:section:${resources.contentHash}',
+      );
+      expect(hotWrite, isNonNegative);
+      expect(profilesWrite, isNonNegative);
+      expect(resourcesWrite, isNonNegative);
+      expect(
+        transport.events,
+        isNot(contains('read:section:device-a:hot/profile-circle')),
+      );
+      expect(
+        transport.events[profilesWrite + 1],
+        'read:section:device-a:profiles',
+      );
+      expect(
+        transport.events[resourcesWrite + 1],
+        'read:section:device-a:resources',
+      );
+    },
+  );
+
+  test('corrupt stored resources section is caught during push', () async {
+    final circleLocal = _FakeCircleLocalAdapter(
+      <String, Object?>{'theme': 'dark'},
+      profiles: _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Local',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-a',
+          ),
+        },
+      ),
+    );
+    transport.corruptLargeSectionWrites = true;
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: circleLocal,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+
+    await expectLater(runFixture(context()), throwsStateError);
+
+    expect(transport.events, contains('read:section:device-a:resources'));
+    expect(transport.events, isNot(contains('write:manifest')));
+  });
+
+  test('invalid own hot section is marked dirty and republished', () async {
+    await runFixture(context());
+    final oldHot = states.state.ownManifest!.section('hot/profile-circle')!;
+    transport.sections['device-a:${oldHot.contentHash}']![0] ^= 0xff;
+    transport.events.clear();
+
+    final report = await runFixture(context());
+
+    final newHot = states.state.ownManifest!.section('hot/profile-circle')!;
+    expect(report.disposition, WebDavSyncCycleDisposition.completed);
+    expect(states.hotDigestWasCleared, isTrue);
+    expect(newHot.contentHash, isNot(oldHot.contentHash));
+    expect(
+      transport.events,
+      contains('read:section:device-a:hot/profile-circle'),
+    );
+    expect(transport.events, contains('write:section:${newHot.contentHash}'));
+    expect(
+      states.state.profiles['profile-circle']!.lastPushedHotDigest,
+      newHot.semanticDigest,
+    );
+  });
+
   test('remote-change cycle records its successful pull time', () async {
     final report = await engine.runCycle(
       context(),
@@ -2919,6 +3027,7 @@ final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
   WebDavSyncEngineState state = const WebDavSyncEngineState();
   int loads = 0;
   int updates = 0;
+  bool hotDigestWasCleared = false;
 
   @override
   Future<WebDavSyncEngineState> load(String namespaceId) async {
@@ -2932,7 +3041,14 @@ final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
     WebDavSyncEngineState Function(WebDavSyncEngineState current) update,
   ) async {
     updates++;
+    final previous = state;
     state = update(state);
+    for (final entry in previous.profiles.entries) {
+      if (entry.value.lastPushedHotDigest != null &&
+          state.profiles[entry.key]?.lastPushedHotDigest == null) {
+        hotDigestWasCleared = true;
+      }
+    }
     return state;
   }
 }
@@ -3162,6 +3278,7 @@ class _FakeTransport implements WebDavSyncTransport {
   WebDavException? rootError;
   WebDavResponseMetadata? sectionWriteMetadata;
   bool sectionWritesPreconditionFail = false;
+  bool corruptLargeSectionWrites = false;
   int factories = 0;
   Duration readDelay = Duration.zero;
   int activeReads = 0;
@@ -3292,6 +3409,10 @@ class _FakeTransport implements WebDavSyncTransport {
   }) async {
     events.add('write:section:$contentHash');
     sections['$deviceId:$contentHash'] = Uint8List.fromList(bytes);
+    if (corruptLargeSectionWrites &&
+        maxBytes == WebDavSyncLimits.maxGraphDocumentBytes) {
+      sections['$deviceId:$contentHash']![0] ^= 0xff;
+    }
     writtenText.add(String.fromCharCodes(bytes));
     if (sectionWritesPreconditionFail) {
       throw const WebDavException(

@@ -63,17 +63,17 @@ void main() {
       ProtocolWebDavSyncTransport(
         location: location,
         credentials: credentials,
-        client: owner.clientFor('binding-a'),
+        client: owner.borrow('binding-a').client,
       ).close();
       ProtocolWebDavSyncTransport(
         location: location,
         credentials: credentials,
-        client: owner.clientFor('binding-a'),
+        client: owner.borrow('binding-a').client,
       ).close();
       ProtocolWebDavSyncTransport(
         location: location,
         credentials: credentials,
-        client: owner.clientFor('binding-a'),
+        client: owner.borrow('binding-a').client,
       ).close();
 
       expect(factoryCalls, 1);
@@ -99,7 +99,7 @@ void main() {
         },
       );
 
-      owner.clientFor('binding-a');
+      owner.borrow('binding-a');
       final failedTransport = ProtocolWebDavSyncTransport(
         location: WebDavSyncFolderLocation(
           endpoint: 'https://example.test/dav',
@@ -107,7 +107,7 @@ void main() {
           serverName: 'Test',
         ),
         credentials: const WebDavCredentials(username: '', password: ''),
-        client: owner.clientFor('binding-b'),
+        client: owner.borrow('binding-b').client,
       );
 
       expect(clients, hasLength(2));
@@ -127,6 +127,43 @@ void main() {
       expect(clients.last.closeCalls, 1);
     },
   );
+
+  test('stale generations cannot use or close a rearmed client', () async {
+    final clients = <_CountingClient>[];
+    final owner = WebDavSyncBindingHttpClientOwner(
+      clientFactory: () {
+        final client = _CountingClient();
+        clients.add(client);
+        return client;
+      },
+    );
+    final stale = owner.borrow('binding-a');
+
+    owner.close(ifGeneration: stale.generation);
+    expect(owner.borrowIfGeneration('binding-a', stale.generation), isNull);
+    final rearmed = owner.borrow('binding-a');
+    expect(owner.borrowIfGeneration('binding-a', stale.generation), isNull);
+    owner.close(ifGeneration: stale.generation);
+
+    expect(clients, hasLength(2));
+    expect(clients.first.closeCalls, 1);
+    expect(clients.last.closeCalls, 0);
+    expect(owner.debugHasClient, isTrue);
+    await expectLater(
+      stale.client.send(
+        http.Request('GET', Uri.parse('https://example.test/stale')),
+      ),
+      throwsA(isA<http.ClientException>()),
+    );
+    expect(clients.last.sendCalls, 0);
+
+    owner.close(ifGeneration: rearmed.generation);
+    owner.close(ifGeneration: rearmed.generation);
+
+    expect(clients.first.closeCalls, 1);
+    expect(clients.last.closeCalls, 1);
+    expect(owner.debugHasClient, isFalse);
+  });
 
   test('corrupt persisted sync state cannot trap startup in a loop', () async {
     final fixture = await _openRuntimeFixture('corrupt-state');
@@ -207,10 +244,13 @@ void main() {
 
 final class _CountingClient extends http.BaseClient {
   int closeCalls = 0;
+  int sendCalls = 0;
 
   @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) =>
-      throw http.ClientException('connection failed', request.url);
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    sendCalls++;
+    throw http.ClientException('connection failed', request.url);
+  }
 
   @override
   void close() {

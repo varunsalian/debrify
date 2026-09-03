@@ -150,7 +150,11 @@ void main() {
       );
       expect(
         transport.events.where((event) => event.startsWith('read:section:')),
-        isEmpty,
+        <String>[
+          'read:section:bootstrap',
+          'read:section:profiles',
+          'read:section:resources',
+        ],
       );
       final snapshot = await bindingStore.load();
       expect(snapshot.activeBindingId, binding.id);

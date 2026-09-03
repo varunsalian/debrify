@@ -33,11 +33,21 @@ final class WebDavSyncRemotePollContext {
     required this.transport,
     required this.peerDeviceIds,
     required this.validators,
+    this.clientGeneration,
+    this.isClientGenerationCurrent,
   });
 
   final WebDavSyncTransport transport;
   final List<String> peerDeviceIds;
   final Map<String, WebDavSyncManifestValidator> validators;
+  final int? clientGeneration;
+  final bool Function(int generation)? isClientGenerationCurrent;
+
+  bool get hasCurrentClientGeneration {
+    final generation = clientGeneration;
+    final isCurrent = isClientGenerationCurrent;
+    return generation == null || isCurrent == null || isCurrent(generation);
+  }
 }
 
 typedef WebDavSyncRemotePollContextProvider =
@@ -316,46 +326,58 @@ final class WebDavSyncScheduler {
       context = await provider();
       if (context == null ||
           generation != _pollGeneration ||
+          !context.hasCurrentClientGeneration ||
           !_remotePollingForeground ||
           _running ||
           _gateHolds) {
         return;
       }
-      final peerDeviceIds = context.peerDeviceIds.toSet().toList()..sort();
+      final pollContext = context;
+      final peerDeviceIds = pollContext.peerDeviceIds.toSet().toList()..sort();
       if (peerDeviceIds.isEmpty) return;
-      final outcomes = await _mapPollConcurrentOrdered<String, _PollOutcome>(
+      final outcomes = await _mapPollConcurrentOrdered<String, _PollOutcome?>(
         peerDeviceIds,
         limit: 4,
         operation: (deviceId) async {
+          if (generation != _pollGeneration ||
+              !pollContext.hasCurrentClientGeneration) {
+            return null;
+          }
           try {
             return _PollOutcome(
               deviceId: deviceId,
-              probe: await context!.transport.probeManifest(deviceId),
+              probe: await pollContext.transport.probeManifest(deviceId),
             );
           } catch (error) {
             return _PollOutcome(deviceId: deviceId, error: error);
           }
         },
       );
-      if (generation != _pollGeneration || !_remotePollingForeground) return;
-      if (outcomes.any((outcome) => outcome.error != null)) {
+      if (generation != _pollGeneration ||
+          !pollContext.hasCurrentClientGeneration ||
+          !_remotePollingForeground ||
+          outcomes.any((outcome) => outcome == null)) {
+        return;
+      }
+      final completedOutcomes = outcomes.cast<_PollOutcome>();
+      if (completedOutcomes.any((outcome) => outcome.error != null)) {
         _recordPollFailure();
         return;
       }
       _resetPollBackoff();
-      final changed = outcomes.any((outcome) {
+      final changed = completedOutcomes.any((outcome) {
         final probe = outcome.probe!;
         if (!probe.exists) return true;
         final validator = probe.validator;
         return validator != null &&
-            validator != context!.validators[outcome.deviceId];
+            validator != pollContext.validators[outcome.deviceId];
       });
       if (changed) {
         _rearmWarmPolling();
         await signal(WebDavSyncTrigger.remoteChange);
         return;
       }
-      if (outcomes.any(
+      if (completedOutcomes.any(
         (outcome) => outcome.probe!.exists && outcome.probe!.validator == null,
       )) {
         _pollDisabledNoValidators = true;

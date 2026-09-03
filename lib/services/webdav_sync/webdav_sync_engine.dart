@@ -704,6 +704,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         final peerCircle = await _readCirclePeerData(
           transport: transport,
           root: root,
+          namespaceId: namespaceId,
+          ownDeviceId: deviceId,
           manifests: manifests,
           instrumentation: instrumentation,
         );
@@ -940,6 +942,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         final peerData = await _readProfilePeerData(
           transport: transport,
           root: root,
+          namespaceId: namespaceId,
+          ownDeviceId: deviceId,
           manifests: manifests,
           circleProfileId: circleProfileId,
           serverNowMs: serverNowMs,
@@ -1298,6 +1302,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   Future<_PeerProfileData> _readProfilePeerData({
     required WebDavSyncTransport transport,
     required OpenedWebDavSyncRoot root,
+    required String namespaceId,
+    required String ownDeviceId,
     required Map<String, WebDavSyncManifest> manifests,
     required String circleProfileId,
     required int serverNowMs,
@@ -1318,6 +1324,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             operation: (entry) => _readOnePeerProfileData(
               transport: transport,
               root: root,
+              namespaceId: namespaceId,
+              ownDeviceId: ownDeviceId,
               deviceId: entry.key,
               manifest: entry.value,
               circleProfileId: circleProfileId,
@@ -1341,6 +1349,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   Future<_PeerCircleData> _readCirclePeerData({
     required WebDavSyncTransport transport,
     required OpenedWebDavSyncRoot root,
+    required String namespaceId,
+    required String ownDeviceId,
     required Map<String, WebDavSyncManifest> manifests,
     required _CycleInstrumentation instrumentation,
   }) async {
@@ -1355,6 +1365,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         operation: (entry) => _readOneCirclePeer(
           transport: transport,
           root: root,
+          namespaceId: namespaceId,
+          ownDeviceId: ownDeviceId,
           deviceId: entry.key,
           manifest: entry.value,
           instrumentation: instrumentation,
@@ -1376,6 +1388,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   Future<_PeerCircleData> _readOneCirclePeer({
     required WebDavSyncTransport transport,
     required OpenedWebDavSyncRoot root,
+    required String namespaceId,
+    required String ownDeviceId,
     required String deviceId,
     required WebDavSyncManifest manifest,
     required _CycleInstrumentation instrumentation,
@@ -1412,6 +1426,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync profiles section', error);
       } on Exception catch (error) {
+        if (deviceId == ownDeviceId) {
+          await _markOwnSectionDirty(namespaceId, profilesRef.name);
+        }
         _diagnostic('Ignored an invalid WebDAV sync profiles section', error);
       }
     }
@@ -1446,6 +1463,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync resources section', error);
       } on Exception catch (error) {
+        if (deviceId == ownDeviceId) {
+          await _markOwnSectionDirty(namespaceId, resourcesRef.name);
+        }
         _diagnostic('Ignored an invalid WebDAV sync resources section', error);
       }
     }
@@ -1543,6 +1563,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   Future<_PeerProfileData> _readOnePeerProfileData({
     required WebDavSyncTransport transport,
     required OpenedWebDavSyncRoot root,
+    required String namespaceId,
+    required String ownDeviceId,
     required String deviceId,
     required WebDavSyncManifest manifest,
     required String circleProfileId,
@@ -1575,6 +1597,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync hot section', error);
       } on Exception catch (error) {
+        if (deviceId == ownDeviceId) {
+          await _markOwnSectionDirty(namespaceId, hotRef.name);
+        }
         _diagnostic('Ignored an invalid WebDAV sync hot section', error);
       }
     }
@@ -1597,6 +1622,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync tombstone section', error);
       } on Exception catch (error) {
+        if (deviceId == ownDeviceId) {
+          await _markOwnSectionDirty(namespaceId, tombstoneRef.name);
+        }
         _diagnostic('Ignored an invalid WebDAV sync tombstone section', error);
       }
     }
@@ -1723,6 +1751,37 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       maxBytes: maxBytes,
     );
   }
+
+  Future<void> _markOwnSectionDirty(String namespaceId, String sectionName) =>
+      _stateRepository.update(namespaceId, (current) {
+        if (sectionName == 'profiles') {
+          return current.copyWith(clearLastPushedProfilesDigest: true);
+        }
+        if (sectionName == 'resources') {
+          return current.copyWith(clearLastPushedResourcesDigest: true);
+        }
+        const hotPrefix = 'hot/';
+        const tombstonePrefix = 'tombstones/';
+        final isHot = sectionName.startsWith(hotPrefix);
+        final isTombstone = sectionName.startsWith(tombstonePrefix);
+        if (!isHot && !isTombstone) return current;
+        final circleProfileId = sectionName.substring(
+          isHot ? hotPrefix.length : tombstonePrefix.length,
+        );
+        final profile = current.profiles[circleProfileId];
+        if (profile == null) return current;
+        return current.copyWith(
+          profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+            <String, WebDavSyncProfileEngineState>{
+              ...current.profiles,
+              circleProfileId: profile.copyWith(
+                clearLastPushedHotDigest: isHot,
+                clearLastPushedTombstoneDigest: isTombstone,
+              ),
+            },
+          ),
+        );
+      });
 
   Future<_PushResult> _pushChanged({
     required WebDavSyncTransport transport,
@@ -1875,7 +1934,20 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       }
       phaseStarted = instrumentation.startPhase();
       try {
-        if (metadata != null) {
+        if (section.reference.name == 'profiles') {
+          instrumentation.requestStarted();
+          final readBack = await transport.readSection(
+            deviceId,
+            section.reference,
+            maxBytes: _maxBytesFor(section.reference.name),
+          );
+          instrumentation.received(readBack.bytes.length);
+          if (!_bytesEqual(readBack.bytes, section.bytes)) {
+            throw StateError(
+              'WebDAV sync section read-back verification failed',
+            );
+          }
+        } else if (metadata != null) {
           validateWebDavSyncSectionWriteMetadata(
             metadata,
             expectedBytes: section.bytes.length,
