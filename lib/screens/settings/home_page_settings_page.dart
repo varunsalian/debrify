@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/home_collections_store.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
@@ -11,6 +12,7 @@ import '../../services/trakt/trakt_list_source.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
+import 'collections_settings_page.dart';
 import 'home_sections_filter_page.dart';
 import 'spotlight_hero_source_page.dart';
 import 'tv_home_style_page.dart';
@@ -394,6 +396,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// the tile and drops re-taps.
   bool _gatheringHomeRows = false;
 
+  Future<void> _openCollections() async {
+    await pushSettingsPage(context, const CollectionsSettingsPage());
+  }
+
   /// Open the two-pane Home Rows manager (which rows/catalogs appear on the
   /// Home board). Feeds it the same browsable catalog tree the board uses,
   /// plus the opt-in extras and their dynamic leaf data — the user's Trakt
@@ -411,6 +417,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final disabled = await StorageService.getHomeDisabledSections();
       final extras = await StorageService.getHomeExtraRows();
       final rowOrder = await StorageService.getHomeRowOrder();
+      final collections = await HomeCollectionsStore.instance
+          .getEnabledCollections();
       var iptvLists = const <IptvListMeta>[];
       try {
         iptvLists = await StorageService.getIptvLists();
@@ -466,6 +474,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
             mdblistLiked: mdblistLiked,
             mdblistTop: mdblistTop,
             iptvLists: iptvLists,
+            collections: collections,
             isTelevision: PlatformUtil.isTelevision,
           ),
         ),
@@ -535,6 +544,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           ? 'Loading your lists…'
                           : 'Choose and arrange what appears on Home',
                       onTap: _openHomeRowsManager,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.collections,
+                      onTap: _openCollections,
                     ),
                     // Which catalog feeds the Spotlight layout's hero reel.
                     // Always shown, but greyed out under any other layout —

@@ -83,6 +83,11 @@ abstract final class SettingsRows {
     title: 'Home Screen',
     subtitle: 'Layout, rows, trailer & continue watching',
   );
+  static const collections = SettingsRowContent(
+    icon: Icons.collections_bookmark_rounded,
+    title: 'Collections',
+    subtitle: 'Import Nuvio-style folder collections as Home rows',
+  );
   static const player = SettingsRowContent(
     icon: Icons.play_circle_outline_rounded,
     title: 'Playback',

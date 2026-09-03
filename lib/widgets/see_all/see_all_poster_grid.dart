@@ -139,6 +139,10 @@ class SeeAllPosterGrid extends StatefulWidget {
   /// DPAD-left at column 0 leaves the grid (e.g. to the sidebar). No-op if null.
   final VoidCallback? onExitLeft;
 
+  /// SHELF only: DPAD-down leaves the single row (e.g. to the next rail on a
+  /// stacked-rails screen). Null keeps the shelf's default of swallowing it.
+  final VoidCallback? onExitBottom;
+
   const SeeAllPosterGrid({
     super.key,
     required this.items,
@@ -155,6 +159,7 @@ class SeeAllPosterGrid extends StatefulWidget {
     this.isBound,
     this.onExitTop,
     this.onExitLeft,
+    this.onExitBottom,
   });
 
   @override
@@ -337,6 +342,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
+      widget.onExitBottom?.call();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

@@ -98,6 +98,15 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 ## Settings · storage · misc infra
 - Settings: `screens/settings/*` (+ `home_sections_filter_page.dart` = show/hide home rows,
   `home_page_settings_page.dart`). Metrics/format helpers: `utils/*`.
+- Collections (imported Nuvio/Xperience-style folder groups → Home rows of folder tiles):
+  `models/home_collection.dart` (schema + parser + `collection:<id>` row ids),
+  `services/home_collections_store.dart` (`home_collections_v1`, file/URL/paste import, addon
+  resolution), `services/collection_folder_loader.dart` (merged multi-catalog paging),
+  `services/home_collection_rows.dart` (`HomeCollectionSection`), browser
+  `screens/collections/collection_folder_screen.dart` (+ `widgets/collections/rail_see_all_pill.dart`),
+  settings `screens/settings/collections_settings_page.dart` (+ `widgets/text_prompt_dialog.dart`).
+  Board wiring lives in `search_screen.dart` (`_buildCollectionSections`, `_openCollectionFolder`,
+  `_openCollectionScreen`). Docs: `docs/collections.md`.
 - Backup/transfer/sync: `services/backup_restore_service.dart` (full config snapshot),
   `widgets/remote/*` + `services/remote_control/*` (device-to-device over LAN, no server).
 - Onboarding: `widgets/initial_setup_flow.dart` 🔴. Migration: `services/app_migration_service.dart`.
