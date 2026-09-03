@@ -183,6 +183,13 @@ class IptvMediaStore {
   @visibleForTesting
   static DateTime Function() debugLibraryClock = DateTime.now;
 
+  static final WebDavSyncMonotonicStamp _monotonicStamp =
+      WebDavSyncMonotonicStamp();
+
+  /// Stamp time for a user library mutation; strictly increasing per clock so
+  /// a backwards clock step cannot reuse a stamp for a different mutation.
+  static int _nextStampMs() => _monotonicStamp.next(debugLibraryClock);
+
   static Future<void> _ensureMigrated() {
     final scopeKey = ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted
         ? ProfileRuntime.capture().preferencePrefix
@@ -921,7 +928,7 @@ class IptvMediaStore {
             kind: WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
             ownerKey: sourceId,
             itemKey: group,
-            updatedAtMs: debugLibraryClock().millisecondsSinceEpoch,
+            updatedAtMs: _nextStampMs(),
             deleted: items.isEmpty,
             origin: origin,
           );
@@ -1041,7 +1048,7 @@ class IptvMediaStore {
           whereArgs: <Object?>[sourceId],
         );
         if (groups.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final group in groups) {
             await _writeLibraryState(
               txn,
@@ -1121,7 +1128,7 @@ class IptvMediaStore {
     if (channelUrl.isEmpty) return Future<void>.value();
     await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
-        final now = debugLibraryClock().millisecondsSinceEpoch;
+        final now = _nextStampMs();
         await txn.insert('iptv_watch_history', {
           'url': channelUrl,
           'name': channelName ?? '',
@@ -1206,7 +1213,7 @@ class IptvMediaStore {
           whereArgs: [playlistId],
         );
         if (urls.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final url in urls) {
             await _writeLibraryState(
               txn,
@@ -1295,7 +1302,7 @@ class IptvMediaStore {
         );
         if (origin == WebDavSyncMutationOrigin.user &&
             (historyOwners.isNotEmpty || resumeOwners.isNotEmpty)) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final owner in historyOwners) {
             await _writeLibraryState(
               txn,
@@ -1369,7 +1376,7 @@ class IptvMediaStore {
           );
         }
         if (urls.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final url in urls) {
             await _writeLibraryState(
               txn,
@@ -1481,7 +1488,7 @@ class IptvMediaStore {
                 ? '_'
                 : resolvedSourceId,
             itemKey: key,
-            updatedAtMs: debugLibraryClock().millisecondsSinceEpoch,
+            updatedAtMs: _nextStampMs(),
             deleted: false,
             origin: origin,
           );
@@ -1532,7 +1539,7 @@ class IptvMediaStore {
           whereArgs: [key],
         );
         if (owners.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final owner in owners) {
             await _writeLibraryState(
               txn,
@@ -1613,7 +1620,7 @@ class IptvMediaStore {
         };
         await txn.delete('video_resume');
         if (targets.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final target in targets) {
             await _writeLibraryState(
               txn,

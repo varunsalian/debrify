@@ -695,6 +695,84 @@ void main() {
     },
   );
 
+  test(
+    'an exact generation stamp with missing pool rows re-materializes',
+    () async {
+      final channelLeaf = leaf(100, 'device-a', const <String, Object?>{
+        'name': 'Alpha',
+        'avoidNsfw': false,
+        'channelNumber': 7,
+        'createdAt': 10,
+        'keywords': <String>['alpha'],
+      });
+      final channelTarget = WebDavSyncTvChannelTarget(
+        channelId: 'channel-a',
+        name: 'Alpha',
+        avoidNsfw: false,
+        desiredChannelNumber: 7,
+        createdAtMs: 10,
+        keywords: const <String>['alpha'],
+        leaf: channelLeaf,
+      );
+      final generationTarget = WebDavSyncTvPoolGenerationTarget(
+        channelId: 'channel-a',
+        generationId: 'generation-a',
+        leaf: leaf(110, 'device-a', const <String, Object?>{
+          'generationId': 'generation-a',
+        }),
+      );
+      final poolTarget = WebDavSyncTvPoolTarget(
+        channelId: 'channel-a',
+        infohash: 'a' * 40,
+        generationId: 'generation-a',
+        name: 'Pool title',
+        sizeBytes: 1234,
+        keywords: const <String>['alpha'],
+        rank: 0,
+        leaf: leaf(110, 'device-a', const <String, Object?>{
+          'generationId': 'generation-a',
+          'name': 'Pool title',
+          'sizeBytes': 1234,
+          'keywords': <String>['alpha'],
+          'rank': 0,
+        }),
+      );
+      Future<Set<String>> apply(int expectedRevision) async {
+        final outcome = await DebrifyTvDatabase.instance
+            .applyWebDavSyncFamilies(
+              profileA,
+              expectedRevision: expectedRevision,
+              channelTargets: <WebDavSyncTvChannelTarget>[channelTarget],
+              generationTargets: <WebDavSyncTvPoolGenerationTarget>[
+                generationTarget,
+              ],
+              poolTargets: <WebDavSyncTvPoolTarget>[poolTarget],
+              orderTargets: const <WebDavSyncIptvOrderTarget>[],
+              watchTargets: const <WebDavSyncIptvWatchTarget>[],
+              resumeTargets: const <WebDavSyncVideoResumeTarget>[],
+            );
+        expect(outcome.result, WebDavSyncLibraryApplyResult.applied);
+        return outcome.touchedNamespaces;
+      }
+
+      await apply(0);
+      // A snapshot or restore path that splits physical rows from their
+      // sidecar stamps: rows vanish, the exact generation stamp remains.
+      await DebrifyTvDatabase.instance.runOneShotScoped(
+        profileA,
+        (db) => db.delete('tv_cached_torrents'),
+      );
+
+      expect(await apply(1), contains('tv/pool'));
+      final pools = await DebrifyTvDatabase.instance.runOneShotScoped(
+        profileA,
+        (db) => db.query('tv_cached_torrents'),
+      );
+      expect(pools, hasLength(1));
+      expect(pools.single['infohash'], 'a' * 40);
+    },
+  );
+
   test('native payload path contains no Debrify TV SQLite writer', () async {
     final nativeSources = <File>[];
     for (final root in <String>[

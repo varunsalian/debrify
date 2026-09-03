@@ -134,7 +134,7 @@ class DebrifyTvRepository {
 
       if (origin == WebDavSyncMutationOrigin.user) {
         final now =
-            WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch;
+            WebDavSyncLibraryMutation.nextTvStampMs();
         await txn.insert('webdav_sync_record_state', <String, Object?>{
           'kind': WebDavSyncLibraryKinds.tvChannels,
           'owner_key': record.channelId,
@@ -191,7 +191,7 @@ class DebrifyTvRepository {
       await txn.delete('tv_channels');
       if (channelIds.isNotEmpty) {
         final now =
-            WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch;
+            WebDavSyncLibraryMutation.nextTvStampMs();
         for (final channelId in channelIds) {
           await _writeChannelTombstone(txn, channelId, updatedAtMs: now);
         }
@@ -213,7 +213,7 @@ Future<void> _writeChannelTombstone(
   'item_key': '',
   'updated_at_ms':
       updatedAtMs ??
-      WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch,
+      WebDavSyncLibraryMutation.nextTvStampMs(),
   'origin_device_id': WebDavSyncLibraryMutation.originDeviceId,
   'normalized': 0,
   'deleted': 1,

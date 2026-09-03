@@ -2563,8 +2563,13 @@ class StorageService {
   }
 
   /// Clear all continue watching items.
-  static Future<void> clearContinueWatching() async {
-    await _saveContinueWatchingItems(const <Map<String, dynamic>>[]);
+  static Future<void> clearContinueWatching({
+    bool recordSyncDeletions = true,
+  }) async {
+    await _saveContinueWatchingItems(
+      const <Map<String, dynamic>>[],
+      tombstoneRemovals: recordSyncDeletions,
+    );
   }
 
   static Future<void> _saveContinueWatchingItems(
@@ -3924,13 +3929,23 @@ class StorageService {
   }
 
   /// Clear all playback-related data (series and video states, track prefs, legacy resume)
-  static Future<void> clearAllPlaybackData() async {
+  /// [recordSyncDeletions] distinguishes a deliberate clear (default, which
+  /// deletes on every synced device) from a device-local wipe such as app
+  /// reset, which must never mint circle-wide deletions.
+  static Future<void> clearAllPlaybackData({
+    bool recordSyncDeletions = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    await _savePlaybackStateMap(<String, dynamic>{}, recordDeletions: true);
-    final finishedMovies = await _getFinishedMovieIds();
-    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
-      finishedMovies.map(WebDavSyncRecordKey.finishedMovie),
+    await _savePlaybackStateMap(
+      <String, dynamic>{},
+      recordDeletions: recordSyncDeletions,
     );
+    if (recordSyncDeletions) {
+      final finishedMovies = await _getFinishedMovieIds();
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        finishedMovies.map(WebDavSyncRecordKey.finishedMovie),
+      );
+    }
     await prefs.remove(_finishedMoviesKey);
     await prefs.remove(localSeriesCompletionStateKey);
     await prefs.remove(localSeriesCalendarCheckedAtKey);
@@ -3939,7 +3954,11 @@ class StorageService {
     // Resume lives in the DB now; the prefs key only still exists for users
     // who wipe before the one-time import has run.
     await prefs.remove(_videoResumeKey);
-    await IptvMediaStore.clearVideoResume();
+    await IptvMediaStore.clearVideoResume(
+      origin: recordSyncDeletions
+          ? WebDavSyncMutationOrigin.user
+          : WebDavSyncMutationOrigin.maintenance,
+    );
     debugPrint(
       'StorageService: cleared playback state, completed movies, and video resume data',
     );
@@ -4335,17 +4354,20 @@ class StorageService {
   }
 
   static Future<void> savePlaylistItemsRaw(
-    List<Map<String, dynamic>> items,
-  ) async {
+    List<Map<String, dynamic>> items, {
+    bool recordSyncDeletions = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    final previous = await getPlaylistItemsRaw();
-    final retained = items.map(computePlaylistDedupeKey).toSet();
-    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
-      previous
-          .map(computePlaylistDedupeKey)
-          .where((key) => !retained.contains(key))
-          .map(WebDavSyncRecordKey.playlistItem),
-    );
+    if (recordSyncDeletions) {
+      final previous = await getPlaylistItemsRaw();
+      final retained = items.map(computePlaylistDedupeKey).toSet();
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        previous
+            .map(computePlaylistDedupeKey)
+            .where((key) => !retained.contains(key))
+            .map(WebDavSyncRecordKey.playlistItem),
+      );
+    }
     await prefs.setString(_playlistKey, jsonEncode(items));
   }
 
@@ -4492,17 +4514,24 @@ class StorageService {
     return item['lastPlayedAt'] as int?;
   }
 
-  static Future<void> clearPlaylist() async {
-    await savePlaylistItemsRaw(const <Map<String, dynamic>>[]);
+  static Future<void> clearPlaylist({bool recordSyncDeletions = true}) async {
+    await savePlaylistItemsRaw(
+      const <Map<String, dynamic>>[],
+      recordSyncDeletions: recordSyncDeletions,
+    );
   }
 
   /// Clear all playlist-related metadata (view modes, favorites, poster overrides)
-  static Future<void> clearAllPlaylistMetadata() async {
+  static Future<void> clearAllPlaylistMetadata({
+    bool recordSyncDeletions = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    final favorites = await getPlaylistFavoriteKeys();
-    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
-      favorites.map(WebDavSyncRecordKey.playlistFavorite),
-    );
+    if (recordSyncDeletions) {
+      final favorites = await getPlaylistFavoriteKeys();
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        favorites.map(WebDavSyncRecordKey.playlistFavorite),
+      );
+    }
     await prefs.remove(_playlistViewModesKey);
     await prefs.remove(_playlistFavoritesKey);
     await prefs.remove(_playlistPosterOverridesKey);

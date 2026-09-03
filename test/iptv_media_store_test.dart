@@ -710,6 +710,52 @@ void main() {
       },
     );
 
+    // App reset wipes the device without minting circle-wide deletions.
+    test('device-local reset clears resume without tombstones', () async {
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications += 1;
+      };
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(5000);
+      await IptvMediaStore.upsertVideoResume(
+        'generic-title',
+        const <String, dynamic>{'positionMs': 1, 'durationMs': 2},
+      );
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      final revisionBefore = (await db.query(
+        'webdav_sync_meta',
+        columns: const <String>['value'],
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      )).single['value'];
+      final notificationsBefore = notifications;
+
+      await IptvMediaStore.clearVideoResume(
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+
+      expect(await db.query('video_resume'), isEmpty);
+      expect(
+        await db.query(
+          'webdav_sync_record_state',
+          where: 'kind = ? AND deleted = 1',
+          whereArgs: const <Object?>[WebDavSyncLibraryKinds.videoResume],
+        ),
+        isEmpty,
+      );
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        revisionBefore,
+      );
+      expect(notifications, notificationsBefore);
+    });
+
     // Backs Home's "Remove from Continue Watching" on an IPTV card.
     test(
       'removing a movie drops its shelf row AND its saved position',

@@ -611,3 +611,26 @@ String? _tryDecodeBase64Part(String source) {
     return null;
   }
 }
+
+/// Strictly increasing wall-clock stamps per clock source.
+///
+/// An NTP step backwards (or a frozen clock) can otherwise mint two different
+/// user mutations carrying an identical (time, origin) stamp; per-key LWW then
+/// tie-breaks by value digest and may pick related leaves — a pool generation
+/// and its rows — from different writes. Swapping the clock function (tests do)
+/// starts a new epoch so fixed-clock fixtures keep their exact values.
+final class WebDavSyncMonotonicStamp {
+  DateTime Function()? _clock;
+  int _lastMs = 0;
+
+  int next(DateTime Function() clock) {
+    final now = clock().millisecondsSinceEpoch;
+    if (!identical(clock, _clock)) {
+      _clock = clock;
+      _lastMs = now;
+      return now;
+    }
+    _lastMs = now > _lastMs ? now : _lastMs + 1;
+    return _lastMs;
+  }
+}

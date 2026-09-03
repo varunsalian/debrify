@@ -654,6 +654,13 @@ class IptvCatalogDb {
   @visibleForTesting
   static DateTime Function() debugLibraryClock = DateTime.now;
 
+  static final WebDavSyncMonotonicStamp _monotonicStamp =
+      WebDavSyncMonotonicStamp();
+
+  /// Stamp time for a user catalog mutation; strictly increasing per clock so
+  /// a backwards clock step cannot reuse a stamp for a different mutation.
+  static int _nextStampMs() => _monotonicStamp.next(debugLibraryClock);
+
   /// The resolved database path — worker isolates need it to open their own
   /// connection. Only valid after [open] has completed.
   static String get path {
@@ -1120,7 +1127,7 @@ class IptvCatalogDb {
         ''');
       }
       if (current < 4) {
-        final now = debugLibraryClock().millisecondsSinceEpoch;
+        final now = _nextStampMs();
         db.execute(
           '''
           INSERT OR IGNORE INTO webdav_sync_record_state
@@ -2200,7 +2207,7 @@ class IptvCatalogDb {
     final list = keys.toList(growable: false);
     if (list.isEmpty) return;
     await open();
-    final now = debugLibraryClock().millisecondsSinceEpoch;
+    final now = _nextStampMs();
     final changed = await runExclusive(
       () => compute(_removeCatalogsJob, (
         dbPath: path,
@@ -2527,7 +2534,7 @@ class IptvCatalogDb {
           keys,
         );
         if (existing.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-          final now = debugLibraryClock().millisecondsSinceEpoch;
+          final now = _nextStampMs();
           for (final row in existing) {
             final catalogKey = row['catalog_key'] as String;
             _writeCategoryOrderState(
@@ -2572,7 +2579,7 @@ class IptvCatalogDb {
         catalogKey: catalogKey,
         ordered: names,
         stamp: origin == WebDavSyncMutationOrigin.user,
-        updatedAtMs: debugLibraryClock().millisecondsSinceEpoch,
+        updatedAtMs: _nextStampMs(),
         originDeviceId: WebDavSyncLibraryMutation.originDeviceId,
       ), debugLabel: 'iptv-category-order-save');
     });
@@ -2904,7 +2911,7 @@ class IptvCatalogDb {
     var changed = hidden;
     db.execute('BEGIN IMMEDIATE');
     try {
-      final now = debugLibraryClock().millisecondsSinceEpoch;
+      final now = _nextStampMs();
       if (hidden) {
         db.execute(
           'INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at) '
@@ -2974,7 +2981,7 @@ class IptvCatalogDb {
     );
     try {
       db.execute('BEGIN IMMEDIATE');
-      final hiddenAt = debugLibraryClock().millisecondsSinceEpoch;
+      final hiddenAt = _nextStampMs();
       for (final group in names) {
         insert.execute([catalogKey, group, hiddenAt]);
         if (origin == WebDavSyncMutationOrigin.user) {
@@ -3031,7 +3038,7 @@ class IptvCatalogDb {
         catalogKey,
       ]);
       if (groups.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-        final now = debugLibraryClock().millisecondsSinceEpoch;
+        final now = _nextStampMs();
         for (final group in groups) {
           _writeHiddenGroupState(
             db,
@@ -3079,7 +3086,7 @@ class IptvCatalogDb {
         keys,
       );
       if (removed.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
-        final now = debugLibraryClock().millisecondsSinceEpoch;
+        final now = _nextStampMs();
         for (final row in removed) {
           _writeHiddenGroupState(
             db,

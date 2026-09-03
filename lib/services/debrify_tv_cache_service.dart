@@ -247,7 +247,7 @@ class DebrifyTvCacheService {
           txn,
           entry.channelId,
           generationId!,
-          WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch,
+          WebDavSyncLibraryMutation.nextTvStampMs(),
         );
         await _incrementWebDavSyncRevision(txn);
       }
@@ -293,7 +293,7 @@ class DebrifyTvCacheService {
           txn,
           channelId,
           WebDavSyncLibraryMutation.mintTvGenerationId(differentFrom: existing),
-          WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch,
+          WebDavSyncLibraryMutation.nextTvStampMs(),
         );
         await _incrementWebDavSyncRevision(txn);
         stamped = true;
@@ -320,7 +320,7 @@ class DebrifyTvCacheService {
       await txn.delete('tv_channel_cache_state');
       if (channelIds.isNotEmpty) {
         final now =
-            WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch;
+            WebDavSyncLibraryMutation.nextTvStampMs();
         for (final channelId in channelIds) {
           final existing = await _poolGeneration(txn, channelId);
           await _writePoolGeneration(

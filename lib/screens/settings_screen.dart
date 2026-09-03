@@ -6160,10 +6160,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Clears the key + username AND the in-memory list/items cache.
     await MdblistService.instance.logout();
     await DownloadService.instance.clearDownloadDatabase();
-    await StorageService.clearAllPlaybackData();
-    await StorageService.clearContinueWatching();
-    await StorageService.clearPlaylist();
-    await StorageService.clearAllPlaylistMetadata();
+    // Reset is a device-local wipe: none of these clears may record synced
+    // deletions, or reconnecting sync later replays them circle-wide.
+    await StorageService.clearAllPlaybackData(recordSyncDeletions: false);
+    await StorageService.clearContinueWatching(recordSyncDeletions: false);
+    await StorageService.clearPlaylist(recordSyncDeletions: false);
+    await StorageService.clearAllPlaylistMetadata(recordSyncDeletions: false);
     await StorageService.clearMyWatchlist();
     await StorageService.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();

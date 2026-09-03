@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'webdav_sync_library_models.dart';
 import '../profiles/profile_preferences.dart';
 import '../profiles/profile_runtime.dart';
 
@@ -17,6 +18,13 @@ abstract final class WebDavSyncLibraryMutation {
     debugTvClock = DateTime.now;
     debugTvGenerationId = _newGenerationId;
   }
+
+  static final WebDavSyncMonotonicStamp _monotonic = WebDavSyncMonotonicStamp();
+
+  /// Stamp time for a user TV mutation: the clock, floored strictly above the
+  /// previous stamp so a backwards clock step cannot mint two different
+  /// mutations with one identical stamp.
+  static int nextTvStampMs() => _monotonic.next(debugTvClock);
 
   static String mintTvGenerationId({String? differentFrom}) {
     var candidate = debugTvGenerationId();

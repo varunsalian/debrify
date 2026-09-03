@@ -657,6 +657,9 @@ class DebrifyTvDatabase {
             .add(target);
       }
       for (final target in generationTargets) {
+        final matching =
+            poolsByGeneration['${target.channelId}\u0000${target.generationId}'] ??
+            const <WebDavSyncTvPoolTarget>[];
         if (!await needsWrite(
           WebDavSyncLibraryKinds.tvPoolGeneration,
           target.channelId,
@@ -664,16 +667,25 @@ class DebrifyTvDatabase {
           target.leaf,
           aux: target.generationId,
         )) {
-          continue;
+          // A sidecar stamp can outlive its physical rows (a snapshot or
+          // restore path that splits them). Row count is the cheap integrity
+          // probe: a divergent pool re-materializes even under an exact stamp.
+          final physicalRows =
+              Sqflite.firstIntValue(
+                await txn.rawQuery(
+                  'SELECT COUNT(*) FROM tv_cached_torrents '
+                  'WHERE channel_id = ?',
+                  <Object?>[target.channelId],
+                ),
+              ) ??
+              0;
+          if (physicalRows == matching.length) continue;
         }
         await txn.delete(
           'tv_cached_torrents',
           where: 'channel_id = ?',
           whereArgs: <Object?>[target.channelId],
         );
-        final matching =
-            poolsByGeneration['${target.channelId}\u0000${target.generationId}'] ??
-            const <WebDavSyncTvPoolTarget>[];
         final ranked = matching.toList(growable: false)
           ..sort((left, right) {
             final byRank = left.rank.compareTo(right.rank);
