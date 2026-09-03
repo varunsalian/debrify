@@ -19,6 +19,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_setup_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -389,6 +390,142 @@ void main() {
       expect(circleLocal.appliedCircleJson[1], exactTarget);
       expect(transport.events.first, 'read:root');
       expect(states.state.pendingCircleApply, isNull);
+    },
+  );
+
+  test(
+    'circle conflict keeps baselines unadvanced and republishes the newer edit',
+    () async {
+      final diagnostics = <String>[];
+      final stale = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Before edit',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-a',
+          ),
+        },
+      );
+      final newer = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Edited locally',
+            time: now.millisecondsSinceEpoch + 1,
+            origin: 'device-a',
+          ),
+        },
+      );
+      final circleLocal = _FakeCircleLocalAdapter(<String, Object?>{
+        'theme': 'dark',
+      }, profiles: stale)..conflictNextCircleApply = true;
+      circleLocal.beforeCircleApply = (_) {
+        circleLocal.profiles = newer;
+        circleLocal.beforeCircleApply = null;
+      };
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+
+      final conflicted = await runFixture(context());
+
+      expect(conflicted.localChangeFollowUp, isTrue);
+      expect(states.state.pendingCircleApply, isNull);
+      expect(states.state.circleProfilesBaseline, isNull);
+      expect(states.state.circleResourcesBaseline, isNull);
+      expect(
+        diagnostics,
+        contains(
+          'Deferred WebDAV circle apply after a concurrent local registry '
+          'change',
+        ),
+      );
+      expect(
+        diagnostics,
+        isNot(contains('Quarantined an invalid pending WebDAV circle target')),
+      );
+
+      final followedUp = await runFixture(context());
+
+      expect(followedUp.localChangeFollowUp, isFalse);
+      expect(followedUp.sectionsPushed, greaterThan(0));
+      expect(
+        states
+            .state
+            .circleProfilesBaseline!
+            .profiles['profile-circle']!
+            .value!
+            .name,
+        'Edited locally',
+      );
+      expect(
+        circleLocal
+            .appliedRequests
+            .last
+            .profiles
+            .profiles['profile-circle']!
+            .stamp
+            .normalizedTimeMs,
+        now.millisecondsSinceEpoch + 1,
+      );
+    },
+  );
+
+  test(
+    'circle conflict follow-up publishes a post-snapshot deletion',
+    () async {
+      final stale = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Delete locally',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-a',
+          ),
+        },
+      );
+      final tombstone = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: now.millisecondsSinceEpoch + 1,
+              originDeviceId: 'device-a',
+            ),
+            value: null,
+          ),
+        },
+      );
+      final circleLocal = _FakeCircleLocalAdapter(<String, Object?>{
+        'theme': 'dark',
+      }, profiles: stale)..conflictNextCircleApply = true;
+      circleLocal.beforeCircleApply = (_) {
+        circleLocal.profiles = tombstone;
+        circleLocal.beforeCircleApply = null;
+      };
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+
+      final conflicted = await runFixture(context());
+
+      expect(conflicted.localChangeFollowUp, isTrue);
+      expect(states.state.pendingCircleApply, isNull);
+      expect(states.state.circleProfilesBaseline, isNull);
+
+      final followedUp = await runFixture(context());
+
+      expect(followedUp.sectionsPushed, greaterThan(0));
+      final published =
+          states.state.circleProfilesBaseline!.profiles['profile-circle']!;
+      expect(published.value, isNull);
+      expect(published.stamp.normalizedTimeMs, now.millisecondsSinceEpoch + 1);
     },
   );
 
@@ -934,7 +1071,17 @@ void main() {
       );
       expect(transport.events, contains('read:section:device-b:profiles'));
       expect(states.state.pendingActiveProfileDeletion, 'local-profile');
+      expect(
+        states.state.pendingActiveProfile?.reason,
+        WebDavSyncPendingActiveProfileReason.deleted,
+      );
       expect(states.state.pendingAdminSafetyProfile, 'local-profile');
+      expect(suppressWebDavSyncActiveProfileRetirement(states.state), isTrue);
+      expect(
+        states.state.statusHint,
+        'sync kept active Local because it is this device\'s only managing '
+        'Admin',
+      );
       expect(
         circleLocal.appliedRequests.single.deferredActiveCircleProfileId,
         'profile-circle',
@@ -942,6 +1089,246 @@ void main() {
       expect(
         circleLocal.appliedRequests.single.deferredAdminCircleProfileId,
         'profile-circle',
+      );
+    },
+  );
+
+  test(
+    'sole active Admin retirement stays inert until another Admin is promoted',
+    () async {
+      final localProfiles = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'active-admin': _circleProfileLeaf(
+            name: 'Active Admin',
+            time: now.millisecondsSinceEpoch - 2,
+            origin: 'device-a',
+          ),
+          'member': _circleProfileLeaf(
+            name: 'Member',
+            time: now.millisecondsSinceEpoch - 2,
+            origin: 'device-a',
+            role: UserProfileRole.member,
+          ),
+        },
+      );
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        activeProfileId: 'local-active',
+        localProfileIds: const <String>{'local-active', 'local-member'},
+        managingAdminLocalProfileIds: const <String>{'local-active'},
+        localProfileNames: const <String, String>{
+          'local-active': 'Active Admin',
+          'local-member': 'Member',
+        },
+        honorProfileSuppression: true,
+        profiles: localProfiles,
+      );
+      final deletion = WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+        stamp: WebDavSyncStamp(
+          normalizedTimeMs: now.millisecondsSinceEpoch,
+          originDeviceId: 'device-b',
+        ),
+        value: null,
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'active-admin': deletion,
+          },
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      final mappedContext = context(
+        profiles: const <String, String>{
+          'active-admin': 'local-active',
+          'member': 'local-member',
+        },
+      );
+
+      await runFixture(mappedContext);
+
+      expect(states.state.pendingActiveProfileDeletion, 'local-active');
+      expect(states.state.pendingAdminSafetyProfile, 'local-active');
+      expect(suppressWebDavSyncActiveProfileRetirement(states.state), isTrue);
+      expect(circleLocal.localProfileIds, contains('local-active'));
+      expect(circleLocal.activeProfileId, 'local-active');
+
+      final later = now.add(const Duration(minutes: 1));
+      transport.serverDate = later;
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: later,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'active-admin': deletion,
+            'member': _circleProfileLeaf(
+              name: 'Promoted',
+              time: later.millisecondsSinceEpoch,
+              origin: 'device-b',
+            ),
+          },
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => later,
+      );
+
+      await engine.runCycle(mappedContext, allowPreActivation: true);
+
+      expect(states.state.pendingActiveProfileDeletion, 'local-active');
+      expect(states.state.pendingAdminSafetyProfile, isNull);
+      expect(suppressWebDavSyncActiveProfileRetirement(states.state), isFalse);
+      expect(
+        circleLocal.appliedRequests.last.deferredAdminCircleProfileId,
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'active remote disable defers without republication and re-enable cancels',
+    () async {
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        activeProfileId: 'local-x',
+        localProfileIds: const <String>{'local-x', 'local-y'},
+        managingAdminLocalProfileIds: const <String>{'local-x', 'local-y'},
+        localProfileNames: const <String, String>{
+          'local-x': 'X',
+          'local-y': 'Y',
+        },
+        honorProfileSuppression: true,
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'x-admin': _circleProfileLeaf(
+              name: 'X',
+              time: now.millisecondsSinceEpoch - 2,
+              origin: 'device-a',
+            ),
+            'y-admin': _circleProfileLeaf(
+              name: 'Y',
+              time: now.millisecondsSinceEpoch - 2,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      final disabled = _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'x-admin': _circleProfileLeaf(
+            name: 'X',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-b',
+            enabled: false,
+          ),
+        },
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        profiles: disabled,
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      final twoProfileContext = context(
+        profiles: const <String, String>{
+          'x-admin': 'local-x',
+          'y-admin': 'local-y',
+        },
+      );
+
+      await runFixture(twoProfileContext);
+      final converged = await runFixture(twoProfileContext);
+
+      expect(circleLocal.activeProfileId, 'local-x');
+      expect(
+        states.state.pendingActiveProfile?.reason,
+        WebDavSyncPendingActiveProfileReason.disabled,
+      );
+      expect(
+        circleLocal.appliedRequests.first.deferredActiveCircleProfileId,
+        'x-admin',
+      );
+      expect(
+        circleLocal.buildRequests[1].suppressedLocalProfileIds,
+        contains('local-x'),
+      );
+      expect(converged.sectionsPushed, 0);
+
+      final later = now.add(const Duration(minutes: 1));
+      transport.serverDate = later;
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: later,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'x-admin': _circleProfileLeaf(
+              name: 'X',
+              time: later.millisecondsSinceEpoch,
+              origin: 'device-b',
+            ),
+          },
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => later,
+      );
+
+      await engine.runCycle(twoProfileContext, allowPreActivation: true);
+
+      expect(states.state.pendingActiveProfile, isNull);
+      expect(
+        circleLocal.appliedRequests.last.deferredActiveCircleProfileId,
+        isNull,
       );
     },
   );
@@ -2135,6 +2522,7 @@ WebDavSyncCircleLeaf<WebDavSyncProfileValue> _circleProfileLeaf({
   required int time,
   required String origin,
   UserProfileRole role = UserProfileRole.admin,
+  bool enabled = true,
 }) => WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
   stamp: WebDavSyncStamp(normalizedTimeMs: time, originDeviceId: origin),
   value: WebDavSyncProfileValue(
@@ -2143,7 +2531,7 @@ WebDavSyncCircleLeaf<WebDavSyncProfileValue> _circleProfileLeaf({
     policy: Map<String, Object?>.from(
       jsonDecode(ProfilePolicy.allAllowedFor(role).encode()) as Map,
     ),
-    enabled: true,
+    enabled: enabled,
     lockOnResume: false,
     setupComplete: true,
     lifecycle: UserProfileLifecycle.active,
@@ -2290,6 +2678,7 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
   int registryOutboxRowCount = 0;
   Future<void> Function()? beforeCircleSnapshot;
   bool failNextCircleApply = false;
+  bool conflictNextCircleApply = false;
   void Function(WebDavSyncCircleApplyRequest request)? beforeCircleApply;
   final List<bool> circleReplayFlags = <bool>[];
   final List<WebDavSyncCircleApplyRequest> appliedRequests =
@@ -2350,7 +2739,7 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
   }
 
   @override
-  Future<void> applyCircleState(
+  Future<WebDavSyncCircleApplyResult> applyCircleState(
     WebDavSyncLocalSession session,
     WebDavSyncCircleApplyRequest request, {
     bool replayingPending = false,
@@ -2370,6 +2759,11 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
       failNextCircleApply = false;
       throw StateError('simulated circle apply crash');
     }
+    if (conflictNextCircleApply) {
+      conflictNextCircleApply = false;
+      return WebDavSyncCircleApplyResult.conflict;
+    }
+    return WebDavSyncCircleApplyResult.applied;
   }
 }
 

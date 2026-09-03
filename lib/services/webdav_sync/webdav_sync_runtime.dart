@@ -22,6 +22,7 @@ import 'webdav_sync_adoption.dart';
 import 'webdav_sync_adoption_operations.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_clock.dart';
+import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_discovery.dart';
 import 'webdav_sync_engine.dart';
@@ -30,6 +31,7 @@ import 'webdav_sync_existing_root_connector.dart';
 import 'webdav_sync_feature.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_graph_tier.dart';
+import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_manifest_publisher.dart';
 import 'webdav_sync_models.dart';
@@ -37,7 +39,14 @@ import 'webdav_sync_operation_coordinator.dart';
 import 'webdav_sync_safety_backup.dart';
 import 'webdav_sync_scheduler.dart';
 import 'webdav_sync_setup_service.dart';
+import 'webdav_sync_tombstones.dart';
 import 'webdav_sync_transport.dart';
+
+@visibleForTesting
+bool suppressWebDavSyncActiveProfileRetirement(WebDavSyncEngineState state) =>
+    state.pendingActiveProfile != null &&
+    state.pendingActiveProfile!.localProfileId ==
+        state.pendingAdminSafetyProfile;
 
 abstract interface class WebDavSyncActivationController {
   Future<void> inspectExisting(String bindingId);
@@ -516,14 +525,17 @@ final class WebDavSyncRuntime
 
   Future<void> _handleForeground() async {
     String? namespaceBefore;
-    String? pendingBefore;
+    WebDavSyncPendingActiveProfile? pendingBefore;
+    var retirementSuppressedBefore = false;
     try {
       final binding = (await bindingStore.load()).activeBinding;
       namespaceBefore = binding?.namespaceId;
       if (namespaceBefore != null) {
-        pendingBefore = (await stateStore.load(
-          namespaceBefore,
-        )).pendingActiveProfileDeletion;
+        final state = await stateStore.load(namespaceBefore);
+        pendingBefore = state.pendingActiveProfile;
+        retirementSuppressedBefore = suppressWebDavSyncActiveProfileRetirement(
+          state,
+        );
       }
     } catch (_) {
       // A malformed/unavailable binding must not interrupt foregrounding.
@@ -535,6 +547,10 @@ final class WebDavSyncRuntime
     if (_playbackActive || namespaceBefore == null || pendingBefore == null) {
       return;
     }
+    // A foreground which restores another managing Admin clears the safety
+    // hold during the cycle above. Retirement intentionally waits for the next
+    // idle foreground, preserving a stable handoff boundary.
+    if (retirementSuppressedBefore) return;
     final callback = MainPageBridge.retireProfileFromSync;
     if (callback == null) return;
     try {
@@ -542,11 +558,27 @@ final class WebDavSyncRuntime
       final binding = stored.activeBinding;
       if (binding == null || binding.namespaceId != namespaceBefore) return;
       final state = await stateStore.load(binding.namespaceId);
-      final profileId = state.pendingActiveProfileDeletion;
-      if (profileId != pendingBefore || !await callback(profileId!)) return;
+      final pending = state.pendingActiveProfile;
+      if (pending == null ||
+          !_samePendingActiveProfile(pending, pendingBefore) ||
+          suppressWebDavSyncActiveProfileRetirement(state) ||
+          !await callback(
+            pending.localProfileId,
+            delete:
+                pending.reason == WebDavSyncPendingActiveProfileReason.deleted,
+            applyOutcome: () =>
+                _applyPendingActiveProfile(binding.namespaceId, pending),
+          )) {
+        return;
+      }
       await stateStore.update(
         binding.namespaceId,
-        (current) => current.pendingActiveProfileDeletion == profileId
+        (current) =>
+            current.pendingActiveProfile != null &&
+                _samePendingActiveProfile(
+                  current.pendingActiveProfile!,
+                  pending,
+                )
             ? current.copyWith(clearPendingActiveProfileDeletion: true)
             : current,
       );
@@ -554,6 +586,103 @@ final class WebDavSyncRuntime
       // The durable marker remains for a later idle foreground.
     }
   }
+
+  Future<void> _applyPendingActiveProfile(
+    String namespaceId,
+    WebDavSyncPendingActiveProfile pending,
+  ) async {
+    final current = await stateStore.load(namespaceId);
+    final durable = current.pendingActiveProfile;
+    if (durable == null ||
+        !_samePendingActiveProfile(durable, pending) ||
+        suppressWebDavSyncActiveProfileRetirement(current)) {
+      return;
+    }
+    final leaf = durable.profileLeaf;
+    final circleProfileId = durable.circleProfileId;
+    final cycleRunner = _cycleRunner;
+    final adapter = cycleRunner?.localAdapter;
+    final WebDavSyncCircleLocalAdapter? circleAdapter =
+        adapter is WebDavSyncCircleLocalAdapter
+        ? adapter as WebDavSyncCircleLocalAdapter
+        : null;
+    final context = await _activeContext();
+    if (leaf == null ||
+        circleProfileId == null ||
+        circleAdapter == null ||
+        context == null ||
+        context.namespaceId != namespaceId ||
+        !context.isComplete ||
+        !current.hasAuthenticatedMaps) {
+      _scheduler?.notifyLocalChange(
+        ProfilePreferences.webDavSyncRegistryLogicalKey,
+      );
+      return;
+    }
+    final versions = WebDavSyncRegistryVersionSnapshot(
+      enforce: true,
+      updatedAtMsByRecord: durable.expectedPriorUpdatedAtMs == null
+          ? const <String, int>{}
+          : <String, int>{
+              WebDavSyncRegistryRecordId.profile(
+                durable.localProfileId,
+              ).storageKey: durable.expectedPriorUpdatedAtMs!,
+            },
+    );
+    final session = await adapter!.beginCycle();
+    final result = await circleAdapter.applyCircleState(
+      session,
+      WebDavSyncCircleApplyRequest(
+        identityMaps: WebDavSyncIdentityMaps(
+          circleToLocalProfiles: current.circleToLocalProfiles!,
+          circleToLocalResources: current.circleToLocalResources!,
+        ),
+        circleId: context.root!.document.circleId,
+        circleKey: context.root!.key,
+        profiles: WebDavSyncProfilesDocument(
+          profiles: <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            circleProfileId: leaf,
+          },
+        ),
+        resources: const WebDavSyncResourcesDocument(
+          resources: <String, WebDavSyncResourceEntry>{},
+          grants:
+              <
+                String,
+                Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>
+              >{},
+          settings:
+              <
+                String,
+                Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+              >{},
+          bindings:
+              <
+                String,
+                Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
+              >{},
+        ),
+        registryVersions: versions,
+      ),
+    );
+    if (result == WebDavSyncCircleApplyResult.conflict) {
+      _scheduler?.notifyLocalChange(
+        ProfilePreferences.webDavSyncRegistryLogicalKey,
+      );
+    }
+  }
+
+  static bool _samePendingActiveProfile(
+    WebDavSyncPendingActiveProfile left,
+    WebDavSyncPendingActiveProfile right,
+  ) =>
+      left.localProfileId == right.localProfileId &&
+      left.circleProfileId == right.circleProfileId &&
+      left.reason == right.reason &&
+      left.profileLeaf?.stamp.normalizedTimeMs ==
+          right.profileLeaf?.stamp.normalizedTimeMs &&
+      left.profileLeaf?.stamp.originDeviceId ==
+          right.profileLeaf?.stamp.originDeviceId;
 
   void _onPlaybackStarted() {
     _playbackActive = true;

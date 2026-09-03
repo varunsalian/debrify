@@ -7,6 +7,7 @@ import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -154,14 +155,27 @@ void main() {
       registry: registry,
       participants: <ProfileLifecycleParticipant>[participant],
     );
+    final retiredVersion = (await registry.readProfileSyncProjection())
+        .singleWhere((entry) => entry.profile.id == firstId)
+        .updatedAtMs;
 
     expect(await registry.getProfile(firstId), isNotNull);
     expect(
-      await switchThenDeleteSyncedProfile(
+      await switchThenApplySyncedProfileOutcome(
         lifecycle: lifecycle,
-        registry: registry,
-        retiredProfileId: firstId,
         replacementProfileId: replacementId,
+        applyOutcome: () async {
+          await registry.applySyncedRegistryDelta(
+            SyncedRegistryDelta(
+              deletes: <SyncedRegistryDeleteRecord>[
+                SyncedRegistryDeleteRecord(
+                  record: WebDavSyncRegistryRecordId.profile(firstId),
+                  expectedPriorUpdatedAtMs: retiredVersion,
+                ),
+              ],
+            ),
+          );
+        },
       ),
       isTrue,
     );
@@ -170,6 +184,58 @@ void main() {
     expect(ProfileRuntime.capture().profileId, replacementId);
     expect((await registry.activeProfile())?.id, replacementId);
     expect(await registry.getProfile(firstId), isNull);
+    lifecycle.dispose();
+  });
+
+  test('synced active disable lands only after replacement switch', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    final replacementId = (await registry.createProfile(
+      name: 'Replacement Admin',
+      role: UserProfileRole.admin,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    )).id;
+    final current = (await registry.readProfileSyncProjection()).singleWhere(
+      (entry) => entry.profile.id == firstId,
+    );
+    final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+
+    expect(
+      await switchThenApplySyncedProfileOutcome(
+        lifecycle: lifecycle,
+        replacementProfileId: replacementId,
+        applyOutcome: () async {
+          final result = await registry.applySyncedRegistryDelta(
+            SyncedRegistryDelta(
+              profiles: <SyncedRegistryProfileRecord>[
+                SyncedRegistryProfileRecord(
+                  id: firstId,
+                  name: current.profile.name,
+                  avatarKey: current.profile.avatarKey,
+                  role: current.profile.role,
+                  policy: current.profile.policy,
+                  enabled: false,
+                  lockOnResume: current.profile.lockOnResume,
+                  inactivityTimeoutMinutes:
+                      current.profile.inactivityTimeoutMinutes,
+                  setupComplete: current.profile.setupComplete,
+                  lifecycle: current.profile.lifecycle,
+                  pin: current.pin,
+                  updatedAtMs: current.updatedAtMs + 1,
+                  expectedPriorUpdatedAtMs: current.updatedAtMs,
+                ),
+              ],
+            ),
+          );
+          expect(result, SyncedRegistryApplyResult.applied);
+        },
+      ),
+      isTrue,
+    );
+
+    expect(ProfileRuntime.capture().profileId, replacementId);
+    expect((await registry.getProfile(firstId))?.isEnabled, isFalse);
     lifecycle.dispose();
   });
 }

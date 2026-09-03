@@ -258,6 +258,34 @@ void main() {
     });
   });
 
+  test('registry conflict requests one immediate local-change follow-up', () {
+    fakeAsync((async) {
+      final runner = _Runner()..requestFollowUpOnNextRun = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => DateTime.utc(2026, 9, 1).add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.manual,
+        WebDavSyncTrigger.localChange,
+      ]);
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      scheduler.dispose();
+    });
+  });
+
   test('local-change cycles respect television and low-memory gates', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);
@@ -616,6 +644,7 @@ final class _Runner implements WebDavSyncCycleRunner {
   int runs = 0;
   Completer<void>? blocker;
   void Function(WebDavSyncTrigger? trigger)? onRun;
+  bool requestFollowUpOnNextRun = false;
   final List<WebDavSyncTrigger?> triggers = <WebDavSyncTrigger?>[];
 
   @override
@@ -628,8 +657,11 @@ final class _Runner implements WebDavSyncCycleRunner {
     triggers.add(trigger);
     onRun?.call(trigger);
     await blocker?.future;
-    return const WebDavSyncCycleReport(
+    final followUp = requestFollowUpOnNextRun;
+    requestFollowUpOnNextRun = false;
+    return WebDavSyncCycleReport(
       disposition: WebDavSyncCycleDisposition.completed,
+      localChangeFollowUp: followUp,
     );
   }
 }

@@ -77,6 +77,7 @@ final class WebDavSyncScheduler {
   bool _remotePollingForeground = true;
   bool _pollDisabledNoValidators = false;
   bool _dirtyDuringRun = false;
+  bool _immediateDirtyDuringRun = false;
   int _consecutivePollFailures = 0;
   int _pollGeneration = 0;
   Completer<void>? _pollCompletion;
@@ -118,6 +119,7 @@ final class WebDavSyncScheduler {
     _localChangeTimer?.cancel();
     _localChangeTimer = null;
     _dirtyDuringRun = false;
+    _immediateDirtyDuringRun = false;
     _pollDisabledNoValidators = false;
     _resetPollBackoff();
     _pollGeneration++;
@@ -161,13 +163,17 @@ final class WebDavSyncScheduler {
       logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
       logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
 
-  void _scheduleLocalChange() {
+  void _scheduleLocalChange({bool immediate = false}) {
     if (_contextProvider == null) return;
     // Coalescing window, not a resetting debounce: the first write arms the
     // timer and later writes join it. A resetting timer would starve the push
     // for as long as a steady write stream (playback progress) keeps arriving.
     if (_localChangeTimer != null) return;
-    final delay = _gate.playbackActive ? playbackDebounce : localChangeDebounce;
+    final delay = immediate
+        ? Duration.zero
+        : _gate.playbackActive
+        ? playbackDebounce
+        : localChangeDebounce;
     _localChangeTimer = Timer(delay, () {
       _localChangeTimer = null;
       unawaited(_signalLocalChange());
@@ -316,6 +322,7 @@ final class WebDavSyncScheduler {
     _localChangeTimer?.cancel();
     _localChangeTimer = null;
     _dirtyDuringRun = false;
+    _immediateDirtyDuringRun = false;
     _pollDisabledNoValidators = false;
     _resetPollBackoff();
     _pollGeneration++;
@@ -364,12 +371,19 @@ final class WebDavSyncScheduler {
         );
       }
       _lastStartedAt = _clock();
-      return await _runner.runCycle(context, trigger: trigger);
+      final report = await _runner.runCycle(context, trigger: trigger);
+      if (report.localChangeFollowUp) {
+        _dirtyDuringRun = true;
+        _immediateDirtyDuringRun = true;
+      }
+      return report;
     } finally {
       _running = false;
       if (_dirtyDuringRun && _contextProvider != null) {
         _dirtyDuringRun = false;
-        _scheduleLocalChange();
+        final immediate = _immediateDirtyDuringRun;
+        _immediateDirtyDuringRun = false;
+        _scheduleLocalChange(immediate: immediate);
       }
     }
   }

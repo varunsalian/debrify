@@ -76,26 +76,184 @@ final class WebDavSyncPendingCircleApply {
   const WebDavSyncPendingCircleApply({
     required this.profiles,
     required this.resources,
+    this.registryVersions = const WebDavSyncRegistryVersionSnapshot(),
   });
 
   final WebDavSyncProfilesDocument profiles;
   final WebDavSyncResourcesDocument resources;
+  final WebDavSyncRegistryVersionSnapshot registryVersions;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'profiles': profiles.toJson(),
     'resources': resources.toJson(),
+    if (registryVersions.enforce ||
+        registryVersions.updatedAtMsByRecord.isNotEmpty)
+      'registryVersions': registryVersions.toJson(),
   };
 
   factory WebDavSyncPendingCircleApply.fromJson(Object? source) {
     final json = _map(source, 'pending circle apply');
-    if (json.length != 2 ||
+    if (json.length < 2 ||
+        json.length > 3 ||
         !json.containsKey('profiles') ||
-        !json.containsKey('resources')) {
+        !json.containsKey('resources') ||
+        json.keys.any(
+          (key) =>
+              key != 'profiles' &&
+              key != 'resources' &&
+              key != 'registryVersions',
+        )) {
       throw const FormatException('Invalid WebDAV sync pending circle apply');
     }
     return WebDavSyncPendingCircleApply(
       profiles: WebDavSyncProfilesDocument.fromJson(json['profiles']),
       resources: WebDavSyncResourcesDocument.fromJson(json['resources']),
+      registryVersions: WebDavSyncRegistryVersionSnapshot.fromJson(
+        json['registryVersions'],
+      ),
+    );
+  }
+}
+
+/// The row timestamps observed by the transactionally consistent registry
+/// projection used to build a circle section. Missing keys mean the row was
+/// absent. The snapshot is journaled with a pending apply so crash replay uses
+/// the same optimistic-concurrency evidence as the original attempt.
+final class WebDavSyncRegistryVersionSnapshot {
+  const WebDavSyncRegistryVersionSnapshot({
+    this.updatedAtMsByRecord = const <String, int>{},
+    this.enforce = false,
+  });
+
+  final Map<String, int> updatedAtMsByRecord;
+  final bool enforce;
+
+  int? expectedUpdatedAtMs(String recordStorageKey) =>
+      updatedAtMsByRecord[recordStorageKey];
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'updatedAtMsByRecord': updatedAtMsByRecord,
+    'enforce': enforce,
+  };
+
+  factory WebDavSyncRegistryVersionSnapshot.fromJson(Object? source) {
+    if (source == null) {
+      return const WebDavSyncRegistryVersionSnapshot(enforce: true);
+    }
+    final json = _map(source, 'registry version snapshot');
+    if (json.length != 2 ||
+        !json.containsKey('updatedAtMsByRecord') ||
+        json['enforce'] is! bool) {
+      throw const FormatException('Invalid registry version snapshot');
+    }
+    final raw = json['updatedAtMsByRecord'];
+    if (raw is! Map ||
+        raw.length >
+            WebDavSyncLimits.maxRecordsPerHotDocument +
+                WebDavSyncLimits.maxMapEntries) {
+      throw const FormatException('Invalid registry version snapshot');
+    }
+    final versions = <String, int>{};
+    for (final entry in raw.entries) {
+      if (entry.key is! String ||
+          (entry.key as String).isEmpty ||
+          utf8.encode(entry.key as String).length > 512 ||
+          entry.value is! int ||
+          (entry.value as int) < 0 ||
+          (entry.value as int) > WebDavSyncLimits.maxTimestampMs) {
+        throw const FormatException('Invalid registry version snapshot');
+      }
+      versions[entry.key as String] = entry.value as int;
+    }
+    return WebDavSyncRegistryVersionSnapshot(
+      updatedAtMsByRecord: Map<String, int>.unmodifiable(versions),
+      enforce: json['enforce']! as bool,
+    );
+  }
+}
+
+enum WebDavSyncPendingActiveProfileReason { deleted, disabled }
+
+/// Durable handoff for a merged profile value which cannot be applied while
+/// that profile owns the active runtime session.
+final class WebDavSyncPendingActiveProfile {
+  const WebDavSyncPendingActiveProfile({
+    required this.localProfileId,
+    required this.reason,
+    this.circleProfileId,
+    this.profileLeaf,
+    this.expectedPriorUpdatedAtMs,
+  });
+
+  const WebDavSyncPendingActiveProfile.legacyDeletion(this.localProfileId)
+    : reason = WebDavSyncPendingActiveProfileReason.deleted,
+      circleProfileId = null,
+      profileLeaf = null,
+      expectedPriorUpdatedAtMs = null;
+
+  final String localProfileId;
+  final WebDavSyncPendingActiveProfileReason reason;
+  final String? circleProfileId;
+  final WebDavSyncCircleLeaf<WebDavSyncProfileValue>? profileLeaf;
+  final int? expectedPriorUpdatedAtMs;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'localProfileId': localProfileId,
+    'reason': reason.name,
+    if (circleProfileId != null) 'circleProfileId': circleProfileId,
+    if (profileLeaf != null)
+      'profileLeaf': profileLeaf!.toJson((value) => value.toJson()),
+    if (expectedPriorUpdatedAtMs != null)
+      'expectedPriorUpdatedAtMs': expectedPriorUpdatedAtMs,
+  };
+
+  factory WebDavSyncPendingActiveProfile.fromJson(Object? source) {
+    final json = _map(source, 'pending active profile');
+    final localProfileId = json['localProfileId'];
+    final rawReason = json['reason'];
+    final circleProfileId = json['circleProfileId'];
+    final rawLeaf = json['profileLeaf'];
+    final expectedPriorUpdatedAtMs = json['expectedPriorUpdatedAtMs'];
+    if (json.length < 2 ||
+        json.length > 5 ||
+        localProfileId is! String ||
+        !_safeSyncIdentifier.hasMatch(localProfileId) ||
+        rawReason is! String ||
+        (circleProfileId != null &&
+            (circleProfileId is! String ||
+                !_safeSyncIdentifier.hasMatch(circleProfileId))) ||
+        (rawLeaf == null) != (circleProfileId == null) ||
+        (expectedPriorUpdatedAtMs != null &&
+            (expectedPriorUpdatedAtMs is! int ||
+                expectedPriorUpdatedAtMs < 0 ||
+                expectedPriorUpdatedAtMs > WebDavSyncLimits.maxTimestampMs))) {
+      throw const FormatException('Invalid WebDAV sync pending active profile');
+    }
+    late final WebDavSyncPendingActiveProfileReason reason;
+    try {
+      reason = WebDavSyncPendingActiveProfileReason.values.byName(rawReason);
+    } on ArgumentError {
+      throw const FormatException('Invalid WebDAV sync pending active profile');
+    }
+    WebDavSyncCircleLeaf<WebDavSyncProfileValue>? leaf;
+    if (circleProfileId != null) {
+      leaf = WebDavSyncProfilesDocument.fromJson(<String, Object?>{
+        'version': WebDavSyncProfilesDocument.schemaVersion,
+        'profiles': <String, Object?>{circleProfileId: rawLeaf},
+      }).profiles[circleProfileId];
+      if ((reason == WebDavSyncPendingActiveProfileReason.deleted) !=
+          (leaf?.value == null)) {
+        throw const FormatException(
+          'Invalid WebDAV sync pending active profile reason',
+        );
+      }
+    }
+    return WebDavSyncPendingActiveProfile(
+      localProfileId: localProfileId,
+      reason: reason,
+      circleProfileId: circleProfileId as String?,
+      profileLeaf: leaf,
+      expectedPriorUpdatedAtMs: expectedPriorUpdatedAtMs as int?,
     );
   }
 }
@@ -206,7 +364,7 @@ final class WebDavSyncEngineState {
     this.pendingCircleApply,
     this.lastPushedProfilesDigest,
     this.lastPushedResourcesDigest,
-    this.pendingActiveProfileDeletion,
+    this.pendingActiveProfile,
     this.pendingAdminSafetyProfile,
     this.statusHint,
     this.peerManifestHighWater = const <String, int>{},
@@ -236,7 +394,11 @@ final class WebDavSyncEngineState {
   final WebDavSyncPendingCircleApply? pendingCircleApply;
   final String? lastPushedProfilesDigest;
   final String? lastPushedResourcesDigest;
-  final String? pendingActiveProfileDeletion;
+  final WebDavSyncPendingActiveProfile? pendingActiveProfile;
+
+  /// Compatibility view for callers which only need the deferred local ID.
+  String? get pendingActiveProfileDeletion =>
+      pendingActiveProfile?.localProfileId;
   final String? pendingAdminSafetyProfile;
   final String? statusHint;
   final Map<String, int> peerManifestHighWater;
@@ -275,7 +437,7 @@ final class WebDavSyncEngineState {
     bool clearPendingCircleApply = false,
     String? lastPushedProfilesDigest,
     String? lastPushedResourcesDigest,
-    String? pendingActiveProfileDeletion,
+    WebDavSyncPendingActiveProfile? pendingActiveProfile,
     bool clearPendingActiveProfileDeletion = false,
     String? pendingAdminSafetyProfile,
     bool clearPendingAdminSafetyProfile = false,
@@ -317,9 +479,9 @@ final class WebDavSyncEngineState {
         lastPushedProfilesDigest ?? this.lastPushedProfilesDigest,
     lastPushedResourcesDigest:
         lastPushedResourcesDigest ?? this.lastPushedResourcesDigest,
-    pendingActiveProfileDeletion: clearPendingActiveProfileDeletion
+    pendingActiveProfile: clearPendingActiveProfileDeletion
         ? null
-        : (pendingActiveProfileDeletion ?? this.pendingActiveProfileDeletion),
+        : (pendingActiveProfile ?? this.pendingActiveProfile),
     pendingAdminSafetyProfile: clearPendingAdminSafetyProfile
         ? null
         : (pendingAdminSafetyProfile ?? this.pendingAdminSafetyProfile),
@@ -372,8 +534,8 @@ final class WebDavSyncEngineState {
       'lastPushedProfilesDigest': lastPushedProfilesDigest,
     if (lastPushedResourcesDigest != null)
       'lastPushedResourcesDigest': lastPushedResourcesDigest,
-    if (pendingActiveProfileDeletion != null)
-      'pendingActiveProfileDeletion': pendingActiveProfileDeletion,
+    if (pendingActiveProfile != null)
+      'pendingActiveProfile': pendingActiveProfile!.toJson(),
     if (pendingAdminSafetyProfile != null)
       'pendingAdminSafetyProfile': pendingAdminSafetyProfile,
     if (statusHint != null) 'statusHint': statusHint,
@@ -503,13 +665,32 @@ final class WebDavSyncEngineState {
       return value;
     }
 
-    final pendingActiveProfileDeletion = json['pendingActiveProfileDeletion'];
-    if (pendingActiveProfileDeletion != null &&
-        (pendingActiveProfileDeletion is! String ||
-            !_safeSyncIdentifier.hasMatch(pendingActiveProfileDeletion))) {
+    final rawPendingActiveProfile = json['pendingActiveProfile'];
+    final legacyPendingActiveProfileDeletion =
+        json['pendingActiveProfileDeletion'];
+    if (rawPendingActiveProfile != null &&
+        legacyPendingActiveProfileDeletion != null) {
       throw const FormatException(
-        'Invalid WebDAV sync pending active profile deletion',
+        'Invalid WebDAV sync pending active profile state',
       );
+    }
+    final WebDavSyncPendingActiveProfile? pendingActiveProfile;
+    if (rawPendingActiveProfile != null) {
+      pendingActiveProfile = WebDavSyncPendingActiveProfile.fromJson(
+        rawPendingActiveProfile,
+      );
+    } else if (legacyPendingActiveProfileDeletion != null) {
+      if (legacyPendingActiveProfileDeletion is! String ||
+          !_safeSyncIdentifier.hasMatch(legacyPendingActiveProfileDeletion)) {
+        throw const FormatException(
+          'Invalid WebDAV sync pending active profile deletion',
+        );
+      }
+      pendingActiveProfile = WebDavSyncPendingActiveProfile.legacyDeletion(
+        legacyPendingActiveProfileDeletion,
+      );
+    } else {
+      pendingActiveProfile = null;
     }
     final pendingAdminSafetyProfile = json['pendingAdminSafetyProfile'];
     if (pendingAdminSafetyProfile != null &&
@@ -677,7 +858,7 @@ final class WebDavSyncEngineState {
           : WebDavSyncPendingCircleApply.fromJson(json['pendingCircleApply']),
       lastPushedProfilesDigest: circleDigest('lastPushedProfilesDigest'),
       lastPushedResourcesDigest: circleDigest('lastPushedResourcesDigest'),
-      pendingActiveProfileDeletion: pendingActiveProfileDeletion as String?,
+      pendingActiveProfile: pendingActiveProfile,
       pendingAdminSafetyProfile: pendingAdminSafetyProfile as String?,
       statusHint: statusHint as String?,
       peerManifestHighWater: Map<String, int>.unmodifiable(peerHighWater),

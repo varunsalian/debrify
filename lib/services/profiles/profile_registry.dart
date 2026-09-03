@@ -2690,7 +2690,9 @@ class ProfileRegistry {
   /// Applies a fully merged circle-registry delta without staged-graph or
   /// restore journals. The caller supplies merge provenance; this writer owns
   /// relational ordering, local authorization revisions, and secret storage.
-  Future<void> applySyncedRegistryDelta(SyncedRegistryDelta delta) async {
+  Future<SyncedRegistryApplyResult> applySyncedRegistryDelta(
+    SyncedRegistryDelta delta,
+  ) async {
     for (final item in delta.resources) {
       final payload = item.sealedSecretPayload;
       if ((payload == null) != (item.secretPayloadVersion == null)) {
@@ -2703,7 +2705,10 @@ class ProfileRegistry {
     }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
-    await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
+      if (!await _syncedDeltaMatchesObservedState(txn, delta)) {
+        return SyncedRegistryApplyResult.conflict;
+      }
       final activeRows = await txn.query(
         'device_state',
         columns: const <String>['active_profile_id'],
@@ -2715,9 +2720,9 @@ class ProfileRegistry {
           : activeRows.single['active_profile_id'] as String?;
       final deletedProfileIds = delta.deletes
           .where(
-            (record) => record.kind == WebDavSyncRegistryRecordKind.profile,
+            (item) => item.record.kind == WebDavSyncRegistryRecordKind.profile,
           )
-          .map((record) => record.profileId!)
+          .map((item) => item.record.profileId!)
           .toSet();
       if (activeProfileId != null &&
           deletedProfileIds.contains(activeProfileId)) {
@@ -3007,9 +3012,9 @@ class ProfileRegistry {
 
       final deletedResourceIds = delta.deletes
           .where(
-            (record) => record.kind == WebDavSyncRegistryRecordKind.resource,
+            (item) => item.record.kind == WebDavSyncRegistryRecordKind.resource,
           )
-          .map((record) => record.resourceId!)
+          .map((item) => item.record.resourceId!)
           .toSet();
       for (final resourceId in <String>{
         ...delta.resources.map((item) => item.resource.id),
@@ -3028,27 +3033,30 @@ class ProfileRegistry {
 
       // Child-first physical removal keeps this explicit and works even if a
       // future schema tightens one of today's cascading foreign keys.
-      for (final record in delta.deletes.where(
-        (record) => record.kind == WebDavSyncRegistryRecordKind.binding,
+      for (final item in delta.deletes.where(
+        (item) => item.record.kind == WebDavSyncRegistryRecordKind.binding,
       )) {
+        final record = item.record;
         await txn.delete(
           'profile_connection_bindings',
           where: 'profile_id = ? AND slot = ?',
           whereArgs: <Object>[record.profileId!, record.slot!],
         );
       }
-      for (final record in delta.deletes.where(
-        (record) => record.kind == WebDavSyncRegistryRecordKind.setting,
+      for (final item in delta.deletes.where(
+        (item) => item.record.kind == WebDavSyncRegistryRecordKind.setting,
       )) {
+        final record = item.record;
         await txn.delete(
           'profile_resource_settings',
           where: 'profile_id = ? AND resource_id = ?',
           whereArgs: <Object>[record.profileId!, record.resourceId!],
         );
       }
-      for (final record in delta.deletes.where(
-        (record) => record.kind == WebDavSyncRegistryRecordKind.grant,
+      for (final item in delta.deletes.where(
+        (item) => item.record.kind == WebDavSyncRegistryRecordKind.grant,
       )) {
+        final record = item.record;
         affectedProfileIds.add(record.profileId!);
         await txn.delete(
           'profile_resource_grants',
@@ -3086,8 +3094,116 @@ class ProfileRegistry {
         throw StateError('Synced registry delta violates foreign keys');
       }
       await _assertAdminInvariant(txn);
+      return SyncedRegistryApplyResult.applied;
     });
     await checkpointTvOsRecovery();
+    return result;
+  }
+
+  static Future<bool> _syncedDeltaMatchesObservedState(
+    DatabaseExecutor db,
+    SyncedRegistryDelta delta,
+  ) async {
+    Future<bool> matches(
+      String table,
+      String where,
+      List<Object> whereArgs,
+      int? expectedUpdatedAtMs,
+    ) async {
+      final rows = await db.query(
+        table,
+        columns: const <String>['updated_at_ms'],
+        where: where,
+        whereArgs: whereArgs,
+        limit: 1,
+      );
+      return expectedUpdatedAtMs == null
+          ? rows.isEmpty
+          : rows.length == 1 &&
+                rows.single['updated_at_ms'] == expectedUpdatedAtMs;
+    }
+
+    for (final item in delta.profiles) {
+      if (!await matches('user_profiles', 'id = ?', <Object>[
+        item.id,
+      ], item.expectedPriorUpdatedAtMs)) {
+        return false;
+      }
+    }
+    for (final item in delta.resources) {
+      if (!await matches('connection_resources', 'id = ?', <Object>[
+        item.resource.id,
+      ], item.expectedPriorUpdatedAtMs)) {
+        return false;
+      }
+    }
+    for (final item in delta.grants) {
+      if (!await matches(
+        'profile_resource_grants',
+        'profile_id = ? AND resource_id = ?',
+        <Object>[item.profileId, item.resourceId],
+        item.expectedPriorUpdatedAtMs,
+      )) {
+        return false;
+      }
+    }
+    for (final item in delta.settings) {
+      if (!await matches(
+        'profile_resource_settings',
+        'profile_id = ? AND resource_id = ?',
+        <Object>[item.profileId, item.resourceId],
+        item.expectedPriorUpdatedAtMs,
+      )) {
+        return false;
+      }
+    }
+    for (final item in delta.bindings) {
+      if (!await matches(
+        'profile_connection_bindings',
+        'profile_id = ? AND slot = ?',
+        <Object>[item.profileId, item.slot],
+        item.expectedPriorUpdatedAtMs,
+      )) {
+        return false;
+      }
+    }
+    for (final item in delta.deletes) {
+      final record = item.record;
+      final matched = switch (record.kind) {
+        WebDavSyncRegistryRecordKind.profile => await matches(
+          'user_profiles',
+          'id = ?',
+          <Object>[record.profileId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.resource => await matches(
+          'connection_resources',
+          'id = ?',
+          <Object>[record.resourceId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.grant => await matches(
+          'profile_resource_grants',
+          'profile_id = ? AND resource_id = ?',
+          <Object>[record.profileId!, record.resourceId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.setting => await matches(
+          'profile_resource_settings',
+          'profile_id = ? AND resource_id = ?',
+          <Object>[record.profileId!, record.resourceId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.binding => await matches(
+          'profile_connection_bindings',
+          'profile_id = ? AND slot = ?',
+          <Object>[record.profileId!, record.slot!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+      };
+      if (!matched) return false;
+    }
+    return true;
   }
 
   static void _validateSyncedProfile(SyncedRegistryProfileRecord item) {
@@ -6153,13 +6269,15 @@ class ProfileRegistry {
   }
 }
 
+enum SyncedRegistryApplyResult { applied, conflict }
+
 class SyncedRegistryDelta {
   final List<SyncedRegistryProfileRecord> profiles;
   final List<SyncedRegistryResourceRecord> resources;
   final List<SyncedRegistryGrantRecord> grants;
   final List<SyncedRegistrySettingsRecord> settings;
   final List<SyncedRegistryBindingRecord> bindings;
-  final Set<WebDavSyncRegistryRecordId> deletes;
+  final List<SyncedRegistryDeleteRecord> deletes;
 
   const SyncedRegistryDelta({
     this.profiles = const <SyncedRegistryProfileRecord>[],
@@ -6167,7 +6285,17 @@ class SyncedRegistryDelta {
     this.grants = const <SyncedRegistryGrantRecord>[],
     this.settings = const <SyncedRegistrySettingsRecord>[],
     this.bindings = const <SyncedRegistryBindingRecord>[],
-    this.deletes = const <WebDavSyncRegistryRecordId>{},
+    this.deletes = const <SyncedRegistryDeleteRecord>[],
+  });
+}
+
+class SyncedRegistryDeleteRecord {
+  final WebDavSyncRegistryRecordId record;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistryDeleteRecord({
+    required this.record,
+    this.expectedPriorUpdatedAtMs,
   });
 }
 
@@ -6188,6 +6316,7 @@ class SyncedRegistryProfileRecord {
   /// remains device-local when the singular wire credential is unchanged.
   final bool applyPin;
   final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
 
   const SyncedRegistryProfileRecord({
     required this.id,
@@ -6203,6 +6332,7 @@ class SyncedRegistryProfileRecord {
     this.pin = const ProfilePinRecord(),
     this.applyPin = true,
     required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
   });
 }
 
@@ -6212,6 +6342,7 @@ class SyncedRegistryResourceRecord {
   final String? sealedSecretPayload;
   final int? secretPayloadVersion;
   final bool clearSecret;
+  final int? expectedPriorUpdatedAtMs;
 
   const SyncedRegistryResourceRecord({
     required this.resource,
@@ -6219,6 +6350,7 @@ class SyncedRegistryResourceRecord {
     this.sealedSecretPayload,
     this.secretPayloadVersion,
     this.clearSecret = false,
+    this.expectedPriorUpdatedAtMs,
   });
 }
 
@@ -6227,12 +6359,14 @@ class SyncedRegistryGrantRecord {
   final String resourceId;
   final int permissions;
   final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
 
   const SyncedRegistryGrantRecord({
     required this.profileId,
     required this.resourceId,
     required this.permissions,
     required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
   });
 }
 
@@ -6242,6 +6376,7 @@ class SyncedRegistrySettingsRecord {
   final bool enabled;
   final Map<String, dynamic> settings;
   final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
 
   const SyncedRegistrySettingsRecord({
     required this.profileId,
@@ -6249,6 +6384,7 @@ class SyncedRegistrySettingsRecord {
     required this.enabled,
     this.settings = const <String, dynamic>{},
     required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
   });
 }
 
@@ -6257,12 +6393,14 @@ class SyncedRegistryBindingRecord {
   final String slot;
   final String resourceId;
   final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
 
   const SyncedRegistryBindingRecord({
     required this.profileId,
     required this.slot,
     required this.resourceId,
     required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
   });
 }
 

@@ -520,7 +520,13 @@ void main() {
       ),
       lastPushedProfilesDigest: 'e' * 64,
       lastPushedResourcesDigest: 'f' * 64,
-      pendingActiveProfileDeletion: 'local-retired-profile',
+      pendingActiveProfile: WebDavSyncPendingActiveProfile(
+        localProfileId: 'local-retired-profile',
+        circleProfileId: 'circle-profile',
+        reason: WebDavSyncPendingActiveProfileReason.deleted,
+        profileLeaf: circleProfiles.profiles['circle-profile'],
+        expectedPriorUpdatedAtMs: 41,
+      ),
       pendingAdminSafetyProfile: 'local-admin',
       statusHint: 'sync kept Local Admin as Admin on this device',
     );
@@ -556,10 +562,19 @@ void main() {
     expect(restored.pendingCircleApply?.toJson(), {
       'profiles': circleProfiles.toJson(),
       'resources': circleResources.toJson(),
+      'registryVersions': {
+        'updatedAtMsByRecord': <String, Object?>{},
+        'enforce': true,
+      },
     });
     expect(restored.lastPushedProfilesDigest, 'e' * 64);
     expect(restored.lastPushedResourcesDigest, 'f' * 64);
     expect(restored.pendingActiveProfileDeletion, 'local-retired-profile');
+    expect(
+      restored.pendingActiveProfile?.reason,
+      WebDavSyncPendingActiveProfileReason.deleted,
+    );
+    expect(restored.pendingActiveProfile?.expectedPriorUpdatedAtMs, 41);
     expect(restored.pendingAdminSafetyProfile, 'local-admin');
     expect(
       restored.statusHint,

@@ -19,6 +19,7 @@ import 'webdav_sync_active_profile_refresh.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_tombstones.dart';
@@ -117,11 +118,13 @@ final class WebDavSyncBuiltCircleState {
     required this.profiles,
     required this.resources,
     this.registryOutboxRowCount = 0,
+    this.registryVersions = const WebDavSyncRegistryVersionSnapshot(),
   });
 
   final WebDavSyncProfilesDocument profiles;
   final WebDavSyncResourcesDocument resources;
   final int registryOutboxRowCount;
+  final WebDavSyncRegistryVersionSnapshot registryVersions;
 }
 
 final class WebDavSyncCircleApplyRequest {
@@ -131,6 +134,7 @@ final class WebDavSyncCircleApplyRequest {
     required this.circleKey,
     required this.profiles,
     required this.resources,
+    this.registryVersions = const WebDavSyncRegistryVersionSnapshot(),
     this.deferredActiveCircleProfileId,
     this.deferredAdminCircleProfileId,
   });
@@ -140,9 +144,12 @@ final class WebDavSyncCircleApplyRequest {
   final WebDavSyncCircleKey circleKey;
   final WebDavSyncProfilesDocument profiles;
   final WebDavSyncResourcesDocument resources;
+  final WebDavSyncRegistryVersionSnapshot registryVersions;
   final String? deferredActiveCircleProfileId;
   final String? deferredAdminCircleProfileId;
 }
+
+enum WebDavSyncCircleApplyResult { applied, conflict }
 
 /// Optional circle-registry boundary. Keeping it separate preserves the small
 /// hot-only fake adapters while production and circle-engine fixtures opt in.
@@ -156,7 +163,7 @@ abstract interface class WebDavSyncCircleLocalAdapter {
     WebDavSyncCircleBuildRequest request,
   );
 
-  Future<void> applyCircleState(
+  Future<WebDavSyncCircleApplyResult> applyCircleState(
     WebDavSyncLocalSession session,
     WebDavSyncCircleApplyRequest request, {
     bool replayingPending = false,
@@ -616,42 +623,95 @@ final class ProfileWebDavSyncLocalAdapter
       profiles: profileDocument,
       resources: resourceDocument,
       registryOutboxRowCount: circleProjection.outboxRowCount,
+      registryVersions: WebDavSyncRegistryVersionSnapshot(
+        enforce: true,
+        updatedAtMsByRecord: Map<String, int>.unmodifiable(<String, int>{
+          for (final entry in profileProjection)
+            WebDavSyncRegistryRecordId.profile(entry.profile.id).storageKey:
+                entry.updatedAtMs,
+          for (final entry in registryProjection.resources)
+            WebDavSyncRegistryRecordId.resource(
+              entry.resource.id,
+              ownerProfileId: entry.resource.ownerProfileId,
+            ).storageKey: entry.updatedAtMs,
+          for (final entry in registryProjection.grants)
+            WebDavSyncRegistryRecordId.grant(
+              entry.profileId,
+              entry.resourceId,
+            ).storageKey: entry.updatedAtMs,
+          for (final entry in registryProjection.settings)
+            WebDavSyncRegistryRecordId.setting(
+              entry.profileId,
+              entry.resourceId,
+            ).storageKey: entry.updatedAtMs,
+          for (final entry in registryProjection.bindings)
+            WebDavSyncRegistryRecordId.binding(
+              entry.profileId,
+              entry.slot,
+              resourceId: entry.resourceId,
+            ).storageKey: entry.updatedAtMs,
+        }),
+      ),
     );
   }
 
   @override
-  Future<void> applyCircleState(
+  Future<WebDavSyncCircleApplyResult> applyCircleState(
     WebDavSyncLocalSession session,
     WebDavSyncCircleApplyRequest request, {
     bool replayingPending = false,
   }) async {
     _validateSession(session);
     final maps = request.identityMaps;
-    final currentProfileProjection = await registry.readProfileSyncProjection();
+    final currentCircleProjection = await registry.readCircleSyncProjection();
+    final currentProfileProjection = currentCircleProjection.profiles;
     final currentProfiles = <String, UserProfile>{
       for (final entry in currentProfileProjection)
         entry.profile.id: entry.profile,
     };
+    final currentProfileVersions = <String, int>{
+      for (final entry in currentProfileProjection)
+        entry.profile.id: entry.updatedAtMs,
+    };
     final currentPins = <String, ProfilePinRecord>{
       for (final entry in currentProfileProjection) entry.profile.id: entry.pin,
     };
-    final currentRegistry = await registry.readRegistrySyncProjection();
+    final currentRegistry = currentCircleProjection.registry;
     final currentResources = <String, ConnectionResource>{
       for (final entry in currentRegistry.resources)
         entry.resource.id: entry.resource,
     };
+    final currentResourceVersions = <String, int>{
+      for (final entry in currentRegistry.resources)
+        entry.resource.id: entry.updatedAtMs,
+    };
+    int? expectedVersion(WebDavSyncRegistryRecordId id, int? currentVersion) =>
+        request.registryVersions.enforce
+        ? request.registryVersions.expectedUpdatedAtMs(id.storageKey)
+        : currentVersion;
     _validateSession(session);
     final profileRecords = <SyncedRegistryProfileRecord>[];
-    final profileDeletes = <WebDavSyncRegistryRecordId>{};
+    final profileDeletes = <SyncedRegistryDeleteRecord>[];
     final prePins = <String, ProfilePinRecord?>{};
     for (final entry in request.profiles.profiles.entries) {
       final localId = maps.circleToLocalProfiles[entry.key];
       if (localId == null) continue;
-      if (entry.key == request.deferredAdminCircleProfileId) continue;
+      if (entry.key == request.deferredAdminCircleProfileId ||
+          entry.key == request.deferredActiveCircleProfileId) {
+        continue;
+      }
       if (entry.value.value == null) {
-        if (entry.key != request.deferredActiveCircleProfileId &&
-            currentProfiles.containsKey(localId)) {
-          profileDeletes.add(WebDavSyncRegistryRecordId.profile(localId));
+        if (currentProfiles.containsKey(localId)) {
+          final id = WebDavSyncRegistryRecordId.profile(localId);
+          profileDeletes.add(
+            SyncedRegistryDeleteRecord(
+              record: id,
+              expectedPriorUpdatedAtMs: expectedVersion(
+                id,
+                currentProfileVersions[localId],
+              ),
+            ),
+          );
         }
         continue;
       }
@@ -673,6 +733,10 @@ final class ProfileWebDavSyncLocalAdapter
         pin: localPin,
         applyPin: current == null || !_samePin(currentPin, localPin),
         updatedAtMs: entry.value.stamp.normalizedTimeMs,
+        expectedPriorUpdatedAtMs: expectedVersion(
+          WebDavSyncRegistryRecordId.profile(localId),
+          currentProfileVersions[localId],
+        ),
       );
       if (current != null &&
           currentPin != null &&
@@ -684,7 +748,7 @@ final class ProfileWebDavSyncLocalAdapter
     }
 
     final resourceRecords = <SyncedRegistryResourceRecord>[];
-    final resourceDeletes = <WebDavSyncRegistryRecordId>{};
+    final resourceDeletes = <SyncedRegistryDeleteRecord>[];
     final codec = WebDavSyncCodec();
     final cipher = DeviceKeyProvider.cipher;
     for (final entry in request.resources.resources.entries) {
@@ -694,10 +758,17 @@ final class ProfileWebDavSyncLocalAdapter
       if (metadata == null) {
         final existing = currentResources[localResourceId];
         if (existing != null) {
+          final id = WebDavSyncRegistryRecordId.resource(
+            localResourceId,
+            ownerProfileId: existing.ownerProfileId,
+          );
           resourceDeletes.add(
-            WebDavSyncRegistryRecordId.resource(
-              localResourceId,
-              ownerProfileId: existing.ownerProfileId,
+            SyncedRegistryDeleteRecord(
+              record: id,
+              expectedPriorUpdatedAtMs: expectedVersion(
+                id,
+                currentResourceVersions[localResourceId],
+              ),
             ),
           );
         }
@@ -799,6 +870,13 @@ final class ProfileWebDavSyncLocalAdapter
           sealedSecretPayload: sealedSecret,
           secretPayloadVersion: secretVersion,
           clearSecret: clearSecret,
+          expectedPriorUpdatedAtMs: expectedVersion(
+            WebDavSyncRegistryRecordId.resource(
+              localResourceId,
+              ownerProfileId: ownerId,
+            ),
+            currentResourceVersions[localResourceId],
+          ),
         ),
       );
     }
@@ -806,7 +884,7 @@ final class ProfileWebDavSyncLocalAdapter
     final grantRecords = <SyncedRegistryGrantRecord>[];
     final settingRecords = <SyncedRegistrySettingsRecord>[];
     final bindingRecords = <SyncedRegistryBindingRecord>[];
-    final nestedDeletes = <WebDavSyncRegistryRecordId>{};
+    final nestedDeletes = <SyncedRegistryDeleteRecord>[];
     final currentGrants = <String, RegistrySyncGrantProjection>{
       for (final item in currentRegistry.grants)
         _pairKey(item.profileId, item.resourceId): item,
@@ -829,8 +907,15 @@ final class ProfileWebDavSyncLocalAdapter
         final current = currentGrants[_pairKey(profileId, resourceId)];
         if (value == null) {
           if (current != null) {
+            final id = WebDavSyncRegistryRecordId.grant(profileId, resourceId);
             nestedDeletes.add(
-              WebDavSyncRegistryRecordId.grant(profileId, resourceId),
+              SyncedRegistryDeleteRecord(
+                record: id,
+                expectedPriorUpdatedAtMs: expectedVersion(
+                  id,
+                  current.updatedAtMs,
+                ),
+              ),
             );
           }
         } else {
@@ -841,6 +926,10 @@ final class ProfileWebDavSyncLocalAdapter
               resourceId: resourceId,
               permissions: value.permissions,
               updatedAtMs: inner.value.stamp.normalizedTimeMs,
+              expectedPriorUpdatedAtMs: expectedVersion(
+                WebDavSyncRegistryRecordId.grant(profileId, resourceId),
+                current?.updatedAtMs,
+              ),
             ),
           );
         }
@@ -856,8 +945,18 @@ final class ProfileWebDavSyncLocalAdapter
         final current = currentSettings[_pairKey(profileId, resourceId)];
         if (value == null) {
           if (current != null) {
+            final id = WebDavSyncRegistryRecordId.setting(
+              profileId,
+              resourceId,
+            );
             nestedDeletes.add(
-              WebDavSyncRegistryRecordId.setting(profileId, resourceId),
+              SyncedRegistryDeleteRecord(
+                record: id,
+                expectedPriorUpdatedAtMs: expectedVersion(
+                  id,
+                  current.updatedAtMs,
+                ),
+              ),
             );
           }
         } else {
@@ -874,6 +973,10 @@ final class ProfileWebDavSyncLocalAdapter
               enabled: value.enabled,
               settings: Map<String, dynamic>.from(value.settings),
               updatedAtMs: inner.value.stamp.normalizedTimeMs,
+              expectedPriorUpdatedAtMs: expectedVersion(
+                WebDavSyncRegistryRecordId.setting(profileId, resourceId),
+                current?.updatedAtMs,
+              ),
             ),
           );
         }
@@ -887,11 +990,18 @@ final class ProfileWebDavSyncLocalAdapter
         final current = currentBindings[_pairKey(profileId, inner.key)];
         if (value == null) {
           if (current != null) {
+            final id = WebDavSyncRegistryRecordId.binding(
+              profileId,
+              inner.key,
+              resourceId: current.resourceId,
+            );
             nestedDeletes.add(
-              WebDavSyncRegistryRecordId.binding(
-                profileId,
-                inner.key,
-                resourceId: current.resourceId,
+              SyncedRegistryDeleteRecord(
+                record: id,
+                expectedPriorUpdatedAtMs: expectedVersion(
+                  id,
+                  current.updatedAtMs,
+                ),
               ),
             );
           }
@@ -908,6 +1018,14 @@ final class ProfileWebDavSyncLocalAdapter
               slot: inner.key,
               resourceId: resourceId,
               updatedAtMs: inner.value.stamp.normalizedTimeMs,
+              expectedPriorUpdatedAtMs: expectedVersion(
+                WebDavSyncRegistryRecordId.binding(
+                  profileId,
+                  inner.key,
+                  resourceId: resourceId,
+                ),
+                current?.updatedAtMs,
+              ),
             ),
           );
         }
@@ -922,22 +1040,25 @@ final class ProfileWebDavSyncLocalAdapter
         profileDeletes.isEmpty &&
         resourceDeletes.isEmpty &&
         nestedDeletes.isEmpty) {
-      return;
+      return WebDavSyncCircleApplyResult.applied;
     }
-    await registry.applySyncedRegistryDelta(
+    final result = await registry.applySyncedRegistryDelta(
       SyncedRegistryDelta(
         profiles: profileRecords,
         resources: resourceRecords,
         grants: grantRecords,
         settings: settingRecords,
         bindings: bindingRecords,
-        deletes: <WebDavSyncRegistryRecordId>{
+        deletes: <SyncedRegistryDeleteRecord>[
           ...profileDeletes,
           ...resourceDeletes,
           ...nestedDeletes,
-        },
+        ],
       ),
     );
+    if (result == SyncedRegistryApplyResult.conflict) {
+      return WebDavSyncCircleApplyResult.conflict;
+    }
     _validateSession(session);
 
     for (final item in profileRecords) {
@@ -952,6 +1073,7 @@ final class ProfileWebDavSyncLocalAdapter
         MainPageBridge.reloadProfilePolicy?.call();
       }
     }
+    return WebDavSyncCircleApplyResult.applied;
   }
 
   static ProfilePinRecord _localPin(WebDavSyncProfilePin pin) =>

@@ -284,6 +284,7 @@ void main() {
               sealedSecretPayload: sealed,
               secretPayloadVersion:
                   ConnectionResourceService.secretPayloadVersion,
+              expectedPriorUpdatedAtMs: 10,
             ),
           ],
         ),

@@ -109,6 +109,47 @@ void main() {
     },
   );
 
+  test('sync delta returns a typed conflict and aborts every row', () async {
+    final local = await admin('edited-admin');
+    final observed = (await registry.readProfileSyncProjection()).singleWhere(
+      (entry) => entry.profile.id == local.id,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+    await registry.updateProfile(id: local.id, name: 'Fresh local edit');
+
+    final result = await registry.applySyncedRegistryDelta(
+      SyncedRegistryDelta(
+        profiles: <SyncedRegistryProfileRecord>[
+          SyncedRegistryProfileRecord(
+            id: local.id,
+            name: 'Stale remote value',
+            role: local.role,
+            policy: local.policy,
+            enabled: true,
+            lockOnResume: local.lockOnResume,
+            setupComplete: local.setupComplete,
+            updatedAtMs: observed.updatedAtMs + 1,
+            expectedPriorUpdatedAtMs: observed.updatedAtMs,
+          ),
+          SyncedRegistryProfileRecord(
+            id: 'must-not-be-created',
+            name: 'Atomic companion',
+            role: UserProfileRole.member,
+            policy: ProfilePolicy.defaultsFor(UserProfileRole.member),
+            enabled: true,
+            lockOnResume: false,
+            setupComplete: true,
+            updatedAtMs: observed.updatedAtMs + 1,
+          ),
+        ],
+      ),
+    );
+
+    expect(result, SyncedRegistryApplyResult.conflict);
+    expect((await registry.getProfile(local.id))?.name, 'Fresh local edit');
+    expect(await registry.getProfile('must-not-be-created'), isNull);
+  });
+
   test('fresh v8 schema and v6 upgrade have exact defaults/backfill', () async {
     var db = await raw();
     Future<Map<String, Map<String, Object?>>> columns(String table) async => {
@@ -591,6 +632,7 @@ void main() {
               updatedAtMs: 300,
               sealedSecretPayload: 'local-sealed-secret',
               secretPayloadVersion: 1,
+              expectedPriorUpdatedAtMs: 200,
             ),
           ],
         ),
@@ -608,6 +650,7 @@ void main() {
             SyncedRegistryResourceRecord(
               resource: resource(resourceId, adminId, label: 'Metadata only'),
               updatedAtMs: 400,
+              expectedPriorUpdatedAtMs: 300,
             ),
           ],
         ),
@@ -621,15 +664,24 @@ void main() {
 
       await registry.applySyncedRegistryDelta(
         SyncedRegistryDelta(
-          deletes: <WebDavSyncRegistryRecordId>{
-            WebDavSyncRegistryRecordId.binding(
-              memberId,
-              'provider.realDebrid',
-              resourceId: resourceId,
+          deletes: <SyncedRegistryDeleteRecord>[
+            SyncedRegistryDeleteRecord(
+              record: WebDavSyncRegistryRecordId.binding(
+                memberId,
+                'provider.realDebrid',
+                resourceId: resourceId,
+              ),
+              expectedPriorUpdatedAtMs: 204,
             ),
-            WebDavSyncRegistryRecordId.setting(memberId, resourceId),
-            WebDavSyncRegistryRecordId.grant(memberId, resourceId),
-          },
+            SyncedRegistryDeleteRecord(
+              record: WebDavSyncRegistryRecordId.setting(memberId, resourceId),
+              expectedPriorUpdatedAtMs: 203,
+            ),
+            SyncedRegistryDeleteRecord(
+              record: WebDavSyncRegistryRecordId.grant(memberId, resourceId),
+              expectedPriorUpdatedAtMs: 202,
+            ),
+          ],
         ),
       );
       projection = await registry.readRegistrySyncProjection();
@@ -746,12 +798,18 @@ void main() {
         activeProfileId: first.id,
         migratedLegacyInstall: false,
       );
+      final firstVersion = (await registry.readProfileSyncProjection())
+          .singleWhere((entry) => entry.profile.id == first.id)
+          .updatedAtMs;
       await expectLater(
         registry.applySyncedRegistryDelta(
           SyncedRegistryDelta(
-            deletes: <WebDavSyncRegistryRecordId>{
-              WebDavSyncRegistryRecordId.profile(first.id),
-            },
+            deletes: <SyncedRegistryDeleteRecord>[
+              SyncedRegistryDeleteRecord(
+                record: WebDavSyncRegistryRecordId.profile(first.id),
+                expectedPriorUpdatedAtMs: firstVersion,
+              ),
+            ],
           ),
         ),
         throwsA(
@@ -765,12 +823,18 @@ void main() {
       expect(await registry.getProfile(first.id), isNotNull);
 
       await registry.setActiveProfile(member.id);
+      final refreshedFirstVersion = (await registry.readProfileSyncProjection())
+          .singleWhere((entry) => entry.profile.id == first.id)
+          .updatedAtMs;
       await expectLater(
         registry.applySyncedRegistryDelta(
           SyncedRegistryDelta(
-            deletes: <WebDavSyncRegistryRecordId>{
-              WebDavSyncRegistryRecordId.profile(first.id),
-            },
+            deletes: <SyncedRegistryDeleteRecord>[
+              SyncedRegistryDeleteRecord(
+                record: WebDavSyncRegistryRecordId.profile(first.id),
+                expectedPriorUpdatedAtMs: refreshedFirstVersion,
+              ),
+            ],
           ),
         ),
         throwsA(

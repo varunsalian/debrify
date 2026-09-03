@@ -17,11 +17,9 @@ import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_remote_lease.dart';
-import '../../services/profiles/profile_registry.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import '../../services/watched_status_service.dart';
-import '../../services/webdav_sync/webdav_sync_tombstones.dart';
 import 'manage_profiles_screen.dart';
 import 'profile_gate_looks.dart';
 import 'profile_picker_screen.dart';
@@ -39,25 +37,28 @@ bool shouldAutoEnterSoleProfile(
 }
 
 @visibleForTesting
-Future<bool> switchThenDeleteSyncedProfile({
+Future<bool> switchThenApplySyncedProfileOutcome({
   required ProfileLifecycleCoordinator lifecycle,
-  required ProfileRegistry registry,
-  required String retiredProfileId,
   required String replacementProfileId,
+  required SyncedProfileOutcomeApply applyOutcome,
 }) async {
   final switched = await lifecycle.switchTo(
     replacementProfileId,
     unlock: (_) async => true,
   );
   if (!switched) return false;
-  await registry.applySyncedRegistryDelta(
-    SyncedRegistryDelta(
-      deletes: <WebDavSyncRegistryRecordId>{
-        WebDavSyncRegistryRecordId.profile(retiredProfileId),
-      },
-    ),
-  );
+  await applyOutcome();
   return true;
+}
+
+final class _PendingSyncedProfileRetirement {
+  const _PendingSyncedProfileRetirement({
+    required this.profileId,
+    required this.applyOutcome,
+  });
+
+  final String profileId;
+  final SyncedProfileOutcomeApply applyOutcome;
 }
 
 class ProfileGate extends StatefulWidget {
@@ -74,7 +75,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   UserProfile? _pinTarget;
   bool _pinForManagement = false;
   bool _entered = false;
-  String? _pendingSyncedRetirement;
+  _PendingSyncedProfileRetirement? _pendingSyncedRetirement;
 
   /// Guards the one retry [_load] gets when it fails before the gate has any
   /// profiles to paint. Cleared on every success.
@@ -160,7 +161,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     try {
       await ProfileGateStyle.warm();
       await ProfileGateAlwaysAsk.warm();
-      final retiredId = _pendingSyncedRetirement;
+      final retiredId = _pendingSyncedRetirement?.profileId;
       profiles = (await ProfileBootstrap.registry.listProfiles())
           .where((profile) => profile.id != retiredId)
           .toList(growable: false);
@@ -231,21 +232,34 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     unawaited(_openPicker());
   }
 
-  Future<bool> _retireProfileFromSync(String profileId) async {
+  Future<bool> _retireProfileFromSync(
+    String profileId, {
+    required bool delete,
+    required SyncedProfileOutcomeApply applyOutcome,
+  }) async {
     if (!mounted || !_committed) return false;
     final existing = await ProfileBootstrap.registry.getProfile(profileId);
     if (existing == null) return true;
-    if (ProfileRuntime.capture().profileId != profileId) {
-      await ProfileBootstrap.registry.applySyncedRegistryDelta(
-        SyncedRegistryDelta(
-          deletes: <WebDavSyncRegistryRecordId>{
-            WebDavSyncRegistryRecordId.profile(profileId),
-          },
-        ),
-      );
-      return await ProfileBootstrap.registry.getProfile(profileId) == null;
+    if (!delete &&
+        (!existing.isEnabled ||
+            existing.lifecycle != UserProfileLifecycle.active ||
+            existing.pinResetRequired)) {
+      return true;
     }
-    _pendingSyncedRetirement = profileId;
+    if (ProfileRuntime.capture().profileId != profileId) {
+      await applyOutcome();
+      final applied = await ProfileBootstrap.registry.getProfile(profileId);
+      return delete
+          ? applied == null
+          : applied == null ||
+                !applied.isEnabled ||
+                applied.lifecycle != UserProfileLifecycle.active ||
+                applied.pinResetRequired;
+    }
+    _pendingSyncedRetirement = _PendingSyncedProfileRetirement(
+      profileId: profileId,
+      applyOutcome: applyOutcome,
+    );
     await _openPicker();
     if (!mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -342,14 +356,14 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
 
   Future<void> _activate(UserProfile profile) async {
     final currentId = ProfileRuntime.capture().profileId;
-    final retiredId = _pendingSyncedRetirement;
+    final retirement = _pendingSyncedRetirement;
+    final retiredId = retirement?.profileId;
     if (profile.id != currentId) {
       final switched = retiredId != null && retiredId != profile.id
-          ? await switchThenDeleteSyncedProfile(
+          ? await switchThenApplySyncedProfileOutcome(
               lifecycle: _lifecycle!,
-              registry: ProfileBootstrap.registry,
-              retiredProfileId: retiredId,
               replacementProfileId: profile.id,
+              applyOutcome: retirement!.applyOutcome,
             )
           : await _lifecycle!.switchTo(profile.id, unlock: (_) async => true);
       if (!switched || !mounted) return;

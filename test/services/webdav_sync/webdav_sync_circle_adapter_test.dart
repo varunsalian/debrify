@@ -14,9 +14,11 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -130,6 +132,153 @@ void main() {
       );
       expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
       await db.close();
+    },
+  );
+
+  test(
+    'circle apply conflicts preserve an edit made after its snapshot',
+    () async {
+      final maps = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: <String, String>{'p-active': activeId},
+        circleToLocalResources: const <String, String>{},
+      );
+      final built = await adapter.buildCircleState(
+        session,
+        WebDavSyncCircleBuildRequest(
+          identityMaps: maps,
+          deviceId: 'device-local',
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          localNowMs: DateTime.now().millisecondsSinceEpoch,
+          clockOffsetMs: 0,
+          serverNowMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      final observed = built.profiles.profiles['p-active']!;
+      await Future<void>.delayed(const Duration(milliseconds: 2));
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      await registry.updateProfile(
+        id: activeId,
+        name: 'Edited locally',
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+
+      final result = await adapter.applyCircleState(
+        session,
+        _request(
+          root: circleRoot,
+          profiles:
+              _profiles(<String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+                'p-active': _profileLeaf(
+                  'Stale remote',
+                  observed.stamp.normalizedTimeMs + 1,
+                ),
+              }),
+          resources: _emptyResources(),
+          profileMap: <String, String>{'p-active': activeId},
+          resourceMap: const <String, String>{},
+          registryVersions: built.registryVersions,
+        ),
+      );
+
+      expect(result, WebDavSyncCircleApplyResult.conflict);
+      expect((await registry.getProfile(activeId))?.name, 'Edited locally');
+      final followUp = await adapter.buildCircleState(
+        session,
+        WebDavSyncCircleBuildRequest(
+          identityMaps: maps,
+          deviceId: 'device-local',
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          localNowMs: DateTime.now().millisecondsSinceEpoch,
+          clockOffsetMs: 0,
+          serverNowMs: DateTime.now().millisecondsSinceEpoch,
+          previousProfiles: built.profiles,
+          previousResources: built.resources,
+        ),
+      );
+      expect(
+        followUp.profiles.profiles['p-active']!.value!.name,
+        'Edited locally',
+      );
+      expect(
+        followUp.profiles.profiles['p-active']!.stamp.normalizedTimeMs,
+        greaterThan(observed.stamp.normalizedTimeMs),
+      );
+    },
+  );
+
+  test(
+    'circle apply conflicts do not resurrect a post-snapshot deletion',
+    () async {
+      final tombstones = <WebDavSyncRegistryRecordId>{};
+      WebDavSyncTombstoneRecorder.debugInstall(
+        registrySink: (records) => tombstones.addAll(records),
+      );
+      addTearDown(WebDavSyncTombstoneRecorder.debugReset);
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      const deletedId = 'deleted-in-window';
+      await registry.createProfile(
+        id: deletedId,
+        name: 'Delete me',
+        role: UserProfileRole.member,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+      final maps = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: <String, String>{
+          'p-active': activeId,
+          'p-deleted': deletedId,
+        },
+        circleToLocalResources: const <String, String>{},
+      );
+      final built = await adapter.buildCircleState(
+        session,
+        WebDavSyncCircleBuildRequest(
+          identityMaps: maps,
+          deviceId: 'device-local',
+          circleId: circleRoot.document.circleId,
+          circleKey: circleRoot.key,
+          localNowMs: DateTime.now().millisecondsSinceEpoch,
+          clockOffsetMs: 0,
+          serverNowMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      final deleteActor = await ProfileAuthorizationContext.capture(registry);
+      await registry.deleteProfileWithDisposition(
+        id: deletedId,
+        deleteOwnedResources: false,
+        detachPublicArtifacts: false,
+        actingProfileId: deleteActor.profileId,
+        actingAuthorizationRevision: deleteActor.authorizationRevision,
+        actingSessionEpoch: deleteActor.sessionEpoch,
+      );
+
+      final result = await adapter.applyCircleState(
+        session,
+        _request(
+          root: circleRoot,
+          profiles:
+              _profiles(<String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+                'p-active': built.profiles.profiles['p-active']!,
+                'p-deleted': _profileLeaf('Remote resurrection', 9999999999999),
+              }),
+          resources: _emptyResources(),
+          profileMap: maps.circleToLocalProfiles,
+          resourceMap: const <String, String>{},
+          registryVersions: built.registryVersions,
+        ),
+      );
+
+      expect(result, WebDavSyncCircleApplyResult.conflict);
+      expect(await registry.getProfile(deletedId), isNull);
+      expect(
+        tombstones,
+        contains(WebDavSyncRegistryRecordId.profile(deletedId)),
+      );
     },
   );
 
@@ -568,6 +717,8 @@ WebDavSyncCircleApplyRequest _request({
   required WebDavSyncResourcesDocument resources,
   required Map<String, String> profileMap,
   required Map<String, String> resourceMap,
+  WebDavSyncRegistryVersionSnapshot registryVersions =
+      const WebDavSyncRegistryVersionSnapshot(),
 }) => WebDavSyncCircleApplyRequest(
   identityMaps: WebDavSyncIdentityMaps(
     circleToLocalProfiles: profileMap,
@@ -577,6 +728,17 @@ WebDavSyncCircleApplyRequest _request({
   circleKey: root.key,
   profiles: profiles,
   resources: resources,
+  registryVersions: registryVersions,
+);
+
+WebDavSyncResourcesDocument
+_emptyResources() => const WebDavSyncResourcesDocument(
+  resources: <String, WebDavSyncResourceEntry>{},
+  grants: <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>>{},
+  settings:
+      <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>>{},
+  bindings:
+      <String, Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>>{},
 );
 
 WebDavSyncProfilesDocument _profiles(

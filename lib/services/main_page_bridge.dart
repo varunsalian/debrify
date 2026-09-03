@@ -7,6 +7,14 @@ import '../models/advanced_search_selection.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
 
+typedef SyncedProfileOutcomeApply = Future<void> Function();
+typedef SyncedProfileRetirementHandoff =
+    Future<bool> Function(
+      String profileId, {
+      required bool delete,
+      required SyncedProfileOutcomeApply applyOutcome,
+    });
+
 /// Stable page identities for [MainPageBridge.switchTab], deep links and the
 /// nav — indices into main.dart's `_pages`/`_titles`, NEVER visible-nav
 /// positions (per-profile and per-config filtering hides entries without
@@ -55,9 +63,9 @@ class MainPageBridge {
   static VoidCallback? showProfilePicker;
   static ValueChanged<String>? switchProfile;
 
-  /// Gate-owned handoff for a circle tombstone targeting the active profile.
-  /// Returns true only after the retired row is physically gone.
-  static Future<bool> Function(String profileId)? retireProfileFromSync;
+  /// Gate-owned handoff for a circle value which makes the active profile
+  /// ineligible. Returns true only after the deferred delete/disable lands.
+  static SyncedProfileRetirementHandoff? retireProfileFromSync;
 
   /// Re-reads the ACTIVE profile's policy into MainPage's tab gating and the
   /// ProfilePolicyGuard sync mirror. Editing screens call this after saving
