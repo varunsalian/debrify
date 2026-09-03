@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_mutation.dart';
 
 /// The v5 migration: favorites stop being their own table and become the
 /// built-in list of the custom-lists schema.
@@ -189,6 +190,18 @@ void main() {
       dbPath,
       options: OpenDatabaseOptions(
         version: 8,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
+  Future<Database> upgradeToV9() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 9,
         onConfigure: configure,
         onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
         onUpgrade: DebrifyTvDatabase.runUpgrade,
@@ -489,4 +502,80 @@ void main() {
       );
     },
   );
+
+  test('v8→v9 backfills channels and pools with migration origin', () async {
+    WebDavSyncLibraryMutation.debugTvGenerationId = () => 'migration-gen';
+    addTearDown(WebDavSyncLibraryMutation.resetDebugTvHooks);
+    var db = await openAt(8, (db, _) async {
+      await DebrifyTvDatabase.createIptvStoreTables(db);
+      await db.execute('''
+        CREATE TABLE tv_channels (
+          channel_id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          avoid_nsfw INTEGER NOT NULL DEFAULT 1,
+          channel_number INTEGER NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE tv_cached_torrents (
+          channel_id TEXT NOT NULL,
+          infohash TEXT NOT NULL,
+          name TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          created_unix INTEGER NOT NULL,
+          seeders INTEGER NOT NULL,
+          leechers INTEGER NOT NULL,
+          completed INTEGER NOT NULL,
+          scraped_date INTEGER NOT NULL,
+          keywords_json TEXT NOT NULL,
+          sources_json TEXT NOT NULL,
+          added_at INTEGER NOT NULL,
+          PRIMARY KEY (channel_id, infohash)
+        )
+      ''');
+    });
+    await db.insert('tv_channels', <String, Object?>{
+      'channel_id': 'channel-a',
+      'name': 'Alpha',
+      'avoid_nsfw': 1,
+      'channel_number': 4,
+      'created_at': 10,
+      'updated_at': 123,
+    });
+    await db.insert('tv_cached_torrents', <String, Object?>{
+      'channel_id': 'channel-a',
+      'infohash': 'a' * 40,
+      'name': 'Pool',
+      'size_bytes': 1,
+      'created_unix': 2,
+      'seeders': 3,
+      'leechers': 4,
+      'completed': 5,
+      'scraped_date': 6,
+      'keywords_json': '[]',
+      'sources_json': '[]',
+      'added_at': 999999,
+    });
+    await db.close();
+
+    db = await upgradeToV9();
+    addTearDown(db.close);
+    final channelState = (await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object>[WebDavSyncLibraryKinds.tvChannels],
+    )).single;
+    final generationState = (await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+    )).single;
+    expect(channelState['updated_at_ms'], 123);
+    expect(channelState['origin_device_id'], 'migration');
+    expect(generationState['origin_device_id'], 'migration');
+    expect(generationState['aux'], 'migration-gen');
+    expect(generationState['updated_at_ms'], isNot(999999));
+  });
 }

@@ -524,6 +524,25 @@ class MainPageBridge {
     }
   }
 
+  // Debrify TV has one mounted library surface. Keep this hook deliberately
+  // narrower than the generic playback-return listeners: a remote channel or
+  // pool apply only asks that screen to invalidate its private DB mirrors.
+  static VoidCallback? _debrifyTvLibraryListener;
+
+  static void registerDebrifyTvLibraryListener(VoidCallback listener) {
+    _debrifyTvLibraryListener = listener;
+  }
+
+  static void unregisterDebrifyTvLibraryListener(VoidCallback listener) {
+    if (_debrifyTvLibraryListener == listener) {
+      _debrifyTvLibraryListener = null;
+    }
+  }
+
+  static void notifyDebrifyTvLibraryChanged() {
+    _debrifyTvLibraryListener?.call();
+  }
+
   static void notifyAutoLaunchFailed([String? reason]) {
     debugPrint('MainPageBridge: Auto-launch failed: $reason');
     hideAutoLaunchOverlay?.call();

@@ -18,12 +18,68 @@ enum WebDavSyncMutationOrigin {
 }
 
 abstract final class WebDavSyncLibraryKinds {
+  static const String tvChannels = 'tv_channels';
+  static const String tvPoolGeneration = 'tv_pool_generation';
   static const String hiddenGroups = 'hidden_groups';
   static const String categoryManualOrders = 'category_manual_orders';
   static const String iptvCategoryChannelOrders =
       'iptv_category_channel_orders';
   static const String iptvWatchHistory = 'iptv_watch_history';
   static const String videoResume = 'video_resume';
+}
+
+final class WebDavSyncTvChannelTarget {
+  const WebDavSyncTvChannelTarget({
+    required this.channelId,
+    required this.name,
+    required this.avoidNsfw,
+    required this.desiredChannelNumber,
+    required this.createdAtMs,
+    required this.keywords,
+    required this.leaf,
+  });
+
+  final String channelId;
+  final String name;
+  final bool avoidNsfw;
+  final int desiredChannelNumber;
+  final int createdAtMs;
+  final List<String> keywords;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncTvPoolGenerationTarget {
+  const WebDavSyncTvPoolGenerationTarget({
+    required this.channelId,
+    required this.generationId,
+    required this.leaf,
+  });
+
+  final String channelId;
+  final String generationId;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncTvPoolTarget {
+  const WebDavSyncTvPoolTarget({
+    required this.channelId,
+    required this.infohash,
+    required this.generationId,
+    required this.name,
+    required this.sizeBytes,
+    required this.keywords,
+    required this.rank,
+    required this.leaf,
+  });
+
+  final String channelId;
+  final String infohash;
+  final String generationId;
+  final String name;
+  final int sizeBytes;
+  final List<String> keywords;
+  final int rank;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
 }
 
 final class WebDavSyncRecordState {
@@ -55,10 +111,34 @@ final class WebDavSyncDatabaseStateSnapshot {
   const WebDavSyncDatabaseStateSnapshot({
     required this.mutationRevision,
     this.records = const <WebDavSyncRecordState>[],
+    this.tvPools = const <WebDavSyncTvPoolSnapshot>[],
   });
 
   final int mutationRevision;
   final List<WebDavSyncRecordState> records;
+  final List<WebDavSyncTvPoolSnapshot> tvPools;
+}
+
+final class WebDavSyncTvPoolSnapshot {
+  const WebDavSyncTvPoolSnapshot({
+    required this.channelId,
+    required this.infohash,
+    required this.generationId,
+    required this.name,
+    required this.sizeBytes,
+    required this.keywords,
+    required this.rank,
+    required this.stamp,
+  });
+
+  final String channelId;
+  final String infohash;
+  final String generationId;
+  final String name;
+  final int sizeBytes;
+  final List<String> keywords;
+  final int rank;
+  final WebDavSyncStamp stamp;
 }
 
 final class WebDavSyncDatabaseRevisions {
@@ -326,6 +406,8 @@ abstract final class WebDavSyncLibraryMerge {
         }
       }
     }
+    _canonicalizeTvChannelNumbers(winners);
+    _pruneSuppressedTvChildren(winners);
     return WebDavSyncLibraryDocument(
       circleProfileId: circleProfileId,
       records:
@@ -333,6 +415,100 @@ abstract final class WebDavSyncLibraryMerge {
             winners,
           ),
     );
+  }
+
+  /// A pool generation is the one authoritative membership boundary. Leaves
+  /// from a superseded generation are deliberately pruned from the publisher's
+  /// next full library document, so repeated rescrapes cannot grow it without
+  /// bound. The outer 64 MiB/100,000-leaf checks remain the fail-closed backstop.
+  /// A winning channel tombstone similarly suppresses every child record.
+  static void _pruneSuppressedTvChildren(
+    Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> winners,
+  ) {
+    final channels = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{};
+    final generations = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{};
+    for (final entry in winners.entries) {
+      final parts = entry.key.split('/');
+      if (parts.length == 3 && parts[0] == 'tv' && parts[1] == 'ch') {
+        channels[parts[2]] = entry.value;
+      } else if (parts.length == 3 &&
+          parts[0] == 'tv' &&
+          parts[1] == 'pool-gen') {
+        generations[parts[2]] = entry.value;
+      }
+    }
+    winners.removeWhere((key, leaf) {
+      final parts = key.split('/');
+      final isGeneration =
+          parts.length == 3 && parts[0] == 'tv' && parts[1] == 'pool-gen';
+      final isPool =
+          parts.length == 4 && parts[0] == 'tv' && parts[1] == 'pool';
+      if (!isGeneration && !isPool) return false;
+      final channel = channels[parts[2]];
+      if (channel?.value == null && channel != null) return true;
+      if (!isPool) return false;
+      final generation = generations[parts[2]]?.value?['generationId'];
+      return generation is String && leaf.value?['generationId'] != generation;
+    });
+  }
+
+  /// Canonicalize concurrent number collisions without minting a new stamp.
+  /// Desired numbers sort first, then the decoded portable channel ID; each
+  /// collision takes the next free positive number. Doing this in the pure
+  /// merge as well as the SQLite materializer keeps the published target and
+  /// every device's physical UNIQUE column identical across merge orders.
+  static void _canonicalizeTvChannelNumbers(
+    Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> winners,
+  ) {
+    final channels =
+        <
+          ({
+            String key,
+            String channelId,
+            int desired,
+            WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
+          })
+        >[];
+    for (final entry in winners.entries) {
+      final parts = entry.key.split('/');
+      final value = entry.value.value;
+      if (parts.length != 3 ||
+          parts[0] != 'tv' ||
+          parts[1] != 'ch' ||
+          value == null ||
+          value['channelNumber'] is! int ||
+          (value['channelNumber']! as int) <= 0) {
+        continue;
+      }
+      final channelId = _tryDecodeBase64Part(parts[2]);
+      if (channelId == null) continue;
+      channels.add((
+        key: entry.key,
+        channelId: channelId,
+        desired: value['channelNumber']! as int,
+        leaf: entry.value,
+      ));
+    }
+    channels.sort((left, right) {
+      final desired = left.desired.compareTo(right.desired);
+      return desired != 0 ? desired : left.channelId.compareTo(right.channelId);
+    });
+    final used = <int>{};
+    for (final channel in channels) {
+      var assigned = channel.desired;
+      while (used.contains(assigned)) {
+        assigned += 1;
+      }
+      used.add(assigned);
+      if (assigned == channel.desired) continue;
+      winners[channel.key] = WebDavSyncCircleLeaf<Map<String, Object?>>(
+        stamp: channel.leaf.stamp,
+        value: Map<String, Object?>.unmodifiable(<String, Object?>{
+          ...channel.leaf.value!,
+          'channelNumber': assigned,
+        }),
+      );
+    }
   }
 
   static int compareLeaves(
@@ -421,4 +597,17 @@ String _logicalKey(Object? value, String label) {
     throw FormatException('Invalid WebDAV sync $label');
   }
   return value;
+}
+
+String? _tryDecodeBase64Part(String source) {
+  final padding = '=' * ((4 - source.length % 4) % 4);
+  try {
+    final decoded = utf8.decode(base64Url.decode('$source$padding'));
+    return decoded.isNotEmpty &&
+            base64UrlEncode(utf8.encode(decoded)).replaceAll('=', '') == source
+        ? decoded
+        : null;
+  } on FormatException {
+    return null;
+  }
 }

@@ -169,17 +169,21 @@ void main() {
   });
 
   test(
-    'IPTV family pings coalesce and playback refresh does not stop playback',
+    'library family pings coalesce and playback refresh does not stop playback',
     () {
       var playbackRefreshes = 0;
       var playbackStops = 0;
+      var debrifyTvRefreshes = 0;
       void refreshListener() => playbackRefreshes++;
       void stopListener() => playbackStops++;
+      void debrifyTvListener() => debrifyTvRefreshes++;
       MainPageBridge.addPlaybackReturnListener(refreshListener);
       MainPageBridge.addContentPlaybackStopListener(stopListener);
+      MainPageBridge.registerDebrifyTvLibraryListener(debrifyTvListener);
       addTearDown(() {
         MainPageBridge.removePlaybackReturnListener(refreshListener);
         MainPageBridge.removeContentPlaybackStopListener(stopListener);
+        MainPageBridge.unregisterDebrifyTvLibraryListener(debrifyTvListener);
         MainPageBridge.notifyContentPlaybackStopped();
       });
       MainPageBridge.notifyPlayerLaunching();
@@ -191,9 +195,12 @@ void main() {
         'iptv/order',
         'iptv/watch',
         'resume',
+        'tv/ch',
+        'tv/pool',
       });
 
       expect(playbackRefreshes, 1);
+      expect(debrifyTvRefreshes, 1);
       expect(
         playbackStops,
         0,

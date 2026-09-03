@@ -16,6 +16,7 @@ enum _WebDavSyncUiRefreshTarget {
   iptvCatalog,
   iptvSource,
   playbackData,
+  debrifyTvLibrary,
 }
 
 /// Replays the same live-UI notifications used by local settings writes after
@@ -27,6 +28,8 @@ enum _WebDavSyncUiRefreshTarget {
 /// awaited `notifyPlaylistChanged` path in the active-profile refresher.
 abstract final class WebDavSyncUiRefresh {
   static const Map<String, Set<_WebDavSyncUiRefreshTarget>> _targetsByKey = {
+    'tv/ch': {_WebDavSyncUiRefreshTarget.debrifyTvLibrary},
+    'tv/pool': {_WebDavSyncUiRefreshTarget.debrifyTvLibrary},
     'catalog/hidden': {_WebDavSyncUiRefreshTarget.iptvCatalog},
     'catalog/category-order': {_WebDavSyncUiRefreshTarget.iptvCatalog},
     'iptv/order': {_WebDavSyncUiRefreshTarget.iptvSource},
@@ -135,6 +138,8 @@ abstract final class WebDavSyncUiRefresh {
             IptvChannelOrderSignal.notifySourceChanged('');
           case _WebDavSyncUiRefreshTarget.playbackData:
             MainPageBridge.notifyPlaybackDataChanged();
+          case _WebDavSyncUiRefreshTarget.debrifyTvLibrary:
+            MainPageBridge.notifyDebrifyTvLibraryChanged();
         }
       } catch (_) {
         // A UI notification can never turn an already committed sync batch

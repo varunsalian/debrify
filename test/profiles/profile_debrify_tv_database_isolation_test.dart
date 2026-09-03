@@ -3,8 +3,15 @@ import 'dart:io';
 
 import 'package:debrify/services/debrify_tv_cache_service.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/debrify_tv_repository.dart';
+import 'package:debrify/models/debrify_tv_cache.dart';
+import 'package:debrify/models/debrify_tv_channel_record.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_mutation.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -17,6 +24,58 @@ void main() {
   late Directory documents;
   late ProfileScope profileA;
   late ProfileScope profileB;
+
+  DebrifyTvChannelRecord channel(
+    String id, {
+    String name = 'Channel',
+    List<String> keywords = const <String>['one'],
+    int number = 1,
+  }) => DebrifyTvChannelRecord(
+    channelId: id,
+    name: name,
+    keywords: keywords,
+    avoidNsfw: true,
+    channelNumber: number,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(10),
+    updatedAt: DateTime.fromMillisecondsSinceEpoch(20),
+  );
+
+  CachedTorrent torrent(String hash, String name) => CachedTorrent(
+    rowid: 0,
+    infohash: hash,
+    name: name,
+    sizeBytes: 1234,
+    createdUnix: 90,
+    seeders: 8,
+    leechers: 2,
+    completed: 7,
+    scrapedDate: 80,
+    sources: const <String>['scraper'],
+    keywords: const <String>['one'],
+  );
+
+  DebrifyTvChannelCacheEntry cache(
+    String channelId,
+    List<CachedTorrent> torrents,
+  ) => DebrifyTvChannelCacheEntry(
+    version: 1,
+    channelId: channelId,
+    normalizedKeywords: const <String>['one'],
+    fetchedAt: 50,
+    status: DebrifyTvCacheStatus.ready,
+    errorMessage: null,
+    torrents: torrents,
+    keywordStats: const <String, KeywordStat>{},
+  );
+
+  WebDavSyncCircleLeaf<Map<String, Object?>> leaf(
+    int time,
+    String origin,
+    Map<String, Object?>? value,
+  ) => WebDavSyncCircleLeaf<Map<String, Object?>>(
+    stamp: WebDavSyncStamp(normalizedTimeMs: time, originDeviceId: origin),
+    value: value,
+  );
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -52,12 +111,19 @@ void main() {
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeCommitted(profileA);
     await DebrifyTvDatabase.instance.debugResetScopeState();
+    WebDavSyncLibraryMutation.originDeviceId = 'device-a';
+    WebDavSyncLibraryMutation.debugTvClock = DateTime.now;
+    WebDavSyncLibraryMutation.debugTvGenerationId = () => 'generation-default';
+    WebDavSyncLibraryMutation.debugUserMutationObserver = null;
   });
 
   tearDown(() async {
     await DebrifyTvDatabase.instance.debugResetScopeState();
     ProfileRuntime.debugReset();
     AppStorage.debugReset();
+    WebDavSyncLibraryMutation.originDeviceId = 'local-device';
+    WebDavSyncLibraryMutation.resetDebugTvHooks();
+    WebDavSyncLibraryMutation.debugUserMutationObserver = null;
     await root.delete(recursive: true);
   });
 
@@ -293,5 +359,373 @@ void main() {
       (db) => db.query('tv_channels'),
     );
     expect(bRows, isEmpty);
+  });
+
+  test(
+    'channel create edit delete stamps one record with convergent keywords',
+    () async {
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications += 1;
+      };
+      WebDavSyncLibraryMutation.debugTvClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(100);
+
+      await DebrifyTvRepository.instance.upsertChannel(
+        channel('channel-a', keywords: const <String>['One', 'Two']),
+      );
+      var db = await DebrifyTvDatabase.instance.database;
+      var states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvChannels],
+      );
+      expect(states, hasLength(1));
+      expect(states.single['updated_at_ms'], 100);
+      expect(states.single['origin_device_id'], 'device-a');
+      expect(states.single['deleted'], 0);
+
+      WebDavSyncLibraryMutation.debugTvClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(200);
+      await DebrifyTvRepository.instance.upsertChannel(
+        channel(
+          'channel-a',
+          name: 'Edited',
+          keywords: const <String>['Two', 'Three'],
+        ),
+      );
+      expect(
+        await DebrifyTvRepository.instance.fetchChannelKeywords('channel-a'),
+        <String>['Two', 'Three'],
+      );
+      states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvChannels],
+      );
+      expect(states, hasLength(1), reason: 'keywords share the channel stamp');
+      expect(states.single['updated_at_ms'], 200);
+
+      WebDavSyncLibraryMutation.debugTvClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(300);
+      await DebrifyTvRepository.instance.deleteChannel('channel-a');
+      db = await DebrifyTvDatabase.instance.database;
+      states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvChannels],
+      );
+      expect(states.single['updated_at_ms'], 300);
+      expect(states.single['deleted'], 1);
+      expect(notifications, 3);
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '3',
+      );
+    },
+  );
+
+  test(
+    'failed restore and maintenance eviction preserve generation silently',
+    () async {
+      var notifications = 0;
+      var generation = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications += 1;
+      };
+      WebDavSyncLibraryMutation.debugTvGenerationId = () =>
+          'generation-${++generation}';
+      WebDavSyncLibraryMutation.debugTvClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(100);
+      await DebrifyTvRepository.instance.upsertChannel(channel('channel-a'));
+      await DebrifyTvCacheService.saveEntry(
+        cache('channel-a', <CachedTorrent>[torrent('a' * 40, 'Original')]),
+      );
+      final db = await DebrifyTvDatabase.instance.database;
+      final before = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+      )).single;
+      final revisionBefore = (await db.query(
+        'webdav_sync_meta',
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      )).single['value'];
+      expect(notifications, 2);
+
+      await DebrifyTvCacheService.saveEntry(
+        cache('channel-a', <CachedTorrent>[torrent('b' * 40, 'Restored')]),
+        origin: WebDavSyncMutationOrigin.rollback,
+      );
+      var after = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+      )).single;
+      expect(after['aux'], before['aux']);
+      expect(notifications, 2);
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        revisionBefore,
+      );
+
+      await DebrifyTvCacheService.removeEntry(
+        'channel-a',
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+      after = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+      )).single;
+      expect(after['aux'], before['aux']);
+      expect(await db.query('tv_cached_torrents'), isEmpty);
+      expect(notifications, 2);
+    },
+  );
+
+  test('explicit pool removal publishes one empty generation', () async {
+    var generation = 0;
+    var notifications = 0;
+    WebDavSyncLibraryMutation.debugTvGenerationId = () =>
+        'generation-${++generation}';
+    WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+      notifications += 1;
+    };
+    await DebrifyTvRepository.instance.upsertChannel(channel('channel-a'));
+    await DebrifyTvCacheService.saveEntry(
+      cache('channel-a', <CachedTorrent>[torrent('a' * 40, 'Original')]),
+    );
+    final db = await DebrifyTvDatabase.instance.database;
+
+    await DebrifyTvCacheService.removeEntry('channel-a');
+
+    final state = (await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+    )).single;
+    expect(state['aux'], 'generation-2');
+    expect(state['deleted'], 0);
+    expect(await db.query('tv_cached_torrents'), isEmpty);
+    expect(notifications, 3);
+  });
+
+  test(
+    'repository clear tombstones channels and cache clear emits no pool stamp',
+    () async {
+      var generation = 0;
+      WebDavSyncLibraryMutation.debugTvGenerationId = () =>
+          'generation-${++generation}';
+      await DebrifyTvRepository.instance.upsertChannel(channel('channel-a'));
+      await DebrifyTvCacheService.saveEntry(
+        cache('channel-a', <CachedTorrent>[torrent('a' * 40, 'Original')]),
+      );
+      final db = await DebrifyTvDatabase.instance.database;
+      final poolBefore = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+      )).single;
+
+      await DebrifyTvRepository.instance.clearAll();
+      final revisionAfterRepository = (await db.query(
+        'webdav_sync_meta',
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      )).single['value'];
+      await DebrifyTvCacheService.clearAll(
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+
+      final channelState = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvChannels],
+      )).single;
+      final poolAfter = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+      )).single;
+      expect(channelState['deleted'], 1);
+      expect(poolAfter['aux'], poolBefore['aux']);
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        revisionAfterRepository,
+      );
+    },
+  );
+
+  test(
+    'two devices canonicalize channel collisions and converge TV pools',
+    () async {
+      final channelA = leaf(100, 'device-a', const <String, Object?>{
+        'name': 'Alpha',
+        'avoidNsfw': true,
+        'channelNumber': 7,
+        'createdAt': 10,
+        'keywords': <String>['alpha'],
+      });
+      final channelB = leaf(100, 'device-b', const <String, Object?>{
+        'name': 'Beta',
+        'avoidNsfw': false,
+        'channelNumber': 7,
+        'createdAt': 11,
+        'keywords': <String>['beta'],
+      });
+      final generationLeaf = leaf(110, 'device-a', const <String, Object?>{
+        'generationId': 'generation-a',
+      });
+      final poolLeaf = leaf(110, 'device-a', const <String, Object?>{
+        'generationId': 'generation-a',
+        'name': 'Pool title',
+        'sizeBytes': 1234,
+        'keywords': <String>['alpha'],
+        'rank': 0,
+      });
+      final aTarget = WebDavSyncTvChannelTarget(
+        channelId: 'channel-a',
+        name: 'Alpha',
+        avoidNsfw: true,
+        desiredChannelNumber: 7,
+        createdAtMs: 10,
+        keywords: const <String>['alpha'],
+        leaf: channelA,
+      );
+      final bTarget = WebDavSyncTvChannelTarget(
+        channelId: 'channel-b',
+        name: 'Beta',
+        avoidNsfw: false,
+        desiredChannelNumber: 7,
+        createdAtMs: 11,
+        keywords: const <String>['beta'],
+        leaf: channelB,
+      );
+      final generationTarget = WebDavSyncTvPoolGenerationTarget(
+        channelId: 'channel-a',
+        generationId: 'generation-a',
+        leaf: generationLeaf,
+      );
+      final poolTarget = WebDavSyncTvPoolTarget(
+        channelId: 'channel-a',
+        infohash: 'a' * 40,
+        generationId: 'generation-a',
+        name: 'Pool title',
+        sizeBytes: 1234,
+        keywords: const <String>['alpha'],
+        rank: 0,
+        leaf: poolLeaf,
+      );
+
+      Future<void> apply(
+        ProfileScope scope,
+        List<WebDavSyncTvChannelTarget> order,
+      ) async {
+        final outcome = await DebrifyTvDatabase.instance
+            .applyWebDavSyncFamilies(
+              scope,
+              expectedRevision: 0,
+              channelTargets: order,
+              generationTargets: <WebDavSyncTvPoolGenerationTarget>[
+                generationTarget,
+              ],
+              poolTargets: <WebDavSyncTvPoolTarget>[poolTarget],
+              orderTargets: const <WebDavSyncIptvOrderTarget>[],
+              watchTargets: const <WebDavSyncIptvWatchTarget>[],
+              resumeTargets: const <WebDavSyncVideoResumeTarget>[],
+            );
+        expect(outcome.result, WebDavSyncLibraryApplyResult.applied);
+        expect(outcome.touchedNamespaces, <String>{'tv/ch', 'tv/pool'});
+      }
+
+      await apply(profileA, <WebDavSyncTvChannelTarget>[bTarget, aTarget]);
+      await apply(profileB, <WebDavSyncTvChannelTarget>[aTarget, bTarget]);
+
+      Future<List<Map<String, Object?>>> rows(
+        ProfileScope scope,
+        String table,
+      ) => DebrifyTvDatabase.instance.runOneShotScoped(
+        scope,
+        (db) => db.query(
+          table,
+          orderBy: table == 'tv_channels'
+              ? 'channel_id'
+              : table == 'tv_cached_torrents'
+              ? 'channel_id, infohash'
+              : 'kind, owner_key, item_key',
+        ),
+      );
+      final channelsA = await rows(profileA, 'tv_channels');
+      final channelsB = await rows(profileB, 'tv_channels');
+      expect(channelsA, channelsB);
+      expect(channelsA.map((row) => row['channel_number']), <Object?>[7, 8]);
+      expect(
+        await rows(profileA, 'tv_cached_torrents'),
+        await rows(profileB, 'tv_cached_torrents'),
+      );
+      final statesA = await rows(profileA, 'webdav_sync_record_state');
+      final statesB = await rows(profileB, 'webdav_sync_record_state');
+      expect(statesA, statesB);
+      expect(
+        statesA.where(
+          (row) => row['kind'] == WebDavSyncLibraryKinds.tvChannels,
+        ),
+        everyElement(containsPair('normalized', 1)),
+      );
+      expect(
+        statesA.where(
+          (row) => row['kind'] == WebDavSyncLibraryKinds.tvChannels,
+        ),
+        everyElement(containsPair('updated_at_ms', 100)),
+      );
+    },
+  );
+
+  test('native payload path contains no Debrify TV SQLite writer', () async {
+    final nativeSources = <File>[];
+    for (final root in <String>[
+      'android',
+      'ios',
+      'macos',
+      'linux',
+      'windows',
+    ]) {
+      final directory = Directory(root);
+      if (!await directory.exists()) continue;
+      await for (final entity in directory.list(recursive: true)) {
+        if (entity is File &&
+            <String>[
+              '.java',
+              '.kt',
+              '.swift',
+              '.m',
+              '.mm',
+              '.cc',
+              '.cpp',
+            ].any(entity.path.endsWith)) {
+          nativeSources.add(entity);
+        }
+      }
+    }
+    for (final file in nativeSources) {
+      final source = await file.readAsString();
+      expect(source, isNot(contains('tv_channels')), reason: file.path);
+      expect(source, isNot(contains('tv_channel_keywords')), reason: file.path);
+      expect(source, isNot(contains('tv_cached_torrents')), reason: file.path);
+    }
   });
 }

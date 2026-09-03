@@ -56,10 +56,14 @@ void main() {
     expect(merged.records[key]!.value, isNull);
   });
 
-  test('leaf bound fails closed instead of truncating', () {
+  test('TV pools above the leaf bound fail closed instead of truncating', () {
     final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
       for (var index = 0; index <= WebDavSyncLibraryDocument.maxLeaves; index++)
-        'future/$index': leaf(index, 'device-a', const <String, Object?>{}),
+        'tv/pool/Y2hhbm5lbA/hash$index': leaf(
+          index,
+          'device-a',
+          const <String, Object?>{'generationId': 'generation-a'},
+        ),
     };
     final document = WebDavSyncLibraryDocument(
       circleProfileId: 'profile-circle',
@@ -68,6 +72,137 @@ void main() {
 
     expect(document.toJson, throwsFormatException);
   });
+
+  test(
+    'clear-and-rescrape on A drops stale B hashes by generation in every merge order',
+    () {
+      const channel = 'Y2hhbm5lbA';
+      final a = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'tv/ch/$channel': leaf(1, 'device-a', const <String, Object?>{
+            'name': 'Channel',
+          }),
+          'tv/pool-gen/$channel': leaf(2, 'device-a', const <String, Object?>{
+            'generationId': 'generation-a',
+          }),
+          'tv/pool/$channel/oldhash': leaf(
+            2,
+            'device-a',
+            const <String, Object?>{'generationId': 'generation-a'},
+          ),
+        },
+      );
+      final b = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'tv/pool-gen/$channel': leaf(3, 'device-b', const <String, Object?>{
+            'generationId': 'generation-b',
+          }),
+          'tv/pool/$channel/newhash': leaf(
+            3,
+            'device-b',
+            const <String, Object?>{'generationId': 'generation-b'},
+          ),
+        },
+      );
+
+      for (final documents in <List<WebDavSyncLibraryDocument>>[
+        <WebDavSyncLibraryDocument>[a, b],
+        <WebDavSyncLibraryDocument>[b, a],
+      ]) {
+        final merged = WebDavSyncLibraryMerge.merge(
+          circleProfileId: 'profile-circle',
+          documents: documents,
+        );
+        expect(merged.records, isNot(contains('tv/pool/$channel/oldhash')));
+        expect(merged.records, contains('tv/pool/$channel/newhash'));
+      }
+    },
+  );
+
+  test('channel tombstone suppresses its generation and pool children', () {
+    const channel = 'Y2hhbm5lbA';
+    final merged = WebDavSyncLibraryMerge.merge(
+      circleProfileId: 'profile-circle',
+      documents: <WebDavSyncLibraryDocument>[
+        WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+            'tv/ch/$channel': leaf(2, 'device-b', null),
+            'tv/pool-gen/$channel': leaf(1, 'device-a', const {
+              'generationId': 'generation-a',
+            }),
+            'tv/pool/$channel/hash': leaf(1, 'device-a', const {
+              'generationId': 'generation-a',
+            }),
+          },
+        ),
+      ],
+    );
+
+    expect(merged.records.keys, <String>['tv/ch/$channel']);
+  });
+
+  test('concurrent same-channel edits converge independent of merge order', () {
+    const key = 'tv/ch/Y2hhbm5lbA';
+    WebDavSyncLibraryDocument document(String origin, String name) =>
+        WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+            key: leaf(10, origin, <String, Object?>{'name': name}),
+          },
+        );
+    final a = document('device-a', 'A');
+    final b = document('device-b', 'B');
+    final ab = WebDavSyncLibraryMerge.merge(
+      circleProfileId: 'profile-circle',
+      documents: <WebDavSyncLibraryDocument>[a, b],
+    );
+    final ba = WebDavSyncLibraryMerge.merge(
+      circleProfileId: 'profile-circle',
+      documents: <WebDavSyncLibraryDocument>[b, a],
+    );
+
+    expect(ab.toJson(), ba.toJson());
+    expect(ab.records[key]!.value!['name'], 'B');
+  });
+
+  test(
+    'channel-number collision canonicalization is merge-order invariant',
+    () {
+      final a = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'tv/ch/Y2hhbm5lbC1h': leaf(10, 'device-a', const <String, Object?>{
+            'name': 'A',
+            'channelNumber': 7,
+          }),
+        },
+      );
+      final b = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'tv/ch/Y2hhbm5lbC1i': leaf(10, 'device-b', const <String, Object?>{
+            'name': 'B',
+            'channelNumber': 7,
+          }),
+        },
+      );
+      final ab = WebDavSyncLibraryMerge.merge(
+        circleProfileId: 'profile-circle',
+        documents: <WebDavSyncLibraryDocument>[a, b],
+      );
+      final ba = WebDavSyncLibraryMerge.merge(
+        circleProfileId: 'profile-circle',
+        documents: <WebDavSyncLibraryDocument>[b, a],
+      );
+
+      expect(ab.toJson(), ba.toJson());
+      expect(ab.records['tv/ch/Y2hhbm5lbC1h']!.value!['channelNumber'], 7);
+      expect(ab.records['tv/ch/Y2hhbm5lbC1i']!.value!['channelNumber'], 8);
+    },
+  );
 
   test('pending apply journals and verifies digest plus both revisions', () {
     final target = WebDavSyncLibraryDocument(

@@ -330,9 +330,9 @@ void main() {
 
     expect(
       find.text(
-        'IPTV sources, favorites, history and resume state transfer. Each '
-        'device rebuilds its channel and guide caches. Debrify TV channels '
-        'do not transfer yet.',
+        'IPTV sources, favorites, history, resume state and Debrify TV '
+        'channels stay in sync. Each device rebuilds its channel and '
+        'guide caches.',
       ),
       findsOneWidget,
     );

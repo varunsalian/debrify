@@ -452,6 +452,19 @@ final class ProfileWebDavSyncLocalAdapter
     }
     for (final state in tv.records) {
       final kind = state.kind;
+      if (kind == WebDavSyncLibraryKinds.tvChannels ||
+          kind == WebDavSyncLibraryKinds.tvPoolGeneration) {
+        final encodedChannelId = _base64Part(state.ownerKey);
+        final wireKey = kind == WebDavSyncLibraryKinds.tvChannels
+            ? 'tv/ch/$encodedChannelId'
+            : 'tv/pool-gen/$encodedChannelId';
+        if (!state.deleted && state.value == null) continue;
+        records[wireKey] = WebDavSyncCircleLeaf<Map<String, Object?>>(
+          stamp: state.stamp,
+          value: state.deleted ? null : state.value,
+        );
+        continue;
+      }
       String? circleResourceId;
       if (kind == WebDavSyncLibraryKinds.videoResume && state.ownerKey == '_') {
         circleResourceId = '_';
@@ -484,12 +497,39 @@ final class ProfileWebDavSyncLocalAdapter
         records[wireKey] = candidate;
       }
     }
-    final document = WebDavSyncLibraryDocument(
+    for (final pool in tv.tvPools) {
+      final wireKey =
+          'tv/pool/${_base64Part(pool.channelId)}/${pool.infohash.toLowerCase()}';
+      final candidate = WebDavSyncCircleLeaf<Map<String, Object?>>(
+        stamp: pool.stamp,
+        value: <String, Object?>{
+          'generationId': pool.generationId,
+          'name': pool.name,
+          'sizeBytes': pool.sizeBytes,
+          'keywords': pool.keywords,
+          'rank': pool.rank,
+        },
+      );
+      final current = records[wireKey];
+      if (current == null ||
+          WebDavSyncLibraryMerge.compareLeaves(candidate, current) > 0) {
+        records[wireKey] = candidate;
+      }
+    }
+    // Running the local projection through the same merge normalizer prunes
+    // superseded pool generations and every child of a channel tombstone.
+    final document = WebDavSyncLibraryMerge.merge(
       circleProfileId: request.circleProfileId,
-      records:
-          Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>>.unmodifiable(
-            records,
-          ),
+      documents: <WebDavSyncLibraryDocument>[
+        WebDavSyncLibraryDocument(
+          circleProfileId: request.circleProfileId,
+          records:
+              Map<
+                String,
+                WebDavSyncCircleLeaf<Map<String, Object?>>
+              >.unmodifiable(records),
+        ),
+      ],
     );
     request.identityMaps.assertContainsNoLocalIds(document.toJson());
     return WebDavSyncLocalLibrarySnapshot(
@@ -519,6 +559,9 @@ final class ProfileWebDavSyncLocalAdapter
       localProfileId,
       request.identityMaps,
     );
+    final channelTargets = <WebDavSyncTvChannelTarget>[];
+    final generationTargets = <WebDavSyncTvPoolGenerationTarget>[];
+    final poolTargets = <WebDavSyncTvPoolTarget>[];
     final hiddenTargets = <WebDavSyncHiddenGroupTarget>[];
     final categoryOrderTargets = <WebDavSyncCategoryOrderTarget>[];
     final orderTargets = <WebDavSyncIptvOrderTarget>[];
@@ -534,6 +577,74 @@ final class ProfileWebDavSyncLocalAdapter
 
     for (final entry in request.document.records.entries) {
       final parts = entry.key.split('/');
+      if (parts.length == 3 && parts[0] == 'tv' && parts[1] == 'ch') {
+        final channelId = _decodeCanonicalBase64Part(parts[2]);
+        final value = entry.value.value;
+        final decoded = value == null ? null : _tvChannelValue(value);
+        if (channelId == null || value != null && decoded == null) {
+          _diagnostic('Ignored an invalid Debrify TV channel library leaf');
+          continue;
+        }
+        channelTargets.add(
+          WebDavSyncTvChannelTarget(
+            channelId: channelId,
+            name: decoded?.name ?? '',
+            avoidNsfw: decoded?.avoidNsfw ?? true,
+            desiredChannelNumber: decoded?.channelNumber ?? 1,
+            createdAtMs: decoded?.createdAtMs ?? 0,
+            keywords: decoded?.keywords ?? const <String>[],
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
+      if (parts.length == 3 && parts[0] == 'tv' && parts[1] == 'pool-gen') {
+        final channelId = _decodeCanonicalBase64Part(parts[2]);
+        final value = entry.value.value;
+        final generationId = value == null || value.length != 1
+            ? null
+            : value['generationId'];
+        if (channelId == null ||
+            generationId is! String ||
+            !_validGenerationId.hasMatch(generationId)) {
+          _diagnostic('Ignored an invalid Debrify TV generation library leaf');
+          continue;
+        }
+        generationTargets.add(
+          WebDavSyncTvPoolGenerationTarget(
+            channelId: channelId,
+            generationId: generationId,
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
+      if (parts.length == 4 && parts[0] == 'tv' && parts[1] == 'pool') {
+        final channelId = _decodeCanonicalBase64Part(parts[2]);
+        final infohash = parts[3];
+        final value = entry.value.value;
+        final decoded = value == null ? null : _tvPoolValue(value);
+        if (channelId == null ||
+            !_validInfohash.hasMatch(infohash) ||
+            infohash != infohash.toLowerCase() ||
+            decoded == null) {
+          _diagnostic('Ignored an invalid Debrify TV pool library leaf');
+          continue;
+        }
+        poolTargets.add(
+          WebDavSyncTvPoolTarget(
+            channelId: channelId,
+            infohash: infohash,
+            generationId: decoded.generationId,
+            name: decoded.name,
+            sizeBytes: decoded.sizeBytes,
+            keywords: decoded.keywords,
+            rank: decoded.rank,
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
       if (parts.length == 5 && parts[0] == 'catalog' && parts[1] == 'hidden') {
         final catalogKey =
             mappings.byWireResourceVariant['${parts[2]}/${parts[3]}'];
@@ -653,16 +764,35 @@ final class ProfileWebDavSyncLocalAdapter
         );
       }
     }
+    final liveChannelIds = channelTargets
+        .where((target) => target.leaf.value != null)
+        .map((target) => target.channelId)
+        .toSet();
+    final applicableGenerations = generationTargets
+        .where((target) => liveChannelIds.contains(target.channelId))
+        .toList(growable: false);
+    final generationByChannel = <String, String>{
+      for (final target in applicableGenerations)
+        target.channelId: target.generationId,
+    };
+    final applicablePools = poolTargets
+        .where(
+          (target) =>
+              generationByChannel[target.channelId] == target.generationId,
+        )
+        .toList(growable: false);
     await beforeWrite?.call();
     _validateSession(session);
-    final tvResult = await DebrifyTvDatabase.instance
-        .applyWebDavSyncIptvFamilies(
-          scope,
-          expectedRevision: request.observedRevisions.debrifyTv,
-          orderTargets: orderTargets,
-          watchTargets: watchTargets,
-          resumeTargets: resumeTargets,
-        );
+    final tvResult = await DebrifyTvDatabase.instance.applyWebDavSyncFamilies(
+      scope,
+      expectedRevision: request.observedRevisions.debrifyTv,
+      channelTargets: channelTargets,
+      generationTargets: applicableGenerations,
+      poolTargets: applicablePools,
+      orderTargets: orderTargets,
+      watchTargets: watchTargets,
+      resumeTargets: resumeTargets,
+    );
     if (tvResult.result == WebDavSyncLibraryApplyResult.conflict) {
       return const WebDavSyncLibraryApplyOutcome(
         result: WebDavSyncLibraryApplyResult.conflict,
@@ -1797,5 +1927,112 @@ bool _validResumeValue(Map<String, Object?> value) {
       value['aspectRatio'] is String;
 }
 
+({
+  String name,
+  bool avoidNsfw,
+  int channelNumber,
+  int createdAtMs,
+  List<String> keywords,
+})?
+_tvChannelValue(Map<String, Object?> value) {
+  final name = value['name'];
+  final avoidNsfw = value['avoidNsfw'];
+  final channelNumber = value['channelNumber'];
+  final createdAt = value['createdAt'];
+  final keywords = _boundedStringList(value['keywords']);
+  if (value.length != 5 ||
+      name is! String ||
+      name.isEmpty ||
+      utf8.encode(name).length > 4096 ||
+      avoidNsfw is! bool ||
+      channelNumber is! int ||
+      channelNumber <= 0 ||
+      channelNumber > 2147383647 ||
+      createdAt is! int ||
+      createdAt < 0 ||
+      createdAt > 0x7fffffffffffffff ||
+      keywords == null) {
+    return null;
+  }
+  return (
+    name: name,
+    avoidNsfw: avoidNsfw,
+    channelNumber: channelNumber,
+    createdAtMs: createdAt,
+    keywords: keywords,
+  );
+}
+
+({
+  String generationId,
+  String name,
+  int sizeBytes,
+  List<String> keywords,
+  int rank,
+})?
+_tvPoolValue(Map<String, Object?> value) {
+  final generationId = value['generationId'];
+  final name = value['name'];
+  final sizeBytes = value['sizeBytes'];
+  final keywords = _boundedStringList(value['keywords']);
+  final rank = value['rank'];
+  if (value.length != 5 ||
+      generationId is! String ||
+      !_validGenerationId.hasMatch(generationId) ||
+      name is! String ||
+      name.isEmpty ||
+      utf8.encode(name).length > 16384 ||
+      sizeBytes is! int ||
+      sizeBytes < 0 ||
+      sizeBytes > 0x7fffffffffffffff ||
+      keywords == null ||
+      rank is! int ||
+      rank < 0 ||
+      rank >= WebDavSyncLibraryDocument.maxLeaves) {
+    return null;
+  }
+  return (
+    generationId: generationId,
+    name: name,
+    sizeBytes: sizeBytes,
+    keywords: keywords,
+    rank: rank,
+  );
+}
+
+List<String>? _boundedStringList(Object? source) {
+  if (source is! List || source.length > WebDavSyncLibraryDocument.maxLeaves) {
+    return null;
+  }
+  final result = <String>[];
+  for (final value in source) {
+    if (value is! String || value.isEmpty || utf8.encode(value).length > 4096) {
+      return null;
+    }
+    result.add(value);
+  }
+  return List<String>.unmodifiable(result);
+}
+
+String? _decodeCanonicalBase64Part(String source) {
+  try {
+    final decoded = WebDavSyncRecordKey.decodePart(source);
+    return decoded.isNotEmpty &&
+            utf8.encode(decoded).length <= 256 &&
+            !decoded.contains('\u0000') &&
+            _base64Part(decoded) == source
+        ? decoded
+        : null;
+  } on FormatException {
+    return null;
+  }
+}
+
 String _sha256Text(String value) =>
     crypto.sha256.convert(utf8.encode(value)).toString();
+
+String _base64Part(String value) =>
+    base64UrlEncode(utf8.encode(value)).replaceAll('=', '');
+
+final RegExp _validGenerationId = RegExp(r'^[A-Za-z0-9_-]{1,96}$');
+final RegExp _validInfohash = RegExp(r'^[a-z0-9]{1,128}$');

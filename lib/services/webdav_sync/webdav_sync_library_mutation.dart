@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import '../profiles/profile_preferences.dart';
 import '../profiles/profile_runtime.dart';
 
@@ -7,6 +10,29 @@ import '../profiles/profile_runtime.dart';
 abstract final class WebDavSyncLibraryMutation {
   static String originDeviceId = 'local-device';
   static void Function()? debugUserMutationObserver;
+  static DateTime Function() debugTvClock = DateTime.now;
+  static String Function() debugTvGenerationId = _newGenerationId;
+
+  static void resetDebugTvHooks() {
+    debugTvClock = DateTime.now;
+    debugTvGenerationId = _newGenerationId;
+  }
+
+  static String mintTvGenerationId({String? differentFrom}) {
+    var candidate = debugTvGenerationId();
+    if (candidate == differentFrom) candidate = _newGenerationId();
+    if (candidate == differentFrom ||
+        !RegExp(r'^[A-Za-z0-9_-]{1,96}$').hasMatch(candidate)) {
+      throw StateError('Could not mint a valid Debrify TV pool generation');
+    }
+    return candidate;
+  }
+
+  static String _newGenerationId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(18, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
 
   static void notifyUserMutation() {
     try {

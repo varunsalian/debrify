@@ -34,6 +34,7 @@ import '../services/profiles/profile_authorization.dart';
 import '../services/profiles/profile_bootstrap.dart';
 import '../services/profiles/profile_device_reset_service.dart';
 import '../services/profiles/profile_reset_service.dart';
+import '../services/webdav_sync/webdav_sync_library_models.dart';
 import '../utils/platform_util.dart';
 import '../utils/deovr_utils.dart' as deovr;
 
@@ -6173,7 +6174,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearAllTorrentEngineSettings();
     await StorageService.clearAllPostTorrentActions();
     await StorageService.clearAllDebrifyTvSettings();
-    await DebrifyTvRepository.instance.clearAll();
+    // A device-local reset must never mint circle-wide channel deletions:
+    // rejoining a sync circle later means adopting its data, not erasing it.
+    await DebrifyTvRepository.instance.clearAll(
+      origin: WebDavSyncMutationOrigin.maintenance,
+    );
     await StremioService.instance.clearAllAddons();
     await StorageService.setInitialSetupComplete(false);
     if (!mounted) return;

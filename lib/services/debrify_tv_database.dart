@@ -12,6 +12,7 @@ import 'profiles/profile_database_adoption_gate.dart';
 import 'webdav_sync/webdav_sync_circle_models.dart';
 import 'webdav_sync/webdav_sync_hot_models.dart';
 import 'webdav_sync/webdav_sync_library_models.dart';
+import 'webdav_sync/webdav_sync_library_mutation.dart';
 
 typedef _DatabaseScope = ({String key, ProfileScope? scope});
 
@@ -245,6 +246,19 @@ class DebrifyTvDatabase {
     required int serverNowMs,
   }) => runOneShotScoped(scope, (db) {
     return db.transaction((txn) async {
+      final channelRows = await txn.query('tv_channels');
+      final channelKeywords = <String, List<String>>{};
+      for (final row in await txn.query(
+        'tv_channel_keywords',
+        orderBy: 'channel_id, position',
+      )) {
+        channelKeywords
+            .putIfAbsent(row['channel_id']! as String, () => <String>[])
+            .add(row['keyword']! as String);
+      }
+      final channels = <String, Map<String, Object?>>{
+        for (final row in channelRows) row['channel_id']! as String: row,
+      };
       final orderRows = await txn.query(
         'iptv_category_channel_orders',
         orderBy: 'source_id, channel_group, position, url, name, occurrence',
@@ -275,6 +289,7 @@ class DebrifyTvDatabase {
         orderBy: 'kind, owner_key, item_key',
       );
       final records = <WebDavSyncRecordState>[];
+      final poolGenerations = <String, WebDavSyncRecordState>{};
       for (final row in rawStates) {
         var updatedAtMs = (row['updated_at_ms'] as num).toInt();
         if (row['normalized'] != 1) {
@@ -299,6 +314,22 @@ class DebrifyTvDatabase {
         Map<String, Object?>? value;
         if (!deleted) {
           switch (kind) {
+            case WebDavSyncLibraryKinds.tvChannels:
+              final physical = channels[owner];
+              if (physical != null) {
+                value = <String, Object?>{
+                  'name': physical['name'] as String,
+                  'avoidNsfw': physical['avoid_nsfw'] == 1,
+                  'channelNumber': (physical['channel_number'] as num).toInt(),
+                  'createdAt': (physical['created_at'] as num).toInt(),
+                  'keywords': channelKeywords[owner] ?? const <String>[],
+                };
+              }
+            case WebDavSyncLibraryKinds.tvPoolGeneration:
+              final generationId = row['aux'];
+              if (generationId is String && generationId.isNotEmpty) {
+                value = <String, Object?>{'generationId': generationId};
+              }
             case WebDavSyncLibraryKinds.iptvCategoryChannelOrders:
               final items = orders[(owner, item)];
               if (items != null) {
@@ -327,18 +358,50 @@ class DebrifyTvDatabase {
               }
           }
         }
-        records.add(
-          WebDavSyncRecordState(
-            kind: kind,
-            ownerKey: owner,
-            itemKey: item,
-            stamp: WebDavSyncStamp(
-              normalizedTimeMs: updatedAtMs,
-              originDeviceId: row['origin_device_id']! as String,
-            ),
-            deleted: deleted,
-            aux: row['aux'] as String?,
-            value: value,
+        final record = WebDavSyncRecordState(
+          kind: kind,
+          ownerKey: owner,
+          itemKey: item,
+          stamp: WebDavSyncStamp(
+            normalizedTimeMs: updatedAtMs,
+            originDeviceId: row['origin_device_id']! as String,
+          ),
+          deleted: deleted,
+          aux: row['aux'] as String?,
+          value: value,
+        );
+        records.add(record);
+        if (kind == WebDavSyncLibraryKinds.tvPoolGeneration &&
+            !deleted &&
+            value != null) {
+          poolGenerations[owner] = record;
+        }
+      }
+      final pools = <WebDavSyncTvPoolSnapshot>[];
+      String? rankedChannel;
+      var rank = 0;
+      for (final row in await txn.query(
+        'tv_cached_torrents',
+        orderBy: 'channel_id ASC, added_at DESC, infohash ASC',
+      )) {
+        final channelId = row['channel_id']! as String;
+        final generation = poolGenerations[channelId];
+        final generationId = generation?.value?['generationId'];
+        if (generation == null || generationId is! String) continue;
+        if (rankedChannel != channelId) {
+          rankedChannel = channelId;
+          rank = 0;
+        }
+        pools.add(
+          WebDavSyncTvPoolSnapshot(
+            channelId: channelId,
+            infohash: (row['infohash']! as String).toLowerCase(),
+            generationId: generationId,
+            name: row['name']! as String,
+            sizeBytes: (row['size_bytes'] as num).toInt(),
+            keywords: _decodeStringList(row['keywords_json']),
+            rank: rank++,
+            stamp: generation.stamp,
           ),
         );
       }
@@ -354,17 +417,21 @@ class DebrifyTvDatabase {
       return WebDavSyncDatabaseStateSnapshot(
         mutationRevision: int.parse(meta.single['value']! as String),
         records: List<WebDavSyncRecordState>.unmodifiable(records),
+        tvPools: List<WebDavSyncTvPoolSnapshot>.unmodifiable(pools),
       );
     }, exclusive: true);
   });
 
-  /// Exact-stamp materializer for every IPTV family stored in debrify_tv.db.
+  /// Exact-stamp materializer for every v3 family stored in debrify_tv.db.
   /// Public mutation APIs are intentionally bypassed: apply never re-stamps,
   /// creates tombstones, or emits local-change/UI notifications.
   Future<({WebDavSyncLibraryApplyResult result, Set<String> touchedNamespaces})>
-  applyWebDavSyncIptvFamilies(
+  applyWebDavSyncFamilies(
     ProfileScope scope, {
     required int expectedRevision,
+    required Iterable<WebDavSyncTvChannelTarget> channelTargets,
+    required Iterable<WebDavSyncTvPoolGenerationTarget> generationTargets,
+    required Iterable<WebDavSyncTvPoolTarget> poolTargets,
     required Iterable<WebDavSyncIptvOrderTarget> orderTargets,
     required Iterable<WebDavSyncIptvWatchTarget> watchTargets,
     required Iterable<WebDavSyncVideoResumeTarget> resumeTargets,
@@ -390,8 +457,9 @@ class DebrifyTvDatabase {
         String kind,
         String owner,
         String item,
-        WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
-      ) async {
+        WebDavSyncCircleLeaf<Map<String, Object?>> leaf, {
+        String? aux,
+      }) async {
         final rows = await txn.query(
           'webdav_sync_record_state',
           columns: const <String>[
@@ -399,6 +467,7 @@ class DebrifyTvDatabase {
             'origin_device_id',
             'normalized',
             'deleted',
+            'aux',
           ],
           where: 'kind = ? AND owner_key = ? AND item_key = ?',
           whereArgs: <Object?>[kind, owner, item],
@@ -409,15 +478,17 @@ class DebrifyTvDatabase {
                 leaf.stamp.normalizedTimeMs ||
             rows.single['origin_device_id'] != leaf.stamp.originDeviceId ||
             rows.single['normalized'] != 1 ||
-            rows.single['deleted'] != (leaf.value == null ? 1 : 0);
+            rows.single['deleted'] != (leaf.value == null ? 1 : 0) ||
+            aux != null && rows.single['aux'] != aux;
       }
 
       Future<void> writeState(
         String kind,
         String owner,
         String item,
-        WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
-      ) => txn.insert('webdav_sync_record_state', <String, Object?>{
+        WebDavSyncCircleLeaf<Map<String, Object?>> leaf, {
+        String? aux,
+      }) => txn.insert('webdav_sync_record_state', <String, Object?>{
         'kind': kind,
         'owner_key': owner,
         'item_key': item,
@@ -425,8 +496,223 @@ class DebrifyTvDatabase {
         'origin_device_id': leaf.stamp.originDeviceId,
         'normalized': 1,
         'deleted': leaf.value == null ? 1 : 0,
-        'aux': null,
+        'aux': aux,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      final channels = channelTargets.toList(growable: false);
+      final liveChannels =
+          channels
+              .where((target) => target.leaf.value != null)
+              .toList(growable: false)
+            ..sort((left, right) {
+              final desired = left.desiredChannelNumber.compareTo(
+                right.desiredChannelNumber,
+              );
+              return desired != 0
+                  ? desired
+                  : left.channelId.compareTo(right.channelId);
+            });
+      final targetIds = channels.map((target) => target.channelId).toSet();
+      final physicalChannelRows = await txn.query('tv_channels');
+      final physicalById = <String, Map<String, Object?>>{
+        for (final row in physicalChannelRows)
+          row['channel_id']! as String: row,
+      };
+      final usedNumbers = <int>{
+        for (final row in physicalChannelRows)
+          if (!targetIds.contains(row['channel_id']))
+            (row['channel_number'] as num).toInt(),
+      };
+      final assignedNumbers = <String, int>{};
+      for (final target in liveChannels) {
+        var assigned = target.desiredChannelNumber;
+        while (usedNumbers.contains(assigned)) {
+          assigned += 1;
+        }
+        assignedNumbers[target.channelId] = assigned;
+        usedNumbers.add(assigned);
+      }
+
+      var writeChannels = false;
+      for (final target in channels) {
+        final stateChanged = await needsWrite(
+          WebDavSyncLibraryKinds.tvChannels,
+          target.channelId,
+          '',
+          target.leaf,
+        );
+        final physical = physicalById[target.channelId];
+        final value = target.leaf.value;
+        final physicalChanged = value == null
+            ? physical != null
+            : physical == null ||
+                  physical['name'] != target.name ||
+                  physical['avoid_nsfw'] != (target.avoidNsfw ? 1 : 0) ||
+                  physical['channel_number'] !=
+                      assignedNumbers[target.channelId] ||
+                  physical['created_at'] != target.createdAtMs ||
+                  !await _channelKeywordsEqual(txn, target);
+        if (stateChanged || physicalChanged) writeChannels = true;
+      }
+      if (writeChannels) {
+        final occupied = <int>{
+          ...physicalChannelRows.map(
+            (row) => (row['channel_number'] as num).toInt(),
+          ),
+          ...assignedNumbers.values,
+        };
+        var temporary = occupied.isEmpty
+            ? 1
+            : occupied.reduce((left, right) => left > right ? left : right) + 1;
+        // Vacate every target number before canonical insertion. This avoids
+        // transient UNIQUE failures when two winners exchange or collide.
+        for (final target in liveChannels) {
+          if (!physicalById.containsKey(target.channelId)) continue;
+          while (occupied.contains(temporary)) {
+            temporary += 1;
+          }
+          await txn.update(
+            'tv_channels',
+            <String, Object?>{'channel_number': temporary},
+            where: 'channel_id = ?',
+            whereArgs: <Object?>[target.channelId],
+          );
+          occupied.add(temporary++);
+        }
+        for (final target in channels.where(
+          (target) => target.leaf.value == null,
+        )) {
+          await txn.delete(
+            'tv_channels',
+            where: 'channel_id = ?',
+            whereArgs: <Object?>[target.channelId],
+          );
+        }
+        for (final target in liveChannels) {
+          final values = <String, Object?>{
+            'name': target.name,
+            'avoid_nsfw': target.avoidNsfw ? 1 : 0,
+            'channel_number': assignedNumbers[target.channelId],
+            'created_at': target.createdAtMs,
+            'updated_at': target.leaf.stamp.normalizedTimeMs,
+          };
+          if (physicalById.containsKey(target.channelId)) {
+            await txn.update(
+              'tv_channels',
+              values,
+              where: 'channel_id = ?',
+              whereArgs: <Object?>[target.channelId],
+            );
+          } else {
+            await txn.insert('tv_channels', <String, Object?>{
+              'channel_id': target.channelId,
+              ...values,
+            });
+            await txn.insert(
+              'tv_channel_cache_state',
+              <String, Object?>{
+                'channel_id': target.channelId,
+                'status': 'warming',
+                'error_message': null,
+                'fetched_at': 0,
+              },
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+          await txn.delete(
+            'tv_channel_keywords',
+            where: 'channel_id = ?',
+            whereArgs: <Object?>[target.channelId],
+          );
+          for (
+            var position = 0;
+            position < target.keywords.length;
+            position++
+          ) {
+            await txn.insert('tv_channel_keywords', <String, Object?>{
+              'channel_id': target.channelId,
+              'position': position,
+              'keyword': target.keywords[position],
+            });
+          }
+        }
+        for (final target in channels) {
+          await writeState(
+            WebDavSyncLibraryKinds.tvChannels,
+            target.channelId,
+            '',
+            target.leaf,
+          );
+        }
+        touched.add('tv/ch');
+      }
+
+      final poolsByGeneration = <String, List<WebDavSyncTvPoolTarget>>{};
+      for (final target in poolTargets) {
+        poolsByGeneration
+            .putIfAbsent(
+              '${target.channelId}\u0000${target.generationId}',
+              () => <WebDavSyncTvPoolTarget>[],
+            )
+            .add(target);
+      }
+      for (final target in generationTargets) {
+        if (!await needsWrite(
+          WebDavSyncLibraryKinds.tvPoolGeneration,
+          target.channelId,
+          '',
+          target.leaf,
+          aux: target.generationId,
+        )) {
+          continue;
+        }
+        await txn.delete(
+          'tv_cached_torrents',
+          where: 'channel_id = ?',
+          whereArgs: <Object?>[target.channelId],
+        );
+        final matching =
+            poolsByGeneration['${target.channelId}\u0000${target.generationId}'] ??
+            const <WebDavSyncTvPoolTarget>[];
+        final ranked = matching.toList(growable: false)
+          ..sort((left, right) {
+            final byRank = left.rank.compareTo(right.rank);
+            return byRank != 0
+                ? byRank
+                : left.infohash.compareTo(right.infohash);
+          });
+        for (var index = 0; index < ranked.length; index++) {
+          final pool = ranked[index];
+          await txn.insert('tv_cached_torrents', <String, Object?>{
+            'channel_id': pool.channelId,
+            'infohash': pool.infohash,
+            'name': pool.name,
+            'size_bytes': pool.sizeBytes,
+            'created_unix': 0,
+            'seeders': 0,
+            'leechers': 0,
+            'completed': 0,
+            'scraped_date': 0,
+            'keywords_json': jsonEncode(pool.keywords),
+            'sources_json': '[]',
+            'added_at': ranked.length - index,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        await txn.insert('tv_channel_cache_state', <String, Object?>{
+          'channel_id': target.channelId,
+          'status': ranked.isEmpty ? 'warming' : 'ready',
+          'error_message': null,
+          'fetched_at': target.leaf.stamp.normalizedTimeMs,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        await writeState(
+          WebDavSyncLibraryKinds.tvPoolGeneration,
+          target.channelId,
+          '',
+          target.leaf,
+          aux: target.generationId,
+        );
+        touched.add('tv/pool');
+      }
 
       for (final target in orderTargets) {
         if (!await needsWrite(
@@ -601,7 +887,7 @@ class DebrifyTvDatabase {
     bool singleInstance = true,
   }) => openDatabase(
     dbPath,
-    version: 8,
+    version: 9,
     singleInstance: singleInstance,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
@@ -613,8 +899,16 @@ class DebrifyTvDatabase {
   );
 
   static Future<void> _createSchema(Database db, int _) async {
+    await createTvStoreTables(db);
+    await createIptvStoreTables(db);
+  }
+
+  /// Debrify TV channel/cache tables. Exposed for real-SQLite store fixtures;
+  /// production creates the same shape through [_createSchema].
+  @visibleForTesting
+  static Future<void> createTvStoreTables(DatabaseExecutor db) async {
     await db.execute('''
-      CREATE TABLE tv_channels (
+      CREATE TABLE IF NOT EXISTS tv_channels (
         channel_id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         avoid_nsfw INTEGER NOT NULL DEFAULT 1,
@@ -624,7 +918,7 @@ class DebrifyTvDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE tv_channel_keywords (
+      CREATE TABLE IF NOT EXISTS tv_channel_keywords (
         channel_id TEXT NOT NULL,
         position INTEGER NOT NULL,
         keyword TEXT NOT NULL,
@@ -633,7 +927,7 @@ class DebrifyTvDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE tv_channel_cache_state (
+      CREATE TABLE IF NOT EXISTS tv_channel_cache_state (
         channel_id TEXT PRIMARY KEY,
         status TEXT NOT NULL DEFAULT 'warming',
         error_message TEXT,
@@ -642,7 +936,7 @@ class DebrifyTvDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE tv_cached_torrents (
+      CREATE TABLE IF NOT EXISTS tv_cached_torrents (
         channel_id TEXT NOT NULL,
         infohash TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -660,11 +954,11 @@ class DebrifyTvDatabase {
       )
     ''');
     await db.execute('''
-      CREATE INDEX idx_tv_cached_torrents_channel_added
+      CREATE INDEX IF NOT EXISTS idx_tv_cached_torrents_channel_added
       ON tv_cached_torrents(channel_id, added_at)
     ''');
     await db.execute('''
-      CREATE TABLE tv_keyword_stats (
+      CREATE TABLE IF NOT EXISTS tv_keyword_stats (
         channel_id TEXT NOT NULL,
         keyword TEXT NOT NULL,
         total_fetched INTEGER NOT NULL,
@@ -675,7 +969,6 @@ class DebrifyTvDatabase {
         FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
       )
     ''');
-    await createIptvStoreTables(db);
   }
 
   /// Schema migrations. Named (rather than an inline closure) so migration
@@ -742,6 +1035,9 @@ class DebrifyTvDatabase {
     }
     if (oldVersion < 8 && newVersion >= 8) {
       await migrateWebDavSyncIptvFamilies(db);
+    }
+    if (oldVersion < 9 && newVersion >= 9) {
+      await migrateWebDavSyncTvFamilies(db);
     }
   }
 
@@ -1004,6 +1300,60 @@ class DebrifyTvDatabase {
     );
   }
 
+  /// v9: seed one migration-origin channel stamp and one generation stamp per
+  /// existing physical pool. Torrent `added_at` is ordering data only; it is
+  /// never promoted to the pool's LWW coordinate.
+  @visibleForTesting
+  static Future<void> migrateWebDavSyncTvFamilies(DatabaseExecutor db) async {
+    await createWebDavSyncSidecarTables(db);
+    await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      SELECT ?, channel_id, '', updated_at, 'migration', 0, 0, NULL
+      FROM tv_channels
+      ''',
+      <Object?>[WebDavSyncLibraryKinds.tvChannels],
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final poolTable = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      const <Object>['tv_cached_torrents'],
+    );
+    final cacheStateTable = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      const <Object>['tv_channel_cache_state'],
+    );
+    if (poolTable.isEmpty && cacheStateTable.isEmpty) return;
+    final pooledChannels = await db.rawQuery(switch ((
+      poolTable.isNotEmpty,
+      cacheStateTable.isNotEmpty,
+    )) {
+      (true, true) =>
+        'SELECT channel_id FROM tv_cached_torrents '
+            'UNION SELECT channel_id FROM tv_channel_cache_state',
+      (true, false) =>
+        'SELECT channel_id FROM tv_cached_torrents GROUP BY channel_id',
+      (false, true) => 'SELECT channel_id FROM tv_channel_cache_state',
+      _ => throw StateError('Unreachable TV pool migration state'),
+    });
+    for (final row in pooledChannels) {
+      final channelId = row['channel_id'] as String?;
+      if (channelId == null || channelId.isEmpty) continue;
+      await db.insert('webdav_sync_record_state', <String, Object?>{
+        'kind': WebDavSyncLibraryKinds.tvPoolGeneration,
+        'owner_key': channelId,
+        'item_key': '',
+        'updated_at_ms': now,
+        'origin_device_id': 'migration',
+        'normalized': 0,
+        'deleted': 0,
+        'aux': WebDavSyncLibraryMutation.mintTvGenerationId(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
   /// Private v3 library-sync sidecar. The shape is shared with
   /// `iptv_catalog.db`; family-specific rounds populate their own [kind]s.
   static Future<void> createWebDavSyncSidecarTables(DatabaseExecutor db) async {
@@ -1064,6 +1414,40 @@ class DebrifyTvDatabase {
         'hasNext': (row['has_next'] as num).toInt() != 0,
       'lastPlayedAt': (row['last_played_at'] as num).toInt(),
     };
+  }
+
+  static List<String> _decodeStringList(Object? source) {
+    if (source is! String || source.isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! List) return const <String>[];
+      return List<String>.unmodifiable(
+        decoded
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty),
+      );
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  static Future<bool> _channelKeywordsEqual(
+    DatabaseExecutor db,
+    WebDavSyncTvChannelTarget target,
+  ) async {
+    final rows = await db.query(
+      'tv_channel_keywords',
+      columns: const <String>['keyword'],
+      where: 'channel_id = ?',
+      whereArgs: <Object?>[target.channelId],
+      orderBy: 'position',
+    );
+    if (rows.length != target.keywords.length) return false;
+    for (var index = 0; index < rows.length; index++) {
+      if (rows[index]['keyword'] != target.keywords[index]) return false;
+    }
+    return true;
   }
 
   /// Insert the built-in Favorites row if it isn't already there.

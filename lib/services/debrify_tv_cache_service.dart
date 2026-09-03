@@ -5,6 +5,8 @@ import 'package:sqflite/sqflite.dart';
 import '../models/debrify_tv/channel_stats.dart';
 import '../models/debrify_tv_cache.dart';
 import 'debrify_tv_database.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
+import 'webdav_sync/webdav_sync_library_mutation.dart';
 
 class DebrifyTvCacheService {
   /// Rail-cheap health for every channel, in three grouped queries — run once
@@ -173,7 +175,11 @@ class DebrifyTvCacheService {
     );
   }
 
-  static Future<void> saveEntry(DebrifyTvChannelCacheEntry entry) async {
+  static Future<void> saveEntry(
+    DebrifyTvChannelCacheEntry entry, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    String? generationId;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       await txn.insert('tv_channel_cache_state', {
         'channel_id': entry.channelId,
@@ -231,11 +237,41 @@ class DebrifyTvCacheService {
         });
         await statsBatch.commit(noResult: true);
       }
+
+      if (origin == WebDavSyncMutationOrigin.user) {
+        final existing = await _poolGeneration(txn, entry.channelId);
+        generationId = WebDavSyncLibraryMutation.mintTvGenerationId(
+          differentFrom: existing,
+        );
+        await _writePoolGeneration(
+          txn,
+          entry.channelId,
+          generationId!,
+          WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch,
+        );
+        await _incrementWebDavSyncRevision(txn);
+      }
     });
+    if (generationId != null) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
-  static Future<void> removeEntry(String channelId) async {
+  static Future<void> removeEntry(
+    String channelId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var stamped = false;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
+      final channelExists =
+          origin == WebDavSyncMutationOrigin.user &&
+          (await txn.query(
+            'tv_channels',
+            columns: const <String>['channel_id'],
+            where: 'channel_id = ?',
+            whereArgs: <Object?>[channelId],
+            limit: 1,
+          )).isNotEmpty;
       await txn.delete(
         'tv_cached_torrents',
         where: 'channel_id = ?',
@@ -251,15 +287,56 @@ class DebrifyTvCacheService {
         where: 'channel_id = ?',
         whereArgs: [channelId],
       );
+      if (channelExists) {
+        final existing = await _poolGeneration(txn, channelId);
+        await _writePoolGeneration(
+          txn,
+          channelId,
+          WebDavSyncLibraryMutation.mintTvGenerationId(differentFrom: existing),
+          WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch,
+        );
+        await _incrementWebDavSyncRevision(txn);
+        stamped = true;
+      }
     });
+    if (stamped) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
-  static Future<void> clearAll() async {
+  static Future<void> clearAll({
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var stamped = false;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
+      final channelIds = origin == WebDavSyncMutationOrigin.user
+          ? (await txn.query(
+                  'tv_channels',
+                  columns: const <String>['channel_id'],
+                ))
+                .map((row) => row['channel_id']! as String)
+                .toList(growable: false)
+          : const <String>[];
       await txn.delete('tv_cached_torrents');
       await txn.delete('tv_keyword_stats');
       await txn.delete('tv_channel_cache_state');
+      if (channelIds.isNotEmpty) {
+        final now =
+            WebDavSyncLibraryMutation.debugTvClock().millisecondsSinceEpoch;
+        for (final channelId in channelIds) {
+          final existing = await _poolGeneration(txn, channelId);
+          await _writePoolGeneration(
+            txn,
+            channelId,
+            WebDavSyncLibraryMutation.mintTvGenerationId(
+              differentFrom: existing,
+            ),
+            now,
+          );
+        }
+        await _incrementWebDavSyncRevision(txn);
+        stamped = true;
+      }
     });
+    if (stamped) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   static CachedTorrent _rowToCachedTorrent(Map<String, Object?> row) {
@@ -296,3 +373,40 @@ class DebrifyTvCacheService {
     return const <String>[];
   }
 }
+
+Future<void> _writePoolGeneration(
+  DatabaseExecutor db,
+  String channelId,
+  String generationId,
+  int updatedAtMs,
+) => db.insert('webdav_sync_record_state', <String, Object?>{
+  'kind': WebDavSyncLibraryKinds.tvPoolGeneration,
+  'owner_key': channelId,
+  'item_key': '',
+  'updated_at_ms': updatedAtMs,
+  'origin_device_id': WebDavSyncLibraryMutation.originDeviceId,
+  'normalized': 0,
+  'deleted': 0,
+  'aux': generationId,
+}, conflictAlgorithm: ConflictAlgorithm.replace);
+
+Future<String?> _poolGeneration(DatabaseExecutor db, String channelId) async {
+  final rows = await db.query(
+    'webdav_sync_record_state',
+    columns: const <String>['aux'],
+    where: 'kind = ? AND owner_key = ? AND item_key = ?',
+    whereArgs: <Object?>[
+      WebDavSyncLibraryKinds.tvPoolGeneration,
+      channelId,
+      '',
+    ],
+    limit: 1,
+  );
+  return rows.isEmpty ? null : rows.single['aux'] as String?;
+}
+
+Future<void> _incrementWebDavSyncRevision(DatabaseExecutor db) => db.execute('''
+  UPDATE webdav_sync_meta
+  SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+  WHERE key = 'mutation_revision'
+''');

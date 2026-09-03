@@ -1,9 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:debrify/models/debrify_tv_cache.dart';
+import 'package:debrify/models/debrify_tv_channel_record.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/debrify_tv_cache_service.dart';
+import 'package:debrify/services/debrify_tv_repository.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_channel_order.dart';
@@ -29,6 +34,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 String _sha(String value) => crypto.sha256.convert(value.codeUnits).toString();
+String _part(String value) =>
+    base64UrlEncode(utf8.encode(value)).replaceAll('=', '');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -110,7 +117,10 @@ void main() {
       options: OpenDatabaseOptions(
         version: 1,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onCreate: (db, _) async {
+          await DebrifyTvDatabase.createTvStoreTables(db);
+          await DebrifyTvDatabase.createIptvStoreTables(db);
+        },
       ),
     );
     DebrifyTvDatabase.debugDatabaseOverride = dbA;
@@ -118,10 +128,12 @@ void main() {
     IptvCatalogDb.debugDirectoryOverride = catalogA.path;
     await IptvCatalogDb.open();
     WebDavSyncLibraryMutation.originDeviceId = 'device-a';
+    WebDavSyncLibraryMutation.resetDebugTvHooks();
   });
 
   tearDown(() async {
     WebDavSyncLibraryMutation.originDeviceId = 'local-device';
+    WebDavSyncLibraryMutation.resetDebugTvHooks();
     WebDavSyncLibraryMutation.debugUserMutationObserver = null;
     IptvMediaStore.debugLibraryClock = DateTime.now;
     IptvCatalogDb.debugLibraryClock = DateTime.now;
@@ -150,13 +162,16 @@ void main() {
       );
 
   test(
-    'one cycle carries all four IPTV families from A to B with exact stamps',
+    'one cycle carries IPTV and Debrify TV families A to B with exact stamps',
     () async {
       var now = 1000;
       IptvMediaStore.debugLibraryClock = () =>
           DateTime.fromMillisecondsSinceEpoch(now++);
       IptvCatalogDb.debugLibraryClock = () =>
           DateTime.fromMillisecondsSinceEpoch(now++);
+      WebDavSyncLibraryMutation.debugTvClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      WebDavSyncLibraryMutation.debugTvGenerationId = () => 'generation-a';
       final catalogKey = IptvCatalogKey.forUrl(playlistUrl);
       await IptvCatalogDb.setCategoryOrder(catalogKey, const <String>[
         'News',
@@ -205,13 +220,50 @@ void main() {
           'updatedAt': 1000,
         },
       );
+      await DebrifyTvRepository.instance.upsertChannel(
+        DebrifyTvChannelRecord(
+          channelId: 'channel-a',
+          name: 'TV Alpha',
+          keywords: const <String>['Alpha', 'Beta'],
+          avoidNsfw: true,
+          channelNumber: 4,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(800),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(900),
+        ),
+      );
+      await DebrifyTvCacheService.saveEntry(
+        DebrifyTvChannelCacheEntry(
+          version: 1,
+          channelId: 'channel-a',
+          normalizedKeywords: const <String>['alpha', 'beta'],
+          fetchedAt: 901,
+          status: DebrifyTvCacheStatus.ready,
+          errorMessage: null,
+          torrents: <CachedTorrent>[
+            CachedTorrent(
+              rowid: 0,
+              infohash: 'a' * 40,
+              name: 'TV Pool Title',
+              sizeBytes: 1234,
+              createdUnix: 12,
+              seeders: 99,
+              leechers: 7,
+              completed: 88,
+              scrapedDate: 13,
+              sources: const <String>['private-scraper'],
+              keywords: const <String>['alpha'],
+            ),
+          ],
+          keywordStats: const <String, KeywordStat>{},
+        ),
+      );
 
       final fromA = await adapter.readLibrary(
         session,
         profileId,
         buildRequest(maps),
       );
-      expect(fromA.document.records, hasLength(5));
+      expect(fromA.document.records, hasLength(8));
       expect(
         fromA.document.records.keys,
         containsAll(<String>[
@@ -220,8 +272,22 @@ void main() {
           'iptv/watch/$circleResourceId/${_sha('https://panel.invalid/movie/9')}',
           'resume/$circleResourceId/${_sha('https://panel.invalid/movie/9')}',
           'resume/_/${_sha('generic-title')}',
+          'tv/ch/${_part('channel-a')}',
+          'tv/pool-gen/${_part('channel-a')}',
+          'tv/pool/${_part('channel-a')}/${'a' * 40}',
         ]),
       );
+      final poolValue = fromA
+          .document
+          .records['tv/pool/${_part('channel-a')}/${'a' * 40}']!
+          .value!;
+      expect(poolValue.keys.toSet(), <String>{
+        'generationId',
+        'name',
+        'sizeBytes',
+        'keywords',
+        'rank',
+      });
       for (final key in fromA.document.records.keys) {
         expect(key, isNot(contains('panel.invalid')));
         expect(key, isNot(contains('Bearer secret')));
@@ -236,7 +302,10 @@ void main() {
         options: OpenDatabaseOptions(
           version: 1,
           onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-          onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+          onCreate: (db, _) async {
+            await DebrifyTvDatabase.createTvStoreTables(db);
+            await DebrifyTvDatabase.createIptvStoreTables(db);
+          },
         ),
       );
       DebrifyTvDatabase.debugDatabaseOverride = dbB;
@@ -272,7 +341,15 @@ void main() {
         'iptv/order',
         'iptv/watch',
         'resume',
+        'tv/ch',
+        'tv/pool',
       });
+      final tvChannels = await DebrifyTvRepository.instance.fetchAllChannels();
+      expect(tvChannels.single.name, 'TV Alpha');
+      expect(tvChannels.single.keywords, <String>['Alpha', 'Beta']);
+      final tvCache = await DebrifyTvCacheService.getEntry('channel-a');
+      expect(tvCache!.torrents.single.infohash, 'a' * 40);
+      expect(tvCache.torrents.single.sizeBytes, 1234);
       expect(IptvCatalogDb.savedCategoryOrder(catalogKey), <String>[
         'News',
         'Sports',
