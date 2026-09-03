@@ -16102,15 +16102,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // the same snapshot on disk; Dart reconciles and deletes it on the
         // next launch (see TvResumeRescue), and deletes it after every clean
         // finish. Same values as the map so the two sinks can never disagree.
-        stageResumeSnapshot(
-            resumeId = item.resumeId,
-            url = item.url,
-            positionMs = position,
-            durationMs = duration,
-            season = item.season,
-            episode = item.episode,
-            completed = completed || localCompleted,
-        )
+        // Singles only for now: series/collection progress is authoritative in
+        // the series playback-state store, which has its own watched-union and
+        // ghost-purge invariants a rescue must not write around (codex review
+        // round 1, finding 6) — extending the rescue there is follow-up work.
+        if (model.contentType == "single") {
+            stageResumeSnapshot(
+                resumeId = item.resumeId,
+                url = item.url,
+                positionMs = position,
+                durationMs = duration,
+                season = item.season,
+                episode = item.episode,
+                completed = completed || localCompleted,
+            )
+        }
     }
 
     // Durable resume stage. Serialized on its own daemon thread: a 5-second
@@ -16120,6 +16126,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "debrify-resume-stage").apply { isDaemon = true }
         }
+
+    // onDestroy clears startupFailoverCursor BEFORE its final sendProgress, so
+    // the cursor alone cannot prove at teardown that a candidate ever passed
+    // the startup gate. This flag can: it latches at commit and never resets,
+    // keeping a failed-every-candidate session from staging its error-slate
+    // position as resumable content.
+    @Volatile
+    private var startupEverCommitted = false
 
     private fun stageResumeSnapshot(
         resumeId: String?,
@@ -16138,6 +16152,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             deleteStagedResume()
             return
         }
+        if (!startupEverCommitted) return
         if (resumeId.isNullOrEmpty() || durationMs <= 0L || positionMs <= 0L) return
         val snapshot = JSONObject()
             .put("resumeId", resumeId)
@@ -16148,29 +16163,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .put("episode", episode)
             .put("updatedAtMs", System.currentTimeMillis())
             .toString()
-        resumeStageExecutor.execute {
-            try {
-                // Write-then-rename so a mid-write kill leaves the previous
-                // complete snapshot, never a truncated one.
-                val temp = java.io.File(filesDir, RESUME_STAGE_TMP)
-                temp.writeText(snapshot)
-                val target = java.io.File(filesDir, RESUME_STAGE_FILE)
-                if (!temp.renameTo(target)) {
-                    target.delete()
-                    temp.renameTo(target)
+        try {
+            resumeStageExecutor.execute {
+                try {
+                    // Write-then-rename so a mid-write kill leaves the previous
+                    // complete snapshot, never a truncated one.
+                    val temp = java.io.File(filesDir, RESUME_STAGE_TMP)
+                    temp.writeText(snapshot)
+                    val target = java.io.File(filesDir, RESUME_STAGE_FILE)
+                    if (!temp.renameTo(target)) {
+                        target.delete()
+                        temp.renameTo(target)
+                    }
+                } catch (_: Throwable) {
+                    // Best-effort mirror of state Dart already receives live.
                 }
-            } catch (_: Throwable) {
-                // Best-effort mirror of state Dart already receives live.
             }
+        } catch (_: Throwable) {
+            // Executor already shut down (teardown-path sendProgress); the
+            // live channel still delivered this position.
         }
     }
 
     private fun deleteStagedResume() {
-        resumeStageExecutor.execute {
-            try {
-                java.io.File(filesDir, RESUME_STAGE_FILE).delete()
-                java.io.File(filesDir, RESUME_STAGE_TMP).delete()
-            } catch (_: Throwable) {}
+        try {
+            resumeStageExecutor.execute {
+                try {
+                    java.io.File(filesDir, RESUME_STAGE_FILE).delete()
+                    java.io.File(filesDir, RESUME_STAGE_TMP).delete()
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {
+            // Executor already shut down; Dart deletes the stage on a clean
+            // finish anyway.
         }
     }
 
@@ -16737,6 +16762,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
         cursor.commit()
+        startupEverCommitted = true
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
         startupFailoverTimeout = null
         startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
@@ -18292,9 +18318,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
-        // Queued stage writes drain before the thread dies (shutdown, not
-        // shutdownNow): the newest position snapshot is the one worth keeping.
-        resumeStageExecutor.shutdown()
         iptvTuneDiagnostics.onSessionEnd()
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
         startupFailoverTimeout = null
@@ -18434,6 +18457,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         seekbarOverlay.setOnKeyListener(null)
 
         sendFinished()
+        // LAST, after the final sendProgress above has queued its stage write:
+        // shutdown() lets queued writes drain on the daemon thread, and any
+        // stragglers after this point are rejected — which the stage helpers
+        // swallow (codex review round 1: an early shutdown here made the
+        // teardown-path sendProgress throw RejectedExecutionException and
+        // turned every clean exit into a crash).
+        resumeStageExecutor.shutdown()
         super.onDestroy()
     }
 

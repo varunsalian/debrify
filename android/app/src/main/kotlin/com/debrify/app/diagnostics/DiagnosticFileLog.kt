@@ -233,38 +233,62 @@ object DiagnosticFileLog {
             val preferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val lastRecorded = preferences.getLong(LAST_EXIT_TIMESTAMP, 0L)
             var newestRecorded = lastRecorded
-            exits
-                .asSequence()
+            val pending = exits
                 .filter { it.timestamp > lastRecorded }
                 .sortedBy { it.timestamp }
-                .forEach { exit ->
-                    append(
-                        context = context,
-                        source = "android_process",
-                        event = "previous_exit",
-                        message = buildString {
-                            append("reason=")
-                            append(exitReason(exit.reason))
-                            append(" status=")
-                            append(exit.status)
-                            append(" importance=")
-                            append(exit.importance)
-                            append(" pssKb=")
-                            append(exit.pss)
-                            append(" rssKb=")
-                            append(exit.rss)
-                        },
-                        level = if (
-                            exit.reason == ApplicationExitInfo.REASON_CRASH ||
-                            exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
-                            exit.reason == ApplicationExitInfo.REASON_ANR ||
-                            exit.reason == ApplicationExitInfo.REASON_LOW_MEMORY
-                        ) "warning" else "info",
-                        timestampMs = exit.timestamp,
-                        fileKind = "android",
-                        forceSync = false,
-                    )
-                    if (exit.timestamp > newestRecorded) newestRecorded = exit.timestamp
+            for (exit in pending) {
+                    // Advance the watermark only past exits that actually
+                    // reached the log: append() swallows failures, and a
+                    // watermark stamped past an unwritten exit would filter
+                    // it out of every later flush retry permanently (codex
+                    // review round 1, finding 8). The throwing core makes
+                    // success observable; a failed write leaves the
+                    // watermark behind so the next flush retries. A failed
+                    // preference commit after a successful write can at
+                    // worst duplicate an entry — the survivable direction.
+                    val written = try {
+                        synchronized(fileLock) {
+                            if (!accepting) return
+                            writeRecordLocked(
+                                context = context,
+                                source = "android_process",
+                                event = "previous_exit",
+                                message = buildString {
+                                    append("reason=")
+                                    append(exitReason(exit.reason))
+                                    append(" status=")
+                                    append(exit.status)
+                                    append(" importance=")
+                                    append(exit.importance)
+                                    append(" pssKb=")
+                                    append(exit.pss)
+                                    append(" rssKb=")
+                                    append(exit.rss)
+                                },
+                                level = if (
+                                    exit.reason == ApplicationExitInfo.REASON_CRASH ||
+                                    exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                                    exit.reason == ApplicationExitInfo.REASON_ANR ||
+                                    exit.reason == ApplicationExitInfo.REASON_LOW_MEMORY
+                                ) "warning" else "info",
+                                timestampMs = exit.timestamp,
+                                fileKind = "android",
+                                forceSync = false,
+                            )
+                        }
+                        true
+                    } catch (failure: Throwable) {
+                        droppedWrites.incrementAndGet()
+                        lastDropCause = failure.javaClass.name
+                        false
+                    }
+                    // Stop at the first failure: entries are ascending, so
+                    // letting a later success advance the watermark would
+                    // filter the failed one out of every retry.
+                    if (!written) break
+                    if (exit.timestamp > newestRecorded) {
+                        newestRecorded = exit.timestamp
+                    }
                 }
             if (newestRecorded > lastRecorded) {
                 preferences.edit().putLong(LAST_EXIT_TIMESTAMP, newestRecorded).commit()
@@ -504,14 +528,19 @@ object DiagnosticFileLog {
             if (forceSync) output.fd.sync()
         }
         lastIsoTimestamp = stamp
-        trimSegment(file)
-        if (lastPrunedSegment != segmentStart) {
-            lastPrunedSegment = segmentStart
-            // Historical ApplicationExitInfo entries retain their
-            // original timestamp. Always prune against wall-clock time
-            // so importing one cannot resurrect an expired segment.
-            pruneExpired(context, System.currentTimeMillis())
-        }
+        // Maintenance after this point is best-effort: the record is on disk,
+        // so a transient trim/prune failure must not report it as dropped
+        // (codex review round 1, finding 9).
+        try {
+            trimSegment(file)
+            if (lastPrunedSegment != segmentStart) {
+                lastPrunedSegment = segmentStart
+                // Historical ApplicationExitInfo entries retain their
+                // original timestamp. Always prune against wall-clock time
+                // so importing one cannot resurrect an expired segment.
+                pruneExpired(context, System.currentTimeMillis())
+            }
+        } catch (_: Throwable) {}
     }
 
     private fun trimSegment(file: File) {

@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import '../utils/app_storage.dart';
 import 'diagnostic_log.dart';
 import 'profiles/profile_runtime.dart';
+import 'profiles/profile_scope.dart';
 import 'profiles/profile_session.dart';
 import 'storage_service.dart';
 
@@ -37,8 +38,21 @@ import 'storage_service.dart';
 ///  * it never moves a position backward, never marks anything watched, and
 ///    ignores snapshots at 95%+ (completion territory belongs to the live
 ///    path and connected trackers only);
-///  * it only runs for the profile that was playing, and leaves the files in
-///    place for that profile's next activation otherwise.
+///  * it applies to SINGLE content only: series/collection progress is
+///    authoritative in the series playback-state store, whose watched-union
+///    and ghost-purge invariants a rescue must not write around;
+///  * it only runs for the profile that was playing — the storage writes are
+///    executed under that captured [ProfileScope], so a profile switch racing
+///    the reconcile cannot redirect them (codex review round 1, finding 4);
+///  * a position snapshot older than its owner's launch stamp is discarded,
+///    so a straggler write from a previous session can never pair with a new
+///    owner (codex review round 1, finding 5).
+///
+/// The existing-row and deepen-only checks read immediately before writing;
+/// a concurrent writer in that gap (remote import, sync apply) could still
+/// interleave, but the reconcile runs once at startup before the UI exists,
+/// and the staged value is at most one crash old — the same trust the live
+/// 5-second path already extends (codex review round 1, finding 3: accepted).
 class TvResumeRescue {
   TvResumeRescue._();
 
@@ -58,6 +72,7 @@ class TvResumeRescue {
 
   static bool _started = false;
   static bool _running = false;
+  static bool _pendingKick = false;
   static VoidCallback? _scopeListener;
 
   /// True between [recordLaunch] and [clearAfterCleanFinish] in THIS process:
@@ -120,10 +135,18 @@ class TvResumeRescue {
   }
 
   static Future<void> _reconcileOnce() async {
-    if (_running) return;
+    if (_running) {
+      // A profile activation arrived mid-reconcile; run again when the
+      // current pass finishes instead of dropping the notification.
+      _pendingKick = true;
+      return;
+    }
     _running = true;
     try {
-      await _reconcile();
+      do {
+        _pendingKick = false;
+        await _reconcile();
+      } while (_pendingKick);
     } catch (error) {
       debugPrint('TvResumeRescue: reconcile failed: $error');
     } finally {
@@ -147,12 +170,23 @@ class TvResumeRescue {
       return;
     }
 
-    final ownerProfileId = owner['profileId'] as String?;
-    final updatedAtMs = (position['updatedAtMs'] as num?)?.toInt() ?? 0;
+    // Type-defensive extraction: a corrupt-but-parseable stage must land in a
+    // cleanup path, not throw past it and wedge every later activation on the
+    // same files (codex review round 1, finding 10).
+    final ownerProfileId = _asString(owner['profileId']);
+    final launchedAtMs = _asInt(owner['launchedAtMs']);
+    final updatedAtMs = _asInt(position['updatedAtMs']);
     final age = DateTime.now().difference(
       DateTime.fromMillisecondsSinceEpoch(updatedAtMs),
     );
     if (updatedAtMs <= 0 || age > _staleAfter || age.isNegative) {
+      await clearAfterCleanFinish();
+      return;
+    }
+    // Session binding: the position must postdate its owner's launch. A
+    // queued stage write draining from a PREVIOUS session carries an older
+    // stamp and must not pair with this owner.
+    if (launchedAtMs <= 0 || updatedAtMs < launchedAtMs) {
       await clearAfterCleanFinish();
       return;
     }
@@ -162,76 +196,91 @@ class TvResumeRescue {
       return;
     }
 
-    final resumeId = position['resumeId'] as String?;
-    final positionMs = (position['positionMs'] as num?)?.toInt() ?? 0;
-    final durationMs = (position['durationMs'] as num?)?.toInt() ?? 0;
-    final stagedUrl = position['url'] as String?;
-    final contentType = owner['contentType'] as String?;
+    // Pin the verified profile for the storage work below. In committed mode
+    // the zone override makes every StorageService call resolve to this
+    // scope even if the active profile changes mid-await; legacy mode has no
+    // scopes to race.
+    final ProfileScope? capturedScope =
+        ProfileRuntime.isProfileCommitted ? ProfileSession.notifier.value : null;
+    if (ProfileRuntime.isProfileCommitted && capturedScope == null) return;
+
     try {
+      final resumeId = _asString(position['resumeId']);
+      final positionMs = _asInt(position['positionMs']);
+      final durationMs = _asInt(position['durationMs']);
+      final stagedUrl = _asString(position['url']);
+      final contentType = _asString(owner['contentType']);
+      final imdbId = _asString(owner['imdbId']);
       if (resumeId == null ||
           resumeId.isEmpty ||
+          contentType != 'single' ||
           positionMs <= 0 ||
           durationMs <= 0 ||
           positionMs * 100.0 / durationMs >= _maxRescuePercent) {
         return;
       }
 
-      var rescuedState = false;
-      var rescuedResume = false;
+      Future<void> applyRescue() async {
+        var rescuedState = false;
+        var rescuedResume = false;
 
-      // Playback-state map (drives Continue Watching). Deepen-only, and only
-      // an entry the live path already created; getVideoPlaybackState also
-      // returns null for a movie marked finished, which keeps a rescue from
-      // resurrecting a completed one.
-      final state = await StorageService.getVideoPlaybackState(
-        videoTitle: resumeId,
-      );
-      final stateUrl = (stagedUrl != null && stagedUrl.isNotEmpty)
-          ? stagedUrl
-          : state?['url'] as String?;
-      if (state != null &&
-          stateUrl != null &&
-          ((state['positionMs'] as num?)?.toInt() ?? 0) < positionMs) {
-        await StorageService.saveVideoPlaybackState(
+        // Playback-state map (drives Continue Watching). Deepen-only, and
+        // only an entry the live path already created; getVideoPlaybackState
+        // also returns null for a movie marked finished, which keeps a rescue
+        // from resurrecting a completed one.
+        final state = await StorageService.getVideoPlaybackState(
           videoTitle: resumeId,
-          videoUrl: stateUrl,
-          positionMs: positionMs,
-          durationMs: durationMs,
-          speed: (state['speed'] as num?)?.toDouble() ?? 1.0,
-          aspect: state['aspect'] as String? ?? 'contain',
-          imdbId: owner['imdbId'] as String? ?? state['imdbId'] as String?,
         );
-        rescuedState = true;
-      }
+        final stateUrl = (stagedUrl != null && stagedUrl.isNotEmpty)
+            ? stagedUrl
+            : _asString(state?['url']);
+        if (state != null &&
+            stateUrl != null &&
+            _asInt(state['positionMs']) < positionMs) {
+          await StorageService.saveVideoPlaybackState(
+            videoTitle: resumeId,
+            videoUrl: stateUrl,
+            positionMs: positionMs,
+            durationMs: durationMs,
+            speed: (state['speed'] as num?)?.toDouble() ?? 1.0,
+            aspect: _asString(state['aspect']) ?? 'contain',
+            imdbId: imdbId ?? _asString(state['imdbId']),
+          );
+          rescuedState = true;
+        }
 
-      // The per-video resume store, singles only — mirroring which store the
-      // live path writes for each content type.
-      if (contentType == 'single') {
+        // The per-video resume store — the second sink the live path writes
+        // for single content.
         final resume = await StorageService.getVideoResume(resumeId);
-        if (resume != null &&
-            ((resume['positionMs'] as num?)?.toInt() ?? 0) < positionMs) {
+        if (resume != null && _asInt(resume['positionMs']) < positionMs) {
           await StorageService.upsertVideoResume(resumeId, {
             'positionMs': positionMs,
             'durationMs': durationMs,
             'speed': (resume['speed'] as num?)?.toDouble() ?? 1.0,
-            'aspect': resume['aspect'] as String? ?? 'contain',
+            'aspect': _asString(resume['aspect']) ?? 'contain',
             'updatedAt': DateTime.now().millisecondsSinceEpoch,
           });
           rescuedResume = true;
         }
+
+        if (rescuedState || rescuedResume) {
+          DiagnosticLog.instance.recordEvent(
+            source: 'app',
+            event: 'tv_resume_rescued',
+            fields: <String, Object?>{
+              'positionMs': positionMs,
+              'durationMs': durationMs,
+              'playbackState': rescuedState,
+              'videoResume': rescuedResume,
+            },
+          );
+        }
       }
 
-      if (rescuedState || rescuedResume) {
-        DiagnosticLog.instance.recordEvent(
-          source: 'app',
-          event: 'tv_resume_rescued',
-          fields: <String, Object?>{
-            'positionMs': positionMs,
-            'durationMs': durationMs,
-            'playbackState': rescuedState,
-            'videoResume': rescuedResume,
-          },
-        );
+      if (capturedScope != null) {
+        await ProfileRuntime.withCapturedScope(capturedScope, applyRescue);
+      } else {
+        await applyRescue();
       }
     } finally {
       // Applied or skipped, the snapshot is consumed: a rescue must run at
@@ -245,6 +294,10 @@ class TvResumeRescue {
     if (!ProfileRuntime.isProfileCommitted) return 'legacy';
     return ProfileSession.notifier.value?.profileId;
   }
+
+  static int _asInt(Object? value) => value is num ? value.toInt() : 0;
+
+  static String? _asString(Object? value) => value is String ? value : null;
 
   static Future<File> _file(String name) async {
     final root = await AppStorage.support();
