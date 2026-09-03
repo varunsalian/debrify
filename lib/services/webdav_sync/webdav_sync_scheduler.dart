@@ -22,6 +22,10 @@ const bool webDavSyncRemotePollEnabled = bool.fromEnvironment(
   defaultValue: true,
 );
 
+const Duration warmPollPeriod = Duration(seconds: 5);
+const Duration idlePollPeriod = Duration(seconds: 60);
+const Duration warmDuration = Duration(minutes: 3);
+
 enum WebDavSyncPollState { active, pausedBackoff, disabledNoValidators, gated }
 
 final class WebDavSyncRemotePollContext {
@@ -47,9 +51,8 @@ final class WebDavSyncScheduler {
     required WebDavSyncRuntimeGate gate,
     this.debounce = const Duration(seconds: 45),
     this.period = const Duration(minutes: 15),
-    this.localChangeDebounce = const Duration(seconds: 10),
+    this.localChangeDebounce = const Duration(seconds: 2),
     this.playbackDebounce = const Duration(seconds: 60),
-    this.remotePollPeriod = const Duration(seconds: 60),
     this.remotePollingEnabled = webDavSyncRemotePollEnabled,
     this.localChangeObserver,
     DateTime Function()? clock,
@@ -64,7 +67,6 @@ final class WebDavSyncScheduler {
   final Duration period;
   final Duration localChangeDebounce;
   final Duration playbackDebounce;
-  final Duration remotePollPeriod;
   final bool remotePollingEnabled;
   final WebDavSyncLocalChangeObserver? localChangeObserver;
 
@@ -72,9 +74,11 @@ final class WebDavSyncScheduler {
   WebDavSyncRemotePollContextProvider? _remotePollContextProvider;
   Timer? _periodic;
   Timer? _remotePollTimer;
+  Timer? _warmExpiryTimer;
   Timer? _localChangeTimer;
   DateTime? _lastStartedAt;
   DateTime? _nextRemotePollAt;
+  DateTime? _warmUntil;
   bool _running = false;
   bool _polling = false;
   bool _remotePollingForeground = true;
@@ -84,6 +88,7 @@ final class WebDavSyncScheduler {
   String? _pendingLocalChangeKey;
   int _consecutivePollFailures = 0;
   int _pollGeneration = 0;
+  int _pollTimerGeneration = 0;
   Completer<void>? _pollCompletion;
 
   bool get isArmed => _contextProvider != null;
@@ -120,12 +125,14 @@ final class WebDavSyncScheduler {
     _remotePollContextProvider = remotePollContextProvider;
     _periodic?.cancel();
     _remotePollTimer?.cancel();
+    _warmExpiryTimer?.cancel();
     _localChangeTimer?.cancel();
     _localChangeTimer = null;
     _dirtyDuringRun = false;
     _immediateDirtyDuringRun = false;
     _pendingLocalChangeKey = null;
     _pollDisabledNoValidators = false;
+    _warmUntil = null;
     _resetPollBackoff();
     _pollGeneration++;
     _periodic = Timer.periodic(period, (_) => unawaited(_signalPeriodic()));
@@ -134,8 +141,7 @@ final class WebDavSyncScheduler {
 
   void pauseRemotePolling() {
     _remotePollingForeground = false;
-    _remotePollTimer?.cancel();
-    _remotePollTimer = null;
+    _cancelRemotePollTimer();
     _pollGeneration++;
   }
 
@@ -143,7 +149,7 @@ final class WebDavSyncScheduler {
     if (_remotePollingForeground) return;
     _remotePollingForeground = true;
     _pollGeneration++;
-    _armRemotePollTimer();
+    _rearmWarmPolling();
   }
 
   /// Synchronous write-side ingress. Filtering and timer coalescing stay here
@@ -170,16 +176,20 @@ final class WebDavSyncScheduler {
     _scheduleLocalChange(immediate: true);
   }
 
-  static bool admitsLocalChangeKey(String logicalKey) =>
-      ProfilePreferencePortability.allowsKey(logicalKey) ||
-      logicalKey == WebDavSyncHotMerge.playbackPreference ||
-      logicalKey == WebDavSyncHotMerge.continueWatchingPreference ||
-      logicalKey == WebDavSyncHotMerge.finishedMoviesPreference ||
-      logicalKey == WebDavSyncHotMerge.explicitlyWatchedSeriesPreference ||
-      logicalKey == WebDavSyncHotMerge.playlistPreference ||
-      logicalKey == WebDavSyncHotMerge.playlistFavoritesPreference ||
-      logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
-      logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
+  static bool admitsLocalChangeKey(String logicalKey) {
+    if (WebDavSyncHotMerge.hotLocalOnlyScalarKeys.contains(logicalKey)) {
+      return false;
+    }
+    return ProfilePreferencePortability.allowsKey(logicalKey) ||
+        logicalKey == WebDavSyncHotMerge.playbackPreference ||
+        logicalKey == WebDavSyncHotMerge.continueWatchingPreference ||
+        logicalKey == WebDavSyncHotMerge.finishedMoviesPreference ||
+        logicalKey == WebDavSyncHotMerge.explicitlyWatchedSeriesPreference ||
+        logicalKey == WebDavSyncHotMerge.playlistPreference ||
+        logicalKey == WebDavSyncHotMerge.playlistFavoritesPreference ||
+        logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
+        logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
+  }
 
   void _scheduleLocalChange({bool immediate = false}) {
     if (_contextProvider == null) return;
@@ -222,18 +232,65 @@ final class WebDavSyncScheduler {
   }
 
   void _armRemotePollTimer() {
-    _remotePollTimer?.cancel();
-    _remotePollTimer = null;
+    _cancelRemotePollTimer();
     if (!remotePollingEnabled ||
         !_remotePollingForeground ||
         _remotePollContextProvider == null ||
         _pollDisabledNoValidators) {
       return;
     }
-    _remotePollTimer = Timer.periodic(
-      remotePollPeriod,
-      (_) => unawaited(_pollForRemoteChanges()),
-    );
+    final now = _clock();
+    final backoffUntil = _nextRemotePollAt;
+    final delay = backoffUntil != null && now.isBefore(backoffUntil)
+        ? backoffUntil.difference(now)
+        : _isWarm(now)
+        ? warmPollPeriod
+        : idlePollPeriod;
+    final timerGeneration = _pollTimerGeneration;
+    _remotePollTimer = Timer(delay, () {
+      if (timerGeneration != _pollTimerGeneration) return;
+      _remotePollTimer = null;
+      unawaited(_handleRemotePollTimer(timerGeneration));
+    });
+  }
+
+  void _cancelRemotePollTimer() {
+    _remotePollTimer?.cancel();
+    _remotePollTimer = null;
+    _pollTimerGeneration++;
+  }
+
+  Future<void> _handleRemotePollTimer(int timerGeneration) async {
+    await _pollForRemoteChanges();
+    if (timerGeneration == _pollTimerGeneration) {
+      _armRemotePollTimer();
+    }
+  }
+
+  bool _isWarm(DateTime now) {
+    final until = _warmUntil;
+    return until != null && now.isBefore(until);
+  }
+
+  void _rearmWarmPolling() {
+    final now = _clock();
+    final wasWarm = _isWarm(now);
+    _warmUntil = now.add(warmDuration);
+    _warmExpiryTimer?.cancel();
+    _warmExpiryTimer = Timer(warmDuration, _expireWarmPolling);
+    if (!wasWarm) _armRemotePollTimer();
+  }
+
+  void _expireWarmPolling() {
+    final now = _clock();
+    final until = _warmUntil;
+    if (until != null && now.isBefore(until)) {
+      _warmExpiryTimer = Timer(until.difference(now), _expireWarmPolling);
+      return;
+    }
+    _warmExpiryTimer = null;
+    _warmUntil = null;
+    _armRemotePollTimer();
   }
 
   Future<void> _pollForRemoteChanges() async {
@@ -294,6 +351,7 @@ final class WebDavSyncScheduler {
             validator != context!.validators[outcome.deviceId];
       });
       if (changed) {
+        _rearmWarmPolling();
         await signal(WebDavSyncTrigger.remoteChange);
         return;
       }
@@ -318,7 +376,7 @@ final class WebDavSyncScheduler {
 
   void _recordPollFailure() {
     _consecutivePollFailures++;
-    var delayMs = remotePollPeriod.inMilliseconds;
+    var delayMs = idlePollPeriod.inMilliseconds;
     for (var index = 1; index < _consecutivePollFailures; index++) {
       delayMs *= 2;
       if (delayMs >= period.inMilliseconds) {
@@ -342,14 +400,18 @@ final class WebDavSyncScheduler {
     _periodic = null;
     _remotePollTimer?.cancel();
     _remotePollTimer = null;
+    _warmExpiryTimer?.cancel();
+    _warmExpiryTimer = null;
     _localChangeTimer?.cancel();
     _localChangeTimer = null;
     _dirtyDuringRun = false;
     _immediateDirtyDuringRun = false;
     _pendingLocalChangeKey = null;
     _pollDisabledNoValidators = false;
+    _warmUntil = null;
     _resetPollBackoff();
     _pollGeneration++;
+    _pollTimerGeneration++;
   }
 
   Future<WebDavSyncCycleReport> signal(WebDavSyncTrigger trigger) async {
@@ -407,6 +469,10 @@ final class WebDavSyncScheduler {
         }
       }
       final report = await _runner.runCycle(context, trigger: trigger);
+      if (trigger == WebDavSyncTrigger.localChange ||
+          trigger == WebDavSyncTrigger.manual) {
+        _rearmWarmPolling();
+      }
       if (report.localChangeFollowUp) {
         _dirtyDuringRun = true;
         _immediateDirtyDuringRun = true;

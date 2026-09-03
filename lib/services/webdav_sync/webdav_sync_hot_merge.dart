@@ -514,6 +514,9 @@ abstract final class WebDavSyncHotMerge {
     mdblistSyncCheckpointPreference,
   };
 
+  /// Preference keys consumed locally by the hot builder but never synced.
+  static Set<String> get hotLocalOnlyScalarKeys => _hotLocalOnlyScalarKeys;
+
   static WebDavSyncBuiltHotState build(WebDavSyncBuildInput input) {
     final previous = input.previous;
     if (previous != null && previous.circleProfileId != input.circleProfileId) {

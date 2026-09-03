@@ -6,6 +6,7 @@ import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
@@ -69,6 +70,35 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  test('hot-local-only checkpoint writes are not admitted or scheduled', () {
+    fakeAsync((async) {
+      final observedKeys = <String>[];
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        localChangeObserver: observedKeys.add,
+      );
+      scheduler.arm(() async => context());
+
+      expect(
+        WebDavSyncScheduler.admitsLocalChangeKey(
+          WebDavSyncHotMerge.mdblistSyncCheckpointPreference,
+        ),
+        isFalse,
+      );
+      scheduler.notifyLocalChange(
+        WebDavSyncHotMerge.mdblistSyncCheckpointPreference,
+      );
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 0);
+      expect(observedKeys, isEmpty);
+      scheduler.dispose();
+    });
   });
 
   test(
@@ -145,7 +175,7 @@ void main() {
     expect(runner.runs, 1);
   });
 
-  test('burst of ten local changes runs once after trailing debounce', () {
+  test('burst of ten local changes runs once two seconds after first', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);
       final runner = _Runner();
@@ -160,9 +190,9 @@ void main() {
         scheduler.notifyLocalChange('theme');
         async.elapse(const Duration(milliseconds: 100));
       }
-      // The window opens at the FIRST write of the burst, so it fires 10s
+      // The window opens at the FIRST write of the burst, so it fires 2s
       // after t=0 (not after the last write).
-      async.elapse(const Duration(milliseconds: 8850));
+      async.elapse(const Duration(milliseconds: 850));
       expect(runner.runs, 0);
 
       async.elapse(const Duration(milliseconds: 250));
@@ -188,7 +218,7 @@ void main() {
 
       scheduler.notifyLocalChange('theme');
       scheduler.notifyLocalChange('subtitle_language');
-      async.elapse(const Duration(seconds: 10));
+      async.elapse(const Duration(seconds: 2));
       async.flushMicrotasks();
 
       expect(runner.runs, 1);
@@ -208,10 +238,10 @@ void main() {
       );
       scheduler.arm(() async => context());
 
-      // Writes every 5s forever; the 10s window must still fire on schedule.
+      // Writes every second forever; the 2s window must still fire on schedule.
       for (var index = 0; index < 6; index++) {
         scheduler.notifyLocalChange('theme');
-        async.elapse(const Duration(seconds: 5));
+        async.elapse(const Duration(seconds: 1));
         async.flushMicrotasks();
       }
       expect(runner.runs, greaterThanOrEqualTo(2));
@@ -256,7 +286,7 @@ void main() {
       scheduler.arm(() async => context());
 
       scheduler.notifyLocalChange('theme');
-      async.elapse(const Duration(seconds: 10));
+      async.elapse(const Duration(seconds: 2));
       async.flushMicrotasks();
       expect(runner.runs, 1);
 
@@ -266,7 +296,7 @@ void main() {
       runner.blocker = null;
       firstRun.complete();
       async.flushMicrotasks();
-      async.elapse(const Duration(seconds: 9));
+      async.elapse(const Duration(seconds: 1));
       async.flushMicrotasks();
       expect(runner.runs, 1);
 
@@ -290,7 +320,7 @@ void main() {
       );
       scheduler.arm(() async => context());
 
-      // An ordinary write already has the ten-second coalescing timer armed
+      // An ordinary write already has the two-second coalescing timer armed
       // when the manual cycle discovers the fenced conflict.
       scheduler.notifyLocalChange('theme');
       unawaited(scheduler.signal(WebDavSyncTrigger.manual));
@@ -304,7 +334,7 @@ void main() {
         WebDavSyncTrigger.manual,
         WebDavSyncTrigger.localChange,
       ]);
-      async.elapse(const Duration(seconds: 10));
+      async.elapse(const Duration(seconds: 2));
       async.flushMicrotasks();
       expect(runner.runs, 2);
       scheduler.dispose();
@@ -332,7 +362,7 @@ void main() {
         ..televisionPlayback = false
         ..lowMemory = true;
       scheduler.notifyLocalChange('theme');
-      async.elapse(const Duration(seconds: 10));
+      async.elapse(const Duration(seconds: 2));
       async.flushMicrotasks();
       expect(runner.runs, 0);
       scheduler.dispose();
@@ -361,7 +391,113 @@ void main() {
     });
   });
 
-  test('changed validator starts exactly one remote-change cycle', () {
+  test('local-change completion warms polling then decays to idle', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(milliseconds: 1999));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(milliseconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      expect(transport.probedDeviceIds, isEmpty);
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[7]);
+
+      async.elapse(const Duration(minutes: 2, seconds: 50));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds.last, 177);
+      final warmProbeCount = transport.probeSeconds.length;
+
+      // Warmth expires at t=182. That boundary re-arms the idle cadence,
+      // whose next probe is sixty seconds later without another event.
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, hasLength(warmProbeCount));
+      async.elapse(const Duration(seconds: 59));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, hasLength(warmProbeCount));
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds.last, 242);
+      scheduler.dispose();
+    });
+  });
+
+  test('manual sync warms remote polling', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5]);
+      scheduler.dispose();
+    });
+  });
+
+  test('changed validator starts one cycle and warms remote polling', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);
       var storedValidator = const WebDavSyncManifestValidator.etag('"v1"');
@@ -396,13 +532,14 @@ void main() {
         ),
       );
 
-      async.elapse(const Duration(minutes: 3));
+      async.elapse(const Duration(seconds: 65));
       async.flushMicrotasks();
 
       expect(runner.runs, 1);
       expect(runner.triggers, <WebDavSyncTrigger?>[
         WebDavSyncTrigger.remoteChange,
       ]);
+      expect(transport.probeSeconds, <int>[60, 65]);
       scheduler.dispose();
     });
   });
@@ -542,7 +679,57 @@ void main() {
     });
   });
 
-  test('remote polling pauses in background and resumes cleanly', () {
+  test('failure backoff overrides warm cadence and resets on success', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..failuresRemaining = 1;
+      final scheduler = WebDavSyncScheduler(
+        runner: _Runner(),
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      scheduler.pauseRemotePolling();
+      scheduler.resumeRemotePolling();
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5]);
+      expect(scheduler.pollState, WebDavSyncPollState.pausedBackoff);
+
+      async.elapse(const Duration(seconds: 59));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5]);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5, 65]);
+      expect(scheduler.pollState, WebDavSyncPollState.active);
+
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5, 65, 70]);
+      scheduler.dispose();
+    });
+  });
+
+  test('foreground resume warms polling and background pauses it', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);
       final transport = _PollTransport(
@@ -577,12 +764,63 @@ void main() {
       expect(scheduler.pollState, WebDavSyncPollState.gated);
 
       scheduler.resumeRemotePolling();
-      async.elapse(const Duration(seconds: 59));
+      async.elapse(const Duration(seconds: 4));
       async.flushMicrotasks();
       expect(transport.probedDeviceIds, isEmpty);
       async.elapse(const Duration(seconds: 1));
       async.flushMicrotasks();
       expect(transport.probedDeviceIds, <String>['device-b']);
+
+      scheduler.pauseRemotePolling();
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
+      scheduler.dispose();
+    });
+  });
+
+  test('disabled poll define gate wins over every warm trigger', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: _Runner(),
+        gate: _Gate(),
+        remotePollingEnabled: false,
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      scheduler.pauseRemotePolling();
+      scheduler.resumeRemotePolling();
+      async.elapse(const Duration(minutes: 5));
+      async.flushMicrotasks();
+
+      expect(transport.probedDeviceIds, isEmpty);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
       scheduler.dispose();
     });
   });
@@ -630,7 +868,10 @@ void main() {
       runner.blocker = null;
       blocked.complete();
       async.flushMicrotasks();
-      async.elapse(const Duration(seconds: 60));
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      async.elapse(const Duration(seconds: 1));
       async.flushMicrotasks();
       expect(transport.probedDeviceIds, <String>['device-b']);
       expect(transport.probedDeviceIds, isNot(contains('unknown-device')));
@@ -661,6 +902,18 @@ void main() {
     expect(
       consumedKeys,
       everyElement(predicate<String>(WebDavSyncScheduler.admitsLocalChangeKey)),
+    );
+  });
+
+  test('every hot-local-only scalar key is excluded from admission', () {
+    expect(WebDavSyncHotMerge.hotLocalOnlyScalarKeys, isNotEmpty);
+    expect(
+      WebDavSyncHotMerge.hotLocalOnlyScalarKeys,
+      everyElement(
+        predicate<String>(
+          (key) => !WebDavSyncScheduler.admitsLocalChangeKey(key),
+        ),
+      ),
     );
   });
 }
