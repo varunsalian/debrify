@@ -210,7 +210,11 @@ final class WebDavSyncScheduler {
   /// playback coalescing interval. Harmless when nothing is pending — the
   /// cycle is digest-suppressed.
   void notifyPlaybackCheckpoint() {
-    if (_contextProvider == null) return;
+    // Television and low-memory gates forbid cycles outright. Do not even
+    // replace a durable-intent retry timer here: repeated remote/button events
+    // during TV playback could otherwise keep escalating its backoff while no
+    // cycle was permitted to run.
+    if (_contextProvider == null || _gateHolds) return;
     if (_running) {
       _dirtyDuringRun = true;
       _immediateDirtyDuringRun = true;

@@ -1389,44 +1389,112 @@ void main() {
         async.elapse(const Duration(seconds: 5));
         async.flushMicrotasks();
         expect(runner.runs, 0); // still inside the 60s playback window
-        scheduler.notifyPlaybackCheckpoint(); // pause pressed
+        for (var index = 0; index < 20; index++) {
+          scheduler.notifyPlaybackCheckpoint(); // pause/seek burst
+        }
         async.flushMicrotasks();
         async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+        expect(runner.runs, 1); // replaced playback timer never fires later
+        scheduler.dispose();
+      });
+    });
+
+    test('an immediate checkpoint preserves durable retry accounting', () {
+      fakeAsync((async) {
+        final runner = _Runner()..failuresRemaining = 2;
+        final delays = <Duration>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          localChangeDeferredObserver: (_, _, delay) => delays.add(delay),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        expect(delays, <Duration>[const Duration(seconds: 2)]);
+
+        async.elapse(const Duration(seconds: 1));
+        scheduler.notifyPlaybackCheckpoint();
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        expect(delays, <Duration>[
+          const Duration(seconds: 2),
+          const Duration(seconds: 4),
+        ]);
+
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 3);
+        scheduler.dispose();
+      });
+    });
+
+    test('television checkpoints leave the gated retry timer untouched', () {
+      fakeAsync((async) {
+        final gate = _Gate()..televisionPlayback = true;
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: gate);
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+
+        async.elapse(const Duration(seconds: 30));
+        for (var index = 0; index < 20; index++) {
+          scheduler.notifyPlaybackCheckpoint();
+        }
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 0);
+
+        gate.televisionPlayback = false;
+        async.elapse(const Duration(seconds: 30));
         async.flushMicrotasks();
         expect(runner.runs, 1);
         scheduler.dispose();
       });
     });
 
-    test('a checkpoint during a running cycle produces one immediate follow-up',
-        () {
-      fakeAsync((async) {
-        final start = DateTime.utc(2026, 9, 3);
-        final runner = _Runner();
-        final scheduler = WebDavSyncScheduler(
-          runner: runner,
-          gate: _Gate(),
-          clock: () => start.add(async.elapsed),
-        );
-        runner.blocker = Completer<void>();
-        scheduler.arm(() async => context());
-        scheduler.notifyLocalChange('playback_state_v1');
-        async.elapse(const Duration(seconds: 3));
-        async.flushMicrotasks();
-        expect(runner.runs, 1);
-        scheduler.notifyPlaybackCheckpoint();
-        scheduler.notifyPlaybackCheckpoint(); // burst coalesces
-        runner.blocker!.complete();
-        runner.blocker = null;
-        async.flushMicrotasks();
-        async.elapse(Duration.zero);
-        async.flushMicrotasks();
-        expect(runner.runs, 2);
-        async.elapse(const Duration(seconds: 30));
-        expect(runner.runs, 2);
-        scheduler.dispose();
-      });
-    });
+    test(
+      'a checkpoint during a running cycle produces one immediate follow-up',
+      () {
+        fakeAsync((async) {
+          final start = DateTime.utc(2026, 9, 3);
+          final runner = _Runner();
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            clock: () => start.add(async.elapsed),
+          );
+          runner.blocker = Completer<void>();
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('playback_state_v1');
+          async.elapse(const Duration(seconds: 3));
+          async.flushMicrotasks();
+          expect(runner.runs, 1);
+          scheduler.notifyPlaybackCheckpoint();
+          scheduler.notifyPlaybackCheckpoint(); // burst coalesces
+          runner.blocker!.complete();
+          runner.blocker = null;
+          async.flushMicrotasks();
+          async.elapse(Duration.zero);
+          async.flushMicrotasks();
+          expect(runner.runs, 2);
+          async.elapse(const Duration(seconds: 30));
+          expect(runner.runs, 2);
+          scheduler.dispose();
+        });
+      },
+    );
 
     test('extendWarmSession keeps the fast poll cadence alive', () {
       fakeAsync((async) {
@@ -1453,6 +1521,38 @@ void main() {
         async.elapse(const Duration(seconds: 30));
         final warmed = probes - decayed;
         expect(warmed, greaterThanOrEqualTo(5)); // ~6 probes at 5s cadence
+        scheduler.dispose();
+      });
+    });
+
+    test('warm polling decays after real watch activity stops', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        var probes = 0;
+        final scheduler = WebDavSyncScheduler(
+          runner: _Runner(),
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async {
+            probes++;
+            return null;
+          },
+        );
+        scheduler.extendWarmSession();
+
+        async.elapse(warmDuration);
+        async.flushMicrotasks();
+        final atExpiry = probes;
+        expect(atExpiry, greaterThanOrEqualTo(35));
+        async.elapse(const Duration(seconds: 59));
+        async.flushMicrotasks();
+        expect(probes, atExpiry);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(probes, atExpiry + 1);
         scheduler.dispose();
       });
     });

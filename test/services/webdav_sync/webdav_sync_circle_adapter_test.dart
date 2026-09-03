@@ -9,6 +9,7 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_lock_controller.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -84,6 +85,21 @@ void main() {
     DeviceKeyProvider.debugReset();
     await registry.close();
     await directory.delete(recursive: true);
+  });
+
+  test('an unchanged playback target reports zero applied keys', () async {
+    const playback = '{"movie":{"positionMs":42000}}';
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(WebDavSyncHotMerge.playbackPreference, playback);
+    session = await adapter.beginCycle();
+
+    final appliedKeys = await adapter.applyProfile(
+      session,
+      activeId,
+      const <String, Object>{WebDavSyncHotMerge.playbackPreference: playback},
+    );
+
+    expect(appliedKeys, isEmpty);
   });
 
   test(

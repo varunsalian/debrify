@@ -615,6 +615,24 @@ void main() {
     expect(tvHomeCalls, 0);
   });
 
+  test('a pure echo with zero applied keys publishes no callback', () async {
+    var callbackCalls = 0;
+    local.appliedKeysOverride = const <String>{};
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      sectionCache: sectionCache,
+      clock: () => now,
+      appliedKeysCallback: (_, _) => callbackCalls++,
+    );
+
+    await runFixture(context());
+
+    expect(callbackCalls, 0);
+  });
+
   test('pending apply replay dispatches active UI callback once', () async {
     ProfileRuntime.initializeCommitted(
       ProfileScope(
@@ -3183,6 +3201,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
   void Function()? beforeConflict;
   bool sessionValid = true;
   void Function()? afterApply;
+  Set<String>? appliedKeysOverride;
   final List<bool> replayingPendingFlags = <bool>[];
 
   @override
@@ -3241,7 +3260,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     applied.add(Map<String, Object>.from(values));
     preferences = Map<String, Object?>.from(values);
     afterApply?.call();
-    return Set<String>.unmodifiable(values.keys);
+    return appliedKeysOverride ?? Set<String>.unmodifiable(values.keys);
   }
 }
 

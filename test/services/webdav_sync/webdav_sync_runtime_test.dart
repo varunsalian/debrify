@@ -12,6 +12,7 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_feature.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
@@ -24,6 +25,56 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'remote watch activity is no-op safe, profile agnostic, and disarmed',
+    () {
+      final runtime = WebDavSyncRuntime.instance;
+      runtime.debugResetInitialization();
+      ProfileRuntime.debugReset();
+      addTearDown(() {
+        runtime.debugResetInitialization();
+        ProfileRuntime.debugReset();
+      });
+      var calls = 0;
+      webDavSyncRemoteWatchActivityHook = () => calls++;
+
+      // The active-profile gate is intentionally later: an inactive profile's
+      // actual watch activity still keeps this device's polling session warm.
+      dispatchWebDavSyncAppliedKeysForActiveProfile(
+        'inactive-profile',
+        <String>{WebDavSyncHotMerge.playbackPreference},
+      );
+      expect(calls, 1);
+
+      dispatchWebDavSyncAppliedKeysForActiveProfile(
+        'inactive-profile',
+        const <String>{},
+      );
+      dispatchWebDavSyncAppliedKeysForActiveProfile(
+        'inactive-profile',
+        const <String>{'theme'},
+      );
+      expect(calls, 1, reason: 'no-op and non-watch applies are not activity');
+
+      webDavSyncRemoteWatchActivityHook = () => throw StateError('observer');
+      expect(
+        () => dispatchWebDavSyncAppliedKeysForActiveProfile(
+          'inactive-profile',
+          <String>{WebDavSyncHotMerge.continueWatchingPreference},
+        ),
+        returnsNormally,
+      );
+
+      webDavSyncRemoteWatchActivityHook = () => calls++;
+      runtime.pauseForReconfiguration();
+      dispatchWebDavSyncAppliedKeysForActiveProfile(
+        'inactive-profile',
+        <String>{WebDavSyncHotMerge.playbackPreference},
+      );
+      expect(calls, 1, reason: 'disarm clears the hook synchronously');
+    },
+  );
 
   test('one authentication failure does not disable a healthy binding', () {
     final tracker = WebDavSyncAuthenticationFailureTracker();

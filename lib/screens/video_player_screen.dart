@@ -10,6 +10,7 @@ import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:synchronized/synchronized.dart';
 
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -1202,6 +1203,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Blocks the autosave from filing a near-zero position over a deep resume
   // point while a requested resume seek has not landed. See ResumeWriteGuard.
   final ResumeWriteGuard _resumeWriteGuard = ResumeWriteGuard();
+  // The 6s tick and explicit UI checkpoints can land together. Serialize the
+  // read/modify/write saves so an older autosave cannot finish after, and
+  // overwrite, a newer pause or settled-seek checkpoint.
+  final Lock _resumeSaveLock = Lock();
   // Bumped whenever the media the landing verifier is watching stops being
   // current (item change, source switch). Aborts the verifier WITHOUT
   // releasing the guard — the guard must survive through the outgoing
@@ -11420,11 +11425,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return null;
   }
 
-  Future<void> _saveResume({bool debounced = false}) async {
-    if (_validationGateActive || !_isReady) {
-      return;
-    }
-
+  bool _resumeSaveBlocked(bool debounced) {
+    if (_validationGateActive || !_isReady) return true;
     // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
     // the incoming stream opens, while _position/_duration still describe the
     // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
@@ -11432,16 +11434,44 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // key, which the Continue-watching shelf would then show as real progress.
     // Nothing is lost by skipping: the next tick saves once the switch lands.
     if (_effectiveIptvChannels != null && _isTransitioning) {
-      return;
+      return true;
     }
 
     // If this is a manual episode selection and it's been less than 30 seconds, skip saving
     // This gives the user time to seek to where they want
     if (_isManualEpisodeSelection && debounced) {
-      return;
+      return true;
     }
+    return false;
+  }
 
-    var pos = _position;
+  Future<void> _saveResume({
+    bool debounced = false,
+    Duration? positionOverride,
+  }) {
+    // Check both when requested and after queueing. A save requested inside a
+    // transition/validation guard must not become valid merely because an
+    // older write kept it queued until the guard ended; conversely, a newly
+    // started transition must suppress work which was waiting on the lock.
+    if (_resumeSaveBlocked(debounced)) return Future<void>.value();
+    // A periodic tick carries no unique intent. If any newer/older save owns
+    // the lock, drop this tick instead of building an unbounded timer backlog.
+    if (debounced && _resumeSaveLock.locked) return Future<void>.value();
+    return _resumeSaveLock.synchronized(
+      () => _saveResumeLocked(
+        debounced: debounced,
+        positionOverride: positionOverride,
+      ),
+    );
+  }
+
+  Future<void> _saveResumeLocked({
+    required bool debounced,
+    Duration? positionOverride,
+  }) async {
+    if (_resumeSaveBlocked(debounced)) return;
+
+    var pos = positionOverride ?? _position;
     final dur = _duration;
     if (dur <= Duration.zero) {
       return;
@@ -12418,6 +12448,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _activeMediaUserPaused = true;
       _activeMediaShouldPlay = false;
       _player.pause();
+      unawaited(_saveResume(positionOverride: _position));
     } else {
       // An explicit press is the one thing that clears a sleep stop.
       _sleepStopLatched = false;
@@ -14071,13 +14102,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     _isSeekingWithSlider = false;
                                     _scheduleAutoHide();
                                     if (_lastSliderSeekPos != null) {
-                                      _traktScrobbleSeek(_lastSliderSeekPos!);
-                                      _simklScrobbleSeek(_lastSliderSeekPos!);
-                                      _mdblistScrobbleSeek(_lastSliderSeekPos!);
+                                      final settledPosition =
+                                          _lastSliderSeekPos!;
+                                      _traktScrobbleSeek(settledPosition);
+                                      _simklScrobbleSeek(settledPosition);
+                                      _mdblistScrobbleSeek(settledPosition);
                                       _lastSliderSeekPos = null;
                                       // A settled seek is a handoff moment:
                                       // persist and let sync flush promptly.
-                                      _saveResume();
+                                      unawaited(
+                                        _saveResume(
+                                          positionOverride: settledPosition,
+                                        ),
+                                      );
                                     }
                                   },
                                   // IPTV episode list (series/VOD) gets Next/Previous
