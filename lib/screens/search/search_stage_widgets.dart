@@ -161,6 +161,7 @@ class _BoardCell extends StatelessWidget {
   /// row uses; Promenade's strip passes 16/9 with a derived wide still.
   final double aspectRatio;
   final String? artUrl;
+  final String? focusArtUrl;
   final bool showTitleOverlay;
 
   /// Dim applied to this cell while it is NOT focused (Promenade's strip).
@@ -204,6 +205,7 @@ class _BoardCell extends StatelessWidget {
     this.onRight,
     this.aspectRatio = 2 / 3,
     this.artUrl,
+    this.focusArtUrl,
     this.showTitleOverlay = true,
     this.restVeil,
     this.onUpHold,
@@ -283,6 +285,7 @@ class _BoardCell extends StatelessWidget {
         heroTag: heroTag,
         aspectRatio: aspectRatio,
         artUrl: artUrl,
+        focusArtUrl: focusArtUrl,
         showTitleOverlay: showTitleOverlay,
         restVeil: restVeil,
       ),

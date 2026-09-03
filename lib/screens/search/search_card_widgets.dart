@@ -39,6 +39,11 @@ class _StremioCard extends StatefulWidget {
   /// centre-cropped poster.
   final String? artUrl;
 
+  /// Animated art shown over [artUrl] only while the card is focused or
+  /// hovered (collection folder tiles). At most one card is active, so at
+  /// most one GIF decodes at a time.
+  final String? focusArtUrl;
+
   /// Whether the card may paint local title text, either on a landscape
   /// artwork overlay or inside a loading/missing-art placeholder. Home can
   /// suppress this while Search and Discover retain their defaults.
@@ -62,6 +67,7 @@ class _StremioCard extends StatefulWidget {
     this.heroTag,
     this.aspectRatio = 2 / 3,
     this.artUrl,
+    this.focusArtUrl,
     this.showTitleOverlay = true,
     this.restVeil,
   });
@@ -164,6 +170,16 @@ class _StremioCardState extends State<_StremioCard>
         )
       else
         _placeholder(item.name),
+      if (widget.focusArtUrl != null && _active)
+        Positioned.fill(
+          child: CachedNetworkImage(
+            imageUrl: widget.focusArtUrl!,
+            fit: BoxFit.cover,
+            fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
+            fadeOutDuration: Duration.zero,
+            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
       // A landscape still rarely carries its title the way poster art does,
       // and off TV there is no hero identity revealing the focused card —
       // so a wide TOUCH card labels itself. TV keeps clean cards: browsing

@@ -38,6 +38,10 @@ class CatalogSeeAllScreen extends StatefulWidget {
   /// Type/Catalog re-runs the query on the new catalog, Genre narrows it.
   final String? query;
 
+  /// Genre to open on (a collection folder's list carries one). Only applied
+  /// when the catalog supports the `genre` extra; the dropdown reflects it.
+  final String? initialGenre;
+
   /// Items already loaded on the rail — used to seed the grid without a refetch.
   final List<StremioMeta> seedItems;
 
@@ -72,6 +76,7 @@ class CatalogSeeAllScreen extends StatefulWidget {
     required this.initialCatalog,
     required this.onOpenItem,
     this.query,
+    this.initialGenre,
     this.seedItems = const [],
     this.seedNextSkip = 0,
     this.isTelevision = false,
@@ -143,6 +148,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     _type = widget.initialCatalog.type;
     _catalog = widget.initialCatalog;
     _searchQuery = widget.query?.trim() ?? '';
+    final genre = widget.initialGenre?.trim();
+    if (genre != null && genre.isNotEmpty) _genre = genre;
     // Discover only: reopen on the order the user last picked. Ignore a stored
     // id that is no longer one of the three options.
     if (widget.embedded) {
