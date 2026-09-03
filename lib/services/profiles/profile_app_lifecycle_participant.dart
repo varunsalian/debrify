@@ -5,6 +5,7 @@ import '../../theme/app_theme_controller.dart';
 import '../account_service.dart';
 import '../alldebrid_account_service.dart';
 import '../discover_prefs.dart';
+import '../hide_watched_prefs.dart';
 import '../debrify_tv_database.dart';
 import '../download_service.dart';
 import '../iptv_catalog_db.dart';
@@ -67,6 +68,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     IptvService.instance.clearCache();
     XtreamCodesService.instance.clearCache();
     DiscoverPrefs.resetProfileScope();
+    HideWatchedPrefs.resetProfileScope();
     SubtitleFontService.instance.resetProfileScope();
     SubtitleSettingsService.instance.resetProfileScope();
     AccountService.clearUserInfo();
@@ -124,6 +126,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       _warmed('IPTV', scope, IptvService.instance.clearCache);
       _warmed('Xtream', scope, XtreamCodesService.instance.clearCache);
       _warmed('DiscoverPrefs', scope, DiscoverPrefs.resetProfileScope);
+      _warmed('HideWatchedPrefs', scope, HideWatchedPrefs.resetProfileScope);
       _warmed(
         'SubtitleFont',
         scope,
@@ -174,6 +177,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       await AppThemeController.warm();
       await TvHeroArtworkQualityController.warm();
       await DiscoverPrefs.warmUp();
+      await HideWatchedPrefs.warmUp();
       // Do not open credentials here. ProfileGate intentionally keeps the
       // candidate locked until switchTo returns; the newly mounted profile UI
       // refreshes provider authentication immediately after unlock.

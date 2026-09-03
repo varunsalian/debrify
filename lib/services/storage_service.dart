@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
+import 'hide_watched_prefs.dart';
 import 'iptv_channel_order.dart';
 import 'iptv_media_store.dart';
 import 'profiles/profile_preferences.dart';
@@ -6244,6 +6245,7 @@ class StorageService {
       'home_tick_sources': ticks
           .map((source) => source.storageName)
           .toList(growable: false),
+      'hide_watched': await HideWatchedPrefs.read(),
     };
   }
 
@@ -6284,6 +6286,8 @@ class StorageService {
           if (TrackingSourceStorageName.parse(value) case final source?) source,
       });
     }
+    final hideWatched = payload['hide_watched'];
+    if (hideWatched is bool) await HideWatchedPrefs.setEnabled(hideWatched);
   }
 
   static Future<String?> getRedditLastSubreddit() async {
