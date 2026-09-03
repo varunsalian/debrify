@@ -270,7 +270,9 @@ void main() {
     );
     await store.setLifecycle(waiting.id, WebDavSyncLifecycle.awaitingAdoption);
     final activation = _FakeActivation(store);
-    await pumpPage(tester, enabled: true, activation: activation);
+    // The finishing spinner animates indefinitely, so a settling pump would
+    // never complete; use the helper's bounded pumps until promotion lands.
+    await pumpPage(tester, enabled: true, activation: activation, settle: false);
     expect(find.text('Finishing first sync…'), findsOneWidget);
 
     await store.activateAndPromoteStaged(waiting.id);
