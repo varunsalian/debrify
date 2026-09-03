@@ -1013,6 +1013,23 @@ class MainActivity : FlutterActivity() {
         // than recreating the measured full-1080p-plus-blend jank.
         trailerUnderlayEffective = isTelevision() && trailerUnderlayEnabled() &&
             (gpuCapable || renderScale < 0.999f)
+        // Device RAM snapshot for Dart's image-cache sizing. The tvOS side
+        // already downshifts on low-memory hardware; Android had no probe at
+        // all, so a 1-2 GB TV box ran the full-size caches (2026-09-03 field
+        // report: silent mid-playback process death on a low-RAM box). Same
+        // first-read-wins idiom as the underlay flag: stamped before Dart
+        // starts, so `_capImageCache` can read it synchronously.
+        var totalMemMb = 0L
+        var lowRamDevice = false
+        try {
+            val activityManager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            val memoryInfo = android.app.ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memoryInfo)
+            totalMemMb = memoryInfo.totalMem / (1024L * 1024L)
+            lowRamDevice = activityManager.isLowRamDevice
+        } catch (_: Throwable) {
+            // 0/false reads as "unknown" on the Dart side: no downshift.
+        }
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .edit()
             .putBoolean(
@@ -1021,6 +1038,8 @@ class MainActivity : FlutterActivity() {
             )
             // Surfaced for a future Settings row ("performance rendering").
             .putBoolean("flutter.tv_low_res_render_active", renderScale < 0.999f)
+            .putLong("flutter.android_total_mem_mb", totalMemMb)
+            .putBoolean("flutter.android_low_ram_device", lowRamDevice)
             .commit()
         super.onCreate(savedInstanceState)
         applyFixedSurfaceSize()
@@ -1345,7 +1364,18 @@ class MainActivity : FlutterActivity() {
 			NATIVE_DIAGNOSTICS_CHANNEL,
 		).setMethodCallHandler { call, result ->
 			when (call.method) {
-				"flush" -> DiagnosticFileLog.flush { result.success(null) }
+				"flush" -> {
+					// Re-run exit-reason capture before draining: onCreate's
+					// attempt runs microseconds into the new process, where
+					// ApplicationExitInfo may not yet list the death that
+					// just ended the old one (field export 2026-09-03 had no
+					// `previous_exit` for a restart 6 minutes earlier). By
+					// export time the record exists; the prefs watermark makes
+					// the retry idempotent, and entries carry the original
+					// death timestamp so they land in the correct window.
+					DiagnosticFileLog.recordPreviousProcessExit(this)
+					DiagnosticFileLog.flush { result.success(null) }
+				}
 				"clearForDeviceReset" -> DiagnosticFileLog.clearForDeviceReset { cleared ->
 					if (cleared) {
 						result.success(null)

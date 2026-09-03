@@ -16093,6 +16093,85 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
 
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
+
+        // The channel hop above is the ONLY path that used to persist this
+        // position, and it needs a live Flutter engine in this process. When
+        // the process dies mid-playback (decoder crash, LMK, OOM) everything
+        // since the last successfully-delivered ping is gone — the 2026-09-03
+        // field report resumed 10 minutes shy for exactly this reason. Stage
+        // the same snapshot on disk; Dart reconciles and deletes it on the
+        // next launch (see TvResumeRescue), and deletes it after every clean
+        // finish. Same values as the map so the two sinks can never disagree.
+        stageResumeSnapshot(
+            resumeId = item.resumeId,
+            url = item.url,
+            positionMs = position,
+            durationMs = duration,
+            season = item.season,
+            episode = item.episode,
+            completed = completed || localCompleted,
+        )
+    }
+
+    // Durable resume stage. Serialized on its own daemon thread: a 5-second
+    // cadence of ~200-byte writes, kept off the main looper so slow TV flash
+    // can never stutter playback.
+    private val resumeStageExecutor =
+        java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "debrify-resume-stage").apply { isDaemon = true }
+        }
+
+    private fun stageResumeSnapshot(
+        resumeId: String?,
+        url: String?,
+        positionMs: Long,
+        durationMs: Long,
+        season: Int?,
+        episode: Int?,
+        completed: Boolean,
+    ) {
+        // A completion must tear the stage down, not persist: replaying a
+        // finished position after Dart has cleared the Continue Watching row
+        // would resurrect it (the ghost-row class of bug). Reconcile-side
+        // guards enforce the same rule; deleting here is the belt.
+        if (completed) {
+            deleteStagedResume()
+            return
+        }
+        if (resumeId.isNullOrEmpty() || durationMs <= 0L || positionMs <= 0L) return
+        val snapshot = JSONObject()
+            .put("resumeId", resumeId)
+            .put("url", url)
+            .put("positionMs", positionMs)
+            .put("durationMs", durationMs)
+            .put("season", season)
+            .put("episode", episode)
+            .put("updatedAtMs", System.currentTimeMillis())
+            .toString()
+        resumeStageExecutor.execute {
+            try {
+                // Write-then-rename so a mid-write kill leaves the previous
+                // complete snapshot, never a truncated one.
+                val temp = java.io.File(filesDir, RESUME_STAGE_TMP)
+                temp.writeText(snapshot)
+                val target = java.io.File(filesDir, RESUME_STAGE_FILE)
+                if (!temp.renameTo(target)) {
+                    target.delete()
+                    temp.renameTo(target)
+                }
+            } catch (_: Throwable) {
+                // Best-effort mirror of state Dart already receives live.
+            }
+        }
+    }
+
+    private fun deleteStagedResume() {
+        resumeStageExecutor.execute {
+            try {
+                java.io.File(filesDir, RESUME_STAGE_FILE).delete()
+                java.io.File(filesDir, RESUME_STAGE_TMP).delete()
+            } catch (_: Throwable) {}
+        }
     }
 
     /**
@@ -18213,6 +18292,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
+        // Queued stage writes drain before the thread dies (shutdown, not
+        // shutdownNow): the newest position snapshot is the one worth keeping.
+        resumeStageExecutor.shutdown()
         iptvTuneDiagnostics.onSessionEnd()
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
         startupFailoverTimeout = null
@@ -19058,6 +19140,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
          * flip to false to restore the exact prior behaviour.
          */
         private const val USE_UNIFIED_MENU = true
+        // Crash-durable resume snapshot in filesDir; owner manifest written by
+        // Dart at launch, position updated here, both deleted by Dart on a
+        // clean finish or after the next-launch reconcile (TvResumeRescue).
+        private const val RESUME_STAGE_FILE = "tv_resume_stage.pos.json"
+        private const val RESUME_STAGE_TMP = "tv_resume_stage.pos.json.tmp"
         private const val PROGRESS_INTERVAL_MS = 5_000L
         private const val STARTUP_FAILOVER_TIMEOUT_MS = 12_000L
         // Watchdog recheck cadence once the base timeout has elapsed but the

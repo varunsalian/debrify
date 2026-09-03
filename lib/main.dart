@@ -98,6 +98,8 @@ import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_pairing_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
+import 'services/profiles/profile_preferences.dart' show DevicePreferences;
+import 'services/tv_resume_rescue.dart';
 import 'utils/platform_util.dart';
 import 'utils/tvos_device.dart';
 import 'services/desktop_recording_service.dart';
@@ -152,6 +154,29 @@ Future<void> _capImageCache() async {
     // size, so the smaller cache still holds a full screen of cards.
     cache.maximumSize = 100;
     cache.maximumSizeBytes = 36 << 20; // 36 MB
+  }
+  if (!kIsWeb && Platform.isAndroid) {
+    // The same downshift for low-RAM Android TV boxes, which previously had
+    // no probe at all — every low-memory adaptation in the app was tvOS-gated
+    // while `largeHeap` boxes ran the full caches (2026-09-03 field report:
+    // silent mid-playback process death). MainActivity stamps the device RAM
+    // into FlutterSharedPreferences before the Dart isolate starts; 0 means
+    // the native probe failed, and the caps above already apply. The 1900 MB
+    // line catches "2 GB" boxes (the kernel reservation makes them report
+    // ~1.7-1.9 GB) without touching 3 GB-class units.
+    try {
+      final device = await DevicePreferences.instance();
+      final totalMemMb =
+          device.getInt(DevicePreferences.androidTotalMemMbKey) ?? 0;
+      final lowRam =
+          device.getBool(DevicePreferences.androidLowRamDeviceKey) ?? false;
+      if (lowRam || (totalMemMb > 0 && totalMemMb < 1900)) {
+        cache.maximumSize = 100;
+        cache.maximumSizeBytes = 36 << 20; // 36 MB
+      }
+    } catch (_) {
+      // Unknown RAM keeps the TV caps already applied above.
+    }
   }
 }
 
@@ -597,6 +622,11 @@ Future<void> _continueApplicationStartup() async {
     'resume-ghost-purge',
     StorageService.purgeUnwatchedResumeGhosts,
   );
+  // Consume any crash-durable position the native TV player staged before a
+  // process death (see TvResumeRescue). AFTER the ghost purge on purpose: the
+  // rescue deepens surviving rows, so the purge must never see its writes as
+  // fresh progress on a row it is about to drop.
+  await _bestEffortStartupStep('tv-resume-rescue', TvResumeRescue.start);
   // Warm the layout prefs the shell reads through field initializers —
   // without this the first frame paints canvas/ghost/rail and then snaps
   // to the stored (possibly just-migrated) look. A warm that fails costs

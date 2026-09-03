@@ -396,9 +396,13 @@ class DevicePreferences {
   static const String tvTrailerUnderlayEffectiveKey =
       'tv_trailer_underlay_effective';
   static const String tvLowResRenderActiveKey = 'tv_low_res_render_active';
+  static const String androidTotalMemMbKey = 'android_total_mem_mb';
+  static const String androidLowRamDeviceKey = 'android_low_ram_device';
   static const Set<String> nativeLaunchSnapshotKeys = <String>{
     tvTrailerUnderlayEffectiveKey,
     tvLowResRenderActiveKey,
+    androidTotalMemMbKey,
+    androidLowRamDeviceKey,
   };
 
   static const Set<String> allowedKeys = <String>{

@@ -45,6 +45,7 @@ import '../services/mdblist/mdblist_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'tracking_source_policy.dart';
+import 'tv_resume_rescue.dart';
 
 /// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
 String? _traktLastScrobbleAction;
@@ -3043,12 +3044,23 @@ class VideoPlayerLauncher {
         }
       }
 
+      // Stamp the rescue owner before the Activity can write its first
+      // position snapshot (see TvResumeRescue: identity from Dart, position
+      // from Kotlin, both consumed on the next launch after a process death).
+      await TvResumeRescue.recordLaunch(
+        contentType: result.payload.contentType.name,
+        imdbId: result.payload.imdbId,
+      );
+
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payloadMap,
         onProgress: (progress) =>
             _handleProgressUpdate(result.payload, progress),
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
+          // The channel just delivered the session's final state; a stage
+          // left behind now would read as a crash on the next launch.
+          await TvResumeRescue.clearAfterCleanFinish();
           resolver.dispose();
           // The native player may have requested a Quick Play next episode
           // right before it called finish(). The bridge handler only stores
@@ -3121,6 +3133,7 @@ class VideoPlayerLauncher {
       );
 
       if (!launched) {
+        await TvResumeRescue.clearAfterCleanFinish();
         await result.payload.mdblistSession?.close();
         result.payload.mdblistSession = null;
         resolver.dispose();

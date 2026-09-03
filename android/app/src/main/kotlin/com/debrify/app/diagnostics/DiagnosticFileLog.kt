@@ -16,6 +16,7 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Small native companion to Dart's rolling diagnostics store.
@@ -51,6 +52,46 @@ object DiagnosticFileLog {
     @Volatile
     private var lastPrunedSegment = Long.MIN_VALUE
 
+    // Write-failure visibility. Every sink in this class swallows Throwable by
+    // design (diagnostics must never break the app), which made real write
+    // failures indistinguishable from silence: a launch whose init event never
+    // landed exported as an empty gap (field report 2026-09-03, Bravia
+    // Android 14 — no `native_diagnostics_initialized`, no `previous_exit`,
+    // while writes seconds later succeeded). Count the drops and surface them
+    // on the next append that works, so the NEXT export shows the hole.
+    private val droppedWrites = AtomicInteger(0)
+
+    @Volatile
+    private var lastDropCause: String = "unknown"
+
+    // Fallback stamp for the crash handler's minimal write: the exporter
+    // discards records whose timestamp does not parse or falls outside the
+    // window, so a slightly stale-but-valid stamp beats a fresh one the
+    // formatter failed to produce under memory pressure.
+    @Volatile
+    private var lastIsoTimestamp: String = ""
+
+    // Compiled once. The crash handler runs these under memory pressure, and
+    // per-call Regex construction was an allocation the emergency path could
+    // not afford; ordinary appends paid for it on every record too.
+    private val safeLabelRegex = Regex("[^a-zA-Z0-9_.-]")
+    private val redactUrlRegex =
+        Regex("(?i)\\b(?:https?|magnet|stremio-addon):[^\\s'\\\")]+")
+    private val redactAddressRegex =
+        Regex("\\b(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d+)?\\b")
+    private val redactBearerRegex = Regex("(?i)\\bbearer\\s+[^,;\\s)\\]}]+")
+    private val redactSecretRegex = Regex(
+        "(?i)\\b(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|" +
+            "password|authorization|bearer|secret|payload|headers?|body)" +
+            "\\b\\s*[:=]\\s*[^,;\\s)]+",
+    )
+
+    // SimpleDateFormat is not thread-safe; every use stays under [fileLock].
+    private val isoFormatter =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+
     fun initialize(context: Context) {
         if (!initialized.compareAndSet(false, true)) return
         val appContext = context.applicationContext
@@ -59,7 +100,19 @@ object DiagnosticFileLog {
         installCrashHandler(appContext)
         executor.execute {
             if (!accepting) return@execute
-            pruneExpired(appContext, System.currentTimeMillis())
+            // The init event goes FIRST: pruning used to run before it, so any
+            // failure there silently ate the one record that identifies the
+            // device — and append() prunes newly-touched segments itself.
+            val memory = try {
+                val activityManager =
+                    appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                val info = ActivityManager.MemoryInfo()
+                activityManager.getMemoryInfo(info)
+                "totalMemMb=${info.totalMem / (1024L * 1024L)} " +
+                    "lowRamDevice=${activityManager.isLowRamDevice}"
+            } catch (_: Throwable) {
+                "totalMemMb=unknown"
+            }
             append(
                 context = appContext,
                 source = "android",
@@ -67,12 +120,14 @@ object DiagnosticFileLog {
                 message = "sdk=${Build.VERSION.SDK_INT} " +
                     "manufacturer=${safeLabel(Build.MANUFACTURER)} " +
                     "model=${safeLabel(Build.MODEL)} " +
-                    "abi=${safeLabel(Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")}",
+                    "abi=${safeLabel(Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")} " +
+                    memory,
                 level = "info",
                 timestampMs = System.currentTimeMillis(),
                 fileKind = "android",
                 forceSync = false,
             )
+            pruneExpired(appContext, System.currentTimeMillis())
         }
     }
 
@@ -242,24 +297,15 @@ object DiagnosticFileLog {
         val prior = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                val message = buildString {
-                    append("thread=")
-                    append(safeLabel(thread.name))
-                    append(" type=")
-                    append(throwable.javaClass.name)
-                    append(" stack=")
-                    append(throwable.stackTrace.take(32).joinToString(" | "))
+                // Two-stage write: the full record allocates freely (stack
+                // join, JSON, redaction), which is exactly what an
+                // OutOfMemoryError landing here may not be able to afford —
+                // and an OOM is the crash this recorder most needs to keep.
+                // When the full write fails, fall back to a minimal record
+                // built from what is already resident.
+                if (!writeCrashRecordFull(context, thread, throwable)) {
+                    writeCrashRecordMinimal(context, thread, throwable)
                 }
-                append(
-                    context = context,
-                    source = "android_process",
-                    event = "uncaught_exception",
-                    message = message,
-                    level = "error",
-                    timestampMs = System.currentTimeMillis(),
-                    fileKind = "android-crash",
-                    forceSync = true,
-                )
             } catch (_: Throwable) {
                 // Always delegate, even if the emergency write itself failed.
             } finally {
@@ -269,6 +315,101 @@ object DiagnosticFileLog {
                     Process.killProcess(Process.myPid())
                     kotlin.system.exitProcess(10)
                 }
+            }
+        }
+    }
+
+    private fun writeCrashRecordFull(
+        context: Context,
+        thread: Thread,
+        throwable: Throwable,
+    ): Boolean = try {
+        // Heap occupancy at the moment of death — primitives only, and the
+        // one signal that separates "heap exhausted" from every other cause
+        // when ApplicationExitInfo has nothing to say.
+        val runtime = Runtime.getRuntime()
+        val message = buildString {
+            append("thread=")
+            append(safeLabel(thread.name))
+            append(" type=")
+            append(throwable.javaClass.name)
+            append(" heapUsedKb=")
+            append((runtime.totalMemory() - runtime.freeMemory()) / 1024L)
+            append(" heapMaxKb=")
+            append(runtime.maxMemory() / 1024L)
+            append(" stack=")
+            append(throwable.stackTrace.take(32).joinToString(" | "))
+        }
+        synchronized(fileLock) {
+            if (!accepting) return true // deliberately dropped, not failed
+            writeRecordLocked(
+                context = context,
+                source = "android_process",
+                event = "uncaught_exception",
+                message = message,
+                level = "error",
+                timestampMs = System.currentTimeMillis(),
+                fileKind = "android-crash",
+                forceSync = true,
+            )
+        }
+        true
+    } catch (_: Throwable) {
+        false
+    }
+
+    /**
+     * Last-resort crash record: no JSONObject, no regex, no string templates
+     * beyond small appends — assembled from values that are already resident
+     * so it can complete inside the heap headroom an OOM leaves behind. The
+     * exporter requires a parseable in-window ISO timestamp, so a cached one
+     * from the last ordinary append backs up the live format call.
+     */
+    private fun writeCrashRecordMinimal(
+        context: Context,
+        thread: Thread,
+        throwable: Throwable,
+    ) {
+        try {
+            val timestampMs = System.currentTimeMillis()
+            val stamp = try {
+                synchronized(fileLock) { isoFormatter.format(Date(timestampMs)) }
+            } catch (_: Throwable) {
+                lastIsoTimestamp.ifEmpty { return }
+            }
+            val builder = StringBuilder(256)
+            builder.append("{\"timestamp\":\"").append(stamp)
+            builder.append("\",\"level\":\"error\",\"source\":\"android_process\"")
+            builder.append(",\"event\":\"uncaught_exception_minimal\"")
+            builder.append(",\"message\":\"type=")
+            appendSanitized(builder, throwable.javaClass.name)
+            builder.append(" thread=")
+            appendSanitized(builder, thread.name)
+            builder.append("\"}\n")
+            val segmentStart = timestampMs - (timestampMs % SEGMENT_MS)
+            val file = File(
+                File(context.filesDir, "diagnostics"),
+                "$FILE_PREFIX$segmentStart-android-crash$FILE_SUFFIX",
+            )
+            file.parentFile?.mkdirs()
+            FileOutputStream(file, true).use { output ->
+                output.write(builder.toString().toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+        } catch (_: Throwable) {
+            // Nothing left to try; delegation still runs.
+        }
+    }
+
+    /** Character-filtered append — keeps the minimal record valid JSON without
+     *  invoking the redaction regexes. */
+    private fun appendSanitized(builder: StringBuilder, raw: String) {
+        for (index in 0 until minOf(raw.length, 128)) {
+            val char = raw[index]
+            if (char.isLetterOrDigit() || char == '.' || char == '_' || char == '-' || char == '$') {
+                builder.append(char)
+            } else {
+                builder.append('_')
             }
         }
     }
@@ -286,37 +427,90 @@ object DiagnosticFileLog {
         try {
             synchronized(fileLock) {
                 if (!accepting) return
-                val directory = File(context.filesDir, "diagnostics")
-                if (!directory.exists() && !directory.mkdirs()) return
-                val segmentStart = timestampMs - (timestampMs % SEGMENT_MS)
-                val file = File(
-                    directory,
-                    "$FILE_PREFIX$segmentStart-${safeLabel(fileKind)}$FILE_SUFFIX",
+                val dropped = droppedWrites.get()
+                if (dropped > 0) {
+                    // Surface earlier silent failures before the new record,
+                    // so an export shows WHERE the log has holes instead of
+                    // presenting a clean-looking gap. Subtract (not reset):
+                    // failures racing in from other threads stay counted.
+                    writeRecordLocked(
+                        context = context,
+                        source = "android",
+                        event = "diagnostics_write_failed",
+                        message = "dropped=$dropped lastCause=$lastDropCause",
+                        level = "warning",
+                        timestampMs = System.currentTimeMillis(),
+                        fileKind = "android",
+                        forceSync = false,
+                    )
+                    droppedWrites.addAndGet(-dropped)
+                }
+                writeRecordLocked(
+                    context = context,
+                    source = source,
+                    event = event,
+                    message = message,
+                    level = level,
+                    timestampMs = timestampMs,
+                    fileKind = fileKind,
+                    forceSync = forceSync,
                 )
-                val record = JSONObject()
-                    .put("timestamp", isoTimestamp(timestampMs))
-                    .put("level", safeLabel(level))
-                    .put("source", safeLabel(source))
-                    .put("event", safeLabel(event))
-                if (!message.isNullOrBlank()) {
-                    record.put("message", redact(message))
-                }
-                val bytes = (record.toString() + "\n").toByteArray(Charsets.UTF_8)
-                FileOutputStream(file, true).use { output ->
-                    output.write(bytes)
-                    if (forceSync) output.fd.sync()
-                }
-                trimSegment(file)
-                if (lastPrunedSegment != segmentStart) {
-                    lastPrunedSegment = segmentStart
-                    // Historical ApplicationExitInfo entries retain their
-                    // original timestamp. Always prune against wall-clock time
-                    // so importing one cannot resurrect an expired segment.
-                    pruneExpired(context, System.currentTimeMillis())
-                }
             }
-        } catch (_: Throwable) {
-            // No logging failure may alter playback or crash delegation.
+        } catch (failure: Throwable) {
+            // No logging failure may alter playback or crash delegation — but
+            // it must not stay invisible either: count it for the next
+            // successful append, and leave a logcat trail for adb sessions.
+            droppedWrites.incrementAndGet()
+            lastDropCause = failure.javaClass.name
+            try {
+                android.util.Log.w("DebrifyDiagnostics", "diagnostic write failed", failure)
+            } catch (_: Throwable) {}
+        }
+    }
+
+    /** Core record write. Caller holds [fileLock]; throws on failure so the
+     *  wrapper can count the drop. */
+    private fun writeRecordLocked(
+        context: Context,
+        source: String,
+        event: String,
+        message: String?,
+        level: String,
+        timestampMs: Long,
+        fileKind: String,
+        forceSync: Boolean,
+    ) {
+        val directory = File(context.filesDir, "diagnostics")
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw java.io.IOException("diagnostics directory unavailable")
+        }
+        val segmentStart = timestampMs - (timestampMs % SEGMENT_MS)
+        val file = File(
+            directory,
+            "$FILE_PREFIX$segmentStart-${safeLabel(fileKind)}$FILE_SUFFIX",
+        )
+        val stamp = isoTimestamp(timestampMs)
+        val record = JSONObject()
+            .put("timestamp", stamp)
+            .put("level", safeLabel(level))
+            .put("source", safeLabel(source))
+            .put("event", safeLabel(event))
+        if (!message.isNullOrBlank()) {
+            record.put("message", redact(message))
+        }
+        val bytes = (record.toString() + "\n").toByteArray(Charsets.UTF_8)
+        FileOutputStream(file, true).use { output ->
+            output.write(bytes)
+            if (forceSync) output.fd.sync()
+        }
+        lastIsoTimestamp = stamp
+        trimSegment(file)
+        if (lastPrunedSegment != segmentStart) {
+            lastPrunedSegment = segmentStart
+            // Historical ApplicationExitInfo entries retain their
+            // original timestamp. Always prune against wall-clock time
+            // so importing one cannot resurrect an expired segment.
+            pruneExpired(context, System.currentTimeMillis())
         }
     }
 
@@ -354,29 +548,20 @@ object DiagnosticFileLog {
 
     private fun redact(raw: String): String {
         var value = raw
-            .replace(Regex("(?i)\\b(?:https?|magnet|stremio-addon):[^\\s'\\\")]+"), "[private-url]")
-            .replace(Regex("\\b(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d+)?\\b"), "[private-address]")
-            .replace(Regex("(?i)\\bbearer\\s+[^,;\\s)\\]}]+"), "[private-value]")
-            .replace(
-                Regex(
-                    "(?i)\\b(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|" +
-                        "password|authorization|bearer|secret|payload|headers?|body)" +
-                        "\\b\\s*[:=]\\s*[^,;\\s)]+",
-                ),
-                "[private-value]",
-            )
+            .replace(redactUrlRegex, "[private-url]")
+            .replace(redactAddressRegex, "[private-address]")
+            .replace(redactBearerRegex, "[private-value]")
+            .replace(redactSecretRegex, "[private-value]")
         if (value.length > 8_192) value = value.take(8_191) + "…"
         return value
     }
 
     private fun safeLabel(raw: String): String {
-        val value = raw.replace(Regex("[^a-zA-Z0-9_.-]"), "_").take(64)
+        val value = raw.replace(safeLabelRegex, "_").take(64)
         return value.ifBlank { "unknown" }
     }
 
-    private fun isoTimestamp(timestampMs: Long): String {
-        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        formatter.timeZone = TimeZone.getTimeZone("UTC")
-        return formatter.format(Date(timestampMs))
-    }
+    /** Caller holds [fileLock]; [isoFormatter] is not thread-safe. */
+    private fun isoTimestamp(timestampMs: Long): String =
+        isoFormatter.format(Date(timestampMs))
 }
