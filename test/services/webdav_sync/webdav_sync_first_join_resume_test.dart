@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_first_join_resume.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
@@ -147,6 +148,81 @@ void main() {
       expect(persisted.errorMessage, contains('could not finish'));
     },
   );
+
+  test('offline attempt waits and the next foreground can activate', () async {
+    var connects = 0;
+    final policy = resumePolicy(
+      connect: (bindingId) async {
+        connects++;
+        if (connects == 1) {
+          final error = const WebDavException(
+            kind: WebDavErrorKind.network,
+            message: 'Could not reach the WebDAV server',
+          );
+          await store.markError(bindingId, error);
+          throw error;
+        }
+        await store.activateAndPromoteStaged(bindingId);
+        return (await store.load()).activeBinding!;
+      },
+    );
+
+    expect(
+      await policy.resumeIfNeeded(reconfigurationPaused: false),
+      WebDavSyncFirstJoinAutoResumeOutcome.waiting,
+    );
+    final waiting = (await store.load()).stagedBinding!;
+    expect(waiting.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
+    expect(waiting.errorMessage, isNull);
+    expect(policy.hasAttemptsRemaining, isTrue);
+
+    now = now.add(WebDavSyncFirstJoinAutoResume.minimumSpacing);
+    expect(
+      await policy.resumeIfNeeded(reconfigurationPaused: false),
+      WebDavSyncFirstJoinAutoResumeOutcome.activated,
+    );
+    expect(connects, 2);
+    expect(
+      (await store.load()).activeBinding?.lifecycle,
+      WebDavSyncLifecycle.active,
+    );
+  });
+
+  test('repeated authentication failure becomes terminal', () async {
+    var connects = 0;
+    final policy = resumePolicy(
+      connect: (bindingId) async {
+        connects++;
+        final error = const WebDavException(
+          kind: WebDavErrorKind.authentication,
+          message: 'WebDAV authentication failed',
+        );
+        await store.markError(bindingId, error);
+        throw error;
+      },
+    );
+
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      expect(
+        await policy.resumeIfNeeded(reconfigurationPaused: false),
+        attempt == 3
+            ? WebDavSyncFirstJoinAutoResumeOutcome.failed
+            : WebDavSyncFirstJoinAutoResumeOutcome.waiting,
+      );
+      now = now.add(WebDavSyncFirstJoinAutoResume.minimumSpacing);
+    }
+
+    expect(connects, 3);
+    expect(policy.hasAttemptsRemaining, isFalse);
+    expect(
+      (await store.load()).bindings[binding.id]?.lifecycle,
+      WebDavSyncLifecycle.error,
+    );
+    expect(
+      await policy.resumeIfNeeded(reconfigurationPaused: false),
+      WebDavSyncFirstJoinAutoResumeOutcome.skipped,
+    );
+  });
 
   test(
     'non-concurrency failure surfaces and cannot loop automatically',

@@ -11,6 +11,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_graph_tier.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_setup_authorization.dart';
@@ -240,6 +241,46 @@ void main() {
     expect(find.text('Finishing first sync…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('foreground status refresh observes first-sync promotion', (
+    tester,
+  ) async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final root = await codec.openRoot(
+      marker,
+      'circle-secret',
+      runInBackground: false,
+    );
+    var waiting = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      config: _config,
+      syncPassphrase: 'circle-secret',
+    );
+    waiting = await store.markRootVerified(
+      bindingId: waiting.id,
+      root: root.document,
+      markerBytes: marker,
+    );
+    await store.setLifecycle(waiting.id, WebDavSyncLifecycle.awaitingAdoption);
+    final activation = _FakeActivation(store);
+    await pumpPage(tester, enabled: true, activation: activation);
+    expect(find.text('Finishing first sync…'), findsOneWidget);
+
+    await store.activateAndPromoteStaged(waiting.id);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(activation.statusReads, 1);
+    expect(find.text('Finishing first sync…'), findsNothing);
+    expect(find.text('Sync is active'), findsOneWidget);
+    expect(find.text('Change sync folder'), findsOneWidget);
   });
 
   testWidgets('terminal first-sync failure replaces progress with error', (
@@ -613,6 +654,7 @@ final class _FakeTransport implements WebDavSyncProbeTransport {
 final class _FakeActivation
     implements
         WebDavSyncActivationController,
+        WebDavSyncManagementController,
         WebDavSyncReconfigurationController {
   _FakeActivation(this.store, {this.onInitialize});
 
@@ -624,6 +666,7 @@ final class _FakeActivation
   int initializations = 0;
   int pauses = 0;
   int resumes = 0;
+  int statusReads = 0;
   Object? syncError;
 
   @override
@@ -667,4 +710,22 @@ final class _FakeActivation
       disposition: WebDavSyncCycleDisposition.completed,
     );
   }
+
+  @override
+  Future<WebDavSyncRuntimeStatus> status() async {
+    statusReads++;
+    return const WebDavSyncRuntimeStatus(
+      lastSuccessfulSyncMs: null,
+      peerCount: 0,
+      adminPruneBlocked: false,
+      deviceClockWarning: false,
+      clockPauseReason: null,
+    );
+  }
+
+  @override
+  Future<List<WebDavSyncDeviceSummary>> listDevices() async => const [];
+
+  @override
+  Future<void> forgetDevice(String deviceId) async {}
 }

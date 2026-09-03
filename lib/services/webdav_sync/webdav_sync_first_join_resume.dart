@@ -1,4 +1,5 @@
 import '../profiles/profile_preferences.dart';
+import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_models.dart';
@@ -46,6 +47,8 @@ final class WebDavSyncFirstJoinAutoResume {
        _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic;
 
   static const int attemptLimit = 5;
+  // Match the active-cycle authentication posture in the runtime.
+  static const int _authenticationFailureLimit = 3;
   static const Duration minimumSpacing = Duration(seconds: 30);
   static const String _attemptDiagnostic =
       'Automatic WebDAV first-sync completion attempt';
@@ -60,6 +63,7 @@ final class WebDavSyncFirstJoinAutoResume {
   int _attempts = 0;
   DateTime? _lastAttemptAt;
   bool _terminalFailure = false;
+  final Map<String, int> _authenticationFailures = <String, int>{};
 
   int get attemptCount => _attempts;
   bool get hasAttemptsRemaining =>
@@ -91,15 +95,32 @@ final class WebDavSyncFirstJoinAutoResume {
     try {
       final result = await _connect(binding.id);
       if (result.lifecycle == WebDavSyncLifecycle.active) {
+        _authenticationFailures.remove(binding.id);
         return WebDavSyncFirstJoinAutoResumeOutcome.activated;
       }
       if (result.lifecycle != WebDavSyncLifecycle.awaitingAdoption) {
         throw StateError('WebDAV first-sync completion left invalid state');
       }
+      _authenticationFailures.remove(binding.id);
       return _waitOrExhaust(binding.id);
     } on ProfilePreferenceMutationConflict {
+      _authenticationFailures.remove(binding.id);
       return _waitOrExhaust(binding.id);
+    } on WebDavException catch (error) {
+      if (_isTransient(error)) {
+        _authenticationFailures.remove(binding.id);
+        return _waitAfterRetryableFailure(binding.id);
+      }
+      if (error.kind == WebDavErrorKind.authentication &&
+          !_authenticationFailureIsTerminal(binding.id)) {
+        return _waitAfterRetryableFailure(binding.id);
+      }
+      _authenticationFailures.remove(binding.id);
+      _terminalFailure = true;
+      await _recordTerminalFailure(binding.id, error);
+      return WebDavSyncFirstJoinAutoResumeOutcome.failed;
     } catch (error) {
+      _authenticationFailures.remove(binding.id);
       _terminalFailure = true;
       await _recordTerminalFailure(binding.id, error);
       return WebDavSyncFirstJoinAutoResumeOutcome.failed;
@@ -112,6 +133,32 @@ final class WebDavSyncFirstJoinAutoResume {
       await _bindingStore.markAwaitingAdoptionError(bindingId, error);
     }
   }
+
+  Future<WebDavSyncFirstJoinAutoResumeOutcome> _waitAfterRetryableFailure(
+    String bindingId,
+  ) async {
+    final current = (await _bindingStore.load()).bindings[bindingId];
+    if (current != null &&
+        (current.lifecycle == WebDavSyncLifecycle.error ||
+            current.lifecycle == WebDavSyncLifecycle.awaitingAdoption)) {
+      await _bindingStore.setLifecycle(
+        bindingId,
+        WebDavSyncLifecycle.awaitingAdoption,
+      );
+    }
+    return _waitOrExhaust(bindingId);
+  }
+
+  bool _authenticationFailureIsTerminal(String bindingId) {
+    final failures = (_authenticationFailures[bindingId] ?? 0) + 1;
+    _authenticationFailures[bindingId] = failures;
+    return failures >= _authenticationFailureLimit;
+  }
+
+  static bool _isTransient(WebDavException error) =>
+      error.kind == WebDavErrorKind.transient ||
+      error.kind == WebDavErrorKind.timeout ||
+      error.kind == WebDavErrorKind.network;
 
   Future<WebDavSyncFirstJoinAutoResumeOutcome> _waitOrExhaust(
     String bindingId,
@@ -144,5 +191,6 @@ final class WebDavSyncFirstJoinAutoResume {
     _attempts = 0;
     _lastAttemptAt = null;
     _terminalFailure = false;
+    _authenticationFailures.clear();
   }
 }

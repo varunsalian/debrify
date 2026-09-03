@@ -43,7 +43,8 @@ class SyncAndMigratePage extends StatefulWidget {
   State<SyncAndMigratePage> createState() => _SyncAndMigratePageState();
 }
 
-class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
+class _SyncAndMigratePageState extends State<SyncAndMigratePage>
+    with WidgetsBindingObserver {
   late final WebDavSyncSetupService _syncService;
   late final WebDavSyncSetupAuthorization _syncAuthorization;
   WebDavSyncActivationController? _syncActivation;
@@ -58,6 +59,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _syncService = widget.syncService ?? WebDavSyncSetupService();
     _syncAuthorization =
         widget.syncAuthorization ?? const ProfileWebDavSyncSetupAuthorization();
@@ -68,6 +70,26 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
         (widget.syncService == null ? WebDavSyncRuntime.instance : null);
     AnalyticsService.screenView('sync_and_migrate');
     if (_syncFeatureEnabled) _loadSyncState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_syncFeatureEnabled && state == AppLifecycleState.resumed) {
+      unawaited(_reloadSyncAfterForeground());
+    }
+  }
+
+  Future<void> _reloadSyncAfterForeground() async {
+    // Let the runtime's foreground callback enqueue any first-join promotion
+    // before status enters the same serialized runtime operation path.
+    await Future<void>.delayed(Duration.zero);
+    if (mounted) await _loadActiveSyncState();
   }
 
   Future<void> _loadSyncState() async {
@@ -96,8 +118,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
     if (management == null) return;
     try {
       final status = await management.status();
+      final snapshot = await _syncService.store.load();
       if (status.localStateMissing) {
-        final snapshot = await _syncService.store.load();
         if (!mounted) return;
         setState(() {
           _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
@@ -109,6 +131,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
       }
       if (!mounted) return;
       setState(() {
+        _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
         _runtimeStatus = status;
         _syncStateMessage = status.adminPruneBlocked
             ? status.safetyCleanupBlocked
