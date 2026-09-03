@@ -8,6 +8,7 @@ import '../theme/widgets/focus_expression.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import 'format_badge.dart';
+import 'stream_badge_strip.dart';
 
 /// The unified row for the redesigned Sources page. Drives two looks from one
 /// widget:
@@ -30,6 +31,8 @@ class SourceRow extends StatefulWidget {
     required this.focusNode,
     required this.onTap,
     this.formatTags = const [],
+    this.badgeName,
+    this.badgeDescription,
     this.qualityTag,
     this.cacheLabel,
     this.coverageBadge,
@@ -52,6 +55,12 @@ class SourceRow extends StatefulWidget {
 
   /// Non-empty → format-logo row (Concept F). Empty → compact row.
   final List<FormatTag> formatTags;
+
+  /// The name and description halves of the imported stream badge rules'
+  /// input (see [StreamBadgeStripFor]; `Torrent.name` and
+  /// `Torrent.badgeDescription`). A null [badgeName] draws no rule badges.
+  final String? badgeName;
+  final String? badgeDescription;
 
   /// Neutral resolution pill for the compact row (e.g. "1080p"). Ignored when
   /// [formatTags] is non-empty (the logos carry resolution).
@@ -371,6 +380,18 @@ class _SourceRowState extends State<SourceRow> {
             child: FormatBadgeRow(
               widget.formatTags,
               scale: widget.isTelevision ? 1.12 : 1.0,
+            ),
+          ),
+        if (widget.badgeName != null)
+          StreamBadgeStripFor(
+            name: widget.badgeName!,
+            description: widget.badgeDescription,
+            height: widget.isTelevision ? 22 : 20,
+            builder: (strip) => Padding(
+              padding: EdgeInsets.only(
+                top: widget.formatTags.isNotEmpty ? 8 : 10,
+              ),
+              child: strip,
             ),
           ),
       ],

@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/play_loader_style.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
+import 'stream_badges_settings_page.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Row caption for the current choice (Appearance row subtitle).
@@ -122,6 +123,22 @@ class _PlayLoaderStylePageState extends State<PlayLoaderStylePage> {
                   'already loaded. Titles without that artwork fall back to '
                   'the poster, exactly like Classic.',
                   style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Sources',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.sell_rounded,
+                      title: 'Stream badges',
+                      subtitle:
+                          'Import Nuvio-style badge rules for the source list',
+                      onTap: () => pushSettingsPage(
+                        context,
+                        const StreamBadgesSettingsPage(),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

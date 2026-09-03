@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/iptv_transfer_payload.dart';
+import '../../services/stream_badges_service.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import 'remote_pairing_dialog.dart';
@@ -61,6 +62,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _iptvPlaylists;
   _ConfigItem? _iptvFavorites;
   _ConfigItem? _iptvLists;
+  _ConfigItem? _streamBadges;
 
   // Non-secret account labels used only for the transfer inventory.
   String? _traktUsername;
@@ -80,6 +82,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   int _iptvFavoriteCount = 0;
   int _iptvListCount = 0;
   int _iptvListChannelCount = 0;
+  int _streamBadgeCount = 0;
 
   /// Playlists imported from a file, which can't be sent — their definition
   /// is the raw M3U text. Surfaced so the screen says so instead of quietly
@@ -223,6 +226,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         _iptvListChannelCount = 0;
       }
 
+      try {
+        _streamBadgeCount =
+            (await StreamBadgesService.instance.getSources()).length;
+      } catch (_) {
+        debugPrint('RemoteConfigExport: stream badge inventory failed');
+        _streamBadgeCount = 0;
+      }
+
       if (!mounted) return;
       setState(() {
         _realDebrid = _ConfigItem(
@@ -346,6 +357,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: _iptvListCount > 0,
         );
 
+        _streamBadges = _ConfigItem(
+          id: ConfigCommand.streamBadges,
+          name: 'Stream Badges',
+          icon: 'badges',
+          isConfigured: _streamBadgeCount > 0,
+          selected: _streamBadgeCount > 0,
+        );
+
         _loading = false;
       });
     } catch (_) {
@@ -373,6 +392,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       _iptvPlaylists,
       _iptvFavorites,
       _iptvLists,
+      _streamBadges,
     ])
       if (item != null) item,
   ];
@@ -743,6 +763,23 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
               );
         },
       );
+      await sendSelected(
+        _streamBadges?.selected == true,
+        'Stream Badges',
+        ConfigCommand.streamBadges,
+        () async {
+          final payload = await StreamBadgesService.instance.exportJson();
+          return payload.isNotEmpty &&
+              await sendConfigPayloadToDevice(
+                state,
+                ConfigCommand.streamBadges,
+                targetIp,
+                jsonEncode(payload),
+                label: 'Stream badges',
+                transferRequestId: supportsApplicationResult ? requestId : null,
+              );
+        },
+      );
 
       // Send complete signal to trigger TV restart (only if at least one succeeded)
       if (successCount > 0) {
@@ -987,6 +1024,13 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                     '$_iptvListCount '
                     'list${_iptvListCount != 1 ? 's' : ''} · '
                     '$_iptvListChannelCount channels',
+              ),
+            if (_streamBadges?.isConfigured == true)
+              _buildConfigTile(
+                _streamBadges!,
+                subtitle:
+                    '$_streamBadgeCount '
+                    'ruleset${_streamBadgeCount != 1 ? 's' : ''}',
               ),
             if (_iptvFileImported > 0)
               Padding(
@@ -1380,6 +1424,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.star_rounded;
       case ConfigCommand.iptvLists:
         return Icons.playlist_play_rounded;
+      case ConfigCommand.streamBadges:
+        return Icons.sell_rounded;
       default:
         return Icons.settings;
     }
@@ -1415,6 +1461,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFFF472B6); // Pink
       case ConfigCommand.iptvLists:
         return const Color(0xFFA78BFA); // Violet
+      case ConfigCommand.streamBadges:
+        return const Color(0xFFFBBF24); // Amber
       default:
         return Colors.white;
     }
