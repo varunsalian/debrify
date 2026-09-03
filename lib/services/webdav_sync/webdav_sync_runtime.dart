@@ -269,6 +269,7 @@ final class WebDavSyncRuntime
         runner: _cycleRunner!,
         gate: this,
         localChangeObserver: recordWebDavSyncLocalChangeTrigger,
+        localChangeDeferredObserver: recordWebDavSyncLocalChangeDeferred,
       );
       WidgetsBinding.instance.addObserver(this);
       MainPageBridge.addPlayerLaunchListener(_onPlaybackStarted);

@@ -16,6 +16,8 @@ abstract interface class WebDavSyncRuntimeGate {
 
 typedef WebDavSyncContextProvider = Future<WebDavSyncCycleContext?> Function();
 typedef WebDavSyncLocalChangeObserver = void Function(String logicalKey);
+typedef WebDavSyncLocalChangeDeferredObserver =
+    void Function(String reason, int attempt, Duration delay);
 
 const bool webDavSyncRemotePollEnabled = bool.fromEnvironment(
   'DEBRIFY_WEBDAV_SYNC_POLL',
@@ -65,6 +67,7 @@ final class WebDavSyncScheduler {
     this.playbackDebounce = const Duration(seconds: 60),
     this.remotePollingEnabled = webDavSyncRemotePollEnabled,
     this.localChangeObserver,
+    this.localChangeDeferredObserver,
     DateTime Function()? clock,
   }) : _runner = runner,
        _gate = gate,
@@ -79,6 +82,7 @@ final class WebDavSyncScheduler {
   final Duration playbackDebounce;
   final bool remotePollingEnabled;
   final WebDavSyncLocalChangeObserver? localChangeObserver;
+  final WebDavSyncLocalChangeDeferredObserver? localChangeDeferredObserver;
 
   WebDavSyncContextProvider? _contextProvider;
   WebDavSyncRemotePollContextProvider? _remotePollContextProvider;
@@ -96,6 +100,14 @@ final class WebDavSyncScheduler {
   bool _dirtyDuringRun = false;
   bool _immediateDirtyDuringRun = false;
   String? _pendingLocalChangeKey;
+
+  /// Durable local-change intent: the latest admitted write not yet flushed by
+  /// a successfully completed cycle that STARTED after it. Any rejected,
+  /// gated, or failed attempt re-arms a bounded retry instead of dropping the
+  /// intent; the 15-minute periodic remains the final net. Survives disarm.
+  DateTime? _pendingLocalChangeAt;
+  int _localChangeRetries = 0;
+  static const Duration localChangeRetryCap = Duration(minutes: 2);
   int _consecutivePollFailures = 0;
   int _pollGeneration = 0;
   int _pollTimerGeneration = 0;
@@ -142,6 +154,9 @@ final class WebDavSyncScheduler {
     _immediateDirtyDuringRun = false;
     _pendingLocalChangeKey = null;
     _pollDisabledNoValidators = false;
+    // A local-change intent recorded before a disarm/rearm bounce (or while
+    // the sink was dark) must not wait for an unrelated trigger.
+    if (_pendingLocalChangeAt != null) _scheduleLocalChange();
     _warmUntil = null;
     _resetPollBackoff();
     _pollGeneration++;
@@ -167,6 +182,7 @@ final class WebDavSyncScheduler {
   void notifyLocalChange(String logicalKey) {
     if (_contextProvider == null || !admitsLocalChangeKey(logicalKey)) return;
     _pendingLocalChangeKey = logicalKey;
+    _pendingLocalChangeAt = _clock();
     if (_running) {
       _dirtyDuringRun = true;
       return;
@@ -199,6 +215,42 @@ final class WebDavSyncScheduler {
         logicalKey == WebDavSyncHotMerge.playlistFavoritesPreference ||
         logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
         logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
+  }
+
+  /// Clears the pending intent only when a cycle that STARTED at or after the
+  /// intent completes; every other outcome re-arms a bounded retry.
+  void _handleLocalChangeOutcome({
+    required DateTime startedAt,
+    required bool completed,
+  }) {
+    final pending = _pendingLocalChangeAt;
+    if (pending == null) return;
+    if (completed && !pending.isAfter(startedAt)) {
+      _pendingLocalChangeAt = null;
+      _localChangeRetries = 0;
+      return;
+    }
+    _rearmPendingLocalChange(
+      completed ? 'write landed during the cycle' : 'cycle did not complete',
+    );
+  }
+
+  void _rearmPendingLocalChange(String reason) {
+    if (_contextProvider == null || _pendingLocalChangeAt == null) return;
+    if (_localChangeTimer != null) return;
+    _localChangeRetries++;
+    final shift = (_localChangeRetries - 1).clamp(0, 8);
+    var delay = localChangeDebounce * (1 << shift);
+    if (delay > localChangeRetryCap) delay = localChangeRetryCap;
+    try {
+      localChangeDeferredObserver?.call(reason, _localChangeRetries, delay);
+    } catch (_) {
+      // Observability must never affect scheduling.
+    }
+    _localChangeTimer = Timer(delay, () {
+      _localChangeTimer = null;
+      unawaited(_signalLocalChange());
+    });
   }
 
   void _scheduleLocalChange({bool immediate = false}) {
@@ -458,6 +510,9 @@ final class WebDavSyncScheduler {
       );
     }
     if (_gateHolds) {
+      if (trigger == WebDavSyncTrigger.localChange) {
+        _rearmPendingLocalChange('a platform gate holds');
+      }
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
@@ -475,14 +530,20 @@ final class WebDavSyncScheduler {
       );
     }
     _running = true;
+    DateTime? intentCycleStartedAt;
+    var intentCycleCompleted = false;
     try {
       final context = await provider();
       if (context == null || !context.active || !context.isComplete) {
+        if (trigger == WebDavSyncTrigger.localChange) {
+          _rearmPendingLocalChange('no active sync context');
+        }
         return const WebDavSyncCycleReport(
           disposition: WebDavSyncCycleDisposition.inactive,
         );
       }
       _lastStartedAt = _clock();
+      intentCycleStartedAt = _lastStartedAt;
       if (trigger == WebDavSyncTrigger.localChange) {
         final logicalKey = _pendingLocalChangeKey;
         _pendingLocalChangeKey = null;
@@ -495,6 +556,8 @@ final class WebDavSyncScheduler {
         }
       }
       final report = await _runner.runCycle(context, trigger: trigger);
+      intentCycleCompleted =
+          report.disposition == WebDavSyncCycleDisposition.completed;
       if (trigger == WebDavSyncTrigger.localChange ||
           trigger == WebDavSyncTrigger.manual) {
         _rearmWarmPolling();
@@ -506,6 +569,12 @@ final class WebDavSyncScheduler {
       return report;
     } finally {
       _running = false;
+      if (intentCycleStartedAt != null) {
+        _handleLocalChangeOutcome(
+          startedAt: intentCycleStartedAt,
+          completed: intentCycleCompleted,
+        );
+      }
       if (_dirtyDuringRun && _contextProvider != null) {
         _dirtyDuringRun = false;
         final immediate = _immediateDirtyDuringRun;

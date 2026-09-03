@@ -56,6 +56,37 @@ void recordWebDavSyncLocalChangeTrigger(String logicalKey) {
   }
 }
 
+/// Records a local-change intent that could not flush this attempt and the
+/// bounded retry the scheduler armed for it. Reasons are constant labels.
+void recordWebDavSyncLocalChangeDeferred(
+  String reason,
+  int attempt,
+  Duration delay,
+) {
+  try {
+    debugPrint(
+      'WebDAV sync local change deferred ($reason); '
+      'retry #$attempt in ${delay.inSeconds}s',
+    );
+  } catch (_) {
+    // Continue to the retained sink if the live console is unavailable.
+  }
+  try {
+    DiagnosticLog.instance.recordEvent(
+      source: 'webdav_sync',
+      event: 'local_change_deferred',
+      level: DiagnosticLevel.warning,
+      fields: <String, Object?>{
+        'reason': DiagnosticLabel(reason),
+        'attempt': attempt,
+        'delayMs': delay.inMilliseconds,
+      },
+    );
+  } catch (_) {
+    // Observability must never affect sync scheduling.
+  }
+}
+
 DiagnosticLevel _webDavSyncDiagnosticLevel(String message) {
   final normalized = message.toLowerCase();
   if (normalized.contains('ignored') ||
