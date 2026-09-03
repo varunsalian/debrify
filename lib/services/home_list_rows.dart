@@ -3,6 +3,7 @@ import 'dart:async';
 import '../models/stremio_addon.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_list_source.dart';
+import 'watched_filter.dart';
 import 'simkl/simkl_list_source.dart';
 import 'mdblist/mdblist_list_source.dart';
 
@@ -220,11 +221,14 @@ class HomeListRowsService {
       traktPool.add(() async {
         final choice = TraktListChoice.builtin(list);
         final r = await _traktLoad(choice);
-        if (r.items.isEmpty) return;
+        final items = list.hidesWatched
+            ? WatchedFilter.apply(List.of(r.items))
+            : List.of(r.items);
+        if (items.isEmpty) return;
         slot.section = HomeListSection(
           rowId: id,
           title: list.label,
-          items: List.of(r.items),
+          items: items,
           traktChoice: choice,
         );
       });
@@ -354,13 +358,20 @@ class HomeListRowsService {
           slot.withinRank = order++;
           mdblistPool.add(() async {
             final result = await _mdblistLoad(entry.value);
-            if (!result.complete || result.items.isEmpty) return;
+            if (!result.complete) return;
+            // Public "top" lists hide watched titles; the user's own and
+            // liked lists never do.
+            final items =
+                entry.key.startsWith(HomeExtraRowIds.mdblistTopPrefix)
+                ? WatchedFilter.apply(List.of(result.items))
+                : List.of(result.items);
+            if (items.isEmpty) return;
             slot.section = HomeListSection(
               rowId: entry.key,
               title: byId[entry.key]!.title.isNotEmpty
                   ? byId[entry.key]!.title
                   : entry.value.label,
-              items: List.of(result.items),
+              items: items,
               mdblistList: entry.value,
             );
           });

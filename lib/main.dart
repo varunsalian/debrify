@@ -39,6 +39,7 @@ import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
+import 'services/hide_watched_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/profiles/profile_bootstrap.dart';
 import 'services/profiles/profile_migration_service.dart';
@@ -709,6 +710,8 @@ Future<void> _continueApplicationStartup() async {
   // panels can read it synchronously in initState and paint already-sorted.
   // Cheap: SharedPreferences is already open by this point.
   await DiscoverPrefs.warmUp();
+  // Same for the hide-watched switch: the catalog filter reads it inline.
+  await HideWatchedPrefs.warmUp();
   // Old-playback-state cleanup is pure housekeeping — never block first frame
   // on a storage sweep (slow flash on TV boxes).
   unawaited(_cleanupPlaybackState());

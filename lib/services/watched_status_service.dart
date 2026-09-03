@@ -35,6 +35,8 @@ class WatchedStatusService extends ChangeNotifier {
   Set<String> _mdblistSeries = const {};
   int _generation = 0;
   bool _started = false;
+  bool _hasSnapshot = false;
+  final List<Completer<void>> _snapshotWaiters = [];
   bool _refreshing = false;
   bool _refreshPending = false;
   int _localGeneration = 0;
@@ -44,6 +46,28 @@ class WatchedStatusService extends ChangeNotifier {
   Set<TrackingSource> _tickSources = Set<TrackingSource>.of(
     TrackingSource.values,
   );
+
+  /// True once the local snapshot has been published this profile session.
+  /// The hide-watched filter hides nothing before that, so a cold start never
+  /// paints a list that then loses items a beat later.
+  bool get hasSnapshot => _hasSnapshot;
+
+  /// Completes once [hasSnapshot] is true (immediately if it already is).
+  Future<void> get firstSnapshot {
+    if (_hasSnapshot) return Future.value();
+    final c = Completer<void>();
+    _snapshotWaiters.add(c);
+    return c.future;
+  }
+
+  void _markSnapshot() {
+    if (_hasSnapshot) return;
+    _hasSnapshot = true;
+    for (final c in _snapshotWaiters) {
+      if (!c.isCompleted) c.complete();
+    }
+    _snapshotWaiters.clear();
+  }
 
   bool isWatched(String imdbId, String contentType) {
     final id = imdbId.trim().toLowerCase();
@@ -123,6 +147,7 @@ class WatchedStatusService extends ChangeNotifier {
     _mdblistDirtyAt = null;
     _mdblistRefreshTimer?.cancel();
     _mdblistRefreshTimer = null;
+    _hasSnapshot = false;
     _localMovies = const {};
     _localSeries = const {};
     _traktMovies = const {};
@@ -190,6 +215,7 @@ class WatchedStatusService extends ChangeNotifier {
       if (generation != _localGeneration) return;
       _localMovies = results[0];
       _localSeries = <String>{...results[1], ...results[2]};
+      _markSnapshot();
       notifyListeners();
 
       // Calendar reconciliation may involve network requests. Keep it behind
@@ -250,6 +276,7 @@ class WatchedStatusService extends ChangeNotifier {
     if (generation == _generation && localGeneration == _localGeneration) {
       _localMovies = localMovies;
       _localSeries = localSeries;
+      _markSnapshot();
       notifyListeners();
     }
 

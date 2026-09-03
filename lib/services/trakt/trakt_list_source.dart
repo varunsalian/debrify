@@ -72,6 +72,12 @@ extension TraktSeeAllListX on TraktSeeAllList {
       this == TraktSeeAllList.popular ||
       this == TraktSeeAllList.anticipated;
 
+  /// Discovery lists, where the "Hide watched titles" switch applies. The
+  /// rest (Continue Watching, Watchlist, History, Collection, Ratings) are the
+  /// user's own lists and stay complete.
+  bool get hidesWatched =>
+      isPublic || this == TraktSeeAllList.recommendations;
+
   /// Lists whose natural order is a genuine cross-type timeline (watched_at /
   /// rated_at / collected_at recency), so merging movies + shows must sort by
   /// that timestamp rather than interleave. Excludes Watchlist (user-curated

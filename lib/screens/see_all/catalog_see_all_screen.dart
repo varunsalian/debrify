@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/discover_prefs.dart';
+import '../../services/filtered_catalog_pager.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/watched_filter.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
@@ -261,16 +263,19 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       _loadingMore = false;
     });
     try {
-      var rawCount = 0;
-      final page = await _fetchPage(0, (c) => rawCount = c);
+      final page = await fetchFilteredPage(
+        _fetchPage,
+        skip: 0,
+        hides: WatchedFilter.predicate,
+      );
       if (!mounted || token != _reqToken) return;
       setState(() {
-        _items.addAll(page);
-        _nextSkip = rawCount > 0 ? rawCount : page.length;
-        _exhausted = page.isEmpty;
+        _items.addAll(page.items);
+        _nextSkip = page.nextSkip;
+        _exhausted = page.exhausted;
         _loadingInitial = false;
       });
-      if (autoFocus && widget.isTelevision && page.isNotEmpty) {
+      if (autoFocus && widget.isTelevision && page.items.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _gridKey.currentState?.focusFirst(),
         );
@@ -289,25 +294,20 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     final token = _reqToken;
     setState(() => _loadingMore = true);
     try {
-      var rawCount = 0;
-      final page = await _fetchPage(_nextSkip, (c) => rawCount = c);
-      if (!mounted || token != _reqToken) return;
-      if (page.isEmpty) {
-        setState(() {
-          _exhausted = true;
-          _loadingMore = false;
-        });
-        return;
-      }
       final seen = _items.map((m) => m.id).toSet();
-      final fresh = page.where((m) => seen.add(m.id)).toList();
+      final page = await fetchFilteredPage(
+        _fetchPage,
+        skip: _nextSkip,
+        hides: WatchedFilter.predicate,
+        seenIds: seen,
+      );
+      if (!mounted || token != _reqToken) return;
       setState(() {
-        _nextSkip += rawCount > 0 ? rawCount : page.length;
-        if (fresh.isEmpty) {
-          _exhausted = true;
-        } else {
-          _items.addAll(fresh);
-        }
+        _nextSkip = page.nextSkip;
+        _items.addAll(page.items);
+        // Nothing new (only duplicates, or the addon ignores skip) also ends
+        // the grid.
+        _exhausted = page.exhausted || page.items.isEmpty;
         _loadingMore = false;
       });
     } catch (_) {

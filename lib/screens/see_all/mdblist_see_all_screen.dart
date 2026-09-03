@@ -11,6 +11,7 @@ import '../../services/mdblist/mdblist_discover_models.dart';
 import '../../services/mdblist/mdblist_discover_source.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_models.dart';
+import '../../services/watched_filter.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/mdblist_save_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
@@ -466,6 +467,8 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   void _recompute() {
     Iterable<StremioMeta> items = _page.items;
+    // Public catalog browse only; the user's own and liked lists stay complete.
+    if (_isCatalog) items = items.where((m) => !WatchedFilter.hides(m));
     if (!_isCatalog) {
       if (_show == 'movie') {
         items = items.where((item) => item.type != 'series');

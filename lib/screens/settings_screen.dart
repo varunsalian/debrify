@@ -3259,6 +3259,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const ['hide', 'titles', 'ratings', 'cards', 'clean artwork'],
       ),
       leaf(
+        'Tracking',
+        'Hide watched titles',
+        'Remove finished movies and shows from Home, Search and Discover',
+        const [
+          'hide',
+          'watched',
+          'seen',
+          'finished',
+          'completed',
+          'already watched',
+          'filter',
+        ],
+      ),
+      leaf(
         'Home Screen',
         'Hide Catalog Add-on Names',
         'Remove source labels beside Home row headings',
