@@ -205,6 +205,27 @@ final class WebDavSyncScheduler {
     _scheduleLocalChange(immediate: true);
   }
 
+  /// A playback checkpoint (pause, settled seek, explicit save) is a human
+  /// handoff moment: flush the pending window now instead of waiting out the
+  /// playback coalescing interval. Harmless when nothing is pending — the
+  /// cycle is digest-suppressed.
+  void notifyPlaybackCheckpoint() {
+    if (_contextProvider == null) return;
+    if (_running) {
+      _dirtyDuringRun = true;
+      _immediateDirtyDuringRun = true;
+      return;
+    }
+    _scheduleLocalChange(immediate: true);
+  }
+
+  /// Applied remote watch activity means another device is mid-session:
+  /// keep the fast poll cadence alive for the duration of that session.
+  void extendWarmSession() {
+    if (_contextProvider == null) return;
+    _rearmWarmPolling();
+  }
+
   static bool admitsLocalChangeKey(String logicalKey) {
     if (WebDavSyncHotMerge.hotLocalOnlyScalarKeys.contains(logicalKey)) {
       return false;

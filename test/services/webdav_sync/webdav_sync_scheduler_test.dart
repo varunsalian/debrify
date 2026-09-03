@@ -1372,6 +1372,91 @@ void main() {
       });
     });
   });
+
+  group('playback checkpoint and session warmth', () {
+    test('a checkpoint flushes the playback window immediately', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        final gate = _Gate()..playback = true;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+        async.elapse(const Duration(seconds: 5));
+        async.flushMicrotasks();
+        expect(runner.runs, 0); // still inside the 60s playback window
+        scheduler.notifyPlaybackCheckpoint(); // pause pressed
+        async.flushMicrotasks();
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('a checkpoint during a running cycle produces one immediate follow-up',
+        () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        runner.blocker = Completer<void>();
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.notifyPlaybackCheckpoint();
+        scheduler.notifyPlaybackCheckpoint(); // burst coalesces
+        runner.blocker!.complete();
+        runner.blocker = null;
+        async.flushMicrotasks();
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        async.elapse(const Duration(seconds: 30));
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('extendWarmSession keeps the fast poll cadence alive', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        var probes = 0;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async {
+            probes++;
+            return null; // counted, then treated as inactive
+          },
+        );
+        // Idle past the initial warm window so cadence decays.
+        async.elapse(const Duration(minutes: 4));
+        final decayed = probes;
+        // Remote watch activity arrives: cadence must return to warm.
+        scheduler.extendWarmSession();
+        async.elapse(const Duration(seconds: 30));
+        final warmed = probes - decayed;
+        expect(warmed, greaterThanOrEqualTo(5)); // ~6 probes at 5s cadence
+        scheduler.dispose();
+      });
+    });
+  });
 }
 
 final class _Runner

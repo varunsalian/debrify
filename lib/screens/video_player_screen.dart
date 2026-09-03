@@ -11614,6 +11614,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       'durationMs': dur.inMilliseconds,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     });
+
+    // Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the
+    // handoff moments another device would resume from — let sync flush now
+    // instead of waiting out the playback coalescing window. The 6s autosave
+    // tick stays on the throttled path.
+    if (!debounced) {
+      MainPageBridge.notifyPlaybackCheckpoint();
+    }
   }
 
   /// True while the auto-hide poll is being held off by a scrub, a pause, a
@@ -14067,6 +14075,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       _simklScrobbleSeek(_lastSliderSeekPos!);
                                       _mdblistScrobbleSeek(_lastSliderSeekPos!);
                                       _lastSliderSeekPos = null;
+                                      // A settled seek is a handoff moment:
+                                      // persist and let sync flush promptly.
+                                      _saveResume();
                                     }
                                   },
                                   // IPTV episode list (series/VOD) gets Next/Previous

@@ -51,11 +51,29 @@ import 'webdav_sync_ui_refresh.dart';
 
 /// Runtime boundary for the engine's UI-agnostic post-commit apply callback.
 /// Only the currently mounted, committed profile may publish live UI changes.
+/// Armed while the scheduler is armed. Applied remote watch-state records
+/// (any profile) re-warm the poll cadence so an ongoing session on another
+/// device keeps propagation fast for its whole duration.
+@visibleForTesting
+void Function()? webDavSyncRemoteWatchActivityHook;
+
+const Set<String> _webDavSyncWatchActivityKeys = <String>{
+  WebDavSyncHotMerge.playbackPreference,
+  WebDavSyncHotMerge.continueWatchingPreference,
+};
+
 @visibleForTesting
 void dispatchWebDavSyncAppliedKeysForActiveProfile(
   String localProfileId,
   Set<String> appliedKeys,
 ) {
+  if (appliedKeys.any(_webDavSyncWatchActivityKeys.contains)) {
+    try {
+      webDavSyncRemoteWatchActivityHook?.call();
+    } catch (_) {
+      // Cadence hints must never affect the apply path.
+    }
+  }
   if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
     return;
   }
@@ -289,6 +307,7 @@ final class WebDavSyncRuntime
       WidgetsBinding.instance.addObserver(this);
       MainPageBridge.addPlayerLaunchListener(_onPlaybackStarted);
       MainPageBridge.addContentPlaybackStopListener(_onPlaybackStopped);
+      MainPageBridge.addPlaybackCheckpointListener(_onPlaybackCheckpoint);
     }
     try {
       await _recoverAdoptions();
@@ -895,6 +914,12 @@ final class WebDavSyncRuntime
     }
   }
 
+  void _onPlaybackCheckpoint() {
+    // Television keeps its no-cycles-during-playback gate; the scheduler's
+    // gates decide, this only accelerates an already-armed window elsewhere.
+    _scheduler?.notifyPlaybackCheckpoint();
+  }
+
   Future<void> _recoverAdoptions() async {
     final stored = await bindingStore.load();
     var recoveredJournal = false;
@@ -968,6 +993,7 @@ final class WebDavSyncRuntime
       remotePollContextProvider: _cycleRunner!.remotePollContext,
     );
     ProfilePreferences.webDavSyncLocalChangeSink = _onLocalProfileChange;
+    webDavSyncRemoteWatchActivityHook = () => _scheduler?.extendWarmSession();
     _maintenanceTimer?.cancel();
     _maintenanceTimer = Timer.periodic(WebDavSyncGraphTier.cadence, (_) {
       unawaited(_maintainSeed(force: false));
@@ -980,6 +1006,7 @@ final class WebDavSyncRuntime
 
   void _disarmScheduler() {
     ProfilePreferences.webDavSyncLocalChangeSink = null;
+    webDavSyncRemoteWatchActivityHook = null;
     _scheduler?.disarm();
   }
 
@@ -1117,6 +1144,7 @@ final class WebDavSyncRuntime
   @visibleForTesting
   void debugResetInitialization() {
     ProfilePreferences.webDavSyncLocalChangeSink = null;
+    webDavSyncRemoteWatchActivityHook = null;
     _scheduler?.dispose();
     _cycleRunner?.closeCycleTransports();
     _maintenanceTimer?.cancel();
@@ -1126,6 +1154,7 @@ final class WebDavSyncRuntime
     WidgetsBinding.instance.removeObserver(this);
     MainPageBridge.removePlayerLaunchListener(_onPlaybackStarted);
     MainPageBridge.removeContentPlaybackStopListener(_onPlaybackStopped);
+    MainPageBridge.removePlaybackCheckpointListener(_onPlaybackCheckpoint);
     _initialized = false;
     _initializing = null;
     _reconfigurationPaused = false;

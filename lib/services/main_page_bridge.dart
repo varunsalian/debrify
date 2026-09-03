@@ -440,6 +440,24 @@ class MainPageBridge {
     }
   }
 
+  /// Human handoff moments inside playback — pause, a settled seek, an
+  /// explicit checkpoint save. Listeners (WebDAV sync) may flush immediately.
+  static final Set<VoidCallback> _playbackCheckpointListeners = {};
+
+  static void addPlaybackCheckpointListener(VoidCallback listener) {
+    _playbackCheckpointListeners.add(listener);
+  }
+
+  static void removePlaybackCheckpointListener(VoidCallback listener) {
+    _playbackCheckpointListeners.remove(listener);
+  }
+
+  static void notifyPlaybackCheckpoint() {
+    for (final listener in List.of(_playbackCheckpointListeners)) {
+      listener();
+    }
+  }
+
   /// [isTrailer] true for a trailer launch: it still hides the auto-launch
   /// overlay, but does NOT fire the content-launch listeners — watching a
   /// trailer must not suppress the ambient trailer backdrop.
