@@ -44,7 +44,8 @@ final class WebDavSyncLargeSectionIo {
         transport is WebDavSyncFileTransport &&
             (logicalName == 'bootstrap' ||
                 logicalName == 'graph' ||
-                logicalName == 'resources')
+                logicalName == 'resources' ||
+                logicalName.startsWith('library/'))
         ? transport as WebDavSyncFileTransport
         : null;
     if (fileTransport == null) {
@@ -59,7 +60,8 @@ final class WebDavSyncLargeSectionIo {
         runInBackground:
             logicalName == 'bootstrap' ||
             logicalName == 'graph' ||
-            logicalName == 'resources',
+            logicalName == 'resources' ||
+            logicalName.startsWith('library/'),
       );
       final reference = _reference(
         logicalName: logicalName,
@@ -86,7 +88,8 @@ final class WebDavSyncLargeSectionIo {
         runInBackground:
             logicalName == 'bootstrap' ||
             logicalName == 'graph' ||
-            logicalName == 'resources',
+            logicalName == 'resources' ||
+            logicalName.startsWith('library/'),
       );
       return reference;
     }
@@ -328,7 +331,8 @@ final class WebDavSyncLargeSectionIo {
       logicalName == 'bootstrap' ||
       logicalName == 'graph' ||
       logicalName == 'profiles' ||
-      logicalName == 'resources';
+      logicalName == 'resources' ||
+      logicalName.startsWith('library/');
 
   static bool _bytesEqual(List<int> left, List<int> right) {
     var difference = left.length ^ right.length;

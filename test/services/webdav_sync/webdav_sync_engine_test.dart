@@ -22,6 +22,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_setup_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
@@ -168,6 +169,249 @@ void main() {
       expect(second.sectionsPushed, 0);
       expect(states.state.lastPushMs, now.millisecondsSinceEpoch);
       expect(transport.writeCount, writesAfterFirst);
+    },
+  );
+
+  test('hide on A reaches B, and unhide tombstone never resurrects', () async {
+    final stamp = WebDavSyncStamp(
+      normalizedTimeMs: now.millisecondsSinceEpoch - 10,
+      originDeviceId: 'device-a',
+    );
+    final hiddenKey = 'catalog/hidden/resource-circle/m3u/${'a' * 64}';
+    final source = _FakeLibraryLocalAdapter(
+      <String, Object?>{'theme': 'dark'},
+      document: WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          hiddenKey: WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: stamp,
+            value: const <String, Object?>{'group': 'Adult'},
+          ),
+          'future/family/opaque': WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: stamp,
+            value: const <String, Object?>{'opaque': true},
+          ),
+        },
+      ),
+    );
+    final receiver = _FakeLibraryLocalAdapter(
+      <String, Object?>{'theme': 'dark'},
+      document: const WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+      ),
+    );
+    final sourceStates = _MemoryStateRepository();
+    final receiverStates = _MemoryStateRepository();
+    final sourceEngine = WebDavSyncEngine(
+      stateRepository: sourceStates,
+      localAdapter: source,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+    final receiverEngine = WebDavSyncEngine(
+      stateRepository: receiverStates,
+      localAdapter: receiver,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+    WebDavSyncCycleContext deviceContext(String device, String localProfile) =>
+        WebDavSyncCycleContext(
+          namespaceId: 'circle:circle-1',
+          deviceId: device,
+          markerPin: marker,
+          root: root,
+          circleToLocalProfiles: <String, String>{
+            'profile-circle': localProfile,
+          },
+          circleToLocalResources: const <String, String>{
+            'resource-circle': 'local-resource',
+          },
+        );
+
+    await sourceEngine.runCycle(
+      deviceContext('device-a', 'local-a'),
+      allowPreActivation: true,
+    );
+    final report = await receiverEngine.runCycle(
+      deviceContext('device-b', 'local-b'),
+      allowPreActivation: true,
+    );
+
+    expect(report.disposition, WebDavSyncCycleDisposition.completed);
+    expect(receiver.appliedLibraries, hasLength(1));
+    final applied = receiver.appliedLibraries.single;
+    expect(
+      applied.records.values.map((leaf) => leaf.stamp),
+      everyElement(
+        isA<WebDavSyncStamp>()
+            .having(
+              (value) => value.normalizedTimeMs,
+              'time',
+              stamp.normalizedTimeMs,
+            )
+            .having((value) => value.originDeviceId, 'origin', 'device-a'),
+      ),
+    );
+    expect(applied.records[hiddenKey]!.value!['group'], 'Adult');
+    expect(applied.records, contains('future/family/opaque'));
+    expect(
+      receiverStates.state.ownManifest!.section('library/profile-circle'),
+      isNotNull,
+    );
+
+    source.document = WebDavSyncLibraryDocument(
+      circleProfileId: 'profile-circle',
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        ...source.document.records,
+        hiddenKey: WebDavSyncCircleLeaf<Map<String, Object?>>(
+          stamp: WebDavSyncStamp(
+            normalizedTimeMs: now.millisecondsSinceEpoch,
+            originDeviceId: 'device-a',
+          ),
+          value: null,
+        ),
+      },
+    );
+    source.revisions = WebDavSyncDatabaseRevisions(
+      debrifyTv: source.revisions.debrifyTv,
+      iptvCatalog: source.revisions.iptvCatalog + 1,
+    );
+    await sourceEngine.runCycle(
+      deviceContext('device-a', 'local-a'),
+      allowPreActivation: true,
+    );
+    await receiverEngine.runCycle(
+      deviceContext('device-b', 'local-b'),
+      allowPreActivation: true,
+    );
+
+    expect(receiver.document.records[hiddenKey]!.value, isNull);
+    final writesBeforeEcho = transport.writeCount;
+    await sourceEngine.runCycle(
+      deviceContext('device-a', 'local-a'),
+      allowPreActivation: true,
+    );
+    expect(source.document.records[hiddenKey]!.value, isNull);
+    expect(transport.writeCount, writesBeforeEcho);
+  });
+
+  test('library revision conflict is benign and next cycle applies', () async {
+    final libraryLocal = _FakeLibraryLocalAdapter(
+      <String, Object?>{'theme': 'dark'},
+      document: WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'future/item': WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: now.millisecondsSinceEpoch,
+              originDeviceId: 'device-a',
+            ),
+            value: const <String, Object?>{'value': 1},
+          ),
+        },
+      ),
+    )..conflictNextLibraryApply = true;
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: libraryLocal,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+
+    final first = await runFixture(context());
+    expect(first.localChangeFollowUp, isTrue);
+    expect(
+      states.state.profiles['profile-circle']!.pendingLibraryApply,
+      isNull,
+    );
+    expect(libraryLocal.appliedLibraries, isEmpty);
+
+    final second = await runFixture(context());
+    expect(second.disposition, WebDavSyncCycleDisposition.completed);
+    expect(libraryLocal.appliedLibraries, hasLength(1));
+  });
+
+  test('pending library apply is replayed after a crash', () async {
+    final target = WebDavSyncLibraryDocument(
+      circleProfileId: 'profile-circle',
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        'future/item': WebDavSyncCircleLeaf<Map<String, Object?>>(
+          stamp: WebDavSyncStamp(
+            normalizedTimeMs: now.millisecondsSinceEpoch,
+            originDeviceId: 'device-a',
+          ),
+          value: const <String, Object?>{'value': 1},
+        ),
+      },
+    );
+    final libraryLocal = _FakeLibraryLocalAdapter(<String, Object?>{
+      'theme': 'dark',
+    }, document: target)..failNextLibraryApply = true;
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: libraryLocal,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+
+    await expectLater(runFixture(context()), throwsStateError);
+    final pending =
+        states.state.profiles['profile-circle']!.pendingLibraryApply!;
+    expect(pending.target.semanticDigest, target.semanticDigest);
+    expect(pending.observedRevisions, libraryLocal.revisions);
+
+    await runFixture(context());
+
+    expect(libraryLocal.libraryReplayFlags, contains(true));
+    expect(
+      states.state.profiles['profile-circle']!.pendingLibraryApply,
+      isNull,
+    );
+    expect(
+      states.state.profiles['profile-circle']!.libraryBaseline!.semanticDigest,
+      target.semanticDigest,
+    );
+  });
+
+  test(
+    'a peer manifest without a library section remains compatible',
+    () async {
+      final libraryLocal = _FakeLibraryLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        document: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'old-device',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: libraryLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+
+      final report = await runFixture(context());
+
+      expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      expect(libraryLocal.appliedLibraries, hasLength(1));
+      expect(libraryLocal.document.records, isEmpty);
     },
   );
 
@@ -3261,6 +3505,73 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     preferences = Map<String, Object?>.from(values);
     afterApply?.call();
     return appliedKeysOverride ?? Set<String>.unmodifiable(values.keys);
+  }
+}
+
+final class _FakeLibraryLocalAdapter extends _FakeLocalAdapter
+    implements WebDavSyncLibraryLocalAdapter {
+  _FakeLibraryLocalAdapter(super.preferences, {required this.document});
+
+  WebDavSyncLibraryDocument document;
+  WebDavSyncDatabaseRevisions revisions = const WebDavSyncDatabaseRevisions(
+    debrifyTv: 0,
+    iptvCatalog: 0,
+  );
+  bool conflictNextLibraryApply = false;
+  bool failNextLibraryApply = false;
+  final List<WebDavSyncLibraryDocument> appliedLibraries =
+      <WebDavSyncLibraryDocument>[];
+  final List<bool> libraryReplayFlags = <bool>[];
+
+  @override
+  Future<WebDavSyncLocalLibrarySnapshot> readLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request,
+  ) async => WebDavSyncLocalLibrarySnapshot(
+    document: document,
+    revisions: revisions,
+    hiddenGroupNamesByWireKey: <String, String>{
+      for (final entry in document.records.entries)
+        if (entry.value.value?['group'] is String)
+          entry.key: entry.value.value!['group']! as String,
+    },
+  );
+
+  @override
+  Future<WebDavSyncLibraryApplyOutcome> applyLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request, {
+    Future<void> Function()? beforeWrite,
+    bool replayingPending = false,
+  }) async {
+    libraryReplayFlags.add(replayingPending);
+    await beforeWrite?.call();
+    if (failNextLibraryApply) {
+      failNextLibraryApply = false;
+      throw StateError('simulated library apply crash');
+    }
+    if (conflictNextLibraryApply) {
+      conflictNextLibraryApply = false;
+      revisions = WebDavSyncDatabaseRevisions(
+        debrifyTv: revisions.debrifyTv,
+        iptvCatalog: revisions.iptvCatalog + 1,
+      );
+      return const WebDavSyncLibraryApplyOutcome(
+        result: WebDavSyncLibraryApplyResult.conflict,
+      );
+    }
+    appliedLibraries.add(request.document);
+    document = request.document;
+    revisions = WebDavSyncDatabaseRevisions(
+      debrifyTv: revisions.debrifyTv,
+      iptvCatalog: revisions.iptvCatalog + 1,
+    );
+    return const WebDavSyncLibraryApplyOutcome(
+      result: WebDavSyncLibraryApplyResult.applied,
+      appliedNamespaces: <String>{'catalog/hidden'},
+    );
   }
 }
 

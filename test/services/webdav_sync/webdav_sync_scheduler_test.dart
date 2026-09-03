@@ -135,10 +135,16 @@ void main() {
     });
   });
 
-  test('scheduler admits only the dedicated registry synthetic key', () {
+  test('scheduler admits the dedicated registry and library keys', () {
     expect(
       WebDavSyncScheduler.admitsLocalChangeKey(
         ProfilePreferences.webDavSyncRegistryLogicalKey,
+      ),
+      isTrue,
+    );
+    expect(
+      WebDavSyncScheduler.admitsLocalChangeKey(
+        ProfilePreferences.webDavSyncLibraryLogicalKey,
       ),
       isTrue,
     );

@@ -171,6 +171,18 @@ void main() {
     );
   }
 
+  Future<Database> upgradeToV7() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 7,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
   Future<bool> hasTable(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -379,5 +391,33 @@ void main() {
     expect(rows.map((row) => row['name']), ['alpha', 'Mike', 'Zulu']);
     expect(rows.map((row) => row['position']), [0, 1, 2]);
     expect(await hasTable(db, 'iptv_category_channel_orders'), isTrue);
+  });
+
+  test('fresh v7 and v6→v7 both create the library-sync sidecars', () async {
+    var db = await upgradeToV7();
+    expect(await hasTable(db, 'webdav_sync_record_state'), isTrue);
+    expect(await hasTable(db, 'webdav_sync_meta'), isTrue);
+    expect(
+      (await db.query(
+        'webdav_sync_meta',
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      )).single['value'],
+      '0',
+    );
+    await db.close();
+
+    await File(dbPath).delete();
+    db = await openAt(6, (db, _) async {
+      await DebrifyTvDatabase.createIptvStoreTables(db);
+      await db.delete('webdav_sync_meta');
+      await db.execute('DROP TABLE webdav_sync_record_state');
+      await db.execute('DROP TABLE webdav_sync_meta');
+    });
+    await db.close();
+    db = await upgradeToV7();
+    addTearDown(db.close);
+    expect(await hasTable(db, 'webdav_sync_record_state'), isTrue);
+    expect(await hasTable(db, 'webdav_sync_meta'), isTrue);
   });
 }

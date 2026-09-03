@@ -242,6 +242,7 @@ final class WebDavSyncScheduler {
         logicalKey == WebDavSyncHotMerge.playlistPreference ||
         logicalKey == WebDavSyncHotMerge.playlistFavoritesPreference ||
         logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
+        logicalKey == ProfilePreferences.webDavSyncLibraryLogicalKey ||
         logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
   }
 

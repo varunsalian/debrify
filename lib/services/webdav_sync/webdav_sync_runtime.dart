@@ -39,6 +39,7 @@ import 'webdav_sync_graph_tier.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_local_adapter.dart';
+import 'webdav_sync_library_mutation.dart';
 import 'webdav_sync_manifest_publisher.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_operation_coordinator.dart';
@@ -988,6 +989,10 @@ final class WebDavSyncRuntime
       return;
     }
     _cycleRunner!.retainBinding(active.id);
+    final namespace = stored.namespaceFor(active);
+    if (namespace != null) {
+      WebDavSyncLibraryMutation.originDeviceId = namespace.deviceId;
+    }
     _scheduler!.arm(
       _activeContext,
       remotePollContextProvider: _cycleRunner!.remotePollContext,

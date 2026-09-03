@@ -1,4 +1,5 @@
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/iptv_channel_order.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
@@ -155,5 +156,15 @@ void main() {
     });
 
     expect(localChangeSignals, 0);
+  });
+
+  test('hidden-library apply broadcasts one catalog refresh', () {
+    final before = IptvChannelOrderSignal.revision.value;
+
+    WebDavSyncUiRefresh.dispatch(const <String>{'catalog/hidden'});
+
+    expect(IptvChannelOrderSignal.revision.value, before + 1);
+    expect(IptvChannelOrderSignal.latest?.scope, IptvChannelOrderScope.catalog);
+    expect(IptvChannelOrderSignal.latest?.target, isEmpty);
   });
 }

@@ -24,6 +24,7 @@ import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_collection_resource_facade.dart';
+import '../../services/webdav_sync/webdav_sync_library_models.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'iptv_category_order_page.dart';
 import 'iptv_hidden_categories_page.dart';
@@ -413,6 +414,34 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
     final key = IptvCatalogKey.forPlaylist(playlist, 'live');
     return key == null ? const [] : [key];
+  }
+
+  Map<String, WebDavSyncCatalogOwnerReference> _catalogOwnerReferencesFor(
+    IptvPlaylist playlist,
+  ) {
+    final resourceId = playlist.connectionResourceId;
+    if (resourceId == null) {
+      return const <String, WebDavSyncCatalogOwnerReference>{};
+    }
+    if (playlist.isXtreamCodes) {
+      return <String, WebDavSyncCatalogOwnerReference>{
+        for (final type in IptvCatalogKey.xtreamContentTypes)
+          if (IptvCatalogKey.forPlaylist(playlist, type) case final key?)
+            key: WebDavSyncCatalogOwnerReference(
+              localResourceId: resourceId,
+              variant: 'xc-$type',
+            ),
+      };
+    }
+    final key = IptvCatalogKey.forPlaylist(playlist, 'live');
+    return key == null
+        ? const <String, WebDavSyncCatalogOwnerReference>{}
+        : <String, WebDavSyncCatalogOwnerReference>{
+            key: WebDavSyncCatalogOwnerReference(
+              localResourceId: resourceId,
+              variant: 'm3u',
+            ),
+          };
   }
 
   /// Open the per-source hidden-categories manager, then re-read the counts
@@ -1135,7 +1164,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // The source's hidden categories go with it. Deliberately here and not
     // inside the catalog delete: a manual REFRESH also drops and re-ingests
     // the catalog under the same keys, and user rules must survive that.
-    IptvCatalogDb.forgetHiddenGroups(_catalogKeysFor(playlist));
+    IptvCatalogDb.forgetHiddenGroups(
+      _catalogKeysFor(playlist),
+      origin: WebDavSyncMutationOrigin.user,
+      ownerReferences: _catalogOwnerReferencesFor(playlist),
+    );
     if (playlist.isLocalFile) {
       try {
         await IptvCatalogDb.forgetCategoryOrders([
@@ -1709,7 +1742,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // deletes and re-ingests the catalogs above, but the key is
     // server+username+type, so its keys are unchanged and its rules must
     // survive. Same for a rename.
-    IptvCatalogDb.forgetHiddenGroups(unreachableKeys);
+    IptvCatalogDb.forgetHiddenGroups(
+      unreachableKeys,
+      origin: WebDavSyncMutationOrigin.user,
+      ownerReferences: _catalogOwnerReferencesFor(playlist),
+    );
 
     final newPlaylists = [
       for (final p in _playlists)

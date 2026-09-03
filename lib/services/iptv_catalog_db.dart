@@ -9,11 +9,16 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'profiles/profile_storage_paths.dart';
 import 'profiles/profile_database_adoption_gate.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_scope.dart';
 import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../models/iptv_playlist.dart';
 import 'iptv_channel_order.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
+import 'webdav_sync/webdav_sync_library_mutation.dart';
+import 'webdav_sync/webdav_sync_hot_models.dart';
 
 /// Worker entry for cold catalog initialization. The native handle is opened
 /// with FULLMUTEX because ownership moves to Flutter's isolate after this job;
@@ -316,7 +321,7 @@ class IptvCatalogDb {
   IptvCatalogDb._();
 
   static const _dbFileName = 'iptv_catalog.db';
-  static const _schemaVersion = 2;
+  static const _schemaVersion = 3;
   static const _connectionSetupSql = [
     'PRAGMA journal_mode=WAL',
     'PRAGMA synchronous=NORMAL',
@@ -406,6 +411,29 @@ class IptvCatalogDb {
         hidden_at INTEGER NOT NULL,
         PRIMARY KEY (catalog_key, grp)
       )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS webdav_sync_record_state (
+        kind TEXT NOT NULL,
+        owner_key TEXT NOT NULL,
+        item_key TEXT NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        origin_device_id TEXT NOT NULL,
+        normalized INTEGER NOT NULL DEFAULT 0,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        aux TEXT,
+        PRIMARY KEY (kind, owner_key, item_key)
+      )
+    ''',
+    '''
+      CREATE TABLE IF NOT EXISTS webdav_sync_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''',
+    '''
+      INSERT OR IGNORE INTO webdav_sync_meta (key, value)
+      VALUES ('mutation_revision', '0')
     ''',
     // Manual order of CHANNELS inside a category is keyed by provider
     // identity, not generation, so it survives the whole-generation
@@ -599,6 +627,9 @@ class IptvCatalogDb {
   @visibleForTesting
   static int debugMigrationRunCount = 0;
 
+  @visibleForTesting
+  static DateTime Function() debugLibraryClock = DateTime.now;
+
   /// The resolved database path — worker isolates need it to open their own
   /// connection. Only valid after [open] has completed.
   static String get path {
@@ -726,6 +757,182 @@ class IptvCatalogDb {
     return result;
   }
 
+  /// Opens a temporary profile-scoped connection behind the catalog
+  /// maintenance gate. The UI singleton remains untouched.
+  static Future<T> runOneShotScoped<T>(
+    ProfileScope scope,
+    T Function(Database db) action,
+  ) => runExclusive(() async {
+    final override = debugDirectoryOverride;
+    final dbPath = override == null
+        ? await ProfileRuntime.withCapturedScope(
+            scope,
+            () => ProfileStoragePaths.documentsFile(_dbFileName),
+          )
+        : p.join(override, _dbFileName);
+    final db = _openConnection(dbPath);
+    try {
+      _createSchema(db);
+      _runPendingMigrations(db);
+      return action(db);
+    } finally {
+      db.dispose();
+    }
+  });
+
+  /// Transactionally snapshots this database's library state and mutation
+  /// revision. Raw local/migration times are normalized exactly once here.
+  static Future<WebDavSyncDatabaseStateSnapshot> readWebDavSyncState(
+    ProfileScope scope, {
+    required int clockOffsetMs,
+    required int serverNowMs,
+  }) => runOneShotScoped(scope, (db) {
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      final rawRows = db.select('''
+        SELECT kind, owner_key, item_key, updated_at_ms, origin_device_id,
+               normalized, deleted, aux
+        FROM webdav_sync_record_state
+        ORDER BY kind, owner_key, item_key
+      ''');
+      final normalize = db.prepare('''
+        UPDATE webdav_sync_record_state
+        SET updated_at_ms = ?, normalized = 1
+        WHERE kind = ? AND owner_key = ? AND item_key = ?
+      ''');
+      final records = <WebDavSyncRecordState>[];
+      try {
+        for (final row in rawRows) {
+          var updatedAtMs = row['updated_at_ms'] as int;
+          if (row['normalized'] != 1) {
+            updatedAtMs = (updatedAtMs + clockOffsetMs).clamp(0, serverNowMs);
+            normalize.execute([
+              updatedAtMs,
+              row['kind'],
+              row['owner_key'],
+              row['item_key'],
+            ]);
+          }
+          records.add(
+            WebDavSyncRecordState(
+              kind: row['kind'] as String,
+              ownerKey: row['owner_key'] as String,
+              itemKey: row['item_key'] as String,
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: updatedAtMs,
+                originDeviceId: row['origin_device_id'] as String,
+              ),
+              deleted: row['deleted'] == 1,
+              aux: row['aux'] as String?,
+            ),
+          );
+        }
+      } finally {
+        normalize.dispose();
+      }
+      final revision = _webDavSyncRevision(db);
+      db.execute('COMMIT');
+      return WebDavSyncDatabaseStateSnapshot(
+        mutationRevision: revision,
+        records: List<WebDavSyncRecordState>.unmodifiable(records),
+      );
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    }
+  });
+
+  /// Dedicated exact-stamp materializer for hidden groups. It never calls a
+  /// public mutation API and never schedules local-change notification.
+  static Future<({WebDavSyncLibraryApplyResult result, bool touched})>
+  applyWebDavHiddenGroups(
+    ProfileScope scope, {
+    required int expectedRevision,
+    required Iterable<WebDavSyncHiddenGroupTarget> targets,
+  }) => runOneShotScoped(scope, (db) {
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      if (_webDavSyncRevision(db) != expectedRevision) {
+        db.execute('ROLLBACK');
+        return (result: WebDavSyncLibraryApplyResult.conflict, touched: false);
+      }
+      var touched = false;
+      for (final target in targets) {
+        final leaf = target.leaf;
+        final deleted = leaf.value == null;
+        final prior = db.select(
+          '''
+          SELECT updated_at_ms, origin_device_id, normalized, deleted
+          FROM webdav_sync_record_state
+          WHERE kind = ? AND owner_key = ? AND item_key = ?
+        ''',
+          [
+            WebDavSyncLibraryKinds.hiddenGroups,
+            target.catalogKey,
+            target.group,
+          ],
+        );
+        final physicallyPresent = db.select(
+          'SELECT 1 FROM hidden_groups WHERE catalog_key = ? AND grp = ? '
+          'LIMIT 1',
+          [target.catalogKey, target.group],
+        ).isNotEmpty;
+        final alreadyExact =
+            prior.length == 1 &&
+            prior.single['updated_at_ms'] == leaf.stamp.normalizedTimeMs &&
+            prior.single['origin_device_id'] == leaf.stamp.originDeviceId &&
+            prior.single['normalized'] == 1 &&
+            prior.single['deleted'] == (deleted ? 1 : 0) &&
+            physicallyPresent == !deleted;
+        if (alreadyExact) continue;
+        if (deleted) {
+          db.execute(
+            'DELETE FROM hidden_groups WHERE catalog_key = ? AND grp = ?',
+            [target.catalogKey, target.group],
+          );
+        } else {
+          db.execute(
+            '''
+            INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at)
+            VALUES (?, ?, ?)
+          ''',
+            [target.catalogKey, target.group, leaf.stamp.normalizedTimeMs],
+          );
+          db.execute(
+            '''
+            DELETE FROM category_default_selections
+            WHERE catalog_key = ? AND grp = ?
+          ''',
+            [target.catalogKey, target.group],
+          );
+        }
+        db.execute(
+          '''
+          INSERT OR REPLACE INTO webdav_sync_record_state
+            (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+             normalized, deleted, aux)
+          VALUES (?, ?, ?, ?, ?, 1, ?, NULL)
+        ''',
+          [
+            WebDavSyncLibraryKinds.hiddenGroups,
+            target.catalogKey,
+            target.group,
+            leaf.stamp.normalizedTimeMs,
+            leaf.stamp.originDeviceId,
+            deleted ? 1 : 0,
+          ],
+        );
+        touched = true;
+      }
+      if (touched) _bumpWebDavSyncRevision(db);
+      db.execute('COMMIT');
+      return (result: WebDavSyncLibraryApplyResult.applied, touched: touched);
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    }
+  });
+
   /// Whether a row-level upgrade is still outstanding. One database-header
   /// read, so the page can decide whether the work is worth narrating before
   /// committing to say anything.
@@ -777,6 +984,16 @@ class IptvCatalogDb {
     try {
       db.execute(_numberBackfillSql);
       db.execute(_numberIndexSql);
+      if (current < 3) {
+        db.execute('''
+          INSERT OR IGNORE INTO webdav_sync_record_state
+            (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+             normalized, deleted, aux)
+          SELECT '${WebDavSyncLibraryKinds.hiddenGroups}', catalog_key, grp,
+                 hidden_at, 'migration', 0, 0, NULL
+          FROM hidden_groups
+        ''');
+      }
       db.execute('PRAGMA user_version = $_schemaVersion');
       db.execute('COMMIT');
     } catch (_) {
@@ -832,6 +1049,7 @@ class IptvCatalogDb {
     debugPreparationCount = 0;
     debugMigrationRunCount = 0;
     debugMaintenanceRunCount = 0;
+    debugLibraryClock = DateTime.now;
     _maintenanceQueue = Future<void>.value();
   }
 
@@ -2431,32 +2649,57 @@ class IptvCatalogDb {
   /// Returns false when nothing was written (empty name, database not open)
   /// so the caller can tell the user instead of confirming a rule that was
   /// never saved.
-  static bool setGroupHidden(String catalogKey, String group, bool hidden) {
+  static bool setGroupHidden(
+    String catalogKey,
+    String group,
+    bool hidden, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
     if (group.isEmpty || !isOpen) return false;
     final db = _requireDb();
-    if (hidden) {
-      db.execute('BEGIN');
-      try {
+    var changed = hidden;
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      final now = debugLibraryClock().millisecondsSinceEpoch;
+      if (hidden) {
         db.execute(
           'INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at) '
           'VALUES (?, ?, ?)',
-          [catalogKey, group, DateTime.now().millisecondsSinceEpoch],
+          [catalogKey, group, now],
         );
         db.execute(
           'DELETE FROM category_default_selections '
           'WHERE catalog_key = ? AND grp = ?',
           [catalogKey, group],
         );
-        db.execute('COMMIT');
-      } catch (_) {
-        _rollbackQuietly(db);
-        rethrow;
+      } else {
+        changed = db.select(
+          'SELECT 1 FROM hidden_groups WHERE catalog_key = ? AND grp = ? '
+          'LIMIT 1',
+          [catalogKey, group],
+        ).isNotEmpty;
+        db.execute(
+          'DELETE FROM hidden_groups WHERE catalog_key = ? AND grp = ?',
+          [catalogKey, group],
+        );
       }
-    } else {
-      db.execute(
-        'DELETE FROM hidden_groups WHERE catalog_key = ? AND grp = ?',
-        [catalogKey, group],
-      );
+      if (changed && origin == WebDavSyncMutationOrigin.user) {
+        _writeHiddenGroupState(
+          db,
+          catalogKey: catalogKey,
+          group: group,
+          updatedAtMs: now,
+          deleted: !hidden,
+        );
+        _bumpWebDavSyncRevision(db);
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    }
+    if (changed && origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
     }
     return true;
   }
@@ -2468,7 +2711,11 @@ class IptvCatalogDb {
   ///
   /// Returns false when the database isn't open (nothing written); an empty
   /// [groups] is vacuous success.
-  static bool hideGroups(String catalogKey, Iterable<String> groups) {
+  static bool hideGroups(
+    String catalogKey,
+    Iterable<String> groups, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
     if (!isOpen) return false;
     final names = {
       for (final group in groups)
@@ -2482,10 +2729,19 @@ class IptvCatalogDb {
       'VALUES (?, ?, ?)',
     );
     try {
-      db.execute('BEGIN');
-      final hiddenAt = DateTime.now().millisecondsSinceEpoch;
+      db.execute('BEGIN IMMEDIATE');
+      final hiddenAt = debugLibraryClock().millisecondsSinceEpoch;
       for (final group in names) {
         insert.execute([catalogKey, group, hiddenAt]);
+        if (origin == WebDavSyncMutationOrigin.user) {
+          _writeHiddenGroupState(
+            db,
+            catalogKey: catalogKey,
+            group: group,
+            updatedAtMs: hiddenAt,
+            deleted: false,
+          );
+        }
       }
       db.execute(
         'DELETE FROM category_default_selections WHERE catalog_key = ? '
@@ -2494,6 +2750,9 @@ class IptvCatalogDb {
         ')',
         [catalogKey, catalogKey],
       );
+      if (origin == WebDavSyncMutationOrigin.user) {
+        _bumpWebDavSyncRevision(db);
+      }
       db.execute('COMMIT');
     } catch (_) {
       _rollbackQuietly(db);
@@ -2501,30 +2760,147 @@ class IptvCatalogDb {
     } finally {
       insert.dispose();
     }
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
     return true;
   }
 
   /// Reveal every hidden category in [catalogKey]. Returns false when the
   /// database isn't open (nothing deleted).
-  static bool showAllGroups(String catalogKey) {
+  static bool showAllGroups(
+    String catalogKey, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
     if (!isOpen) return false;
-    _requireDb().execute('DELETE FROM hidden_groups WHERE catalog_key = ?', [
-      catalogKey,
-    ]);
+    final db = _requireDb();
+    var groups = const <String>[];
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      groups = db
+          .select('SELECT grp FROM hidden_groups WHERE catalog_key = ?', [
+            catalogKey,
+          ])
+          .map((row) => row['grp'] as String)
+          .toList(growable: false);
+      db.execute('DELETE FROM hidden_groups WHERE catalog_key = ?', [
+        catalogKey,
+      ]);
+      if (groups.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+        final now = debugLibraryClock().millisecondsSinceEpoch;
+        for (final group in groups) {
+          _writeHiddenGroupState(
+            db,
+            catalogKey: catalogKey,
+            group: group,
+            updatedAtMs: now,
+            deleted: true,
+          );
+        }
+        _bumpWebDavSyncRevision(db);
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    }
+    if (groups.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
     return true;
   }
 
   /// Drops a deleted source's hidden categories. Called when its catalogs go,
   /// so re-adding the same playlist later doesn't inherit invisible rules the
   /// user has no memory of setting.
-  static void forgetHiddenGroups(Iterable<String> catalogKeys) {
+  static void forgetHiddenGroups(
+    Iterable<String> catalogKeys, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+    Map<String, WebDavSyncCatalogOwnerReference> ownerReferences = const {},
+  }) {
     final keys = catalogKeys.toList();
     if (!isOpen || keys.isEmpty) return;
     final placeholders = List.filled(keys.length, '?').join(', ');
-    _requireDb().execute(
-      'DELETE FROM hidden_groups WHERE catalog_key IN ($placeholders)',
-      keys,
+    final db = _requireDb();
+    var removed = const <Row>[];
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      removed = db.select(
+        'SELECT catalog_key, grp FROM hidden_groups '
+        'WHERE catalog_key IN ($placeholders)',
+        keys,
+      );
+      db.execute(
+        'DELETE FROM hidden_groups WHERE catalog_key IN ($placeholders)',
+        keys,
+      );
+      if (removed.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+        final now = debugLibraryClock().millisecondsSinceEpoch;
+        for (final row in removed) {
+          _writeHiddenGroupState(
+            db,
+            catalogKey: row['catalog_key'] as String,
+            group: row['grp'] as String,
+            updatedAtMs: now,
+            deleted: true,
+            aux: ownerReferences[row['catalog_key']]?.toAux(),
+          );
+        }
+        _bumpWebDavSyncRevision(db);
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    }
+    if (removed.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
+  }
+
+  static void _writeHiddenGroupState(
+    Database db, {
+    required String catalogKey,
+    required String group,
+    required int updatedAtMs,
+    required bool deleted,
+    String? aux,
+  }) {
+    db.execute(
+      '''
+      INSERT OR REPLACE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+    ''',
+      [
+        WebDavSyncLibraryKinds.hiddenGroups,
+        catalogKey,
+        group,
+        updatedAtMs,
+        WebDavSyncLibraryMutation.originDeviceId,
+        deleted ? 1 : 0,
+        aux,
+      ],
     );
+  }
+
+  static void _bumpWebDavSyncRevision(Database db) {
+    db.execute('''
+      UPDATE webdav_sync_meta
+      SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+      WHERE key = 'mutation_revision'
+    ''');
+  }
+
+  static int _webDavSyncRevision(Database db) {
+    final rows = db.select(
+      "SELECT value FROM webdav_sync_meta WHERE key = 'mutation_revision'",
+    );
+    if (rows.length != 1) {
+      throw StateError('IPTV catalog sync revision is unavailable');
+    }
+    return int.parse(rows.single['value'] as String);
   }
 
   // ── Reads (UI isolate, synchronous) ──────────────────────────────────────

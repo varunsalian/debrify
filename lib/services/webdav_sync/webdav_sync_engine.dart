@@ -17,6 +17,7 @@ import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_large_section_io.dart';
+import 'webdav_sync_library_models.dart';
 import 'webdav_sync_setup_service.dart';
 import 'webdav_sync_tombstones.dart';
 import 'webdav_sync_transport.dart';
@@ -259,6 +260,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     var circlePublicationAllowed = true;
     var localChangeFollowUp = false;
     var circleConflict = false;
+    final libraryConflictProfiles = <String>{};
     if (_localAdapter is WebDavSyncRegistryTombstoneOutboxDrainer) {
       try {
         circlePublicationAllowed =
@@ -333,6 +335,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     WebDavSyncLocalSession? session;
     final circleAdapter = _localAdapter is WebDavSyncCircleLocalAdapter
         ? _localAdapter as WebDavSyncCircleLocalAdapter
+        : null;
+    final libraryAdapter = _localAdapter is WebDavSyncLibraryLocalAdapter
+        ? _localAdapter as WebDavSyncLibraryLocalAdapter
         : null;
     final pendingCircle = state.pendingCircleApply;
     if (pendingCircle != null) {
@@ -658,6 +663,103 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               appliedKeysByLocalProfile,
               pending.localProfileId,
               replayedAppliedKeys,
+            );
+          }
+          state = await _stateRepository.load(namespaceId);
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.mergeApply, replayStarted);
+        }
+      }
+      final pendingLibraries = state.profiles.entries
+          .where((entry) => entry.value.pendingLibraryApply != null)
+          .toList(growable: false);
+      if (pendingLibraries.isNotEmpty) {
+        if (libraryAdapter == null) {
+          throw StateError('WebDAV sync library apply adapter is unavailable');
+        }
+        final replayStarted = instrumentation.startPhase();
+        try {
+          session ??= await _localAdapter.beginCycle();
+          for (final entry in pendingLibraries) {
+            final pending = entry.value.pendingLibraryApply!;
+            if (identityMaps.circleToLocalProfiles[entry.key] !=
+                pending.localProfileId) {
+              throw StateError('WebDAV sync pending library mapping changed');
+            }
+            final fresh = await libraryAdapter.readLibrary(
+              session,
+              pending.localProfileId,
+              WebDavSyncLibraryBuildRequest(
+                circleProfileId: entry.key,
+                identityMaps: identityMaps,
+                clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+                serverNowMs: serverNowMs,
+              ),
+            );
+            final replayed = WebDavSyncLibraryMerge.merge(
+              circleProfileId: entry.key,
+              documents: <WebDavSyncLibraryDocument>[
+                if (entry.value.libraryBaseline != null)
+                  entry.value.libraryBaseline!,
+                fresh.document,
+                pending.target,
+              ],
+            );
+            final outcome = await libraryAdapter.applyLibrary(
+              session,
+              pending.localProfileId,
+              WebDavSyncLibraryApplyRequest(
+                circleProfileId: entry.key,
+                identityMaps: identityMaps,
+                document: replayed,
+                observedRevisions: fresh.revisions,
+                hiddenGroupNamesByWireKey: fresh.hiddenGroupNamesByWireKey,
+              ),
+              replayingPending: true,
+            );
+            if (outcome.result == WebDavSyncLibraryApplyResult.conflict) {
+              localChangeFollowUp = true;
+              libraryConflictProfiles.add(entry.key);
+              await _stateRepository.update(namespaceId, (current) {
+                final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                  current.profiles,
+                );
+                final profile = profiles[entry.key];
+                if (profile != null) {
+                  profiles[entry.key] = profile.copyWith(
+                    clearPendingLibraryApply: true,
+                  );
+                }
+                return current.copyWith(
+                  profiles:
+                      Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                        profiles,
+                      ),
+                );
+              });
+              continue;
+            }
+            await _stateRepository.update(namespaceId, (current) {
+              final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                current.profiles,
+              );
+              final profile =
+                  profiles[entry.key] ?? const WebDavSyncProfileEngineState();
+              profiles[entry.key] = profile.copyWith(
+                libraryBaseline: replayed,
+                clearPendingLibraryApply: true,
+              );
+              return current.copyWith(
+                profiles:
+                    Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                      profiles,
+                    ),
+              );
+            });
+            _recordAppliedKeys(
+              appliedKeysByLocalProfile,
+              pending.localProfileId,
+              outcome.appliedNamespaces,
             );
           }
           state = await _stateRepository.load(namespaceId);
@@ -1088,9 +1190,120 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             localProfileId,
             appliedKeys,
           );
+          WebDavSyncLibraryDocument? mergedLibrary;
+          if (libraryAdapter != null &&
+              !libraryConflictProfiles.contains(circleProfileId)) {
+            final localLibrary = await libraryAdapter.readLibrary(
+              session,
+              localProfileId,
+              WebDavSyncLibraryBuildRequest(
+                circleProfileId: circleProfileId,
+                identityMaps: identityMaps,
+                clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+                serverNowMs: serverNowMs,
+              ),
+            );
+            final libraryTarget = WebDavSyncLibraryMerge.merge(
+              circleProfileId: circleProfileId,
+              documents: <WebDavSyncLibraryDocument>[
+                if (profileState.libraryBaseline != null)
+                  profileState.libraryBaseline!,
+                localLibrary.document,
+                ...peerData.libraryDocuments,
+              ],
+            );
+            identityMaps.assertContainsNoLocalIds(libraryTarget.toJson());
+            final pendingLibrary = WebDavSyncPendingLibraryApply(
+              localProfileId: localProfileId,
+              target: libraryTarget,
+              observedRevisions: localLibrary.revisions,
+            );
+            final outcome = await libraryAdapter.applyLibrary(
+              session,
+              localProfileId,
+              WebDavSyncLibraryApplyRequest(
+                circleProfileId: circleProfileId,
+                identityMaps: identityMaps,
+                document: libraryTarget,
+                observedRevisions: localLibrary.revisions,
+                hiddenGroupNamesByWireKey:
+                    localLibrary.hiddenGroupNamesByWireKey,
+              ),
+              beforeWrite: () => _stateRepository.update(namespaceId, (
+                current,
+              ) {
+                final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                  current.profiles,
+                );
+                final currentProfile =
+                    profiles[circleProfileId] ??
+                    const WebDavSyncProfileEngineState();
+                profiles[circleProfileId] = currentProfile.copyWith(
+                  pendingLibraryApply: pendingLibrary,
+                );
+                return current.copyWith(
+                  profiles:
+                      Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                        profiles,
+                      ),
+                );
+              }),
+            );
+            if (outcome.result == WebDavSyncLibraryApplyResult.conflict) {
+              localChangeFollowUp = true;
+              await _stateRepository.update(namespaceId, (current) {
+                final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                  current.profiles,
+                );
+                final currentProfile = profiles[circleProfileId];
+                if (currentProfile != null) {
+                  profiles[circleProfileId] = currentProfile.copyWith(
+                    clearPendingLibraryApply: true,
+                  );
+                }
+                return current.copyWith(
+                  profiles:
+                      Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                        profiles,
+                      ),
+                );
+              });
+              _diagnostic(
+                'Deferred WebDAV library apply after a concurrent local '
+                'database change',
+                null,
+              );
+            } else {
+              mergedLibrary = libraryTarget;
+              await _stateRepository.update(namespaceId, (current) {
+                final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                  current.profiles,
+                );
+                final currentProfile =
+                    profiles[circleProfileId] ??
+                    const WebDavSyncProfileEngineState();
+                profiles[circleProfileId] = currentProfile.copyWith(
+                  libraryBaseline: libraryTarget,
+                  clearPendingLibraryApply: true,
+                );
+                return current.copyWith(
+                  profiles:
+                      Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                        profiles,
+                      ),
+                );
+              });
+              _recordAppliedKeys(
+                appliedKeysByLocalProfile,
+                localProfileId,
+                outcome.appliedNamespaces,
+              );
+            }
+          }
           profilesApplied++;
           profileResults[circleProfileId] = _ProfileCycleResult(
             document: merged.document,
+            library: mergedLibrary,
             tombstones: merged.tombstones,
             originalLocalTombstones: profileState.tombstones,
           );
@@ -1138,6 +1351,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             ),
             lastPushedHotDigest: entry.value.hotDigest,
             lastPushedTombstoneDigest: entry.value.tombstoneDigest,
+            lastPushedLibraryDigest: entry.value.libraryDigest,
           );
         }
         return current.copyWith(
@@ -1365,6 +1579,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       ),
       tombstoneDocuments: List<WebDavSyncTombstoneDocument>.unmodifiable(
         peers.expand((peer) => peer.tombstoneDocuments),
+      ),
+      libraryDocuments: List<WebDavSyncLibraryDocument>.unmodifiable(
+        peers.expand((peer) => peer.libraryDocuments),
       ),
     );
   }
@@ -1596,6 +1813,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   }) async {
     WebDavSyncHotDocument? hot;
     WebDavSyncTombstoneDocument? tombstone;
+    WebDavSyncLibraryDocument? library;
     final stale =
         serverNowMs - manifest.updatedAtMs > staleManifestCutoff.inMilliseconds;
     final hotRef = manifest.section('hot/$circleProfileId');
@@ -1651,6 +1869,38 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         _diagnostic('Ignored an invalid WebDAV sync tombstone section', error);
       }
     }
+    final libraryRef = manifest.section('library/$circleProfileId');
+    // Durable library leaves deliberately ignore heartbeat age, like
+    // tombstones: a stale device can still hold the only winning deletion.
+    if (libraryRef != null &&
+        libraryRef.schemaVersion == WebDavSyncLibraryDocument.schemaVersion &&
+        libraryRef.size > WebDavSyncLibraryDocument.maxEncodedBytes) {
+      if (deviceId == ownDeviceId) {
+        await _markOwnSectionDirty(namespaceId, libraryRef.name);
+      }
+      _diagnostic('Ignored an oversized WebDAV sync library section', null);
+    } else if (libraryRef != null &&
+        libraryRef.schemaVersion == WebDavSyncLibraryDocument.schemaVersion &&
+        libraryRef.size <= WebDavSyncLibraryDocument.maxEncodedBytes) {
+      try {
+        library = await _readLibrarySection(
+          transport,
+          root,
+          deviceId,
+          libraryRef,
+          circleProfileId,
+          instrumentation,
+        );
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
+        _diagnostic('Ignored a removed WebDAV sync library section', error);
+      } on Exception catch (error) {
+        if (deviceId == ownDeviceId) {
+          await _markOwnSectionDirty(namespaceId, libraryRef.name);
+        }
+        _diagnostic('Ignored an invalid WebDAV sync library section', error);
+      }
+    }
     return _PeerProfileData(
       hotDocuments: hot == null
           ? const <WebDavSyncHotDocument>[]
@@ -1658,7 +1908,60 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       tombstoneDocuments: tombstone == null
           ? const <WebDavSyncTombstoneDocument>[]
           : <WebDavSyncTombstoneDocument>[tombstone],
+      libraryDocuments: library == null
+          ? const <WebDavSyncLibraryDocument>[]
+          : <WebDavSyncLibraryDocument>[library],
     );
+  }
+
+  Future<WebDavSyncLibraryDocument> _readLibrarySection(
+    WebDavSyncTransport transport,
+    OpenedWebDavSyncRoot root,
+    String deviceId,
+    WebDavSyncSectionReference reference,
+    String circleProfileId,
+    _CycleInstrumentation instrumentation,
+  ) async {
+    final cacheKey = _sectionCacheKey(
+      root.document.circleId,
+      deviceId,
+      reference,
+      'library',
+    );
+    final cached = _cached(cacheKey);
+    if (cached is WebDavSyncLibraryDocument &&
+        cached.circleProfileId == circleProfileId &&
+        cached.semanticDigest == reference.semanticDigest) {
+      _requireLibraryPublicationBounds(cached, reference.updatedAtMs);
+      return cached;
+    }
+    _removeCached(cacheKey);
+    instrumentation.requestStarted();
+    final encoded = await WebDavSyncLargeSectionIo(codec: _codec).readVerified(
+      transport: transport,
+      deviceId: deviceId,
+      reference: reference,
+      maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
+    );
+    instrumentation.received(encoded.length);
+    final payload = await _codec.openDocument(
+      key: root.key,
+      encoded: encoded,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: reference.name,
+      schemaVersion: reference.schemaVersion,
+      maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
+      runInBackground: true,
+    );
+    final document = WebDavSyncLibraryDocument.fromJson(payload);
+    if (document.circleProfileId != circleProfileId ||
+        document.semanticDigest != reference.semanticDigest) {
+      throw const FormatException('WebDAV sync library section mismatch');
+    }
+    _requireLibraryPublicationBounds(document, reference.updatedAtMs);
+    _cache(cacheKey, document, reference.size);
+    return document;
   }
 
   Future<WebDavSyncHotDocument> _readHotSection(
@@ -1785,11 +2088,17 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         }
         const hotPrefix = 'hot/';
         const tombstonePrefix = 'tombstones/';
+        const libraryPrefix = 'library/';
         final isHot = sectionName.startsWith(hotPrefix);
         final isTombstone = sectionName.startsWith(tombstonePrefix);
-        if (!isHot && !isTombstone) return current;
+        final isLibrary = sectionName.startsWith(libraryPrefix);
+        if (!isHot && !isTombstone && !isLibrary) return current;
         final circleProfileId = sectionName.substring(
-          isHot ? hotPrefix.length : tombstonePrefix.length,
+          isHot
+              ? hotPrefix.length
+              : isTombstone
+              ? tombstonePrefix.length
+              : libraryPrefix.length,
         );
         final profile = current.profiles[circleProfileId];
         if (profile == null) return current;
@@ -1800,6 +2109,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               circleProfileId: profile.copyWith(
                 clearLastPushedHotDigest: isHot,
                 clearLastPushedTombstoneDigest: isTombstone,
+                clearLastPushedLibraryDigest: isLibrary,
               ),
             },
           ),
@@ -1822,6 +2132,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   }) async {
     final deviceId = context.deviceId!;
     final changed = <_SealedSection>[];
+    final librariesToPush = <String, WebDavSyncLibraryDocument>{};
     final published = <String, _PublishedProfile>{};
     final profilesDigest = circle?.profiles.semanticDigest;
     final resourcesDigest = circle?.resources.semanticDigest;
@@ -1909,9 +2220,16 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           instrumentation.finishPhase(_CyclePhase.seal, phaseStarted);
         }
       }
+      final library = entry.value.library;
+      if (library != null &&
+          (profileState.lastPushedLibraryDigest != library.semanticDigest ||
+              state.ownManifest?.section('library/${entry.key}') == null)) {
+        librariesToPush[entry.key] = library;
+      }
       published[entry.key] = _PublishedProfile(
         hotDigest: hotDigest,
         tombstoneDigest: tombstoneDigest,
+        libraryDigest: entry.value.library?.semanticDigest,
         tombstones: Map<String, WebDavSyncTombstone>.unmodifiable(
           publishedTombstones,
         ),
@@ -1921,6 +2239,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         state.ownManifest?.section(WebDavSyncGraphKind.graph.logicalName) !=
         null;
     if (changed.isEmpty &&
+        librariesToPush.isEmpty &&
         !pushResources &&
         !repairManifest &&
         !dropsLegacyGraph) {
@@ -1981,6 +2300,32 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       }
     }
 
+    final libraryReferences = <String, WebDavSyncSectionReference>{};
+    for (final entry in librariesToPush.entries) {
+      session.validate();
+      phaseStarted = instrumentation.startPhase();
+      try {
+        instrumentation.requestStarted();
+        final document = entry.value;
+        final reference = await WebDavSyncLargeSectionIo(codec: _codec)
+            .sealWriteVerify(
+              transport: transport,
+              key: root.key,
+              circleId: root.document.circleId,
+              deviceId: deviceId,
+              logicalName: 'library/${entry.key}',
+              schemaVersion: WebDavSyncLibraryDocument.schemaVersion,
+              payload: document.toJson(),
+              semanticDigest: document.semanticDigest,
+              updatedAtMs: serverNowMs,
+              maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
+            );
+        libraryReferences[reference.name] = reference;
+      } finally {
+        instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
+      }
+    }
+
     WebDavSyncSectionReference? resourceReference;
     if (pushResources) {
       session.validate();
@@ -2012,6 +2357,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         if (section.name != WebDavSyncGraphKind.graph.logicalName)
           section.name: section,
       for (final section in changed) section.reference.name: section.reference,
+      ...libraryReferences,
       if (resourceReference != null) resourceReference.name: resourceReference,
     };
     if (sections.isEmpty) {
@@ -2094,7 +2440,10 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     }
     final verifiedManifest = WebDavSyncManifest.fromJson(opened);
     return _PushResult(
-      sectionsPushed: changed.length + (resourceReference == null ? 0 : 1),
+      sectionsPushed:
+          changed.length +
+          libraryReferences.length +
+          (resourceReference == null ? 0 : 1),
       manifest: verifiedManifest,
       publishedProfiles: Map<String, _PublishedProfile>.unmodifiable(published),
       publishedProfilesDigest: profilesDigest,
@@ -2350,6 +2699,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
 
   static int _maxBytesFor(String name) {
     if (name == 'resources') return WebDavSyncLimits.maxGraphDocumentBytes;
+    if (name.startsWith('library/')) {
+      return WebDavSyncLibraryDocument.maxEncodedBytes;
+    }
     if (name.startsWith('tombstones/')) {
       return WebDavSyncLimits.maxTombstoneDocumentBytes;
     }
@@ -2384,6 +2736,19 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     )) {
       throw const FormatException(
         'WebDAV sync tombstone section contains a future publication stamp',
+      );
+    }
+  }
+
+  static void _requireLibraryPublicationBounds(
+    WebDavSyncLibraryDocument document,
+    int publishedAtMs,
+  ) {
+    if (document.records.values.any(
+      (leaf) => leaf.stamp.normalizedTimeMs > publishedAtMs,
+    )) {
+      throw const FormatException(
+        'WebDAV sync library section contains a future publication stamp',
       );
     }
   }
@@ -2547,10 +2912,12 @@ final class _PeerProfileData {
   const _PeerProfileData({
     required this.hotDocuments,
     required this.tombstoneDocuments,
+    required this.libraryDocuments,
   });
 
   final List<WebDavSyncHotDocument> hotDocuments;
   final List<WebDavSyncTombstoneDocument> tombstoneDocuments;
+  final List<WebDavSyncLibraryDocument> libraryDocuments;
 }
 
 Future<List<R>> _mapConcurrentOrdered<T, R>(
@@ -2586,11 +2953,13 @@ final class _CachedSection {
 final class _ProfileCycleResult {
   const _ProfileCycleResult({
     required this.document,
+    required this.library,
     required this.tombstones,
     required this.originalLocalTombstones,
   });
 
   final WebDavSyncHotDocument document;
+  final WebDavSyncLibraryDocument? library;
   final Map<String, WebDavSyncTombstone> tombstones;
   final Map<String, WebDavSyncTombstone> originalLocalTombstones;
 }
@@ -2620,11 +2989,13 @@ final class _PublishedProfile {
   const _PublishedProfile({
     required this.hotDigest,
     required this.tombstoneDigest,
+    required this.libraryDigest,
     required this.tombstones,
   });
 
   final String hotDigest;
   final String tombstoneDigest;
+  final String? libraryDigest;
   final Map<String, WebDavSyncTombstone> tombstones;
 }
 

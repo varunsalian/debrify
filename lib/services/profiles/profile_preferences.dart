@@ -52,6 +52,8 @@ final class ProfilePreferenceMutationConflict implements Exception {
 class ProfilePreferences implements SharedPreferences {
   static const String webDavSyncRegistryLogicalKey =
       'remote_webdav_sync_registry_records_v1';
+  static const String webDavSyncLibraryLogicalKey =
+      'remote_webdav_sync_library_records_v1';
   static final Lock _atomicStringListMutationLock = Lock();
   static final Object _exclusiveMutationZoneKey = Object();
   static int _mutationRevision = 0;

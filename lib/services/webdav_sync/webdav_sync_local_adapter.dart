@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -15,6 +17,10 @@ import '../profiles/profile_registry.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
 import '../diagnostic_log.dart';
+import '../debrify_tv_database.dart';
+import '../iptv_catalog_db.dart';
+import '../iptv_catalog_key.dart';
+import '../storage_service.dart';
 import 'webdav_sync_active_profile_refresh.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
@@ -22,6 +28,7 @@ import 'webdav_sync_codec.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_library_models.dart';
 import 'webdav_sync_tombstones.dart';
 
 final class WebDavSyncLocalSession {
@@ -179,11 +186,82 @@ abstract interface class WebDavSyncRegistryTombstoneOutboxDrainer {
   Future<bool> drainRegistryTombstoneOutbox();
 }
 
+final class WebDavSyncLocalLibrarySnapshot {
+  const WebDavSyncLocalLibrarySnapshot({
+    required this.document,
+    required this.revisions,
+    this.hiddenGroupNamesByWireKey = const <String, String>{},
+  });
+
+  final WebDavSyncLibraryDocument document;
+  final WebDavSyncDatabaseRevisions revisions;
+  final Map<String, String> hiddenGroupNamesByWireKey;
+}
+
+final class WebDavSyncLibraryBuildRequest {
+  const WebDavSyncLibraryBuildRequest({
+    required this.circleProfileId,
+    required this.identityMaps,
+    required this.clockOffsetMs,
+    required this.serverNowMs,
+  });
+
+  final String circleProfileId;
+  final WebDavSyncIdentityMaps identityMaps;
+  final int clockOffsetMs;
+  final int serverNowMs;
+}
+
+final class WebDavSyncLibraryApplyRequest {
+  const WebDavSyncLibraryApplyRequest({
+    required this.circleProfileId,
+    required this.identityMaps,
+    required this.document,
+    required this.observedRevisions,
+    required this.hiddenGroupNamesByWireKey,
+  });
+
+  final String circleProfileId;
+  final WebDavSyncIdentityMaps identityMaps;
+  final WebDavSyncLibraryDocument document;
+  final WebDavSyncDatabaseRevisions observedRevisions;
+  final Map<String, String> hiddenGroupNamesByWireKey;
+}
+
+final class WebDavSyncLibraryApplyOutcome {
+  const WebDavSyncLibraryApplyOutcome({
+    required this.result,
+    this.appliedNamespaces = const <String>{},
+  });
+
+  final WebDavSyncLibraryApplyResult result;
+  final Set<String> appliedNamespaces;
+}
+
+/// Optional durable-library boundary. Hot-only test adapters remain valid;
+/// production opts in without widening preference mutation APIs.
+abstract interface class WebDavSyncLibraryLocalAdapter {
+  Future<WebDavSyncLocalLibrarySnapshot> readLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request,
+  );
+
+  Future<WebDavSyncLibraryApplyOutcome> applyLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request, {
+    Future<void> Function()? beforeWrite,
+    bool replayingPending = false,
+  });
+}
+
 /// ProfilePreferences-backed adapter used once M5 arms the engine.
 final class ProfileWebDavSyncLocalAdapter
     implements
         WebDavSyncLocalAdapter,
         WebDavSyncCircleLocalAdapter,
+        WebDavSyncLibraryLocalAdapter,
         WebDavSyncRegistryTombstoneOutboxDrainer {
   ProfileWebDavSyncLocalAdapter(
     this.registry, {
@@ -304,6 +382,253 @@ final class ProfileWebDavSyncLocalAdapter
     }
     _validateSession(session);
     return appliedKeys;
+  }
+
+  @override
+  Future<WebDavSyncLocalLibrarySnapshot> readLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request,
+  ) async {
+    _validateSession(session);
+    final scope = await _profileScope(session, localProfileId);
+    final mappings = await _catalogWireMappings(
+      session,
+      localProfileId,
+      request.identityMaps,
+    );
+    final tvRevision = await DebrifyTvDatabase.instance.runOneShotScoped(
+      scope,
+      (db) async {
+        final rows = await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        );
+        if (rows.length != 1) {
+          throw StateError('Debrify TV sync revision is unavailable');
+        }
+        return int.parse(rows.single['value']! as String);
+      },
+    );
+    final catalog = await IptvCatalogDb.readWebDavSyncState(
+      scope,
+      clockOffsetMs: request.clockOffsetMs,
+      serverNowMs: request.serverNowMs,
+    );
+    _validateSession(session);
+    final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{};
+    final hiddenNames = <String, String>{};
+    for (final state in catalog.records) {
+      if (state.kind != WebDavSyncLibraryKinds.hiddenGroups) continue;
+      var mapping = mappings.byCatalogKey[state.ownerKey];
+      if (mapping == null) {
+        final hint = WebDavSyncCatalogOwnerReference.tryFromAux(state.aux);
+        if (hint != null &&
+            mappings.grantedLocalResourceIds.contains(hint.localResourceId)) {
+          final circleResourceId =
+              request.identityMaps.localToCircleResources[hint.localResourceId];
+          if (circleResourceId != null) {
+            mapping = _CatalogWireIdentity(
+              circleResourceId: circleResourceId,
+              variant: hint.variant,
+            );
+          }
+        }
+      }
+      if (mapping == null) continue;
+      final wireKey = _hiddenGroupWireKey(mapping, state.itemKey);
+      final candidate = WebDavSyncCircleLeaf<Map<String, Object?>>(
+        stamp: state.stamp,
+        value: state.deleted
+            ? null
+            : Map<String, Object?>.unmodifiable(<String, Object?>{
+                'group': state.itemKey,
+              }),
+      );
+      final current = records[wireKey];
+      if (current == null ||
+          WebDavSyncLibraryMerge.compareLeaves(candidate, current) > 0) {
+        hiddenNames[wireKey] = state.itemKey;
+        records[wireKey] = candidate;
+      }
+    }
+    final document = WebDavSyncLibraryDocument(
+      circleProfileId: request.circleProfileId,
+      records:
+          Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>>.unmodifiable(
+            records,
+          ),
+    );
+    request.identityMaps.assertContainsNoLocalIds(document.toJson());
+    return WebDavSyncLocalLibrarySnapshot(
+      document: document,
+      revisions: WebDavSyncDatabaseRevisions(
+        debrifyTv: tvRevision,
+        iptvCatalog: catalog.mutationRevision,
+      ),
+      hiddenGroupNamesByWireKey: Map<String, String>.unmodifiable(hiddenNames),
+    );
+  }
+
+  @override
+  Future<WebDavSyncLibraryApplyOutcome> applyLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request, {
+    Future<void> Function()? beforeWrite,
+    bool replayingPending = false,
+  }) async {
+    _validateSession(session);
+    final scope = await _profileScope(session, localProfileId);
+    final mappings = await _catalogWireMappings(
+      session,
+      localProfileId,
+      request.identityMaps,
+    );
+    final targets = <WebDavSyncHiddenGroupTarget>[];
+    for (final entry in request.document.records.entries) {
+      final parts = entry.key.split('/');
+      if (parts.length != 5 || parts[0] != 'catalog' || parts[1] != 'hidden') {
+        continue;
+      }
+      final catalogKey =
+          mappings.byWireResourceVariant['${parts[2]}/${parts[3]}'];
+      if (catalogKey == null) continue;
+      final value = entry.value.value;
+      final group = value == null
+          ? request.hiddenGroupNamesByWireKey[entry.key]
+          : value.length == 1 && value['group'] is String
+          ? value['group'] as String
+          : null;
+      if (group == null || group.isEmpty || _sha256Text(group) != parts[4]) {
+        continue;
+      }
+      targets.add(
+        WebDavSyncHiddenGroupTarget(
+          catalogKey: catalogKey,
+          group: group,
+          leaf: entry.value,
+        ),
+      );
+    }
+    await beforeWrite?.call();
+    _validateSession(session);
+    final tvFenceMatches = await DebrifyTvDatabase.instance.runOneShotScoped(
+      scope,
+      (db) async {
+        final rows = await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        );
+        return rows.length == 1 &&
+            int.tryParse(rows.single['value']! as String) ==
+                request.observedRevisions.debrifyTv;
+      },
+    );
+    if (!tvFenceMatches) {
+      return const WebDavSyncLibraryApplyOutcome(
+        result: WebDavSyncLibraryApplyResult.conflict,
+      );
+    }
+    final catalogResult = await IptvCatalogDb.applyWebDavHiddenGroups(
+      scope,
+      expectedRevision: request.observedRevisions.iptvCatalog,
+      targets: targets,
+    );
+    _validateSession(session);
+    if (catalogResult.result == WebDavSyncLibraryApplyResult.conflict) {
+      return const WebDavSyncLibraryApplyOutcome(
+        result: WebDavSyncLibraryApplyResult.conflict,
+      );
+    }
+    return WebDavSyncLibraryApplyOutcome(
+      result: WebDavSyncLibraryApplyResult.applied,
+      appliedNamespaces: catalogResult.touched
+          ? const <String>{'catalog/hidden'}
+          : const <String>{},
+    );
+  }
+
+  Future<ProfileScope> _profileScope(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+  ) async {
+    final profile = await registry.getProfile(localProfileId);
+    _validateSession(session);
+    if (profile == null) throw WebDavSyncMappedProfileUnavailable();
+    return ProfileScope(
+      profileId: profile.id,
+      dataGeneration: profile.visibleDataGeneration,
+      sessionEpoch: session.scope.sessionEpoch,
+    );
+  }
+
+  Future<_CatalogWireMappings> _catalogWireMappings(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncIdentityMaps identityMaps,
+  ) async {
+    if (localProfileId != session.scope.profileId) {
+      return const _CatalogWireMappings();
+    }
+    final playlists = await StorageService.getIptvPlaylists(forSettings: true);
+    _validateSession(session);
+    final byCatalogKey = <String, _CatalogWireIdentity>{};
+    final byWireResourceVariant = <String, String>{};
+    final grantedLocalResourceIds = <String>{};
+    void add(String catalogKey, String localResourceId, String variant) {
+      grantedLocalResourceIds.add(localResourceId);
+      final circleResourceId =
+          identityMaps.localToCircleResources[localResourceId];
+      if (circleResourceId == null) return;
+      final identity = _CatalogWireIdentity(
+        circleResourceId: circleResourceId,
+        variant: variant,
+      );
+      byCatalogKey[catalogKey] = identity;
+      byWireResourceVariant['$circleResourceId/$variant'] = catalogKey;
+    }
+
+    for (final playlist in playlists) {
+      final resourceId = playlist.connectionResourceId;
+      if (resourceId == null) continue;
+      if (playlist.isLocalFile) {
+        add(
+          IptvCatalogKey.forLocalCategoryOrder(playlist.id),
+          resourceId,
+          'local',
+        );
+      } else if (playlist.isXtreamCodes) {
+        for (final type in IptvCatalogKey.xtreamContentTypes) {
+          add(
+            IptvCatalogKey.forXtream(
+              playlist.serverUrl!,
+              playlist.username ?? '',
+              type,
+            ),
+            resourceId,
+            'xc-$type',
+          );
+        }
+      } else if (playlist.url.isNotEmpty) {
+        add(IptvCatalogKey.forUrl(playlist.url), resourceId, 'm3u');
+      }
+    }
+    return _CatalogWireMappings(
+      byCatalogKey: Map<String, _CatalogWireIdentity>.unmodifiable(
+        byCatalogKey,
+      ),
+      byWireResourceVariant: Map<String, String>.unmodifiable(
+        byWireResourceVariant,
+      ),
+      grantedLocalResourceIds: Set<String>.unmodifiable(
+        grantedLocalResourceIds,
+      ),
+    );
   }
 
   @override
@@ -1225,3 +1550,32 @@ final class ProfileWebDavSyncLocalAdapter
     );
   }
 }
+
+final class _CatalogWireIdentity {
+  const _CatalogWireIdentity({
+    required this.circleResourceId,
+    required this.variant,
+  });
+
+  final String circleResourceId;
+  final String variant;
+}
+
+final class _CatalogWireMappings {
+  const _CatalogWireMappings({
+    this.byCatalogKey = const <String, _CatalogWireIdentity>{},
+    this.byWireResourceVariant = const <String, String>{},
+    this.grantedLocalResourceIds = const <String>{},
+  });
+
+  final Map<String, _CatalogWireIdentity> byCatalogKey;
+  final Map<String, String> byWireResourceVariant;
+  final Set<String> grantedLocalResourceIds;
+}
+
+String _hiddenGroupWireKey(_CatalogWireIdentity identity, String group) =>
+    'catalog/hidden/${identity.circleResourceId}/${identity.variant}/'
+    '${_sha256Text(group)}';
+
+String _sha256Text(String value) =>
+    crypto.sha256.convert(utf8.encode(value)).toString();

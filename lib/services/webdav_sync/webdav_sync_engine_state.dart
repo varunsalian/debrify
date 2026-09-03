@@ -10,6 +10,7 @@ import 'webdav_sync_adoption_models.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_library_models.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_transport.dart';
 
@@ -68,6 +69,44 @@ final class WebDavSyncPendingApply {
       localProfileId: localProfileId,
       values: Map<String, Object>.unmodifiable(values),
       target: WebDavSyncHotDocument.fromJson(json['target']),
+    );
+  }
+}
+
+final class WebDavSyncPendingLibraryApply {
+  const WebDavSyncPendingLibraryApply({
+    required this.localProfileId,
+    required this.target,
+    required this.observedRevisions,
+  });
+
+  final String localProfileId;
+  final WebDavSyncLibraryDocument target;
+  final WebDavSyncDatabaseRevisions observedRevisions;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'localProfileId': localProfileId,
+    'target': target.toJson(),
+    'targetDigest': target.semanticDigest,
+    'observedRevisions': observedRevisions.toJson(),
+  };
+
+  factory WebDavSyncPendingLibraryApply.fromJson(Object? source) {
+    final json = _map(source, 'pending library apply');
+    final localProfileId = json['localProfileId'];
+    final target = WebDavSyncLibraryDocument.fromJson(json['target']);
+    if (json.length != 4 ||
+        localProfileId is! String ||
+        !_safeSyncIdentifier.hasMatch(localProfileId) ||
+        json['targetDigest'] != target.semanticDigest) {
+      throw const FormatException('Invalid WebDAV sync pending library apply');
+    }
+    return WebDavSyncPendingLibraryApply(
+      localProfileId: localProfileId,
+      target: target,
+      observedRevisions: WebDavSyncDatabaseRevisions.fromJson(
+        json['observedRevisions'],
+      ),
     );
   }
 }
@@ -267,31 +306,46 @@ final class WebDavSyncProfileEngineState {
   const WebDavSyncProfileEngineState({
     this.baseline,
     this.pendingApply,
+    this.libraryBaseline,
+    this.pendingLibraryApply,
     this.tombstones = const <String, WebDavSyncTombstone>{},
     this.lastPushedHotDigest,
     this.lastPushedTombstoneDigest,
+    this.lastPushedLibraryDigest,
   });
 
   final WebDavSyncHotDocument? baseline;
   final WebDavSyncPendingApply? pendingApply;
+  final WebDavSyncLibraryDocument? libraryBaseline;
+  final WebDavSyncPendingLibraryApply? pendingLibraryApply;
   final Map<String, WebDavSyncTombstone> tombstones;
   final String? lastPushedHotDigest;
   final String? lastPushedTombstoneDigest;
+  final String? lastPushedLibraryDigest;
 
   WebDavSyncProfileEngineState copyWith({
     WebDavSyncHotDocument? baseline,
     WebDavSyncPendingApply? pendingApply,
     bool clearPendingApply = false,
+    WebDavSyncLibraryDocument? libraryBaseline,
+    WebDavSyncPendingLibraryApply? pendingLibraryApply,
+    bool clearPendingLibraryApply = false,
     Map<String, WebDavSyncTombstone>? tombstones,
     String? lastPushedHotDigest,
     bool clearLastPushedHotDigest = false,
     String? lastPushedTombstoneDigest,
     bool clearLastPushedTombstoneDigest = false,
+    String? lastPushedLibraryDigest,
+    bool clearLastPushedLibraryDigest = false,
   }) => WebDavSyncProfileEngineState(
     baseline: baseline ?? this.baseline,
     pendingApply: clearPendingApply
         ? null
         : (pendingApply ?? this.pendingApply),
+    libraryBaseline: libraryBaseline ?? this.libraryBaseline,
+    pendingLibraryApply: clearPendingLibraryApply
+        ? null
+        : (pendingLibraryApply ?? this.pendingLibraryApply),
     tombstones: tombstones ?? this.tombstones,
     lastPushedHotDigest: clearLastPushedHotDigest
         ? null
@@ -299,11 +353,17 @@ final class WebDavSyncProfileEngineState {
     lastPushedTombstoneDigest: clearLastPushedTombstoneDigest
         ? null
         : (lastPushedTombstoneDigest ?? this.lastPushedTombstoneDigest),
+    lastPushedLibraryDigest: clearLastPushedLibraryDigest
+        ? null
+        : (lastPushedLibraryDigest ?? this.lastPushedLibraryDigest),
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
     if (baseline != null) 'baseline': baseline!.toJson(),
     if (pendingApply != null) 'pendingApply': pendingApply!.toJson(),
+    if (libraryBaseline != null) 'libraryBaseline': libraryBaseline!.toJson(),
+    if (pendingLibraryApply != null)
+      'pendingLibraryApply': pendingLibraryApply!.toJson(),
     'tombstones': <String, Object?>{
       for (final entry in tombstones.entries)
         entry.key: <String, Object?>{
@@ -314,6 +374,8 @@ final class WebDavSyncProfileEngineState {
     if (lastPushedHotDigest != null) 'lastPushedHotDigest': lastPushedHotDigest,
     if (lastPushedTombstoneDigest != null)
       'lastPushedTombstoneDigest': lastPushedTombstoneDigest,
+    if (lastPushedLibraryDigest != null)
+      'lastPushedLibraryDigest': lastPushedLibraryDigest,
   };
 
   factory WebDavSyncProfileEngineState.fromJson(Object? source) {
@@ -353,9 +415,16 @@ final class WebDavSyncProfileEngineState {
       pendingApply: json['pendingApply'] == null
           ? null
           : WebDavSyncPendingApply.fromJson(json['pendingApply']),
+      libraryBaseline: json['libraryBaseline'] == null
+          ? null
+          : WebDavSyncLibraryDocument.fromJson(json['libraryBaseline']),
+      pendingLibraryApply: json['pendingLibraryApply'] == null
+          ? null
+          : WebDavSyncPendingLibraryApply.fromJson(json['pendingLibraryApply']),
       tombstones: Map<String, WebDavSyncTombstone>.unmodifiable(tombstones),
       lastPushedHotDigest: digest('lastPushedHotDigest'),
       lastPushedTombstoneDigest: digest('lastPushedTombstoneDigest'),
+      lastPushedLibraryDigest: digest('lastPushedLibraryDigest'),
     );
   }
 }
@@ -660,8 +729,11 @@ final class WebDavSyncEngineState {
       final profile = WebDavSyncProfileEngineState.fromJson(entry.value);
       if (profile.baseline != null ||
           profile.pendingApply != null ||
+          profile.libraryBaseline != null ||
+          profile.pendingLibraryApply != null ||
           profile.lastPushedHotDigest != null ||
-          profile.lastPushedTombstoneDigest != null) {
+          profile.lastPushedTombstoneDigest != null ||
+          profile.lastPushedLibraryDigest != null) {
         throw const FormatException(
           'Invalid WebDAV sync pending local profile state',
         );

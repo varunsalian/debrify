@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 import 'package:debrify/widgets/iptv/iptv_results_view.dart'
     show IptvResultsViewState;
 import 'package:sqlite3/sqlite3.dart' as raw;
@@ -126,6 +127,67 @@ void main() {
     expect(IptvCatalogDb.isOpen, isTrue);
   });
 
+  test('fresh schema includes the final library-sync sidecar shape', () {
+    final db = raw.sqlite3.open(IptvCatalogDb.path);
+    try {
+      final tables = db
+          .select(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name LIKE 'webdav_sync_%' ORDER BY name",
+          )
+          .map((row) => row['name']);
+      expect(tables, <String>[
+        'webdav_sync_meta',
+        'webdav_sync_record_state',
+      ]);
+      expect(
+        db
+            .select(
+              "SELECT value FROM webdav_sync_meta "
+              "WHERE key = 'mutation_revision'",
+            )
+            .single['value'],
+        '0',
+      );
+    } finally {
+      db.dispose();
+    }
+  });
+
+  test('v2 upgrade backfills hidden groups from hidden_at', () async {
+    final path = IptvCatalogDb.path;
+    var db = raw.sqlite3.open(path);
+    db.execute(
+      'INSERT INTO hidden_groups (catalog_key, grp, hidden_at) '
+      'VALUES (?, ?, ?)',
+      ['m3u|secret-url', 'Adult', 1234],
+    );
+    db.execute('DELETE FROM webdav_sync_record_state');
+    db.execute('PRAGMA user_version = 2');
+    db.dispose();
+    IptvCatalogDb.debugClose();
+
+    await IptvCatalogDb.open();
+    await IptvCatalogDb.ensureMigrations();
+
+    db = raw.sqlite3.open(path);
+    try {
+      final row = db.select(
+        'SELECT * FROM webdav_sync_record_state WHERE kind = ?',
+        [WebDavSyncLibraryKinds.hiddenGroups],
+      ).single;
+      expect(row['owner_key'], 'm3u|secret-url');
+      expect(row['item_key'], 'Adult');
+      expect(row['updated_at_ms'], 1234);
+      expect(row['origin_device_id'], 'migration');
+      expect(row['normalized'], 0);
+      expect(row['deleted'], 0);
+      expect(db.select('PRAGMA user_version').single.values.single, 3);
+    } finally {
+      db.dispose();
+    }
+  });
+
   test('v1 catalog migration backfills only live channel numbers', () async {
     IptvCatalogDb.debugClose();
     final path = '${dir.path}/iptv_catalog.db';
@@ -214,7 +276,7 @@ void main() {
 
     final db = raw.sqlite3.open(IptvCatalogDb.path);
     try {
-      expect(db.select('PRAGMA user_version').first.values.first, 2);
+      expect(db.select('PRAGMA user_version').first.values.first, 3);
     } finally {
       db.dispose();
     }

@@ -89,92 +89,7 @@ class DebrifyTvDatabase {
             () => ProfileStoragePaths.documentsFile('debrify_tv.db'),
           );
 
-    final opened = await openDatabase(
-      dbPath,
-      version: 6,
-      onConfigure: (db) async {
-        await db.execute('PRAGMA foreign_keys = ON');
-      },
-      // Without this, sqflite THROWS on a version decrease (sideloading an
-      // older APK — routine on TV boxes) — and the throw surfaced inside
-      // IptvMediaStore._ensureMigrated, which swallows it and retries
-      // forever: favorites/history silently never load. This DB is
-      // favorites/history/resume bookkeeping, so rebuilding it from scratch
-      // beats a permanently wedged store.
-      onDowngrade: onDatabaseDowngradeDelete,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE tv_channels (
-            channel_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            avoid_nsfw INTEGER NOT NULL DEFAULT 1,
-            channel_number INTEGER NOT NULL UNIQUE,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE tv_channel_keywords (
-            channel_id TEXT NOT NULL,
-            position INTEGER NOT NULL,
-            keyword TEXT NOT NULL,
-            PRIMARY KEY (channel_id, position),
-            FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE tv_channel_cache_state (
-            channel_id TEXT PRIMARY KEY,
-            status TEXT NOT NULL DEFAULT 'warming',
-            error_message TEXT,
-            fetched_at INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE tv_cached_torrents (
-            channel_id TEXT NOT NULL,
-            infohash TEXT NOT NULL,
-            name TEXT NOT NULL,
-            size_bytes INTEGER NOT NULL,
-            created_unix INTEGER NOT NULL,
-            seeders INTEGER NOT NULL,
-            leechers INTEGER NOT NULL,
-            completed INTEGER NOT NULL,
-            scraped_date INTEGER NOT NULL,
-            keywords_json TEXT NOT NULL,
-            sources_json TEXT NOT NULL,
-            added_at INTEGER NOT NULL,
-            PRIMARY KEY (channel_id, infohash),
-            FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
-          )
-        ''');
-
-        await db.execute('''
-          CREATE INDEX idx_tv_cached_torrents_channel_added
-          ON tv_cached_torrents(channel_id, added_at)
-        ''');
-
-        await db.execute('''
-          CREATE TABLE tv_keyword_stats (
-            channel_id TEXT NOT NULL,
-            keyword TEXT NOT NULL,
-            total_fetched INTEGER NOT NULL,
-            last_searched_at INTEGER NOT NULL,
-            pages_pulled INTEGER NOT NULL,
-            pirate_bay_hits INTEGER NOT NULL,
-            PRIMARY KEY (channel_id, keyword),
-            FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
-          )
-        ''');
-
-        await createIptvStoreTables(db);
-      },
-      onUpgrade: runUpgrade,
-    );
+    final opened = await _openAtPath(dbPath);
 
     // Ensure index exists for fresh creates (onCreate already runs for v2 DB)
     await opened.execute(
@@ -277,6 +192,47 @@ class DebrifyTvDatabase {
     return runScoped((db) => db.transaction(action, exclusive: false));
   }
 
+  /// Opens one temporary connection for [scope] without swapping [_db]. It
+  /// participates in the existing active-operation drain, so a profile switch
+  /// cannot close or redirect a library snapshot/apply midway through.
+  Future<T> runOneShotScoped<T>(
+    ProfileScope scope,
+    Future<T> Function(Database db) action,
+  ) async {
+    await ProfileDatabaseAdoptionGate.waitUntilReleased();
+    final requested = _scopeOf(scope);
+    await _scopeLock.synchronized(() {
+      if (_deactivatedScopeKeys.contains(requested.key)) {
+        throw StateError('Debrify TV database scope is deactivated');
+      }
+      _activeOperations += 1;
+    });
+    Database? opened;
+    var ownsHandle = false;
+    try {
+      opened = debugDatabaseOverride;
+      if (opened == null) {
+        final dbPath = await ProfileRuntime.withCapturedScope(
+          scope,
+          () => ProfileStoragePaths.documentsFile('debrify_tv.db'),
+        );
+        opened = await _openAtPath(dbPath, singleInstance: false);
+        ownsHandle = true;
+      }
+      return await action(opened);
+    } finally {
+      if (ownsHandle) await opened?.close();
+      await _scopeLock.synchronized(() {
+        _activeOperations -= 1;
+        if (_activeOperations == 0) {
+          final drained = _operationsDrained;
+          _operationsDrained = null;
+          if (drained != null && !drained.isCompleted) drained.complete();
+        }
+      });
+    }
+  }
+
   _DatabaseScope _requestedScope() {
     if (!ProfileRuntime.isInitialized) {
       throw StateError('Profile runtime is not initialized');
@@ -303,6 +259,88 @@ class DebrifyTvDatabase {
     debugBeforeOpenPublish = null;
     if (opened != null) await opened.close();
   });
+
+  static Future<Database> _openAtPath(
+    String dbPath, {
+    bool singleInstance = true,
+  }) => openDatabase(
+    dbPath,
+    version: 7,
+    singleInstance: singleInstance,
+    onConfigure: (db) async {
+      await db.execute('PRAGMA foreign_keys = ON');
+    },
+    // Rebuilding is safer than leaving an older sideload permanently wedged.
+    onDowngrade: onDatabaseDowngradeDelete,
+    onCreate: _createSchema,
+    onUpgrade: runUpgrade,
+  );
+
+  static Future<void> _createSchema(Database db, int _) async {
+    await db.execute('''
+      CREATE TABLE tv_channels (
+        channel_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        avoid_nsfw INTEGER NOT NULL DEFAULT 1,
+        channel_number INTEGER NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE tv_channel_keywords (
+        channel_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        keyword TEXT NOT NULL,
+        PRIMARY KEY (channel_id, position),
+        FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE tv_channel_cache_state (
+        channel_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'warming',
+        error_message TEXT,
+        fetched_at INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE tv_cached_torrents (
+        channel_id TEXT NOT NULL,
+        infohash TEXT NOT NULL,
+        name TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        created_unix INTEGER NOT NULL,
+        seeders INTEGER NOT NULL,
+        leechers INTEGER NOT NULL,
+        completed INTEGER NOT NULL,
+        scraped_date INTEGER NOT NULL,
+        keywords_json TEXT NOT NULL,
+        sources_json TEXT NOT NULL,
+        added_at INTEGER NOT NULL,
+        PRIMARY KEY (channel_id, infohash),
+        FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_tv_cached_torrents_channel_added
+      ON tv_cached_torrents(channel_id, added_at)
+    ''');
+    await db.execute('''
+      CREATE TABLE tv_keyword_stats (
+        channel_id TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        total_fetched INTEGER NOT NULL,
+        last_searched_at INTEGER NOT NULL,
+        pages_pulled INTEGER NOT NULL,
+        pirate_bay_hits INTEGER NOT NULL,
+        PRIMARY KEY (channel_id, keyword),
+        FOREIGN KEY (channel_id) REFERENCES tv_channels(channel_id) ON DELETE CASCADE
+      )
+    ''');
+    await createIptvStoreTables(db);
+  }
 
   /// Schema migrations. Named (rather than an inline closure) so migration
   /// tests can drive it against a database opened at an older version.
@@ -362,6 +400,9 @@ class DebrifyTvDatabase {
 
     if (oldVersion < 6 && newVersion >= 6) {
       await migrateIptvChannelOrder(db);
+    }
+    if (oldVersion < 7 && newVersion >= 7) {
+      await createWebDavSyncSidecarTables(db);
     }
   }
 
@@ -560,6 +601,36 @@ class DebrifyTvDatabase {
         updated_at INTEGER NOT NULL DEFAULT 0
       )
     ''');
+
+    await createWebDavSyncSidecarTables(db);
+  }
+
+  /// Private v3 library-sync sidecar. The shape is shared with
+  /// `iptv_catalog.db`; family-specific rounds populate their own [kind]s.
+  static Future<void> createWebDavSyncSidecarTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS webdav_sync_record_state (
+        kind TEXT NOT NULL,
+        owner_key TEXT NOT NULL,
+        item_key TEXT NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        origin_device_id TEXT NOT NULL,
+        normalized INTEGER NOT NULL DEFAULT 0,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        aux TEXT,
+        PRIMARY KEY (kind, owner_key, item_key)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS webdav_sync_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      "INSERT OR IGNORE INTO webdav_sync_meta (key, value) "
+      "VALUES ('mutation_revision', '0')",
+    );
   }
 
   /// Insert the built-in Favorites row if it isn't already there.

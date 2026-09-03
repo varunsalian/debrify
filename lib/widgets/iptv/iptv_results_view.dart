@@ -644,8 +644,9 @@ class IptvResultsViewState extends State<IptvResultsView>
             playlist.customListId == change.target,
       IptvChannelOrderScope.source => playlist.id == change.target,
       IptvChannelOrderScope.catalog =>
-        IptvCatalogKey.forCategoryOrder(playlist, _selectedContentType) ==
-            change.target,
+        change.target.isEmpty ||
+            IptvCatalogKey.forCategoryOrder(playlist, _selectedContentType) ==
+                change.target,
     };
     if (affected) unawaited(_loadPlaylist(playlist));
   }

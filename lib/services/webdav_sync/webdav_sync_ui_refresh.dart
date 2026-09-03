@@ -1,3 +1,4 @@
+import '../iptv_channel_order.dart';
 import '../main_page_bridge.dart';
 import '../storage_service.dart';
 
@@ -12,6 +13,7 @@ enum _WebDavSyncUiRefreshTarget {
   tvSidebarStyle,
   desktopSidebarStyle,
   sidebarConfiguration,
+  iptvCatalog,
 }
 
 /// Replays the same live-UI notifications used by local settings writes after
@@ -23,6 +25,7 @@ enum _WebDavSyncUiRefreshTarget {
 /// awaited `notifyPlaylistChanged` path in the active-profile refresher.
 abstract final class WebDavSyncUiRefresh {
   static const Map<String, Set<_WebDavSyncUiRefreshTarget>> _targetsByKey = {
+    'catalog/hidden': {_WebDavSyncUiRefreshTarget.iptvCatalog},
     // HomePageSettingsPage and SpotlightHeroSourcePage.
     'home_cw_merge_local': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_cw_merge_trakt': {_WebDavSyncUiRefreshTarget.homeSettings},
@@ -120,6 +123,8 @@ abstract final class WebDavSyncUiRefresh {
             MainPageBridge.desktopSidebarStyleChanged?.call();
           case _WebDavSyncUiRefreshTarget.sidebarConfiguration:
             MainPageBridge.sidebarConfigurationChanged?.call();
+          case _WebDavSyncUiRefreshTarget.iptvCatalog:
+            IptvChannelOrderSignal.notifyCatalogChanged('');
         }
       } catch (_) {
         // A UI notification can never turn an already committed sync batch
