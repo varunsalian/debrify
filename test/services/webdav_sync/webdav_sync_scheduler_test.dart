@@ -258,7 +258,7 @@ void main() {
     });
   });
 
-  test('registry conflict requests one immediate local-change follow-up', () {
+  test('registry conflict overrides a pending debounce with one follow-up', () {
     fakeAsync((async) {
       final runner = _Runner()..requestFollowUpOnNextRun = true;
       final scheduler = WebDavSyncScheduler(
@@ -268,6 +268,9 @@ void main() {
       );
       scheduler.arm(() async => context());
 
+      // An ordinary write already has the ten-second coalescing timer armed
+      // when the manual cycle discovers the fenced conflict.
+      scheduler.notifyLocalChange('theme');
       unawaited(scheduler.signal(WebDavSyncTrigger.manual));
       async.flushMicrotasks();
       expect(runner.runs, 1);

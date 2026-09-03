@@ -518,6 +518,24 @@ void main() {
       expect(conflicted.localChangeFollowUp, isTrue);
       expect(states.state.pendingCircleApply, isNull);
       expect(states.state.circleProfilesBaseline, isNull);
+      expect(states.state.lastPushedProfilesDigest, isNull);
+      expect(states.state.lastPushedResourcesDigest, isNull);
+      expect(
+        conflicted.sectionsPushed,
+        2,
+        reason: 'hot sections still publish',
+      );
+      expect(
+        states.state.ownManifest!.sections.map((section) => section.name),
+        containsAll(<String>[
+          'hot/profile-circle',
+          'tombstones/profile-circle',
+        ]),
+      );
+      expect(
+        states.state.ownManifest!.sections.map((section) => section.name),
+        isNot(contains(anyOf('profiles', 'resources'))),
+      );
 
       final followedUp = await runFixture(context());
 
@@ -1094,7 +1112,7 @@ void main() {
   );
 
   test(
-    'sole active Admin retirement stays inert until another Admin is promoted',
+    'promotion conflict retains Admin safety until follow-up commits',
     () async {
       final localProfiles = _circleProfiles(
         <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
@@ -1198,6 +1216,16 @@ void main() {
         codec: codec,
         clock: () => later,
       );
+      circleLocal.conflictNextCircleApply = true;
+
+      final conflicted = await engine.runCycle(
+        mappedContext,
+        allowPreActivation: true,
+      );
+
+      expect(conflicted.localChangeFollowUp, isTrue);
+      expect(states.state.pendingAdminSafetyProfile, 'local-active');
+      expect(suppressWebDavSyncActiveProfileRetirement(states.state), isTrue);
 
       await engine.runCycle(mappedContext, allowPreActivation: true);
 
@@ -1212,7 +1240,7 @@ void main() {
   );
 
   test(
-    'active remote disable defers without republication and re-enable cancels',
+    'stored disabled marker clears when remote re-enables after switch',
     () async {
       final circleLocal = _FakeCircleLocalAdapter(
         <String, Object?>{'theme': 'dark'},
@@ -1294,6 +1322,7 @@ void main() {
       expect(converged.sectionsPushed, 0);
 
       final later = now.add(const Duration(minutes: 1));
+      circleLocal.activeProfileId = 'local-y';
       transport.serverDate = later;
       await transport.addPeer(
         codec: codec,
@@ -1326,10 +1355,27 @@ void main() {
       await engine.runCycle(twoProfileContext, allowPreActivation: true);
 
       expect(states.state.pendingActiveProfile, isNull);
+      expect(circleLocal.activeProfileId, 'local-y');
+      expect(
+        circleLocal
+            .appliedRequests
+            .last
+            .profiles
+            .profiles['x-admin']!
+            .value!
+            .enabled,
+        isTrue,
+      );
       expect(
         circleLocal.appliedRequests.last.deferredActiveCircleProfileId,
         isNull,
       );
+      final convergedAfterSwitch = await engine.runCycle(
+        twoProfileContext,
+        allowPreActivation: true,
+      );
+      expect(states.state.pendingActiveProfile, isNull);
+      expect(convergedAfterSwitch.sectionsPushed, 0);
     },
   );
 
@@ -2569,7 +2615,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
   });
 
   Map<String, Object?> preferences;
-  final String activeProfileId;
+  String activeProfileId;
   final Set<String> unavailableProfileIds;
   final List<Map<String, Object>> applied = <Map<String, Object>>[];
   final List<String> events = <String>[];

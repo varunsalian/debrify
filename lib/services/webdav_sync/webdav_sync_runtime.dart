@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../models/profiles/profile_policy.dart';
+import '../diagnostic_log.dart' as app_diagnostics;
 import '../main_page_bridge.dart';
 import '../profiles/connection_resource_service.dart';
 import '../profiles/device_key_provider.dart';
@@ -13,6 +14,7 @@ import '../profiles/profile_database_adoption_gate.dart';
 import '../profiles/profile_lifecycle.dart';
 import '../profiles/profile_package_service.dart';
 import '../profiles/profile_preferences.dart';
+import '../profiles/profile_registry.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../profiles/profile_runtime.dart';
 import '../webdav_protocol_client.dart';
@@ -32,6 +34,7 @@ import 'webdav_sync_feature.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_graph_tier.dart';
 import 'webdav_sync_hot_merge.dart';
+import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_manifest_publisher.dart';
 import 'webdav_sync_models.dart';
@@ -47,6 +50,53 @@ bool suppressWebDavSyncActiveProfileRetirement(WebDavSyncEngineState state) =>
     state.pendingActiveProfile != null &&
     state.pendingActiveProfile!.localProfileId ==
         state.pendingAdminSafetyProfile;
+
+/// Executes the pre-round-4 deletion marker from local registry identity only.
+/// A successful return means the marker can be cleared; no WebDAV context or
+/// network cycle is needed after the gate has switched to a replacement.
+@visibleForTesting
+Future<bool> applyLegacyWebDavSyncActiveProfileDeletion({
+  required ProfileRegistry registry,
+  required WebDavSyncPendingActiveProfile pending,
+  WebDavSyncDiagnostic? diagnostic,
+}) async {
+  if (!pending.isLegacyDeletion) {
+    diagnostic?.call(
+      'Dropped an invalid legacy WebDAV active-profile deletion marker',
+      null,
+    );
+    return true;
+  }
+  final active = await registry.activeProfile();
+  if (active?.id == pending.localProfileId) return false;
+  RegistrySyncProfileProjection? projection;
+  for (final candidate in await registry.readProfileSyncProjection()) {
+    if (candidate.profile.id == pending.localProfileId) {
+      projection = candidate;
+      break;
+    }
+  }
+  if (projection == null) {
+    if (await registry.getProfile(pending.localProfileId) == null) return true;
+    diagnostic?.call(
+      'Dropped a legacy WebDAV active-profile deletion marker whose local '
+      'identity could not be recovered',
+      null,
+    );
+    return true;
+  }
+  final result = await registry.applySyncedRegistryDelta(
+    SyncedRegistryDelta(
+      deletes: <SyncedRegistryDeleteRecord>[
+        SyncedRegistryDeleteRecord(
+          record: WebDavSyncRegistryRecordId.profile(pending.localProfileId),
+          expectedPriorUpdatedAtMs: projection.updatedAtMs,
+        ),
+      ],
+    ),
+  );
+  return result == SyncedRegistryApplyResult.applied;
+}
 
 abstract interface class WebDavSyncActivationController {
   Future<void> inspectExisting(String bindingId);
@@ -598,8 +648,40 @@ final class WebDavSyncRuntime
         suppressWebDavSyncActiveProfileRetirement(current)) {
       return;
     }
+    if (durable.isLegacyDeletion) {
+      final resolved = await applyLegacyWebDavSyncActiveProfileDeletion(
+        registry: ProfileBootstrap.registry,
+        pending: durable,
+        diagnostic: _pendingActiveProfileDiagnostic,
+      );
+      if (resolved) {
+        await _clearPendingActiveProfile(namespaceId, durable);
+      }
+      return;
+    }
     final leaf = durable.profileLeaf;
     final circleProfileId = durable.circleProfileId;
+    if (leaf == null || circleProfileId == null) {
+      _pendingActiveProfileDiagnostic(
+        'Dropped a WebDAV active-profile marker whose stored outcome could '
+        'not be recovered',
+        null,
+      );
+      await _clearPendingActiveProfile(namespaceId, durable);
+      return;
+    }
+    final currentWinner =
+        current.circleProfilesBaseline?.profiles[circleProfileId];
+    if (currentWinner != null &&
+        _profileWinnerSupersedes(currentWinner, leaf)) {
+      _pendingActiveProfileDiagnostic(
+        'Dropped a stale WebDAV active-profile marker after a newer circle '
+        'winner arrived',
+        null,
+      );
+      await _clearPendingActiveProfile(namespaceId, durable);
+      return;
+    }
     final cycleRunner = _cycleRunner;
     final adapter = cycleRunner?.localAdapter;
     final WebDavSyncCircleLocalAdapter? circleAdapter =
@@ -607,9 +689,7 @@ final class WebDavSyncRuntime
         ? adapter as WebDavSyncCircleLocalAdapter
         : null;
     final context = await _activeContext();
-    if (leaf == null ||
-        circleProfileId == null ||
-        circleAdapter == null ||
+    if (circleAdapter == null ||
         context == null ||
         context.namespaceId != namespaceId ||
         !context.isComplete ||
@@ -666,10 +746,49 @@ final class WebDavSyncRuntime
       ),
     );
     if (result == WebDavSyncCircleApplyResult.conflict) {
-      _scheduler?.notifyLocalChange(
-        ProfilePreferences.webDavSyncRegistryLogicalKey,
-      );
+      _scheduler?.notifyConflictFollowUp();
+      return;
     }
+    await _clearPendingActiveProfile(namespaceId, durable);
+  }
+
+  Future<void> _clearPendingActiveProfile(
+    String namespaceId,
+    WebDavSyncPendingActiveProfile pending,
+  ) => stateStore.update(
+    namespaceId,
+    (current) =>
+        current.pendingActiveProfile != null &&
+            _samePendingActiveProfile(current.pendingActiveProfile!, pending)
+        ? current.copyWith(clearPendingActiveProfileDeletion: true)
+        : current,
+  );
+
+  static bool _profileWinnerSupersedes(
+    WebDavSyncCircleLeaf<WebDavSyncProfileValue> current,
+    WebDavSyncCircleLeaf<WebDavSyncProfileValue> stored,
+  ) {
+    final time = current.stamp.normalizedTimeMs.compareTo(
+      stored.stamp.normalizedTimeMs,
+    );
+    if (time != 0) return time > 0;
+    final origin = current.stamp.originDeviceId.compareTo(
+      stored.stamp.originDeviceId,
+    );
+    if (origin != 0) return origin > 0;
+    return semanticDigestOf(
+          current.value?.toJson(),
+        ).compareTo(semanticDigestOf(stored.value?.toJson())) >
+        0;
+  }
+
+  static void _pendingActiveProfileDiagnostic(String message, Object? _) {
+    debugPrint(message);
+    app_diagnostics.DiagnosticLog.instance.recordEvent(
+      source: 'webdav_sync',
+      event: 'pending_active_profile_marker_dropped',
+      level: app_diagnostics.DiagnosticLevel.warning,
+    );
   }
 
   static bool _samePendingActiveProfile(
@@ -682,7 +801,10 @@ final class WebDavSyncRuntime
       left.profileLeaf?.stamp.normalizedTimeMs ==
           right.profileLeaf?.stamp.normalizedTimeMs &&
       left.profileLeaf?.stamp.originDeviceId ==
-          right.profileLeaf?.stamp.originDeviceId;
+          right.profileLeaf?.stamp.originDeviceId &&
+      left.expectedPriorUpdatedAtMs == right.expectedPriorUpdatedAtMs &&
+      semanticDigestOf(left.profileLeaf?.value?.toJson()) ==
+          semanticDigestOf(right.profileLeaf?.value?.toJson());
 
   void _onPlaybackStarted() {
     _playbackActive = true;

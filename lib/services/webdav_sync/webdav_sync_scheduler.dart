@@ -152,6 +152,18 @@ final class WebDavSyncScheduler {
     _scheduleLocalChange();
   }
 
+  /// A fenced registry conflict needs a fresh snapshot immediately. Unlike an
+  /// ordinary local write, this replaces any already-armed debounce window.
+  void notifyConflictFollowUp() {
+    if (_contextProvider == null) return;
+    if (_running) {
+      _dirtyDuringRun = true;
+      _immediateDirtyDuringRun = true;
+      return;
+    }
+    _scheduleLocalChange(immediate: true);
+  }
+
   static bool admitsLocalChangeKey(String logicalKey) =>
       ProfilePreferencePortability.allowsKey(logicalKey) ||
       logicalKey == WebDavSyncHotMerge.playbackPreference ||
@@ -168,7 +180,12 @@ final class WebDavSyncScheduler {
     // Coalescing window, not a resetting debounce: the first write arms the
     // timer and later writes join it. A resetting timer would starve the push
     // for as long as a steady write stream (playback progress) keeps arriving.
-    if (_localChangeTimer != null) return;
+    if (immediate) {
+      _localChangeTimer?.cancel();
+      _localChangeTimer = null;
+    } else if (_localChangeTimer != null) {
+      return;
+    }
     final delay = immediate
         ? Duration.zero
         : _gate.playbackActive

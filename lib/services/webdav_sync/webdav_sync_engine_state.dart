@@ -197,6 +197,11 @@ final class WebDavSyncPendingActiveProfile {
   final WebDavSyncCircleLeaf<WebDavSyncProfileValue>? profileLeaf;
   final int? expectedPriorUpdatedAtMs;
 
+  bool get isLegacyDeletion =>
+      reason == WebDavSyncPendingActiveProfileReason.deleted &&
+      circleProfileId == null &&
+      profileLeaf == null;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'localProfileId': localProfileId,
     'reason': reason.name,

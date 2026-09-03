@@ -7,6 +7,8 @@ import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -186,6 +188,52 @@ void main() {
     expect(await registry.getProfile(firstId), isNull);
     lifecycle.dispose();
   });
+
+  test(
+    'legacy active deletion round-trips and executes locally after switch',
+    () async {
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      final replacementId = (await registry.createProfile(
+        name: 'Replacement Admin',
+        role: UserProfileRole.admin,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      )).id;
+      final legacyJson = <String, Object?>{
+        ...const WebDavSyncEngineState().toJson(),
+        'pendingActiveProfileDeletion': firstId,
+      };
+      final migrated = WebDavSyncEngineState.fromJson(legacyJson);
+      final roundTripped = WebDavSyncEngineState.fromJson(migrated.toJson());
+      final pending = roundTripped.pendingActiveProfile!;
+      final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+
+      expect(pending.reason, WebDavSyncPendingActiveProfileReason.deleted);
+      expect(pending.isLegacyDeletion, isTrue);
+      expect(pending.localProfileId, firstId);
+      expect(
+        await switchThenApplySyncedProfileOutcome(
+          lifecycle: lifecycle,
+          replacementProfileId: replacementId,
+          applyOutcome: () async {
+            expect(
+              await applyLegacyWebDavSyncActiveProfileDeletion(
+                registry: registry,
+                pending: pending,
+              ),
+              isTrue,
+            );
+          },
+        ),
+        isTrue,
+      );
+
+      expect(ProfileRuntime.capture().profileId, replacementId);
+      expect(await registry.getProfile(firstId), isNull);
+      lifecycle.dispose();
+    },
+  );
 
   test('synced active disable lands only after replacement switch', () async {
     final actor = await ProfileAuthorizationContext.capture(registry);

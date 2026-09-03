@@ -237,6 +237,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   }) async {
     var circlePublicationAllowed = true;
     var localChangeFollowUp = false;
+    var circleConflict = false;
     if (_localAdapter is WebDavSyncRegistryTombstoneOutboxDrainer) {
       try {
         circlePublicationAllowed =
@@ -331,9 +332,37 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       final pendingDeferredLocalId = pendingDeferredCircleId == null
           ? null
           : identityMaps.circleToLocalProfiles[pendingDeferredCircleId];
+      state = await _clearEligiblePendingActiveProfile(
+        namespaceId: namespaceId,
+        state: state,
+        profiles: pendingCircle.profiles,
+        identityMaps: identityMaps,
+      );
+      final pendingActiveCircleId =
+          identityMaps.localToCircleProfiles[session.scope.profileId];
+      final pendingActiveWinner = pendingActiveCircleId == null
+          ? null
+          : pendingCircle.profiles.profiles[pendingActiveCircleId];
+      final pendingActiveReason = pendingActiveWinner == null
+          ? null
+          : _activeProfileDeferralReason(pendingActiveWinner.value);
+      final pendingDeferredActive = pendingActiveReason == null
+          ? null
+          : WebDavSyncPendingActiveProfile(
+              localProfileId: session.scope.profileId,
+              circleProfileId: pendingActiveCircleId,
+              reason: pendingActiveReason,
+              profileLeaf: pendingActiveWinner,
+              expectedPriorUpdatedAtMs: pendingCircle.registryVersions
+                  .expectedUpdatedAtMs(
+                    WebDavSyncRegistryRecordId.profile(
+                      session.scope.profileId,
+                    ).storageKey,
+                  ),
+            );
       final pendingAdminHint = pendingDeferredLocalId == null
           ? null
-          : state.pendingActiveProfile?.localProfileId == pendingDeferredLocalId
+          : pendingDeferredActive?.localProfileId == pendingDeferredLocalId
           ? _activeAdminSafetyStatusHint(
               pendingInventory.localProfileNames[pendingDeferredLocalId] ??
                   pendingDeferredCircleId!,
@@ -342,18 +371,6 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               pendingInventory.localProfileNames[pendingDeferredLocalId] ??
                   pendingDeferredCircleId!,
             );
-      state = await _stateRepository.update(
-        namespaceId,
-        (current) => current.copyWith(
-          pendingAdminSafetyProfile: pendingDeferredLocalId,
-          clearPendingAdminSafetyProfile: pendingDeferredLocalId == null,
-          statusHint: circlePublicationAllowed
-              ? pendingAdminHint
-              : _outboxStatusHint,
-          clearStatusHint: circlePublicationAllowed && pendingAdminHint == null,
-        ),
-      );
-      if (pendingAdminHint != null) _diagnostic(pendingAdminHint, null);
       try {
         WebDavSyncCircleMerge.validateApplicableState(
           profiles: pendingCircle.profiles,
@@ -367,12 +384,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       } on WebDavSyncDeterministicCircleValidationException catch (error) {
         state = await _stateRepository.update(
           namespaceId,
-          (current) => current.copyWith(
-            clearPendingCircleApply: true,
-            clearPendingActiveProfileDeletion: true,
-            clearPendingAdminSafetyProfile: true,
-            clearStatusHint: circlePublicationAllowed,
-          ),
+          (current) => current.copyWith(clearPendingCircleApply: true),
         );
         _diagnostic(
           'Quarantined an invalid pending WebDAV circle target',
@@ -382,13 +394,6 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       if (state.pendingCircleApply != null) {
         final phaseStarted = instrumentation.startPhase();
         try {
-          final deferredActive = state.pendingActiveProfile;
-          final deferredCircleId =
-              deferredActive?.circleProfileId ??
-              (deferredActive == null
-                  ? null
-                  : identityMaps.localToCircleProfiles[deferredActive
-                        .localProfileId]);
           final applyResult = await circleAdapter.applyCircleState(
             session,
             WebDavSyncCircleApplyRequest(
@@ -398,13 +403,17 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               profiles: pendingCircle.profiles,
               resources: pendingCircle.resources,
               registryVersions: pendingCircle.registryVersions,
-              deferredActiveCircleProfileId: deferredCircleId,
+              deferredActiveCircleProfileId:
+                  pendingActiveCircleId == null || pendingDeferredActive == null
+                  ? null
+                  : pendingActiveCircleId,
               deferredAdminCircleProfileId: pendingDeferredCircleId,
             ),
             replayingPending: true,
           );
           if (applyResult == WebDavSyncCircleApplyResult.conflict) {
             localChangeFollowUp = true;
+            circleConflict = true;
             state = await _stateRepository.update(
               namespaceId,
               (current) => current.copyWith(clearPendingCircleApply: true),
@@ -421,8 +430,21 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 circleProfilesBaseline: pendingCircle.profiles,
                 circleResourcesBaseline: pendingCircle.resources,
                 clearPendingCircleApply: true,
+                pendingActiveProfile: pendingDeferredActive,
+                clearPendingActiveProfileDeletion:
+                    pendingDeferredActive == null,
+                pendingAdminSafetyProfile: pendingDeferredLocalId,
+                clearPendingAdminSafetyProfile: pendingDeferredLocalId == null,
+                statusHint: circlePublicationAllowed
+                    ? pendingAdminHint
+                    : _outboxStatusHint,
+                clearStatusHint:
+                    circlePublicationAllowed && pendingAdminHint == null,
               ),
             );
+            if (pendingAdminHint != null) {
+              _diagnostic(pendingAdminHint, null);
+            }
           }
         } finally {
           instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
@@ -581,7 +603,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       session ??= await _localAdapter.beginCycle();
       _CircleCycleResult? circleResult;
       circlePublication:
-      if (circleAdapter != null && circlePublicationAllowed) {
+      if (circleAdapter != null &&
+          circlePublicationAllowed &&
+          !circleConflict) {
         final peerCircle = await _readCirclePeerData(
           transport: transport,
           root: root,
@@ -726,11 +750,12 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                         ).storageKey,
                       ),
                 );
-          final cancelDeferredActive =
-              state.pendingActiveProfile?.localProfileId ==
-                  session.scope.profileId &&
-              activeCircleId != null &&
-              activeDeferralReason == null;
+          state = await _clearEligiblePendingActiveProfile(
+            namespaceId: namespaceId,
+            state: state,
+            profiles: mergedProfiles,
+            identityMaps: identityMaps,
+          );
           final effectiveAdminHint =
               deferredAdminLocalId != null &&
                   (deferActive?.localProfileId ??
@@ -748,19 +773,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           );
           state = await _stateRepository.update(
             namespaceId,
-            (current) => current.copyWith(
-              pendingCircleApply: pending,
-              pendingActiveProfile: deferActive,
-              clearPendingActiveProfileDeletion: cancelDeferredActive,
-              pendingAdminSafetyProfile: deferredAdminLocalId,
-              clearPendingAdminSafetyProfile: deferredAdminLocalId == null,
-              statusHint: effectiveAdminHint,
-              clearStatusHint: effectiveAdminHint == null,
-            ),
+            (current) => current.copyWith(pendingCircleApply: pending),
           );
-          if (effectiveAdminHint != null) {
-            _diagnostic(effectiveAdminHint, null);
-          }
           final applyResult = await circleAdapter.applyCircleState(
             session,
             WebDavSyncCircleApplyRequest(
@@ -778,6 +792,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           );
           if (applyResult == WebDavSyncCircleApplyResult.conflict) {
             localChangeFollowUp = true;
+            circleConflict = true;
             state = await _stateRepository.update(
               namespaceId,
               (current) => current.copyWith(clearPendingCircleApply: true),
@@ -794,13 +809,22 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 circleProfilesBaseline: mergedProfiles,
                 circleResourcesBaseline: mergedResources,
                 clearPendingCircleApply: true,
+                pendingActiveProfile: deferActive,
+                clearPendingActiveProfileDeletion: deferActive == null,
+                pendingAdminSafetyProfile: deferredAdminLocalId,
+                clearPendingAdminSafetyProfile: deferredAdminLocalId == null,
+                statusHint: effectiveAdminHint,
+                clearStatusHint: effectiveAdminHint == null,
               ),
             );
+            if (effectiveAdminHint != null) {
+              _diagnostic(effectiveAdminHint, null);
+            }
+            circleResult = _CircleCycleResult(
+              profiles: mergedProfiles,
+              resources: mergedResources,
+            );
           }
-          circleResult = _CircleCycleResult(
-            profiles: mergedProfiles,
-            resources: mergedResources,
-          );
         } finally {
           instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
         }
@@ -1940,6 +1964,50 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       ),
     );
   }
+
+  Future<WebDavSyncEngineState> _clearEligiblePendingActiveProfile({
+    required String namespaceId,
+    required WebDavSyncEngineState state,
+    required WebDavSyncProfilesDocument profiles,
+    required WebDavSyncIdentityMaps identityMaps,
+  }) {
+    final pending = state.pendingActiveProfile;
+    if (pending == null) {
+      return Future<WebDavSyncEngineState>.value(state);
+    }
+    final circleProfileId =
+        pending.circleProfileId ??
+        identityMaps.localToCircleProfiles[pending.localProfileId];
+    final winner = circleProfileId == null
+        ? null
+        : profiles.profiles[circleProfileId];
+    if (winner == null || _activeProfileDeferralReason(winner.value) != null) {
+      return Future<WebDavSyncEngineState>.value(state);
+    }
+    return _stateRepository.update(
+      namespaceId,
+      (current) =>
+          current.pendingActiveProfile != null &&
+              _samePendingActiveProfile(current.pendingActiveProfile!, pending)
+          ? current.copyWith(clearPendingActiveProfileDeletion: true)
+          : current,
+    );
+  }
+
+  static bool _samePendingActiveProfile(
+    WebDavSyncPendingActiveProfile left,
+    WebDavSyncPendingActiveProfile right,
+  ) =>
+      left.localProfileId == right.localProfileId &&
+      left.circleProfileId == right.circleProfileId &&
+      left.reason == right.reason &&
+      left.profileLeaf?.stamp.normalizedTimeMs ==
+          right.profileLeaf?.stamp.normalizedTimeMs &&
+      left.profileLeaf?.stamp.originDeviceId ==
+          right.profileLeaf?.stamp.originDeviceId &&
+      left.expectedPriorUpdatedAtMs == right.expectedPriorUpdatedAtMs &&
+      semanticDigestOf(left.profileLeaf?.value?.toJson()) ==
+          semanticDigestOf(right.profileLeaf?.value?.toJson());
 
   Future<WebDavSyncEngineState> _promotePendingLocalTombstones(
     String namespaceId,
