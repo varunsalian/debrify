@@ -110,64 +110,11 @@ final class DefaultWebDavSyncActiveProfileRefresher
       StorageService.localCompletionRevision.value++;
       authorizationBarrier();
     }
-    if (changedKeys.any(_affectsTrackingPolicy)) {
-      authorizationBarrier();
-      StorageService.trackingSourceRevision.value++;
-      authorizationBarrier();
-    }
-
-    if (changedKeys.contains('phone_nav_style') ||
-        changedKeys.contains('phone_nav_bar_indices')) {
-      authorizationBarrier();
-      MainPageBridge.navPrefsChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.contains('tv_home_style')) {
-      authorizationBarrier();
-      MainPageBridge.tvHomeStyleChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.contains('tv_hero_artwork_quality') ||
-        changedKeys.contains('tv_low_res_render')) {
-      authorizationBarrier();
-      MainPageBridge.tvHeroArtworkQualityChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.contains('discover_layout')) {
-      authorizationBarrier();
-      MainPageBridge.discoverLayoutChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.any(_affectsDiscoverCards)) {
-      authorizationBarrier();
-      MainPageBridge.discoverCardSettingsChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.contains('tv_sidebar_style')) {
-      authorizationBarrier();
-      MainPageBridge.tvSidebarStyleChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.contains('desktop_sidebar_style')) {
-      authorizationBarrier();
-      MainPageBridge.desktopSidebarStyleChanged?.call();
-      authorizationBarrier();
-    }
-    if (changedKeys.contains('sidebar_configuration_v1')) {
-      authorizationBarrier();
-      MainPageBridge.sidebarConfigurationChanged?.call();
-      authorizationBarrier();
-    }
     if (changedKeys.contains(WebDavSyncHotMerge.playlistPreference) ||
         changedKeys.contains(WebDavSyncHotMerge.playlistFavoritesPreference)) {
       await guarded(() async {
         await MainPageBridge.notifyPlaylistChanged();
       });
-    }
-    if (changedKeys.any(_affectsHome)) {
-      authorizationBarrier();
-      MainPageBridge.notifyHomeSettingsChanged();
-      authorizationBarrier();
     }
   }
 
@@ -176,21 +123,4 @@ final class DefaultWebDavSyncActiveProfileRefresher
       key == WebDavSyncHotMerge.continueWatchingPreference ||
       key == WebDavSyncHotMerge.finishedMoviesPreference ||
       key == WebDavSyncHotMerge.explicitlyWatchedSeriesPreference;
-
-  static bool _affectsTrackingPolicy(String key) =>
-      key == StorageService.watchProgressSourceKey ||
-      key == StorageService.homeTickSourcesKey ||
-      key == StorageService.trackingScrobbleTargetsKey;
-
-  static bool _affectsDiscoverCards(String key) =>
-      key == 'discover_show_type_tags' ||
-      key == 'discover_show_ratings' ||
-      key == 'discover_show_titles';
-
-  static bool _affectsHome(String key) =>
-      key.startsWith('home_') ||
-      key == WebDavSyncHotMerge.playlistPreference ||
-      key == WebDavSyncHotMerge.playlistFavoritesPreference ||
-      _affectsLocalCompletion(key) ||
-      _affectsTrackingPolicy(key);
 }

@@ -47,6 +47,21 @@ import 'webdav_sync_scheduler.dart';
 import 'webdav_sync_setup_service.dart';
 import 'webdav_sync_tombstones.dart';
 import 'webdav_sync_transport.dart';
+import 'webdav_sync_ui_refresh.dart';
+
+/// Runtime boundary for the engine's UI-agnostic post-commit apply callback.
+/// Only the currently mounted, committed profile may publish live UI changes.
+@visibleForTesting
+void dispatchWebDavSyncAppliedKeysForActiveProfile(
+  String localProfileId,
+  Set<String> appliedKeys,
+) {
+  if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+    return;
+  }
+  if (ProfileRuntime.scope.value?.profileId != localProfileId) return;
+  WebDavSyncUiRefresh.dispatch(appliedKeys);
+}
 
 @visibleForTesting
 bool suppressWebDavSyncActiveProfileRetirement(WebDavSyncEngineState state) =>
@@ -1488,6 +1503,7 @@ final class _ProductionCycleRunner
         client: borrow.client,
       ),
       diagnostic: recordWebDavSyncDiagnostic,
+      appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
     );
     try {
       final report = await engine.runCycle(

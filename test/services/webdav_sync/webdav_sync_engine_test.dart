@@ -6,6 +6,8 @@ import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/services/diagnostic_log.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
@@ -540,6 +542,117 @@ void main() {
       expect(states.state.profiles['profile-circle']!.pendingApply, isNull);
     },
   );
+
+  test('active-profile apply dispatches mapped UI callbacks once', () async {
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(
+        profileId: 'local-profile',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      ),
+    );
+    final originalTvHomeStyle = MainPageBridge.tvHomeStyleChanged;
+    final originalDiscoverLayout = MainPageBridge.discoverLayoutChanged;
+    addTearDown(() {
+      MainPageBridge.tvHomeStyleChanged = originalTvHomeStyle;
+      MainPageBridge.discoverLayoutChanged = originalDiscoverLayout;
+      ProfileRuntime.debugReset();
+    });
+    var tvHomeCalls = 0;
+    var discoverCalls = 0;
+    MainPageBridge.tvHomeStyleChanged = () => tvHomeCalls++;
+    MainPageBridge.discoverLayoutChanged = () => discoverCalls++;
+    local.activeProfileId = 'local-profile';
+    local.preferences = <String, Object?>{
+      'tv_home_style': 'classic',
+      'discover_layout': 'grid',
+    };
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      sectionCache: sectionCache,
+      clock: () => now,
+      appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+    );
+
+    await runFixture(context());
+
+    expect(tvHomeCalls, 1);
+    expect(discoverCalls, 1);
+  });
+
+  test('non-active profile apply dispatches no UI callback', () async {
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(
+        profileId: 'different-profile',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      ),
+    );
+    final originalTvHomeStyle = MainPageBridge.tvHomeStyleChanged;
+    addTearDown(() {
+      MainPageBridge.tvHomeStyleChanged = originalTvHomeStyle;
+      ProfileRuntime.debugReset();
+    });
+    var tvHomeCalls = 0;
+    MainPageBridge.tvHomeStyleChanged = () => tvHomeCalls++;
+    local.activeProfileId = 'different-profile';
+    local.preferences = <String, Object?>{'tv_home_style': 'classic'};
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      sectionCache: sectionCache,
+      clock: () => now,
+      appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+    );
+
+    await runFixture(context());
+
+    expect(tvHomeCalls, 0);
+  });
+
+  test('pending apply replay dispatches active UI callback once', () async {
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(
+        profileId: 'local-profile',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      ),
+    );
+    final originalTvHomeStyle = MainPageBridge.tvHomeStyleChanged;
+    addTearDown(() {
+      MainPageBridge.tvHomeStyleChanged = originalTvHomeStyle;
+      ProfileRuntime.debugReset();
+    });
+    var tvHomeCalls = 0;
+    MainPageBridge.tvHomeStyleChanged = () => tvHomeCalls++;
+    local.activeProfileId = 'local-profile';
+    local.preferences = <String, Object?>{'tv_home_style': 'classic'};
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      sectionCache: sectionCache,
+      clock: () => now,
+      appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+    );
+    local.failNextApply = true;
+
+    await expectLater(runFixture(context()), throwsStateError);
+    expect(tvHomeCalls, 0);
+    expect(states.state.profiles['profile-circle']!.pendingApply, isNotNull);
+
+    await runFixture(context());
+
+    expect(local.replayingPendingFlags, <bool>[false, true, false]);
+    expect(tvHomeCalls, 1);
+    expect(states.state.profiles['profile-circle']!.pendingApply, isNull);
+  });
 
   test(
     'pending replay remerges a newer local write and retries its fence',
@@ -3104,7 +3217,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
   }
 
   @override
-  Future<void> applyProfile(
+  Future<Set<String>> applyProfile(
     WebDavSyncLocalSession session,
     String localProfileId,
     Map<String, Object> values, {
@@ -3128,6 +3241,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     applied.add(Map<String, Object>.from(values));
     preferences = Map<String, Object?>.from(values);
     afterApply?.call();
+    return Set<String>.unmodifiable(values.keys);
   }
 }
 

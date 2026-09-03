@@ -145,6 +145,11 @@ typedef WebDavSyncTransportFactory =
 
 typedef WebDavSyncDiagnostic = void Function(String message, Object? error);
 
+/// Best-effort post-commit observer. The engine reports logical preference
+/// keys only and remains independent of their process or UI consumers.
+typedef WebDavSyncAppliedKeysCallback =
+    void Function(String localProfileId, Set<String> appliedKeys);
+
 abstract interface class WebDavSyncCycleRunner {
   Future<WebDavSyncCycleReport> runCycle(
     WebDavSyncCycleContext? context, {
@@ -170,6 +175,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     WebDavSyncSectionCache? sectionCache,
     DateTime Function()? clock,
     WebDavSyncDiagnostic? diagnostic,
+    WebDavSyncAppliedKeysCallback? appliedKeysCallback,
     this.readConcurrency = 4,
   }) : _stateRepository = stateRepository,
        _localAdapter = localAdapter,
@@ -178,6 +184,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
        _sectionCache = sectionCache ?? WebDavSyncSectionCache(),
        _clock = clock ?? DateTime.now,
        _diagnostic = diagnostic ?? _ignoreDiagnostic,
+       _appliedKeysCallback = appliedKeysCallback ?? _ignoreAppliedKeys,
        assert(readConcurrency >= 1 && readConcurrency <= 4);
 
   static const Duration staleManifestCutoff = Duration(days: 30);
@@ -194,6 +201,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   final WebDavSyncSectionCache _sectionCache;
   final DateTime Function() _clock;
   final WebDavSyncDiagnostic _diagnostic;
+  final WebDavSyncAppliedKeysCallback _appliedKeysCallback;
   final int readConcurrency;
   final Lock _cycleLock = Lock();
   @visibleForTesting
@@ -221,12 +229,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required WebDavSyncTrigger? trigger,
   }) async {
     final instrumentation = _CycleInstrumentation(trigger);
+    final appliedKeysByLocalProfile = <String, Set<String>>{};
     try {
       final report = await _runCycle(
         context,
         allowPreActivation: allowPreActivation,
         trigger: trigger,
         instrumentation: instrumentation,
+        appliedKeysByLocalProfile: appliedKeysByLocalProfile,
       );
       instrumentation.disposition = report.disposition.name;
       return report;
@@ -234,6 +244,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       instrumentation.disposition = 'failed';
       rethrow;
     } finally {
+      _publishAppliedKeys(appliedKeysByLocalProfile);
       instrumentation.record();
     }
   }
@@ -243,6 +254,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required bool allowPreActivation,
     required WebDavSyncTrigger? trigger,
     required _CycleInstrumentation instrumentation,
+    required Map<String, Set<String>> appliedKeysByLocalProfile,
   }) async {
     var circlePublicationAllowed = true;
     var localChangeFollowUp = false;
@@ -551,6 +563,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               throw StateError('WebDAV sync pending apply mapping changed');
             }
             WebDavSyncHotDocument? replayedTarget;
+            var replayedAppliedKeys = const <String>{};
             for (var attempt = 0; attempt < 2; attempt++) {
               final fresh = await _localAdapter.readProfile(
                 session,
@@ -610,7 +623,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 protectedPreferenceKeys: built.protectedPreferenceKeys,
               );
               try {
-                await _localAdapter.applyProfile(
+                replayedAppliedKeys = await _localAdapter.applyProfile(
                   session,
                   pending.localProfileId,
                   values,
@@ -641,6 +654,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                     ),
               );
             });
+            _recordAppliedKeys(
+              appliedKeysByLocalProfile,
+              pending.localProfileId,
+              replayedAppliedKeys,
+            );
           }
           state = await _stateRepository.load(namespaceId);
         } finally {
@@ -1025,7 +1043,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             values: values,
             target: merged.document,
           );
-          await _localAdapter.applyProfile(
+          final appliedKeys = await _localAdapter.applyProfile(
             session,
             localProfileId,
             values,
@@ -1065,6 +1083,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               ),
             );
           });
+          _recordAppliedKeys(
+            appliedKeysByLocalProfile,
+            localProfileId,
+            appliedKeys,
+          );
           profilesApplied++;
           profileResults[circleProfileId] = _ProfileCycleResult(
             document: merged.document,
@@ -2416,7 +2439,38 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     return difference == 0;
   }
 
+  static void _recordAppliedKeys(
+    Map<String, Set<String>> appliedKeysByLocalProfile,
+    String localProfileId,
+    Set<String> appliedKeys,
+  ) {
+    if (appliedKeys.isEmpty) return;
+    appliedKeysByLocalProfile
+        .putIfAbsent(localProfileId, () => <String>{})
+        .addAll(appliedKeys);
+  }
+
+  void _publishAppliedKeys(Map<String, Set<String>> appliedKeysByLocalProfile) {
+    for (final entry in appliedKeysByLocalProfile.entries) {
+      try {
+        _appliedKeysCallback(entry.key, Set<String>.unmodifiable(entry.value));
+      } catch (error) {
+        try {
+          _diagnostic(
+            'Ignored a failed post-commit WebDAV sync refresh callback',
+            error,
+          );
+        } catch (_) {
+          // Neither an optional observer nor diagnostics may change the
+          // outcome of a preference batch which has already committed.
+        }
+      }
+    }
+  }
+
   static void _ignoreDiagnostic(String _, Object? __) {}
+
+  static void _ignoreAppliedKeys(String _, Set<String> __) {}
 
   static WebDavSyncPendingActiveProfileReason? _activeProfileDeferralReason(
     WebDavSyncProfileValue? value,

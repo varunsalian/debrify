@@ -9,14 +9,12 @@ void main() {
 
   test('playlist refresh is awaited and authorization-bracketed', () async {
     final events = <String>[];
-    void homeListener() => events.add('home');
     Future<void> playlistListener() async {
       events.add('playlist-start');
       await Future<void>.delayed(Duration.zero);
       events.add('playlist-end');
     }
 
-    MainPageBridge.addHomeSettingsListener(homeListener);
     MainPageBridge.addPlaylistChangeListener(playlistListener);
 
     try {
@@ -24,7 +22,6 @@ void main() {
         WebDavSyncHotMerge.playlistPreference,
       }, authorizationBarrier: () => events.add('barrier'));
     } finally {
-      MainPageBridge.removeHomeSettingsListener(homeListener);
       MainPageBridge.removePlaylistChangeListener(playlistListener);
     }
 
@@ -33,23 +30,17 @@ void main() {
       'playlist-start',
       'playlist-end',
       'barrier',
-      'barrier',
-      'home',
-      'barrier',
     ]);
   });
 
-  test('synced completion and tracking policies publish revisions', () async {
+  test('synced completion publishes its process revision', () async {
     final completionBefore = StorageService.localCompletionRevision.value;
-    final trackingBefore = StorageService.trackingSourceRevision.value;
 
     await refresher.refresh(const <String>{
       WebDavSyncHotMerge.playbackPreference,
-      StorageService.watchProgressSourceKey,
     }, authorizationBarrier: () {});
 
     expect(StorageService.localCompletionRevision.value, completionBefore + 1);
-    expect(StorageService.trackingSourceRevision.value, trackingBefore + 1);
   });
 
   test('profile switch during an awaited refresh is detected', () async {

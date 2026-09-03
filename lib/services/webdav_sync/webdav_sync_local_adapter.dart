@@ -61,7 +61,10 @@ abstract interface class WebDavSyncLocalAdapter {
     String localProfileId,
   );
 
-  Future<void> applyProfile(
+  /// Returns the logical keys committed by this batch. Pending-target replay
+  /// returns the complete durable target so a prior partial write still
+  /// republishes every affected process/UI mirror.
+  Future<Set<String>> applyProfile(
     WebDavSyncLocalSession session,
     String localProfileId,
     Map<String, Object> values, {
@@ -251,7 +254,7 @@ final class ProfileWebDavSyncLocalAdapter
   }
 
   @override
-  Future<void> applyProfile(
+  Future<Set<String>> applyProfile(
     WebDavSyncLocalSession session,
     String localProfileId,
     Map<String, Object> values, {
@@ -276,6 +279,7 @@ final class ProfileWebDavSyncLocalAdapter
       scope,
       CapturedProfilePreferenceAccess.syncApply,
     );
+    var appliedKeys = const <String>{};
     if (!await prefs.applySyncBatch(
       values,
       authorizationBarrier: () => _validateSession(session),
@@ -283,9 +287,15 @@ final class ProfileWebDavSyncLocalAdapter
       beforeWrite: beforeWrite,
       replayCommittedTarget: replayingPending,
       afterApply: (appliedScope, changedKeys) async {
+        // A pending target may have committed only a prefix before the prior
+        // process stopped. Replaying that durable batch must republish every
+        // key in the target, including values already present on re-entry.
+        appliedKeys = replayingPending
+            ? Set<String>.unmodifiable(values.keys)
+            : changedKeys;
         if (appliedScope != session.scope) return;
         await _activeProfileRefresher.refresh(
-          changedKeys,
+          appliedKeys,
           authorizationBarrier: () => _validateSession(session),
         );
       },
@@ -293,6 +303,7 @@ final class ProfileWebDavSyncLocalAdapter
       throw StateError('Could not apply WebDAV sync preferences');
     }
     _validateSession(session);
+    return appliedKeys;
   }
 
   @override
