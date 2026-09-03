@@ -5,8 +5,9 @@ import '../../models/home_collection.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 
-/// The folder's backdrop and title logo above its lists, when the collection
-/// file provides them. Renders nothing for folders without either.
+/// The folder's backdrop and title logo above its lists. Files without a
+/// dedicated backdrop fall back to the cover art; without a logo the title
+/// is set in text. Renders nothing for a folder with no art at all.
 class FolderHeroBand extends StatelessWidget {
   final HomeCollectionFolder folder;
   final bool isTelevision;
@@ -19,7 +20,7 @@ class FolderHeroBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backdrop = folder.heroBackdropUrl;
+    final backdrop = folder.heroBackdropUrl ?? folder.coverImageUrl;
     final logo = folder.titleLogoUrl;
     if (backdrop == null && logo == null) return const SizedBox.shrink();
     final app = AppThemeScope.of(context);

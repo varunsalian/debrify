@@ -68,10 +68,12 @@ Field notes:
   de-duplicated. Only `provider: "addon"` sources are used.
 - `tileShape`: `LANDSCAPE` (16:9, default), `PORTRAIT` (2:3) or `SQUARE`.
 - `hideTitle`: draw no text over the cover (the art carries the brand).
-- `focusGifUrl` + `focusGifEnabled`: animated art played over the tile while
-  it is focused or hovered.
+- `focusGifUrl`: animated art played over the tile while it is focused or
+  hovered (`focusGifEnabled` is ignored; community files set the URL without
+  the flag).
 - `heroBackdropUrl`, `titleLogoUrl`: the backdrop and logo shown above the
-  folder's lists when it is opened.
+  folder's lists when it is opened; the cover stands in for a missing
+  backdrop, the title for a missing logo.
 - `pinToTop`: the row leads the Home board; otherwise collection rows sit
   after the tracker list rows and before addon catalog rows. Rows can be
   re-arranged or hidden under **Home Screen → Home Rows** like any other row

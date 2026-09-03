@@ -39,12 +39,8 @@ class HomeCollectionSection extends CatalogSection {
       );
 
   /// The folder behind a tile, or null for an item that isn't one of ours.
-  /// The folder's animated focus art for [item], when the file enables it.
-  String? focusArtOf(StremioMeta item) {
-    final f = folderOf(item);
-    if (f == null || !f.focusGifEnabled) return null;
-    return f.focusGifUrl;
-  }
+  /// The folder's animated focus art for [item], when the file carries one.
+  String? focusArtOf(StremioMeta item) => folderOf(item)?.focusGifUrl;
 
   HomeCollectionFolder? folderOf(StremioMeta item) {
     final i = folderIndexOf(item);

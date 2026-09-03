@@ -26,7 +26,7 @@ const _xperienceSample = '''
         "heroBackdropUrl": "https://cdn.example/netflix.backdrop.webp",
         "titleLogoUrl": "https://cdn.example/netflix.logo.webp",
         "focusGifUrl": "https://cdn.example/netflix.focus.gif",
-        "focusGifEnabled": true,
+        "focusGifEnabled": false,
         "tileShape": "LANDSCAPE",
         "catalogSources": [
           {"addonId": "app.xperience.abc", "type": "movie", "catalogId": "streaming_netflix_movies", "genre": null},
