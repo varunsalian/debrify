@@ -102,11 +102,13 @@ final class WebDavSyncScheduler {
   String? _pendingLocalChangeKey;
 
   /// Durable local-change intent: the latest admitted write not yet flushed by
-  /// a successfully completed cycle that STARTED after it. Any rejected,
-  /// gated, or failed attempt re-arms a bounded retry instead of dropping the
-  /// intent; the 15-minute periodic remains the final net. Survives disarm.
-  DateTime? _pendingLocalChangeAt;
+  /// a successfully completed cycle whose snapshot could include it. Sequence
+  /// ordering is deliberate: wall clocks can return the same value for a cycle
+  /// start and a later write. Survives disarm.
+  int _localChangeSequence = 0;
+  int? _pendingLocalChangeSequence;
   int _localChangeRetries = 0;
+  static const Duration localChangeRetryFloor = Duration(seconds: 1);
   static const Duration localChangeRetryCap = Duration(minutes: 2);
   int _consecutivePollFailures = 0;
   int _pollGeneration = 0;
@@ -156,7 +158,7 @@ final class WebDavSyncScheduler {
     _pollDisabledNoValidators = false;
     // A local-change intent recorded before a disarm/rearm bounce (or while
     // the sink was dark) must not wait for an unrelated trigger.
-    if (_pendingLocalChangeAt != null) _scheduleLocalChange();
+    if (_pendingLocalChangeSequence != null) _scheduleLocalChange();
     _warmUntil = null;
     _resetPollBackoff();
     _pollGeneration++;
@@ -182,7 +184,8 @@ final class WebDavSyncScheduler {
   void notifyLocalChange(String logicalKey) {
     if (_contextProvider == null || !admitsLocalChangeKey(logicalKey)) return;
     _pendingLocalChangeKey = logicalKey;
-    _pendingLocalChangeAt = _clock();
+    _localChangeSequence++;
+    _pendingLocalChangeSequence = _localChangeSequence;
     if (_running) {
       _dirtyDuringRun = true;
       return;
@@ -217,40 +220,72 @@ final class WebDavSyncScheduler {
         logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
   }
 
-  /// Clears the pending intent only when a cycle that STARTED at or after the
-  /// intent completes; every other outcome re-arms a bounded retry.
+  /// Clears the pending intent only when a completed cycle started with a
+  /// sequence snapshot that included it and did not request a fresh snapshot.
   void _handleLocalChangeOutcome({
-    required DateTime startedAt,
+    required int sequenceAtStart,
     required bool completed,
+    required bool localChangeFollowUp,
+    required bool immediateRetry,
   }) {
-    final pending = _pendingLocalChangeAt;
+    final pending = _pendingLocalChangeSequence;
     if (pending == null) return;
-    if (completed && !pending.isAfter(startedAt)) {
-      _pendingLocalChangeAt = null;
+    if (completed && !localChangeFollowUp && pending <= sequenceAtStart) {
+      _pendingLocalChangeSequence = null;
       _localChangeRetries = 0;
       return;
     }
     _rearmPendingLocalChange(
-      completed ? 'write landed during the cycle' : 'cycle did not complete',
+      !completed
+          ? 'cycle did not complete'
+          : localChangeFollowUp
+          ? 'cycle requested a local-change follow-up'
+          : 'write landed during the cycle',
+      immediate: immediateRetry,
     );
   }
 
-  void _rearmPendingLocalChange(String reason) {
-    if (_contextProvider == null || _pendingLocalChangeAt == null) return;
-    if (_localChangeTimer != null) return;
+  void _rearmPendingLocalChange(String reason, {bool immediate = false}) {
+    if (_contextProvider == null || _pendingLocalChangeSequence == null) return;
+    if (_localChangeTimer != null) {
+      if (!immediate) return;
+      _localChangeTimer!.cancel();
+      _localChangeTimer = null;
+    }
     _localChangeRetries++;
-    final shift = (_localChangeRetries - 1).clamp(0, 8);
-    var delay = localChangeDebounce * (1 << shift);
-    if (delay > localChangeRetryCap) delay = localChangeRetryCap;
+    final delay = immediate
+        ? Duration.zero
+        : _localChangeRetryDelay(_localChangeRetries);
+    _armLocalChangeTimer(delay);
     try {
       localChangeDeferredObserver?.call(reason, _localChangeRetries, delay);
     } catch (_) {
       // Observability must never affect scheduling.
     }
-    _localChangeTimer = Timer(delay, () {
+  }
+
+  Duration _localChangeRetryDelay(int attempt) {
+    var delay = _gate.playbackActive ? playbackDebounce : localChangeDebounce;
+    if (delay < localChangeRetryFloor) delay = localChangeRetryFloor;
+    if (delay >= localChangeRetryCap) return localChangeRetryCap;
+    final doublings = (attempt - 1).clamp(0, 8);
+    for (var index = 0; index < doublings; index++) {
+      if (delay > localChangeRetryCap - delay) {
+        return localChangeRetryCap;
+      }
+      delay += delay;
+    }
+    return delay;
+  }
+
+  void _armLocalChangeTimer(Duration delay) {
+    late final Timer timer;
+    timer = Timer(delay, () {
+      if (!identical(_localChangeTimer, timer)) return;
       _localChangeTimer = null;
       unawaited(_signalLocalChange());
     });
+    _localChangeTimer = timer;
   }
 
   void _scheduleLocalChange({bool immediate = false}) {
@@ -269,10 +304,7 @@ final class WebDavSyncScheduler {
         : _gate.playbackActive
         ? playbackDebounce
         : localChangeDebounce;
-    _localChangeTimer = Timer(delay, () {
-      _localChangeTimer = null;
-      unawaited(_signalLocalChange());
-    });
+    _armLocalChangeTimer(delay);
   }
 
   Future<void> _signalLocalChange() async {
@@ -530,20 +562,18 @@ final class WebDavSyncScheduler {
       );
     }
     _running = true;
-    DateTime? intentCycleStartedAt;
+    int? intentSequenceAtStart;
     var intentCycleCompleted = false;
+    var intentCycleRequestedFollowUp = false;
     try {
       final context = await provider();
       if (context == null || !context.active || !context.isComplete) {
-        if (trigger == WebDavSyncTrigger.localChange) {
-          _rearmPendingLocalChange('no active sync context');
-        }
         return const WebDavSyncCycleReport(
           disposition: WebDavSyncCycleDisposition.inactive,
         );
       }
       _lastStartedAt = _clock();
-      intentCycleStartedAt = _lastStartedAt;
+      intentSequenceAtStart = _localChangeSequence;
       if (trigger == WebDavSyncTrigger.localChange) {
         final logicalKey = _pendingLocalChangeKey;
         _pendingLocalChangeKey = null;
@@ -558,6 +588,7 @@ final class WebDavSyncScheduler {
       final report = await _runner.runCycle(context, trigger: trigger);
       intentCycleCompleted =
           report.disposition == WebDavSyncCycleDisposition.completed;
+      intentCycleRequestedFollowUp = report.localChangeFollowUp;
       if (trigger == WebDavSyncTrigger.localChange ||
           trigger == WebDavSyncTrigger.manual) {
         _rearmWarmPolling();
@@ -569,17 +600,29 @@ final class WebDavSyncScheduler {
       return report;
     } finally {
       _running = false;
-      if (intentCycleStartedAt != null) {
+      final dirtyDuringRun = _dirtyDuringRun;
+      final immediateDirtyDuringRun = _immediateDirtyDuringRun;
+      _dirtyDuringRun = false;
+      _immediateDirtyDuringRun = false;
+      if (intentSequenceAtStart != null) {
         _handleLocalChangeOutcome(
-          startedAt: intentCycleStartedAt,
+          sequenceAtStart: intentSequenceAtStart,
           completed: intentCycleCompleted,
+          localChangeFollowUp: intentCycleRequestedFollowUp,
+          immediateRetry: immediateDirtyDuringRun,
+        );
+      } else if (trigger == WebDavSyncTrigger.localChange) {
+        // Includes context-provider exceptions as well as inactive snapshots.
+        _rearmPendingLocalChange(
+          'cycle did not start',
+          immediate: immediateDirtyDuringRun,
         );
       }
-      if (_dirtyDuringRun && _contextProvider != null) {
-        _dirtyDuringRun = false;
-        final immediate = _immediateDirtyDuringRun;
-        _immediateDirtyDuringRun = false;
-        _scheduleLocalChange(immediate: immediate);
+      if (dirtyDuringRun &&
+          _contextProvider != null &&
+          _localChangeTimer == null &&
+          (_pendingLocalChangeSequence != null || immediateDirtyDuringRun)) {
+        _scheduleLocalChange(immediate: immediateDirtyDuringRun);
       }
     }
   }

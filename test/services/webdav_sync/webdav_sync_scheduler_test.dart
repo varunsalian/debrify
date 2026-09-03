@@ -1094,7 +1094,7 @@ void main() {
       });
     });
 
-    test('a write during the cycle is not cleared by that cycle', () {
+    test('a same-tick write survives the older cycle and a timer disarm', () {
       fakeAsync((async) {
         final start = DateTime.utc(2026, 9, 3);
         final runner = _Runner();
@@ -1104,23 +1104,106 @@ void main() {
           clock: () => start.add(async.elapsed),
         );
         runner.blocker = Completer<void>();
-        runner.onRun = (_) {
-          // Lands mid-cycle: after this cycle's snapshot began.
-          scheduler.notifyLocalChange('home_tick_sources');
-          runner.onRun = null;
-        };
         scheduler.arm(() async => context());
-        scheduler.notifyLocalChange('tracking_scrobble_targets');
-        async.elapse(const Duration(seconds: 2));
+        // This is the cycle a warm poll starts after observing a changed peer.
+        unawaited(scheduler.signal(WebDavSyncTrigger.remoteChange));
         async.flushMicrotasks();
         expect(runner.runs, 1);
+        // Lands mid-cycle, without advancing the injected wall clock.
+        scheduler.notifyLocalChange('home_tick_sources');
         runner.blocker!.complete();
         runner.blocker = null;
         async.flushMicrotasks();
-        async.elapse(const Duration(seconds: 6));
+        // The fake clock has not advanced since the cycle started. A wall-time
+        // comparison therefore cannot distinguish this write from the older
+        // snapshot. Cancel the dirty follow-up to prove the durable marker,
+        // rather than that incidental timer, retains the intent.
+        scheduler.disarm();
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 2));
         async.flushMicrotasks();
         expect(runner.runs, 2); // follow-up flushed the mid-cycle write
         async.elapse(const Duration(minutes: 3));
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('arm during the initial window replaces it with one fresh kick', () {
+      fakeAsync((async) {
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 1));
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 0); // the old window was cancelled
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        async.elapse(const Duration(minutes: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('a throwing context provider re-arms instead of dropping', () {
+      fakeAsync((async) {
+        final runner = _Runner();
+        var contextAttempts = 0;
+        final deferred = <String>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          localChangeDeferredObserver: (reason, attempt, delay) =>
+              deferred.add('$reason#$attempt/${delay.inSeconds}'),
+        );
+        scheduler.arm(() async {
+          contextAttempts++;
+          if (contextAttempts == 1) throw StateError('context unavailable');
+          return context();
+        });
+
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 0);
+        expect(deferred, <String>['cycle did not start#1/2']);
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('a conflict follow-up remains durable across disarm', () {
+      fakeAsync((async) {
+        final firstRun = Completer<void>();
+        final runner = _Runner()
+          ..blocker = firstRun
+          ..requestFollowUpOnNextRun = true;
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        runner.blocker = null;
+        firstRun.complete();
+        async.flushMicrotasks();
+
+        // Cancel the requested immediate retry before its zero-delay timer can
+        // run. The unsatisfied intent must make arm() kick a replacement.
+        scheduler.disarm();
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
         expect(runner.runs, 2);
         scheduler.dispose();
       });
@@ -1144,6 +1227,126 @@ void main() {
         async.elapse(const Duration(seconds: 3));
         async.flushMicrotasks();
         expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('the intent survives disarm while a retry is armed', () {
+      fakeAsync((async) {
+        final runner = _Runner()..failuresRemaining = 1;
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+
+        scheduler.disarm();
+        async.elapse(const Duration(seconds: 10));
+        expect(runner.runs, 1);
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('playback debounce is the retry backoff base', () {
+      fakeAsync((async) {
+        final gate = _Gate()..playback = true;
+        final runner = _Runner()..failuresRemaining = 1;
+        final delays = <Duration>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          localChangeDeferredObserver: (_, _, delay) => delays.add(delay),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        expect(delays, <Duration>[const Duration(seconds: 60)]);
+        async.elapse(const Duration(seconds: 59));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('retry delay has a positive floor and saturating cap', () {
+      fakeAsync((async) {
+        final gate = _Gate();
+        final runner = _Runner()..failuresRemaining = 2;
+        final delays = <Duration>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          localChangeDebounce: Duration.zero,
+          playbackDebounce: const Duration(days: 1000000),
+          localChangeDeferredObserver: (_, _, delay) => delays.add(delay),
+        );
+        runner.onRun = (_) {
+          gate.playback = runner.runs > 1;
+        };
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        expect(delays, <Duration>[WebDavSyncScheduler.localChangeRetryFloor]);
+
+        async.elapse(WebDavSyncScheduler.localChangeRetryFloor);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        expect(delays.last, WebDavSyncScheduler.localChangeRetryCap);
+
+        async.elapse(WebDavSyncScheduler.localChangeRetryCap);
+        async.flushMicrotasks();
+        expect(runner.runs, 3);
+        scheduler.dispose();
+      });
+    });
+
+    test('deferred observer cannot orphan or duplicate a retry', () {
+      fakeAsync((async) {
+        final firstRun = Completer<void>();
+        final runner = _Runner()
+          ..blocker = firstRun
+          ..failuresRemaining = 1;
+        late final WebDavSyncScheduler scheduler;
+        var deferredCalls = 0;
+        scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          localChangeDeferredObserver: (_, _, _) {
+            deferredCalls++;
+            scheduler.notifyConflictFollowUp();
+          },
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        runner.blocker = null;
+        firstRun.complete();
+        async.flushMicrotasks();
+        expect(deferredCalls, 1);
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        async.elapse(const Duration(minutes: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        expect(deferredCalls, 1);
         scheduler.dispose();
       });
     });
