@@ -5,6 +5,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../../models/profiles/user_profile.dart';
 import '../diagnostic_log.dart';
+import '../profiles/profile_preferences.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_merge.dart';
@@ -323,6 +324,15 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         await circleAdapter.readCircleInventory(session),
         identityMaps,
       );
+      final pendingApplicableResources =
+          WebDavSyncCircleMerge.deriveApplicableResources(
+            profiles: pendingCircle.profiles,
+            resources: pendingCircle.resources,
+            localCircleProfileIds: pendingInventory.circleProfileIds,
+            localCircleResourceIds: pendingInventory.circleResourceIds,
+            localCircleGrantIds: pendingInventory.circleGrantIds,
+            onDeferred: (message) => _diagnostic(message, null),
+          );
       final pendingDeferredCircleId =
           WebDavSyncCircleMerge.selectAdminSafetyDeferral(
             profiles: pendingCircle.profiles,
@@ -374,7 +384,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       try {
         WebDavSyncCircleMerge.validateApplicableState(
           profiles: pendingCircle.profiles,
-          resources: pendingCircle.resources,
+          resources: pendingApplicableResources,
           localCircleProfileIds: pendingInventory.circleProfileIds,
           localCircleResourceIds: pendingInventory.circleResourceIds,
           localCircleGrantIds: pendingInventory.circleGrantIds,
@@ -401,7 +411,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               circleId: root.document.circleId,
               circleKey: root.key,
               profiles: pendingCircle.profiles,
-              resources: pendingCircle.resources,
+              resources: pendingApplicableResources,
               registryVersions: pendingCircle.registryVersions,
               deferredActiveCircleProfileId:
                   pendingActiveCircleId == null || pendingDeferredActive == null
@@ -451,48 +461,6 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         }
       }
     }
-    final pendingProfiles = state.profiles.entries
-        .where((entry) => entry.value.pendingApply != null)
-        .toList(growable: false);
-    if (pendingProfiles.isNotEmpty) {
-      final phaseStarted = instrumentation.startPhase();
-      try {
-        session = await _localAdapter.beginCycle();
-        for (final entry in pendingProfiles) {
-          final pending = entry.value.pendingApply!;
-          if (context.circleToLocalProfiles![entry.key] !=
-              pending.localProfileId) {
-            throw StateError('WebDAV sync pending apply mapping changed');
-          }
-          await _localAdapter.applyProfile(
-            session,
-            pending.localProfileId,
-            pending.values,
-            replayingPending: true,
-          );
-          await _stateRepository.update(namespaceId, (current) {
-            final profiles = Map<String, WebDavSyncProfileEngineState>.from(
-              current.profiles,
-            );
-            final profile =
-                profiles[entry.key] ?? const WebDavSyncProfileEngineState();
-            profiles[entry.key] = profile.copyWith(
-              baseline: pending.target,
-              clearPendingApply: true,
-            );
-            return current.copyWith(
-              profiles: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
-                profiles,
-              ),
-            );
-          });
-        }
-        state = await _stateRepository.load(namespaceId);
-      } finally {
-        instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
-      }
-    }
-
     final transport = _transportFactory(context);
     try {
       late final WebDavBytesResult rootRead;
@@ -552,6 +520,115 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         );
       }
       final serverNowMs = clockDecision.serverNowMs!;
+      final pendingProfiles = state.profiles.entries
+          .where((entry) => entry.value.pendingApply != null)
+          .toList(growable: false);
+      if (pendingProfiles.isNotEmpty) {
+        final replayStarted = instrumentation.startPhase();
+        try {
+          session ??= await _localAdapter.beginCycle();
+          for (final entry in pendingProfiles) {
+            final pending = entry.value.pendingApply!;
+            if (identityMaps.circleToLocalProfiles[entry.key] !=
+                pending.localProfileId) {
+              throw StateError('WebDAV sync pending apply mapping changed');
+            }
+            WebDavSyncHotDocument? replayedTarget;
+            for (var attempt = 0; attempt < 2; attempt++) {
+              final fresh = await _localAdapter.readProfile(
+                session,
+                pending.localProfileId,
+              );
+              final currentProfile =
+                  state.profiles[entry.key] ??
+                  const WebDavSyncProfileEngineState();
+              final built = WebDavSyncHotMerge.build(
+                WebDavSyncBuildInput(
+                  circleProfileId: entry.key,
+                  deviceId: deviceId,
+                  rawPreferences: fresh.rawPreferences,
+                  portablePreferences: fresh.portablePreferences,
+                  identityMaps: identityMaps,
+                  localNowMs: localNowMs,
+                  clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+                  serverNowMs: serverNowMs,
+                  previous: currentProfile.baseline,
+                ),
+              );
+              final localTombstones = _normalizeLocalTombstones(
+                currentProfile.tombstones,
+                clockDecision,
+                identityMaps,
+                currentRecordKeys: built.document.watchState.records.keys
+                    .toSet(),
+              );
+              final lastSuccess = state.lastSuccessfulSyncMs;
+              final dormantSince =
+                  lastSuccess != null &&
+                      serverNowMs - lastSuccess >=
+                          tombstoneHorizon.inMilliseconds
+                  ? lastSuccess
+                  : null;
+              final replayed = WebDavSyncHotMerge.clampForPublication(
+                WebDavSyncHotMerge.merge(
+                  local: built.document,
+                  peers: <WebDavSyncHotDocument>[pending.target],
+                  tombstoneDocuments: <WebDavSyncTombstoneDocument>[
+                    WebDavSyncTombstoneDocument(
+                      circleProfileId: entry.key,
+                      items: localTombstones,
+                    ),
+                  ],
+                  nowMs: serverNowMs,
+                  tombstoneHorizon: tombstoneHorizon,
+                  dormantSinceMs: dormantSince,
+                ),
+                serverNowMs: serverNowMs,
+              );
+              final values = WebDavSyncHotMerge.materializePreferences(
+                document: replayed.document,
+                identityMaps: identityMaps,
+                localRichRecords: built.localRichRecords,
+                localPortableRecords: built.document.watchState.records,
+                protectedPreferenceKeys: built.protectedPreferenceKeys,
+              );
+              try {
+                await _localAdapter.applyProfile(
+                  session,
+                  pending.localProfileId,
+                  values,
+                  expectedMutationToken: fresh.mutationToken,
+                  replayingPending: true,
+                );
+                replayedTarget = replayed.document;
+                break;
+              } on ProfilePreferenceMutationConflict {
+                if (attempt != 0) rethrow;
+              }
+            }
+            await _stateRepository.update(namespaceId, (current) {
+              final profiles = Map<String, WebDavSyncProfileEngineState>.from(
+                current.profiles,
+              );
+              final profile =
+                  profiles[entry.key] ?? const WebDavSyncProfileEngineState();
+              profiles[entry.key] = profile.copyWith(
+                baseline: replayedTarget!,
+                clearPendingApply: true,
+              );
+              return current.copyWith(
+                profiles:
+                    Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+                      profiles,
+                    ),
+              );
+            });
+          }
+          state = await _stateRepository.load(namespaceId);
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.mergeApply, replayStarted);
+        }
+      }
       final manifestReads = await _readManifests(
         transport: transport,
         context: context,
@@ -703,6 +780,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 localCircleProfileIds: circleInventory.circleProfileIds,
                 localCircleResourceIds: circleInventory.circleResourceIds,
                 localCircleGrantIds: circleInventory.circleGrantIds,
+                onDeferred: (message) => _diagnostic(message, null),
               );
           final deferredAdminCircleId =
               WebDavSyncCircleMerge.selectAdminSafetyDeferral(
@@ -768,7 +846,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               : adminHint;
           final pending = WebDavSyncPendingCircleApply(
             profiles: mergedProfiles,
-            resources: mergedResources,
+            resources: mergedResourceWinners,
             registryVersions: built.registryVersions,
           );
           state = await _stateRepository.update(
@@ -807,7 +885,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               namespaceId,
               (current) => current.copyWith(
                 circleProfilesBaseline: mergedProfiles,
-                circleResourcesBaseline: mergedResources,
+                circleResourcesBaseline: mergedResourceWinners,
                 clearPendingCircleApply: true,
                 pendingActiveProfile: deferActive,
                 clearPendingActiveProfileDeletion: deferActive == null,
@@ -822,7 +900,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             }
             circleResult = _CircleCycleResult(
               profiles: mergedProfiles,
-              resources: mergedResources,
+              resources: mergedResourceWinners,
             );
           }
         } finally {

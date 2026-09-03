@@ -339,7 +339,10 @@ final class ProfileWebDavSyncLocalAdapter
     final profileProjection = circleProjection.profiles;
     final registryProjection = circleProjection.registry;
     final tombstones =
-        await WebDavSyncTombstoneRecorder.loadRegistryRecordTombstones();
+        await WebDavSyncTombstoneRecorder.loadRegistryRecordTombstones(
+          clockOffsetMs: request.clockOffsetMs,
+          serverNowMs: request.serverNowMs,
+        );
     _validateSession(session);
     final maps = request.identityMaps;
 
@@ -584,6 +587,7 @@ final class ProfileWebDavSyncLocalAdapter
           kind: WebDavSyncCircleDeletionKind.values.byName(record.kind.name),
           timeMs: tombstone.timeMs,
           originDeviceId: tombstone.originDeviceId,
+          normalizedTimeFrozen: tombstone.normalizedTimeFrozen,
           circleProfileId: profileId,
           circleResourceId: resourceId,
           slot: record.slot,

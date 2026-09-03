@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/diagnostic_log.dart';
 import '../../services/deep_link_service.dart';
 import '../../services/profiles/profile_app_lifecycle_participant.dart';
 import '../../services/profiles/profile_authorization.dart';
@@ -47,7 +48,20 @@ Future<bool> switchThenApplySyncedProfileOutcome({
     unlock: (_) async => true,
   );
   if (!switched) return false;
-  await applyOutcome();
+  try {
+    await applyOutcome();
+  } catch (error, stackTrace) {
+    debugPrint(
+      'Deferred synced profile outcome after switching '
+      '(${error.runtimeType})',
+    );
+    DiagnosticLog.instance.recordError(
+      source: 'profiles',
+      event: 'synced_profile_outcome_deferred',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
   return true;
 }
 

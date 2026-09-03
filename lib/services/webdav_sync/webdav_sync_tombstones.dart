@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
@@ -187,16 +188,34 @@ final class WebDavSyncRegistryRecordTombstone {
     required this.record,
     required this.timeMs,
     required this.originDeviceId,
-  });
+    this.normalizedTimeFrozen = false,
+    int? rawLocalTimeMs,
+  }) : rawLocalTimeMs = rawLocalTimeMs ?? timeMs;
 
   final WebDavSyncRegistryRecordId record;
   final int timeMs;
   final String originDeviceId;
+  final bool normalizedTimeFrozen;
+  final int rawLocalTimeMs;
+
+  WebDavSyncRegistryRecordTombstone copyWith({
+    int? timeMs,
+    bool? normalizedTimeFrozen,
+    int? rawLocalTimeMs,
+  }) => WebDavSyncRegistryRecordTombstone(
+    record: record,
+    timeMs: timeMs ?? this.timeMs,
+    originDeviceId: originDeviceId,
+    normalizedTimeFrozen: normalizedTimeFrozen ?? this.normalizedTimeFrozen,
+    rawLocalTimeMs: rawLocalTimeMs ?? this.rawLocalTimeMs,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'record': record.toJson(),
     'timeMs': timeMs,
     'originDeviceId': originDeviceId,
+    'normalizedTimeFrozen': normalizedTimeFrozen,
+    'rawLocalTimeMs': rawLocalTimeMs,
   };
 
   factory WebDavSyncRegistryRecordTombstone.fromJson(Object? source) {
@@ -206,9 +225,14 @@ final class WebDavSyncRegistryRecordTombstone {
     final json = Map<String, Object?>.from(source);
     final timeMs = json['timeMs'];
     final originDeviceId = json['originDeviceId'];
+    final normalizedTimeFrozen = json['normalizedTimeFrozen'] ?? false;
+    final rawLocalTimeMs = json['rawLocalTimeMs'] ?? timeMs;
     if (timeMs is! int ||
         timeMs < 0 ||
         originDeviceId is! String ||
+        normalizedTimeFrozen is! bool ||
+        rawLocalTimeMs is! int ||
+        rawLocalTimeMs < 0 ||
         !_safeRegistryDeviceId.hasMatch(originDeviceId)) {
       throw const FormatException('Invalid registry tombstone');
     }
@@ -216,6 +240,8 @@ final class WebDavSyncRegistryRecordTombstone {
       record: WebDavSyncRegistryRecordId.fromJson(json['record']),
       timeMs: timeMs,
       originDeviceId: originDeviceId,
+      normalizedTimeFrozen: normalizedTimeFrozen,
+      rawLocalTimeMs: rawLocalTimeMs,
     );
   }
 }
@@ -230,6 +256,12 @@ abstract interface class WebDavSyncRegistryTombstoneRepository {
     required String deviceId,
     required Iterable<WebDavSyncRegistryRecordId> records,
     required int nowMs,
+  });
+
+  Future<Map<String, WebDavSyncRegistryRecordTombstone>> freeze(
+    String namespaceId, {
+    required int clockOffsetMs,
+    required int serverNowMs,
   });
 }
 
@@ -294,6 +326,32 @@ final class WebDavSyncRegistryTombstoneStore
         return <String, Object?>{...values, valueKey: _fileMarker};
       });
     }
+  });
+
+  @override
+  Future<Map<String, WebDavSyncRegistryRecordTombstone>> freeze(
+    String namespaceId, {
+    required int clockOffsetMs,
+    required int serverNowMs,
+  }) => _lock.synchronized(() async {
+    final current = await _loadUnlocked(namespaceId);
+    if (current.values.every((item) => item.normalizedTimeFrozen)) {
+      return current;
+    }
+    final frozen = <String, WebDavSyncRegistryRecordTombstone>{
+      for (final entry in current.entries)
+        entry.key: entry.value.normalizedTimeFrozen
+            ? entry.value
+            : entry.value.copyWith(
+                timeMs: min(
+                  max(0, entry.value.timeMs + clockOffsetMs),
+                  serverNowMs,
+                ),
+                normalizedTimeFrozen: true,
+              ),
+    };
+    await _writeFile(await _file(namespaceId), frozen);
+    return Map<String, WebDavSyncRegistryRecordTombstone>.unmodifiable(frozen);
   });
 
   Future<Map<String, WebDavSyncRegistryRecordTombstone>> _loadUnlocked(
@@ -420,7 +478,7 @@ final class WebDavSyncRegistryTombstoneStore
     WebDavSyncRegistryRecordTombstone left,
     WebDavSyncRegistryRecordTombstone right,
   ) {
-    final time = left.timeMs.compareTo(right.timeMs);
+    final time = left.rawLocalTimeMs.compareTo(right.rawLocalTimeMs);
     return time != 0
         ? time
         : left.originDeviceId.compareTo(right.originDeviceId);
@@ -577,7 +635,7 @@ abstract final class WebDavSyncTombstoneRecorder {
   /// Read surface for the future circle-section builder. Unbound devices have
   /// no journal by definition.
   static Future<Map<String, WebDavSyncRegistryRecordTombstone>>
-  loadRegistryRecordTombstones() async {
+  loadRegistryRecordTombstones({int? clockOffsetMs, int? serverNowMs}) async {
     final snapshot = await _bindingStore.load();
     final binding = _bindingForTombstones(snapshot);
     if (binding == null) {
@@ -587,7 +645,19 @@ abstract final class WebDavSyncTombstoneRecorder {
     if (namespace == null) {
       return const <String, WebDavSyncRegistryRecordTombstone>{};
     }
-    return _registryRepository.load(namespace.id);
+    if (clockOffsetMs == null && serverNowMs == null) {
+      return _registryRepository.load(namespace.id);
+    }
+    if (clockOffsetMs == null || serverNowMs == null) {
+      throw ArgumentError(
+        'Registry tombstone normalization requires offset and server time',
+      );
+    }
+    return _registryRepository.freeze(
+      namespace.id,
+      clockOffsetMs: clockOffsetMs,
+      serverNowMs: serverNowMs,
+    );
   }
 
   static Future<void> recordForProfile(

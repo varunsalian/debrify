@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io' show File, Platform, exit;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -125,6 +125,13 @@ import '../widgets/remote/remote_role_picker_screen.dart';
 import '../theme/app_looks.dart';
 import '../theme/app_theme_scope.dart';
 import '../models/tv_hero_artwork_quality.dart';
+
+@visibleForTesting
+bool shouldApplyPendingCredentialOverride({
+  required Set<ConnectionResourceType> pendingTypes,
+  required Set<ConnectionResourceType> providerTypes,
+  required bool configured,
+}) => !configured && pendingTypes.any(providerTypes.contains);
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -395,6 +402,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPlayLoaderStyle(),
       _activeProfileMayExportDiagnostics(),
       _pendingCredentialTypes(),
+      StorageService.getIptvPlaylists(forSettings: false),
     ]);
 
     if (!mounted) return;
@@ -444,6 +452,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final playLoaderStyle = results[40] as String;
     final diagnosticExportVisible = results[41] as bool;
     final pendingCredentialTypes = results[42] as Set<ConnectionResourceType>;
+    final configuredIptvPlaylists = results[43] as List;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -512,10 +521,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _webDavCaption = 'Tap to connect';
     }
 
+    final traktExpired =
+        traktExpiry != null &&
+        DateTime.now().millisecondsSinceEpoch >= traktExpiry;
     if (traktConnected) {
-      final traktExpired =
-          traktExpiry != null &&
-          DateTime.now().millisecondsSinceEpoch >= traktExpiry;
       if (!traktExpired) {
         _traktConnected = true;
         _traktStatus = 'Active';
@@ -564,65 +573,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
           '${indexerManagers.length} engine${indexerManagers.length == 1 ? '' : 's'} configured';
     }
 
-    void pending(Set<ConnectionResourceType> types, void Function() apply) {
-      if (pendingCredentialTypes.any(types.contains)) apply();
+    void pending(
+      Set<ConnectionResourceType> types,
+      bool configured,
+      void Function() apply,
+    ) {
+      if (shouldApplyPendingCredentialOverride(
+        pendingTypes: pendingCredentialTypes,
+        providerTypes: types,
+        configured: configured,
+      )) {
+        apply();
+      }
     }
 
     const pendingCaption = 'credentials pending owner sign-in';
-    _iptvCredentialsPending = pendingCredentialTypes.any(
-      const {
+    _iptvCredentialsPending = shouldApplyPendingCredentialOverride(
+      pendingTypes: pendingCredentialTypes,
+      providerTypes: const {
         ConnectionResourceType.iptvM3u,
         ConnectionResourceType.iptvXtream,
         ConnectionResourceType.xmltv,
-      }.contains,
+      },
+      configured: configuredIptvPlaylists.isNotEmpty,
     );
-    pending(const {ConnectionResourceType.realDebrid}, () {
+    pending(const {ConnectionResourceType.realDebrid}, rdConnected, () {
       _realDebridConnected = true;
       _realDebridStatus = 'Attention';
       _realDebridCaption = pendingCaption;
     });
-    pending(const {ConnectionResourceType.torbox}, () {
+    pending(const {ConnectionResourceType.torbox}, torConnected, () {
       _torboxConnected = true;
       _torboxStatus = 'Attention';
       _torboxCaption = pendingCaption;
     });
-    pending(const {ConnectionResourceType.premiumize}, () {
+    pending(const {ConnectionResourceType.premiumize}, premiumizeConnected, () {
       _premiumizeConnected = true;
       _premiumizeStatus = 'Attention';
       _premiumizeCaption = pendingCaption;
     });
-    pending(const {ConnectionResourceType.allDebrid}, () {
+    pending(const {ConnectionResourceType.allDebrid}, allDebridConnected, () {
       _allDebridConnected = true;
       _allDebridStatus = 'Attention';
       _allDebridCaption = pendingCaption;
     });
-    pending(const {ConnectionResourceType.pikpak}, () {
+    pending(const {ConnectionResourceType.pikpak}, pikpakAuth, () {
       _pikpakConnected = true;
       _pikpakStatus = 'Attention';
       _pikpakCaption = pendingCaption;
     });
-    pending(const {ConnectionResourceType.webDav}, () {
-      _webDavConnected = true;
-      _webDavStatus = 'Attention';
-      _webDavCaption = pendingCaption;
-    });
-    pending(const {ConnectionResourceType.trakt}, () {
-      _traktConnected = true;
-      _traktStatus = 'Attention';
-      _traktCaption = pendingCaption;
-    });
-    pending(const {ConnectionResourceType.simkl}, () {
+    pending(
+      const {ConnectionResourceType.webDav},
+      webDavEnabled && webDavServers.isNotEmpty,
+      () {
+        _webDavConnected = true;
+        _webDavStatus = 'Attention';
+        _webDavCaption = pendingCaption;
+      },
+    );
+    pending(
+      const {ConnectionResourceType.trakt},
+      traktConnected && !traktExpired,
+      () {
+        _traktConnected = true;
+        _traktStatus = 'Attention';
+        _traktCaption = pendingCaption;
+      },
+    );
+    pending(const {ConnectionResourceType.simkl}, simklConnected, () {
       _simklConnected = true;
       _simklStatus = 'Attention';
       _simklCaption = pendingCaption;
     });
-    pending(const {ConnectionResourceType.mdblist}, () {
+    pending(const {ConnectionResourceType.mdblist}, mdblistConnected, () {
       _mdblistConnected = true;
       _mdblistStatus = 'Attention';
       _mdblistCaption = pendingCaption;
     });
     pending(
       const {ConnectionResourceType.jackett, ConnectionResourceType.prowlarr},
+      indexerManagers.isNotEmpty,
       () {
         _indexerManagersConfigured = true;
         _indexerManagersStatus = 'Attention';

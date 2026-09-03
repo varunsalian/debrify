@@ -345,10 +345,39 @@ void main() {
       expect(local.events, contains('apply:local-profile'));
       expect(local.replayingPendingFlags, <bool>[false, true, false]);
       expect(
-        local.events.indexOf('apply:local-profile'),
-        lessThan(local.events.indexOf('read:local-profile')),
+        local.events.indexOf('read:local-profile'),
+        lessThan(local.events.indexOf('apply:local-profile')),
       );
       expect(transport.events.first, 'read:root');
+      expect(states.state.profiles['profile-circle']!.pendingApply, isNull);
+    },
+  );
+
+  test(
+    'pending replay remerges a newer local write and retries its fence',
+    () async {
+      local.failNextApply = true;
+      await expectLater(runFixture(context()), throwsStateError);
+      expect(states.state.profiles['profile-circle']!.pendingApply, isNotNull);
+
+      local.preferences = <String, Object?>{'theme': 'interim'};
+      local.conflictNextApply = true;
+      final later = now.add(const Duration(seconds: 1));
+      transport.serverDate = later;
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: sectionCache,
+        clock: () => later,
+      );
+
+      await runFixture(context());
+
+      expect(local.replayingPendingFlags, <bool>[false, true, true, false]);
+      expect(local.applied.first['theme'], 'interim');
+      expect(local.preferences['theme'], 'interim');
       expect(states.state.profiles['profile-circle']!.pendingApply, isNull);
     },
   );
@@ -831,7 +860,7 @@ void main() {
   });
 
   test(
-    'poisoned pending FK target is quarantined before fresh network state',
+    'pending child of a tombstoned parent is suppressed from local apply',
     () async {
       final diagnostics = <String>[];
       final circleLocal = _FakeCircleLocalAdapter(
@@ -901,9 +930,13 @@ void main() {
 
       expect(
         diagnostics,
-        contains('Quarantined an invalid pending WebDAV circle target'),
+        isNot(contains('Quarantined an invalid pending WebDAV circle target')),
       );
-      expect(circleLocal.circleReplayFlags, everyElement(isFalse));
+      expect(circleLocal.circleReplayFlags.first, isTrue);
+      expect(
+        circleLocal.appliedRequests.first.resources.grants['profile-circle'],
+        isNull,
+      );
       expect(states.state.pendingCircleApply, isNull);
       expect(transport.events, contains('read:root'));
     },
@@ -1028,6 +1061,121 @@ void main() {
       contains('foreign-profile'),
     );
   });
+
+  test(
+    'a partial circle read defers an orphan locally but republishes it live',
+    () async {
+      final diagnostics = <String>[];
+      final stamp = WebDavSyncStamp(
+        normalizedTimeMs: now.millisecondsSinceEpoch,
+        originDeviceId: 'device-b',
+      );
+      final orphan = _circleResources(<String, WebDavSyncResourceEntry>{
+        'resource-orphan': WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: stamp,
+            value: const WebDavSyncResourceMetadata(
+              type: ConnectionResourceType.realDebrid,
+              label: 'Shared RD',
+              ownerCircleProfileId: 'profile-missing-this-cycle',
+              publicConfig: <String, Object?>{'schemaVersion': 1},
+              publicSchemaVersion: 1,
+              enabled: true,
+            ),
+          ),
+          secretConfig: WebDavSyncCircleLeaf<WebDavSyncResourceSecretConfig>(
+            stamp: stamp,
+            value: WebDavSyncResourceSecretConfig(
+              semanticDigest: 'a' * 64,
+              type: ConnectionResourceType.realDebrid,
+              ownerCircleProfileId: 'profile-missing-this-cycle',
+              publicSchemaVersion: 1,
+              payloadVersion: 1,
+              envelope: base64Encode(const <int>[1]),
+            ),
+          ),
+        ),
+      });
+      final circleLocal = _FakeCircleLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-circle': _circleProfileLeaf(
+              name: 'Local',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-a',
+            ),
+          },
+        ),
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        profiles: _circleProfiles(
+          <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+            'profile-missing-this-cycle': _circleProfileLeaf(
+              name: 'Remote owner',
+              time: now.millisecondsSinceEpoch,
+              origin: 'device-b',
+            ),
+          },
+        ),
+        resources: orphan,
+      );
+      transport.sectionNotFoundFailures.add('device-b:profiles');
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: circleLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+
+      await runFixture(context());
+
+      expect(
+        circleLocal.appliedRequests.single.resources.resources,
+        isNot(contains('resource-orphan')),
+      );
+      final published = states.state.circleResourcesBaseline!;
+      expect(published.resources['resource-orphan']!.metadata.value, isNotNull);
+      expect(
+        published.resources['resource-orphan']!.secretConfig!.value,
+        isNotNull,
+      );
+      expect(
+        WebDavSyncCodec.canonicalJson(published.toJson()),
+        isNot(contains('"value":null')),
+      );
+      expect(
+        states.state.ownManifest!.section('resources')!.semanticDigest,
+        published.semanticDigest,
+      );
+      expect(
+        diagnostics,
+        contains(
+          'Deferred a WebDAV circle resource whose owner profile was absent '
+          'from this cycle',
+        ),
+      );
+      final peerMerge = WebDavSyncCircleMerge.mergeResources(
+        <WebDavSyncResourcesDocument>[orphan, published],
+      );
+      expect(peerMerge.resources['resource-orphan']!.metadata.value, isNotNull);
+      expect(
+        peerMerge.resources['resource-orphan']!.secretConfig!.value,
+        isNotNull,
+      );
+    },
+  );
 
   test(
     'heartbeat-stale admin deletion stays on wire and defers local apply',
@@ -2823,6 +2971,7 @@ class _FakeTransport implements WebDavSyncTransport {
   final List<String> events = <String>[];
   final List<String> writtenText = <String>[];
   final Set<String> manifestNetworkFailures = <String>{};
+  final Set<String> sectionNotFoundFailures = <String>{};
   final Set<String> sectionNetworkFailures = <String>{};
   final Set<String> listedWithoutManifest = <String>{};
   WebDavException? rootError;
@@ -2923,6 +3072,12 @@ class _FakeTransport implements WebDavSyncTransport {
     required int maxBytes,
   }) async {
     events.add('read:section:$deviceId:${reference.name}');
+    if (sectionNotFoundFailures.contains('$deviceId:${reference.name}')) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'peer section is missing',
+      );
+    }
     if (sectionNetworkFailures.contains('$deviceId:${reference.name}')) {
       throw const WebDavException(
         kind: WebDavErrorKind.network,

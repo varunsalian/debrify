@@ -315,6 +315,40 @@ void main() {
   });
 
   test(
+    'an absent parent defers its live child without manufacturing tombstones',
+    () {
+      final deferred = <String>[];
+      final winners = _resources(<String, WebDavSyncResourceEntry>{
+        'r-orphan': WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: newer,
+            value: _metadata('p-missing', 'Still live'),
+          ),
+          secretConfig: WebDavSyncCircleLeaf<WebDavSyncResourceSecretConfig>(
+            stamp: newer,
+            value: _secret(_digest1, 'c2VjcmV0'),
+          ),
+        ),
+      });
+
+      final applicable = WebDavSyncCircleMerge.deriveApplicableResources(
+        profiles: _profiles(const {}),
+        resources: winners,
+        onDeferred: deferred.add,
+      );
+
+      expect(applicable.resources, isNot(contains('r-orphan')));
+      expect(winners.resources['r-orphan']!.metadata.value, isNotNull);
+      expect(winners.resources['r-orphan']!.secretConfig!.value, isNotNull);
+      expect(
+        WebDavSyncCodec.canonicalJson(applicable.toJson()),
+        isNot(contains('"value":null')),
+      );
+      expect(deferred, isNotEmpty);
+    },
+  );
+
+  test(
     'resource tombstone suppresses a newer offline grant in every order',
     () {
       final live = WebDavSyncResourcesDocument(
@@ -362,7 +396,7 @@ void main() {
           resources: WebDavSyncCircleMerge.mergeResources(documents),
         );
         expect(applicable.resources['r-a']!.metadata.value, isNull);
-        expect(applicable.grants['p-a']!['r-a']!.value, isNull);
+        expect(applicable.grants['p-a'], isNull);
         WebDavSyncCircleMerge.validateApplicableState(
           profiles: profiles,
           resources: applicable,
@@ -370,6 +404,85 @@ void main() {
         expectedDigest ??= applicable.semanticDigest;
         expect(applicable.semanticDigest, expectedDigest);
       }
+    },
+  );
+
+  test(
+    'a frozen registry deletion neither restamps nor defeats a newer re-grant',
+    () {
+      const deletion = WebDavSyncCircleDeletion(
+        kind: WebDavSyncCircleDeletionKind.grant,
+        timeMs: 150,
+        originDeviceId: 'device-a',
+        normalizedTimeFrozen: true,
+        circleProfileId: 'p-a',
+        circleResourceId: 'r-a',
+      );
+      final first = WebDavSyncCircleMerge.rebuildResources(
+        WebDavSyncResourcesBuildInput(
+          deviceId: 'device-a',
+          localNowMs: 200,
+          clockOffsetMs: 0,
+          serverNowMs: 3000,
+          resources: const {},
+          secrets: const {},
+          grants:
+              <
+                String,
+                Map<String, WebDavSyncLocalCircleValue<WebDavSyncGrantValue>>
+              >{
+                'p-a':
+                    <String, WebDavSyncLocalCircleValue<WebDavSyncGrantValue>>{
+                      'r-a':
+                          const WebDavSyncLocalCircleValue<
+                            WebDavSyncGrantValue
+                          >(
+                            value: WebDavSyncGrantValue(permissions: 1),
+                            updatedAtMs: 200,
+                          ),
+                    },
+              },
+          settings: const {},
+          bindings: const {},
+          deletions: const <WebDavSyncCircleDeletion>[deletion],
+        ),
+      );
+      final second = WebDavSyncCircleMerge.rebuildResources(
+        WebDavSyncResourcesBuildInput(
+          deviceId: 'device-a',
+          localNowMs: 1200,
+          clockOffsetMs: 1000,
+          serverNowMs: 3000,
+          resources: const {},
+          secrets: const {},
+          grants:
+              <
+                String,
+                Map<String, WebDavSyncLocalCircleValue<WebDavSyncGrantValue>>
+              >{
+                'p-a':
+                    <String, WebDavSyncLocalCircleValue<WebDavSyncGrantValue>>{
+                      'r-a':
+                          const WebDavSyncLocalCircleValue<
+                            WebDavSyncGrantValue
+                          >(
+                            value: WebDavSyncGrantValue(permissions: 1),
+                            updatedAtMs: 200,
+                          ),
+                    },
+              },
+          settings: const {},
+          bindings: const {},
+          deletions: const <WebDavSyncCircleDeletion>[deletion],
+          previous: first,
+        ),
+      );
+
+      expect(first.grants['p-a']!['r-a']!.value, isNotNull);
+      expect(first.grants['p-a']!['r-a']!.stamp.normalizedTimeMs, 200);
+      expect(second.semanticDigest, first.semanticDigest);
+      expect(second.grants['p-a']!['r-a']!.value, isNotNull);
+      expect(second.grants['p-a']!['r-a']!.stamp.normalizedTimeMs, 200);
     },
   );
 

@@ -190,6 +190,34 @@ void main() {
   });
 
   test(
+    'a throwing synced outcome still completes the replacement activation',
+    () async {
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      final replacementId = (await registry.createProfile(
+        name: 'Replacement Admin',
+        role: UserProfileRole.admin,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      )).id;
+      final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+
+      expect(
+        await switchThenApplySyncedProfileOutcome(
+          lifecycle: lifecycle,
+          replacementProfileId: replacementId,
+          applyOutcome: () async => throw StateError('simulated apply failure'),
+        ),
+        isTrue,
+      );
+
+      expect(ProfileRuntime.capture().profileId, replacementId);
+      expect((await registry.activeProfile())?.id, replacementId);
+      lifecycle.dispose();
+    },
+  );
+
+  test(
     'legacy active deletion round-trips and executes locally after switch',
     () async {
       final actor = await ProfileAuthorizationContext.capture(registry);

@@ -338,6 +338,15 @@ class ProfileCredentialFacade {
       return true;
     }
     context = await ProfileAuthorizationContext.capture(registry);
+    final resource = await registry.getResource(resourceId);
+    if (resource?.secretPending == true) {
+      await service.updateSecret(
+        context: context,
+        resourceId: resourceId,
+        secretConfig: <String, dynamic>{field.field: value},
+      );
+      return true;
+    }
     final current = await service.resolveSecretForUse(
       context: context,
       resourceId: resourceId,
@@ -374,6 +383,22 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.manage,
       feature: ProfileFeature.manageConnections,
     );
+    if (authorized.secretPending) {
+      try {
+        await registry.deleteOwnedResource(
+          resourceId: resourceId,
+          ownerProfileId: context.profileId,
+          revokeBorrowers: false,
+          actingProfileId: context.profileId,
+          actingAuthorizationRevision: context.authorizationRevision,
+          expectedResourceAuthorizationRevision:
+              authorized.authorizationRevision,
+        );
+      } on StateError catch (error) {
+        throw ResourceImpactRequiredException(error.message);
+      }
+      return true;
+    }
     final current = await service.resolveSecretForUse(
       context: context,
       resourceId: resourceId,

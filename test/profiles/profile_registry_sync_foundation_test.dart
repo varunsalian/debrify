@@ -1300,6 +1300,14 @@ final class _DelayedRegistryTombstoneRepository
       Map<String, WebDavSyncRegistryRecordTombstone>.unmodifiable(records);
 
   @override
+  Future<Map<String, WebDavSyncRegistryRecordTombstone>> freeze(
+    String namespaceId, {
+    required int clockOffsetMs,
+    required int serverNowMs,
+  }) async =>
+      Map<String, WebDavSyncRegistryRecordTombstone>.unmodifiable(records);
+
+  @override
   Future<void> record(
     String namespaceId, {
     required String deviceId,

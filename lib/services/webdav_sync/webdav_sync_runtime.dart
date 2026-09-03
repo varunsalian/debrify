@@ -640,117 +640,120 @@ final class WebDavSyncRuntime
   Future<void> _applyPendingActiveProfile(
     String namespaceId,
     WebDavSyncPendingActiveProfile pending,
-  ) async {
-    final current = await stateStore.load(namespaceId);
-    final durable = current.pendingActiveProfile;
-    if (durable == null ||
-        !_samePendingActiveProfile(durable, pending) ||
-        suppressWebDavSyncActiveProfileRetirement(current)) {
-      return;
-    }
-    if (durable.isLegacyDeletion) {
-      final resolved = await applyLegacyWebDavSyncActiveProfileDeletion(
-        registry: ProfileBootstrap.registry,
-        pending: durable,
-        diagnostic: _pendingActiveProfileDiagnostic,
-      );
-      if (resolved) {
-        await _clearPendingActiveProfile(namespaceId, durable);
+  ) => serializeWebDavSyncPendingActiveProfileApply(
+    operations: _operations,
+    apply: () async {
+      final current = await stateStore.load(namespaceId);
+      final durable = current.pendingActiveProfile;
+      if (durable == null ||
+          !_samePendingActiveProfile(durable, pending) ||
+          suppressWebDavSyncActiveProfileRetirement(current)) {
+        return;
       }
-      return;
-    }
-    final leaf = durable.profileLeaf;
-    final circleProfileId = durable.circleProfileId;
-    if (leaf == null || circleProfileId == null) {
-      _pendingActiveProfileDiagnostic(
-        'Dropped a WebDAV active-profile marker whose stored outcome could '
-        'not be recovered',
-        null,
+      if (durable.isLegacyDeletion) {
+        final resolved = await applyLegacyWebDavSyncActiveProfileDeletion(
+          registry: ProfileBootstrap.registry,
+          pending: durable,
+          diagnostic: _pendingActiveProfileDiagnostic,
+        );
+        if (resolved) {
+          await _clearPendingActiveProfile(namespaceId, durable);
+        }
+        return;
+      }
+      final leaf = durable.profileLeaf;
+      final circleProfileId = durable.circleProfileId;
+      if (leaf == null || circleProfileId == null) {
+        _pendingActiveProfileDiagnostic(
+          'Dropped a WebDAV active-profile marker whose stored outcome could '
+          'not be recovered',
+          null,
+        );
+        await _clearPendingActiveProfile(namespaceId, durable);
+        return;
+      }
+      final currentWinner =
+          current.circleProfilesBaseline?.profiles[circleProfileId];
+      if (currentWinner != null &&
+          _profileWinnerSupersedes(currentWinner, leaf)) {
+        _pendingActiveProfileDiagnostic(
+          'Dropped a stale WebDAV active-profile marker after a newer circle '
+          'winner arrived',
+          null,
+        );
+        await _clearPendingActiveProfile(namespaceId, durable);
+        return;
+      }
+      final cycleRunner = _cycleRunner;
+      final adapter = cycleRunner?.localAdapter;
+      final WebDavSyncCircleLocalAdapter? circleAdapter =
+          adapter is WebDavSyncCircleLocalAdapter
+          ? adapter as WebDavSyncCircleLocalAdapter
+          : null;
+      final context = await _activeContext();
+      if (circleAdapter == null ||
+          context == null ||
+          context.namespaceId != namespaceId ||
+          !context.isComplete ||
+          !current.hasAuthenticatedMaps) {
+        _scheduler?.notifyLocalChange(
+          ProfilePreferences.webDavSyncRegistryLogicalKey,
+        );
+        return;
+      }
+      final versions = WebDavSyncRegistryVersionSnapshot(
+        enforce: true,
+        updatedAtMsByRecord: durable.expectedPriorUpdatedAtMs == null
+            ? const <String, int>{}
+            : <String, int>{
+                WebDavSyncRegistryRecordId.profile(
+                  durable.localProfileId,
+                ).storageKey: durable.expectedPriorUpdatedAtMs!,
+              },
       );
-      await _clearPendingActiveProfile(namespaceId, durable);
-      return;
-    }
-    final currentWinner =
-        current.circleProfilesBaseline?.profiles[circleProfileId];
-    if (currentWinner != null &&
-        _profileWinnerSupersedes(currentWinner, leaf)) {
-      _pendingActiveProfileDiagnostic(
-        'Dropped a stale WebDAV active-profile marker after a newer circle '
-        'winner arrived',
-        null,
-      );
-      await _clearPendingActiveProfile(namespaceId, durable);
-      return;
-    }
-    final cycleRunner = _cycleRunner;
-    final adapter = cycleRunner?.localAdapter;
-    final WebDavSyncCircleLocalAdapter? circleAdapter =
-        adapter is WebDavSyncCircleLocalAdapter
-        ? adapter as WebDavSyncCircleLocalAdapter
-        : null;
-    final context = await _activeContext();
-    if (circleAdapter == null ||
-        context == null ||
-        context.namespaceId != namespaceId ||
-        !context.isComplete ||
-        !current.hasAuthenticatedMaps) {
-      _scheduler?.notifyLocalChange(
-        ProfilePreferences.webDavSyncRegistryLogicalKey,
-      );
-      return;
-    }
-    final versions = WebDavSyncRegistryVersionSnapshot(
-      enforce: true,
-      updatedAtMsByRecord: durable.expectedPriorUpdatedAtMs == null
-          ? const <String, int>{}
-          : <String, int>{
-              WebDavSyncRegistryRecordId.profile(
-                durable.localProfileId,
-              ).storageKey: durable.expectedPriorUpdatedAtMs!,
+      final session = await adapter!.beginCycle();
+      final result = await circleAdapter.applyCircleState(
+        session,
+        WebDavSyncCircleApplyRequest(
+          identityMaps: WebDavSyncIdentityMaps(
+            circleToLocalProfiles: current.circleToLocalProfiles!,
+            circleToLocalResources: current.circleToLocalResources!,
+          ),
+          circleId: context.root!.document.circleId,
+          circleKey: context.root!.key,
+          profiles: WebDavSyncProfilesDocument(
+            profiles: <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+              circleProfileId: leaf,
             },
-    );
-    final session = await adapter!.beginCycle();
-    final result = await circleAdapter.applyCircleState(
-      session,
-      WebDavSyncCircleApplyRequest(
-        identityMaps: WebDavSyncIdentityMaps(
-          circleToLocalProfiles: current.circleToLocalProfiles!,
-          circleToLocalResources: current.circleToLocalResources!,
+          ),
+          resources: const WebDavSyncResourcesDocument(
+            resources: <String, WebDavSyncResourceEntry>{},
+            grants:
+                <
+                  String,
+                  Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>
+                >{},
+            settings:
+                <
+                  String,
+                  Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
+                >{},
+            bindings:
+                <
+                  String,
+                  Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
+                >{},
+          ),
+          registryVersions: versions,
         ),
-        circleId: context.root!.document.circleId,
-        circleKey: context.root!.key,
-        profiles: WebDavSyncProfilesDocument(
-          profiles: <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
-            circleProfileId: leaf,
-          },
-        ),
-        resources: const WebDavSyncResourcesDocument(
-          resources: <String, WebDavSyncResourceEntry>{},
-          grants:
-              <
-                String,
-                Map<String, WebDavSyncCircleLeaf<WebDavSyncGrantValue>>
-              >{},
-          settings:
-              <
-                String,
-                Map<String, WebDavSyncCircleLeaf<WebDavSyncSettingsValue>>
-              >{},
-          bindings:
-              <
-                String,
-                Map<String, WebDavSyncCircleLeaf<WebDavSyncBindingValue>>
-              >{},
-        ),
-        registryVersions: versions,
-      ),
-    );
-    if (result == WebDavSyncCircleApplyResult.conflict) {
-      _scheduler?.notifyConflictFollowUp();
-      return;
-    }
-    await _clearPendingActiveProfile(namespaceId, durable);
-  }
+      );
+      if (result == WebDavSyncCircleApplyResult.conflict) {
+        _scheduler?.notifyConflictFollowUp();
+        return;
+      }
+      await _clearPendingActiveProfile(namespaceId, durable);
+    },
+  );
 
   Future<void> _clearPendingActiveProfile(
     String namespaceId,

@@ -29,4 +29,32 @@ void main() {
       expect(events, <String>['first-start', 'nested', 'first-end', 'second']);
     },
   );
+
+  test(
+    'retirement apply is serialized against a concurrent cycle signal',
+    () async {
+      final coordinator = WebDavSyncOperationCoordinator();
+      final retirementStarted = Completer<void>();
+      final finishRetirement = Completer<void>();
+      final events = <String>[];
+
+      final retirement = serializeWebDavSyncPendingActiveProfileApply(
+        operations: coordinator,
+        apply: () async {
+          events.add('retirement-start');
+          retirementStarted.complete();
+          await finishRetirement.future;
+          events.add('retirement-end');
+        },
+      );
+      await retirementStarted.future;
+      final cycle = coordinator.run(() async => events.add('cycle'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, <String>['retirement-start']);
+      finishRetirement.complete();
+      await Future.wait(<Future<void>>[retirement, cycle]);
+      expect(events, <String>['retirement-start', 'retirement-end', 'cycle']);
+    },
+  );
 }

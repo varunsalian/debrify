@@ -176,6 +176,58 @@ void main() {
     expect(persisted.originDeviceId, 'device-z');
   });
 
+  test(
+    'registry tombstone normalization is frozen in the file store',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'circle-frozen-registry-tombstones',
+      );
+      final store = WebDavSyncRegistryTombstoneStore(
+        bindingStore: bindingStore,
+        directoryProvider: () async => stateDirectory,
+      );
+      final record = WebDavSyncRegistryRecordId.grant(
+        'local-profile',
+        'local-resource',
+      );
+      await store.record(
+        binding.namespaceId,
+        deviceId: 'device-a',
+        records: <WebDavSyncRegistryRecordId>{record},
+        nowMs: 100,
+      );
+
+      final first = (await store.freeze(
+        binding.namespaceId,
+        clockOffsetMs: 50,
+        serverNowMs: 1000,
+      ))[record.storageKey]!;
+      // A crash between the durable file write and SQL outbox deletion can
+      // replay the exact raw batch. It must not unfreeze the stored stamp.
+      await store.record(
+        binding.namespaceId,
+        deviceId: 'device-a',
+        records: <WebDavSyncRegistryRecordId>{record},
+        nowMs: 100,
+      );
+      final second = (await store.freeze(
+        binding.namespaceId,
+        clockOffsetMs: 500,
+        serverNowMs: 1000,
+      ))[record.storageKey]!;
+      final reloaded = (await store.load(
+        binding.namespaceId,
+      ))[record.storageKey]!;
+
+      expect(first.normalizedTimeFrozen, isTrue);
+      expect(first.timeMs, 150);
+      expect(second.timeMs, 150);
+      expect(reloaded.normalizedTimeFrozen, isTrue);
+      expect(reloaded.timeMs, 150);
+    },
+  );
+
   test('recorded deletes notify only while a sync binding exists', () async {
     final notifications = <(String, String)>[];
     ProfilePreferences.webDavSyncLocalChangeSink = (profileId, key) {

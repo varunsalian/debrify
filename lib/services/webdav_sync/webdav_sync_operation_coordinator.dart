@@ -11,3 +11,10 @@ final class WebDavSyncOperationCoordinator {
   Future<T> run<T>(FutureOr<T> Function() operation) =>
       _lock.synchronized(operation);
 }
+
+/// Keeps the post-switch retirement apply on the same exclusion boundary as
+/// live sync cycles while leaving the coordinator independently testable.
+Future<T> serializeWebDavSyncPendingActiveProfileApply<T>({
+  required WebDavSyncOperationCoordinator operations,
+  required FutureOr<T> Function() apply,
+}) => operations.run(apply);

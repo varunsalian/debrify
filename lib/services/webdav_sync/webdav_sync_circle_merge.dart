@@ -28,6 +28,7 @@ final class WebDavSyncCircleDeletion {
     required this.kind,
     required this.timeMs,
     required this.originDeviceId,
+    this.normalizedTimeFrozen = false,
     this.circleProfileId,
     this.circleResourceId,
     this.slot,
@@ -36,6 +37,7 @@ final class WebDavSyncCircleDeletion {
   final WebDavSyncCircleDeletionKind kind;
   final int timeMs;
   final String originDeviceId;
+  final bool normalizedTimeFrozen;
   final String? circleProfileId;
   final String? circleResourceId;
   final String? slot;
@@ -352,9 +354,10 @@ abstract final class WebDavSyncCircleMerge {
     return result;
   }
 
-  /// Removes live child winners that cannot exist after the merged parent
-  /// winners are applied. Tombstones retain the rejected leaf's stamp so the
-  /// projection is deterministic and remains deletion-shaped for local rows.
+  /// Omits live child winners that cannot exist after the merged parent
+  /// winners are applied. This projection is local-only: callers must publish
+  /// the unmodified merged winners, never this filtered document. Explicit
+  /// tombstones remain deletion evidence; absence is never converted into one.
   static WebDavSyncResourcesDocument deriveApplicableResources({
     required WebDavSyncProfilesDocument profiles,
     required WebDavSyncResourcesDocument resources,
@@ -362,6 +365,7 @@ abstract final class WebDavSyncCircleMerge {
     Set<String> localCircleResourceIds = const <String>{},
     Set<WebDavSyncCircleGrantId> localCircleGrantIds =
         const <WebDavSyncCircleGrantId>{},
+    void Function(String message)? onDeferred,
   }) {
     bool profileAvailable(String id) {
       final winner = profiles.profiles[id];
@@ -375,57 +379,87 @@ abstract final class WebDavSyncCircleMerge {
       final metadata = entry.value.metadata;
       if (metadata.value != null &&
           !profileAvailable(metadata.value!.ownerCircleProfileId)) {
-        applicableResources[entry.key] = WebDavSyncResourceEntry(
-          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
-            stamp: metadata.stamp,
-            value: null,
-          ),
-          secretConfig: entry.value.secretConfig == null
-              ? null
-              : WebDavSyncCircleLeaf<WebDavSyncResourceSecretConfig>(
-                  stamp: entry.value.secretConfig!.stamp,
-                  value: null,
-                ),
-        );
+        if (!profiles.profiles.containsKey(
+          metadata.value!.ownerCircleProfileId,
+        )) {
+          onDeferred?.call(
+            'Deferred a WebDAV circle resource whose owner profile was '
+            'absent from this cycle',
+          );
+        }
       } else {
         applicableResources[entry.key] = entry.value;
       }
     }
     bool resourceAvailable(String id) {
-      final winner = applicableResources[id];
+      final winner = resources.resources[id];
       return winner == null
           ? localCircleResourceIds.contains(id)
-          : winner.metadata.value != null;
+          : winner.metadata.value != null &&
+                profileAvailable(winner.metadata.value!.ownerCircleProfileId);
     }
 
-    final grants = _suppressNested<WebDavSyncGrantValue>(
+    final grants = _filterApplicableNested<WebDavSyncGrantValue>(
       resources.grants,
       keep: (profileId, resourceId, _) =>
           profileAvailable(profileId) && resourceAvailable(resourceId),
+      onDeferred: (profileId, resourceId, _) {
+        if (!profiles.profiles.containsKey(profileId) ||
+            !resources.resources.containsKey(resourceId)) {
+          onDeferred?.call(
+            'Deferred a WebDAV circle grant whose parent was absent from '
+            'this cycle',
+          );
+        }
+      },
     );
     bool grantAvailable(String profileId, String resourceId) {
-      final winner = grants[profileId]?[resourceId];
+      final winner = resources.grants[profileId]?[resourceId];
       return winner == null
           ? localCircleGrantIds.contains((
               circleProfileId: profileId,
               circleResourceId: resourceId,
             ))
-          : winner.value != null;
+          : winner.value != null &&
+                profileAvailable(profileId) &&
+                resourceAvailable(resourceId);
     }
 
-    final settings = _suppressNested<WebDavSyncSettingsValue>(
+    final settings = _filterApplicableNested<WebDavSyncSettingsValue>(
       resources.settings,
       keep: (profileId, resourceId, _) =>
           profileAvailable(profileId) &&
           resourceAvailable(resourceId) &&
           grantAvailable(profileId, resourceId),
+      onDeferred: (profileId, resourceId, _) {
+        if (!profiles.profiles.containsKey(profileId) ||
+            !resources.resources.containsKey(resourceId) ||
+            !resources.grants.containsKey(profileId) ||
+            !resources.grants[profileId]!.containsKey(resourceId)) {
+          onDeferred?.call(
+            'Deferred WebDAV circle settings whose parent was absent from '
+            'this cycle',
+          );
+        }
+      },
     );
-    final bindings = _suppressNested<WebDavSyncBindingValue>(
+    final bindings = _filterApplicableNested<WebDavSyncBindingValue>(
       resources.bindings,
       keep: (profileId, _, value) =>
           profileAvailable(profileId) &&
           resourceAvailable(value.circleResourceId) &&
           grantAvailable(profileId, value.circleResourceId),
+      onDeferred: (profileId, _, value) {
+        if (!profiles.profiles.containsKey(profileId) ||
+            !resources.resources.containsKey(value.circleResourceId) ||
+            !resources.grants.containsKey(profileId) ||
+            !resources.grants[profileId]!.containsKey(value.circleResourceId)) {
+          onDeferred?.call(
+            'Deferred a WebDAV circle binding whose parent was absent from '
+            'this cycle',
+          );
+        }
+      },
     );
     return WebDavSyncResourcesDocument(
       resources: Map<String, WebDavSyncResourceEntry>.unmodifiable(
@@ -571,20 +605,27 @@ abstract final class WebDavSyncCircleMerge {
     return projected.isNotEmpty;
   }
 
-  static Map<String, Map<String, WebDavSyncCircleLeaf<T>>> _suppressNested<T>(
+  static Map<String, Map<String, WebDavSyncCircleLeaf<T>>>
+  _filterApplicableNested<T>(
     Map<String, Map<String, WebDavSyncCircleLeaf<T>>> source, {
     required bool Function(String profileId, String key, T value) keep,
-  }) => <String, Map<String, WebDavSyncCircleLeaf<T>>>{
-    for (final outer in source.entries)
-      outer.key: <String, WebDavSyncCircleLeaf<T>>{
-        for (final inner in outer.value.entries)
-          inner.key:
-              inner.value.value == null ||
-                  keep(outer.key, inner.key, inner.value.value as T)
-              ? inner.value
-              : WebDavSyncCircleLeaf<T>(stamp: inner.value.stamp, value: null),
-      },
-  };
+    void Function(String profileId, String key, T value)? onDeferred,
+  }) {
+    final result = <String, Map<String, WebDavSyncCircleLeaf<T>>>{};
+    for (final outer in source.entries) {
+      final applicable = <String, WebDavSyncCircleLeaf<T>>{};
+      for (final inner in outer.value.entries) {
+        final value = inner.value.value;
+        if (value == null || keep(outer.key, inner.key, value)) {
+          applicable[inner.key] = inner.value;
+        } else {
+          onDeferred?.call(outer.key, inner.key, value);
+        }
+      }
+      if (applicable.isNotEmpty) result[outer.key] = applicable;
+    }
+    return result;
+  }
 
   static bool _isManagingAdminLeaf(
     WebDavSyncCircleLeaf<WebDavSyncProfileValue> leaf,
@@ -764,7 +805,9 @@ abstract final class WebDavSyncCircleMerge {
       throw StateError('Unknown WebDAV sync circle build input');
     }
     return WebDavSyncStamp(
-      normalizedTimeMs: min(max(0, deletion.timeMs + offset), serverNowMs),
+      normalizedTimeMs: deletion.normalizedTimeFrozen
+          ? deletion.timeMs
+          : min(max(0, deletion.timeMs + offset), serverNowMs),
       originDeviceId: deletion.originDeviceId,
     );
   }
