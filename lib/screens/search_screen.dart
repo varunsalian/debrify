@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/artwork_accent.dart';
+import '../utils/home_rail_metrics.dart';
 import '../utils/platform_util.dart';
 import '../utils/tvos_device.dart';
 import '../models/debrify_tv/channel.dart';
@@ -16640,12 +16641,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// tuned for a 720-logical canvas leaves no room for a row (plus its header and
   /// the next row's header) under the hero. So scale the poster with the screen
   /// height.
-  double _railPosterW(BuildContext context) {
-    if (!widget.isTelevision) {
-      return MediaQuery.of(context).size.width >= 900 ? 162.0 : 118.0;
-    }
-    return (MediaQuery.of(context).size.height * 0.17).clamp(92.0, 140.0);
-  }
+  double _railPosterW(BuildContext context) =>
+      homeRailPosterWidth(context, isTelevision: widget.isTelevision);
 
   /// TITLE-card size for a classic board rail under the Home Cards
   /// orientation. Landscape keeps Spotlight's proportions — about 1.6× the

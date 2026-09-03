@@ -11,6 +11,7 @@ import '../../services/home_collections_store.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../utils/home_rail_metrics.dart';
 import '../../widgets/collections/folder_hero_band.dart';
 import '../../widgets/collections/rail_see_all_pill.dart';
 import '../../widgets/home/row_tag_pill.dart';
@@ -644,12 +645,14 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     );
   }
 
+  /// Same poster geometry as a Home board rail, so a folder reads as Home
+  /// with different lists.
   DiscoverShelfMetrics _railMetrics(BuildContext context) {
-    final w = MediaQuery.sizeOf(context).width;
-    final cardH = widget.isTelevision
-        ? (w * 0.10).clamp(140.0, 200.0)
-        : (w * 0.14).clamp(120.0, 190.0);
-    return DiscoverShelfMetrics(cardHeight: cardH, hPad: 24);
+    final posterW = homeRailPosterWidth(
+      context,
+      isTelevision: widget.isTelevision,
+    );
+    return DiscoverShelfMetrics(cardHeight: posterW * 1.5, hPad: 24);
   }
 
   Widget _buildBody() {
