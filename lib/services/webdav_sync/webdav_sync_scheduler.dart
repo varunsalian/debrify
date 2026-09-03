@@ -412,6 +412,10 @@ final class WebDavSyncScheduler {
     _resetPollBackoff();
     _pollGeneration++;
     _pollTimerGeneration++;
+    final runner = _runner;
+    if (runner is WebDavSyncCycleTransportOwner) {
+      (runner as WebDavSyncCycleTransportOwner).closeCycleTransports();
+    }
   }
 
   Future<WebDavSyncCycleReport> signal(WebDavSyncTrigger trigger) async {

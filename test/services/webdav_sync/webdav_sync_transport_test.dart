@@ -15,6 +15,66 @@ void main() {
     serverName: 'Test',
   );
 
+  test('section PUT metadata accepts absence and non-empty validators', () {
+    validateWebDavSyncSectionWriteMetadata(
+      WebDavResponseMetadata(
+        statusCode: 201,
+        uri: Uri.parse('https://example.test/dav/section.enc'),
+        headers: const <String, String>{},
+      ),
+      expectedBytes: 42,
+    );
+    validateWebDavSyncSectionWriteMetadata(
+      WebDavResponseMetadata(
+        statusCode: 201,
+        uri: Uri.parse('https://example.test/dav/section.enc'),
+        headers: const <String, String>{
+          'ETag': '"section-1"',
+          'X-Stored-Content-Length': '42',
+        },
+      ),
+      expectedBytes: 42,
+    );
+  });
+
+  test('section PUT metadata rejects empty ETag and size contradictions', () {
+    final uri = Uri.parse('https://example.test/dav/section.enc');
+
+    expect(
+      () => validateWebDavSyncSectionWriteMetadata(
+        WebDavResponseMetadata(
+          statusCode: 201,
+          uri: uri,
+          headers: const <String, String>{'etag': ''},
+        ),
+        expectedBytes: 42,
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateWebDavSyncSectionWriteMetadata(
+        WebDavResponseMetadata(
+          statusCode: 201,
+          uri: uri,
+          headers: const <String, String>{'content-length': '41'},
+        ),
+        expectedBytes: 42,
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateWebDavSyncSectionWriteMetadata(
+        WebDavResponseMetadata(
+          statusCode: 201,
+          uri: uri,
+          headers: const <String, String>{'content-range': 'bytes 0-40/41'},
+        ),
+        expectedBytes: 42,
+      ),
+      throwsStateError,
+    );
+  });
+
   test('peer discovery returns only bounded safe collection IDs', () async {
     final client = MockClient((request) async {
       expect(request.method, 'PROPFIND');

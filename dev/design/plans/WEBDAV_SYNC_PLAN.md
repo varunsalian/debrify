@@ -1692,9 +1692,12 @@ Must land before v2 starts:
 Status: IMPLEMENTED 2026-09-03 on `webdav-sync` (D12-1..D12-4). One
 deliberate deviation: the local-change debounce is a coalescing window that
 opens at the FIRST write of a burst (a resetting trailing debounce would
-starve pushes under steady playback saves). D12-4's read-back removal was
-NOT executed — the §12.10 physical-trace gate was not met, so the read-back
-stays. Line references below are to the pre-implementation tree.
+starve pushes under steady playback saves). The §12.10 physical Koofr trace
+met D12-4's gate, so section read-backs were removed in favor of PUT-response
+metadata validation; manifest read-back remains byte-for-byte plus decrypt
+verification. The cycle front half now overlaps the root GET with device
+listing, and production cycles/polls reuse one HTTP client per binding. Line
+references below are to the pre-implementation tree.
 
 ### 12.1 Product goal
 
@@ -1811,20 +1814,28 @@ New device directories are still discovered only by the full cycles
 
 **D12-4 — Cycle speed, measurement-gated.**
 
+- Start the root-marker GET and device listing together, but authenticate and
+  compare the root pin before consuming the listing. A root failure or mismatch
+  discards the listing and performs no manifest reads. The commit-time root
+  recheck remains sequential immediately before manifest publication.
 - Read peer manifests and peer sections concurrently, bounded 4, results
   merged in a deterministic order. Same outputs as sequential; the
   convergence matrix proves it.
-- **Section read-back (user decision; default chosen):** replace the full
-  GET read-back of each pushed section with the metadata the PUT already
-  returns plus one HEAD — accept when the PUT's `ETag` equals the HEAD's
-  `ETag` (when both are present) and `Content-Length` equals the bytes
-  sent. Keep the **manifest** read-back byte-for-byte (`:945`): it is small
-  and it is the commit record. Sections are content-addressed and
-  AEAD-sealed, so a mangled section can never be misread as valid by a
-  peer; the read-back only bought earlier detection by the pusher. Execute
-  this item only if the D12-1 trace shows read-back ≥ 30 % of hot-cycle
-  time on the real provider; otherwise leave it and record the numbers in
-  §12.10.
+- **Section read-back (gate met; executed 2026-09-03):** after a successful
+  section PUT, issue no full GET or HEAD. Validate response metadata when the
+  server supplies it: a present `ETag` must be non-empty, and any detectable
+  stored/content-length contradiction must match the bytes sent. Missing
+  metadata is accepted. Keep the **manifest** read-back byte-for-byte plus
+  decrypt verification: it is small and it is the commit record. Sections are
+  immutable, content-addressed, and AEAD-sealed; every reader independently
+  checks content hash, AEAD, and semantic digest. A 412 section PUT remains
+  accepted as the pre-existing immutable object.
+- Production cycles and the remote-change poll borrow one long-lived HTTP
+  client for the active binding, preserving per-request credentials while
+  reusing connections/TLS. Per-transport `close()` does not close that shared
+  client. Scheduler disarm, reconfiguration pause, binding change/removal, and
+  runtime reset close and drop it. A network-kind failure keeps the owned
+  client for the next use; lifecycle teardown still closes it.
 
 **Status surface.** `WebDavSyncRuntimeStatus` (`webdav_sync_runtime.dart:79`)
 gains `lastPushMs`, `lastRemoteChangeMs`, and a `pollState` enum (active,
@@ -1857,7 +1868,7 @@ one extra line. No new page, no frequency setting.
 | D12-2 sink in `_write` + tombstone recorder, filter drift test, scheduler coalescing + dirty-rerun | 1 | scheduler is pure Dart, unit-testable |
 | D12-3 `probeManifest`, poll timer, gates, backoff, validator state, status fields + card line | 1.5 | fake-server tests for ETag / no-ETag / 429 |
 | D12-4 concurrent peer reads | 0.5 | bounded `Future.wait` |
-| D12-4 section verify via PUT ETag + HEAD (only if the trace justifies it) | 0.5 | manifest read-back kept |
+| D12-4 section verify via PUT response metadata (trace gate met) | 0.5 | no section GET/HEAD; manifest read-back kept |
 | Convergence matrix: "edit → peer sees it within poll period" | 1 | existing 4-device harness |
 | **Total** | **~5 working days** | 4.5 without the verify change |
 
@@ -1885,10 +1896,10 @@ deterministic before merge. The bound of 4 keeps tvOS memory flat.
 
 **Section verify (D12-4) — the one durability trade.** Loses the pusher's
 immediate detection of a server that stores a corrupted body while
-reporting success. Kept protections: TLS integrity in transit, HEAD length
-check against truncation, AEAD + content-hash verification by every reader,
-manifest read-back unchanged. Gated on measurement so it is not paid for
-without benefit.
+reporting success and no contradictory PUT metadata. Kept protections: TLS
+integrity in transit, PUT metadata checks when available, AEAD + content-hash
+and semantic-digest verification by every reader, and the unchanged manifest
+read-back. The §12.10 measurement gate was met.
 
 ### 12.7 Preconditions
 
@@ -1936,11 +1947,15 @@ path.
 
 ### 12.10 Measurements
 
-(Instrumentation shipped with D12-1: every cycle logs one redacted
-diagnostic event — trigger, peer count, per-phase ms, request count, bytes
-up/down, disposition. The real-provider trace still needs a physical
-device + Koofr session; until it is pasted here the D12-4 read-back change
-stays unexecuted by rule.)
+Physical-provider trace captured against a real Koofr circle on 2026-09-03
+using the shipped per-cycle instrumentation. Observed cycles cost 2.3–14.2 s
+wall. One 14,250 ms cycle reported: root 4,663 ms; list 200 ms; manifests
+1,106 ms; sections 4,891 ms; merge/apply 112 ms; seal 1 ms; push 2,306 ms;
+read-back 925 ms. Individual requests cost roughly 0.3–1.5 s on this provider.
+Before the change, every cycle and poll constructed a fresh protocol client,
+so each began with fresh connections/TLS. These measurements met the D12-4
+gate and justify removing section read-backs, overlapping the root/list front
+half, and reusing one binding client; the manifest commit read-back is retained.
 
 ---
 

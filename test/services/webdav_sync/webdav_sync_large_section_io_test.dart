@@ -66,7 +66,7 @@ void main() {
     );
 
     expect(transport.fileWrites, 1);
-    expect(transport.fileReads, 1);
+    expect(transport.fileReads, 0);
     expect(transport.byteWrites, 0);
     expect(transport.byteReads, 0);
     expect(reference.size, transport.sections[reference.contentHash]!.length);
@@ -89,7 +89,7 @@ void main() {
     );
 
     expect(opened, isA<Map<String, Object?>>());
-    expect(transport.fileReads, 2);
+    expect(transport.fileReads, 1);
     expect(transport.byteReads, 0);
     expect(await stagingBase.list().toList(), isEmpty);
   });
@@ -143,37 +143,73 @@ void main() {
     expect(await stagingBase.list().toList(), isEmpty);
   });
 
-  test(
-    'corrupt read-back fails verification and still cleans scratch',
-    () async {
-      transport.corruptReadBack = true;
+  test('reader still rejects corrupt content-addressed sections', () async {
+    final reference = await io.sealWriteVerify(
+      transport: transport,
+      key: key,
+      circleId: 'circle-test-1',
+      deviceId: 'device-test-1',
+      logicalName: 'graph',
+      schemaVersion: 1,
+      payload: const <String, Object?>{'kind': 'graph'},
+      semanticDigest: List<String>.filled(64, 'f').join(),
+      updatedAtMs: 5000,
+      maxBytes: 1024 * 1024,
+    );
+    transport.corruptReadBack = true;
 
-      await expectLater(
-        io.sealWriteVerify(
-          transport: transport,
-          key: key,
-          circleId: 'circle-test-1',
-          deviceId: 'device-test-1',
-          logicalName: 'graph',
-          schemaVersion: 1,
-          payload: const <String, Object?>{'kind': 'graph'},
-          semanticDigest: List<String>.filled(64, 'b').join(),
-          updatedAtMs: 5678,
-          maxBytes: 1024 * 1024,
-        ),
-        throwsA(isA<StateError>()),
-      );
+    await expectLater(
+      io.readVerified(
+        transport: transport,
+        deviceId: 'device-test-1',
+        reference: reference,
+        maxBytes: 1024 * 1024,
+      ),
+      throwsA(isA<FormatException>()),
+    );
 
-      expect(transport.fileWrites, 1);
-      expect(transport.fileReads, 1);
-      expect(transport.byteWrites, 0);
-      expect(transport.byteReads, 0);
-      expect(await stagingBase.list().toList(), isEmpty);
-    },
-  );
+    expect(transport.fileWrites, 1);
+    expect(transport.fileReads, 1);
+    expect(await stagingBase.list().toList(), isEmpty);
+  });
+
+  test('contradictory PUT metadata fails and still cleans scratch', () async {
+    transport.writeMetadata = WebDavResponseMetadata(
+      statusCode: 201,
+      uri: Uri.parse('https://dav.example.test/sync'),
+      headers: const <String, String>{'ETag': '   '},
+      etag: '   ',
+    );
+
+    await expectLater(
+      io.sealWriteVerify(
+        transport: transport,
+        key: key,
+        circleId: 'circle-test-1',
+        deviceId: 'device-test-1',
+        logicalName: 'graph',
+        schemaVersion: 1,
+        payload: const <String, Object?>{'kind': 'graph'},
+        semanticDigest: List<String>.filled(64, 'b').join(),
+        updatedAtMs: 5678,
+        maxBytes: 1024 * 1024,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(transport.fileWrites, 1);
+    expect(transport.fileReads, 0);
+    expect(transport.byteWrites, 0);
+    expect(transport.byteReads, 0);
+    expect(await stagingBase.list().toList(), isEmpty);
+  });
 
   test('scratch cleanup failure never masks an integrity failure', () async {
-    transport.corruptReadBack = true;
+    transport.writeMetadata = WebDavResponseMetadata(
+      statusCode: 201,
+      uri: Uri.parse('https://dav.example.test/sync'),
+      headers: const <String, String>{'x-stored-content-length': '1'},
+    );
     io = WebDavSyncLargeSectionIo(
       codec: codec,
       stagingDirectoryProvider: () async => stagingBase,
@@ -197,10 +233,32 @@ void main() {
         isA<StateError>().having(
           (error) => error.message,
           'message',
-          contains('read-back verification'),
+          contains('size metadata'),
         ),
       ),
     );
+  });
+
+  test('pre-existing immutable section remains 412 tolerant', () async {
+    transport.preconditionFailure = true;
+
+    final reference = await io.sealWriteVerify(
+      transport: transport,
+      key: key,
+      circleId: 'circle-test-1',
+      deviceId: 'device-test-1',
+      logicalName: 'resources',
+      schemaVersion: 1,
+      payload: const <String, Object?>{'kind': 'resources'},
+      semanticDigest: List<String>.filled(64, 'e').join(),
+      updatedAtMs: 9013,
+      maxBytes: 1024 * 1024,
+    );
+
+    expect(reference.size, greaterThan(0));
+    expect(transport.fileWrites, 1);
+    expect(transport.fileReads, 0);
+    expect(await stagingBase.list().toList(), isEmpty);
   });
 }
 
@@ -213,6 +271,8 @@ final class _FileTransport
   int byteWrites = 0;
   int byteReads = 0;
   bool corruptReadBack = false;
+  bool preconditionFailure = false;
+  WebDavResponseMetadata? writeMetadata;
 
   static final WebDavResponseMetadata _metadata = WebDavResponseMetadata(
     statusCode: 200,
@@ -229,10 +289,16 @@ final class _FileTransport
     required int maxBytes,
   }) async {
     fileWrites += 1;
+    if (preconditionFailure) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.preconditionFailed,
+        message: 'already exists',
+      );
+    }
     final bytes = await file.readAsBytes();
     if (bytes.length > maxBytes) throw StateError('test section too large');
     sections[contentHash] = Uint8List.fromList(bytes);
-    return _metadata;
+    return writeMetadata ?? _metadata;
   }
 
   @override

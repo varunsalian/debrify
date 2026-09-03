@@ -128,6 +128,86 @@ final class WebDavSyncManifestProbe {
   final WebDavSyncManifestValidator? validator;
 }
 
+/// Validates the representation metadata a successful immutable-section PUT
+/// returned without issuing another request. Servers are allowed to omit all
+/// of these fields; readers still authenticate the content-addressed section.
+void validateWebDavSyncSectionWriteMetadata(
+  WebDavResponseMetadata metadata, {
+  required int expectedBytes,
+}) {
+  final headerEtag = _responseHeader(metadata.headers, HttpHeaders.etagHeader);
+  final etagWasProvided = metadata.etag != null || headerEtag != null;
+  final etag = metadata.etag ?? headerEtag;
+  if (etagWasProvided && (etag == null || etag.trim().isEmpty)) {
+    throw StateError('WebDAV sync section PUT returned an empty ETag');
+  }
+
+  // Content-Length normally frames the PUT response body, not the stored
+  // resource. A positive value on a bodyless response is the only form that
+  // can safely be treated as an echo of the uploaded representation size.
+  final contentLength = _responseHeader(
+    metadata.headers,
+    HttpHeaders.contentLengthHeader,
+  );
+  final responseContentType = _responseHeader(
+    metadata.headers,
+    HttpHeaders.contentTypeHeader,
+  );
+  if (contentLength != null && responseContentType == null) {
+    final parsed = int.tryParse(contentLength.trim());
+    if (parsed != null && parsed > 0 && parsed != expectedBytes) {
+      throw StateError(
+        'WebDAV sync section PUT returned a contradictory Content-Length',
+      );
+    }
+  }
+
+  // Some object-backed WebDAV servers expose the stored/uploaded size under
+  // an explicit response header. Those values do describe the resource and
+  // therefore must agree with the bytes whose hash names the section.
+  for (final name in const <String>[
+    'x-upload-content-length',
+    'x-stored-content-length',
+    'x-goog-stored-content-length',
+    'x-file-size',
+    'x-resource-size',
+    'oc-total-length',
+  ]) {
+    final raw = _responseHeader(metadata.headers, name);
+    if (raw == null) continue;
+    final parsed = int.tryParse(raw.trim());
+    if (parsed == null || parsed < 0 || parsed != expectedBytes) {
+      throw StateError(
+        'WebDAV sync section PUT returned contradictory size metadata',
+      );
+    }
+  }
+
+  final contentRange = _responseHeader(
+    metadata.headers,
+    HttpHeaders.contentRangeHeader,
+  );
+  if (contentRange != null) {
+    final match = RegExp(r'/([0-9]+)$').firstMatch(contentRange.trim());
+    final total = match == null ? null : int.tryParse(match.group(1)!);
+    if (total == null || total != expectedBytes) {
+      throw StateError(
+        'WebDAV sync section PUT returned a contradictory Content-Range',
+      );
+    }
+  }
+}
+
+String? _responseHeader(Map<String, String> headers, String name) {
+  final direct = headers[name];
+  if (direct != null) return direct;
+  final lowerName = name.toLowerCase();
+  for (final entry in headers.entries) {
+    if (entry.key.toLowerCase() == lowerName) return entry.value;
+  }
+  return null;
+}
+
 abstract interface class WebDavSyncTransport {
   Future<WebDavBytesResult> readRootMarker();
 

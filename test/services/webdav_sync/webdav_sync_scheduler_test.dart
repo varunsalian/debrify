@@ -57,6 +57,16 @@ void main() {
     expect(runner.runs, 0);
   });
 
+  test('scheduler disarm closes retained cycle transports', () {
+    final runner = _Runner();
+    final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+    scheduler.arm(() async => context());
+
+    scheduler.disarm();
+
+    expect(runner.transportCloses, 1);
+  });
+
   test('scheduler admits only the dedicated registry synthetic key', () {
     expect(
       WebDavSyncScheduler.admitsLocalChangeKey(
@@ -918,12 +928,17 @@ void main() {
   });
 }
 
-final class _Runner implements WebDavSyncCycleRunner {
+final class _Runner
+    implements WebDavSyncCycleRunner, WebDavSyncCycleTransportOwner {
   int runs = 0;
+  int transportCloses = 0;
   Completer<void>? blocker;
   void Function(WebDavSyncTrigger? trigger)? onRun;
   bool requestFollowUpOnNextRun = false;
   final List<WebDavSyncTrigger?> triggers = <WebDavSyncTrigger?>[];
+
+  @override
+  void closeCycleTransports() => transportCloses++;
 
   @override
   Future<WebDavSyncCycleReport> runCycle(

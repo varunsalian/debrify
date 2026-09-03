@@ -261,7 +261,8 @@ final class WebDavSyncGraphTier {
       throw StateError('This device cannot forget its own active record');
     }
     // Pull and republish the complete tombstone union before any cross-device
-    // deletion. The engine verifies its own section and manifest read-backs.
+    // deletion. The engine validates section PUT metadata and verifies its
+    // manifest read-back before publishing local state.
     final merge = await _cycleRunner.runCycle(context);
     if (merge.disposition != WebDavSyncCycleDisposition.completed) {
       throw StateError('Could not preserve sync deletions before forgetting');

@@ -153,6 +153,12 @@ abstract interface class WebDavSyncCycleRunner {
   });
 }
 
+/// Optional lifecycle owned by cycle runners that retain transport resources
+/// between scheduler signals.
+abstract interface class WebDavSyncCycleTransportOwner {
+  void closeCycleTransports();
+}
+
 /// Dormant until M5 supplies an active, root-authenticated context and both ID
 /// maps. Merely constructing this engine never schedules work.
 final class WebDavSyncEngine implements WebDavSyncCycleRunner {
@@ -465,24 +471,33 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     }
     final transport = _transportFactory(context);
     try {
+      final rootPhaseStarted = instrumentation.startPhase();
+      final rootFuture = _readRequiredRoot(transport, instrumentation);
+      final listPhaseStarted = instrumentation.startPhase();
+      instrumentation.requestStarted();
+      final listingFuture =
+          _captureListing(
+            Future<WebDavSyncPeerListing>.sync(transport.listDeviceIds),
+          ).whenComplete(
+            () =>
+                instrumentation.finishPhase(_CyclePhase.list, listPhaseStarted),
+          );
       late final WebDavBytesResult rootRead;
-      var phaseStarted = instrumentation.startPhase();
       try {
-        rootRead = await _readRequiredRoot(transport, instrumentation);
-      } finally {
-        instrumentation.finishPhase(_CyclePhase.root, phaseStarted);
+        try {
+          rootRead = await rootFuture;
+        } finally {
+          instrumentation.finishPhase(_CyclePhase.root, rootPhaseStarted);
+        }
+      } catch (error, stackTrace) {
+        await listingFuture;
+        Error.throwWithStackTrace(error, stackTrace);
       }
       if (!_bytesEqual(markerPin, rootRead.bytes)) {
+        await listingFuture;
         throw const WebDavSyncRootChangedException();
       }
-      late final WebDavSyncPeerListing listing;
-      phaseStarted = instrumentation.startPhase();
-      try {
-        instrumentation.requestStarted();
-        listing = await transport.listDeviceIds();
-      } finally {
-        instrumentation.finishPhase(_CyclePhase.list, phaseStarted);
-      }
+      final listing = (await listingFuture).unwrap();
       instrumentation.peerCount = listing.deviceIds
           .where((listedDeviceId) => listedDeviceId != deviceId)
           .length;
@@ -1844,9 +1859,10 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     for (final section in changed) {
       session.validate();
       phaseStarted = instrumentation.startPhase();
+      WebDavResponseMetadata? metadata;
       try {
         instrumentation.requestStarted(bytesUp: section.bytes.length);
-        await transport.writeSection(
+        metadata = await transport.writeSection(
           deviceId,
           section.reference.contentHash,
           section.bytes,
@@ -1859,15 +1875,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       }
       phaseStarted = instrumentation.startPhase();
       try {
-        instrumentation.requestStarted();
-        final readBack = await transport.readSection(
-          deviceId,
-          section.reference,
-          maxBytes: _maxBytesFor(section.reference.name),
-        );
-        instrumentation.received(readBack.bytes.length);
-        if (!_bytesEqual(readBack.bytes, section.bytes)) {
-          throw StateError('WebDAV sync section read-back verification failed');
+        if (metadata != null) {
+          validateWebDavSyncSectionWriteMetadata(
+            metadata,
+            expectedBytes: section.bytes.length,
+          );
         }
       } finally {
         instrumentation.finishPhase(_CyclePhase.readBack, phaseStarted);
@@ -2375,6 +2387,34 @@ final class _ManifestRead {
 
   final WebDavSyncManifest manifest;
   final WebDavSyncManifestValidator? validator;
+}
+
+final class _ListingResult {
+  const _ListingResult.value(this.value) : error = null, stackTrace = null;
+
+  const _ListingResult.error(this.error, this.stackTrace) : value = null;
+
+  final WebDavSyncPeerListing? value;
+  final Object? error;
+  final StackTrace? stackTrace;
+
+  WebDavSyncPeerListing unwrap() {
+    final failure = error;
+    if (failure != null) {
+      Error.throwWithStackTrace(failure, stackTrace!);
+    }
+    return value!;
+  }
+}
+
+Future<_ListingResult> _captureListing(
+  Future<WebDavSyncPeerListing> listing,
+) async {
+  try {
+    return _ListingResult.value(await listing);
+  } catch (error, stackTrace) {
+    return _ListingResult.error(error, stackTrace);
+  }
 }
 
 final class _PeerProfileData {

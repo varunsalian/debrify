@@ -148,6 +148,10 @@ void main() {
         transport.events.where((event) => event.startsWith('write:section:')),
         hasLength(5),
       );
+      expect(
+        transport.events.where((event) => event.startsWith('read:section:')),
+        isEmpty,
+      );
       final snapshot = await bindingStore.load();
       expect(snapshot.activeBindingId, binding.id);
       expect(
@@ -222,7 +226,7 @@ void main() {
 
   test('a local preference mutation prevents stale root-last commit', () async {
     seeds.guardPreferences = true;
-    transport.afterSectionRead = () async {
+    transport.afterSectionWrite = () async {
       final preferences = await ProfilePreferences.instance();
       await preferences.setString('theme', 'changed-during-seed-upload');
     };
@@ -673,7 +677,7 @@ void main() {
     seeds.guardPreferences = true;
     transport
       ..marker = marker
-      ..afterSectionRead = () async {
+      ..afterSectionWrite = () async {
         final preferences = await ProfilePreferences.instance();
         await preferences.setString('theme', 'changed-during-seed-upload');
       };
@@ -927,7 +931,7 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
   Uint8List? markerOnCreateError;
   bool createStoresThenThrows = false;
   List<String> deviceIds = const <String>[];
-  Future<void> Function()? afterSectionRead;
+  Future<void> Function()? afterSectionWrite;
 
   WebDavResponseMetadata get metadata => WebDavResponseMetadata(
     statusCode: 200,
@@ -956,6 +960,11 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
   }) async {
     events.add('write:section:$contentHash');
     sections[contentHash] = Uint8List.fromList(bytes);
+    final callback = afterSectionWrite;
+    if (callback != null) {
+      afterSectionWrite = null;
+      await callback();
+    }
     return metadata;
   }
 
@@ -966,11 +975,6 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
     required int maxBytes,
   }) async {
     events.add('read:section:${reference.name}');
-    final callback = afterSectionRead;
-    if (callback != null) {
-      afterSectionRead = null;
-      await callback();
-    }
     return WebDavBytesResult(
       bytes: sections[reference.contentHash]!,
       metadata: metadata,

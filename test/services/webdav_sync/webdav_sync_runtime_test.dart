@@ -9,12 +9,15 @@ import 'package:debrify/services/profiles/profile_database_adoption_gate.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_feature.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -38,6 +41,92 @@ void main() {
     tracker.recordSuccess('binding-a');
     expect(tracker.recordFailure('binding-a'), isFalse);
   });
+
+  test(
+    'two cycle transports and a poll reuse one binding client until disarm',
+    () {
+      var factoryCalls = 0;
+      late _CountingClient client;
+      final owner = WebDavSyncBindingHttpClientOwner(
+        clientFactory: () {
+          factoryCalls++;
+          return client = _CountingClient();
+        },
+      );
+      final location = WebDavSyncFolderLocation(
+        endpoint: 'https://example.test/dav',
+        folderPath: 'Family',
+        serverName: 'Test',
+      );
+      const credentials = WebDavCredentials(username: 'alice', password: 'x');
+
+      ProtocolWebDavSyncTransport(
+        location: location,
+        credentials: credentials,
+        client: owner.clientFor('binding-a'),
+      ).close();
+      ProtocolWebDavSyncTransport(
+        location: location,
+        credentials: credentials,
+        client: owner.clientFor('binding-a'),
+      ).close();
+      ProtocolWebDavSyncTransport(
+        location: location,
+        credentials: credentials,
+        client: owner.clientFor('binding-a'),
+      ).close();
+
+      expect(factoryCalls, 1);
+      expect(client.closeCalls, 0);
+      expect(owner.debugHasClient, isTrue);
+
+      owner.close();
+
+      expect(client.closeCalls, 1);
+      expect(owner.debugHasClient, isFalse);
+    },
+  );
+
+  test(
+    'binding change closes the old client and failed use stays owned',
+    () async {
+      final clients = <_CountingClient>[];
+      final owner = WebDavSyncBindingHttpClientOwner(
+        clientFactory: () {
+          final client = _CountingClient();
+          clients.add(client);
+          return client;
+        },
+      );
+
+      owner.clientFor('binding-a');
+      final failedTransport = ProtocolWebDavSyncTransport(
+        location: WebDavSyncFolderLocation(
+          endpoint: 'https://example.test/dav',
+          folderPath: 'Family',
+          serverName: 'Test',
+        ),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: owner.clientFor('binding-b'),
+      );
+
+      expect(clients, hasLength(2));
+      expect(clients.first.closeCalls, 1);
+      expect(clients.last.closeCalls, 0);
+
+      await expectLater(
+        failedTransport.readRootMarker(),
+        throwsA(isA<WebDavException>()),
+      );
+      failedTransport.close();
+      expect(clients.last.closeCalls, 0);
+
+      // A failed cycle does not orphan a separate client: the retained binding
+      // client remains owned until disarm/reset closes it.
+      owner.close();
+      expect(clients.last.closeCalls, 1);
+    },
+  );
 
   test('corrupt persisted sync state cannot trap startup in a loop', () async {
     final fixture = await _openRuntimeFixture('corrupt-state');
@@ -114,6 +203,20 @@ void main() {
       expect(recovered.requiresStateReconnect, isTrue);
     },
   );
+}
+
+final class _CountingClient extends http.BaseClient {
+  int closeCalls = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      throw http.ClientException('connection failed', request.url);
+
+  @override
+  void close() {
+    closeCalls++;
+    super.close();
+  }
 }
 
 final class _RuntimeFixture {

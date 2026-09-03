@@ -140,7 +140,18 @@ void main() {
         transport.events.where((event) => event == 'read:root'),
         hasLength(2),
       );
-      expect(transport.events.last, 'read:manifest:device-a');
+      for (var index = 0; index < transport.events.length - 1; index++) {
+        if (transport.events[index].startsWith('write:section:')) {
+          expect(
+            transport.events[index + 1],
+            isNot(startsWith('read:section:device-a:')),
+          );
+        }
+      }
+      expect(
+        transport.events.sublist(firstManifestWrite, firstManifestWrite + 2),
+        <String>['write:manifest', 'read:manifest:device-a'],
+      );
       expect(
         transport.allWrittenText,
         everyElement(
@@ -157,6 +168,43 @@ void main() {
       expect(transport.writeCount, writesAfterFirst);
     },
   );
+
+  test('section PUT rejects contradictory response metadata', () async {
+    transport.sectionWriteMetadata = WebDavResponseMetadata(
+      statusCode: 201,
+      uri: Uri.parse('https://example.test/dav'),
+      headers: const <String, String>{'etag': '   '},
+      etag: '   ',
+    );
+
+    await expectLater(runFixture(context()), throwsStateError);
+
+    expect(
+      transport.events,
+      isNot(contains(startsWith('read:section:device-a:'))),
+    );
+    expect(transport.events, isNot(contains('write:manifest')));
+  });
+
+  test('pre-existing hot sections remain 412 tolerant without GETs', () async {
+    transport.sectionWritesPreconditionFail = true;
+
+    final report = await runFixture(context());
+
+    expect(report.disposition, WebDavSyncCycleDisposition.completed);
+    expect(report.sectionsPushed, 2);
+    expect(
+      transport.events,
+      isNot(contains(startsWith('read:section:device-a:'))),
+    );
+    expect(
+      transport.events.sublist(
+        transport.events.indexOf('write:manifest'),
+        transport.events.indexOf('write:manifest') + 2,
+      ),
+      <String>['write:manifest', 'read:manifest:device-a'],
+    );
+  });
 
   test('remote-change cycle records its successful pull time', () async {
     final report = await engine.runCycle(
@@ -2536,6 +2584,31 @@ void main() {
     expect(local.applied, isEmpty);
   });
 
+  test(
+    'root pin mismatch discards the concurrent listing before manifest reads',
+    () async {
+      final changedMarker = Uint8List.fromList(marker)..[0] ^= 0xff;
+      transport = _FakeTransport(marker: changedMarker, serverDate: now);
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: sectionCache,
+        clock: () => now,
+      );
+
+      await expectLater(
+        runFixture(context()),
+        throwsA(isA<WebDavSyncRootChangedException>()),
+      );
+
+      expect(transport.events, <String>['read:root', 'list:devices']);
+      expect(transport.events, isNot(contains(startsWith('read:manifest:'))));
+      expect(transport.writeCount, 0);
+    },
+  );
+
   test('clock pause telemetry persists and clears after recovery', () async {
     transport.serverDate = null;
 
@@ -3087,6 +3160,8 @@ class _FakeTransport implements WebDavSyncTransport {
   final Set<String> sectionNetworkFailures = <String>{};
   final Set<String> listedWithoutManifest = <String>{};
   WebDavException? rootError;
+  WebDavResponseMetadata? sectionWriteMetadata;
+  bool sectionWritesPreconditionFail = false;
   int factories = 0;
   Duration readDelay = Duration.zero;
   int activeReads = 0;
@@ -3218,7 +3293,13 @@ class _FakeTransport implements WebDavSyncTransport {
     events.add('write:section:$contentHash');
     sections['$deviceId:$contentHash'] = Uint8List.fromList(bytes);
     writtenText.add(String.fromCharCodes(bytes));
-    return _metadata;
+    if (sectionWritesPreconditionFail) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.preconditionFailed,
+        message: 'immutable section already exists',
+      );
+    }
+    return sectionWriteMetadata ?? _metadata;
   }
 
   @override

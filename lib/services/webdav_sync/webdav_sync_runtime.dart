@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 
 import '../../models/profiles/profile_policy.dart';
 import '../diagnostic_log.dart' as app_diagnostics;
@@ -945,6 +946,7 @@ final class WebDavSyncRuntime
       _maintenanceTimer = null;
       return;
     }
+    _cycleRunner!.retainBinding(active.id);
     _scheduler!.arm(
       _activeContext,
       remotePollContextProvider: _cycleRunner!.remotePollContext,
@@ -1100,6 +1102,7 @@ final class WebDavSyncRuntime
   void debugResetInitialization() {
     ProfilePreferences.webDavSyncLocalChangeSink = null;
     _scheduler?.dispose();
+    _cycleRunner?.closeCycleTransports();
     _maintenanceTimer?.cancel();
     _maintenanceTimer = null;
     _scheduler = null;
@@ -1247,23 +1250,64 @@ final class WebDavSyncAuthenticationFailureTracker {
   }
 }
 
-final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
+typedef WebDavSyncHttpClientFactory = http.Client Function();
+
+/// Owns the one reusable protocol client for the currently armed binding.
+/// Per-cycle transports borrow it and therefore cannot close it themselves.
+final class WebDavSyncBindingHttpClientOwner {
+  WebDavSyncBindingHttpClientOwner({WebDavSyncHttpClientFactory? clientFactory})
+    : _clientFactory = clientFactory ?? http.Client.new;
+
+  final WebDavSyncHttpClientFactory _clientFactory;
+  String? _bindingId;
+  http.Client? _client;
+
+  http.Client clientFor(String bindingId) {
+    retainBinding(bindingId);
+    return _client ??= _clientFactory();
+  }
+
+  void retainBinding(String bindingId) {
+    if (_bindingId != null && _bindingId != bindingId) close();
+    _bindingId = bindingId;
+  }
+
+  void close() {
+    _client?.close();
+    _client = null;
+    _bindingId = null;
+  }
+
+  @visibleForTesting
+  bool get debugHasClient => _client != null;
+}
+
+final class _ProductionCycleRunner
+    implements WebDavSyncCycleRunner, WebDavSyncCycleTransportOwner {
   _ProductionCycleRunner({
     required this.bindingStore,
     required this.stateRepository,
     required this.localAdapter,
     required this.operations,
-  });
+    WebDavSyncBindingHttpClientOwner? httpClientOwner,
+  }) : _httpClientOwner = httpClientOwner ?? WebDavSyncBindingHttpClientOwner();
 
   final WebDavSyncBindingStore bindingStore;
   final WebDavSyncEngineStateRepository stateRepository;
   final WebDavSyncLocalAdapter localAdapter;
   final WebDavSyncOperationCoordinator operations;
+  final WebDavSyncBindingHttpClientOwner _httpClientOwner;
   final WebDavSyncAuthenticationFailureTracker _authenticationFailures =
       WebDavSyncAuthenticationFailureTracker();
   final WebDavSyncSectionCache _sectionCache = WebDavSyncSectionCache();
 
   void clearSectionCache() => _sectionCache.clear();
+
+  void retainBinding(String bindingId) =>
+      _httpClientOwner.retainBinding(bindingId);
+
+  @override
+  void closeCycleTransports() => _httpClientOwner.close();
 
   Future<WebDavSyncRemotePollContext?> remotePollContext() async {
     final stored = await bindingStore.load();
@@ -1289,6 +1333,7 @@ final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
           username: secrets.username,
           password: secrets.password,
         ),
+        client: _httpClientOwner.clientFor(binding.id),
       ),
       peerDeviceIds: List<String>.unmodifiable(peerDeviceIds),
       validators: state.peerManifestValidators,
@@ -1350,6 +1395,7 @@ final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
           username: secrets.username,
           password: secrets.password,
         ),
+        client: _httpClientOwner.clientFor(binding.id),
       ),
       diagnostic: recordWebDavSyncDiagnostic,
     );
