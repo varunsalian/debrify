@@ -423,6 +423,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (resourceId == null) {
       return const <String, WebDavSyncCatalogOwnerReference>{};
     }
+    if (playlist.isLocalFile) {
+      final key = IptvCatalogKey.forLocalCategoryOrder(playlist.id);
+      return <String, WebDavSyncCatalogOwnerReference>{
+        key: WebDavSyncCatalogOwnerReference(
+          localResourceId: resourceId,
+          variant: 'local',
+        ),
+      };
+    }
     if (playlist.isXtreamCodes) {
       return <String, WebDavSyncCatalogOwnerReference>{
         for (final type in IptvCatalogKey.xtreamContentTypes)
@@ -1154,12 +1163,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           playlist.username ?? '',
         ),
         forgetChannelOrders: true,
+        ownerReferences: _catalogOwnerReferencesFor(playlist),
       );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys([
-        IptvCatalogKey.forUrl(playlist.url),
-      ], forgetChannelOrders: true);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogKey.forUrl(playlist.url)],
+        forgetChannelOrders: true,
+        ownerReferences: _catalogOwnerReferencesFor(playlist),
+      );
     }
     // The source's hidden categories go with it. Deliberately here and not
     // inside the catalog delete: a manual REFRESH also drops and re-ingests
@@ -1173,7 +1185,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       try {
         await IptvCatalogDb.forgetCategoryOrders([
           IptvCatalogKey.forLocalCategoryOrder(playlist.id),
-        ]);
+        ], ownerReferences: _catalogOwnerReferencesFor(playlist));
       } catch (error) {
         // Category order is optional catalog metadata. Failure to open a
         // damaged cache must not prevent the source itself being removed.
@@ -1725,13 +1737,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             playlist.username ?? '',
           ),
           forgetChannelOrders: unreachableKeys.isNotEmpty,
+          ownerReferences: _catalogOwnerReferencesFor(playlist),
         );
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys([
-        IptvCatalogKey.forUrl(playlist.url),
-      ], forgetChannelOrders: true);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogKey.forUrl(playlist.url)],
+        forgetChannelOrders: true,
+        ownerReferences: _catalogOwnerReferencesFor(playlist),
+      );
     }
 
     // Hidden-category rules follow the source's IDENTITY, not its catalogs:

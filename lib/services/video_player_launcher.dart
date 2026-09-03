@@ -3317,7 +3317,7 @@ class VideoPlayerLauncher {
         'speed': (progress['speed'] as num?)?.toDouble() ?? 1.0,
         'aspect': (progress['aspect'] as String?) ?? 'contain',
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      });
+      }, sourceId: progress['sourceId'] as String?);
     } catch (e) {
       debugPrint('VideoPlayerLauncher: IPTV progress save failed: $e');
     }

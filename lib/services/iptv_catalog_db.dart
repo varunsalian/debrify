@@ -40,15 +40,28 @@ void _closeTransferredCatalogDb(int handleAddress) {
 /// Worker entry for catalog deletion. `args[0]` is the database path, the rest
 /// are catalog keys. Mass deletes belong off the UI isolate — see
 /// [IptvCatalogDb.removeCatalogsByKeys].
-void _removeCatalogsJob(
-  ({String dbPath, List<String> keys, bool forgetChannelOrders}) job,
+bool _removeCatalogsJob(
+  ({
+    String dbPath,
+    List<String> keys,
+    bool forgetChannelOrders,
+    bool stampDeletion,
+    int updatedAtMs,
+    String originDeviceId,
+    Map<String, String> ownerAux,
+  })
+  job,
 ) {
   final db = IptvCatalogDb._openConnection(job.dbPath);
   try {
-    IptvCatalogDb.removeCatalogsOn(
+    return IptvCatalogDb.removeCatalogsOn(
       db,
       job.keys,
       forgetChannelOrders: job.forgetChannelOrders,
+      stampCategoryOrderDeletion: job.stampDeletion,
+      updatedAtMs: job.updatedAtMs,
+      originDeviceId: job.originDeviceId,
+      ownerAux: job.ownerAux,
     );
   } finally {
     db.dispose();
@@ -59,7 +72,15 @@ void _removeCatalogsJob(
 /// expose close to a thousand categories, so replacing the rank table belongs
 /// off the UI isolate just like channel-order projection does.
 bool _setCategoryOrderJob(
-  ({String dbPath, String catalogKey, List<String> ordered}) job,
+  ({
+    String dbPath,
+    String catalogKey,
+    List<String> ordered,
+    bool stamp,
+    int updatedAtMs,
+    String originDeviceId,
+  })
+  job,
 ) {
   final db = IptvCatalogDb._openConnection(job.dbPath);
   try {
@@ -67,6 +88,9 @@ bool _setCategoryOrderJob(
       db,
       catalogKey: job.catalogKey,
       ordered: job.ordered,
+      stamp: job.stamp,
+      updatedAtMs: job.updatedAtMs,
+      originDeviceId: job.originDeviceId,
     );
     return true;
   } finally {
@@ -321,7 +345,7 @@ class IptvCatalogDb {
   IptvCatalogDb._();
 
   static const _dbFileName = 'iptv_catalog.db';
-  static const _schemaVersion = 3;
+  static const _schemaVersion = 4;
   static const _connectionSetupSql = [
     'PRAGMA journal_mode=WAL',
     'PRAGMA synchronous=NORMAL',
@@ -789,6 +813,15 @@ class IptvCatalogDb {
   }) => runOneShotScoped(scope, (db) {
     db.execute('BEGIN IMMEDIATE');
     try {
+      final categoryOrders = <String, List<String>>{};
+      for (final row in db.select(
+        'SELECT catalog_key, grp FROM category_manual_orders '
+        'ORDER BY catalog_key, manual_position, grp',
+      )) {
+        categoryOrders
+            .putIfAbsent(row['catalog_key'] as String, () => <String>[])
+            .add(row['grp'] as String);
+      }
       final rawRows = db.select('''
         SELECT kind, owner_key, item_key, updated_at_ms, origin_device_id,
                normalized, deleted, aux
@@ -824,6 +857,19 @@ class IptvCatalogDb {
               ),
               deleted: row['deleted'] == 1,
               aux: row['aux'] as String?,
+              value: row['deleted'] == 1
+                  ? null
+                  : switch (row['kind'] as String) {
+                      WebDavSyncLibraryKinds.hiddenGroups => <String, Object?>{
+                        'group': row['item_key'] as String,
+                      },
+                      WebDavSyncLibraryKinds.categoryManualOrders
+                          when categoryOrders.containsKey(row['owner_key']) =>
+                        <String, Object?>{
+                          'groups': categoryOrders[row['owner_key']]!,
+                        },
+                      _ => null,
+                    },
             ),
           );
         }
@@ -849,15 +895,40 @@ class IptvCatalogDb {
     ProfileScope scope, {
     required int expectedRevision,
     required Iterable<WebDavSyncHiddenGroupTarget> targets,
+  }) async {
+    final outcome = await applyWebDavCatalogFamilies(
+      scope,
+      expectedRevision: expectedRevision,
+      hiddenTargets: targets,
+      categoryOrderTargets: const <WebDavSyncCategoryOrderTarget>[],
+    );
+    return (
+      result: outcome.result,
+      touched: outcome.touchedNamespaces.isNotEmpty,
+    );
+  }
+
+  /// One exact-stamp transaction for every catalog-backed library family.
+  static Future<
+    ({WebDavSyncLibraryApplyResult result, Set<String> touchedNamespaces})
+  >
+  applyWebDavCatalogFamilies(
+    ProfileScope scope, {
+    required int expectedRevision,
+    required Iterable<WebDavSyncHiddenGroupTarget> hiddenTargets,
+    required Iterable<WebDavSyncCategoryOrderTarget> categoryOrderTargets,
   }) => runOneShotScoped(scope, (db) {
     db.execute('BEGIN IMMEDIATE');
     try {
       if (_webDavSyncRevision(db) != expectedRevision) {
         db.execute('ROLLBACK');
-        return (result: WebDavSyncLibraryApplyResult.conflict, touched: false);
+        return (
+          result: WebDavSyncLibraryApplyResult.conflict,
+          touchedNamespaces: const <String>{},
+        );
       }
-      var touched = false;
-      for (final target in targets) {
+      final touched = <String>{};
+      for (final target in hiddenTargets) {
         final leaf = target.leaf;
         final deleted = leaf.value == null;
         final prior = db.select(
@@ -922,11 +993,65 @@ class IptvCatalogDb {
             deleted ? 1 : 0,
           ],
         );
-        touched = true;
+        touched.add('catalog/hidden');
       }
-      if (touched) _bumpWebDavSyncRevision(db);
+      for (final target in categoryOrderTargets) {
+        final leaf = target.leaf;
+        final deleted = leaf.value == null;
+        final prior = db.select(
+          '''
+          SELECT updated_at_ms, origin_device_id, normalized, deleted
+          FROM webdav_sync_record_state
+          WHERE kind = ? AND owner_key = ? AND item_key = 'order'
+          ''',
+          [WebDavSyncLibraryKinds.categoryManualOrders, target.catalogKey],
+        );
+        final alreadyExact =
+            prior.length == 1 &&
+            prior.single['updated_at_ms'] == leaf.stamp.normalizedTimeMs &&
+            prior.single['origin_device_id'] == leaf.stamp.originDeviceId &&
+            prior.single['normalized'] == 1 &&
+            prior.single['deleted'] == (deleted ? 1 : 0);
+        if (alreadyExact) continue;
+        db.execute('DELETE FROM category_manual_orders WHERE catalog_key = ?', [
+          target.catalogKey,
+        ]);
+        if (!deleted) {
+          final insert = db.prepare(
+            'INSERT INTO category_manual_orders '
+            '(catalog_key, grp, manual_position) VALUES (?, ?, ?)',
+          );
+          try {
+            for (var index = 0; index < target.groups.length; index++) {
+              insert.execute([target.catalogKey, target.groups[index], index]);
+            }
+          } finally {
+            insert.dispose();
+          }
+        }
+        db.execute(
+          '''
+          INSERT OR REPLACE INTO webdav_sync_record_state
+            (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+             normalized, deleted, aux)
+          VALUES (?, ?, 'order', ?, ?, 1, ?, NULL)
+          ''',
+          [
+            WebDavSyncLibraryKinds.categoryManualOrders,
+            target.catalogKey,
+            leaf.stamp.normalizedTimeMs,
+            leaf.stamp.originDeviceId,
+            deleted ? 1 : 0,
+          ],
+        );
+        touched.add('catalog/category-order');
+      }
+      if (touched.isNotEmpty) _bumpWebDavSyncRevision(db);
       db.execute('COMMIT');
-      return (result: WebDavSyncLibraryApplyResult.applied, touched: touched);
+      return (
+        result: WebDavSyncLibraryApplyResult.applied,
+        touchedNamespaces: Set<String>.unmodifiable(touched),
+      );
     } catch (_) {
       _rollbackQuietly(db);
       rethrow;
@@ -993,6 +1118,20 @@ class IptvCatalogDb {
                  hidden_at, 'migration', 0, 0, NULL
           FROM hidden_groups
         ''');
+      }
+      if (current < 4) {
+        final now = debugLibraryClock().millisecondsSinceEpoch;
+        db.execute(
+          '''
+          INSERT OR IGNORE INTO webdav_sync_record_state
+            (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+             normalized, deleted, aux)
+          SELECT ?, catalog_key, 'order', ?, 'migration', 0, 0, NULL
+          FROM category_manual_orders
+          GROUP BY catalog_key
+          ''',
+          [WebDavSyncLibraryKinds.categoryManualOrders, now],
+        );
       }
       db.execute('PRAGMA user_version = $_schemaVersion');
       db.execute('COMMIT');
@@ -2055,17 +2194,29 @@ class IptvCatalogDb {
   static Future<void> removeCatalogsByKeys(
     Iterable<String> keys, {
     bool forgetChannelOrders = false,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+    Map<String, WebDavSyncCatalogOwnerReference> ownerReferences = const {},
   }) async {
     final list = keys.toList(growable: false);
     if (list.isEmpty) return;
     await open();
-    await runExclusive(
+    final now = debugLibraryClock().millisecondsSinceEpoch;
+    final changed = await runExclusive(
       () => compute(_removeCatalogsJob, (
         dbPath: path,
         keys: list,
         forgetChannelOrders: forgetChannelOrders,
+        stampDeletion:
+            forgetChannelOrders && origin == WebDavSyncMutationOrigin.user,
+        updatedAtMs: now,
+        originDeviceId: WebDavSyncLibraryMutation.originDeviceId,
+        ownerAux: <String, String>{
+          for (final entry in ownerReferences.entries)
+            entry.key: entry.value.toAux(),
+        },
       ), debugLabel: 'iptv-catalog-delete'),
     );
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   /// Marks a removed playlist's numbering namespace as eligible for a future
@@ -2223,13 +2374,18 @@ class IptvCatalogDb {
   /// Synchronous deletion against the caller's own connection. Worker-side
   /// entry point for [removeCatalogsByKeys]; UI callers must use that instead,
   /// so a 50k-row delete never lands on this isolate.
-  static void removeCatalogsOn(
+  static bool removeCatalogsOn(
     Database db,
     Iterable<String> keys, {
     bool forgetChannelOrders = false,
+    bool stampCategoryOrderDeletion = false,
+    int updatedAtMs = 0,
+    String originDeviceId = 'local-device',
+    Map<String, String> ownerAux = const {},
   }) {
     db.execute('BEGIN');
     try {
+      var stamped = false;
       for (final key in keys) {
         db.execute('DELETE FROM channels WHERE catalog_key = ?', [key]);
         db.execute('DELETE FROM catalogs WHERE catalog_key = ?', [key]);
@@ -2238,10 +2394,32 @@ class IptvCatalogDb {
             'DELETE FROM channel_manual_orders WHERE catalog_key = ?',
             [key],
           );
+          final hadCategoryOrder =
+              db.select(
+                'SELECT 1 FROM category_manual_orders '
+                'WHERE catalog_key = ? LIMIT 1',
+                [key],
+              ).isNotEmpty ||
+              db.select(
+                'SELECT 1 FROM webdav_sync_record_state '
+                'WHERE kind = ? AND owner_key = ? AND deleted = 0 LIMIT 1',
+                [WebDavSyncLibraryKinds.categoryManualOrders, key],
+              ).isNotEmpty;
           db.execute(
             'DELETE FROM category_manual_orders WHERE catalog_key = ?',
             [key],
           );
+          if (stampCategoryOrderDeletion && hadCategoryOrder) {
+            _writeCategoryOrderState(
+              db,
+              catalogKey: key,
+              updatedAtMs: updatedAtMs,
+              originDeviceId: originDeviceId,
+              deleted: true,
+              aux: ownerAux[key],
+            );
+            stamped = true;
+          }
           // This flag marks source-identity removal, not an ordinary catalog
           // refresh. A default belongs to that identity just like its manual
           // orders, so it must not reattach if the same endpoint/account is
@@ -2258,7 +2436,9 @@ class IptvCatalogDb {
           _revalidateStartedKey(key),
         ]);
       }
+      if (stamped) _bumpWebDavSyncRevision(db);
       db.execute('COMMIT');
+      return stamped;
     } catch (_) {
       _rollbackQuietly(db);
       rethrow;
@@ -2312,21 +2492,63 @@ class IptvCatalogDb {
 
   /// Drops category-list order for sources that are being removed. Local-file
   /// keys have no catalog rows, so they cannot use [removeCatalogsByKeys].
-  static Future<void> forgetCategoryOrders(Iterable<String> orderKeys) async {
+  static Future<void> forgetCategoryOrders(
+    Iterable<String> orderKeys, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+    Map<String, WebDavSyncCatalogOwnerReference> ownerReferences = const {},
+  }) async {
     final keys = orderKeys.toList(growable: false);
     if (keys.isEmpty) return;
     await open();
-    await runExclusive(() async {
+    final changed = await runExclusive(() async {
       if (!isOpen) {
         throw StateError('IPTV catalog closed while deleting category order');
       }
       final placeholders = List.filled(keys.length, '?').join(', ');
-      _requireDb().execute(
-        'DELETE FROM category_manual_orders '
-        'WHERE catalog_key IN ($placeholders)',
-        keys,
-      );
+      final db = _requireDb();
+      db.execute('BEGIN IMMEDIATE');
+      try {
+        final existing = db.select(
+          'SELECT catalog_key FROM category_manual_orders '
+          'WHERE catalog_key IN ($placeholders) '
+          'UNION SELECT owner_key AS catalog_key '
+          'FROM webdav_sync_record_state '
+          'WHERE kind = ? AND deleted = 0 '
+          'AND owner_key IN ($placeholders)',
+          <Object?>[
+            ...keys,
+            WebDavSyncLibraryKinds.categoryManualOrders,
+            ...keys,
+          ],
+        );
+        db.execute(
+          'DELETE FROM category_manual_orders '
+          'WHERE catalog_key IN ($placeholders)',
+          keys,
+        );
+        if (existing.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+          final now = debugLibraryClock().millisecondsSinceEpoch;
+          for (final row in existing) {
+            final catalogKey = row['catalog_key'] as String;
+            _writeCategoryOrderState(
+              db,
+              catalogKey: catalogKey,
+              updatedAtMs: now,
+              originDeviceId: WebDavSyncLibraryMutation.originDeviceId,
+              deleted: true,
+              aux: ownerReferences[catalogKey]?.toAux(),
+            );
+          }
+          _bumpWebDavSyncRevision(db);
+        }
+        db.execute('COMMIT');
+        return existing.isNotEmpty && origin == WebDavSyncMutationOrigin.user;
+      } catch (_) {
+        _rollbackQuietly(db);
+        rethrow;
+      }
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   /// Replace one catalog's complete category order. An empty iterable resets
@@ -2334,8 +2556,9 @@ class IptvCatalogDb {
   /// left so a mounted IPTV page cannot start a reload that escapes the gate.
   static Future<void> setCategoryOrder(
     String catalogKey,
-    Iterable<String> ordered,
-  ) async {
+    Iterable<String> ordered, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     await open();
     final names = <String>[];
     final seen = <String>{};
@@ -2348,9 +2571,17 @@ class IptvCatalogDb {
         dbPath: path,
         catalogKey: catalogKey,
         ordered: names,
+        stamp: origin == WebDavSyncMutationOrigin.user,
+        updatedAtMs: debugLibraryClock().millisecondsSinceEpoch,
+        originDeviceId: WebDavSyncLibraryMutation.originDeviceId,
       ), debugLabel: 'iptv-category-order-save');
     });
-    if (saved) IptvChannelOrderSignal.notifyCatalogChanged(catalogKey);
+    if (saved) {
+      IptvChannelOrderSignal.notifyCatalogChanged(catalogKey);
+      if (origin == WebDavSyncMutationOrigin.user) {
+        WebDavSyncLibraryMutation.notifyUserMutation();
+      }
+    }
   }
 
   /// Synchronous worker-side implementation of [setCategoryOrder].
@@ -2358,6 +2589,9 @@ class IptvCatalogDb {
     Database db, {
     required String catalogKey,
     required Iterable<String> ordered,
+    bool stamp = false,
+    int updatedAtMs = 0,
+    String originDeviceId = 'local-device',
   }) {
     db.execute('BEGIN IMMEDIATE');
     PreparedStatement? insert;
@@ -2374,6 +2608,16 @@ class IptvCatalogDb {
       for (final raw in ordered) {
         if (raw.trim().isEmpty || !seen.add(raw)) continue;
         insert.execute([catalogKey, raw, position++]);
+      }
+      if (stamp) {
+        _writeCategoryOrderState(
+          db,
+          catalogKey: catalogKey,
+          updatedAtMs: updatedAtMs,
+          originDeviceId: originDeviceId,
+          deleted: position == 0,
+        );
+        _bumpWebDavSyncRevision(db);
       }
       db.execute('COMMIT');
     } catch (_) {
@@ -2879,6 +3123,32 @@ class IptvCatalogDb {
         group,
         updatedAtMs,
         WebDavSyncLibraryMutation.originDeviceId,
+        deleted ? 1 : 0,
+        aux,
+      ],
+    );
+  }
+
+  static void _writeCategoryOrderState(
+    Database db, {
+    required String catalogKey,
+    required int updatedAtMs,
+    required String originDeviceId,
+    required bool deleted,
+    String? aux,
+  }) {
+    db.execute(
+      '''
+      INSERT OR REPLACE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      VALUES (?, ?, 'order', ?, ?, 0, ?, ?)
+      ''',
+      [
+        WebDavSyncLibraryKinds.categoryManualOrders,
+        catalogKey,
+        updatedAtMs,
+        originDeviceId,
         deleted ? 1 : 0,
         aux,
       ],

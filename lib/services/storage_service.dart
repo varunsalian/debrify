@@ -32,6 +32,7 @@ import '../utils/platform_util.dart';
 import 'tracking_scrobble_preferences.dart';
 import 'playlist_dedupe_key.dart';
 import 'webdav_sync/webdav_sync_hot_merge.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
 import 'webdav_sync/webdav_sync_tombstones.dart';
 
 /// Which ambient-trailer surface a sound/volume preference belongs to.
@@ -4068,13 +4069,23 @@ class StorageService {
 
   static Future<void> upsertVideoResume(
     String key,
-    Map<String, dynamic> entry,
-  ) {
-    return IptvMediaStore.upsertVideoResume(key, entry);
+    Map<String, dynamic> entry, {
+    String? sourceId,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
+    return IptvMediaStore.upsertVideoResume(
+      key,
+      entry,
+      sourceId: sourceId,
+      origin: origin,
+    );
   }
 
-  static Future<void> removeVideoResume(String key) {
-    return IptvMediaStore.removeVideoResume(key);
+  static Future<void> removeVideoResume(
+    String key, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
+    return IptvMediaStore.removeVideoResume(key, origin: origin);
   }
 
   /// Save audio and subtitle preferences for series content
@@ -6956,7 +6967,10 @@ class StorageService {
     // Do this before saving the removal so a database failure leaves enough
     // playback metadata for the next startup to retry the cleanup.
     for (final resumeKey in completedMovieResumeKeys) {
-      await removeVideoResume(resumeKey);
+      await removeVideoResume(
+        resumeKey,
+        origin: WebDavSyncMutationOrigin.migration,
+      );
     }
     if (playbackChanged) {
       await _savePlaybackStateMap(playback, recordDeletions: true);

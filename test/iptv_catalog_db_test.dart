@@ -136,10 +136,7 @@ void main() {
             "AND name LIKE 'webdav_sync_%' ORDER BY name",
           )
           .map((row) => row['name']);
-      expect(tables, <String>[
-        'webdav_sync_meta',
-        'webdav_sync_record_state',
-      ]);
+      expect(tables, <String>['webdav_sync_meta', 'webdav_sync_record_state']);
       expect(
         db
             .select(
@@ -154,39 +151,56 @@ void main() {
     }
   });
 
-  test('v2 upgrade backfills hidden groups from hidden_at', () async {
-    final path = IptvCatalogDb.path;
-    var db = raw.sqlite3.open(path);
-    db.execute(
-      'INSERT INTO hidden_groups (catalog_key, grp, hidden_at) '
-      'VALUES (?, ?, ?)',
-      ['m3u|secret-url', 'Adult', 1234],
-    );
-    db.execute('DELETE FROM webdav_sync_record_state');
-    db.execute('PRAGMA user_version = 2');
-    db.dispose();
-    IptvCatalogDb.debugClose();
-
-    await IptvCatalogDb.open();
-    await IptvCatalogDb.ensureMigrations();
-
-    db = raw.sqlite3.open(path);
-    try {
-      final row = db.select(
-        'SELECT * FROM webdav_sync_record_state WHERE kind = ?',
-        [WebDavSyncLibraryKinds.hiddenGroups],
-      ).single;
-      expect(row['owner_key'], 'm3u|secret-url');
-      expect(row['item_key'], 'Adult');
-      expect(row['updated_at_ms'], 1234);
-      expect(row['origin_device_id'], 'migration');
-      expect(row['normalized'], 0);
-      expect(row['deleted'], 0);
-      expect(db.select('PRAGMA user_version').single.values.single, 3);
-    } finally {
+  test(
+    'v2 upgrade backfills hidden groups and category-order vectors',
+    () async {
+      final path = IptvCatalogDb.path;
+      var db = raw.sqlite3.open(path);
+      db.execute(
+        'INSERT INTO hidden_groups (catalog_key, grp, hidden_at) '
+        'VALUES (?, ?, ?)',
+        ['m3u|secret-url', 'Adult', 1234],
+      );
+      db.execute(
+        'INSERT INTO category_manual_orders '
+        '(catalog_key, grp, manual_position) VALUES (?, ?, ?)',
+        ['m3u|secret-url', 'News', 0],
+      );
+      db.execute('DELETE FROM webdav_sync_record_state');
+      db.execute('PRAGMA user_version = 2');
       db.dispose();
-    }
-  });
+      IptvCatalogDb.debugClose();
+
+      await IptvCatalogDb.open();
+      await IptvCatalogDb.ensureMigrations();
+
+      db = raw.sqlite3.open(path);
+      try {
+        final row = db.select(
+          'SELECT * FROM webdav_sync_record_state WHERE kind = ?',
+          [WebDavSyncLibraryKinds.hiddenGroups],
+        ).single;
+        expect(row['owner_key'], 'm3u|secret-url');
+        expect(row['item_key'], 'Adult');
+        expect(row['updated_at_ms'], 1234);
+        expect(row['origin_device_id'], 'migration');
+        expect(row['normalized'], 0);
+        expect(row['deleted'], 0);
+        final categoryOrder = db.select(
+          'SELECT * FROM webdav_sync_record_state WHERE kind = ?',
+          [WebDavSyncLibraryKinds.categoryManualOrders],
+        ).single;
+        expect(categoryOrder['owner_key'], 'm3u|secret-url');
+        expect(categoryOrder['item_key'], 'order');
+        expect(categoryOrder['origin_device_id'], 'migration');
+        expect(categoryOrder['normalized'], 0);
+        expect(categoryOrder['deleted'], 0);
+        expect(db.select('PRAGMA user_version').single.values.single, 4);
+      } finally {
+        db.dispose();
+      }
+    },
+  );
 
   test('v1 catalog migration backfills only live channel numbers', () async {
     IptvCatalogDb.debugClose();
@@ -276,7 +290,7 @@ void main() {
 
     final db = raw.sqlite3.open(IptvCatalogDb.path);
     try {
-      expect(db.select('PRAGMA user_version').first.values.first, 3);
+      expect(db.select('PRAGMA user_version').first.values.first, 4);
     } finally {
       db.dispose();
     }
@@ -1347,6 +1361,15 @@ void main() {
         'News',
         'Sports',
       ]);
+      var sidecar = raw.sqlite3.open(IptvCatalogDb.path);
+      var orderState = sidecar.select(
+        'SELECT deleted, origin_device_id FROM webdav_sync_record_state '
+        'WHERE kind = ? AND owner_key = ?',
+        [WebDavSyncLibraryKinds.categoryManualOrders, 'category-list'],
+      ).single;
+      expect(orderState['deleted'], 0);
+      expect(orderState['origin_device_id'], 'local-device');
+      sidecar.dispose();
       expect(
         IptvCatalogDb.applyCategoryOrder('category-list', const [
           'News',
@@ -1399,6 +1422,24 @@ void main() {
         'category-list',
       ], forgetChannelOrders: true);
       expect(IptvCatalogDb.savedCategoryOrder('category-list'), isEmpty);
+      sidecar = raw.sqlite3.open(IptvCatalogDb.path);
+      orderState = sidecar.select(
+        'SELECT deleted, origin_device_id FROM webdav_sync_record_state '
+        'WHERE kind = ? AND owner_key = ?',
+        [WebDavSyncLibraryKinds.categoryManualOrders, 'category-list'],
+      ).single;
+      expect(orderState['deleted'], 1);
+      expect(orderState['origin_device_id'], 'local-device');
+      expect(
+        sidecar
+            .select(
+              "SELECT value FROM webdav_sync_meta "
+              "WHERE key = 'mutation_revision'",
+            )
+            .single['value'],
+        '2',
+      );
+      sidecar.dispose();
     },
   );
 

@@ -14,6 +14,8 @@ enum _WebDavSyncUiRefreshTarget {
   desktopSidebarStyle,
   sidebarConfiguration,
   iptvCatalog,
+  iptvSource,
+  playbackData,
 }
 
 /// Replays the same live-UI notifications used by local settings writes after
@@ -26,6 +28,10 @@ enum _WebDavSyncUiRefreshTarget {
 abstract final class WebDavSyncUiRefresh {
   static const Map<String, Set<_WebDavSyncUiRefreshTarget>> _targetsByKey = {
     'catalog/hidden': {_WebDavSyncUiRefreshTarget.iptvCatalog},
+    'catalog/category-order': {_WebDavSyncUiRefreshTarget.iptvCatalog},
+    'iptv/order': {_WebDavSyncUiRefreshTarget.iptvSource},
+    'iptv/watch': {_WebDavSyncUiRefreshTarget.playbackData},
+    'resume': {_WebDavSyncUiRefreshTarget.playbackData},
     // HomePageSettingsPage and SpotlightHeroSourcePage.
     'home_cw_merge_local': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_cw_merge_trakt': {_WebDavSyncUiRefreshTarget.homeSettings},
@@ -125,6 +131,10 @@ abstract final class WebDavSyncUiRefresh {
             MainPageBridge.sidebarConfigurationChanged?.call();
           case _WebDavSyncUiRefreshTarget.iptvCatalog:
             IptvChannelOrderSignal.notifyCatalogChanged('');
+          case _WebDavSyncUiRefreshTarget.iptvSource:
+            IptvChannelOrderSignal.notifySourceChanged('');
+          case _WebDavSyncUiRefreshTarget.playbackData:
+            MainPageBridge.notifyPlaybackDataChanged();
         }
       } catch (_) {
         // A UI notification can never turn an already committed sync batch

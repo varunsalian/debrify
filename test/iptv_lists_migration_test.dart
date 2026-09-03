@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 
 /// The v5 migration: favorites stop being their own table and become the
 /// built-in list of the custom-lists schema.
@@ -176,6 +177,18 @@ void main() {
       dbPath,
       options: OpenDatabaseOptions(
         version: 7,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
+  Future<Database> upgradeToV8() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 8,
         onConfigure: configure,
         onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
         onUpgrade: DebrifyTvDatabase.runUpgrade,
@@ -420,4 +433,60 @@ void main() {
     expect(await hasTable(db, 'webdav_sync_record_state'), isTrue);
     expect(await hasTable(db, 'webdav_sync_meta'), isTrue);
   });
+
+  test(
+    'v7→v8 adds resume source identity and backfills all IPTV states',
+    () async {
+      var db = await openAt(7, (db, _) async {
+        await DebrifyTvDatabase.createIptvStoreTables(db);
+        await db.execute('DROP TABLE video_resume');
+        await db.execute('''
+        CREATE TABLE video_resume (
+          resume_key TEXT PRIMARY KEY,
+          position_ms INTEGER NOT NULL DEFAULT 0,
+          duration_ms INTEGER NOT NULL DEFAULT 0,
+          speed REAL NOT NULL DEFAULT 1.0,
+          aspect TEXT NOT NULL DEFAULT 'contain',
+          updated_at INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      });
+      await db.insert('iptv_watch_history', <String, Object?>{
+        'url': 'https://panel.invalid/movie/1',
+        'playlist_id': 'source-1',
+        'last_played_at': 120,
+      });
+      await db.insert('video_resume', <String, Object?>{
+        'resume_key': 'https://panel.invalid/movie/1',
+        'position_ms': 10,
+        'duration_ms': 20,
+        'updated_at': 130,
+      });
+      await db.insert('iptv_category_channel_orders', <String, Object?>{
+        'source_id': 'source-1',
+        'channel_group': 'News',
+        'url': 'https://panel.invalid/live/1',
+        'name': 'One',
+        'occurrence': 0,
+        'position': 0,
+      });
+      await db.close();
+
+      db = await upgradeToV8();
+      addTearDown(db.close);
+      final columns = await db.rawQuery('PRAGMA table_info(video_resume)');
+      expect(columns.map((row) => row['name']), contains('source_id'));
+      expect((await db.query('video_resume')).single['source_id'], 'source-1');
+      final states = await db.query('webdav_sync_record_state');
+      expect(states.map((row) => row['kind']).toSet(), <Object?>{
+        WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+        WebDavSyncLibraryKinds.iptvWatchHistory,
+        WebDavSyncLibraryKinds.videoResume,
+      });
+      expect(
+        states.map((row) => row['origin_device_id']),
+        everyElement('migration'),
+      );
+    },
+  );
 }

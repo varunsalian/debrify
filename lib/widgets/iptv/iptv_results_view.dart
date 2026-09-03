@@ -642,7 +642,8 @@ class IptvResultsViewState extends State<IptvResultsView>
         (playlist.isFavorites &&
                 change.target == StorageService.iptvFavoritesListId) ||
             playlist.customListId == change.target,
-      IptvChannelOrderScope.source => playlist.id == change.target,
+      IptvChannelOrderScope.source =>
+        change.target.isEmpty || playlist.id == change.target,
       IptvChannelOrderScope.catalog =>
         change.target.isEmpty ||
             IptvCatalogKey.forCategoryOrder(playlist, _selectedContentType) ==

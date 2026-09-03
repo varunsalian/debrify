@@ -19,6 +19,11 @@ enum WebDavSyncMutationOrigin {
 
 abstract final class WebDavSyncLibraryKinds {
   static const String hiddenGroups = 'hidden_groups';
+  static const String categoryManualOrders = 'category_manual_orders';
+  static const String iptvCategoryChannelOrders =
+      'iptv_category_channel_orders';
+  static const String iptvWatchHistory = 'iptv_watch_history';
+  static const String videoResume = 'video_resume';
 }
 
 final class WebDavSyncRecordState {
@@ -29,6 +34,7 @@ final class WebDavSyncRecordState {
     required this.stamp,
     required this.deleted,
     this.aux,
+    this.value,
   });
 
   final String kind;
@@ -37,6 +43,12 @@ final class WebDavSyncRecordState {
   final WebDavSyncStamp stamp;
   final bool deleted;
   final String? aux;
+
+  /// Physical value captured in the same transaction as the sidecar. It is
+  /// local-only and is never used for a deleted leaf. Maintenance-pruned
+  /// history states deliberately have no value, which makes them an omission
+  /// (the prior wire winner is preserved) rather than an accidental delete.
+  final Map<String, Object?>? value;
 }
 
 final class WebDavSyncDatabaseStateSnapshot {
@@ -89,6 +101,69 @@ final class WebDavSyncHiddenGroupTarget {
 
   final String catalogKey;
   final String group;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncCategoryOrderTarget {
+  const WebDavSyncCategoryOrderTarget({
+    required this.catalogKey,
+    required this.groups,
+    required this.leaf,
+  });
+
+  final String catalogKey;
+  final List<String> groups;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncIptvOrderItem {
+  const WebDavSyncIptvOrderItem({
+    required this.url,
+    required this.name,
+    required this.occurrence,
+  });
+
+  final String url;
+  final String name;
+  final int occurrence;
+}
+
+final class WebDavSyncIptvOrderTarget {
+  const WebDavSyncIptvOrderTarget({
+    required this.sourceId,
+    required this.group,
+    required this.items,
+    required this.leaf,
+  });
+
+  final String sourceId;
+  final String group;
+  final List<WebDavSyncIptvOrderItem> items;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncIptvWatchTarget {
+  const WebDavSyncIptvWatchTarget({
+    required this.sourceId,
+    required this.url,
+    required this.leaf,
+  });
+
+  final String sourceId;
+  final String url;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncVideoResumeTarget {
+  const WebDavSyncVideoResumeTarget({
+    required this.sourceId,
+    required this.resumeKey,
+    required this.leaf,
+  });
+
+  /// Null is the generic-video `_` wire bucket.
+  final String? sourceId;
+  final String resumeKey;
   final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
 }
 

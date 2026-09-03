@@ -4,8 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/iptv_channel_order.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_mutation.dart';
 
 /// IPTV favorites / watch history / video resume on debrify_tv.db, including
 /// the one-time import of the legacy SharedPreferences JSON blobs. Everything
@@ -23,24 +26,30 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     IptvMediaStore.debugResetMigration();
-    DebrifyTvDatabase.debugDatabaseOverride =
-        await databaseFactoryFfiNoIsolate.openDatabase(
-      inMemoryDatabasePath,
-      options: OpenDatabaseOptions(
-        version: 1,
-        // Production enables this in onConfigure, and list membership is a
-        // foreign key onto iptv_lists — without it the cascade rules under
-        // test here simply wouldn't fire.
-        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
-      ),
-    );
+    IptvMediaStore.debugLibraryClock = DateTime.now;
+    WebDavSyncLibraryMutation.originDeviceId = 'local-device';
+    WebDavSyncLibraryMutation.debugUserMutationObserver = null;
+    DebrifyTvDatabase.debugDatabaseOverride = await databaseFactoryFfiNoIsolate
+        .openDatabase(
+          inMemoryDatabasePath,
+          options: OpenDatabaseOptions(
+            version: 1,
+            // Production enables this in onConfigure, and list membership is a
+            // foreign key onto iptv_lists — without it the cascade rules under
+            // test here simply wouldn't fire.
+            onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+            onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+          ),
+        );
   });
 
   tearDown(() async {
     await DebrifyTvDatabase.debugDatabaseOverride?.close();
     DebrifyTvDatabase.debugDatabaseOverride = null;
     IptvMediaStore.debugResetMigration();
+    IptvMediaStore.debugLibraryClock = DateTime.now;
+    WebDavSyncLibraryMutation.originDeviceId = 'local-device';
+    WebDavSyncLibraryMutation.debugUserMutationObserver = null;
   });
 
   group('legacy prefs import', () {
@@ -78,6 +87,10 @@ void main() {
           },
         }),
       });
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications++;
+      };
 
       final favorites = await StorageService.getIptvFavoriteChannels();
       final meta = favorites['http://h/live/u/p/1.ts']!;
@@ -97,8 +110,9 @@ void main() {
       expect(watched['hasNext'], true);
       expect(watched['lastPlayedAt'], 222);
 
-      final resume =
-          await StorageService.getVideoResume('http://h/movie/u/p/9.mp4');
+      final resume = await StorageService.getVideoResume(
+        'http://h/movie/u/p/9.mp4',
+      );
       expect(resume, isNotNull);
       expect(resume!['positionMs'], 60000);
       expect(resume['durationMs'], 120000);
@@ -107,19 +121,95 @@ void main() {
       expect(resume['updatedAt'], 333);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(favoritesKey), isNull,
-          reason: 'the legacy blob is deleted after a successful import');
+      expect(
+        prefs.getString(favoritesKey),
+        isNull,
+        reason: 'the legacy blob is deleted after a successful import',
+      );
       expect(prefs.getString(historyKey), isNull);
       expect(prefs.getString(resumeKey), isNull);
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      expect(
+        (await db.query(
+          'webdav_sync_record_state',
+          columns: const <String>['origin_device_id'],
+          where: 'kind IN (?, ?)',
+          whereArgs: const <Object?>[
+            WebDavSyncLibraryKinds.iptvWatchHistory,
+            WebDavSyncLibraryKinds.videoResume,
+          ],
+        )).map((row) => row['origin_device_id']),
+        everyElement('migration'),
+      );
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '2',
+      );
+      expect(notifications, 0);
     });
 
-    test('a corrupt legacy blob imports as empty, matching the old reader',
-        () async {
-      SharedPreferences.setMockInitialValues({favoritesKey: 'not json {'});
+    test(
+      'a corrupt legacy blob imports as empty, matching the old reader',
+      () async {
+        SharedPreferences.setMockInitialValues({favoritesKey: 'not json {'});
 
-      expect(await StorageService.getIptvFavoriteChannels(), isEmpty);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(favoritesKey), isNull);
+        expect(await StorageService.getIptvFavoriteChannels(), isEmpty);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString(favoritesKey), isNull);
+      },
+    );
+  });
+
+  group('category channel orders', () {
+    test('source deletion tombstones every order vector once', () async {
+      var now = 3000;
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      const item = IptvChannelOrderIdentity(
+        url: 'https://panel.invalid/live/1',
+        name: 'One',
+        occurrence: 0,
+      );
+      await IptvMediaStore.setCategoryChannelOrder(
+        'source-1',
+        'News',
+        const <IptvChannelOrderIdentity>[item],
+      );
+      await IptvMediaStore.setCategoryChannelOrder(
+        'source-1',
+        'Sports',
+        const <IptvChannelOrderIdentity>[item],
+      );
+
+      await IptvMediaStore.removeCategoryOrdersForSource('source-1');
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      expect(await db.query('iptv_category_channel_orders'), isEmpty);
+      final states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvCategoryChannelOrders],
+        orderBy: 'item_key',
+      );
+      expect(states.map((row) => row['item_key']), <Object?>['News', 'Sports']);
+      expect(states.map((row) => row['deleted']), everyElement(1));
+      expect(states.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+        3002,
+      });
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '3',
+      );
     });
   });
 
@@ -151,23 +241,28 @@ void main() {
       expect(favorites, isEmpty);
     });
 
-    test('re-starring under a different URL form replaces the old entry',
-        () async {
-      await StorageService.setIptvChannelFavorited(
-        'http://h/live/u/p/7.m3u8',
-        true,
-        channelName: 'HLS form',
-      );
-      await StorageService.setIptvChannelFavorited(
-        'http://h/live/u/p/7.ts',
-        true,
-        channelName: 'TS form',
-      );
+    test(
+      're-starring under a different URL form replaces the old entry',
+      () async {
+        await StorageService.setIptvChannelFavorited(
+          'http://h/live/u/p/7.m3u8',
+          true,
+          channelName: 'HLS form',
+        );
+        await StorageService.setIptvChannelFavorited(
+          'http://h/live/u/p/7.ts',
+          true,
+          channelName: 'TS form',
+        );
 
-      final favorites = await StorageService.getIptvFavoriteChannels();
-      expect(favorites.keys, ['http://h/live/u/p/7.ts'],
-          reason: 'canonically-equal duplicates must collapse to one row');
-    });
+        final favorites = await StorageService.getIptvFavoriteChannels();
+        expect(
+          favorites.keys,
+          ['http://h/live/u/p/7.ts'],
+          reason: 'canonically-equal duplicates must collapse to one row',
+        );
+      },
+    );
 
     test('deleting a playlist removes only its favorites', () async {
       await StorageService.setIptvChannelFavorited(
@@ -243,8 +338,50 @@ void main() {
       final history = await StorageService.getIptvWatchHistory();
       expect(history.length, 100);
       expect(history.keys, contains('http://h/movie/u/p/new.mp4'));
-      expect(history.keys, isNot(contains('http://h/movie/u/p/0.mp4')),
-          reason: 'the oldest entry makes room for the newest');
+      expect(
+        history.keys,
+        isNot(contains('http://h/movie/u/p/0.mp4')),
+        reason: 'the oldest entry makes room for the newest',
+      );
+    });
+
+    test('retention pruning is silent and keeps live wire state', () async {
+      var notifications = 0;
+      var now = 1000;
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () =>
+          notifications++;
+      for (var i = 0; i < 101; i++) {
+        await IptvMediaStore.recordWatch(
+          'https://panel.invalid/movie/$i',
+          playlistId: 'source-1',
+        );
+      }
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      expect(await db.query('iptv_watch_history'), hasLength(100));
+      final states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvWatchHistory],
+      );
+      expect(states, hasLength(101));
+      expect(states.map((row) => row['deleted']), everyElement(0));
+      expect(
+        notifications,
+        101,
+        reason: 'the 101 user writes notify; the maintenance prune does not',
+      );
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '101',
+      );
     });
 
     test('deleting a playlist removes its history', () async {
@@ -259,8 +396,9 @@ void main() {
 
       await StorageService.removeIptvWatchHistoryByPlaylistId('p1');
 
-      expect((await StorageService.getIptvWatchHistory()).keys,
-          ['http://h/movie/u/p/2.mp4']);
+      expect((await StorageService.getIptvWatchHistory()).keys, [
+        'http://h/movie/u/p/2.mp4',
+      ]);
     });
   });
 
@@ -291,75 +429,129 @@ void main() {
       });
     }
 
-    test('in-progress items show, barely-started and finished movies do not',
-        () async {
-      await watchAndResume('http://h/mid.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 30);
-      await watchAndResume('http://h/blip.mp4',
-          positionMs: 500, durationMs: 100000, updatedAt: 20);
-      await watchAndResume('http://h/done.mp4',
-          positionMs: 99000, durationMs: 100000, updatedAt: 10);
+    test(
+      'in-progress items show, barely-started and finished movies do not',
+      () async {
+        await watchAndResume(
+          'http://h/mid.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 30,
+        );
+        await watchAndResume(
+          'http://h/blip.mp4',
+          positionMs: 500,
+          durationMs: 100000,
+          updatedAt: 20,
+        );
+        await watchAndResume(
+          'http://h/done.mp4',
+          positionMs: 99000,
+          durationMs: 100000,
+          updatedAt: 10,
+        );
 
-      final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.map((e) => e['url']), ['http://h/mid.mp4']);
-      expect(shelf.single['progress'], closeTo(0.5, 0.001));
-      expect(shelf.single['positionMs'], 50000);
-    });
+        final shelf = await StorageService.getIptvContinueWatching();
+        expect(shelf.map((e) => e['url']), ['http://h/mid.mp4']);
+        expect(shelf.single['progress'], closeTo(0.5, 0.001));
+        expect(shelf.single['positionMs'], 50000);
+      },
+    );
 
-    test('a finished series episode with a next episode stays on the shelf',
-        () async {
-      await watchAndResume('http://h/s1e1.mp4',
+    test(
+      'a finished series episode with a next episode stays on the shelf',
+      () async {
+        await watchAndResume(
+          'http://h/s1e1.mp4',
           positionMs: 99000,
           durationMs: 100000,
           updatedAt: 100,
           seriesId: 's1',
-          hasNext: true);
+          hasNext: true,
+        );
 
-      final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.map((e) => e['url']), ['http://h/s1e1.mp4'],
-          reason: 'a finished middle episode keeps the series visible');
-    });
-
-    test('tracking off stops recording and hides what was already stored',
-        () async {
-      await watchAndResume('http://h/before.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 30);
-
-      await StorageService.setIptvTrackContinueWatching(false);
-      await watchAndResume('http://h/after.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 40);
-
-      expect(await StorageService.getIptvContinueWatching(), isEmpty,
-          reason: 'the shelf is hidden wholesale while tracking is off');
-      // Resume positions are a separate store and deliberately survive, so
-      // both items still play from where they were left.
-      expect(await StorageService.getVideoResume('http://h/after.mp4'),
-          isNotNull);
-
-      await StorageService.setIptvTrackContinueWatching(true);
-      final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.map((e) => e['url']), ['http://h/before.mp4'],
-          reason: 'nothing was deleted, but nothing new was recorded either');
-    });
-
-    test('most recently played sorts first', () async {
-      await watchAndResume('http://h/older.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 100);
-      await watchAndResume('http://h/newer.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 200);
-
-      final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.map((e) => e['url']),
-          ['http://h/newer.mp4', 'http://h/older.mp4']);
-    });
+        final shelf = await StorageService.getIptvContinueWatching();
+        expect(
+          shelf.map((e) => e['url']),
+          ['http://h/s1e1.mp4'],
+          reason: 'a finished middle episode keeps the series visible',
+        );
+      },
+    );
 
     test(
-        'a resume entry without a timestamp falls back to the watch-history '
+      'tracking off stops recording and hides what was already stored',
+      () async {
+        await watchAndResume(
+          'http://h/before.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 30,
+        );
+
+        await StorageService.setIptvTrackContinueWatching(false);
+        await watchAndResume(
+          'http://h/after.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 40,
+        );
+
+        expect(
+          await StorageService.getIptvContinueWatching(),
+          isEmpty,
+          reason: 'the shelf is hidden wholesale while tracking is off',
+        );
+        // Resume positions are a separate store and deliberately survive, so
+        // both items still play from where they were left.
+        expect(
+          await StorageService.getVideoResume('http://h/after.mp4'),
+          isNotNull,
+        );
+
+        await StorageService.setIptvTrackContinueWatching(true);
+        final shelf = await StorageService.getIptvContinueWatching();
+        expect(
+          shelf.map((e) => e['url']),
+          ['http://h/before.mp4'],
+          reason: 'nothing was deleted, but nothing new was recorded either',
+        );
+      },
+    );
+
+    test('most recently played sorts first', () async {
+      await watchAndResume(
+        'http://h/older.mp4',
+        positionMs: 50000,
+        durationMs: 100000,
+        updatedAt: 100,
+      );
+      await watchAndResume(
+        'http://h/newer.mp4',
+        positionMs: 50000,
+        durationMs: 100000,
+        updatedAt: 200,
+      );
+
+      final shelf = await StorageService.getIptvContinueWatching();
+      expect(shelf.map((e) => e['url']), [
+        'http://h/newer.mp4',
+        'http://h/older.mp4',
+      ]);
+    });
+
+    test('a resume entry without a timestamp falls back to the watch-history '
         'recency instead of sorting to 1970', () async {
-      await watchAndResume('http://h/timed.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 5);
-      await StorageService.recordIptvWatch('http://h/untimed.mp4',
-          channelName: 'Untimed');
+      await watchAndResume(
+        'http://h/timed.mp4',
+        positionMs: 50000,
+        durationMs: 100000,
+        updatedAt: 5,
+      );
+      await StorageService.recordIptvWatch(
+        'http://h/untimed.mp4',
+        channelName: 'Untimed',
+      );
       await StorageService.upsertVideoResume('http://h/untimed.mp4', {
         'positionMs': 50000,
         'durationMs': 100000,
@@ -367,8 +559,11 @@ void main() {
       });
 
       final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.first['url'], 'http://h/untimed.mp4',
-          reason: 'recordIptvWatch stamped it now, far newer than updatedAt=5');
+      expect(
+        shelf.first['url'],
+        'http://h/untimed.mp4',
+        reason: 'recordIptvWatch stamped it now, far newer than updatedAt=5',
+      );
     });
 
     test('resume windows: positions only inside the resumable band', () async {
@@ -383,38 +578,47 @@ void main() {
         'updatedAt': 2,
       });
 
-      final positions = await StorageService.getIptvResumePositions(
-        ['http://h/mid.mp4', 'http://h/done.mp4', 'http://h/none.mp4'],
-      );
-      expect(positions, {'http://h/mid.mp4': 50000},
-          reason: 'a finished item restarts from the beginning');
+      final positions = await StorageService.getIptvResumePositions([
+        'http://h/mid.mp4',
+        'http://h/done.mp4',
+        'http://h/none.mp4',
+      ]);
+      expect(positions, {
+        'http://h/mid.mp4': 50000,
+      }, reason: 'a finished item restarts from the beginning');
 
-      final progress = await StorageService.getIptvProgressForUrls(
-        ['http://h/mid.mp4', 'http://h/done.mp4'],
-      );
+      final progress = await StorageService.getIptvProgressForUrls([
+        'http://h/mid.mp4',
+        'http://h/done.mp4',
+      ]);
       expect(progress['http://h/mid.mp4'], closeTo(0.5, 0.001));
-      expect(progress['http://h/done.mp4'], closeTo(0.99, 0.001),
-          reason: 'progress bars do show full for finished items');
+      expect(
+        progress['http://h/done.mp4'],
+        closeTo(0.99, 0.001),
+        reason: 'progress bars do show full for finished items',
+      );
     });
 
-    test('a resume lookup spanning multiple IN-chunks finds every row',
-        () async {
-      final urls = [for (var i = 0; i < 1200; i++) 'http://h/v$i.mp4'];
-      final db = DebrifyTvDatabase.debugDatabaseOverride!;
-      final batch = db.batch();
-      for (final url in urls) {
-        batch.insert('video_resume', {
-          'resume_key': url,
-          'position_ms': 5000,
-          'duration_ms': 10000,
-          'updated_at': 1,
-        });
-      }
-      await batch.commit(noResult: true);
+    test(
+      'a resume lookup spanning multiple IN-chunks finds every row',
+      () async {
+        final urls = [for (var i = 0; i < 1200; i++) 'http://h/v$i.mp4'];
+        final db = DebrifyTvDatabase.debugDatabaseOverride!;
+        final batch = db.batch();
+        for (final url in urls) {
+          batch.insert('video_resume', {
+            'resume_key': url,
+            'position_ms': 5000,
+            'duration_ms': 10000,
+            'updated_at': 1,
+          });
+        }
+        await batch.commit(noResult: true);
 
-      final progress = await StorageService.getIptvProgressForUrls(urls);
-      expect(progress.length, 1200);
-    });
+        final progress = await StorageService.getIptvProgressForUrls(urls);
+        expect(progress.length, 1200);
+      },
+    );
 
     test('clearAllPlaybackData empties the resume store', () async {
       await StorageService.upsertVideoResume('http://h/v.mp4', {
@@ -428,41 +632,140 @@ void main() {
       expect(await StorageService.getVideoResume('http://h/v.mp4'), isNull);
     });
 
-    // Backs Home's "Remove from Continue Watching" on an IPTV card.
-    test('removing a movie drops its shelf row AND its saved position',
-        () async {
-      await watchAndResume('http://h/keep.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 10);
-      await watchAndResume('http://h/drop.mp4',
-          positionMs: 50000, durationMs: 100000, updatedAt: 20);
+    test('clear-all writes one tombstone per resume in one revision', () async {
+      var now = 2000;
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      await IptvMediaStore.upsertVideoResume(
+        'generic-title',
+        const <String, dynamic>{'positionMs': 1, 'durationMs': 2},
+      );
+      await IptvMediaStore.upsertVideoResume(
+        'https://panel.invalid/movie/1',
+        const <String, dynamic>{'positionMs': 3, 'durationMs': 4},
+        sourceId: 'source-1',
+      );
 
-      await StorageService.removeIptvContinueWatchingItem('http://h/drop.mp4');
+      await IptvMediaStore.clearVideoResume();
 
-      final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.map((e) => e['url']), ['http://h/keep.mp4']);
-      expect(await StorageService.getVideoResume('http://h/drop.mp4'), isNull,
-          reason: 'the position must go too, or a replay resumes mid-item');
-      expect(await StorageService.getVideoResume('http://h/keep.mp4'), isNotNull,
-          reason: 'nothing else may be touched');
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      final states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: <Object?>[WebDavSyncLibraryKinds.videoResume],
+        orderBy: 'item_key',
+      );
+      expect(states, hasLength(2));
+      expect(states.map((row) => row['deleted']), everyElement(1));
+      expect(states.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+        2002,
+      });
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '3',
+      );
     });
 
     test(
-        'removing a series clears every episode — position included — and '
-        'leaves other series alone', () async {
-      for (var i = 1; i <= 3; i++) {
-        await watchAndResume('http://h/s1e$i.mp4',
-            positionMs: 50000,
-            durationMs: 100000,
-            updatedAt: 100 + i,
-            seriesId: 's1',
-            hasNext: true);
-      }
-      await watchAndResume('http://h/s2e1.mp4',
+      'clear-all tombstones a live state after silent physical cleanup',
+      () async {
+        IptvMediaStore.debugLibraryClock = () =>
+            DateTime.fromMillisecondsSinceEpoch(4000);
+        await IptvMediaStore.upsertVideoResume(
+          'generic-title',
+          const <String, dynamic>{'positionMs': 1, 'durationMs': 2},
+        );
+        final db = DebrifyTvDatabase.debugDatabaseOverride!;
+        await db.delete(
+          'video_resume',
+          where: 'resume_key = ?',
+          whereArgs: const <Object?>['generic-title'],
+        );
+
+        await IptvMediaStore.clearVideoResume();
+
+        final state = (await db.query(
+          'webdav_sync_record_state',
+          where: 'kind = ? AND item_key = ?',
+          whereArgs: const <Object?>[
+            WebDavSyncLibraryKinds.videoResume,
+            'generic-title',
+          ],
+        )).single;
+        expect(state['deleted'], 1);
+        expect(
+          (await db.query(
+            'webdav_sync_meta',
+            columns: const <String>['value'],
+            where: 'key = ?',
+            whereArgs: const <Object>['mutation_revision'],
+          )).single['value'],
+          '2',
+        );
+      },
+    );
+
+    // Backs Home's "Remove from Continue Watching" on an IPTV card.
+    test(
+      'removing a movie drops its shelf row AND its saved position',
+      () async {
+        await watchAndResume(
+          'http://h/keep.mp4',
           positionMs: 50000,
           durationMs: 100000,
           updatedAt: 10,
-          seriesId: 's2',
-          hasNext: true);
+        );
+        await watchAndResume(
+          'http://h/drop.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 20,
+        );
+
+        await StorageService.removeIptvContinueWatchingItem(
+          'http://h/drop.mp4',
+        );
+
+        final shelf = await StorageService.getIptvContinueWatching();
+        expect(shelf.map((e) => e['url']), ['http://h/keep.mp4']);
+        expect(
+          await StorageService.getVideoResume('http://h/drop.mp4'),
+          isNull,
+          reason: 'the position must go too, or a replay resumes mid-item',
+        );
+        expect(
+          await StorageService.getVideoResume('http://h/keep.mp4'),
+          isNotNull,
+          reason: 'nothing else may be touched',
+        );
+      },
+    );
+
+    test('removing a series clears every episode — position included — and '
+        'leaves other series alone', () async {
+      for (var i = 1; i <= 3; i++) {
+        await watchAndResume(
+          'http://h/s1e$i.mp4',
+          positionMs: 50000,
+          durationMs: 100000,
+          updatedAt: 100 + i,
+          seriesId: 's1',
+          hasNext: true,
+        );
+      }
+      await watchAndResume(
+        'http://h/s2e1.mp4',
+        positionMs: 50000,
+        durationMs: 100000,
+        updatedAt: 10,
+        seriesId: 's2',
+        hasNext: true,
+      );
 
       await StorageService.removeIptvContinueWatchingSeries(
         playlistId: 'p1',
@@ -470,32 +773,45 @@ void main() {
       );
 
       final shelf = await StorageService.getIptvContinueWatching();
-      expect(shelf.map((e) => e['url']), ['http://h/s2e1.mp4'],
-          reason: 'only the removed series leaves the shelf');
+      expect(
+        shelf.map((e) => e['url']),
+        ['http://h/s2e1.mp4'],
+        reason: 'only the removed series leaves the shelf',
+      );
       for (var i = 1; i <= 3; i++) {
-        expect(await StorageService.getVideoResume('http://h/s1e$i.mp4'), isNull,
-            reason: 'episode $i kept its position, so its progress bar lives on');
+        expect(
+          await StorageService.getVideoResume('http://h/s1e$i.mp4'),
+          isNull,
+          reason: 'episode $i kept its position, so its progress bar lives on',
+        );
       }
-      expect(await StorageService.getVideoResume('http://h/s2e1.mp4'), isNotNull);
+      expect(
+        await StorageService.getVideoResume('http://h/s2e1.mp4'),
+        isNotNull,
+      );
     });
 
     test('a series removal is scoped to its own playlist', () async {
-      await watchAndResume('http://h/a/s1e1.mp4',
-          positionMs: 50000,
-          durationMs: 100000,
-          updatedAt: 10,
-          seriesId: 's1',
-          hasNext: true,
-          playlistId: 'p1');
+      await watchAndResume(
+        'http://h/a/s1e1.mp4',
+        positionMs: 50000,
+        durationMs: 100000,
+        updatedAt: 10,
+        seriesId: 's1',
+        hasNext: true,
+        playlistId: 'p1',
+      );
       // Same series id on a DIFFERENT provider — a distinct show as far as the
       // shelf is concerned (it groups on <playlistId>::<seriesId>).
-      await watchAndResume('http://h/b/s1e1.mp4',
-          positionMs: 50000,
-          durationMs: 100000,
-          updatedAt: 20,
-          seriesId: 's1',
-          hasNext: true,
-          playlistId: 'p2');
+      await watchAndResume(
+        'http://h/b/s1e1.mp4',
+        positionMs: 50000,
+        durationMs: 100000,
+        updatedAt: 20,
+        seriesId: 's1',
+        hasNext: true,
+        playlistId: 'p2',
+      );
 
       await StorageService.removeIptvContinueWatchingSeries(
         playlistId: 'p1',
@@ -504,8 +820,10 @@ void main() {
 
       final shelf = await StorageService.getIptvContinueWatching();
       expect(shelf.map((e) => e['url']), ['http://h/b/s1e1.mp4']);
-      expect(await StorageService.getVideoResume('http://h/b/s1e1.mp4'),
-          isNotNull);
+      expect(
+        await StorageService.getVideoResume('http://h/b/s1e1.mp4'),
+        isNotNull,
+      );
     });
   });
 }

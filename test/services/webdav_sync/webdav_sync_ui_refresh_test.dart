@@ -167,4 +167,49 @@ void main() {
     expect(IptvChannelOrderSignal.latest?.scope, IptvChannelOrderScope.catalog);
     expect(IptvChannelOrderSignal.latest?.target, isEmpty);
   });
+
+  test(
+    'IPTV family pings coalesce and playback refresh does not stop playback',
+    () {
+      var playbackRefreshes = 0;
+      var playbackStops = 0;
+      void refreshListener() => playbackRefreshes++;
+      void stopListener() => playbackStops++;
+      MainPageBridge.addPlaybackReturnListener(refreshListener);
+      MainPageBridge.addContentPlaybackStopListener(stopListener);
+      addTearDown(() {
+        MainPageBridge.removePlaybackReturnListener(refreshListener);
+        MainPageBridge.removeContentPlaybackStopListener(stopListener);
+        MainPageBridge.notifyContentPlaybackStopped();
+      });
+      MainPageBridge.notifyPlayerLaunching();
+      final before = IptvChannelOrderSignal.revision.value;
+
+      WebDavSyncUiRefresh.dispatch(const <String>{
+        'catalog/hidden',
+        'catalog/category-order',
+        'iptv/order',
+        'iptv/watch',
+        'resume',
+      });
+
+      expect(playbackRefreshes, 1);
+      expect(
+        playbackStops,
+        0,
+        reason: 'sync refresh must not signal playback termination',
+      );
+      expect(
+        IptvChannelOrderSignal.revision.value,
+        before + 2,
+        reason: 'one catalog ping and one source ping per cycle',
+      );
+      MainPageBridge.notifyContentPlaybackStopped();
+      expect(
+        playbackStops,
+        1,
+        reason: 'the active flag remained set through the sync refresh',
+      );
+    },
+  );
 }

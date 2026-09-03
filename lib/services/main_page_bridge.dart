@@ -516,6 +516,14 @@ class MainPageBridge {
     notifyContentPlaybackStopped();
   }
 
+  /// Re-read playback-derived UI after a committed background materialization
+  /// without claiming that an active mobile playback session stopped.
+  static void notifyPlaybackDataChanged() {
+    for (final listener in List.of(_playbackReturnListeners)) {
+      listener();
+    }
+  }
+
   static void notifyAutoLaunchFailed([String? reason]) {
     debugPrint('MainPageBridge: Auto-launch failed: $reason');
     hideAutoLaunchOverlay?.call();

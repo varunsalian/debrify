@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
@@ -8,6 +9,9 @@ import 'profiles/profile_storage_paths.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_scope.dart';
 import 'profiles/profile_database_adoption_gate.dart';
+import 'webdav_sync/webdav_sync_circle_models.dart';
+import 'webdav_sync/webdav_sync_hot_models.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
 
 typedef _DatabaseScope = ({String key, ProfileScope? scope});
 
@@ -233,6 +237,338 @@ class DebrifyTvDatabase {
     }
   }
 
+  /// Atomically captures all debrify_tv-backed v3 library families together
+  /// with the mutation revision that fences a later materialization.
+  Future<WebDavSyncDatabaseStateSnapshot> readWebDavSyncState(
+    ProfileScope scope, {
+    required int clockOffsetMs,
+    required int serverNowMs,
+  }) => runOneShotScoped(scope, (db) {
+    return db.transaction((txn) async {
+      final orderRows = await txn.query(
+        'iptv_category_channel_orders',
+        orderBy: 'source_id, channel_group, position, url, name, occurrence',
+      );
+      final orders = <(String, String), List<Map<String, Object?>>>{};
+      for (final row in orderRows) {
+        orders
+            .putIfAbsent((
+              row['source_id']! as String,
+              row['channel_group']! as String,
+            ), () => <Map<String, Object?>>[])
+            .add(<String, Object?>{
+              'url': row['url'] as String,
+              'name': row['name'] as String,
+              'occurrence': (row['occurrence'] as num).toInt(),
+            });
+      }
+      final historyRows = await txn.query('iptv_watch_history');
+      final history = <String, Map<String, Object?>>{
+        for (final row in historyRows) row['url']! as String: row,
+      };
+      final resumeRows = await txn.query('video_resume');
+      final resumes = <String, Map<String, Object?>>{
+        for (final row in resumeRows) row['resume_key']! as String: row,
+      };
+      final rawStates = await txn.query(
+        'webdav_sync_record_state',
+        orderBy: 'kind, owner_key, item_key',
+      );
+      final records = <WebDavSyncRecordState>[];
+      for (final row in rawStates) {
+        var updatedAtMs = (row['updated_at_ms'] as num).toInt();
+        if (row['normalized'] != 1) {
+          updatedAtMs = (updatedAtMs + clockOffsetMs)
+              .clamp(0, serverNowMs)
+              .toInt();
+          await txn.update(
+            'webdav_sync_record_state',
+            <String, Object?>{'updated_at_ms': updatedAtMs, 'normalized': 1},
+            where: 'kind = ? AND owner_key = ? AND item_key = ?',
+            whereArgs: <Object?>[
+              row['kind'],
+              row['owner_key'],
+              row['item_key'],
+            ],
+          );
+        }
+        final kind = row['kind']! as String;
+        final owner = row['owner_key']! as String;
+        final item = row['item_key']! as String;
+        final deleted = row['deleted'] == 1;
+        Map<String, Object?>? value;
+        if (!deleted) {
+          switch (kind) {
+            case WebDavSyncLibraryKinds.iptvCategoryChannelOrders:
+              final items = orders[(owner, item)];
+              if (items != null) {
+                value = <String, Object?>{'group': item, 'items': items};
+              }
+            case WebDavSyncLibraryKinds.iptvWatchHistory:
+              final physical = history[item];
+              if (physical != null && physical['playlist_id'] == owner) {
+                value = _watchWireValue(physical);
+              }
+            case WebDavSyncLibraryKinds.videoResume:
+              final physical = resumes[item];
+              final physicalOwner = physical == null
+                  ? null
+                  : ((physical['source_id'] as String?)?.isNotEmpty == true
+                        ? physical['source_id'] as String
+                        : '_');
+              if (physical != null && physicalOwner == owner) {
+                value = <String, Object?>{
+                  'resumeKey': item,
+                  'position': (physical['position_ms'] as num).toInt(),
+                  'duration': (physical['duration_ms'] as num).toInt(),
+                  'speed': (physical['speed'] as num).toDouble(),
+                  'aspectRatio': physical['aspect'] as String,
+                };
+              }
+          }
+        }
+        records.add(
+          WebDavSyncRecordState(
+            kind: kind,
+            ownerKey: owner,
+            itemKey: item,
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: updatedAtMs,
+              originDeviceId: row['origin_device_id']! as String,
+            ),
+            deleted: deleted,
+            aux: row['aux'] as String?,
+            value: value,
+          ),
+        );
+      }
+      final meta = await txn.query(
+        'webdav_sync_meta',
+        columns: const <String>['value'],
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      );
+      if (meta.length != 1) {
+        throw StateError('Debrify TV sync revision is unavailable');
+      }
+      return WebDavSyncDatabaseStateSnapshot(
+        mutationRevision: int.parse(meta.single['value']! as String),
+        records: List<WebDavSyncRecordState>.unmodifiable(records),
+      );
+    }, exclusive: true);
+  });
+
+  /// Exact-stamp materializer for every IPTV family stored in debrify_tv.db.
+  /// Public mutation APIs are intentionally bypassed: apply never re-stamps,
+  /// creates tombstones, or emits local-change/UI notifications.
+  Future<({WebDavSyncLibraryApplyResult result, Set<String> touchedNamespaces})>
+  applyWebDavSyncIptvFamilies(
+    ProfileScope scope, {
+    required int expectedRevision,
+    required Iterable<WebDavSyncIptvOrderTarget> orderTargets,
+    required Iterable<WebDavSyncIptvWatchTarget> watchTargets,
+    required Iterable<WebDavSyncVideoResumeTarget> resumeTargets,
+  }) => runOneShotScoped(scope, (db) {
+    return db.transaction((txn) async {
+      final revisionRows = await txn.query(
+        'webdav_sync_meta',
+        columns: const <String>['value'],
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      );
+      if (revisionRows.length != 1 ||
+          int.tryParse(revisionRows.single['value']! as String) !=
+              expectedRevision) {
+        return (
+          result: WebDavSyncLibraryApplyResult.conflict,
+          touchedNamespaces: const <String>{},
+        );
+      }
+
+      final touched = <String>{};
+      Future<bool> needsWrite(
+        String kind,
+        String owner,
+        String item,
+        WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
+      ) async {
+        final rows = await txn.query(
+          'webdav_sync_record_state',
+          columns: const <String>[
+            'updated_at_ms',
+            'origin_device_id',
+            'normalized',
+            'deleted',
+          ],
+          where: 'kind = ? AND owner_key = ? AND item_key = ?',
+          whereArgs: <Object?>[kind, owner, item],
+          limit: 1,
+        );
+        return rows.length != 1 ||
+            (rows.single['updated_at_ms'] as num).toInt() !=
+                leaf.stamp.normalizedTimeMs ||
+            rows.single['origin_device_id'] != leaf.stamp.originDeviceId ||
+            rows.single['normalized'] != 1 ||
+            rows.single['deleted'] != (leaf.value == null ? 1 : 0);
+      }
+
+      Future<void> writeState(
+        String kind,
+        String owner,
+        String item,
+        WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
+      ) => txn.insert('webdav_sync_record_state', <String, Object?>{
+        'kind': kind,
+        'owner_key': owner,
+        'item_key': item,
+        'updated_at_ms': leaf.stamp.normalizedTimeMs,
+        'origin_device_id': leaf.stamp.originDeviceId,
+        'normalized': 1,
+        'deleted': leaf.value == null ? 1 : 0,
+        'aux': null,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      for (final target in orderTargets) {
+        if (!await needsWrite(
+          WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+          target.sourceId,
+          target.group,
+          target.leaf,
+        )) {
+          continue;
+        }
+        await txn.delete(
+          'iptv_category_channel_orders',
+          where: 'source_id = ? AND channel_group = ?',
+          whereArgs: <Object?>[target.sourceId, target.group],
+        );
+        if (target.leaf.value != null) {
+          for (var position = 0; position < target.items.length; position++) {
+            final item = target.items[position];
+            await txn.insert('iptv_category_channel_orders', <String, Object?>{
+              'source_id': target.sourceId,
+              'channel_group': target.group,
+              'url': item.url,
+              'name': item.name,
+              'occurrence': item.occurrence,
+              'position': position,
+            });
+          }
+        }
+        await writeState(
+          WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+          target.sourceId,
+          target.group,
+          target.leaf,
+        );
+        touched.add('iptv/order');
+      }
+
+      for (final target in watchTargets) {
+        if (!await needsWrite(
+          WebDavSyncLibraryKinds.iptvWatchHistory,
+          target.sourceId,
+          target.url,
+          target.leaf,
+        )) {
+          continue;
+        }
+        await txn.delete(
+          'iptv_watch_history',
+          where: 'url = ?',
+          whereArgs: <Object?>[target.url],
+        );
+        final value = target.leaf.value;
+        if (value != null) {
+          final headers = value['headers'];
+          await txn.insert('iptv_watch_history', <String, Object?>{
+            'url': target.url,
+            'name': value['name'],
+            'logo_url': value['logoUrl'],
+            'channel_group': value['group'],
+            'playlist_id': target.sourceId,
+            'http_headers_json': headers is Map && headers.isNotEmpty
+                ? jsonEncode(headers)
+                : null,
+            'series_id': value['seriesId'],
+            'series_name': value['seriesName'],
+            'season': value['season'],
+            'episode': value['episode'],
+            'has_next': value['hasNext'] == null
+                ? null
+                : (value['hasNext'] == true ? 1 : 0),
+            'last_played_at': value['lastPlayedAt'],
+          });
+        }
+        await writeState(
+          WebDavSyncLibraryKinds.iptvWatchHistory,
+          target.sourceId,
+          target.url,
+          target.leaf,
+        );
+        touched.add('iptv/watch');
+      }
+
+      for (final target in resumeTargets) {
+        final owner = target.sourceId ?? '_';
+        if (!await needsWrite(
+          WebDavSyncLibraryKinds.videoResume,
+          owner,
+          target.resumeKey,
+          target.leaf,
+        )) {
+          continue;
+        }
+        await txn.delete(
+          'video_resume',
+          where: 'resume_key = ?',
+          whereArgs: <Object?>[target.resumeKey],
+        );
+        final value = target.leaf.value;
+        if (value != null) {
+          await txn.insert('video_resume', <String, Object?>{
+            'resume_key': target.resumeKey,
+            'source_id': target.sourceId,
+            'position_ms': value['position'],
+            'duration_ms': value['duration'],
+            'speed': value['speed'],
+            'aspect': value['aspectRatio'],
+            'updated_at': target.leaf.stamp.normalizedTimeMs,
+          });
+        }
+        await writeState(
+          WebDavSyncLibraryKinds.videoResume,
+          owner,
+          target.resumeKey,
+          target.leaf,
+        );
+        touched.add('resume');
+      }
+
+      // Retention is a physical/read-side cap only. State rows remain live so
+      // this omission can neither publish a tombstone nor beat the wire winner.
+      await txn.execute('''
+        DELETE FROM iptv_watch_history
+        WHERE url NOT IN (
+          SELECT url FROM iptv_watch_history
+          ORDER BY last_played_at DESC, url DESC
+          LIMIT 100
+        )
+      ''');
+      if (touched.isNotEmpty) {
+        await txn.execute('''
+          UPDATE webdav_sync_meta
+          SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+          WHERE key = 'mutation_revision'
+        ''');
+      }
+      return (
+        result: WebDavSyncLibraryApplyResult.applied,
+        touchedNamespaces: Set<String>.unmodifiable(touched),
+      );
+    }, exclusive: true);
+  });
+
   _DatabaseScope _requestedScope() {
     if (!ProfileRuntime.isInitialized) {
       throw StateError('Profile runtime is not initialized');
@@ -265,7 +601,7 @@ class DebrifyTvDatabase {
     bool singleInstance = true,
   }) => openDatabase(
     dbPath,
-    version: 7,
+    version: 8,
     singleInstance: singleInstance,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
@@ -403,6 +739,9 @@ class DebrifyTvDatabase {
     }
     if (oldVersion < 7 && newVersion >= 7) {
       await createWebDavSyncSidecarTables(db);
+    }
+    if (oldVersion < 8 && newVersion >= 8) {
+      await migrateWebDavSyncIptvFamilies(db);
     }
   }
 
@@ -594,6 +933,7 @@ class DebrifyTvDatabase {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS video_resume (
         resume_key TEXT PRIMARY KEY,
+        source_id TEXT,
         position_ms INTEGER NOT NULL DEFAULT 0,
         duration_ms INTEGER NOT NULL DEFAULT 0,
         speed REAL NOT NULL DEFAULT 1.0,
@@ -603,6 +943,65 @@ class DebrifyTvDatabase {
     ''');
 
     await createWebDavSyncSidecarTables(db);
+  }
+
+  /// v8: identify IPTV resumes and seed the v3 library sidecar without
+  /// treating imported data as a user mutation.
+  @visibleForTesting
+  static Future<void> migrateWebDavSyncIptvFamilies(DatabaseExecutor db) async {
+    await createIptvStoreTables(db);
+    final columns = await db.rawQuery('PRAGMA table_info(video_resume)');
+    if (!columns.any((row) => row['name'] == 'source_id')) {
+      await db.execute('ALTER TABLE video_resume ADD COLUMN source_id TEXT');
+    }
+    await db.execute('''
+      UPDATE video_resume
+      SET source_id = (
+        SELECT NULLIF(h.playlist_id, '')
+        FROM iptv_watch_history h
+        WHERE h.url = video_resume.resume_key
+        LIMIT 1
+      )
+      WHERE source_id IS NULL
+        AND EXISTS (
+          SELECT 1 FROM iptv_watch_history h
+          WHERE h.url = video_resume.resume_key
+            AND h.playlist_id <> ''
+        )
+    ''');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      SELECT ?, source_id, channel_group, ?, 'migration', 0, 0, NULL
+      FROM iptv_category_channel_orders
+      GROUP BY source_id, channel_group
+      ''',
+      <Object?>[WebDavSyncLibraryKinds.iptvCategoryChannelOrders, now],
+    );
+    await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      SELECT ?, playlist_id, url, last_played_at, 'migration', 0, 0, NULL
+      FROM iptv_watch_history
+      ''',
+      <Object?>[WebDavSyncLibraryKinds.iptvWatchHistory],
+    );
+    await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      SELECT ?, COALESCE(NULLIF(source_id, ''), '_'), resume_key, updated_at,
+             'migration', 0, 0, NULL
+      FROM video_resume
+      ''',
+      <Object?>[WebDavSyncLibraryKinds.videoResume],
+    );
   }
 
   /// Private v3 library-sync sidecar. The shape is shared with
@@ -631,6 +1030,40 @@ class DebrifyTvDatabase {
       "INSERT OR IGNORE INTO webdav_sync_meta (key, value) "
       "VALUES ('mutation_revision', '0')",
     );
+  }
+
+  static Map<String, Object?> _watchWireValue(Map<String, Object?> row) {
+    Map<String, String>? headers;
+    final rawHeaders = row['http_headers_json'];
+    if (rawHeaders is String && rawHeaders.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawHeaders);
+        if (decoded is Map) {
+          headers = <String, String>{
+            for (final entry in decoded.entries)
+              if (entry.key is String && entry.value is String)
+                entry.key as String: entry.value as String,
+          };
+        }
+      } catch (_) {
+        // A malformed optional header blob remains absent from the sealed
+        // value; diagnostics must never echo credential-bearing content.
+      }
+    }
+    return <String, Object?>{
+      'url': row['url'] as String,
+      'name': row['name'] as String,
+      'logoUrl': row['logo_url'] as String,
+      'group': row['channel_group'] as String,
+      if (headers != null && headers.isNotEmpty) 'headers': headers,
+      if (row['series_id'] is String) 'seriesId': row['series_id'],
+      if (row['series_name'] is String) 'seriesName': row['series_name'],
+      if (row['season'] is num) 'season': (row['season'] as num).toInt(),
+      if (row['episode'] is num) 'episode': (row['episode'] as num).toInt(),
+      if (row['has_next'] is num)
+        'hasNext': (row['has_next'] as num).toInt() != 0,
+      'lastPlayedAt': (row['last_played_at'] as num).toInt(),
+    };
   }
 
   /// Insert the built-in Favorites row if it isn't already there.

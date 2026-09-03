@@ -195,6 +195,10 @@ final class WebDavSyncLocalLibrarySnapshot {
 
   final WebDavSyncLibraryDocument document;
   final WebDavSyncDatabaseRevisions revisions;
+
+  /// Local-only hash preimages needed to materialize nullable leaves. The
+  /// field kept its Round 2a name for adapter compatibility; it now also
+  /// carries IPTV group, URL, and resume-key identities and is never encoded.
   final Map<String, String> hiddenGroupNamesByWireKey;
 }
 
@@ -397,20 +401,10 @@ final class ProfileWebDavSyncLocalAdapter
       localProfileId,
       request.identityMaps,
     );
-    final tvRevision = await DebrifyTvDatabase.instance.runOneShotScoped(
+    final tv = await DebrifyTvDatabase.instance.readWebDavSyncState(
       scope,
-      (db) async {
-        final rows = await db.query(
-          'webdav_sync_meta',
-          columns: const <String>['value'],
-          where: 'key = ?',
-          whereArgs: const <Object>['mutation_revision'],
-        );
-        if (rows.length != 1) {
-          throw StateError('Debrify TV sync revision is unavailable');
-        }
-        return int.parse(rows.single['value']! as String);
-      },
+      clockOffsetMs: request.clockOffsetMs,
+      serverNowMs: request.serverNowMs,
     );
     final catalog = await IptvCatalogDb.readWebDavSyncState(
       scope,
@@ -419,9 +413,12 @@ final class ProfileWebDavSyncLocalAdapter
     );
     _validateSession(session);
     final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{};
-    final hiddenNames = <String, String>{};
+    final localIdentities = <String, String>{};
     for (final state in catalog.records) {
-      if (state.kind != WebDavSyncLibraryKinds.hiddenGroups) continue;
+      if (state.kind != WebDavSyncLibraryKinds.hiddenGroups &&
+          state.kind != WebDavSyncLibraryKinds.categoryManualOrders) {
+        continue;
+      }
       var mapping = mappings.byCatalogKey[state.ownerKey];
       if (mapping == null) {
         final hint = WebDavSyncCatalogOwnerReference.tryFromAux(state.aux);
@@ -438,19 +435,52 @@ final class ProfileWebDavSyncLocalAdapter
         }
       }
       if (mapping == null) continue;
-      final wireKey = _hiddenGroupWireKey(mapping, state.itemKey);
+      final wireKey = state.kind == WebDavSyncLibraryKinds.hiddenGroups
+          ? _hiddenGroupWireKey(mapping, state.itemKey)
+          : _categoryOrderWireKey(mapping);
       final candidate = WebDavSyncCircleLeaf<Map<String, Object?>>(
         stamp: state.stamp,
-        value: state.deleted
-            ? null
-            : Map<String, Object?>.unmodifiable(<String, Object?>{
-                'group': state.itemKey,
-              }),
+        value: state.deleted ? null : state.value,
+      );
+      if (!state.deleted && state.value == null) continue;
+      final current = records[wireKey];
+      if (current == null ||
+          WebDavSyncLibraryMerge.compareLeaves(candidate, current) > 0) {
+        localIdentities[wireKey] = state.itemKey;
+        records[wireKey] = candidate;
+      }
+    }
+    for (final state in tv.records) {
+      final kind = state.kind;
+      String? circleResourceId;
+      if (kind == WebDavSyncLibraryKinds.videoResume && state.ownerKey == '_') {
+        circleResourceId = '_';
+      } else {
+        if (!mappings.grantedLocalResourceIds.contains(state.ownerKey)) {
+          continue;
+        }
+        circleResourceId =
+            request.identityMaps.localToCircleResources[state.ownerKey];
+      }
+      if (circleResourceId == null) continue;
+      final wireKey = switch (kind) {
+        WebDavSyncLibraryKinds.iptvCategoryChannelOrders =>
+          'iptv/order/$circleResourceId/${_sha256Text(state.itemKey)}',
+        WebDavSyncLibraryKinds.iptvWatchHistory =>
+          'iptv/watch/$circleResourceId/${_sha256Text(state.itemKey)}',
+        WebDavSyncLibraryKinds.videoResume =>
+          'resume/$circleResourceId/${_sha256Text(state.itemKey)}',
+        _ => null,
+      };
+      if (wireKey == null || (!state.deleted && state.value == null)) continue;
+      final candidate = WebDavSyncCircleLeaf<Map<String, Object?>>(
+        stamp: state.stamp,
+        value: state.deleted ? null : state.value,
       );
       final current = records[wireKey];
       if (current == null ||
           WebDavSyncLibraryMerge.compareLeaves(candidate, current) > 0) {
-        hiddenNames[wireKey] = state.itemKey;
+        localIdentities[wireKey] = state.itemKey;
         records[wireKey] = candidate;
       }
     }
@@ -465,10 +495,12 @@ final class ProfileWebDavSyncLocalAdapter
     return WebDavSyncLocalLibrarySnapshot(
       document: document,
       revisions: WebDavSyncDatabaseRevisions(
-        debrifyTv: tvRevision,
+        debrifyTv: tv.mutationRevision,
         iptvCatalog: catalog.mutationRevision,
       ),
-      hiddenGroupNamesByWireKey: Map<String, String>.unmodifiable(hiddenNames),
+      hiddenGroupNamesByWireKey: Map<String, String>.unmodifiable(
+        localIdentities,
+      ),
     );
   }
 
@@ -487,57 +519,160 @@ final class ProfileWebDavSyncLocalAdapter
       localProfileId,
       request.identityMaps,
     );
-    final targets = <WebDavSyncHiddenGroupTarget>[];
+    final hiddenTargets = <WebDavSyncHiddenGroupTarget>[];
+    final categoryOrderTargets = <WebDavSyncCategoryOrderTarget>[];
+    final orderTargets = <WebDavSyncIptvOrderTarget>[];
+    final watchTargets = <WebDavSyncIptvWatchTarget>[];
+    final resumeTargets = <WebDavSyncVideoResumeTarget>[];
+    String? localSource(String circleResourceId) {
+      final local =
+          request.identityMaps.circleToLocalResources[circleResourceId];
+      return local != null && mappings.grantedLocalResourceIds.contains(local)
+          ? local
+          : null;
+    }
+
     for (final entry in request.document.records.entries) {
       final parts = entry.key.split('/');
-      if (parts.length != 5 || parts[0] != 'catalog' || parts[1] != 'hidden') {
+      if (parts.length == 5 && parts[0] == 'catalog' && parts[1] == 'hidden') {
+        final catalogKey =
+            mappings.byWireResourceVariant['${parts[2]}/${parts[3]}'];
+        if (catalogKey == null) continue;
+        final value = entry.value.value;
+        final group = value == null
+            ? request.hiddenGroupNamesByWireKey[entry.key]
+            : value.length == 1 && value['group'] is String
+            ? value['group'] as String
+            : null;
+        if (group == null || group.isEmpty || _sha256Text(group) != parts[4]) {
+          _diagnostic('Ignored an invalid catalog library leaf');
+          continue;
+        }
+        hiddenTargets.add(
+          WebDavSyncHiddenGroupTarget(
+            catalogKey: catalogKey,
+            group: group,
+            leaf: entry.value,
+          ),
+        );
         continue;
       }
-      final catalogKey =
-          mappings.byWireResourceVariant['${parts[2]}/${parts[3]}'];
-      if (catalogKey == null) continue;
-      final value = entry.value.value;
-      final group = value == null
-          ? request.hiddenGroupNamesByWireKey[entry.key]
-          : value.length == 1 && value['group'] is String
-          ? value['group'] as String
-          : null;
-      if (group == null || group.isEmpty || _sha256Text(group) != parts[4]) {
+      if (parts.length == 4 &&
+          parts[0] == 'catalog' &&
+          parts[1] == 'category-order') {
+        final catalogKey =
+            mappings.byWireResourceVariant['${parts[2]}/${parts[3]}'];
+        if (catalogKey == null) continue;
+        final value = entry.value.value;
+        final groups = value == null
+            ? const <String>[]
+            : _stringVector(value, 'groups');
+        if (groups == null) {
+          _diagnostic('Ignored an invalid category-order library leaf');
+          continue;
+        }
+        categoryOrderTargets.add(
+          WebDavSyncCategoryOrderTarget(
+            catalogKey: catalogKey,
+            groups: groups,
+            leaf: entry.value,
+          ),
+        );
         continue;
       }
-      targets.add(
-        WebDavSyncHiddenGroupTarget(
-          catalogKey: catalogKey,
-          group: group,
-          leaf: entry.value,
-        ),
-      );
+      if (parts.length == 4 && parts[0] == 'iptv' && parts[1] == 'order') {
+        final sourceId = localSource(parts[2]);
+        if (sourceId == null) continue;
+        final value = entry.value.value;
+        final group = value == null
+            ? request.hiddenGroupNamesByWireKey[entry.key]
+            : value['group'] as String?;
+        final items = value == null
+            ? const <WebDavSyncIptvOrderItem>[]
+            : _iptvOrderItems(value);
+        if (group == null ||
+            group.isEmpty ||
+            _sha256Text(group) != parts[3] ||
+            items == null) {
+          _diagnostic('Ignored an invalid IPTV-order library leaf');
+          continue;
+        }
+        orderTargets.add(
+          WebDavSyncIptvOrderTarget(
+            sourceId: sourceId,
+            group: group,
+            items: items,
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
+      if (parts.length == 4 && parts[0] == 'iptv' && parts[1] == 'watch') {
+        final sourceId = localSource(parts[2]);
+        if (sourceId == null) continue;
+        final value = entry.value.value;
+        final url = value == null
+            ? request.hiddenGroupNamesByWireKey[entry.key]
+            : value['url'] as String?;
+        if (url == null ||
+            url.isEmpty ||
+            _sha256Text(url) != parts[3] ||
+            (value != null && !_validWatchValue(value))) {
+          _diagnostic('Ignored an invalid IPTV-watch library leaf');
+          continue;
+        }
+        watchTargets.add(
+          WebDavSyncIptvWatchTarget(
+            sourceId: sourceId,
+            url: url,
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
+      if (parts.length == 3 && parts[0] == 'resume') {
+        final sourceId = parts[1] == '_' ? null : localSource(parts[1]);
+        if (parts[1] != '_' && sourceId == null) continue;
+        final value = entry.value.value;
+        final resumeKey = value == null
+            ? request.hiddenGroupNamesByWireKey[entry.key]
+            : value['resumeKey'] as String?;
+        if (resumeKey == null ||
+            resumeKey.isEmpty ||
+            _sha256Text(resumeKey) != parts[2] ||
+            (value != null && !_validResumeValue(value))) {
+          _diagnostic('Ignored an invalid resume library leaf');
+          continue;
+        }
+        resumeTargets.add(
+          WebDavSyncVideoResumeTarget(
+            sourceId: sourceId,
+            resumeKey: resumeKey,
+            leaf: entry.value,
+          ),
+        );
+      }
     }
     await beforeWrite?.call();
     _validateSession(session);
-    final tvFenceMatches = await DebrifyTvDatabase.instance.runOneShotScoped(
-      scope,
-      (db) async {
-        final rows = await db.query(
-          'webdav_sync_meta',
-          columns: const <String>['value'],
-          where: 'key = ?',
-          whereArgs: const <Object>['mutation_revision'],
+    final tvResult = await DebrifyTvDatabase.instance
+        .applyWebDavSyncIptvFamilies(
+          scope,
+          expectedRevision: request.observedRevisions.debrifyTv,
+          orderTargets: orderTargets,
+          watchTargets: watchTargets,
+          resumeTargets: resumeTargets,
         );
-        return rows.length == 1 &&
-            int.tryParse(rows.single['value']! as String) ==
-                request.observedRevisions.debrifyTv;
-      },
-    );
-    if (!tvFenceMatches) {
+    if (tvResult.result == WebDavSyncLibraryApplyResult.conflict) {
       return const WebDavSyncLibraryApplyOutcome(
         result: WebDavSyncLibraryApplyResult.conflict,
       );
     }
-    final catalogResult = await IptvCatalogDb.applyWebDavHiddenGroups(
+    final catalogResult = await IptvCatalogDb.applyWebDavCatalogFamilies(
       scope,
       expectedRevision: request.observedRevisions.iptvCatalog,
-      targets: targets,
+      hiddenTargets: hiddenTargets,
+      categoryOrderTargets: categoryOrderTargets,
     );
     _validateSession(session);
     if (catalogResult.result == WebDavSyncLibraryApplyResult.conflict) {
@@ -547,9 +682,10 @@ final class ProfileWebDavSyncLocalAdapter
     }
     return WebDavSyncLibraryApplyOutcome(
       result: WebDavSyncLibraryApplyResult.applied,
-      appliedNamespaces: catalogResult.touched
-          ? const <String>{'catalog/hidden'}
-          : const <String>{},
+      appliedNamespaces: Set<String>.unmodifiable(<String>{
+        ...tvResult.touchedNamespaces,
+        ...catalogResult.touchedNamespaces,
+      }),
     );
   }
 
@@ -1576,6 +1712,90 @@ final class _CatalogWireMappings {
 String _hiddenGroupWireKey(_CatalogWireIdentity identity, String group) =>
     'catalog/hidden/${identity.circleResourceId}/${identity.variant}/'
     '${_sha256Text(group)}';
+
+String _categoryOrderWireKey(_CatalogWireIdentity identity) =>
+    'catalog/category-order/${identity.circleResourceId}/${identity.variant}';
+
+List<String>? _stringVector(Map<String, Object?> value, String key) {
+  if (value.length != 1 || value[key] is! List) return null;
+  final result = <String>[];
+  final seen = <String>{};
+  for (final item in value[key]! as List) {
+    if (item is! String || item.isEmpty || !seen.add(item)) return null;
+    result.add(item);
+  }
+  return List<String>.unmodifiable(result);
+}
+
+List<WebDavSyncIptvOrderItem>? _iptvOrderItems(Map<String, Object?> value) {
+  if (value.length != 2 ||
+      value['group'] is! String ||
+      value['items'] is! List) {
+    return null;
+  }
+  final result = <WebDavSyncIptvOrderItem>[];
+  final seen = <(String, String, int)>{};
+  for (final raw in value['items']! as List) {
+    if (raw is! Map) return null;
+    final item = Map<String, Object?>.from(raw);
+    final url = item['url'];
+    final name = item['name'];
+    final occurrence = item['occurrence'];
+    if (item.length != 3 ||
+        url is! String ||
+        url.isEmpty ||
+        name is! String ||
+        occurrence is! int ||
+        occurrence < 0 ||
+        !seen.add((url, name, occurrence))) {
+      return null;
+    }
+    result.add(
+      WebDavSyncIptvOrderItem(url: url, name: name, occurrence: occurrence),
+    );
+  }
+  return List<WebDavSyncIptvOrderItem>.unmodifiable(result);
+}
+
+bool _validWatchValue(Map<String, Object?> value) {
+  if (value['url'] is! String ||
+      (value['url']! as String).isEmpty ||
+      value['name'] is! String ||
+      value['logoUrl'] is! String ||
+      value['group'] is! String ||
+      value['lastPlayedAt'] is! int) {
+    return false;
+  }
+  for (final key in const <String>['seriesId', 'seriesName']) {
+    if (value[key] != null && value[key] is! String) return false;
+  }
+  for (final key in const <String>['season', 'episode']) {
+    if (value[key] != null && value[key] is! int) return false;
+  }
+  if (value['hasNext'] != null && value['hasNext'] is! bool) return false;
+  final headers = value['headers'];
+  if (headers != null) {
+    if (headers is! Map) return false;
+    for (final entry in headers.entries) {
+      if (entry.key is! String || entry.value is! String) return false;
+    }
+  }
+  return true;
+}
+
+bool _validResumeValue(Map<String, Object?> value) {
+  final speed = value['speed'];
+  return value.length == 5 &&
+      value['resumeKey'] is String &&
+      (value['resumeKey']! as String).isNotEmpty &&
+      value['position'] is int &&
+      (value['position']! as int) >= 0 &&
+      value['duration'] is int &&
+      (value['duration']! as int) >= 0 &&
+      speed is num &&
+      speed.isFinite &&
+      value['aspectRatio'] is String;
+}
 
 String _sha256Text(String value) =>
     crypto.sha256.convert(utf8.encode(value)).toString();

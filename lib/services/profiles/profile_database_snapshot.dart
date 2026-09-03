@@ -475,6 +475,32 @@ class ProfileDatabaseSnapshot {
                 whereArgs: <Object>[entry.key],
               );
             }
+            if (tables.contains('video_resume')) {
+              final columns = await txn.rawQuery(
+                'PRAGMA table_info(video_resume)',
+              );
+              if (columns.any((row) => row['name'] == 'source_id')) {
+                await txn.update(
+                  'video_resume',
+                  <String, Object?>{'source_id': entry.value},
+                  where: 'source_id = ?',
+                  whereArgs: <Object>[entry.key],
+                );
+              }
+            }
+            if (tables.contains('webdav_sync_record_state')) {
+              await txn.update(
+                'webdav_sync_record_state',
+                <String, Object?>{'owner_key': entry.value},
+                where: 'owner_key = ? AND kind IN (?, ?, ?)',
+                whereArgs: <Object>[
+                  entry.key,
+                  'iptv_category_channel_orders',
+                  'iptv_watch_history',
+                  'video_resume',
+                ],
+              );
+            }
           } else if (name == 'iptv_catalog.db') {
             if (tables.contains('category_manual_orders')) {
               await txn.update(
@@ -487,6 +513,21 @@ class ProfileDatabaseSnapshot {
                 where: 'catalog_key = ?',
                 whereArgs: <Object>[
                   IptvCatalogKey.forLocalCategoryOrder(entry.key),
+                ],
+              );
+            }
+            if (tables.contains('webdav_sync_record_state')) {
+              await txn.update(
+                'webdav_sync_record_state',
+                <String, Object?>{
+                  'owner_key': IptvCatalogKey.forLocalCategoryOrder(
+                    entry.value,
+                  ),
+                },
+                where: 'owner_key = ? AND kind = ?',
+                whereArgs: <Object>[
+                  IptvCatalogKey.forLocalCategoryOrder(entry.key),
+                  'category_manual_orders',
                 ],
               );
             }

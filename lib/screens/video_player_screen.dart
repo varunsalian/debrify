@@ -11637,13 +11637,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    await StorageService.upsertVideoResume(_resumeKey, {
-      'positionMs': pos.inMilliseconds,
-      'speed': persistedSpeed,
-      'aspect': aspectStr,
-      'durationMs': dur.inMilliseconds,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    });
+    await StorageService.upsertVideoResume(
+      _resumeKey,
+      {
+        'positionMs': pos.inMilliseconds,
+        'speed': persistedSpeed,
+        'aspect': aspectStr,
+        'durationMs': dur.inMilliseconds,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      sourceId:
+          _currentIptvChannel?.attributes['series_playlist_id'] ??
+          _currentIptvChannel?.attributes['source_playlist_id'] ??
+          _iptvGuideContextOverride?.sourceId ??
+          widget.iptvSourceId,
+    );
 
     // Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the
     // handoff moments another device would resume from — let sync flush now
