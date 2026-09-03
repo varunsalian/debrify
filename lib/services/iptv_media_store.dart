@@ -1619,6 +1619,17 @@ class IptvMediaStore {
             (row['owner_key']! as String, row['item_key']! as String),
         };
         await txn.delete('video_resume');
+        if (origin != WebDavSyncMutationOrigin.user) {
+          // A silent wipe takes its live stamps with it, exactly like the
+          // physical rows: a retained exact stamp would otherwise stop the
+          // circle's untouched resume records from re-materializing here.
+          // Tombstones stay — they are published intent, not row provenance.
+          await txn.delete(
+            'webdav_sync_record_state',
+            where: 'kind = ? AND deleted = 0',
+            whereArgs: const <Object?>[WebDavSyncLibraryKinds.videoResume],
+          );
+        }
         if (targets.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
           final now = _nextStampMs();
           for (final target in targets) {

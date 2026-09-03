@@ -736,10 +736,12 @@ void main() {
       );
 
       expect(await db.query('video_resume'), isEmpty);
+      // No tombstones, and no retained live stamps either: an exact stamp
+      // left behind would block the circle's resume from re-materializing.
       expect(
         await db.query(
           'webdav_sync_record_state',
-          where: 'kind = ? AND deleted = 1',
+          where: 'kind = ?',
           whereArgs: const <Object?>[WebDavSyncLibraryKinds.videoResume],
         ),
         isEmpty,

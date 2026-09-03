@@ -2152,7 +2152,9 @@ in create and upgrade paths; every stamped writer bumps it in the same
 transaction).
 
 Mutation origins: `user | syncApply | migration | maintenance | rollback`.
-Only `user` stamps, bumps the revision, and notifies the scheduler.
+Only `user` stamps and notifies the scheduler; the revision advances on
+user writes and on any apply batch that touched rows (that second bump is
+what lets the next build observe a fresh fence).
 Retention prunes (watch history 100 rows), cache evictions, failed-edit
 restores, migrations, and "Reset app data" are silent — a cap or a local
 wipe must never mint a circle-wide deletion. Deletions that ARE user
@@ -2178,9 +2180,11 @@ tombstones.
   sort by (desired number, channel id) and take the next free slot;
   occupied numbers are vacated to temporary values first so exchanges
   cannot trip the UNIQUE constraint mid-transaction.
-- Change detection is sidecar-stamp AND physical-row: a matching stamp
-  with a missing physical row still materializes (first-join after the
-  §1 compaction carve-out). Compaction additionally strips the
+- Change detection is sidecar-stamp AND physical-row: a matching channel
+  stamp with a missing physical row still materializes, and a matching
+  pool-generation stamp is additionally probed by row count (first-join
+  after the §1 compaction carve-out; equal-count content divergence is
+  outside the probe and accepted). Compaction additionally strips the
   `tv_channels`/`tv_pool_generation` sidecar rows when it drops those
   tables (`feb07eae`), so adopted snapshots never inherit stamps for rows
   they do not contain. The library section is now the authoritative
@@ -2206,12 +2210,16 @@ best-effort and can never fail a committed batch.
 Nine findings triaged; four produced changes, five were rejected with the
 reasoning recorded here so they are not re-litigated:
 
-- **Fixed — device-local reset minted circle-wide deletions.** "Reset app
-  data" recorded playback deletions, finished-movie/continue-watching/
-  playlist(+favorites) tombstones, and resume tombstones with user origin.
-  Every clear in the reset path now takes `recordSyncDeletions: false` /
-  maintenance origin. The explicit settings "Clear playback data" action
-  keeps deliberate cross-device deletion semantics.
+- **Fixed — device-local reset minted circle-wide deletions.** The legacy
+  (non-profile-mode) "Reset app data" ladder recorded playback deletions,
+  finished-movie/continue-watching/playlist(+favorites) tombstones, and
+  resume tombstones with user origin. Every clear in that ladder now takes
+  `recordSyncDeletions: false` / maintenance origin, and a maintenance
+  resume clear also drops its live sidecar stamps so the circle's records
+  re-materialize after the wipe. Profile-mode resets were already safe:
+  they swap whole data generations, so stamps travel with rows. The
+  explicit settings "Clear playback data" action keeps deliberate
+  cross-device deletion semantics.
 - **Fixed — stamp collisions under clock steps.** All three mint paths
   (TV mutation, media store, catalog DB) stamp through a per-clock
   monotonic floor (`WebDavSyncMonotonicStamp`): a backwards NTP step can no
@@ -2240,6 +2248,12 @@ reasoning recorded here so they are not re-litigated:
   newer-version snapshot are not republished by an older binary.** The
   records stay intact locally and publish after the app updates; wire
   documents already round-trip unknown families.
+- **Accepted residual — stamp normalization can collapse the monotonic
+  floor.** Local stamps ahead of server time clamp to `serverNowMs`
+  (second-resolution) at build, so two mints from one device could
+  normalize identically — but only when two full publish cycles land in
+  the same server second, which cycle latency prevents in practice; the
+  worst case is one mixed pool that self-heals on the next edit.
 - **Known growth bound (documented, not fixed):** watch-history and
   resume leaves never tombstone from retention, so the library section
   grows monotonically toward the 100k-leaf / 64 MiB fail-closed caps
