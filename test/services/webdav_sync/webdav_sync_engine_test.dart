@@ -383,6 +383,78 @@ void main() {
   );
 
   test(
+    'pending replay fence retry reloads an interim deletion tombstone',
+    () async {
+      final key = WebDavSyncRecordKey.finishedMovie('tt1');
+      local.preferences = <String, Object?>{
+        WebDavSyncHotMerge.finishedMoviesPreference: <String>['tt1'],
+      };
+      local.failNextApply = true;
+      await expectLater(runFixture(context()), throwsStateError);
+      expect(
+        states
+            .state
+            .profiles['profile-circle']!
+            .pendingApply!
+            .target
+            .watchState
+            .records,
+        contains(key),
+      );
+
+      final later = now.add(const Duration(seconds: 1));
+      local.conflictNextApply = true;
+      local.beforeConflict = () {
+        local.preferences = <String, Object?>{
+          WebDavSyncHotMerge.finishedMoviesPreference: <String>[],
+        };
+        final profile = states.state.profiles['profile-circle']!;
+        states.state = states.state.copyWith(
+          profiles: <String, WebDavSyncProfileEngineState>{
+            ...states.state.profiles,
+            'profile-circle': profile.copyWith(
+              tombstones: <String, WebDavSyncTombstone>{
+                key: WebDavSyncTombstone(
+                  key: key,
+                  stamp: WebDavSyncStamp(
+                    normalizedTimeMs: later.millisecondsSinceEpoch,
+                    originDeviceId: 'device-a',
+                  ),
+                  rawLocalTime: true,
+                ),
+              },
+            ),
+          },
+        );
+      };
+      transport.serverDate = later;
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: sectionCache,
+        clock: () => later,
+      );
+
+      await runFixture(context());
+
+      expect(
+        local.preferences[WebDavSyncHotMerge.finishedMoviesPreference],
+        isEmpty,
+      );
+      expect(
+        states.state.profiles['profile-circle']!.baseline!.watchState.records,
+        isNot(contains(key)),
+      );
+      expect(
+        states.state.profiles['profile-circle']!.tombstones,
+        contains(key),
+      );
+    },
+  );
+
+  test(
     'circle apply journals exact target and replays before network after crash',
     () async {
       final circleLocal = _FakeCircleLocalAdapter(
@@ -2769,6 +2841,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
   final List<String> events = <String>[];
   bool failNextApply = false;
   bool conflictNextApply = false;
+  void Function()? beforeConflict;
   bool sessionValid = true;
   void Function()? afterApply;
   final List<bool> replayingPendingFlags = <bool>[];
@@ -2817,6 +2890,8 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     replayingPendingFlags.add(replayingPending);
     if (conflictNextApply) {
       conflictNextApply = false;
+      beforeConflict?.call();
+      beforeConflict = null;
       throw const ProfilePreferenceMutationConflict();
     }
     await beforeWrite?.call();

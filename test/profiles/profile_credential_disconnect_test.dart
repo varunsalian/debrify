@@ -267,6 +267,66 @@ void main() {
   });
 
   test(
+    'pending shared credential field removal updates instead of deleting',
+    () async {
+      const resourceId = 'pending-shared-rd';
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: ConnectionResource(
+                id: resourceId,
+                type: ConnectionResourceType.realDebrid,
+                label: 'Pending shared Real-Debrid',
+                ownerProfileId: adminId,
+                publicConfig: const <String, dynamic>{'schemaVersion': 1},
+                publicSchemaVersion: 1,
+                authorizationRevision: 1,
+                enabled: true,
+                secretPending: true,
+              ),
+              updatedAtMs: 10,
+            ),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: adminId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.values.fold<int>(
+                0,
+                (mask, permission) => mask | permission.bit,
+              ),
+              updatedAtMs: 11,
+            ),
+            SyncedRegistryGrantRecord(
+              profileId: memberId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.use.bit,
+              updatedAtMs: 12,
+            ),
+          ],
+        ),
+      );
+      await registry.bindResource(
+        profileId: adminId,
+        slot: 'provider.realDebrid',
+        resourceId: resourceId,
+      );
+
+      expect(
+        await ProfileCredentialFacade.remove('real_debrid_api_key'),
+        isTrue,
+      );
+
+      final resource = await registry.getResource(resourceId);
+      expect(resource, isNotNull);
+      expect(resource!.secretPending, isFalse);
+      expect(await registry.getGrant(memberId, resourceId), isNotNull);
+      expect(await StorageService.getApiKey(), isNull);
+    },
+  );
+
+  test(
     'unshared owner logout deletes resource then permits remote revoke',
     () async {
       final resource = await createTrakt();

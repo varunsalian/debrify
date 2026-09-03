@@ -13,7 +13,7 @@ void main() {
       shouldApplyPendingCredentialOverride(
         pendingTypes: pending,
         providerTypes: provider,
-        configured: true,
+        ownCredentialPresent: true,
       ),
       isFalse,
     );
@@ -21,9 +21,27 @@ void main() {
       shouldApplyPendingCredentialOverride(
         pendingTypes: pending,
         providerTypes: provider,
-        configured: false,
+        ownCredentialPresent: false,
       ),
       isTrue,
     );
+  });
+
+  test('expired own Trakt credential keeps its Expired status', () {
+    var status = 'Expired';
+
+    if (shouldApplyPendingCredentialOverride(
+      pendingTypes: const <ConnectionResourceType>{
+        ConnectionResourceType.trakt,
+      },
+      providerTypes: const <ConnectionResourceType>{
+        ConnectionResourceType.trakt,
+      },
+      ownCredentialPresent: true,
+    )) {
+      status = 'Attention';
+    }
+
+    expect(status, 'Expired');
   });
 }

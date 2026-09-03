@@ -338,6 +338,7 @@ class ConnectionResourceService {
     required ProfileAuthorizationContext context,
     required String resourceId,
     required Map<String, dynamic> secretConfig,
+    bool allowEmpty = false,
   }) async {
     final authorized = await authorize(
       context: context,
@@ -345,7 +346,7 @@ class ConnectionResourceService {
       permission: ResourcePermission.manage,
       feature: ProfileFeature.manageConnections,
     );
-    if (secretConfig.isEmpty) {
+    if (secretConfig.isEmpty && !allowEmpty) {
       throw ArgumentError.value(
         secretConfig,
         'secretConfig',

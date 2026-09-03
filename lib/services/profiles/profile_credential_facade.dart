@@ -383,50 +383,21 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.manage,
       feature: ProfileFeature.manageConnections,
     );
-    if (authorized.secretPending) {
-      try {
-        await registry.deleteOwnedResource(
-          resourceId: resourceId,
-          ownerProfileId: context.profileId,
-          revokeBorrowers: false,
-          actingProfileId: context.profileId,
-          actingAuthorizationRevision: context.authorizationRevision,
-          expectedResourceAuthorizationRevision:
-              authorized.authorizationRevision,
-        );
-      } on StateError catch (error) {
-        throw ResourceImpactRequiredException(error.message);
-      }
-      return true;
-    }
-    final current = await service.resolveSecretForUse(
-      context: context,
-      resourceId: resourceId,
-      feature: ProfileFeature.manageConnections,
-      permission: ResourcePermission.manage,
-    );
+    final current = authorized.secretPending
+        ? <String, dynamic>{}
+        : await service.resolveSecretForUse(
+            context: context,
+            resourceId: resourceId,
+            feature: ProfileFeature.manageConnections,
+            permission: ResourcePermission.manage,
+          );
     current.remove(field.field);
-    if (current.isEmpty) {
-      try {
-        await registry.deleteOwnedResource(
-          resourceId: resourceId,
-          ownerProfileId: context.profileId,
-          revokeBorrowers: false,
-          actingProfileId: context.profileId,
-          actingAuthorizationRevision: context.authorizationRevision,
-          expectedResourceAuthorizationRevision:
-              authorized.authorizationRevision,
-        );
-      } on StateError catch (error) {
-        throw ResourceImpactRequiredException(error.message);
-      }
-      return true;
-    }
     context = await ProfileAuthorizationContext.capture(registry);
     await service.updateSecret(
       context: context,
       resourceId: resourceId,
       secretConfig: current,
+      allowEmpty: true,
     );
     return true;
   }

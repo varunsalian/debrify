@@ -130,8 +130,8 @@ import '../models/tv_hero_artwork_quality.dart';
 bool shouldApplyPendingCredentialOverride({
   required Set<ConnectionResourceType> pendingTypes,
   required Set<ConnectionResourceType> providerTypes,
-  required bool configured,
-}) => !configured && pendingTypes.any(providerTypes.contains);
+  required bool ownCredentialPresent,
+}) => !ownCredentialPresent && pendingTypes.any(providerTypes.contains);
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -575,13 +575,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     void pending(
       Set<ConnectionResourceType> types,
-      bool configured,
+      bool ownCredentialPresent,
       void Function() apply,
     ) {
       if (shouldApplyPendingCredentialOverride(
         pendingTypes: pendingCredentialTypes,
         providerTypes: types,
-        configured: configured,
+        ownCredentialPresent: ownCredentialPresent,
       )) {
         apply();
       }
@@ -595,7 +595,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ConnectionResourceType.iptvXtream,
         ConnectionResourceType.xmltv,
       },
-      configured: configuredIptvPlaylists.isNotEmpty,
+      ownCredentialPresent: configuredIptvPlaylists.isNotEmpty,
     );
     pending(const {ConnectionResourceType.realDebrid}, rdConnected, () {
       _realDebridConnected = true;
@@ -631,15 +631,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _webDavCaption = pendingCaption;
       },
     );
-    pending(
-      const {ConnectionResourceType.trakt},
-      traktConnected && !traktExpired,
-      () {
-        _traktConnected = true;
-        _traktStatus = 'Attention';
-        _traktCaption = pendingCaption;
-      },
-    );
+    pending(const {ConnectionResourceType.trakt}, traktConnected, () {
+      _traktConnected = true;
+      _traktStatus = 'Attention';
+      _traktCaption = pendingCaption;
+    });
     pending(const {ConnectionResourceType.simkl}, simklConnected, () {
       _simklConnected = true;
       _simklStatus = 'Attention';

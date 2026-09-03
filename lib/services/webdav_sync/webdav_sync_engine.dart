@@ -604,6 +604,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 break;
               } on ProfilePreferenceMutationConflict {
                 if (attempt != 0) rethrow;
+                state = await _stateRepository.load(namespaceId);
               }
             }
             await _stateRepository.update(namespaceId, (current) {
