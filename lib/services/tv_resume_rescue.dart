@@ -156,7 +156,18 @@ class TvResumeRescue {
 
   static Future<void> _reconcile() async {
     if (_sessionActive) return; // live session owns the stage files
-    final activeId = _activeProfileId();
+    // ONE identity snapshot up front: the profileId that passes the owner
+    // check below and the scope the writes run under must come from the same
+    // capture, or a profile switch racing the file reads could validate A and
+    // write under B (codex review round 2, finding 3c).
+    final ProfileScope? capturedScope = ProfileRuntime.isProfileCommitted
+        ? ProfileSession.notifier.value
+        : null;
+    final activeId = !ProfileRuntime.isInitialized
+        ? null
+        : (ProfileRuntime.isProfileCommitted
+              ? capturedScope?.profileId
+              : 'legacy');
     if (activeId == null) return; // runtime not ready; a later kick retries
 
     final owner = await _readJson(_ownerFileName);
@@ -176,10 +187,13 @@ class TvResumeRescue {
     final ownerProfileId = _asString(owner['profileId']);
     final launchedAtMs = _asInt(owner['launchedAtMs']);
     final updatedAtMs = _asInt(position['updatedAtMs']);
-    final age = DateTime.now().difference(
-      DateTime.fromMillisecondsSinceEpoch(updatedAtMs),
-    );
-    if (updatedAtMs <= 0 || age > _staleAfter || age.isNegative) {
+    // Bounds before DateTime construction: fromMillisecondsSinceEpoch throws
+    // outside its representable range, which would skip the cleanup below and
+    // wedge the corrupt stage forever (codex review round 2, finding 3a).
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (updatedAtMs <= 0 ||
+        updatedAtMs > nowMs ||
+        nowMs - updatedAtMs > _staleAfter.inMilliseconds) {
       await clearAfterCleanFinish();
       return;
     }
@@ -195,14 +209,6 @@ class TvResumeRescue {
       // lands here again through the scope listener.
       return;
     }
-
-    // Pin the verified profile for the storage work below. In committed mode
-    // the zone override makes every StorageService call resolve to this
-    // scope even if the active profile changes mid-await; legacy mode has no
-    // scopes to race.
-    final ProfileScope? capturedScope =
-        ProfileRuntime.isProfileCommitted ? ProfileSession.notifier.value : null;
-    if (ProfileRuntime.isProfileCommitted && capturedScope == null) return;
 
     try {
       final resumeId = _asString(position['resumeId']);

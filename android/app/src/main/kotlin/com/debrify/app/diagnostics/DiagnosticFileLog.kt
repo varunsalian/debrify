@@ -284,8 +284,17 @@ object DiagnosticFileLog {
                     }
                     // Stop at the first failure: entries are ascending, so
                     // letting a later success advance the watermark would
-                    // filter the failed one out of every retry.
-                    if (!written) break
+                    // filter the failed one out of every retry. If an earlier
+                    // success SHARED this timestamp, pull the watermark back
+                    // below it — the strict `> lastRecorded` filter would
+                    // otherwise exclude the failed twin forever; re-appending
+                    // the successful one is the survivable duplicate.
+                    if (!written) {
+                        if (newestRecorded >= exit.timestamp) {
+                            newestRecorded = maxOf(lastRecorded, exit.timestamp - 1)
+                        }
+                        break
+                    }
                     if (exit.timestamp > newestRecorded) {
                         newestRecorded = exit.timestamp
                     }
