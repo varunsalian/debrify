@@ -1811,4 +1811,80 @@ void main() {
       expect(preferences.getString('theme_mode'), 'old');
     },
   );
+
+  test('restore preserves original profile creation order', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    // Created in REVERSE of their carried instants: if the adopting device
+    // ordered by insertion, Later-but-created-first would sort first and this
+    // fixture would fail.
+    await registry.createProfile(
+      name: 'Second by instant',
+      role: UserProfileRole.member,
+      createdAtMs: DateTime.utc(2026, 6, 1).millisecondsSinceEpoch,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    );
+    await registry.createProfile(
+      name: 'First by instant',
+      role: UserProfileRole.member,
+      createdAtMs: DateTime.utc(2026, 1, 1).millisecondsSinceEpoch,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    );
+
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final service = ProfilePackageService(
+      registry: registry,
+      resources: ConnectionResourceService(registry: registry, cipher: cipher),
+    );
+    final package = await service.exportAllProfiles(
+      context: authorization,
+      includeSecrets: true,
+    );
+    final originals =
+        (await registry.listProfiles()).map((profile) => profile.id).toSet();
+    await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+    ).restoreDeviceGraph(package: package, authorization: authorization);
+
+    final importedMembers = (await registry.listProfiles())
+        .where(
+          (profile) =>
+              !originals.contains(profile.id) &&
+              profile.role == UserProfileRole.member,
+        )
+        .toList();
+    expect(importedMembers, hasLength(2));
+    // listProfiles orders by created_at_ms — the ORIGINAL instants traveled,
+    // so the January profile sorts first despite being inserted last on both
+    // the seed and the adopting device.
+    expect(importedMembers.first.name, 'First by instant');
+    expect(importedMembers.last.name, 'Second by instant');
+    expect(
+      importedMembers.first.createdAt.millisecondsSinceEpoch,
+      DateTime.utc(2026, 1, 1).millisecondsSinceEpoch,
+    );
+  });
+
+  test('a missing or future createdAt falls back to import time', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    final before = DateTime.now().millisecondsSinceEpoch;
+    final profile = await registry.createProfile(
+      name: 'Clock skew',
+      role: UserProfileRole.member,
+      createdAtMs: DateTime.now()
+          .add(const Duration(days: 365))
+          .millisecondsSinceEpoch,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    );
+    expect(
+      profile.createdAt.millisecondsSinceEpoch,
+      greaterThanOrEqualTo(before),
+    );
+  });
 }

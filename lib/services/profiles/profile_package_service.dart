@@ -158,6 +158,8 @@ class ProfilePackageService {
           if (!sanitized)
             'wasPinProtected': profile.hasPin || profile.pinResetRequired,
           if (!sanitized) 'setupComplete': profile.setupComplete,
+          if (!sanitized)
+            'createdAtMs': profile.createdAt.millisecondsSinceEpoch,
           if (!sanitized) 'lockOnResume': profile.lockOnResume,
           if (!sanitized)
             'inactivityTimeoutMinutes': profile.inactivityTimeoutMinutes,
@@ -296,6 +298,7 @@ class ProfilePackageService {
         'wasPinProtected': profile.hasPin || profile.pinResetRequired,
         if (pinRecord != null) 'pinRecord': pinRecord,
         'setupComplete': profile.setupComplete,
+        'createdAtMs': profile.createdAt.millisecondsSinceEpoch,
         'disabled': !profile.isEnabled,
         'lockOnResume': profile.lockOnResume,
         'inactivityTimeoutMinutes': profile.inactivityTimeoutMinutes,

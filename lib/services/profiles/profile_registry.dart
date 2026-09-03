@@ -997,6 +997,10 @@ class ProfileRegistry {
     bool disabled = false,
     bool lockOnResume = false,
     int? inactivityTimeoutMinutes,
+    // Original creation instant carried through backup restore / sync
+    // adoption so the profile list keeps the seed device's order. Ignored
+    // unless plausibly in the past; row bookkeeping still stamps `now`.
+    int? createdAtMs,
     UserProfileLifecycle lifecycle = UserProfileLifecycle.active,
     String? actingProfileId,
     int? actingAuthorizationRevision,
@@ -1011,6 +1015,10 @@ class ProfileRegistry {
     }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
+    final effectiveCreatedAt =
+        (createdAtMs != null && createdAtMs > 0 && createdAtMs <= now)
+        ? createdAtMs
+        : now;
     final effectivePolicy = policy ?? ProfilePolicy.defaultsFor(role);
     await _db.transaction((txn) async {
       await _assertManagingActor(
@@ -1034,7 +1042,7 @@ class ProfileRegistry {
         'lock_on_resume': lockOnResume ? 1 : 0,
         if (inactivityTimeoutMinutes != null)
           'inactivity_timeout_minutes': inactivityTimeoutMinutes,
-        'created_at_ms': now,
+        'created_at_ms': effectiveCreatedAt,
         'updated_at_ms': now,
         if (disabled) 'disabled_at_ms': now,
       });

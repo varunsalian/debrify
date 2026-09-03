@@ -156,6 +156,10 @@ class ProfileRestoreCoordinator {
           wasPinProtected: _optionalBool(record, 'wasPinProtected') ?? false,
           lockOnResume: _optionalBool(record, 'lockOnResume') ?? false,
           inactivityTimeoutMinutes: _optionalInactivityTimeout(record),
+          createdAtMs: switch (record['createdAtMs']) {
+            final int value when value > 0 => value,
+            _ => null,
+          },
           preferences: values,
         ),
       );
@@ -178,6 +182,7 @@ class ProfileRestoreCoordinator {
           avatarKey: profile.avatarKey,
           role: profile.role,
           policy: profile.policy,
+          createdAtMs: profile.createdAtMs,
           setupComplete: profile.setupComplete,
           // Keep the hidden staging row enabled just long enough to install a
           // carried PIN through the registry's normal credential boundary.
@@ -1681,6 +1686,7 @@ class _ImportedProfile {
   final bool wasPinProtected;
   final bool lockOnResume;
   final int? inactivityTimeoutMinutes;
+  final int? createdAtMs;
   final Map<String, Object?> preferences;
 
   const _ImportedProfile({
@@ -1694,6 +1700,7 @@ class _ImportedProfile {
     required this.wasPinProtected,
     required this.lockOnResume,
     required this.inactivityTimeoutMinutes,
+    this.createdAtMs,
     required this.preferences,
   });
 }
