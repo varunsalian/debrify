@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/iptv_transfer_payload.dart';
+import '../../services/stream_badges_service.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
@@ -30,8 +31,9 @@ import '../../models/profiles/profile_policy.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
 /// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
-/// Jackett/Prowlarr, IPTV providers + favorites + lists, and installed Stremio
-/// addons) from this device to the currently connected receiver.
+/// Jackett/Prowlarr, IPTV providers + favorites + lists, stream badge
+/// rulesets, and installed Stremio addons) from this device to the currently
+/// connected receiver.
 class RemoteTransferAll extends StatefulWidget {
   final VoidCallback onBack;
 
@@ -88,6 +90,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   int _iptvListCount = 0;
   int _iptvListChannelCount = 0;
   int _iptvFileImported = 0;
+  int _streamBadgeCount = 0;
 
   final _pikpakPasswordController = TextEditingController();
   bool _showPikpakPassword = false;
@@ -238,6 +241,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         _iptvFavoriteCount = 0;
         _iptvListCount = 0;
         _iptvListChannelCount = 0;
+      }
+
+      try {
+        _streamBadgeCount =
+            (await StreamBadgesService.instance.getSources()).length;
+      } catch (_) {
+        debugPrint('RemoteTransferAll: stream badge inventory failed');
+        _streamBadgeCount = 0;
       }
 
       final hasWebDav = _webDavCount > 0;
@@ -399,6 +410,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                 '$_iptvListChannelCount channels)',
             icon: Icons.playlist_play_rounded,
             color: const Color(0xFFA78BFA),
+          ),
+        );
+      }
+      if (_streamBadgeCount > 0) {
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.streamBadges,
+            label:
+                'Stream badges ($_streamBadgeCount '
+                'ruleset${_streamBadgeCount == 1 ? '' : 's'})',
+            icon: Icons.sell_rounded,
+            color: const Color(0xFFFBBF24),
           ),
         );
       }
@@ -1283,6 +1306,17 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           targetIp,
           jsonEncode(payload),
           label: 'IPTV lists',
+          transferRequestId: transferRequestId,
+        );
+      case ConfigCommand.streamBadges:
+        final payload = await StreamBadgesService.instance.exportJson();
+        if (payload.isEmpty) return false;
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.streamBadges,
+          targetIp,
+          jsonEncode(payload),
+          label: 'Stream badges',
           transferRequestId: transferRequestId,
         );
       default:

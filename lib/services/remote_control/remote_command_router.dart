@@ -22,6 +22,7 @@ import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/stream_badges_service.dart';
 import '../../services/tracking_source_policy.dart';
 import '../../services/account_service.dart';
 import '../../services/torbox_account_service.dart';
@@ -134,6 +135,7 @@ class RemoteCommandRouter {
     ConfigCommand.iptvPlaylists,
     ConfigCommand.iptvFavorites,
     ConfigCommand.iptvLists,
+    ConfigCommand.streamBadges,
   };
   static const Duration _remoteTransferOutcomeLifetime = Duration(minutes: 5);
 
@@ -2458,6 +2460,9 @@ class RemoteCommandRouter {
       case ConfigCommand.iptvLists:
         payload['iptvLists'] = decoded();
         break;
+      case ConfigCommand.streamBadges:
+        payload['streamBadges'] = decoded();
+        break;
       default:
         throw FormatException('Unsupported profile transfer category $command');
     }
@@ -2493,6 +2498,7 @@ class RemoteCommandRouter {
       ConfigCommand.iptvPlaylists: 'iptvPlaylists',
       ConfigCommand.iptvFavorites: 'iptvFavorites',
       ConfigCommand.iptvLists: 'iptvLists',
+      ConfigCommand.streamBadges: 'streamBadges',
     };
     for (final entry in expected.entries) {
       if (entry.key == RemoteAction.addon) {
@@ -2714,7 +2720,8 @@ class RemoteCommandRouter {
         summary.indexerManagerCount +
         summary.iptvPlaylistCount +
         summary.iptvFavoriteCount +
-        summary.iptvListCount;
+        summary.iptvListCount +
+        summary.streamBadgeSourceCount;
     if (!context.mounted) return false;
     final confirmed =
         await showDialog<bool>(
@@ -2900,6 +2907,7 @@ class RemoteCommandRouter {
         'iptvPlaylists': ConfigCommand.iptvPlaylists,
         'iptvFavorites': ConfigCommand.iptvFavorites,
         'iptvLists': ConfigCommand.iptvLists,
+        'streamBadges': ConfigCommand.streamBadges,
       };
       for (final entry in rawStringCategories.entries) {
         final value = payload[entry.key];
@@ -3247,6 +3255,9 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.iptvLists:
         await _handleIptvListsConfig(data);
+        break;
+      case ConfigCommand.streamBadges:
+        await _handleStreamBadgesConfig(data);
         break;
       case ConfigCommand.debrifyChannel:
         await _handleDebrifyChannelConfig(data, context, profileBinding);
@@ -3871,8 +3882,25 @@ class RemoteCommandRouter {
     });
   }
 
-  /// Shared decode + report for the three IPTV payloads: they all arrive as a
-  /// JSON array and all report the same added / already-there / failed shape.
+  /// Stream badge rulesets arrive as the backup payload's `streamBadges`
+  /// array; same id merges in place, so a re-send is an update.
+  Future<void> _handleStreamBadgesConfig(String jsonData) async {
+    await _applyIptvPayload(jsonData, 'Stream badges', (entries) async {
+      final counts = await StreamBadgesService.instance.applyBackup(entries);
+      final n = counts.imported;
+      return (
+        added: n,
+        skipped: counts.alreadyPresent,
+        failed: counts.failed,
+        error: null,
+        summary: '$n badge ruleset${n == 1 ? '' : 's'} added',
+      );
+    });
+  }
+
+  /// Shared decode + report for the IPTV payloads and stream badges: they all
+  /// arrive as a JSON array and report the same added / already-there /
+  /// failed shape.
   Future<void> _applyIptvPayload(
     String jsonData,
     String label,

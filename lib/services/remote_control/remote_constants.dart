@@ -168,6 +168,9 @@ class ConfigCommand {
   static const String iptvPlaylists = 'iptv_playlists';
   static const String iptvFavorites = 'iptv_favorites';
   static const String iptvLists = 'iptv_lists';
+
+  /// Stream badge rulesets (imported badges.json sources), as one JSON array.
+  static const String streamBadges = 'stream_badges';
   static const String debrifyChannel = 'debrify_channel';
   // The chunked-transfer envelope. Named for Debrify TV channels because that
   // was the first thing big enough to need it, but the start packet carries a

@@ -798,6 +798,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       ConfigCommand.iptvPlaylists => 'IPTV providers',
       ConfigCommand.iptvFavorites => 'IPTV favorites',
       ConfigCommand.iptvLists => 'IPTV lists',
+      ConfigCommand.streamBadges => 'Stream badges',
       ConfigCommand.debrifyChannel => 'TV channel',
       ConfigCommand.debrifyChannelStart => _chunkLabel(data),
       ConfigCommand.profileGraph => 'All profiles',

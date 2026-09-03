@@ -9,8 +9,9 @@ audio codec and channels, language flags.
 Rulesets come from a link (refreshable later), a file, or pasted text.
 Several can be active at once and apply in list order; each can be disabled
 or deleted, and the page has an on/off switch for the whole feature.
-Rulesets are stored per profile and are included in Backup & Restore
-(`streamBadges`).
+Rulesets are stored per profile and are included in Backup & Restore and in
+Remote's Send Setup and Transfer Everything (the `streamBadges` payload in
+both).
 
 ## File format
 
