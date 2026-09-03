@@ -2172,6 +2172,8 @@ class StremioService {
           stremioAddonKey: stream.addonKey,
           stremioStreamKey: stream.streamKey,
           stremioStreamIndex: stream.streamIndex,
+          streamLabel: stream.name,
+          streamDescription: stream.title,
         );
 
         // Exact addon mode preserves every returned playable entry, including

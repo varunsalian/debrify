@@ -15567,6 +15567,8 @@ class _SearchScreenState extends State<SearchScreen>
                               isTelevision: widget.isTelevision,
                               showPlayPill: widget.isTelevision,
                               formatTags: tags,
+                              badgeName: t.name,
+                              badgeDescription: t.badgeDescription,
                               qualityTag: tags.isEmpty
                                   ? _SourcesScreenState._qualityLabel(t)
                                   : null,

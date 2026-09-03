@@ -98,6 +98,11 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 ## Settings · storage · misc infra
 - Settings: `screens/settings/*` (+ `home_sections_filter_page.dart` = show/hide home rows,
   `home_page_settings_page.dart`). Metrics/format helpers: `utils/*`.
+- Stream badges (Nuvio `badges.json` rulesets → chips on source rows): `models/stream_badge_rules.dart`,
+  `services/{stream_badge_matcher,stream_badges_service}.dart`, `widgets/stream_badge_strip.dart`,
+  `screens/settings/stream_badges_settings_page.dart` (from the Play Loader page). Rendered by
+  `widgets/source_row.dart` and the in-player `video_player/widgets/source_sheet.dart`; the addon's
+  label/description ride `Torrent.streamLabel`/`streamDescription` (set in `stremio_service.dart`).
 - Backup/transfer/sync: `services/backup_restore_service.dart` (full config snapshot),
   `widgets/remote/*` + `services/remote_control/*` (device-to-device over LAN, no server).
 - Onboarding: `widgets/initial_setup_flow.dart` 🔴. Migration: `services/app_migration_service.dart`.

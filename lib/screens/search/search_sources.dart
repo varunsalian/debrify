@@ -1915,6 +1915,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       isTelevision: widget.isTelevision,
       showPlayPill: !widget.bindMode && widget.isTelevision,
       formatTags: tags,
+      badgeName: t.name,
+      badgeDescription: t.badgeDescription,
       qualityTag: tags.isEmpty ? _qualityLabel(t) : null,
       cacheLabel: _cacheLabel(t),
       coverageBadge: _keywordMode ? null : _coverageLabel(t),

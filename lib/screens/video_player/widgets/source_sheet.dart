@@ -8,6 +8,7 @@ import '../../../services/series_source_fetcher.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/source_quality.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/stream_badge_strip.dart';
 
 /// Full-screen source browser.  It deliberately keeps the source list in its
 /// supplied order: grouping is only a view over the list, never a re-rank.
@@ -988,6 +989,12 @@ class _SourceRow extends StatelessWidget {
       if (quality != null)
         _Pill(label: quality, inverse: inverse, emphasis: true),
       for (final tag in tags) _Pill(label: tag, inverse: inverse),
+      StreamBadgeStripFor(
+        name: torrent.name,
+        description: torrent.badgeDescription,
+        height: 20,
+        spacing: 6,
+      ),
     ];
     final activity = resolving
         ? SizedBox(

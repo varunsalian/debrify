@@ -46,6 +46,13 @@ class Torrent {
   final String? transformedTitle; // The improved, user-friendly title
   final String? episodeIdentifier; // e.g., "S01E01" for what's being played
 
+  /// The addon's short stream label ("Torrentio 4K RD+") and its description
+  /// block. Neither survives in [name] (the filename or stream title), and
+  /// imported stream badge rules match on this text too. Null for non-addon
+  /// sources.
+  final String? streamLabel;
+  final String? streamDescription;
+
   Torrent({
     required this.rowid,
     required this.infohash,
@@ -73,7 +80,21 @@ class Torrent {
     this.seasonNumber,
     this.transformedTitle,
     this.episodeIdentifier,
+    this.streamLabel,
+    this.streamDescription,
   }) : source = (source ?? '').trim().toLowerCase();
+
+  /// The *description* half of the stream badge matcher's input ([name] is
+  /// the other half): [streamLabel] and [streamDescription] as one block,
+  /// null when neither is set.
+  String? get badgeDescription {
+    final parts = [
+      if (streamLabel != null && streamLabel!.isNotEmpty) streamLabel!,
+      if (streamDescription != null && streamDescription!.isNotEmpty)
+        streamDescription!,
+    ];
+    return parts.isEmpty ? null : parts.join('\n');
+  }
 
   /// Whether this is a direct playable stream (not torrent)
   bool get isDirectStream => streamType == StreamType.directUrl;
@@ -154,6 +175,8 @@ class Torrent {
       seasonNumber: json['season_number'] as int?,
       transformedTitle: json['transformed_title']?.toString(),
       episodeIdentifier: json['episode_identifier']?.toString(),
+      streamLabel: json['stream_label']?.toString(),
+      streamDescription: json['stream_description']?.toString(),
     );
   }
 
@@ -186,6 +209,8 @@ class Torrent {
       if (seasonNumber != null) 'season_number': seasonNumber,
       if (transformedTitle != null) 'transformed_title': transformedTitle,
       if (episodeIdentifier != null) 'episode_identifier': episodeIdentifier,
+      if (streamLabel != null) 'stream_label': streamLabel,
+      if (streamDescription != null) 'stream_description': streamDescription,
     };
   }
 
