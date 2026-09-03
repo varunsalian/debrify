@@ -336,6 +336,17 @@ class ProfileDatabaseSnapshot {
         for (final table in compactedTables.where(existing.contains)) {
           removedRows += await txn.delete(table);
         }
+        // Omitted physical rows must take their sync sidecar stamps with
+        // them: a joiner that adopts stamps without rows would treat the
+        // matching remote records as already applied and never backfill.
+        if (name == debrifyTvDatabaseName &&
+            existing.contains('webdav_sync_record_state')) {
+          await txn.delete(
+            'webdav_sync_record_state',
+            where: 'kind IN (?, ?)',
+            whereArgs: const <Object>['tv_channels', 'tv_pool_generation'],
+          );
+        }
       });
       await db.execute('VACUUM');
       final integrity = await db.rawQuery('PRAGMA integrity_check');

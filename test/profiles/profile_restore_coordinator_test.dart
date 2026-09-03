@@ -341,6 +341,107 @@ void main() {
     },
   );
 
+  test(
+    'compacted TV omission drops matching sync stamps so a joiner backfills',
+    () async {
+      final scope = ProfileRuntime.capture();
+      final source = scope.fileIn(documents, 'documents', 'debrify_tv.db');
+      await source.parent.create(recursive: true);
+      final database = await openDatabase(source.path, singleInstance: false);
+      await database.execute(
+        'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_cached_torrents '
+        '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL)',
+      );
+      await database.execute(
+        'CREATE TABLE webdav_sync_record_state ('
+        'kind TEXT NOT NULL, owner_key TEXT NOT NULL, '
+        'item_key TEXT NOT NULL, updated_at_ms INTEGER NOT NULL, '
+        'origin_device_id TEXT NOT NULL, normalized INTEGER NOT NULL, '
+        'deleted INTEGER NOT NULL, aux TEXT, '
+        'PRIMARY KEY (kind, owner_key, item_key))',
+      );
+      await database.insert('tv_channels', <String, Object?>{
+        'channel_id': 'portable-channel',
+      });
+      await database.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'portable-channel',
+        'infohash': 'portable-hash',
+      });
+      for (final kind in const <String>[
+        'tv_channels',
+        'tv_pool_generation',
+        'video_resume',
+      ]) {
+        await database.insert('webdav_sync_record_state', <String, Object?>{
+          'kind': kind,
+          'owner_key': 'portable-channel',
+          'item_key': '',
+          'updated_at_ms': 111,
+          'origin_device_id': 'other-device',
+          'normalized': 1,
+          'deleted': 0,
+          'aux': kind == 'tv_pool_generation' ? 'generation-one' : null,
+        });
+      }
+      await database.close();
+
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            compactDatabaseSnapshots: true,
+          );
+      expect(package.omissions, contains(DebrifyTvBackupOmission.key));
+
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+      expect(report.profilesImported, 1);
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final importedScope = ProfileScope(
+        profileId: imported.id,
+        dataGeneration: imported.visibleDataGeneration,
+        sessionEpoch: 0,
+      );
+      final restored = await openDatabase(
+        importedScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      expect(await restored.query('tv_channels'), isEmpty);
+      expect(
+        await restored.query(
+          'webdav_sync_record_state',
+          where: 'kind IN (?, ?)',
+          whereArgs: const <Object>['tv_channels', 'tv_pool_generation'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await restored.query(
+          'webdav_sync_record_state',
+          where: 'kind = ?',
+          whereArgs: const <Object>['video_resume'],
+        ),
+        hasLength(1),
+      );
+      await restored.close();
+    },
+  );
+
   test('publishes only the finalized staged generation', () async {
     final section = await PortableProfilePackage.buildSection(
       const <String, Object?>{'theme_mode': 'restored', 'language': 'en'},
