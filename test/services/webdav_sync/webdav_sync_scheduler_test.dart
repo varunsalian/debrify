@@ -175,6 +175,28 @@ void main() {
     });
   });
 
+  test('local-change visibility reports only the most recent key', () {
+    fakeAsync((async) {
+      final observedKeys = <String>[];
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        localChangeObserver: observedKeys.add,
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.notifyLocalChange('subtitle_language');
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 1);
+      expect(observedKeys, <String>['subtitle_language']);
+      scheduler.dispose();
+    });
+  });
+
   test('a sustained write stream cannot starve the local-change push', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);

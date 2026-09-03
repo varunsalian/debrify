@@ -27,6 +27,7 @@ import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_discovery.dart';
+import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_existing_root_connector.dart';
@@ -253,7 +254,11 @@ final class WebDavSyncRuntime
         localAdapter: ProfileWebDavSyncLocalAdapter(ProfileBootstrap.registry),
         operations: _operations,
       );
-      _scheduler = WebDavSyncScheduler(runner: _cycleRunner!, gate: this);
+      _scheduler = WebDavSyncScheduler(
+        runner: _cycleRunner!,
+        gate: this,
+        localChangeObserver: recordWebDavSyncLocalChangeTrigger,
+      );
       WidgetsBinding.instance.addObserver(this);
       MainPageBridge.addPlayerLaunchListener(_onPlaybackStarted);
       MainPageBridge.addContentPlaybackStopListener(_onPlaybackStopped);
@@ -493,6 +498,7 @@ final class WebDavSyncRuntime
       await WebDavSyncExistingRootDiscovery(
         bindingStore: bindingStore,
         stateRepository: stateStore,
+        diagnostic: recordWebDavSyncDiagnostic,
       ).discover(bindingId: bindingId);
     });
   }
@@ -538,6 +544,7 @@ final class WebDavSyncRuntime
         discovery: WebDavSyncExistingRootDiscovery(
           bindingStore: bindingStore,
           stateRepository: stateStore,
+          diagnostic: recordWebDavSyncDiagnostic,
         ),
         adoption: adoption,
         publisher: WebDavSyncOwnManifestPublisher(
@@ -1102,6 +1109,7 @@ final class WebDavSyncRuntime
         // the imported Admin's ordinary profile-unlock screen.
         unlockImportedAdmin: (_) async => true,
       ),
+      diagnostic: recordWebDavSyncDiagnostic,
     );
   }
 
@@ -1110,6 +1118,7 @@ final class WebDavSyncRuntime
     final discovery = WebDavSyncExistingRootDiscovery(
       bindingStore: bindingStore,
       stateRepository: stateStore,
+      diagnostic: recordWebDavSyncDiagnostic,
     );
     return WebDavSyncGraphTier(
       bindingStore: bindingStore,
@@ -1291,6 +1300,7 @@ final class _ProductionCycleRunner implements WebDavSyncCycleRunner {
           password: secrets.password,
         ),
       ),
+      diagnostic: recordWebDavSyncDiagnostic,
     );
     try {
       final report = await engine.runCycle(

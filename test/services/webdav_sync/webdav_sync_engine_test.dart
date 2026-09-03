@@ -14,6 +14,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_diagnostics.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
@@ -180,11 +181,19 @@ void main() {
         trigger: WebDavSyncTrigger.localChange,
       );
       expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      recordWebDavSyncDiagnostic(
+        'Ignored a removed WebDAV sync peer',
+        ArgumentError('https://example.test/private-path'),
+      );
+      recordWebDavSyncDiagnostic('Read a legacy WebDAV sync hot section', null);
+      recordWebDavSyncLocalChangeTrigger('subtitle_language');
 
       final exported = await DiagnosticLog.instance.exportLastWindow();
-      final events = const LineSplitter()
+      final allEvents = const LineSplitter()
           .convert(utf8.decode(exported.bytes))
           .map((line) => jsonDecode(line) as Map<String, dynamic>)
+          .toList(growable: false);
+      final events = allEvents
           .where((entry) => entry['event'] == 'cycle')
           .toList(growable: false);
       expect(events, hasLength(1));
@@ -242,6 +251,29 @@ void main() {
         expect(payload, isNot(contains(privateValue)));
       }
       expect(payload, isNot(contains('/')));
+
+      final notes = allEvents
+          .where((entry) => entry['event'] == 'engine_note')
+          .toList(growable: false);
+      expect(notes, hasLength(2));
+      expect(notes[0]['level'], 'warning');
+      expect(notes[0]['fields'], <String, Object?>{
+        'message': 'ignored_a_removed_webdav_sync_peer',
+      });
+      expect(notes[1]['level'], 'info');
+      expect(notes[1]['fields'], <String, Object?>{
+        'message': 'read_a_legacy_webdav_sync_hot_section',
+      });
+      expect(jsonEncode(notes), isNot(contains('example.test')));
+      expect(jsonEncode(notes), isNot(contains('private-path')));
+
+      final localChangeTriggers = allEvents
+          .where((entry) => entry['event'] == 'local_change_trigger')
+          .toList(growable: false);
+      expect(localChangeTriggers, hasLength(1));
+      expect(localChangeTriggers.single['fields'], <String, Object?>{
+        'preferenceKey': 'subtitle_language',
+      });
     } finally {
       await DiagnosticLog.instance.dispose();
       if (await directory.exists()) await directory.delete(recursive: true);
@@ -1059,7 +1091,12 @@ void main() {
 
     await runFixture(context());
 
-    expect(diagnostics, contains('sync kept Local as Admin on this device'));
+    expect(
+      diagnostics,
+      contains('Deferred a WebDAV sync admin change for local safety'),
+    );
+    expect(diagnostics.join('\n'), isNot(contains('Local')));
+    expect(states.state.statusHint, 'sync kept Local as Admin on this device');
     expect(
       diagnostics,
       isNot(contains('Quarantined an invalid pending WebDAV circle target')),

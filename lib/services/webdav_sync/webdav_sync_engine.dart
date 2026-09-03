@@ -179,6 +179,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   static const Duration unreferencedSectionRetention = Duration(days: 7);
   static const String _outboxStatusHint =
       'Circle changes are waiting for deletion history to be saved';
+  static const String _adminSafetyDiagnostic =
+      'Deferred a WebDAV sync admin change for local safety';
   final WebDavSyncEngineStateRepository _stateRepository;
   final WebDavSyncLocalAdapter _localAdapter;
   final WebDavSyncTransportFactory _transportFactory;
@@ -453,7 +455,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               ),
             );
             if (pendingAdminHint != null) {
-              _diagnostic(pendingAdminHint, null);
+              _diagnostic(_adminSafetyDiagnostic, null);
             }
           }
         } finally {
@@ -897,7 +899,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               ),
             );
             if (effectiveAdminHint != null) {
-              _diagnostic(effectiveAdminHint, null);
+              _diagnostic(_adminSafetyDiagnostic, null);
             }
             circleResult = _CircleCycleResult(
               profiles: mergedProfiles,

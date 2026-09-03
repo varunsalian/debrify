@@ -15,6 +15,7 @@ abstract interface class WebDavSyncRuntimeGate {
 }
 
 typedef WebDavSyncContextProvider = Future<WebDavSyncCycleContext?> Function();
+typedef WebDavSyncLocalChangeObserver = void Function(String logicalKey);
 
 const bool webDavSyncRemotePollEnabled = bool.fromEnvironment(
   'DEBRIFY_WEBDAV_SYNC_POLL',
@@ -50,6 +51,7 @@ final class WebDavSyncScheduler {
     this.playbackDebounce = const Duration(seconds: 60),
     this.remotePollPeriod = const Duration(seconds: 60),
     this.remotePollingEnabled = webDavSyncRemotePollEnabled,
+    this.localChangeObserver,
     DateTime Function()? clock,
   }) : _runner = runner,
        _gate = gate,
@@ -64,6 +66,7 @@ final class WebDavSyncScheduler {
   final Duration playbackDebounce;
   final Duration remotePollPeriod;
   final bool remotePollingEnabled;
+  final WebDavSyncLocalChangeObserver? localChangeObserver;
 
   WebDavSyncContextProvider? _contextProvider;
   WebDavSyncRemotePollContextProvider? _remotePollContextProvider;
@@ -78,6 +81,7 @@ final class WebDavSyncScheduler {
   bool _pollDisabledNoValidators = false;
   bool _dirtyDuringRun = false;
   bool _immediateDirtyDuringRun = false;
+  String? _pendingLocalChangeKey;
   int _consecutivePollFailures = 0;
   int _pollGeneration = 0;
   Completer<void>? _pollCompletion;
@@ -120,6 +124,7 @@ final class WebDavSyncScheduler {
     _localChangeTimer = null;
     _dirtyDuringRun = false;
     _immediateDirtyDuringRun = false;
+    _pendingLocalChangeKey = null;
     _pollDisabledNoValidators = false;
     _resetPollBackoff();
     _pollGeneration++;
@@ -145,6 +150,7 @@ final class WebDavSyncScheduler {
   /// so profile persistence never waits for, or owns, sync scheduling.
   void notifyLocalChange(String logicalKey) {
     if (_contextProvider == null || !admitsLocalChangeKey(logicalKey)) return;
+    _pendingLocalChangeKey = logicalKey;
     if (_running) {
       _dirtyDuringRun = true;
       return;
@@ -340,6 +346,7 @@ final class WebDavSyncScheduler {
     _localChangeTimer = null;
     _dirtyDuringRun = false;
     _immediateDirtyDuringRun = false;
+    _pendingLocalChangeKey = null;
     _pollDisabledNoValidators = false;
     _resetPollBackoff();
     _pollGeneration++;
@@ -388,6 +395,17 @@ final class WebDavSyncScheduler {
         );
       }
       _lastStartedAt = _clock();
+      if (trigger == WebDavSyncTrigger.localChange) {
+        final logicalKey = _pendingLocalChangeKey;
+        _pendingLocalChangeKey = null;
+        if (logicalKey != null) {
+          try {
+            localChangeObserver?.call(logicalKey);
+          } catch (_) {
+            // Observability must never prevent the already-admitted cycle.
+          }
+        }
+      }
       final report = await _runner.runCycle(context, trigger: trigger);
       if (report.localChangeFollowUp) {
         _dirtyDuringRun = true;
