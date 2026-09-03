@@ -32,6 +32,7 @@ import 'webdav_sync_engine.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_existing_root_connector.dart';
 import 'webdav_sync_feature.dart';
+import 'webdav_sync_first_join_resume.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_graph_tier.dart';
 import 'webdav_sync_hot_merge.dart';
@@ -159,8 +160,8 @@ final class WebDavSyncRuntimeStatus {
 }
 
 /// Production owner of WebDAV sync composition and trigger arming.
-/// Construction alone does no network work; [initialize] only resumes a
-/// durable local adoption and arms an already-Active binding.
+/// Construction alone does no network work; [initialize] recovers durable
+/// adoption state, resumes an unfinished first sync, and arms Active bindings.
 final class WebDavSyncRuntime
     with WidgetsBindingObserver
     implements
@@ -168,7 +169,15 @@ final class WebDavSyncRuntime
         WebDavSyncManagementController,
         WebDavSyncReconfigurationController,
         WebDavSyncRuntimeGate {
-  WebDavSyncRuntime._();
+  WebDavSyncRuntime._() {
+    _firstJoinAutoResume = WebDavSyncFirstJoinAutoResume(
+      bindingStore: bindingStore,
+      operations: _operations,
+      connect: _connectExistingRoot,
+      pauseCheck: () => _reconfigurationPaused,
+      diagnostic: recordWebDavSyncDiagnostic,
+    );
+  }
 
   static final WebDavSyncRuntime instance = WebDavSyncRuntime._();
 
@@ -178,6 +187,7 @@ final class WebDavSyncRuntime
   );
   final WebDavSyncOperationCoordinator _operations =
       WebDavSyncOperationCoordinator();
+  late final WebDavSyncFirstJoinAutoResume _firstJoinAutoResume;
 
   WebDavSyncScheduler? _scheduler;
   Timer? _maintenanceTimer;
@@ -265,7 +275,12 @@ final class WebDavSyncRuntime
     }
     try {
       await _recoverAdoptions();
-      if (enableRuntime) await _armIfActive();
+      if (enableRuntime) {
+        await _firstJoinAutoResume.resumeIfNeeded(
+          reconfigurationPaused: _reconfigurationPaused,
+        );
+        await _armIfActive();
+      }
       _initialized = true;
     } catch (error) {
       // Sync recovery is optional startup work. Persisted corruption or a
@@ -535,35 +550,58 @@ final class WebDavSyncRuntime
     _requireInteractiveWorkAllowed();
     _requireAvailable();
     return _operations.run(() async {
-      final authorization = await _captureManagingAdmin();
-      final components = _components();
-      final adoption = _adoption(components);
-      final connector = WebDavSyncExistingRootConnector(
+      try {
+        final result = await _connectExistingRoot(
+          bindingId,
+          replacementConfirmed: replacementConfirmed,
+        );
+        _startupRecoveryUnavailable = false;
+        await _armIfActive();
+        return result;
+      } catch (error) {
+        try {
+          final stored = await bindingStore.load();
+          final binding = stored.bindings[bindingId];
+          if (binding?.lifecycle == WebDavSyncLifecycle.awaitingAdoption) {
+            await bindingStore.markAwaitingAdoptionError(bindingId, error);
+          }
+        } catch (_) {
+          // Error-status persistence must not replace the actionable failure
+          // returned to the manual setup path.
+        }
+        rethrow;
+      }
+    });
+  }
+
+  Future<WebDavSyncBinding> _connectExistingRoot(
+    String bindingId, {
+    bool replacementConfirmed = true,
+  }) async {
+    final authorization = await _captureManagingAdmin();
+    final components = _components();
+    final connector = WebDavSyncExistingRootConnector(
+      bindingStore: bindingStore,
+      stateRepository: stateStore,
+      discovery: WebDavSyncExistingRootDiscovery(
         bindingStore: bindingStore,
         stateRepository: stateStore,
-        discovery: WebDavSyncExistingRootDiscovery(
-          bindingStore: bindingStore,
-          stateRepository: stateStore,
-          diagnostic: recordWebDavSyncDiagnostic,
-        ),
-        adoption: adoption,
-        publisher: WebDavSyncOwnManifestPublisher(
-          bindingStore: bindingStore,
-          stateRepository: stateStore,
-          seedSource: components.seedSource,
-        ),
-        engine: _cycleRunner!,
-      );
-      final active = await connector.connect(
-        bindingId: bindingId,
-        authorization: authorization,
-        recaptureAuthorization: _captureManagingAdmin,
-        replacementConfirmed: replacementConfirmed,
-      );
-      _startupRecoveryUnavailable = false;
-      await _armIfActive();
-      return active;
-    });
+        diagnostic: recordWebDavSyncDiagnostic,
+      ),
+      adoption: _adoption(components),
+      publisher: WebDavSyncOwnManifestPublisher(
+        bindingStore: bindingStore,
+        stateRepository: stateStore,
+        seedSource: components.seedSource,
+      ),
+      engine: _cycleRunner!,
+    );
+    return connector.connect(
+      bindingId: bindingId,
+      authorization: authorization,
+      recaptureAuthorization: _captureManagingAdmin,
+      replacementConfirmed: replacementConfirmed,
+    );
   }
 
   @override
@@ -581,6 +619,18 @@ final class WebDavSyncRuntime
   }
 
   Future<void> _handleForeground() async {
+    try {
+      final outcome = await _firstJoinAutoResume.resumeIfNeeded(
+        reconfigurationPaused: _reconfigurationPaused,
+      );
+      if (outcome == WebDavSyncFirstJoinAutoResumeOutcome.activated) {
+        _startupRecoveryUnavailable = false;
+        await _armIfActive();
+      }
+    } catch (_) {
+      // The durable awaiting state remains available to a later foreground or
+      // manual retry; ordinary foreground work must continue.
+    }
     String? namespaceBefore;
     WebDavSyncPendingActiveProfile? pendingBefore;
     var retirementSuppressedBefore = false;
@@ -1063,6 +1113,7 @@ final class WebDavSyncRuntime
     _playbackActive = false;
     _startupRecoveryUnavailable = false;
     _missingStateNamespaces.clear();
+    _firstJoinAutoResume.reset();
     _clearCachedRoot();
   }
 

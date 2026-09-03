@@ -1,4 +1,5 @@
 import '../profiles/profile_authorization.dart';
+import '../profiles/profile_preferences.dart';
 import 'webdav_sync_adoption.dart';
 import 'webdav_sync_adoption_models.dart';
 import 'webdav_sync_binding_store.dart';
@@ -22,6 +23,7 @@ final class WebDavSyncExistingRootConnector {
     required WebDavSyncAdoptionRunner adoption,
     required WebDavSyncSeedPublisher publisher,
     required WebDavSyncCycleRunner engine,
+    this.preferenceFenceRetrySpacing = const Duration(milliseconds: 250),
   }) : _bindingStore = bindingStore,
        _stateRepository = stateRepository,
        _discovery = discovery,
@@ -29,12 +31,15 @@ final class WebDavSyncExistingRootConnector {
        _publisher = publisher,
        _engine = engine;
 
+  static const int preferenceFenceAttemptLimit = 5;
+
   final WebDavSyncBindingStore _bindingStore;
   final WebDavSyncEngineStateRepository _stateRepository;
   final WebDavSyncExistingRootDiscoverer _discovery;
   final WebDavSyncAdoptionRunner _adoption;
   final WebDavSyncSeedPublisher _publisher;
   final WebDavSyncCycleRunner _engine;
+  final Duration preferenceFenceRetrySpacing;
 
   Future<WebDavSyncBinding> connect({
     required String bindingId,
@@ -92,25 +97,31 @@ final class WebDavSyncExistingRootConnector {
       throw StateError('WebDAV sync adoption did not finish safely');
     }
 
-    final published = await _publisher.publish(
-      bindingId: bindingId,
-      authorization: currentAuthorization,
-    );
-    state = await _stateRepository.load(snapshot.namespace.id);
-    final report = await _engine.runCycle(
-      WebDavSyncCycleContext(
-        namespaceId: snapshot.namespace.id,
-        deviceId: snapshot.namespace.deviceId,
-        markerPin: snapshot.markerBytes,
-        root: snapshot.root,
-        circleToLocalProfiles: state.circleToLocalProfiles,
-        circleToLocalResources: state.circleToLocalResources,
-        wireProfileMap: published.manifest.profileMap,
-        wireResourceMap: published.manifest.resourceMap,
-        active: false,
+    final published = await _retryPreferenceFence(
+      () => _publisher.publish(
+        bindingId: bindingId,
+        authorization: currentAuthorization,
       ),
-      allowPreActivation: true,
     );
+    if (published == null) return _awaitingBinding(bindingId);
+    state = await _stateRepository.load(snapshot.namespace.id);
+    final report = await _retryPreferenceFence(
+      () => _engine.runCycle(
+        WebDavSyncCycleContext(
+          namespaceId: snapshot.namespace.id,
+          deviceId: snapshot.namespace.deviceId,
+          markerPin: snapshot.markerBytes,
+          root: snapshot.root,
+          circleToLocalProfiles: state.circleToLocalProfiles,
+          circleToLocalResources: state.circleToLocalResources,
+          wireProfileMap: published.manifest.profileMap,
+          wireResourceMap: published.manifest.resourceMap,
+          active: false,
+        ),
+        allowPreActivation: true,
+      ),
+    );
+    if (report == null) return _awaitingBinding(bindingId);
     if (report.disposition != WebDavSyncCycleDisposition.completed) {
       throw StateError('WebDAV sync could not complete its first merge');
     }
@@ -126,6 +137,40 @@ final class WebDavSyncExistingRootConnector {
       throw StateError('WebDAV sync binding promotion failed');
     }
     return active;
+  }
+
+  /// Retries only an optimistic profile-preference fence. Callers place this
+  /// around snapshot/build/commit work after durable adoption has completed,
+  /// so restore, database carry-forward, and identity-map minting cannot be
+  /// repeated by routine first-launch preference churn.
+  Future<T?> _retryPreferenceFence<T extends Object>(
+    Future<T> Function() operation,
+  ) async {
+    for (var attempt = 1; attempt <= preferenceFenceAttemptLimit; attempt++) {
+      try {
+        return await operation();
+      } on ProfilePreferenceMutationConflict {
+        if (attempt == preferenceFenceAttemptLimit) return null;
+        await Future<void>.delayed(preferenceFenceRetrySpacing);
+      }
+    }
+    return null;
+  }
+
+  Future<WebDavSyncBinding> _awaitingBinding(String bindingId) async {
+    final stored = await _bindingStore.load();
+    final binding = stored.bindings[bindingId];
+    if (binding?.lifecycle == WebDavSyncLifecycle.rootVerified) {
+      return _bindingStore.setLifecycle(
+        bindingId,
+        WebDavSyncLifecycle.awaitingAdoption,
+      );
+    }
+    if (binding == null ||
+        binding.lifecycle != WebDavSyncLifecycle.awaitingAdoption) {
+      throw StateError('WebDAV sync adoption retry state is unavailable');
+    }
+    return binding;
   }
 
   Future<WebDavSyncBinding?> _finishInterruptedPromotion(

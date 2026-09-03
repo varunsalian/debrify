@@ -72,6 +72,7 @@ void main() {
     required bool enabled,
     WebDavSyncActivationController? activation,
     String folderPath = 'Family/Sync/',
+    bool settle = true,
   }) async {
     final theme = AppThemes.byId('spotlight');
     await tester.binding.setSurfaceSize(const Size(1280, 720));
@@ -90,7 +91,12 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
   }
 
   testWidgets('M3 setup stays hidden behind its rollout gate', (tester) async {
@@ -202,6 +208,76 @@ void main() {
     expect(copy, isNot(contains('enrollment')));
     expect(copy, isNot(contains('seed')));
     expect(copy, isNot(contains('join')));
+  });
+
+  testWidgets('awaiting first sync is progress, not an error', (tester) async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final root = await codec.openRoot(
+      marker,
+      'circle-secret',
+      runInBackground: false,
+    );
+    var waiting = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      config: _config,
+      syncPassphrase: 'circle-secret',
+    );
+    waiting = await store.markRootVerified(
+      bindingId: waiting.id,
+      root: root.document,
+      markerBytes: marker,
+    );
+    await store.setLifecycle(waiting.id, WebDavSyncLifecycle.awaitingAdoption);
+
+    await pumpPage(tester, enabled: true, settle: false);
+
+    expect(find.text('Finishing first sync…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('terminal first-sync failure replaces progress with error', (
+    tester,
+  ) async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final root = await codec.openRoot(
+      marker,
+      'circle-secret',
+      runInBackground: false,
+    );
+    var waiting = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      config: _config,
+      syncPassphrase: 'circle-secret',
+    );
+    waiting = await store.markRootVerified(
+      bindingId: waiting.id,
+      root: root.document,
+      markerBytes: marker,
+    );
+    await store.setLifecycle(waiting.id, WebDavSyncLifecycle.awaitingAdoption);
+    await store.markAwaitingAdoptionError(
+      waiting.id,
+      StateError('First sync needs a manual retry'),
+    );
+
+    await pumpPage(tester, enabled: true);
+
+    expect(find.text('First sync needs a manual retry'), findsOneWidget);
+    expect(find.text('Finishing first sync…'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('setup discloses the bounded TV database fallback', (

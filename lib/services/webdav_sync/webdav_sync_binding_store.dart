@@ -276,6 +276,18 @@ final class WebDavSyncBindingStore {
         errorMessage: _boundedError(error),
       );
 
+  /// Retains a resumable first-join lifecycle while exposing a terminal
+  /// process-local auto-resume failure to settings. A later manual attempt or
+  /// process restart may safely enter the existing-root connector again.
+  Future<WebDavSyncBinding> markAwaitingAdoptionError(
+    String bindingId,
+    Object error,
+  ) => setLifecycle(
+    bindingId,
+    WebDavSyncLifecycle.awaitingAdoption,
+    errorMessage: _boundedError(error),
+  );
+
   /// Atomically publishes a fully verified staged binding as the active one.
   ///
   /// Keeping the lifecycle transition and pointer promotion in one persisted

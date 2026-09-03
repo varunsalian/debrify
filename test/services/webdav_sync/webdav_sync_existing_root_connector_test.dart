@@ -6,6 +6,7 @@ import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -195,16 +196,19 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
-  WebDavSyncExistingRootConnector connector() {
-    final adoption = _FakeAdoption(states, events);
-    final publisher = _FakePublisher(states, snapshot, events);
+  WebDavSyncExistingRootConnector connector({
+    _FakeAdoption? adoption,
+    _FakePublisher? publisher,
+    _FakeEngine? engine,
+  }) {
     return WebDavSyncExistingRootConnector(
       bindingStore: bindingStore,
       stateRepository: states,
       discovery: _FakeDiscovery(snapshot, events),
-      adoption: adoption,
-      publisher: publisher,
-      engine: _FakeEngine(events),
+      adoption: adoption ?? _FakeAdoption(states, events),
+      publisher: publisher ?? _FakePublisher(states, snapshot, events),
+      engine: engine ?? _FakeEngine(events),
+      preferenceFenceRetrySpacing: Duration.zero,
     );
   }
 
@@ -259,6 +263,88 @@ void main() {
     );
 
     expect(events, <String>['discover', 'publish', 'merge']);
+  });
+
+  test(
+    'preference fence misses twice then completes without repeating adoption',
+    () async {
+      final adoption = _FakeAdoption(states, events);
+      final publisher = _FakePublisher(
+        states,
+        snapshot,
+        events,
+        conflictsRemaining: 2,
+      );
+
+      final active = await connector(adoption: adoption, publisher: publisher)
+          .connect(
+            bindingId: binding.id,
+            authorization: authorization,
+            recaptureAuthorization: () async => authorization,
+            replacementConfirmed: true,
+          );
+
+      expect(active.lifecycle, WebDavSyncLifecycle.active);
+      expect(publisher.publishCalls, 3);
+      expect(adoption.restoreCalls, 1);
+      expect(adoption.copyForwardCalls, 1);
+      expect(adoption.mapMintCalls, 1);
+      expect((await bindingStore.load()).activeBindingId, binding.id);
+    },
+  );
+
+  test(
+    'five preference fence misses leave adoption resumable without throwing',
+    () async {
+      final adoption = _FakeAdoption(states, events);
+      final publisher = _FakePublisher(
+        states,
+        snapshot,
+        events,
+        conflictsRemaining: 99,
+      );
+      final engine = _FakeEngine(events);
+
+      final result =
+          await connector(
+            adoption: adoption,
+            publisher: publisher,
+            engine: engine,
+          ).connect(
+            bindingId: binding.id,
+            authorization: authorization,
+            recaptureAuthorization: () async => authorization,
+            replacementConfirmed: true,
+          );
+
+      expect(result.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
+      expect(publisher.publishCalls, 5);
+      expect(engine.runCalls, 0);
+      expect(adoption.restoreCalls, 1);
+      expect(adoption.copyForwardCalls, 1);
+      expect(adoption.mapMintCalls, 1);
+      expect((await bindingStore.load()).activeBindingId, isNull);
+      expect(states.state.adoption, isNull);
+      expect(states.state.hasAuthenticatedMaps, isTrue);
+    },
+  );
+
+  test('pre-activation merge retries only its fenced cycle', () async {
+    final adoption = _FakeAdoption(states, events);
+    final engine = _FakeEngine(events, conflictsRemaining: 2);
+
+    final active = await connector(adoption: adoption, engine: engine).connect(
+      bindingId: binding.id,
+      authorization: authorization,
+      recaptureAuthorization: () async => authorization,
+      replacementConfirmed: true,
+    );
+
+    expect(active.lifecycle, WebDavSyncLifecycle.active);
+    expect(engine.runCalls, 3);
+    expect(adoption.restoreCalls, 1);
+    expect(adoption.copyForwardCalls, 1);
+    expect(adoption.mapMintCalls, 1);
   });
 
   test('a saved circle cannot reuse mappings from replaced profiles', () async {
@@ -350,16 +436,22 @@ final class _FakeDiscovery implements WebDavSyncExistingRootDiscoverer {
 }
 
 final class _FakeAdoption implements WebDavSyncAdoptionRunner {
-  const _FakeAdoption(this.states, this.events);
+  _FakeAdoption(this.states, this.events);
 
   final _MemoryStateRepository states;
   final List<String> events;
+  int restoreCalls = 0;
+  int copyForwardCalls = 0;
+  int mapMintCalls = 0;
 
   @override
   Future<WebDavSyncAdoptionRecord> adopt(
     WebDavSyncAdoptionRequest request,
   ) async {
     events.add('adopt:${request.mode.name}');
+    restoreCalls++;
+    copyForwardCalls++;
+    mapMintCalls++;
     await states.update(
       request.namespaceId,
       (current) => current.copyWith(
@@ -400,11 +492,18 @@ final class _FakeAdoption implements WebDavSyncAdoptionRunner {
 }
 
 final class _FakePublisher implements WebDavSyncSeedPublisher {
-  const _FakePublisher(this.states, this.snapshot, this.events);
+  _FakePublisher(
+    this.states,
+    this.snapshot,
+    this.events, {
+    this.conflictsRemaining = 0,
+  });
 
   final _MemoryStateRepository states;
   final WebDavSyncExistingRootSnapshot snapshot;
   final List<String> events;
+  int conflictsRemaining;
+  int publishCalls = 0;
 
   @override
   Future<WebDavSyncPublishedSeed> publish({
@@ -412,6 +511,11 @@ final class _FakePublisher implements WebDavSyncSeedPublisher {
     required ProfileAuthorizationContext authorization,
   }) async {
     events.add('publish');
+    publishCalls++;
+    if (conflictsRemaining > 0) {
+      conflictsRemaining--;
+      throw const ProfilePreferenceMutationConflict();
+    }
     final manifest = WebDavSyncManifest(
       circleId: snapshot.root.document.circleId,
       deviceId: snapshot.namespace.deviceId,
@@ -450,9 +554,11 @@ final class _FakePublisher implements WebDavSyncSeedPublisher {
 }
 
 final class _FakeEngine implements WebDavSyncCycleRunner {
-  const _FakeEngine(this.events);
+  _FakeEngine(this.events, {this.conflictsRemaining = 0});
 
   final List<String> events;
+  int conflictsRemaining;
+  int runCalls = 0;
 
   @override
   Future<WebDavSyncCycleReport> runCycle(
@@ -463,6 +569,11 @@ final class _FakeEngine implements WebDavSyncCycleRunner {
     expect(allowPreActivation, isTrue);
     expect(context?.active, isFalse);
     events.add('merge');
+    runCalls++;
+    if (conflictsRemaining > 0) {
+      conflictsRemaining--;
+      throw const ProfilePreferenceMutationConflict();
+    }
     return const WebDavSyncCycleReport(
       disposition: WebDavSyncCycleDisposition.completed,
     );

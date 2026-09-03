@@ -549,7 +549,9 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
         'Ready to initialize this folder',
       WebDavSyncLifecycle.rootVerified => 'Folder verified',
       WebDavSyncLifecycle.awaitingAdoption =>
-        'Ready to connect after confirmation',
+        binding.errorMessage == null
+            ? 'Finishing first sync…'
+            : _userFacingSyncError(binding.errorMessage!),
       WebDavSyncLifecycle.active => 'Sync is active',
       WebDavSyncLifecycle.error =>
         binding.errorMessage == null
@@ -563,11 +565,15 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
         WebDavSyncLifecycle.awaitingSeedCommit =>
           'Folder selected. WebDAV Sync is ready to initialize.',
         WebDavSyncLifecycle.rootVerified => 'WebDAV sync folder verified.',
+        WebDavSyncLifecycle.awaitingAdoption => 'Finishing first sync…',
         _ => 'WebDAV Sync configuration updated.',
       };
 
   Widget _buildSyncSection() {
     final active = _syncBinding?.lifecycle == WebDavSyncLifecycle.active;
+    final finishingFirstSync =
+        _syncBinding?.lifecycle == WebDavSyncLifecycle.awaitingAdoption &&
+        _syncBinding?.errorMessage == null;
     final credentialRepairAvailable =
         _syncBinding?.lifecycle == WebDavSyncLifecycle.error &&
         _syncBinding?.circleId != null &&
@@ -585,7 +591,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage> {
               title: active ? 'Change sync folder' : 'Enable WebDAV Sync',
               subtitle: _syncStatus(),
               enabled: !_syncBusy,
-              trailing: _syncBusy
+              trailing: _syncBusy || finishingFirstSync
                   ? const SizedBox.square(
                       dimension: 22,
                       child: CircularProgressIndicator(strokeWidth: 2),

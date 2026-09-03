@@ -1,0 +1,249 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_first_join_resume.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_operation_coordinator.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  late WebDavSyncBindingStore store;
+  late WebDavSyncBinding binding;
+  late WebDavSyncOperationCoordinator operations;
+  late DateTime now;
+  late List<String> diagnostics;
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.filled(32, 9)),
+    );
+    store = WebDavSyncBindingStore(
+      randomBytes: (length) =>
+          Uint8List.fromList(List<int>.generate(length, (index) => index)),
+    );
+    const config = WebDavConfig(
+      id: 'server',
+      name: 'Server',
+      baseUrl: 'https://example.test/dav',
+      username: 'alice',
+      password: 'secret',
+    );
+    binding = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
+      config: config,
+      syncPassphrase: 'circle-secret',
+    );
+    binding = await store.markRootVerified(
+      bindingId: binding.id,
+      root: WebDavSyncRootDocument(
+        circleId: 'circle-one',
+        createdAt: DateTime.utc(2026, 9, 1),
+        schemaFloor: 1,
+        kdfSalt: Uint8List(16),
+      ),
+      markerBytes: const <int>[1, 2, 3],
+    );
+    binding = await store.setLifecycle(
+      binding.id,
+      WebDavSyncLifecycle.awaitingAdoption,
+    );
+    operations = WebDavSyncOperationCoordinator();
+    now = DateTime.utc(2026, 9, 3, 10);
+    diagnostics = <String>[];
+  });
+
+  tearDown(DeviceKeyProvider.debugReset);
+
+  WebDavSyncFirstJoinAutoResume resumePolicy({
+    required WebDavSyncFirstJoinConnect connect,
+  }) => WebDavSyncFirstJoinAutoResume(
+    bindingStore: store,
+    operations: operations,
+    connect: connect,
+    clock: () => now,
+    diagnostic: (message, _) => diagnostics.add(message),
+  );
+
+  test(
+    'awaiting adoption arms auto-resume and next foreground completes it',
+    () async {
+      var publishes = 0;
+      var schedulerArms = 0;
+      final policy = resumePolicy(
+        connect: (bindingId) async {
+          publishes++;
+          await store.setLifecycle(bindingId, WebDavSyncLifecycle.active);
+          await store.promoteStaged(bindingId);
+          return (await store.load()).activeBinding!;
+        },
+      );
+
+      expect(policy.hasAttemptsRemaining, isTrue);
+      final outcome = await policy.resumeIfNeeded(reconfigurationPaused: false);
+      if (outcome == WebDavSyncFirstJoinAutoResumeOutcome.activated) {
+        schedulerArms++;
+      }
+
+      expect(outcome, WebDavSyncFirstJoinAutoResumeOutcome.activated);
+      expect((await store.load()).activeBindingId, binding.id);
+      expect(publishes, 1);
+      expect(schedulerArms, 1);
+      expect(diagnostics, <String>[
+        'Automatic WebDAV first-sync completion attempt',
+      ]);
+    },
+  );
+
+  test(
+    'automatic attempts have a thirty-second floor and stop at five',
+    () async {
+      var connects = 0;
+      final policy = resumePolicy(
+        connect: (bindingId) async {
+          connects++;
+          return (await store.load()).bindings[bindingId]!;
+        },
+      );
+
+      expect(
+        await policy.resumeIfNeeded(reconfigurationPaused: false),
+        WebDavSyncFirstJoinAutoResumeOutcome.waiting,
+      );
+      now = now.add(const Duration(seconds: 29));
+      expect(
+        await policy.resumeIfNeeded(reconfigurationPaused: false),
+        WebDavSyncFirstJoinAutoResumeOutcome.skipped,
+      );
+      for (var attempt = 2; attempt <= 5; attempt++) {
+        now = now.add(const Duration(seconds: 30));
+        final outcome = await policy.resumeIfNeeded(
+          reconfigurationPaused: false,
+        );
+        expect(
+          outcome,
+          attempt == 5
+              ? WebDavSyncFirstJoinAutoResumeOutcome.exhausted
+              : WebDavSyncFirstJoinAutoResumeOutcome.waiting,
+        );
+      }
+      now = now.add(const Duration(minutes: 1));
+      expect(
+        await policy.resumeIfNeeded(reconfigurationPaused: false),
+        WebDavSyncFirstJoinAutoResumeOutcome.skipped,
+      );
+
+      expect(connects, 5);
+      expect(policy.attemptCount, 5);
+      expect(policy.hasAttemptsRemaining, isFalse);
+      expect(diagnostics, hasLength(5));
+      expect(diagnostics.toSet(), hasLength(1));
+      final persisted = (await store.load()).bindings[binding.id]!;
+      expect(persisted.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
+      expect(persisted.errorMessage, contains('could not finish'));
+    },
+  );
+
+  test(
+    'non-concurrency failure surfaces and cannot loop automatically',
+    () async {
+      var connects = 0;
+      final policy = resumePolicy(
+        connect: (_) async {
+          connects++;
+          throw StateError('persistent setup failure');
+        },
+      );
+
+      expect(
+        await policy.resumeIfNeeded(reconfigurationPaused: false),
+        WebDavSyncFirstJoinAutoResumeOutcome.failed,
+      );
+      for (var attempt = 0; attempt < 10; attempt++) {
+        now = now.add(const Duration(minutes: 1));
+        expect(
+          await policy.resumeIfNeeded(reconfigurationPaused: false),
+          WebDavSyncFirstJoinAutoResumeOutcome.skipped,
+        );
+      }
+
+      expect(connects, 1);
+      expect(policy.attemptCount, lessThanOrEqualTo(5));
+      expect(policy.hasAttemptsRemaining, isFalse);
+      final persisted = (await store.load()).bindings[binding.id]!;
+      expect(persisted.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
+      expect(persisted.errorMessage, contains('persistent setup failure'));
+    },
+  );
+
+  test(
+    'manual retry racing auto-resume is serialized without side effects',
+    () async {
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      var connectorCalls = 0;
+      var activeConnectors = 0;
+      var maxActiveConnectors = 0;
+      var adoptionSideEffects = 0;
+
+      Future<WebDavSyncBinding> connect(String bindingId) async {
+        connectorCalls++;
+        activeConnectors++;
+        if (activeConnectors > maxActiveConnectors) {
+          maxActiveConnectors = activeConnectors;
+        }
+        try {
+          final current = (await store.load()).bindings[bindingId]!;
+          if (current.lifecycle == WebDavSyncLifecycle.active) return current;
+          adoptionSideEffects++;
+          if (!entered.isCompleted) {
+            entered.complete();
+            await release.future;
+          }
+          await store.setLifecycle(bindingId, WebDavSyncLifecycle.active);
+          await store.promoteStaged(bindingId);
+          return (await store.load()).activeBinding!;
+        } finally {
+          activeConnectors--;
+        }
+      }
+
+      final policy = resumePolicy(connect: connect);
+      final automatic = policy.resumeIfNeeded(reconfigurationPaused: false);
+      await entered.future;
+      final manual = operations.run(() => connect(binding.id));
+      await Future<void>.delayed(Duration.zero);
+      expect(connectorCalls, 1);
+      release.complete();
+
+      expect(await automatic, WebDavSyncFirstJoinAutoResumeOutcome.activated);
+      await manual;
+      expect(connectorCalls, 2);
+      expect(maxActiveConnectors, 1);
+      expect(adoptionSideEffects, 1);
+      expect((await store.load()).activeBindingId, binding.id);
+    },
+  );
+
+  test('reconfiguration pause suppresses auto-resume', () async {
+    var connects = 0;
+    final policy = resumePolicy(
+      connect: (bindingId) async {
+        connects++;
+        return (await store.load()).bindings[bindingId]!;
+      },
+    );
+
+    expect(
+      await policy.resumeIfNeeded(reconfigurationPaused: true),
+      WebDavSyncFirstJoinAutoResumeOutcome.skipped,
+    );
+    expect(connects, 0);
+    expect(policy.attemptCount, 0);
+    expect(diagnostics, isEmpty);
+  });
+}
