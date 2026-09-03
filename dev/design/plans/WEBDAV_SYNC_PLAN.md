@@ -41,13 +41,12 @@ to ship.
 Goal: everything the app considers "the user's state" — profiles, connections,
 addons, playlists, favorites, settings, watch progress, source bindings —
 follows the user across devices, via a user-supplied WebDAV server, encrypted
-client-side, with no Debrify-run infrastructure. **Honest database carve-out
-(2026-09-02):** IPTV source credentials, favorites, watch history, resume,
-manual order and numbering state transfer in the bootstrap, but each device
-rebuilds its IPTV channel catalogue and EPG cache. Debrify TV channels and
-their saved hash pools do not transfer in v1. None of this database state
-syncs continuously after first connection. The UI must say so (§6); this goal
-line must not oversell it. Playlists and playlist favorites are prefs
+client-side, with no Debrify-run infrastructure. **Database carve-out
+(2026-09-02, superseded by §14 on 2026-09-03):** each device still rebuilds
+its IPTV channel catalogue and EPG cache locally. Everything personal now
+syncs continuously: IPTV source credentials, favorites, watch history,
+resume, hidden categories and arrangements, plus Debrify TV channels and
+their hash pools travel as live per-record library state (§14). Playlists and playlist favorites are prefs
 (`user_playlist_v1`, `playlist_favorites_v1`) and DO hot-sync.
 
 Design priorities, in order: **low bug surface → durability → few days**.
@@ -983,9 +982,9 @@ needed) and **Migrate** (one-shot WebDAV backup/restore, M2). The words
   that an installed device still has the credentials and sync key; real v1
   revocation means changing the WebDAV password on the server, while sync
   re-keying is v2.
-- The v1 carve-out stays visible: *“IPTV sources, favorites, history and
-  resume state transfer. Each device rebuilds its channel and guide caches.
-  Debrify TV channels do not transfer yet.”* iOS and tvOS use the same flow;
+- The carve-out copy (updated for §14): *“IPTV sources, favorites, history,
+  resume state and Debrify TV channels stay in sync. Each device rebuilds
+  its channel and guide caches.”* iOS and tvOS use the same flow;
   tvOS uses the DPAD picker and Keychain-backed `DeviceKeyProvider`, needs no
   document picker, and still observes the low-memory/playback gates.
 
@@ -2097,3 +2096,155 @@ safe.
   Android pulls it, then publishes an unrelated setting without reverting it;
   repeat Android → Mac. Record authenticated remote value + per-key stamp from
   both manifests in the test note.
+
+## 14. v3 — Live library sync for per-record database families
+
+Implemented 2026-09-03 overnight (rounds 2a `2f1ddfb4`, 2b `8f81d3ce`,
+2c `be01a978`, compaction fix `feb07eae`). Everything below is shipped
+behavior, recorded here as the design of record.
+
+### 14.1 Scope
+
+Synced live, per record, under the same stamped-LWW rules as hot scalars:
+
+- IPTV personal state: hidden categories (`hidden_groups`), manual category
+  arrangements (`category_manual_orders`), per-category channel arrangements
+  (`iptv_category_channel_orders`), VOD watch history/continue watching
+  (`iptv_watch_history`), video resume (`video_resume`).
+- Debrify TV: channels with their keywords (`tv_channels` +
+  `tv_channel_keywords`, one record), and per-channel torrent hash pools
+  (`tv_cached_torrents`) — the pool is the channel's playable inventory.
+
+Excluded by design: IPTV catalogs/EPG (each device re-downloads its
+playlists), custom IPTV lists, `tv_keyword_stats`, `tv_channel_cache_state`
+(both rebuildable device-local caches).
+
+### 14.2 Wire placement
+
+A per-profile `library/<circleProfileId>` section (schema 1): one map of
+stamped nullable leaves, routed through the large-section path. Bounds are
+64 MiB / 100k leaves, fail-closed on build and apply — an over-bound
+library refuses the cycle visibly (status + diagnostics); it never
+truncates or silently skips. Record keys never carry URLs, headers, or
+group names in the clear:
+
+- `tv/ch/<b64(channelId)>` — channel + keywords + desired number.
+- `tv/pool-gen/<b64(channelId)>` — the channel's current pool generation
+  (generation id rides the sidecar `aux` and the leaf).
+- `tv/pool/<b64(channelId)>/<lowerInfohash>` — one pool row
+  {generationId, name, sizeBytes, keywords, rank}. Scrape metadata
+  (seeders, dates, sources_json) is deliberately not carried.
+- `iptv/order/<circleResourceId>/<sha256(group)>`,
+  `iptv/watch/<circleResourceId>/<sha256(url)>`,
+  `resume/<circleResourceId-or-_>/<sha256(resumeKey)>`,
+  `catalog/hidden/<circleResourceId>/<variant>/<sha256(group)>`,
+  `catalog/category-order/<circleResourceId>/<variant>` with
+  variant ∈ {local, m3u, xc-live, xc-vod, xc-series}. Raw URLs/headers may
+  appear only inside sealed leaf VALUES, never in keys or diagnostics.
+
+### 14.3 Sidecar provenance
+
+Both `debrify_tv.db` and `iptv_catalog.db` gained
+`webdav_sync_record_state(kind, owner_key, item_key, updated_at_ms,
+origin_device_id, normalized, deleted, aux)` plus `webdav_sync_meta`
+holding a monotonic `mutation_revision` (seeded '0' via INSERT OR IGNORE
+in create and upgrade paths; every stamped writer bumps it in the same
+transaction).
+
+Mutation origins: `user | syncApply | migration | maintenance | rollback`.
+Only `user` stamps, bumps the revision, and notifies the scheduler.
+Retention prunes (watch history 100 rows), cache evictions, failed-edit
+restores, migrations, and "Reset app data" are silent — a cap or a local
+wipe must never mint a circle-wide deletion. Deletions that ARE user
+intent write `deleted=1` tombstone rows (channels: per-channel tombstones
+on delete and clear-all).
+
+### 14.4 Pool generations
+
+Pools replace atomically, never row-by-row: every user pool save mints a
+fresh generation id (`tv/pool-gen` record), publishes the full pool under
+that generation, and peers materialize only pool leaves whose generationId
+matches the winning generation record — stale rows from a losing
+generation are inert and cleaned by the next generation apply. Explicit
+pool removal publishes one empty generation. There are no per-row pool
+tombstones.
+
+### 14.5 Apply semantics
+
+- Revision-fenced: apply re-reads `mutation_revision` in its transaction;
+  a concurrent local user write turns the batch into a typed benign
+  conflict that clears pending state and schedules an immediate follow-up.
+- Channel numbers canonicalize deterministically on every device: winners
+  sort by (desired number, channel id) and take the next free slot;
+  occupied numbers are vacated to temporary values first so exchanges
+  cannot trip the UNIQUE constraint mid-transaction.
+- Change detection is sidecar-stamp AND physical-row: a matching stamp
+  with a missing physical row still materializes (first-join after the
+  §1 compaction carve-out). Compaction additionally strips the
+  `tv_channels`/`tv_pool_generation` sidecar rows when it drops those
+  tables (`feb07eae`), so adopted snapshots never inherit stamps for rows
+  they do not contain. The library section is now the authoritative
+  carrier for Debrify TV: a joiner whose bootstrap omitted the TV tables
+  receives full channels and pools on its first cycles.
+- Identity: catalog families map through (circleResourceId, variant);
+  records for unmapped resources are retained, not dropped or misapplied.
+- Unknown record families merge and republish verbatim (forward compat);
+  they are never applied and never stripped.
+
+### 14.6 Propagation and UI
+
+User library mutations ride the same 2s coalescing local-change window and
+durable intent as hot scalars (`webDavSyncLibraryLogicalKey`). Applied
+batches dispatch family-scoped refreshes: `tv/ch` + `tv/pool` invalidate
+the mounted Debrify TV screen through a dedicated MainPageBridge hook;
+`catalog/*` and `iptv/*` reuse the IPTV catalog/source signals; watch and
+resume records fire the playback-data notification. UI callbacks are
+best-effort and can never fail a committed batch.
+
+### 14.7 Adversarial review outcome (2026-09-04 night)
+
+Nine findings triaged; four produced changes, five were rejected with the
+reasoning recorded here so they are not re-litigated:
+
+- **Fixed — device-local reset minted circle-wide deletions.** "Reset app
+  data" recorded playback deletions, finished-movie/continue-watching/
+  playlist(+favorites) tombstones, and resume tombstones with user origin.
+  Every clear in the reset path now takes `recordSyncDeletions: false` /
+  maintenance origin. The explicit settings "Clear playback data" action
+  keeps deliberate cross-device deletion semantics.
+- **Fixed — stamp collisions under clock steps.** All three mint paths
+  (TV mutation, media store, catalog DB) stamp through a per-clock
+  monotonic floor (`WebDavSyncMonotonicStamp`): a backwards NTP step can no
+  longer mint two different mutations with one identical (time, origin)
+  stamp, which closes the mixed-generation LWW tie-break edge.
+- **Fixed — exact generation stamp masking missing pool rows.** The pool
+  apply gate now row-count-probes `tv_cached_torrents` when the sidecar
+  stamp matches; a divergent pool re-materializes.
+- **Fixed earlier the same night** — compaction strips the TV sidecar
+  stamps it orphans (§14.5).
+- **Rejected: duplicate-URL collisions across two granted resources.**
+  Two active playlists sharing one stream URL share one physical
+  history/resume row; merge order is deterministic, so devices converge on
+  the same winner. Accepted as a bounded quirk, not divergence.
+- **Rejected: partial intra-file row loss republished under an old
+  stamp.** Physical rows and sidecar stamps live in one SQLite file and
+  move atomically; partial intra-file loss is outside the durability
+  model (whole-file loss takes stamps along). Pool families additionally
+  self-heal via the count probe.
+- **Rejected: library mutations waiting in the 60s playback window.**
+  Identical to how every non-checkpoint local change behaves during
+  playback; consistency is the design.
+- **Rejected: destructive downgrade.** `onDatabaseDowngradeDelete`
+  pre-dates v3 (shipped with v6) and is a deliberate anti-wedge choice.
+- **Rejected (deferred): unknown sidecar kinds from an adopted
+  newer-version snapshot are not republished by an older binary.** The
+  records stay intact locally and publish after the app updates; wire
+  documents already round-trip unknown families.
+- **Known growth bound (documented, not fixed):** watch-history and
+  resume leaves never tombstone from retention, so the library section
+  grows monotonically toward the 100k-leaf / 64 MiB fail-closed caps
+  (years at personal scale; leaves are ~a few hundred bytes). When a cap
+  is hit, the build refuses visibly with an audited message and the
+  durable intent retries at the saturated 2-minute backoff with no
+  network cost. A deterministic post-merge age trim for watch/resume
+  families is the designated follow-up if anyone approaches the bound.
