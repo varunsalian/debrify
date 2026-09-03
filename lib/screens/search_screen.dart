@@ -6937,6 +6937,12 @@ class _SearchScreenState extends State<SearchScreen>
             SpotlightCard(
               image: m.poster,
               fallbackImage: m.background,
+              previewBuilder: section.focusArtOf(m) == null
+                  ? null
+                  : (_) => CachedNetworkImage(
+                      imageUrl: section.focusArtOf(m)!,
+                      fit: BoxFit.cover,
+                    ),
               title: m.name,
               shape: section.landscapeTiles
                   ? SpotlightCardShape.wide
@@ -18547,6 +18553,7 @@ class _SearchScreenState extends State<SearchScreen>
                             artUrl: collection != null
                                 ? item.poster
                                 : _titleArtUrl(item),
+                            focusArtUrl: collection?.focusArtOf(item),
                             showTitleOverlay: collection != null
                                 ? !(collection.folderOf(item)?.hideTitle ??
                                       false)

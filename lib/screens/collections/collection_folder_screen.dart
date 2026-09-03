@@ -11,6 +11,7 @@ import '../../services/home_collections_store.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../widgets/collections/folder_hero_band.dart';
 import '../../widgets/collections/rail_see_all_pill.dart';
 import '../../widgets/home/row_tag_pill.dart';
 import '../../widgets/see_all/discover_shelf_scope.dart';
@@ -555,6 +556,12 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
               backNode: _backNode,
               onFilterDown: () => _folderNode.requestFocus(),
             ),
+            if (_hasFolders)
+              FolderHeroBand(
+                key: ValueKey('folder-hero-${_folder.id}'),
+                folder: _folder,
+                isTelevision: widget.isTelevision,
+              ),
             _buildFilterBar(),
             Expanded(child: _buildBody()),
           ],

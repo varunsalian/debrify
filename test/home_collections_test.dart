@@ -25,6 +25,8 @@ const _xperienceSample = '''
         "coverEmoji": null,
         "heroBackdropUrl": "https://cdn.example/netflix.backdrop.webp",
         "titleLogoUrl": "https://cdn.example/netflix.logo.webp",
+        "focusGifUrl": "https://cdn.example/netflix.focus.gif",
+        "focusGifEnabled": true,
         "tileShape": "LANDSCAPE",
         "catalogSources": [
           {"addonId": "app.xperience.abc", "type": "movie", "catalogId": "streaming_netflix_movies", "genre": null},
@@ -172,6 +174,13 @@ void main() {
       expect(section.folderOf(section.items[1])?.title, 'Action');
       expect(section.folderIndexOf(section.items[1]), 1);
       expect(section.folderOf(_meta('tt1')), isNull);
+      expect(
+        section.focusArtOf(section.items.first),
+        'https://cdn.example/netflix.focus.gif',
+      );
+      expect(section.focusArtOf(section.items[1]), isNull);
+      expect(c.folders.first.heroBackdropUrl, endsWith('backdrop.webp'));
+      expect(c.folders.first.titleLogoUrl, endsWith('logo.webp'));
       expect(section.landscapeTiles, isTrue);
     });
   });

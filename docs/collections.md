@@ -68,6 +68,10 @@ Field notes:
   de-duplicated. Only `provider: "addon"` sources are used.
 - `tileShape`: `LANDSCAPE` (16:9, default), `PORTRAIT` (2:3) or `SQUARE`.
 - `hideTitle`: draw no text over the cover (the art carries the brand).
+- `focusGifUrl` + `focusGifEnabled`: animated art played over the tile while
+  it is focused or hovered.
+- `heroBackdropUrl`, `titleLogoUrl`: the backdrop and logo shown above the
+  folder's lists when it is opened.
 - `pinToTop`: the row leads the Home board; otherwise collection rows sit
   after the tracker list rows and before addon catalog rows. Rows can be
   re-arranged or hidden under **Home Screen → Home Rows** like any other row
@@ -75,7 +79,7 @@ Field notes:
 - `showAllTab`: the folder browser offers an "All" view merging every list.
 - Records without an `id` get a stable one derived from their title, so
   re-importing the same file updates rather than duplicates.
-- Unknown fields (`viewMode`, `focusGlowEnabled`, focus GIF/video URLs, …) are
+- Unknown fields (`viewMode`, `focusGlowEnabled`, focus video URLs, …) are
   ignored.
 
 ## Addon resolution
