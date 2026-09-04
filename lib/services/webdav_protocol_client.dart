@@ -320,6 +320,7 @@ final class WebDavProtocolClient {
   Future<WebDavBytesResult> getBytes({
     required String path,
     required int maxBytes,
+    Duration? bodyInactivityTimeout,
     Future<void> Function()? beforeSend,
   }) async {
     final response = await _sendFollowingRedirects(
@@ -329,7 +330,11 @@ final class WebDavProtocolClient {
       beforeSend: beforeSend,
     );
     await _throwUnlessAccepted(response, _isSuccess);
-    final bytes = await _readBounded(response, maxBytes);
+    final bytes = await _readBounded(
+      response,
+      maxBytes,
+      inactivityTimeout: bodyInactivityTimeout,
+    );
     return WebDavBytesResult(bytes: bytes, metadata: _metadata(response));
   }
 
@@ -837,8 +842,9 @@ final class WebDavProtocolClient {
 
   Future<Uint8List> _readBounded(
     http.StreamedResponse response,
-    int maxBytes,
-  ) async {
+    int maxBytes, {
+    Duration? inactivityTimeout,
+  }) async {
     if (maxBytes < 0 ||
         (response.contentLength != null &&
             response.contentLength! > maxBytes)) {
@@ -850,7 +856,10 @@ final class WebDavProtocolClient {
     }
     final builder = BytesBuilder(copy: false);
     var length = 0;
-    await for (final chunk in _responseChunks(response)) {
+    await for (final chunk in _responseChunks(
+      response,
+      inactivityTimeout: inactivityTimeout,
+    )) {
       if (length > maxBytes - chunk.length) {
         throw const WebDavException(
           kind: WebDavErrorKind.invalidRequest,
@@ -882,10 +891,15 @@ final class WebDavProtocolClient {
     );
   }
 
-  Stream<List<int>> _responseChunks(http.StreamedResponse response) async* {
+  Stream<List<int>> _responseChunks(
+    http.StreamedResponse response, {
+    Duration? inactivityTimeout,
+  }) async* {
     final uri = response.request?.url ?? endpoint;
     try {
-      await for (final chunk in response.stream.timeout(timeout)) {
+      await for (final chunk in response.stream.timeout(
+        inactivityTimeout ?? timeout,
+      )) {
         yield chunk;
       }
     } on TimeoutException catch (error) {

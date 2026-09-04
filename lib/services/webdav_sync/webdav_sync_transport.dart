@@ -394,6 +394,11 @@ final class ProtocolWebDavSyncTransport
     return _client.getBytes(
       path: _join(_devices, '$deviceId/sections/${reference.contentHash}.enc'),
       maxBytes: maxBytes,
+      // Servers throttle repeated large-object reads with mid-body pauses;
+      // a large section is allowed a longer stall before it counts as dead.
+      bodyInactivityTimeout: reference.size > 8 * 1024 * 1024
+          ? const Duration(seconds: 90)
+          : null,
     );
   }
 
