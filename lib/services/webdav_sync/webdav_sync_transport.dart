@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:xml/xml.dart';
@@ -256,10 +257,19 @@ abstract interface class WebDavSyncSectionGcTransport {
   Future<void> deleteOwnSection(String deviceId, String contentHash);
 }
 
+/// Setup-only capability check for the conditional creation primitive that
+/// protects the immutable root key and marker.
+abstract interface class WebDavSyncConditionalCreateProbeTransport {
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  });
+}
+
 /// M5-only mutation surface. Ordinary M4 cycles receive the narrower
 /// [WebDavSyncTransport] and therefore cannot create or delete a sync root.
 abstract interface class WebDavSyncActivationTransport
-    implements WebDavSyncTransport {
+    implements WebDavSyncTransport, WebDavSyncConditionalCreateProbeTransport {
   Future<void> ensureActivationLayout();
 
   Future<WebDavBytesResult> readRootKey();
@@ -308,6 +318,14 @@ final class ProtocolWebDavSyncTransport
 
   String get _syncRoot => _join(_location.folderPath, 'debrify-sync');
   String get _devices => _join(_syncRoot, 'devices');
+
+  @override
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) => WebDavSyncConditionalCreateProbe(
+    _client,
+  ).verify(syncRootPath: syncRootPath, beforeSend: beforeSend);
 
   @override
   Future<WebDavBytesResult> readRootMarker() => _client.getBytes(
@@ -693,3 +711,96 @@ final class ProtocolWebDavSyncTransport
 }
 
 final RegExp _safeDeviceId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$');
+
+/// Exercises create-only PUT against a disposable sentinel before setup relies
+/// on the same precondition for either root authority file.
+final class WebDavSyncConditionalCreateProbe {
+  const WebDavSyncConditionalCreateProbe(this._client);
+
+  final WebDavProtocolClient _client;
+
+  Future<void> verify({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) async {
+    final random = Random.secure();
+    final nameBytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final first = Uint8List.fromList(
+      List<int>.generate(16, (_) => random.nextInt(256)),
+    );
+    final second = Uint8List.fromList(first);
+    second[0] ^= 0xff;
+    final suffix = nameBytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final path = ProtocolWebDavSyncTransport._join(
+      syncRootPath,
+      '.cond-probe-$suffix',
+    );
+    var mayExist = false;
+    try {
+      final created = await _client.putBytes(
+        path: path,
+        bytes: first,
+        maxBytes: first.length,
+        ifNoneMatch: '*',
+        createParents: false,
+        beforeSend: beforeSend,
+      );
+      mayExist = true;
+      if (created.statusCode != HttpStatus.created) {
+        throw const WebDavSyncProviderUnsupportedException();
+      }
+
+      var secondWasRejected = false;
+      try {
+        await _client.putBytes(
+          path: path,
+          bytes: second,
+          maxBytes: second.length,
+          ifNoneMatch: '*',
+          createParents: false,
+          beforeSend: beforeSend,
+        );
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.preconditionFailed) {
+          throw const WebDavSyncProviderUnsupportedException();
+        }
+        secondWasRejected = true;
+      }
+
+      final readBack = await _client.getBytes(
+        path: path,
+        maxBytes: first.length,
+        beforeSend: beforeSend,
+      );
+      if (!secondWasRejected ||
+          !_constantTimeBytesEqual(readBack.bytes, first)) {
+        throw const WebDavSyncProviderUnsupportedException();
+      }
+    } on WebDavSyncProviderUnsupportedException {
+      rethrow;
+    } on WebDavException {
+      throw const WebDavSyncProviderUnsupportedException();
+    } finally {
+      if (mayExist) {
+        try {
+          await _client.deletePath(path: path, beforeSend: beforeSend);
+        } catch (_) {
+          // A failed cleanup leaves only a harmless random dotfile.
+        }
+      }
+    }
+  }
+}
+
+bool _constantTimeBytesEqual(List<int> left, List<int> right) {
+  var difference = left.length ^ right.length;
+  final length = max(left.length, right.length);
+  for (var index = 0; index < length; index++) {
+    difference |=
+        (index < left.length ? left[index] : 0) ^
+        (index < right.length ? right[index] : 0);
+  }
+  return difference == 0;
+}

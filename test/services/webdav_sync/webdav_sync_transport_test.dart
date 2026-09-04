@@ -289,6 +289,85 @@ void main() {
     transport.close();
   });
 
+  test('conditional-create probe verifies first body and cleans up', () async {
+    final methods = <String>[];
+    Uri? sentinel;
+    Uint8List? firstBody;
+    Uint8List? secondBody;
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((request) async {
+        methods.add(request.method);
+        sentinel ??= request.url;
+        expect(request.url, sentinel);
+        expect(
+          request.url.path,
+          matches(
+            RegExp(r'^/dav/Family/debrify-sync/\.cond-probe-[0-9a-f]{32}$'),
+          ),
+        );
+        if (request.method == 'PUT' && firstBody == null) {
+          expect(request.headers['if-none-match'], '*');
+          firstBody = Uint8List.fromList(request.bodyBytes);
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT') {
+          expect(request.headers['if-none-match'], '*');
+          secondBody = Uint8List.fromList(request.bodyBytes);
+          return http.Response('', 412);
+        }
+        if (request.method == 'GET') {
+          return http.Response.bytes(firstBody!, 200);
+        }
+        if (request.method == 'DELETE') return http.Response('', 204);
+        return http.Response('', 500);
+      }),
+    );
+
+    await transport.verifyConditionalCreate(
+      syncRootPath: 'Family/debrify-sync',
+    );
+
+    expect(methods, <String>['PUT', 'PUT', 'GET', 'DELETE']);
+    expect(firstBody, hasLength(16));
+    expect(secondBody, hasLength(16));
+    expect(secondBody, isNot(orderedEquals(firstBody!)));
+    transport.close();
+  });
+
+  test(
+    'conditional-create probe refuses an overwrite lie and cleans up',
+    () async {
+      final methods = <String>[];
+      Uint8List? stored;
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((request) async {
+          methods.add(request.method);
+          if (request.method == 'PUT') {
+            stored = Uint8List.fromList(request.bodyBytes);
+            return http.Response('', 201);
+          }
+          if (request.method == 'GET') {
+            return http.Response.bytes(stored!, 200);
+          }
+          if (request.method == 'DELETE') return http.Response('', 204);
+          return http.Response('', 500);
+        }),
+      );
+
+      await expectLater(
+        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
+        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
+      );
+
+      expect(methods, <String>['PUT', 'PUT', 'GET', 'DELETE']);
+      transport.close();
+    },
+  );
+
   test('root key claim is create-only and accepts exactly 201', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),

@@ -6,6 +6,7 @@ import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_models.dart';
+import 'webdav_sync_transport.dart';
 
 sealed class WebDavSyncSetupException implements Exception {
   const WebDavSyncSetupException(this.message);
@@ -93,7 +94,8 @@ abstract interface class WebDavSyncProbeTransport {
   void close();
 }
 
-abstract interface class WebDavSyncRootKeyProvisionTransport {
+abstract interface class WebDavSyncRootKeyProvisionTransport
+    implements WebDavSyncConditionalCreateProbeTransport {
   Future<WebDavResponseMetadata> createRootKey({
     required String path,
     required Uint8List bytes,
@@ -118,6 +120,14 @@ final class ProtocolWebDavSyncProbeTransport
        );
 
   final WebDavProtocolClient _client;
+
+  @override
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) => WebDavSyncConditionalCreateProbe(
+    _client,
+  ).verify(syncRootPath: syncRootPath, beforeSend: beforeSend);
 
   @override
   Future<WebDavBytesResult> readRootMarker({
@@ -280,12 +290,17 @@ final class WebDavSyncSetupService {
           }
           await _provisionLegacyRootKey(
             transport: transport,
+            syncRootPath: location.folderPath.isEmpty
+                ? 'debrify-sync'
+                : '${location.folderPath}/debrify-sync',
             path: location.rootKeyPath,
             rootKey: rootKey,
             beforeSend: beforeSend,
           );
         } catch (error) {
-          final failure = error is WebDavSyncRootChangedException
+          final failure =
+              error is WebDavSyncRootChangedException ||
+                  error is WebDavSyncProviderUnsupportedException
               ? error
               : const WebDavSyncRootKeyClaimException();
           try {
@@ -313,6 +328,7 @@ final class WebDavSyncSetupService {
 
   Future<void> _provisionLegacyRootKey({
     required WebDavSyncProbeTransport transport,
+    required String syncRootPath,
     required String path,
     required WebDavSyncRootKeyFile rootKey,
     Future<void> Function()? beforeSend,
@@ -321,6 +337,11 @@ final class WebDavSyncSetupService {
     if (provision is! WebDavSyncRootKeyProvisionTransport) {
       throw const WebDavSyncRootKeyClaimException();
     }
+    await (provision as WebDavSyncRootKeyProvisionTransport)
+        .verifyConditionalCreate(
+          syncRootPath: syncRootPath,
+          beforeSend: beforeSend,
+        );
     final expected = rootKey.encode();
     try {
       await (provision as WebDavSyncRootKeyProvisionTransport).createRootKey(

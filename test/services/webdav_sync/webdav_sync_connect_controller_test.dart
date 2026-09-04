@@ -297,6 +297,10 @@ void main() {
     (name: 'clock validation', error: StateError('server clock unavailable')),
     (name: 'key claim', error: const WebDavSyncRootKeyClaimException()),
     (
+      name: 'conditional-create capability',
+      error: const WebDavSyncProviderUnsupportedException(),
+    ),
+    (
       name: 'seed upload',
       error: const WebDavException(
         kind: WebDavErrorKind.network,
@@ -316,6 +320,12 @@ void main() {
             );
 
         expect(outcome, isA<WebDavSyncConnectPreHandoffFailure>());
+        if (scenario.error is WebDavSyncProviderUnsupportedException) {
+          expect(
+            (outcome as WebDavSyncConnectPreHandoffFailure).error,
+            isA<WebDavSyncProviderUnsupportedException>(),
+          );
+        }
         expect(
           (await store.load()).stagedBinding?.lifecycle,
           WebDavSyncLifecycle.awaitingSeedCommit,

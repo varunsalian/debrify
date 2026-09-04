@@ -583,6 +583,12 @@ final class _ForgetTransport implements WebDavSyncActivationTransport {
   Future<void> ensureActivationLayout() => throw UnimplementedError();
 
   @override
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) => throw UnimplementedError();
+
+  @override
   Future<void> ensureOwnLayout(String deviceId) => throw UnimplementedError();
 
   @override

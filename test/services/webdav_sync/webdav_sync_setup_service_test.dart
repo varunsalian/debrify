@@ -545,6 +545,38 @@ void main() {
       );
       expect(repaired.lifecycle, WebDavSyncLifecycle.active);
       expect((await store.readSecrets(repaired)).password, 'rotated-secret');
+      expect(transport.conditionalCreateProbeCalls, 1);
+    },
+  );
+
+  test(
+    'legacy keyfile provisioning refuses a failed capability probe',
+    () async {
+      final installed = await installActiveBinding();
+      transport
+        ..keyBytes = null
+        ..conditionalCreateProbeError =
+            const WebDavSyncProviderUnsupportedException();
+
+      await expectLater(
+        service.inspectFolder(
+          config: _config,
+          folderPath: 'Family',
+          context: WebDavSyncFolderInspectionContext.repair,
+          repairBindingId: installed.binding.id,
+        ),
+        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
+      );
+
+      expect(transport.conditionalCreateProbeCalls, 1);
+      expect(transport.createKeyCalls, 0);
+      expect(transport.keyBytes, isNull);
+      final failed = (await store.load()).bindings[installed.binding.id]!;
+      expect(failed.lifecycle, WebDavSyncLifecycle.error);
+      expect(
+        failed.errorMessage,
+        WebDavSyncProviderUnsupportedException.userMessage,
+      );
     },
   );
 
@@ -605,6 +637,8 @@ final class _FakeProbeTransport
   Object? createKeyError;
   Uint8List? keyOnCreateError;
   int createKeyCalls = 0;
+  int conditionalCreateProbeCalls = 0;
+  Object? conditionalCreateProbeError;
   final List<String> paths = <String>[];
 
   Uint8List? get bytes => _bytes;
@@ -684,6 +718,17 @@ final class _FakeProbeTransport
       uri: endpoint!.resolve(path),
       headers: const <String, String>{},
     );
+  }
+
+  @override
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) async {
+    conditionalCreateProbeCalls++;
+    paths.add('$syncRootPath/.cond-probe');
+    await beforeSend?.call();
+    if (conditionalCreateProbeError case final failure?) throw failure;
   }
 
   @override

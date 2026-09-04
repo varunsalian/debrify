@@ -25,6 +25,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../services/webdav_sync/webdav_sync_connect_controller.dart';
+import '../../services/webdav_sync/webdav_sync_models.dart';
 import '../../utils/platform_util.dart';
 import '../pikpak_folder_picker_dialog.dart';
 import 'controllers/tracker_auth_controller.dart';
@@ -326,8 +327,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           debugPrint('Onboarding WebDAV login failed (${error.runtimeType})');
           setState(() {
             _connectingWebDav = false;
-            _webDavError =
-                'Could not connect this account. Check your details and try again.';
+            _webDavError = error is WebDavSyncProviderUnsupportedException
+                ? error.message
+                : 'Could not connect this account. Check your details and try again.';
           });
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => _requestLanding(),
@@ -358,8 +360,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       debugPrint('Onboarding WebDAV login failed (${error.runtimeType})');
       setState(() {
         _connectingWebDav = false;
-        _webDavError =
-            'Could not connect this account. Check your details and try again.';
+        _webDavError = error is WebDavSyncProviderUnsupportedException
+            ? error.message
+            : 'Could not connect this account. Check your details and try again.';
       });
     }
   }

@@ -126,6 +126,30 @@ void main() {
   );
 
   test(
+    'conditional-create probe failure aborts before root mutation',
+    () async {
+      transport.conditionalCreateProbeError =
+          const WebDavSyncProviderUnsupportedException();
+
+      await expectLater(
+        initializer().initialize(
+          bindingId: binding.id,
+          authorization: authorization,
+        ),
+        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
+      );
+
+      expect(transport.conditionalCreateProbeCalls, 1);
+      expect(transport.events, isNot(contains('read:key')));
+      expect(transport.events, isNot(contains('read:root')));
+      expect(transport.events, isNot(contains('create:key')));
+      expect(transport.events, isNot(contains('create:root')));
+      expect(transport.marker, isNull);
+      expect((await bindingStore.load()).activeBinding, isNull);
+    },
+  );
+
+  test(
     'publishes complete seed and manifest before creating root last',
     () async {
       final outcome = await initializer().initialize(
@@ -336,6 +360,7 @@ void main() {
       final active = (outcome as WebDavSyncInitialized).binding;
 
       expect(seeds.prepareCalls, 2);
+      expect(transport.conditionalCreateProbeCalls, 1);
       expect(
         transport.events.where((event) => event == 'create:root'),
         hasLength(1),
@@ -382,7 +407,7 @@ void main() {
   );
 
   test(
-    'a resumed candidate repairs a diverged key to its committed marker',
+    'entry-state divergence resumes from its marker and repairs the key',
     () async {
       final resumedMarker = await WebDavSyncCodec().sealRoot(
         passphrase: 'circle-secret',
@@ -401,7 +426,7 @@ void main() {
       );
       transport
         ..marker = resumedMarker
-        ..rootKeyOnRead[2] = const WebDavSyncRootKeyFile(
+        ..rootKey = const WebDavSyncRootKeyFile(
           syncPassphrase: 'delayed-claimant-secret',
         ).encode();
 
@@ -416,9 +441,54 @@ void main() {
         WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
         'circle-secret',
       );
+      expect(
+        transport.events.indexOf('read:root'),
+        lessThan(transport.events.indexOf('read:key')),
+      );
+      expect(
+        (await bindingStore.readSecrets(
+          (await bindingStore.load()).activeBinding!,
+        )).syncPassphrase,
+        'circle-secret',
+      );
       expect(transport.events, isNot(contains('create:root')));
     },
   );
+
+  test('a marker-committed resume provisions its missing key', () async {
+    final resumedMarker = await WebDavSyncCodec().sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'resumed-circle',
+      createdAt: DateTime.utc(2026, 9, 1),
+      runInBackground: true,
+    );
+    await bindingStore.updateNamespaceValues(
+      binding.namespaceId,
+      (values) => <String, Object?>{
+        ...values,
+        WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
+          resumedMarker,
+        ),
+      },
+    );
+    transport
+      ..marker = resumedMarker
+      ..rootKey = null;
+
+    final outcome = await initializer().initialize(
+      bindingId: binding.id,
+      authorization: authorization,
+    );
+
+    expect(outcome, isA<WebDavSyncInitialized>());
+    expect(transport.overwriteKeyCalls, 1);
+    expect(
+      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
+      'circle-secret',
+    );
+    expect(transport.events, isNot(contains('create:key')));
+    expect(transport.events, isNot(contains('create:root')));
+  });
 
   test('same-marker 412 repairs a key overwritten with the response', () async {
     transport
@@ -1163,34 +1233,93 @@ void main() {
   });
 
   test(
-    'a server ignoring create-only still follows the read-back winner',
+    'a server ignoring create-only is refused before the TOCTOU window',
     () async {
-      final winningMarker = await WebDavSyncCodec().sealRoot(
-        passphrase: 'circle-secret',
-        circleId: 'late-winning-circle',
-        createdAt: DateTime.utc(2026, 8, 31),
-        memoryKiB: 64,
-        iterations: 1,
-      );
-      transport.replaceMarkerAfterCreate = winningMarker;
+      transport.conditionalCreateProbeError =
+          const WebDavSyncProviderUnsupportedException();
 
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
+      await expectLater(
+        initializer().initialize(
+          bindingId: binding.id,
+          authorization: authorization,
+        ),
+        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
       );
 
-      expect(outcome, isA<WebDavSyncConcurrentRoot>());
-      final current = (await bindingStore.load()).bindings[binding.id]!;
-      expect(current.circleId, 'late-winning-circle');
-      expect(current.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
+      expect(transport.events, isNot(contains('read:key')));
+      expect(transport.events, isNot(contains('read:root')));
+      expect(transport.events, isNot(contains('create:key')));
+      expect(transport.events, isNot(contains('create:root')));
       expect((await bindingStore.load()).activeBindingId, isNull);
     },
   );
 
   test(
-    'two initializers cannot silently diverge on an ignore-all server',
+    'two initializers with independent secrets refuse an ignore-all server',
     () async {
       final server = _IgnoringPreconditionsServer();
+      final firstSecret = WebDavSyncCodec.generateSyncSecret();
+      final secondSecret = WebDavSyncCodec.generateSyncSecret();
+      expect(firstSecret, isNot(secondSecret));
+
+      final firstLocation = WebDavSyncFolderLocation(
+        endpoint: 'https://first-device.test/dav',
+        folderPath: 'Family',
+        serverName: 'First device',
+      );
+      var firstBinding = await bindingStore.stageBinding(
+        location: firstLocation,
+        config: WebDavConfig(
+          id: 'first-device',
+          name: 'First device',
+          baseUrl: firstLocation.endpoint.toString(),
+          username: 'alice',
+          password: 'first-password',
+        ),
+        syncPassphrase: firstSecret,
+      );
+      firstBinding = await bindingStore.markAwaitingSeedCommit(firstBinding.id);
+      final firstSnapshot = await bindingStore.load();
+
+      final secondLocation = WebDavSyncFolderLocation(
+        endpoint: 'https://second-device.test/dav',
+        folderPath: 'Family',
+        serverName: 'Second device',
+      );
+      var secondBinding = await bindingStore.stageBinding(
+        location: secondLocation,
+        config: WebDavConfig(
+          id: 'second-device',
+          name: 'Second device',
+          baseUrl: secondLocation.endpoint.toString(),
+          username: 'bob',
+          password: 'second-password',
+        ),
+        syncPassphrase: secondSecret,
+      );
+      secondBinding = await bindingStore.markAwaitingSeedCommit(
+        secondBinding.id,
+      );
+      final secondSnapshot = await bindingStore.load();
+      final combined = WebDavSyncStoreSnapshot(
+        stagedBindingId: secondBinding.id,
+        bindings: <String, WebDavSyncBinding>{
+          firstBinding.id: firstBinding,
+          secondBinding.id: secondBinding,
+        },
+        namespaces: <String, WebDavSyncNamespace>{
+          firstBinding.namespaceId: firstSnapshot.namespaceFor(firstBinding)!,
+          secondBinding.namespaceId: secondSnapshot.namespaceFor(
+            secondBinding,
+          )!,
+        },
+      );
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        WebDavSyncBindingStore.storageKey,
+        jsonEncode(combined.toJson()),
+      );
+
       final first = WebDavSyncNewRootInitializer(
         bindingStore: bindingStore,
         stateRepository: _MemoryStateRepository(),
@@ -1220,38 +1349,28 @@ void main() {
 
       final results = await Future.wait(<Future<Object>>[
         settle(
-          first.initialize(bindingId: binding.id, authorization: authorization),
+          first.initialize(
+            bindingId: firstBinding.id,
+            authorization: authorization,
+          ),
         ),
         settle(
           second.initialize(
-            bindingId: binding.id,
+            bindingId: secondBinding.id,
             authorization: authorization,
           ),
         ),
       ]);
 
-      expect(server.keyCreateCalls, 2);
-      expect(server.markerCreateCalls, 2);
-      final finalKey = WebDavSyncRootKeyFile.parse(server.rootKey!);
-      await expectLater(
-        WebDavSyncCodec().openRoot(
-          server.marker!,
-          finalKey.syncPassphrase,
-          runInBackground: true,
-        ),
-        completion(isA<OpenedWebDavSyncRoot>()),
-      );
+      expect(server.probeCalls, 2);
+      expect(server.keyCreateCalls, 0);
+      expect(server.markerCreateCalls, 0);
+      expect(server.rootKey, isNull);
+      expect(server.marker, isNull);
       expect(
         results,
-        everyElement(
-          anyOf(
-            isA<WebDavSyncInitializationOutcome>(),
-            isA<WebDavSyncRootKeyClaimException>(),
-          ),
-        ),
-        reason:
-            'a non-conforming server may fail both claimants, but one device '
-            'must not silently accept a divergent root',
+        everyElement(isA<WebDavSyncProviderUnsupportedException>()),
+        reason: 'both initializers must refuse before the race can mutate',
       );
     },
   );
@@ -1563,6 +1682,8 @@ class _FakeActivationTransport
   bool createStoresThenThrows = false;
   List<String> deviceIds = const <String>[];
   Future<void> Function()? afterSectionWrite;
+  Object? conditionalCreateProbeError;
+  int conditionalCreateProbeCalls = 0;
 
   WebDavResponseMetadata get metadata => WebDavResponseMetadata(
     statusCode: 200,
@@ -1582,6 +1703,16 @@ class _FakeActivationTransport
     if (!activationLayoutExists) {
       throw const WebDavSyncRootKeyClaimException();
     }
+  }
+
+  @override
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) async {
+    conditionalCreateProbeCalls++;
+    events.add('probe:conditional');
+    if (conditionalCreateProbeError case final failure?) throw failure;
   }
 
   @override
@@ -1754,6 +1885,7 @@ class _FakeActivationTransport
 final class _IgnoringPreconditionsServer {
   Uint8List? rootKey;
   Uint8List? marker;
+  int probeCalls = 0;
   int keyCreateCalls = 0;
   int markerCreateCalls = 0;
   int _initialKeyReads = 0;
@@ -1821,6 +1953,16 @@ final class _IgnoringPreconditionsTransport extends _FakeActivationTransport {
 
   final _IgnoringPreconditionsServer server;
   bool _initialMarkerRead = true;
+
+  @override
+  Future<void> verifyConditionalCreate({
+    required String syncRootPath,
+    Future<void> Function()? beforeSend,
+  }) async {
+    server.probeCalls++;
+    events.add('probe:conditional');
+    throw const WebDavSyncProviderUnsupportedException();
+  }
 
   @override
   Future<WebDavBytesResult> readRootKey() {

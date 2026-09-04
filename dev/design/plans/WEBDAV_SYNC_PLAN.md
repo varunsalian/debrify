@@ -1068,7 +1068,7 @@ map dependency makes that safer than exposing a temporary incompatible format.
 | M2 | Backup to/restore from WebDAV (phone + TV UI) — lands in the NEW **Settings → Sync and Migrate** section ("Migrate" half), NOT on the Backup & Restore page (§6); acceptance criteria below (round-10) | transport-neutral backup entry points + picker mode + new settings section | 1.5–2 |
 | M3 | Login-first binding foundation: dedicated Koofr/Custom credentials that never enter Cloud accounts; fixed `Debrify` folder; persisted lifecycle states; fresh-setup read-only marker + strict 4 KiB keyfile probe implementing the four-state matrix; pinned legacy repair may provision the missing keyfile create-only as specified in §15; existing-root keyfile-secret/key-check verification + local marker pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + machine secret sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-account staging; frozen bounded root/manifest envelope codecs and golden/tamper/version/keyfile tests. **M3 publishes no root, manifest, hot data, or graph.** | binding service + login/setup component + codec tests | 1.5–2 |
 | M4 | **Inactive hot-state engine** requiring an injected root context + authenticated profile AND resource circle↔local maps—absence is no-op and local IDs are never used on wire: peer discovery + peer-count/doc-size bounds; server-`Date` clockOffset capture, monotonic high-water mark, offset-delta damping, and normalized-time arbitration; hot-document semantic digests; deletion-path audit (**normative** — ships a test matching audited APIs to helper call sites) → tombstone helpers + replication + pending-until-published; two-part hot doc with `origin` stamps; merge module (pure functions, heavy unit tests: LWW + key-union + deterministic tie-break, alias-keyed playback unions + order stamps, completion diff-stamping, tombstones + cutoff exemption, dormant-rejoin, last-pushed dirty compare + convergence-stops-traffic, publish-time clamp, CW re-cap, **null-dropping doc build + never-delete-on-null apply, tombstone horizon from first publication — round-7**; **playlist per-item union by `computePlaylistDedupeKey` + diff-stamps + tombstones + order value, lossy-twin projection-equality rule — round-8**); `_exportPreferences` exposed additively; **scope-captured BATCH apply op (one tvOS checkpoint + one native projection — round-7) guarded by a persisted pending-apply target (round-8)**; trigger plumbing remains unarmed until M5, whose bounded seed/adoption transaction may invoke builders explicitly | merge module + helpers + gated glue | 5.5–6 |
-| M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, claim `circle.key` before candidate use (`If-None-Match: *`, strict 201/read-back; 412 adopts winner; ambiguity fails closed), atomically reseal a winning secret and invalidate stale candidate identity/state, then mint circle IDs; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; create immutable root LAST with the unchanged marker race protocol. Concurrent-root follow defensively re-reads and persists the winning key before opening the marker. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
+| M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, prove honest conditional creation with a disposable sentinel, check whether a standing marker is the persisted candidate, otherwise claim `circle.key` before candidate use (`If-None-Match: *`, strict 201/read-back; 412 adopts winner; ambiguity fails closed), atomically reseal a winning secret and invalidate stale candidate identity/state, then mint circle IDs; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; create immutable root LAST with the unchanged marker race protocol. Concurrent-root follow defensively re-reads and persists the winning key before opening the marker. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
 | M6 | Device-matrix hardening: simulated phone ↔ Mi Box ↔ tvOS ↔ desktop convergence; bounded/LRU hot-section cache; disk-staged large WebDAV transfer and integrity verification; tvOS memory/path audit; explicit scenarios for the marker/keyfile four-state matrix, malformed keyfile fail-closed, key-claim crash recovery, marker deletion/replacement, concurrent initializers, 30+ day bootstrap discovery, bootstrap-less-marker rejection, mandatory first-connection consent, account rebind isolation, and M4 remaining inactive without maps. Physical-device soak remains a manual gate. | fixes + matrix tests | 1–1.5 |
 
 Post-M6 correctness work is tracked separately in §13. Although M4's original
@@ -1099,8 +1099,9 @@ ship-ready until §13's per-setting convergence gates pass.
   network, local apply, timestamping, tombstone expiry, and manifest writes.
   Fixtures prove no serialized path or payload ever contains a local profile
   or resource ID.
-- M5 new-root tests assert wire order: collection verification → create-only
-  key claim/adoption → candidate generation → all bounded/hash-verified
+- M5 new-root tests assert wire order: collection verification → conditional-
+  create capability probe and cleanup → standing-marker/candidate resume check
+  → create-only key claim/adoption when required → candidate generation → all bounded/hash-verified
   sections → non-empty read-back-verified seed manifest → final marker-404
   preflight → create-only root returning 201 → root read-back pin. A
   204/ambiguous keyfile or marker response never activates; failure/crash
@@ -1110,13 +1111,15 @@ ship-ready until §13's per-setting convergence gates pass.
   ignored accepted litter; peers issue no cross-device cleanup request.
 - Concurrent-initializer tests cover both keyfile and marker 412 winner
   adoption. Correctness requires the provider to honor conditional PUT for the
-  immutable marker (and therefore for the initial key claim). Activation also
+  immutable marker and initial key claim. Activation proves that capability
+  up front with a disposable create/read-back/delete sentinel and refuses a
+  provider that overwrites its second `If-None-Match: *` PUT. Activation also
   re-verifies the key immediately before marker creation and restarts under an
   observed replacement, and every own-marker resume/412/read-back path repairs
   divergence to the current marker's secret only after confirming that marker
   still wins. These checks converge keyfile races on quirky providers; a
-  server that ignores marker preconditions remains unsupported and can fail
-  with a typed error. At each guarded commit edge they either converge the
+  server that ignores marker preconditions is refused up front with a typed
+  unsupported-provider error. At each guarded commit edge they either converge the
   observed keyfile/marker pair or reject activation instead of knowingly
   accepting divergence.
 - M5 refuses Active when a marker has no authentic recoverable
@@ -2407,8 +2410,16 @@ passphrase, this section supersedes them.
   runtime pause/resume remain with the caller. Onboarding uses the same
   controller and acknowledges its durable completion intent only after the
   profile-scoped setup-complete write succeeds.
-- New-root activation proves the collection exists, then resolves key
-  ownership before reading or creating candidate state. A 201 claim must read
+- New-root activation proves the collection exists, then runs a disposable
+  conditional-create probe before any key claim or marker work. The first
+  sentinel PUT must return 201, the second create-only PUT must return 412,
+  and read-back must retain the first random body; cleanup is best-effort. The
+  result is cached for that initialization attempt. A resumed initializer
+  reads the standing marker before key claim/adoption: when it byte-matches
+  the persisted candidate, that marker owns the root, so the initializer keeps
+  its pre-adoption secret and repairs a missing or divergent key toward it.
+  Otherwise activation resolves key ownership before creating candidate
+  state. A 201 claim must read
   back byte-identically; a 412 adopts the winner; malformed,
   missing-after-conflict, 204, or ambiguous behavior fails closed. Immediately
   before the immutable marker commit it re-reads the key and restarts candidate
@@ -2435,16 +2446,16 @@ passphrase, this section supersedes them.
   has no keyfile, repair/reconnect opens its exact pinned marker with the local
   sealed secret and provisions `circle.key` create-only. A 412 is accepted only
   when the winner contains that same verified secret; all other outcomes fail
-  with the damaged-folder/unsupported-provider error.
+  with the damaged-folder/unsupported-provider error. The same conditional-
+  create capability probe runs before this exceptional legacy provisioning.
 
-Conditional PUT support remains a server requirement: in particular, a
-provider that ignores the immutable marker's `If-None-Match: *` is unsupported.
-The pre-commit re-verification and marker-authoritative convergent repair cover
-keyfile replacement windows around every observed candidate-marker commit.
-They are not a substitute for marker precondition enforcement: a server that
-ignores both create-only preconditions may still force typed activation errors,
-but each observed race converges or refuses activation instead of knowingly
-accepting a keyfile/marker-divergent local binding.
+Final contract: sync initialization requires a WebDAV server with honest
+conditional creation, and the capability probe enforces that requirement
+before any key claim, marker mutation, or legacy keyfile provision. On a
+conforming server, immutable key/marker creation plus the verify/repair ladder
+guarantees that a standing marker always matches `circle.key`. A
+non-conforming server is refused before those authority files are mutated,
+instead of risking key/marker divergence.
 
 The accepted trust change is deliberate: because the at-rest secret sits next
 to the encrypted data, encryption no longer protects the user from the storage

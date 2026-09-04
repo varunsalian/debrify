@@ -96,6 +96,25 @@ void main() {
     expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
   });
 
+  testWidgets('unsupported provider failure stays clear and inline', (
+    tester,
+  ) async {
+    await pumpLogin(tester, (_) async {
+      throw const WebDavSyncProviderUnsupportedException();
+    });
+
+    await tester.enterText(field('webdav-sync-username'), 'alice@example.test');
+    await tester.enterText(field('webdav-sync-password'), 'app-password');
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(WebDavSyncProviderUnsupportedException.userMessage),
+      findsOneWidget,
+    );
+    expect(find.byType(WebDavSyncLoginScreen), findsOneWidget);
+  });
+
   testWidgets('reconnect variant pins location and asks only for credentials', (
     tester,
   ) async {

@@ -228,6 +228,24 @@ final class WebDavSyncRootKeyClaimException implements Exception {
       'This WebDAV provider is unsupported, or the sync folder is damaged.';
 }
 
+/// The provider accepted a second create-only write instead of rejecting it.
+///
+/// Sync setup relies on `If-None-Match: *` to make the root key and marker
+/// immutable. Providers that do not enforce that precondition are refused
+/// before either authority file is created or changed.
+final class WebDavSyncProviderUnsupportedException implements Exception {
+  const WebDavSyncProviderUnsupportedException();
+
+  static const String userMessage =
+      'This WebDAV server cannot protect sync setup from conflicts. '
+      'Use Koofr or a server that supports conditional file creation.';
+
+  String get message => userMessage;
+
+  @override
+  String toString() => userMessage;
+}
+
 /// The imported profile has already become local authority. The original
 /// failure remains available for diagnostics, but setup must roll forward.
 final class WebDavSyncPostHandoffException implements Exception {
