@@ -262,6 +262,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     var localChangeFollowUp = false;
     var circleConflict = false;
     final libraryConflictProfiles = <String>{};
+    final consumedPeerSections = _ConsumedPeerSections();
     if (_localAdapter is WebDavSyncRegistryTombstoneOutboxDrainer) {
       try {
         circlePublicationAllowed =
@@ -828,6 +829,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           namespaceId: namespaceId,
           ownDeviceId: deviceId,
           manifests: manifests,
+          lastMergedPeerSections: state.lastMergedPeerSections,
+          hasProfilesBaseline: state.circleProfilesBaseline != null,
+          hasResourcesBaseline: state.circleResourcesBaseline != null,
           instrumentation: instrumentation,
         );
         final remoteProfiles = WebDavSyncCircleMerge.mergeProfiles(
@@ -1043,6 +1047,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               profiles: mergedProfiles,
               resources: mergedResourceWinners,
             );
+            consumedPeerSections.addAll(peerCircle.readReferences);
           }
         } finally {
           instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
@@ -1060,6 +1065,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             circleResult.profiles.profiles[circleProfileId]?.value == null) {
           continue;
         }
+        final profileState =
+            state.profiles[circleProfileId] ??
+            const WebDavSyncProfileEngineState();
         final peerData = await _readProfilePeerData(
           transport: transport,
           root: root,
@@ -1068,6 +1076,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           manifests: manifests,
           circleProfileId: circleProfileId,
           serverNowMs: serverNowMs,
+          profileState: profileState,
+          lastMergedPeerSections: state.lastMergedPeerSections,
           instrumentation: instrumentation,
         );
         final phaseStarted = instrumentation.startPhase();
@@ -1085,9 +1095,6 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             );
             continue;
           }
-          final profileState =
-              state.profiles[circleProfileId] ??
-              const WebDavSyncProfileEngineState();
           final built = WebDavSyncHotMerge.build(
             WebDavSyncBuildInput(
               circleProfileId: circleProfileId,
@@ -1186,6 +1193,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               ),
             );
           });
+          consumedPeerSections.addAll(peerData.hotAndTombstoneReferences);
           _recordAppliedKeys(
             appliedKeysByLocalProfile,
             localProfileId,
@@ -1259,6 +1267,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             );
             if (outcome.result == WebDavSyncLibraryApplyResult.conflict) {
               localChangeFollowUp = true;
+              libraryConflictProfiles.add(circleProfileId);
               await _stateRepository.update(namespaceId, (current) {
                 final profiles = Map<String, WebDavSyncProfileEngineState>.from(
                   current.profiles,
@@ -1301,6 +1310,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                       ),
                 );
               });
+              consumedPeerSections.addAll(peerData.libraryReferences);
               _recordAppliedKeys(
                 appliedKeysByLocalProfile,
                 localProfileId,
@@ -1329,6 +1339,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           deviceClockWarning: clockDecision.deviceClockWarning,
         );
       }
+      // A missing flag denotes a pre-compression journal. Only an active
+      // binding may perform the one-shot rewrite; the flag itself is committed
+      // below with the completed cycle, never with a pre-activation seed.
+      final forceCompressionMigration =
+          context.active && !state.sealedCompressionMigrated;
       final push = await _pushChanged(
         transport: transport,
         context: context,
@@ -1341,8 +1356,19 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         serverNowMs: serverNowMs,
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
         repairManifest: verifiedOwnManifest == null,
+        forceCompressionMigration: forceCompressionMigration,
         instrumentation: instrumentation,
       );
+      await _collectUnreferencedOwnSections(
+        transport: transport,
+        session: session,
+        deviceId: deviceId,
+        manifest: push.manifest ?? state.ownManifest,
+        serverNowMs: serverNowMs,
+        instrumentation: instrumentation,
+      );
+      final cycleConflicted =
+          circleConflict || libraryConflictProfiles.isNotEmpty;
       state = await _stateRepository.update(namespaceId, (current) {
         final profiles = Map<String, WebDavSyncProfileEngineState>.from(
           current.profiles,
@@ -1379,16 +1405,19 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           lastRemoteChangeMs: trigger == WebDavSyncTrigger.remoteChange
               ? serverNowMs
               : current.lastRemoteChangeMs,
+          lastMergedPeerSections: cycleConflicted
+              ? current.lastMergedPeerSections
+              : consumedPeerSections.mergeInto(
+                  current.lastMergedPeerSections,
+                  currentDeviceIds: manifests.keys,
+                ),
+          sealedCompressionMigrated:
+              current.sealedCompressionMigrated ||
+              (forceCompressionMigration &&
+                  push.sectionsPushed > 0 &&
+                  !cycleConflicted),
         );
       });
-      await _collectUnreferencedOwnSections(
-        transport: transport,
-        session: session,
-        deviceId: deviceId,
-        manifest: state.ownManifest,
-        serverNowMs: serverNowMs,
-        instrumentation: instrumentation,
-      );
       return WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.completed,
         peerCount: manifests.length,
@@ -1552,6 +1581,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required Map<String, WebDavSyncManifest> manifests,
     required String circleProfileId,
     required int serverNowMs,
+    required WebDavSyncProfileEngineState profileState,
+    required Map<String, Map<String, WebDavSyncSectionReference>>
+    lastMergedPeerSections,
     required _CycleInstrumentation instrumentation,
   }) async {
     final entries = manifests.entries.toList(growable: false)
@@ -1575,6 +1607,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               manifest: entry.value,
               circleProfileId: circleProfileId,
               serverNowMs: serverNowMs,
+              profileState: profileState,
+              lastMergedPeerSections: lastMergedPeerSections,
               instrumentation: instrumentation,
             ),
           );
@@ -1591,6 +1625,12 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       libraryDocuments: List<WebDavSyncLibraryDocument>.unmodifiable(
         peers.expand((peer) => peer.libraryDocuments),
       ),
+      hotAndTombstoneReferences: List<_PeerSectionReference>.unmodifiable(
+        peers.expand((peer) => peer.hotAndTombstoneReferences),
+      ),
+      libraryReferences: List<_PeerSectionReference>.unmodifiable(
+        peers.expand((peer) => peer.libraryReferences),
+      ),
     );
   }
 
@@ -1600,6 +1640,10 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required String namespaceId,
     required String ownDeviceId,
     required Map<String, WebDavSyncManifest> manifests,
+    required Map<String, Map<String, WebDavSyncSectionReference>>
+    lastMergedPeerSections,
+    required bool hasProfilesBaseline,
+    required bool hasResourcesBaseline,
     required _CycleInstrumentation instrumentation,
   }) async {
     final entries = manifests.entries.toList(growable: false)
@@ -1617,6 +1661,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           ownDeviceId: ownDeviceId,
           deviceId: entry.key,
           manifest: entry.value,
+          lastMergedPeerSections: lastMergedPeerSections,
+          hasProfilesBaseline: hasProfilesBaseline,
+          hasResourcesBaseline: hasResourcesBaseline,
           instrumentation: instrumentation,
         ),
       );
@@ -1630,6 +1677,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       resources: List<WebDavSyncResourcesDocument>.unmodifiable(
         peers.expand((peer) => peer.resources),
       ),
+      readReferences: List<_PeerSectionReference>.unmodifiable(
+        peers.expand((peer) => peer.readReferences),
+      ),
     );
   }
 
@@ -1640,17 +1690,30 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required String ownDeviceId,
     required String deviceId,
     required WebDavSyncManifest manifest,
+    required Map<String, Map<String, WebDavSyncSectionReference>>
+    lastMergedPeerSections,
+    required bool hasProfilesBaseline,
+    required bool hasResourcesBaseline,
     required _CycleInstrumentation instrumentation,
   }) async {
     WebDavSyncProfilesDocument? profiles;
     WebDavSyncResourcesDocument? resources;
+    final readReferences = <_PeerSectionReference>[];
     final profilesRef = manifest.section('profiles');
     if (profilesRef != null &&
         profilesRef.size > WebDavSyncLimits.maxHotDocumentBytes) {
       throw const FormatException('WebDAV sync profiles exceed size limit');
     }
     if (profilesRef != null &&
-        profilesRef.schemaVersion == WebDavSyncProfilesDocument.schemaVersion) {
+        profilesRef.schemaVersion == WebDavSyncProfilesDocument.schemaVersion &&
+        !_shouldSkipMergedPeerSection(
+          deviceId: deviceId,
+          ownDeviceId: ownDeviceId,
+          reference: profilesRef,
+          hasBaseline: hasProfilesBaseline,
+          lastMergedPeerSections: lastMergedPeerSections,
+          instrumentation: instrumentation,
+        )) {
       try {
         final payload = await _readCircleSectionPayload(
           transport: transport,
@@ -1670,6 +1733,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           _profileStamps(profiles),
           profilesRef.updatedAtMs,
         );
+        if (deviceId != ownDeviceId) {
+          readReferences.add(
+            _PeerSectionReference(deviceId: deviceId, reference: profilesRef),
+          );
+        }
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync profiles section', error);
@@ -1687,7 +1755,15 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     }
     if (resourcesRef != null &&
         resourcesRef.schemaVersion ==
-            WebDavSyncResourcesDocument.schemaVersion) {
+            WebDavSyncResourcesDocument.schemaVersion &&
+        !_shouldSkipMergedPeerSection(
+          deviceId: deviceId,
+          ownDeviceId: ownDeviceId,
+          reference: resourcesRef,
+          hasBaseline: hasResourcesBaseline,
+          lastMergedPeerSections: lastMergedPeerSections,
+          instrumentation: instrumentation,
+        )) {
       try {
         final payload = await _readCircleSectionPayload(
           transport: transport,
@@ -1707,6 +1783,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           _resourceStamps(resources),
           resourcesRef.updatedAtMs,
         );
+        if (deviceId != ownDeviceId) {
+          readReferences.add(
+            _PeerSectionReference(deviceId: deviceId, reference: resourcesRef),
+          );
+        }
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync resources section', error);
@@ -1724,6 +1805,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       resources: resources == null
           ? const <WebDavSyncResourcesDocument>[]
           : <WebDavSyncResourcesDocument>[resources],
+      readReferences: List<_PeerSectionReference>.unmodifiable(readReferences),
     );
   }
 
@@ -1808,6 +1890,44 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     }
   }
 
+  /// The section merges gated here are monotone record-level LWW merges
+  /// against a durable baseline. Once a peer document was merged and that
+  /// baseline was persisted, the baseline contains every record contributed
+  /// by that document; the exact same reference therefore contributes nothing
+  /// new and is equivalent to an absent merge input. This applies to hot data,
+  /// retained tombstones, libraries, profiles, and resources. Bootstrap is
+  /// intentionally not gated: it is an adoption/repair snapshot rather than a
+  /// monotone merge against these engine baselines, so its readers continue to
+  /// fetch and verify it.
+  static bool _shouldSkipMergedPeerSection({
+    required String deviceId,
+    required String ownDeviceId,
+    required WebDavSyncSectionReference reference,
+    required bool hasBaseline,
+    required Map<String, Map<String, WebDavSyncSectionReference>>
+    lastMergedPeerSections,
+    required _CycleInstrumentation instrumentation,
+  }) {
+    if (deviceId == ownDeviceId || !hasBaseline) return false;
+    final merged = lastMergedPeerSections[deviceId]?[reference.name];
+    if (merged == null || !_sameSectionReference(merged, reference)) {
+      return false;
+    }
+    instrumentation.sectionSkipped(reference.size);
+    return true;
+  }
+
+  static bool _sameSectionReference(
+    WebDavSyncSectionReference left,
+    WebDavSyncSectionReference right,
+  ) =>
+      left.name == right.name &&
+      left.contentHash == right.contentHash &&
+      left.semanticDigest == right.semanticDigest &&
+      left.updatedAtMs == right.updatedAtMs &&
+      left.schemaVersion == right.schemaVersion &&
+      left.size == right.size;
+
   Future<_PeerProfileData> _readOnePeerProfileData({
     required WebDavSyncTransport transport,
     required OpenedWebDavSyncRoot root,
@@ -1817,11 +1937,16 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required WebDavSyncManifest manifest,
     required String circleProfileId,
     required int serverNowMs,
+    required WebDavSyncProfileEngineState profileState,
+    required Map<String, Map<String, WebDavSyncSectionReference>>
+    lastMergedPeerSections,
     required _CycleInstrumentation instrumentation,
   }) async {
     WebDavSyncHotDocument? hot;
     WebDavSyncTombstoneDocument? tombstone;
     WebDavSyncLibraryDocument? library;
+    final hotAndTombstoneReferences = <_PeerSectionReference>[];
+    final libraryReferences = <_PeerSectionReference>[];
     final stale =
         serverNowMs - manifest.updatedAtMs > staleManifestCutoff.inMilliseconds;
     final hotRef = manifest.section('hot/$circleProfileId');
@@ -1829,7 +1954,15 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         hotRef != null &&
         (hotRef.schemaVersion == 1 ||
             hotRef.schemaVersion == WebDavSyncHotDocument.schemaVersion) &&
-        hotRef.size <= WebDavSyncLimits.maxHotDocumentBytes) {
+        hotRef.size <= WebDavSyncLimits.maxHotDocumentBytes &&
+        !_shouldSkipMergedPeerSection(
+          deviceId: deviceId,
+          ownDeviceId: ownDeviceId,
+          reference: hotRef,
+          hasBaseline: profileState.baseline != null,
+          lastMergedPeerSections: lastMergedPeerSections,
+          instrumentation: instrumentation,
+        )) {
       try {
         hot = await _readHotSection(
           transport,
@@ -1841,6 +1974,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         );
         if (hotRef.schemaVersion == 1) {
           _diagnostic('Read a legacy WebDAV sync hot section', null);
+        }
+        if (deviceId != ownDeviceId) {
+          hotAndTombstoneReferences.add(
+            _PeerSectionReference(deviceId: deviceId, reference: hotRef),
+          );
         }
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
@@ -1857,7 +1995,15 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     if (tombstoneRef != null &&
         tombstoneRef.schemaVersion ==
             WebDavSyncTombstoneDocument.schemaVersion &&
-        tombstoneRef.size <= WebDavSyncLimits.maxTombstoneDocumentBytes) {
+        tombstoneRef.size <= WebDavSyncLimits.maxTombstoneDocumentBytes &&
+        !_shouldSkipMergedPeerSection(
+          deviceId: deviceId,
+          ownDeviceId: ownDeviceId,
+          reference: tombstoneRef,
+          hasBaseline: profileState.baseline != null,
+          lastMergedPeerSections: lastMergedPeerSections,
+          instrumentation: instrumentation,
+        )) {
       try {
         tombstone = await _readTombstoneSection(
           transport,
@@ -1867,6 +2013,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           circleProfileId,
           instrumentation,
         );
+        if (deviceId != ownDeviceId) {
+          hotAndTombstoneReferences.add(
+            _PeerSectionReference(deviceId: deviceId, reference: tombstoneRef),
+          );
+        }
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync tombstone section', error);
@@ -1889,7 +2040,17 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       _diagnostic('Ignored an oversized WebDAV sync library section', null);
     } else if (libraryRef != null &&
         libraryRef.schemaVersion == WebDavSyncLibraryDocument.schemaVersion &&
-        libraryRef.size <= WebDavSyncLibraryDocument.maxEncodedBytes) {
+        libraryRef.size <= WebDavSyncLibraryDocument.maxEncodedBytes &&
+        !_shouldSkipMergedPeerSection(
+          deviceId: deviceId,
+          ownDeviceId: ownDeviceId,
+          reference: libraryRef,
+          hasBaseline:
+              profileState.baseline != null &&
+              profileState.libraryBaseline != null,
+          lastMergedPeerSections: lastMergedPeerSections,
+          instrumentation: instrumentation,
+        )) {
       try {
         library = await _readLibrarySection(
           transport,
@@ -1899,6 +2060,11 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           circleProfileId,
           instrumentation,
         );
+        if (deviceId != ownDeviceId) {
+          libraryReferences.add(
+            _PeerSectionReference(deviceId: deviceId, reference: libraryRef),
+          );
+        }
       } on WebDavException catch (error) {
         if (error.kind != WebDavErrorKind.notFound) rethrow;
         _diagnostic('Ignored a removed WebDAV sync library section', error);
@@ -1919,6 +2085,12 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       libraryDocuments: library == null
           ? const <WebDavSyncLibraryDocument>[]
           : <WebDavSyncLibraryDocument>[library],
+      hotAndTombstoneReferences: List<_PeerSectionReference>.unmodifiable(
+        hotAndTombstoneReferences,
+      ),
+      libraryReferences: List<_PeerSectionReference>.unmodifiable(
+        libraryReferences,
+      ),
     );
   }
 
@@ -2140,6 +2312,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     required int serverNowMs,
     required int clockOffsetMs,
     required bool repairManifest,
+    required bool forceCompressionMigration,
     required _CycleInstrumentation instrumentation,
   }) async {
     final deviceId = context.deviceId!;
@@ -2150,11 +2323,13 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     final resourcesDigest = circle?.resources.semanticDigest;
     final pushProfiles =
         circle != null &&
-        (state.lastPushedProfilesDigest != profilesDigest ||
+        (forceCompressionMigration ||
+            state.lastPushedProfilesDigest != profilesDigest ||
             state.ownManifest?.section('profiles') == null);
     final pushResources =
         circle != null &&
-        (state.lastPushedResourcesDigest != resourcesDigest ||
+        (forceCompressionMigration ||
+            state.lastPushedResourcesDigest != resourcesDigest ||
             state.ownManifest?.section('resources') == null);
     if (pushProfiles) {
       final phaseStarted = instrumentation.startPhase();
@@ -2194,7 +2369,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
         ),
       );
       final tombstoneDigest = tombstoneDocument.semanticDigest;
-      if (profileState.lastPushedHotDigest != hotDigest) {
+      if (forceCompressionMigration ||
+          profileState.lastPushedHotDigest != hotDigest) {
         final phaseStarted = instrumentation.startPhase();
         try {
           changed.add(
@@ -2213,7 +2389,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           instrumentation.finishPhase(_CyclePhase.seal, phaseStarted);
         }
       }
-      if (profileState.lastPushedTombstoneDigest != tombstoneDigest) {
+      if (forceCompressionMigration ||
+          profileState.lastPushedTombstoneDigest != tombstoneDigest) {
         final phaseStarted = instrumentation.startPhase();
         try {
           changed.add(
@@ -2234,7 +2411,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       }
       final library = entry.value.library;
       if (library != null &&
-          (profileState.lastPushedLibraryDigest != library.semanticDigest ||
+          (forceCompressionMigration ||
+              profileState.lastPushedLibraryDigest != library.semanticDigest ||
               state.ownManifest?.section('library/${entry.key}') == null)) {
         librariesToPush[entry.key] = library;
       }
@@ -2941,11 +3119,15 @@ final class _PeerProfileData {
     required this.hotDocuments,
     required this.tombstoneDocuments,
     required this.libraryDocuments,
+    required this.hotAndTombstoneReferences,
+    required this.libraryReferences,
   });
 
   final List<WebDavSyncHotDocument> hotDocuments;
   final List<WebDavSyncTombstoneDocument> tombstoneDocuments;
   final List<WebDavSyncLibraryDocument> libraryDocuments;
+  final List<_PeerSectionReference> hotAndTombstoneReferences;
+  final List<_PeerSectionReference> libraryReferences;
 }
 
 Future<List<R>> _mapConcurrentOrdered<T, R>(
@@ -3000,10 +3182,73 @@ final class _CircleCycleResult {
 }
 
 final class _PeerCircleData {
-  const _PeerCircleData({required this.profiles, required this.resources});
+  const _PeerCircleData({
+    required this.profiles,
+    required this.resources,
+    required this.readReferences,
+  });
 
   final List<WebDavSyncProfilesDocument> profiles;
   final List<WebDavSyncResourcesDocument> resources;
+  final List<_PeerSectionReference> readReferences;
+}
+
+final class _PeerSectionReference {
+  const _PeerSectionReference({
+    required this.deviceId,
+    required this.reference,
+  });
+
+  final String deviceId;
+  final WebDavSyncSectionReference reference;
+}
+
+final class _ConsumedPeerSections {
+  final Map<String, Map<String, WebDavSyncSectionReference>> _references =
+      <String, Map<String, WebDavSyncSectionReference>>{};
+
+  void addAll(Iterable<_PeerSectionReference> references) {
+    for (final item in references) {
+      (_references[item.deviceId] ??=
+              <String, WebDavSyncSectionReference>{})[item.reference.name] =
+          item.reference;
+    }
+  }
+
+  Map<String, Map<String, WebDavSyncSectionReference>> mergeInto(
+    Map<String, Map<String, WebDavSyncSectionReference>> current, {
+    required Iterable<String> currentDeviceIds,
+  }) {
+    final currentDevices = currentDeviceIds.toSet();
+    final merged = <String, Map<String, WebDavSyncSectionReference>>{
+      for (final device in current.entries)
+        if (currentDevices.contains(device.key))
+          device.key: Map<String, WebDavSyncSectionReference>.from(
+            device.value,
+          ),
+    };
+    for (final device in _references.entries) {
+      if (!currentDevices.contains(device.key)) continue;
+      (merged[device.key] ??= <String, WebDavSyncSectionReference>{}).addAll(
+        device.value,
+      );
+    }
+    if (merged.length > WebDavSyncLimits.maxPeers ||
+        merged.values.any(
+          (sections) =>
+              sections.length > WebDavSyncLimits.maxSectionsPerManifest,
+        )) {
+      throw StateError('WebDAV sync merged section state exceeds its limit');
+    }
+    return Map<String, Map<String, WebDavSyncSectionReference>>.unmodifiable(
+      <String, Map<String, WebDavSyncSectionReference>>{
+        for (final device in merged.entries)
+          device.key: Map<String, WebDavSyncSectionReference>.unmodifiable(
+            device.value,
+          ),
+      },
+    );
+  }
 }
 
 final class _SealedSection {
@@ -3063,6 +3308,8 @@ final class _CycleInstrumentation {
   int requestCount = 0;
   int bytesUp = 0;
   int bytesDown = 0;
+  int sectionsSkipped = 0;
+  int bytesSaved = 0;
   String disposition = 'failed';
   int _rootUs = 0;
   int _listUs = 0;
@@ -3112,6 +3359,11 @@ final class _CycleInstrumentation {
 
   void received(int byteCount) => bytesDown += byteCount;
 
+  void sectionSkipped(int byteCount) {
+    sectionsSkipped++;
+    bytesSaved += byteCount;
+  }
+
   void record() {
     _stopwatch.stop();
     DiagnosticLog.instance.recordEvent(
@@ -3132,6 +3384,8 @@ final class _CycleInstrumentation {
         'requestCount': requestCount,
         'bytesUp': bytesUp,
         'bytesDown': bytesDown,
+        'sectionsSkipped': sectionsSkipped,
+        'bytesSaved': bytesSaved,
         'disposition': DiagnosticLabel(disposition),
       },
     );

@@ -448,6 +448,8 @@ final class WebDavSyncEngineState {
     this.statusHint,
     this.peerManifestHighWater = const <String, int>{},
     this.peerManifestValidators = const <String, WebDavSyncManifestValidator>{},
+    this.lastMergedPeerSections =
+        const <String, Map<String, WebDavSyncSectionReference>>{},
     this.currentDeviceIds = const <String>{},
     this.lastSuccessfulSyncMs,
     this.lastPushMs,
@@ -459,6 +461,7 @@ final class WebDavSyncEngineState {
     this.adoption,
     this.prunePendingProfileIds = const <String>{},
     this.safetyProtectedProfileIds = const <String>{},
+    this.sealedCompressionMigrated = false,
   });
 
   final Map<String, String>? circleToLocalProfiles;
@@ -482,6 +485,8 @@ final class WebDavSyncEngineState {
   final String? statusHint;
   final Map<String, int> peerManifestHighWater;
   final Map<String, WebDavSyncManifestValidator> peerManifestValidators;
+  final Map<String, Map<String, WebDavSyncSectionReference>>
+  lastMergedPeerSections;
   final Set<String> currentDeviceIds;
   final int? lastSuccessfulSyncMs;
   final int? lastPushMs;
@@ -493,6 +498,7 @@ final class WebDavSyncEngineState {
   final WebDavSyncAdoptionRecord? adoption;
   final Set<String> prunePendingProfileIds;
   final Set<String> safetyProtectedProfileIds;
+  final bool sealedCompressionMigrated;
 
   bool get blocksAllPushes => adoption?.blocksPushes ?? false;
   bool get blocksSeedPushes =>
@@ -526,6 +532,8 @@ final class WebDavSyncEngineState {
     bool clearStatusHint = false,
     Map<String, int>? peerManifestHighWater,
     Map<String, WebDavSyncManifestValidator>? peerManifestValidators,
+    Map<String, Map<String, WebDavSyncSectionReference>>?
+    lastMergedPeerSections,
     Set<String>? currentDeviceIds,
     int? lastSuccessfulSyncMs,
     int? lastPushMs,
@@ -538,6 +546,7 @@ final class WebDavSyncEngineState {
     bool clearAdoption = false,
     Set<String>? prunePendingProfileIds,
     Set<String>? safetyProtectedProfileIds,
+    bool? sealedCompressionMigrated,
   }) => WebDavSyncEngineState(
     circleToLocalProfiles: circleToLocalProfiles ?? this.circleToLocalProfiles,
     circleToLocalResources:
@@ -572,6 +581,8 @@ final class WebDavSyncEngineState {
     peerManifestHighWater: peerManifestHighWater ?? this.peerManifestHighWater,
     peerManifestValidators:
         peerManifestValidators ?? this.peerManifestValidators,
+    lastMergedPeerSections:
+        lastMergedPeerSections ?? this.lastMergedPeerSections,
     currentDeviceIds: currentDeviceIds ?? this.currentDeviceIds,
     lastSuccessfulSyncMs: lastSuccessfulSyncMs ?? this.lastSuccessfulSyncMs,
     lastPushMs: lastPushMs ?? this.lastPushMs,
@@ -587,6 +598,8 @@ final class WebDavSyncEngineState {
         prunePendingProfileIds ?? this.prunePendingProfileIds,
     safetyProtectedProfileIds:
         safetyProtectedProfileIds ?? this.safetyProtectedProfileIds,
+    sealedCompressionMigrated:
+        sealedCompressionMigrated ?? this.sealedCompressionMigrated,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -628,6 +641,14 @@ final class WebDavSyncEngineState {
         for (final entry in peerManifestValidators.entries)
           entry.key: entry.value.toJson(),
       },
+    if (lastMergedPeerSections.isNotEmpty)
+      'lastMergedPeerSections': <String, Object?>{
+        for (final device in lastMergedPeerSections.entries)
+          device.key: <String, Object?>{
+            for (final section in device.value.entries)
+              section.key: section.value.toJson(),
+          },
+      },
     if (currentDeviceIds.isNotEmpty)
       'currentDeviceIds': currentDeviceIds.toList()..sort(),
     if (lastSuccessfulSyncMs != null)
@@ -644,6 +665,7 @@ final class WebDavSyncEngineState {
     'prunePendingProfileIds': prunePendingProfileIds.toList()..sort(),
     if (safetyProtectedProfileIds.isNotEmpty)
       'safetyProtectedProfileIds': safetyProtectedProfileIds.toList()..sort(),
+    if (sealedCompressionMigrated) 'sealedCompressionMigrated': true,
   };
 
   factory WebDavSyncEngineState.fromJson(Object? source) {
@@ -660,12 +682,16 @@ final class WebDavSyncEngineState {
     final rawPeerHighWater = json['peerManifestHighWater'] as Map;
     final rawPeerValidators =
         json['peerManifestValidators'] ?? const <String, Object?>{};
+    final rawLastMergedPeerSections =
+        json['lastMergedPeerSections'] ?? const <String, Object?>{};
     if (rawProfiles.length > WebDavSyncLimits.maxMapEntries ||
         rawPendingLocalProfiles is! Map ||
         rawPendingLocalProfiles.length > WebDavSyncLimits.maxMapEntries ||
         rawPeerHighWater.length > WebDavSyncLimits.maxMapEntries ||
         rawPeerValidators is! Map ||
-        rawPeerValidators.length > WebDavSyncLimits.maxMapEntries) {
+        rawPeerValidators.length > WebDavSyncLimits.maxMapEntries ||
+        rawLastMergedPeerSections is! Map ||
+        rawLastMergedPeerSections.length > WebDavSyncLimits.maxPeers) {
       throw const FormatException('WebDAV sync engine state exceeds its limit');
     }
     Map<String, String>? optionalMap(String key, {required int maxEntries}) {
@@ -717,6 +743,36 @@ final class WebDavSyncEngineState {
       }
       peerValidators[entry.key as String] =
           WebDavSyncManifestValidator.fromJson(entry.value);
+    }
+    final lastMergedPeerSections =
+        <String, Map<String, WebDavSyncSectionReference>>{};
+    for (final deviceEntry in rawLastMergedPeerSections.entries) {
+      if (deviceEntry.key is! String ||
+          !_safeSyncIdentifier.hasMatch(deviceEntry.key as String) ||
+          deviceEntry.value is! Map ||
+          (deviceEntry.value as Map).length >
+              WebDavSyncLimits.maxSectionsPerManifest) {
+        throw const FormatException('Invalid WebDAV sync merged section state');
+      }
+      final sections = <String, WebDavSyncSectionReference>{};
+      for (final sectionEntry in (deviceEntry.value as Map).entries) {
+        if (sectionEntry.key is! String) {
+          throw const FormatException(
+            'Invalid WebDAV sync merged section state',
+          );
+        }
+        final reference = WebDavSyncSectionReference.fromJson(
+          sectionEntry.value,
+        );
+        if (reference.name != sectionEntry.key) {
+          throw const FormatException(
+            'WebDAV sync merged section name mismatch',
+          );
+        }
+        sections[sectionEntry.key as String] = reference;
+      }
+      lastMergedPeerSections[deviceEntry.key as String] =
+          Map<String, WebDavSyncSectionReference>.unmodifiable(sections);
     }
     final pendingLocalProfiles = <String, WebDavSyncProfileEngineState>{};
     for (final entry in rawPendingLocalProfiles.entries) {
@@ -818,6 +874,13 @@ final class WebDavSyncEngineState {
     final deviceClockWarning = json['deviceClockWarning'] ?? false;
     if (deviceClockWarning is! bool) {
       throw const FormatException('Invalid WebDAV sync clock warning');
+    }
+    final sealedCompressionMigrated =
+        json['sealedCompressionMigrated'] ?? false;
+    if (sealedCompressionMigrated is! bool) {
+      throw const FormatException(
+        'Invalid WebDAV sync compression migration state',
+      );
     }
     final rawClockPauseReason = json['lastClockPauseReason'];
     WebDavSyncClockPauseReason? lastClockPauseReason;
@@ -950,6 +1013,10 @@ final class WebDavSyncEngineState {
       peerManifestHighWater: Map<String, int>.unmodifiable(peerHighWater),
       peerManifestValidators:
           Map<String, WebDavSyncManifestValidator>.unmodifiable(peerValidators),
+      lastMergedPeerSections:
+          Map<String, Map<String, WebDavSyncSectionReference>>.unmodifiable(
+            lastMergedPeerSections,
+          ),
       currentDeviceIds: currentDeviceIds,
       lastSuccessfulSyncMs: successful as int?,
       lastPushMs: lastPush as int?,
@@ -966,6 +1033,7 @@ final class WebDavSyncEngineState {
           : WebDavSyncAdoptionRecord.fromJson(json['adoption']),
       prunePendingProfileIds: idSet('prunePendingProfileIds'),
       safetyProtectedProfileIds: idSet('safetyProtectedProfileIds'),
+      sealedCompressionMigrated: sealedCompressionMigrated,
     );
   }
 }

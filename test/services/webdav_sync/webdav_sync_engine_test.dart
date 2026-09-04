@@ -90,6 +90,19 @@ void main() {
   Future<WebDavSyncCycleReport> runFixture(WebDavSyncCycleContext value) =>
       engine.runCycle(value, allowPreActivation: true);
 
+  Future<WebDavSyncManifest> openManifest(String deviceId) async {
+    final payload = await codec.openDocument(
+      key: root.key,
+      encoded: transport.manifests[deviceId]!,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: 'manifest',
+      schemaVersion: WebDavSyncManifest.schemaVersion,
+      maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+    return WebDavSyncManifest.fromJson(payload);
+  }
+
   test('missing root or either identity map is a total no-op', () async {
     final reports = <WebDavSyncCycleReport>[
       await engine.runCycle(null, allowPreActivation: true),
@@ -617,6 +630,8 @@ void main() {
           'requestCount',
           'bytesUp',
           'bytesDown',
+          'sectionsSkipped',
+          'bytesSaved',
           'disposition',
         }),
       );
@@ -2634,6 +2649,359 @@ void main() {
     );
   });
 
+  test(
+    'unchanged peer references skip reads with an identical merged outcome',
+    () async {
+      final peerLibrary = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'future/library/record': WebDavSyncCircleLeaf(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: now.millisecondsSinceEpoch,
+              originDeviceId: 'device-b',
+            ),
+            value: const <String, Object?>{'value': 'peer'},
+          ),
+        },
+      );
+      local = _FakeLibraryLocalAdapter(
+        <String, Object?>{'theme': 'dark'},
+        document: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: WebDavSyncSectionCache(),
+        clock: () => now,
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(scalars: const <String, Object>{'peerSetting': true}),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        library: peerLibrary,
+      );
+
+      await runFixture(context());
+      final readsAfterFirst = transport.events
+          .where((event) => event.startsWith('read:section:device-b:'))
+          .length;
+      expect(
+        states.state.lastMergedPeerSections['device-b']!.keys,
+        containsAll(<String>[
+          'hot/profile-circle',
+          'tombstones/profile-circle',
+          'library/profile-circle',
+        ]),
+      );
+
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: WebDavSyncSectionCache(),
+        clock: () => now,
+      );
+      await runFixture(context());
+      final skippedOutcome = WebDavSyncCodec.canonicalJson(
+        states.state.profiles['profile-circle']!.baseline!.toJson(),
+      );
+      final skippedLibraryOutcome = WebDavSyncCodec.canonicalJson(
+        states.state.profiles['profile-circle']!.libraryBaseline!.toJson(),
+      );
+      expect(
+        transport.events
+            .where((event) => event.startsWith('read:section:device-b:'))
+            .length,
+        readsAfterFirst,
+      );
+
+      states.state = states.state.copyWith(
+        lastMergedPeerSections:
+            const <String, Map<String, WebDavSyncSectionReference>>{},
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: WebDavSyncSectionCache(),
+        clock: () => now,
+      );
+      await runFixture(context());
+      final alwaysReadOutcome = WebDavSyncCodec.canonicalJson(
+        states.state.profiles['profile-circle']!.baseline!.toJson(),
+      );
+      final alwaysReadLibraryOutcome = WebDavSyncCodec.canonicalJson(
+        states.state.profiles['profile-circle']!.libraryBaseline!.toJson(),
+      );
+
+      expect(
+        transport.events
+            .where((event) => event.startsWith('read:section:device-b:'))
+            .length,
+        readsAfterFirst + 3,
+      );
+      expect(skippedOutcome, alwaysReadOutcome);
+      expect(skippedLibraryOutcome, alwaysReadLibraryOutcome);
+    },
+  );
+
+  test('a changed peer section reference is read and committed', () async {
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(scalars: const <String, Object>{'peerSetting': 'before'}),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+    );
+    await runFixture(context());
+    final oldReference =
+        states.state.lastMergedPeerSections['device-b']!['hot/profile-circle']!;
+    final readsBefore = transport.events
+        .where((event) => event == 'read:section:device-b:hot/profile-circle')
+        .length;
+
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(scalars: const <String, Object>{'peerSetting': 'after'}),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+    );
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      sectionCache: WebDavSyncSectionCache(),
+      clock: () => now,
+    );
+
+    await runFixture(context());
+
+    final newReference =
+        states.state.lastMergedPeerSections['device-b']!['hot/profile-circle']!;
+    expect(
+      transport.events
+          .where((event) => event == 'read:section:device-b:hot/profile-circle')
+          .length,
+      readsBefore + 1,
+    );
+    expect(newReference.contentHash, isNot(oldReference.contentHash));
+    expect(local.preferences['peerSetting'], 'after');
+  });
+
+  test('a failed cycle does not advance peer section references', () async {
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+    );
+    local.failNextApply = true;
+
+    await expectLater(runFixture(context()), throwsStateError);
+
+    expect(states.state.lastMergedPeerSections, isEmpty);
+  });
+
+  test('a conflicted cycle does not advance peer section references', () async {
+    final circleLocal = _FakeCircleLocalAdapter(
+      <String, Object?>{'theme': 'dark'},
+      profiles: _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Local',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-a',
+          ),
+        },
+      ),
+    )..conflictNextCircleApply = true;
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+      profiles: _circleProfiles(
+        <String, WebDavSyncCircleLeaf<WebDavSyncProfileValue>>{
+          'profile-circle': _circleProfileLeaf(
+            name: 'Peer',
+            time: now.millisecondsSinceEpoch,
+            origin: 'device-b',
+          ),
+        },
+      ),
+    );
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: circleLocal,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+
+    final report = await runFixture(context());
+
+    expect(report.localChangeFollowUp, isTrue);
+    expect(states.state.lastMergedPeerSections, isEmpty);
+  });
+
+  test('compression migration republishes once only while active', () async {
+    await runFixture(context());
+    final legacyReferences = <String, String>{
+      for (final section in states.state.ownManifest!.sections)
+        section.name: section.contentHash,
+    };
+    expect(states.state.sealedCompressionMigrated, isFalse);
+    transport.events.clear();
+
+    local.failNextApply = true;
+    await expectLater(engine.runCycle(context(active: true)), throwsStateError);
+    expect(states.state.sealedCompressionMigrated, isFalse);
+    transport.events.clear();
+
+    final migrated = await engine.runCycle(context(active: true));
+    final migratedReferences = <String, String>{
+      for (final section in states.state.ownManifest!.sections)
+        section.name: section.contentHash,
+    };
+
+    expect(migrated.sectionsPushed, 2);
+    expect(states.state.sealedCompressionMigrated, isTrue);
+    expect(
+      migratedReferences['hot/profile-circle'],
+      isNot(legacyReferences['hot/profile-circle']),
+    );
+    expect(
+      migratedReferences['tombstones/profile-circle'],
+      isNot(legacyReferences['tombstones/profile-circle']),
+    );
+
+    transport.events.clear();
+    final settled = await engine.runCycle(context(active: true));
+
+    expect(settled.sectionsPushed, 0);
+    expect(
+      transport.events.where((event) => event.startsWith('write:section:')),
+      isEmpty,
+    );
+    expect(states.state.sealedCompressionMigrated, isTrue);
+  });
+
+  test('a profile without a baseline reads every peer section', () async {
+    const emptyLibrary = WebDavSyncLibraryDocument(
+      circleProfileId: 'profile-circle',
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+    );
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+      library: emptyLibrary,
+    );
+    final peerManifest = await openManifest('device-b');
+    states.state = WebDavSyncEngineState(
+      profiles: const <String, WebDavSyncProfileEngineState>{
+        'profile-circle': WebDavSyncProfileEngineState(
+          libraryBaseline: emptyLibrary,
+        ),
+      },
+      lastMergedPeerSections: <String, Map<String, WebDavSyncSectionReference>>{
+        'device-b': <String, WebDavSyncSectionReference>{
+          for (final section in peerManifest.sections) section.name: section,
+        },
+      },
+    );
+    local = _FakeLibraryLocalAdapter(<String, Object?>{
+      'theme': 'dark',
+    }, document: emptyLibrary);
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+
+    await runFixture(context());
+
+    expect(
+      transport.events
+          .where((event) => event.startsWith('read:section:device-b:'))
+          .toList(),
+      containsAll(<String>[
+        'read:section:device-b:hot/profile-circle',
+        'read:section:device-b:tombstones/profile-circle',
+        'read:section:device-b:library/profile-circle',
+      ]),
+    );
+  });
+
+  test('read cursors and compression migration state round-trip durably', () {
+    final reference = WebDavSyncSectionReference(
+      name: 'library/profile-circle',
+      contentHash: 'a' * 64,
+      semanticDigest: 'b' * 64,
+      updatedAtMs: now.millisecondsSinceEpoch,
+      schemaVersion: WebDavSyncLibraryDocument.schemaVersion,
+      size: 123,
+    );
+    final restored = WebDavSyncEngineState.fromJson(
+      WebDavSyncEngineState(
+        lastMergedPeerSections:
+            <String, Map<String, WebDavSyncSectionReference>>{
+              'device-b': <String, WebDavSyncSectionReference>{
+                reference.name: reference,
+              },
+            },
+        sealedCompressionMigrated: true,
+      ).toJson(),
+    );
+
+    expect(
+      restored.lastMergedPeerSections['device-b']![reference.name]!.contentHash,
+      reference.contentHash,
+    );
+    expect(restored.sealedCompressionMigrated, isTrue);
+  });
+
   test('hot manifest gate reads v1 and silently skips v3', () async {
     final diagnostics = <String>[];
     engine = WebDavSyncEngine(
@@ -3889,6 +4257,7 @@ class _FakeTransport implements WebDavSyncTransport {
     Object? hotPayload,
     WebDavSyncProfilesDocument? profiles,
     WebDavSyncResourcesDocument? resources,
+    WebDavSyncLibraryDocument? library,
   }) async {
     Future<WebDavSyncSectionReference> addSection(
       String name,
@@ -3951,6 +4320,15 @@ class _FakeTransport implements WebDavSyncTransport {
             WebDavSyncLimits.maxGraphDocumentBytes,
             WebDavSyncResourcesDocument.schemaVersion,
           );
+    final libraryRef = library == null
+        ? null
+        : await addSection(
+            'library/${library.circleProfileId}',
+            library.toJson(),
+            library.semanticDigest,
+            WebDavSyncLibraryDocument.maxEncodedBytes,
+            WebDavSyncLibraryDocument.schemaVersion,
+          );
     final manifest = WebDavSyncManifest(
       circleId: root.document.circleId,
       deviceId: deviceId,
@@ -3964,6 +4342,7 @@ class _FakeTransport implements WebDavSyncTransport {
         tombstoneRef,
         if (profileRef != null) profileRef,
         if (resourceRef != null) resourceRef,
+        if (libraryRef != null) libraryRef,
       ],
     );
     manifests[deviceId] = await codec.sealDocument(
