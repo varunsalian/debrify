@@ -2424,7 +2424,7 @@ passphrase, this section supersedes them.
   read-back visibility 404 are inconclusive. The whole probe is retried a
   bounded three times, then
   surfaces a typed retryable setup error rather than unsupported-provider.
-  A received 2xx on the conflicting probe PUT is treated as an ignorer even if its body fails to drain.
+  Any failure while consuming an already-received response body retains that response's status, so a received 2xx on the conflicting probe PUT is treated as an ignorer regardless of the stream error type.
   An overwritten body or absent conflict read-back likewise refuses the
   provider. The result is cached for that
   initialization attempt. A resumed initializer

@@ -934,6 +934,16 @@ final class WebDavProtocolClient {
         uri: uri,
         cause: error,
       );
+    } on WebDavException {
+      rethrow;
+    } catch (error) {
+      throw WebDavException(
+        kind: WebDavErrorKind.network,
+        message: 'WebDAV response was interrupted',
+        statusCode: response.statusCode,
+        uri: uri,
+        cause: error,
+      );
     }
   }
 

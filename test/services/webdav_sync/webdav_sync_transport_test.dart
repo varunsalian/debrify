@@ -465,9 +465,19 @@ void main() {
     },
   );
 
-  test(
-    'conditional-create probe refuses received 2xx when body drain fails',
-    () async {
+  for (final scenario in <({String name, Object error})>[
+    (
+      name: 'HTTP client error',
+      error: http.ClientException('response interrupted'),
+    ),
+    (
+      name: 'decoder-style format error',
+      error: const FormatException('invalid compressed response'),
+    ),
+    (name: 'generic error', error: Exception('response interrupted')),
+  ]) {
+    test('conditional-create probe refuses received 2xx with '
+        '${scenario.name} while draining', () async {
       final methods = <String>[];
       final diagnostics = <String>[];
       Uint8List? stored;
@@ -496,9 +506,7 @@ void main() {
               );
             }
             return http.StreamedResponse(
-              Stream<List<int>>.error(
-                http.ClientException('response interrupted'),
-              ),
+              Stream<List<int>>.error(scenario.error),
               201,
               request: request,
             );
@@ -551,8 +559,72 @@ void main() {
         'WebDAV sync authority failure: probe-conflict, HTTP 201',
       ]);
       transport.close();
-    },
-  );
+    });
+  }
+
+  test('conditional-create probe retries received 2xx create with generic '
+      'body failure', () async {
+    final methods = <String>[];
+    final diagnostics = <String>[];
+    var putCount = 0;
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      diagnostic: (message, _) => diagnostics.add(message),
+      client: _StreamingClient((request) async {
+        methods.add(request.method);
+        if (request.method == 'PUT') {
+          putCount++;
+          await request.finalize().drain<void>();
+          return http.StreamedResponse(
+            Stream<List<int>>.error(Exception('response interrupted')),
+            201,
+            request: request,
+          );
+        }
+        if (request.method == 'DELETE') {
+          return http.StreamedResponse(
+            const Stream<List<int>>.empty(),
+            204,
+            request: request,
+          );
+        }
+        return http.StreamedResponse(
+          const Stream<List<int>>.empty(),
+          500,
+          request: request,
+        );
+      }),
+    );
+
+    await expectLater(
+      transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
+      throwsA(
+        isA<WebDavSyncSetupInconclusiveException>()
+            .having((error) => error.probeStep, 'step', 1)
+            .having((error) => error.statusCode, 'status', 201)
+            .having(
+              (error) => error.exceptionKind,
+              'kind',
+              WebDavErrorKind.network,
+            ),
+      ),
+    );
+
+    expect(putCount, 3);
+    expect(methods, <String>[
+      'PUT',
+      'DELETE',
+      'PUT',
+      'DELETE',
+      'PUT',
+      'DELETE',
+    ]);
+    expect(diagnostics, <String>[
+      'WebDAV sync authority failure: probe-create, HTTP 201',
+    ]);
+    transport.close();
+  });
 
   test('conditional-create probe retries a transient first create', () async {
     final diagnostics = <String>[];

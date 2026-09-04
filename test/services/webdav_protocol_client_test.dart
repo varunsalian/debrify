@@ -706,38 +706,100 @@ void main() {
     );
   });
 
-  test('successful PUT preserves status when its body drain fails', () async {
+  for (final scenario in <({String name, Object error, WebDavErrorKind kind})>[
+    (
+      name: 'timeout',
+      error: TimeoutException('response timed out'),
+      kind: WebDavErrorKind.timeout,
+    ),
+    (
+      name: 'TLS handshake',
+      error: const HandshakeException('response handshake failed'),
+      kind: WebDavErrorKind.tls,
+    ),
+    (
+      name: 'socket',
+      error: const SocketException('response interrupted'),
+      kind: WebDavErrorKind.network,
+    ),
+    (
+      name: 'HTTP client',
+      error: http.ClientException('response interrupted'),
+      kind: WebDavErrorKind.network,
+    ),
+    (
+      name: 'decoder-style format',
+      error: const FormatException('invalid compressed response'),
+      kind: WebDavErrorKind.network,
+    ),
+    (
+      name: 'generic',
+      error: Exception('response interrupted'),
+      kind: WebDavErrorKind.network,
+    ),
+  ]) {
+    test(
+      'successful PUT preserves status for ${scenario.name} body failure',
+      () async {
+        client.close();
+        client = WebDavProtocolClient(
+          endpoint: await endpointFor(server),
+          credentials: const WebDavCredentials(username: '', password: ''),
+          client: _StreamingClient(
+            (request) async => http.StreamedResponse(
+              Stream<List<int>>.error(scenario.error),
+              HttpStatus.noContent,
+              request: request,
+            ),
+          ),
+        );
+        final requestUri = client.uriForPath('status-preserved');
+
+        await expectLater(
+          client.putBytes(
+            path: 'status-preserved',
+            bytes: const <int>[1],
+            maxBytes: 1,
+            createParents: false,
+          ),
+          throwsA(
+            isA<WebDavException>()
+                .having((error) => error.kind, 'kind', scenario.kind)
+                .having(
+                  (error) => error.statusCode,
+                  'status',
+                  HttpStatus.noContent,
+                )
+                .having((error) => error.uri, 'uri', requestUri)
+                .having((error) => error.cause, 'cause', scenario.error),
+          ),
+        );
+      },
+    );
+  }
+
+  test('response body WebDavException is rethrown as-is', () async {
+    const bodyError = WebDavException(
+      kind: WebDavErrorKind.malformedResponse,
+      message: 'invalid response body',
+      statusCode: HttpStatus.partialContent,
+    );
     client.close();
     client = WebDavProtocolClient(
       endpoint: await endpointFor(server),
       credentials: const WebDavCredentials(username: '', password: ''),
       client: _StreamingClient(
         (request) async => http.StreamedResponse(
-          Stream<List<int>>.error(
-            const SocketException('response interrupted'),
-          ),
-          HttpStatus.noContent,
+          Stream<List<int>>.error(bodyError),
+          HttpStatus.partialContent,
           request: request,
         ),
       ),
     );
 
     await expectLater(
-      client.putBytes(
-        path: 'status-preserved',
-        bytes: const <int>[1],
-        maxBytes: 1,
-        createParents: false,
-      ),
-      throwsA(
-        isA<WebDavException>()
-            .having((error) => error.kind, 'kind', WebDavErrorKind.network)
-            .having(
-              (error) => error.statusCode,
-              'status',
-              HttpStatus.noContent,
-            ),
-      ),
+      client.getBytes(path: 'invalid', maxBytes: 100),
+      throwsA(same(bodyError)),
     );
   });
 
