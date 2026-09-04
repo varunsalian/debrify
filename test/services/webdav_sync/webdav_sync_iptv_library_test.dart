@@ -177,6 +177,24 @@ void main() {
         'News',
         'Sports',
       ]);
+      final customListId = await IptvMediaStore.createList('Sports');
+      await IptvMediaStore.setChannelInList(
+        customListId,
+        'https://panel.invalid/live/10',
+        true,
+        channelName: 'List channel',
+        playlistId: sourceId,
+        channelNumber: 10,
+        contentType: 'live',
+        duration: -1,
+        httpHeaders: const <String, String>{'Referer': 'https://panel.invalid'},
+      );
+      await IptvMediaStore.setChannelFavorited(
+        'https://panel.invalid/live/11',
+        true,
+        channelName: 'Favorite channel',
+        playlistId: sourceId,
+      );
       await IptvMediaStore.setCategoryChannelOrder(
         sourceId,
         'News',
@@ -263,11 +281,14 @@ void main() {
         profileId,
         buildRequest(maps),
       );
-      expect(fromA.document.records, hasLength(8));
+      expect(fromA.document.records, hasLength(11));
       expect(
         fromA.document.records.keys,
         containsAll(<String>[
           'catalog/category-order/$circleResourceId/m3u',
+          'iptv/list/${_part(customListId)}',
+          'iptv/list-ch/${_part(customListId)}/${_sha('https://panel.invalid/live/10')}',
+          'iptv/list-ch/${_part(IptvMediaStore.favoritesListId)}/${_sha('https://panel.invalid/live/11')}',
           'iptv/order/$circleResourceId/${_sha('News')}',
           'iptv/watch/$circleResourceId/${_sha('https://panel.invalid/movie/9')}',
           'resume/$circleResourceId/${_sha('https://panel.invalid/movie/9')}',
@@ -276,6 +297,13 @@ void main() {
           'tv/pool-gen/${_part('channel-a')}',
           'tv/pool/${_part('channel-a')}/${'a' * 40}',
         ]),
+      );
+      expect(
+        fromA
+            .document
+            .records['iptv/list-ch/${_part(customListId)}/${_sha('https://panel.invalid/live/10')}']
+            ?.value?['sourceRef'],
+        circleResourceId,
       );
       final poolValue = fromA
           .document
@@ -338,6 +366,8 @@ void main() {
       );
       expect(outcome.appliedNamespaces, <String>{
         'catalog/category-order',
+        'iptv/list',
+        'iptv/list-ch',
         'iptv/order',
         'iptv/watch',
         'resume',
@@ -359,6 +389,29 @@ void main() {
         orderBy: 'position',
       );
       expect(orderRows.map((row) => row['name']), <String>['Two', 'One']);
+      expect(
+        (await dbB.query(
+          'iptv_lists',
+          where: 'id = ?',
+          whereArgs: <Object?>[customListId],
+        )).single['name'],
+        'Sports',
+      );
+      final memberships = await dbB.query(
+        'iptv_list_channels',
+        orderBy: 'list_id, url',
+      );
+      expect(memberships, hasLength(2));
+      expect(
+        memberships.map((row) => row['playlist_id']),
+        everyElement(sourceId),
+      );
+      expect(
+        memberships.singleWhere(
+          (row) => row['url'] == 'https://panel.invalid/live/10',
+        )['duration'],
+        -1,
+      );
       final history = await StorageService.getIptvWatchHistory();
       expect(
         history['https://panel.invalid/movie/9']?['httpHeaders'],
@@ -495,6 +548,166 @@ void main() {
       );
     },
   );
+
+  test('list membership applies when its sourceRef is unmapped', () async {
+    final blank = await adapter.readLibrary(
+      session,
+      profileId,
+      buildRequest(maps),
+    );
+    const url = 'https://retired.invalid/live/1';
+    final remote = WebDavSyncLibraryDocument(
+      circleProfileId: circleProfileId,
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        'iptv/list-ch/${_part(IptvMediaStore.favoritesListId)}/${_sha(url)}':
+            const WebDavSyncCircleLeaf<Map<String, Object?>>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: 7000,
+                originDeviceId: 'device-b',
+              ),
+              value: <String, Object?>{
+                'url': url,
+                'name': 'Retired source channel',
+                'logoUrl': '',
+                'group': 'Archive',
+                'sourceRef': 'resource-missing',
+                'httpHeaders': <String, String>{'User-Agent': 'Legacy'},
+                'addedAt': 6000,
+                'position': 3,
+              },
+            ),
+      },
+    );
+
+    final outcome = await adapter.applyLibrary(
+      session,
+      profileId,
+      WebDavSyncLibraryApplyRequest(
+        circleProfileId: circleProfileId,
+        identityMaps: maps,
+        document: remote,
+        observedRevisions: blank.revisions,
+        hiddenGroupNamesByWireKey: const <String, String>{},
+      ),
+    );
+
+    expect(outcome.appliedNamespaces, const <String>{'iptv/list-ch'});
+    final row = (await dbA.query('iptv_list_channels')).single;
+    expect(row['url'], url);
+    expect(row['playlist_id'], isEmpty);
+    expect(row['http_headers_json'], contains('Legacy'));
+  });
+
+  test('Favorites metadata is discarded and cannot suppress members', () {
+    const url = 'https://panel.invalid/live/favorite';
+    final listKey = 'iptv/list/${_part(IptvMediaStore.favoritesListId)}';
+    final memberKey =
+        'iptv/list-ch/${_part(IptvMediaStore.favoritesListId)}/${_sha(url)}';
+    final member = WebDavSyncCircleLeaf<Map<String, Object?>>(
+      stamp: const WebDavSyncStamp(
+        normalizedTimeMs: 10,
+        originDeviceId: 'device-a',
+      ),
+      value: const <String, Object?>{
+        'url': url,
+        'name': 'Favorite',
+        'logoUrl': '',
+        'group': '',
+        'sourceRef': '',
+        'addedAt': 10,
+        'position': 0,
+      },
+    );
+    final merged = WebDavSyncLibraryMerge.merge(
+      circleProfileId: circleProfileId,
+      documents: <WebDavSyncLibraryDocument>[
+        WebDavSyncLibraryDocument(
+          circleProfileId: circleProfileId,
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+            listKey: const WebDavSyncCircleLeaf<Map<String, Object?>>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: 11,
+                originDeviceId: 'device-b',
+              ),
+              value: null,
+            ),
+            memberKey: member,
+          },
+        ),
+      ],
+    );
+
+    expect(merged.records, isNot(contains(listKey)));
+    expect(merged.records[memberKey], member);
+  });
+
+  test('list tombstone prunes members and cascades the local rows', () async {
+    final listId = await IptvMediaStore.createList('Temporary');
+    const url = 'https://panel.invalid/live/temporary';
+    await IptvMediaStore.setChannelInList(listId, url, true);
+    final local = await adapter.readLibrary(
+      session,
+      profileId,
+      buildRequest(maps),
+    );
+    final listKey = 'iptv/list/${_part(listId)}';
+    final memberKey = 'iptv/list-ch/${_part(listId)}/${_sha(url)}';
+    expect(local.document.records, contains(memberKey));
+    final remote = WebDavSyncLibraryDocument(
+      circleProfileId: circleProfileId,
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        listKey: const WebDavSyncCircleLeaf<Map<String, Object?>>(
+          stamp: WebDavSyncStamp(
+            normalizedTimeMs: 100001,
+            originDeviceId: 'device-b',
+          ),
+          value: null,
+        ),
+      },
+    );
+    final merged = WebDavSyncLibraryMerge.merge(
+      circleProfileId: circleProfileId,
+      documents: <WebDavSyncLibraryDocument>[local.document, remote],
+    );
+    expect(merged.records[listKey]?.value, isNull);
+    expect(merged.records, isNot(contains(memberKey)));
+
+    final outcome = await adapter.applyLibrary(
+      session,
+      profileId,
+      WebDavSyncLibraryApplyRequest(
+        circleProfileId: circleProfileId,
+        identityMaps: maps,
+        document: merged,
+        observedRevisions: local.revisions,
+        hiddenGroupNamesByWireKey: local.hiddenGroupNamesByWireKey,
+      ),
+    );
+
+    expect(outcome.appliedNamespaces, const <String>{'iptv/list'});
+    expect(
+      await dbA.query(
+        'iptv_lists',
+        where: 'id = ?',
+        whereArgs: <Object?>[listId],
+      ),
+      isEmpty,
+    );
+    expect(
+      await dbA.query(
+        'iptv_list_channels',
+        where: 'list_id = ?',
+        whereArgs: <Object?>[listId],
+      ),
+      isEmpty,
+    );
+    final memberState = (await dbA.query(
+      'webdav_sync_record_state',
+      where: 'kind = ? AND owner_key = ?',
+      whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvListChannels, listId],
+    )).single;
+    expect(memberState['deleted'], 0);
+  });
 
   test(
     'debrify_tv revision fence rejects a concurrent local mutation',

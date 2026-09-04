@@ -24,6 +24,8 @@ abstract final class WebDavSyncLibraryKinds {
   static const String categoryManualOrders = 'category_manual_orders';
   static const String iptvCategoryChannelOrders =
       'iptv_category_channel_orders';
+  static const String iptvLists = 'iptv_lists';
+  static const String iptvListChannels = 'iptv_list_channels';
   static const String iptvWatchHistory = 'iptv_watch_history';
   static const String videoResume = 'video_resume';
 }
@@ -222,6 +224,36 @@ final class WebDavSyncIptvOrderTarget {
   final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
 }
 
+final class WebDavSyncIptvListTarget {
+  const WebDavSyncIptvListTarget({
+    required this.listId,
+    required this.name,
+    required this.desiredPosition,
+    required this.createdAtMs,
+    required this.leaf,
+  });
+
+  final String listId;
+  final String name;
+  final int desiredPosition;
+  final int createdAtMs;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
+final class WebDavSyncIptvListChannelTarget {
+  const WebDavSyncIptvListChannelTarget({
+    required this.listId,
+    required this.url,
+    required this.localSourceId,
+    required this.leaf,
+  });
+
+  final String listId;
+  final String url;
+  final String localSourceId;
+  final WebDavSyncCircleLeaf<Map<String, Object?>> leaf;
+}
+
 final class WebDavSyncIptvWatchTarget {
   const WebDavSyncIptvWatchTarget({
     required this.sourceId,
@@ -407,7 +439,9 @@ abstract final class WebDavSyncLibraryMerge {
       }
     }
     _canonicalizeTvChannelNumbers(winners);
+    _canonicalizeIptvListPositions(winners);
     _pruneSuppressedTvChildren(winners);
+    _pruneSuppressedIptvListChildren(winners);
     return WebDavSyncLibraryDocument(
       circleProfileId: circleProfileId,
       records:
@@ -449,6 +483,38 @@ abstract final class WebDavSyncLibraryMerge {
       if (!isPool) return false;
       final generation = generations[parts[2]]?.value?['generationId'];
       return generation is String && leaf.value?['generationId'] != generation;
+    });
+  }
+
+  /// A custom-list tombstone is the sole membership boundary for deletion.
+  /// Individual member tombstones would make list removal proportional to its
+  /// size, so every child of a dead list is removed by this normalizer.
+  static void _pruneSuppressedIptvListChildren(
+    Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> winners,
+  ) {
+    final deadLists = <String>{};
+    final forbiddenBuiltinMetadata = <String>[];
+    for (final entry in winners.entries) {
+      final parts = entry.key.split('/');
+      if (parts.length == 3 && parts[0] == 'iptv' && parts[1] == 'list') {
+        if (_tryDecodeBase64Part(parts[2]) == 'favorites') {
+          forbiddenBuiltinMetadata.add(entry.key);
+          continue;
+        }
+        if (entry.value.value != null) continue;
+        deadLists.add(parts[2]);
+      }
+    }
+    for (final key in forbiddenBuiltinMetadata) {
+      winners.remove(key);
+    }
+    if (deadLists.isEmpty) return;
+    winners.removeWhere((key, _) {
+      final parts = key.split('/');
+      return parts.length == 4 &&
+          parts[0] == 'iptv' &&
+          parts[1] == 'list-ch' &&
+          deadLists.contains(parts[2]);
     });
   }
 
@@ -506,6 +572,58 @@ abstract final class WebDavSyncLibraryMerge {
         value: Map<String, Object?>.unmodifiable(<String, Object?>{
           ...channel.leaf.value!,
           'channelNumber': assigned,
+        }),
+      );
+    }
+  }
+
+  /// Custom-list positions are a compact deterministic sequence. Favorites
+  /// has no metadata leaf and is therefore never moved by library merge.
+  static void _canonicalizeIptvListPositions(
+    Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> winners,
+  ) {
+    final lists =
+        <
+          ({
+            String key,
+            String listId,
+            int desired,
+            WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
+          })
+        >[];
+    for (final entry in winners.entries) {
+      final parts = entry.key.split('/');
+      final value = entry.value.value;
+      if (parts.length != 3 ||
+          parts[0] != 'iptv' ||
+          parts[1] != 'list' ||
+          value == null ||
+          value['position'] is! int ||
+          (value['position']! as int) < 0) {
+        continue;
+      }
+      final listId = _tryDecodeBase64Part(parts[2]);
+      if (listId == null || listId == 'favorites') continue;
+      lists.add((
+        key: entry.key,
+        listId: listId,
+        desired: value['position']! as int,
+        leaf: entry.value,
+      ));
+    }
+    lists.sort((left, right) {
+      final desired = left.desired.compareTo(right.desired);
+      return desired != 0 ? desired : left.listId.compareTo(right.listId);
+    });
+    for (var index = 0; index < lists.length; index++) {
+      final list = lists[index];
+      final assigned = index + 1;
+      if (assigned == list.desired) continue;
+      winners[list.key] = WebDavSyncCircleLeaf<Map<String, Object?>>(
+        stamp: list.leaf.stamp,
+        value: Map<String, Object?>.unmodifiable(<String, Object?>{
+          ...list.leaf.value!,
+          'position': assigned,
         }),
       );
     }

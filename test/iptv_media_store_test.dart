@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_channel_order.dart';
 import 'package:debrify/services/iptv_media_store.dart';
@@ -133,8 +134,9 @@ void main() {
         (await db.query(
           'webdav_sync_record_state',
           columns: const <String>['origin_device_id'],
-          where: 'kind IN (?, ?)',
+          where: 'kind IN (?, ?, ?)',
           whereArgs: const <Object?>[
+            WebDavSyncLibraryKinds.iptvListChannels,
             WebDavSyncLibraryKinds.iptvWatchHistory,
             WebDavSyncLibraryKinds.videoResume,
           ],
@@ -148,43 +150,54 @@ void main() {
           where: 'key = ?',
           whereArgs: const <Object>['mutation_revision'],
         )).single['value'],
-        '2',
+        '3',
       );
+      final favoriteState = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+      )).single;
+      expect(favoriteState['owner_key'], IptvMediaStore.favoritesListId);
+      expect(favoriteState['item_key'], 'http://h/live/u/p/1.ts');
+      expect(favoriteState['updated_at_ms'], 111);
       expect(notifications, 0);
     });
 
-    test('an oversized legacy history blob imports only the newest rows', () async {
-      final blob = <String, Object?>{
-        for (var i = 0; i < 250; i++)
-          'http://h/movie/$i.mp4': <String, Object?>{
-            'name': 'Movie $i',
-            'playlistId': 'p1',
-            'lastPlayedAt': 1000 + i,
-          },
-      };
-      SharedPreferences.setMockInitialValues({historyKey: jsonEncode(blob)});
+    test(
+      'an oversized legacy history blob imports only the newest rows',
+      () async {
+        final blob = <String, Object?>{
+          for (var i = 0; i < 250; i++)
+            'http://h/movie/$i.mp4': <String, Object?>{
+              'name': 'Movie $i',
+              'playlistId': 'p1',
+              'lastPlayedAt': 1000 + i,
+            },
+        };
+        SharedPreferences.setMockInitialValues({historyKey: jsonEncode(blob)});
 
-      final history = await StorageService.getIptvWatchHistory();
-      expect(history, hasLength(100));
-      expect(history.containsKey('http://h/movie/249.mp4'), isTrue);
-      expect(history.containsKey('http://h/movie/150.mp4'), isTrue);
-      expect(
-        history.containsKey('http://h/movie/149.mp4'),
-        isFalse,
-        reason: 'the import honors the same retention as the live writer',
-      );
+        final history = await StorageService.getIptvWatchHistory();
+        expect(history, hasLength(100));
+        expect(history.containsKey('http://h/movie/249.mp4'), isTrue);
+        expect(history.containsKey('http://h/movie/150.mp4'), isTrue);
+        expect(
+          history.containsKey('http://h/movie/149.mp4'),
+          isFalse,
+          reason: 'the import honors the same retention as the live writer',
+        );
 
-      final db = DebrifyTvDatabase.debugDatabaseOverride!;
-      expect(
-        await db.query(
-          'webdav_sync_record_state',
-          where: 'kind = ?',
-          whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvWatchHistory],
-        ),
-        hasLength(100),
-        reason: 'capped-out rows carry no migration stamps',
-      );
-    });
+        final db = DebrifyTvDatabase.debugDatabaseOverride!;
+        expect(
+          await db.query(
+            'webdav_sync_record_state',
+            where: 'kind = ?',
+            whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvWatchHistory],
+          ),
+          hasLength(100),
+          reason: 'capped-out rows carry no migration stamps',
+        );
+      },
+    );
 
     test(
       'a corrupt legacy blob imports as empty, matching the old reader',
@@ -196,6 +209,303 @@ void main() {
         expect(prefs.getString(favoritesKey), isNull);
       },
     );
+  });
+
+  group('list library sync', () {
+    test('create, rename, reorder and delete stamp once per call', () async {
+      var now = 1000;
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      WebDavSyncLibraryMutation.originDeviceId = 'device-a';
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications++;
+      };
+
+      final alpha = await IptvMediaStore.createList('Alpha');
+      final beta = await IptvMediaStore.createList('Beta');
+      await IptvMediaStore.renameList(alpha, 'Renamed');
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      var alphaState = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ? AND owner_key = ?',
+        whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvLists, alpha],
+      )).single;
+      expect(alphaState['updated_at_ms'], 1002);
+      expect(alphaState['origin_device_id'], 'device-a');
+      expect(alphaState['deleted'], 0);
+
+      await IptvMediaStore.reorderLists(<String>[beta, alpha]);
+      final reordered = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvLists],
+      );
+      expect(reordered.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+        1003,
+      });
+      await IptvMediaStore.deleteList(alpha);
+
+      alphaState = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ? AND owner_key = ?',
+        whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvLists, alpha],
+      )).single;
+      expect(alphaState['deleted'], 1);
+      expect(alphaState['updated_at_ms'], 1004);
+      expect(
+        await db.query(
+          'webdav_sync_record_state',
+          where: 'kind = ? AND owner_key = ?',
+          whereArgs: const <Object?>[
+            WebDavSyncLibraryKinds.iptvLists,
+            IptvMediaStore.favoritesListId,
+          ],
+        ),
+        isEmpty,
+        reason: 'Favorites never has a metadata record',
+      );
+      expect(notifications, 5);
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '5',
+      );
+    });
+
+    test('list deletion leaves member states live for merge pruning', () async {
+      final listId = await IptvMediaStore.createList('Temporary');
+      await IptvMediaStore.setChannelInList(
+        listId,
+        'https://panel.invalid/live/1',
+        true,
+      );
+
+      await IptvMediaStore.deleteList(listId);
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      expect(
+        await db.query(
+          'iptv_list_channels',
+          where: 'list_id = ?',
+          whereArgs: <Object?>[listId],
+        ),
+        isEmpty,
+      );
+      final memberState = (await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ? AND owner_key = ?',
+        whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvListChannels, listId],
+      )).single;
+      expect(memberState['deleted'], 0);
+    });
+
+    test(
+      'custom and Favorites membership writes stamp one record each',
+      () async {
+        var now = 2000;
+        IptvMediaStore.debugLibraryClock = () =>
+            DateTime.fromMillisecondsSinceEpoch(now++);
+        final listId = await IptvMediaStore.createList('Sports');
+        var notifications = 0;
+        WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+          notifications++;
+        };
+
+        await IptvMediaStore.setChannelInList(
+          listId,
+          'https://panel.invalid/live/1',
+          true,
+          playlistId: 'source-1',
+        );
+        await IptvMediaStore.setChannelFavorited(
+          'https://panel.invalid/live/2',
+          true,
+          playlistId: 'source-1',
+        );
+
+        final db = DebrifyTvDatabase.debugDatabaseOverride!;
+        final states = await db.query(
+          'webdav_sync_record_state',
+          where: 'kind = ?',
+          whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+          orderBy: 'owner_key',
+        );
+        expect(states, hasLength(2));
+        expect(states.map((row) => row['owner_key']).toSet(), <Object?>{
+          listId,
+          IptvMediaStore.favoritesListId,
+        });
+        expect(states.map((row) => row['deleted']), everyElement(0));
+        expect(notifications, 2);
+      },
+    );
+
+    test('playlist deletion tombstones all removed members once', () async {
+      var now = 3000;
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      final listId = await IptvMediaStore.createList('Sports');
+      await IptvMediaStore.setChannelInList(
+        listId,
+        'https://panel.invalid/live/1',
+        true,
+        playlistId: 'source-1',
+      );
+      await IptvMediaStore.setChannelFavorited(
+        'https://panel.invalid/live/2',
+        true,
+        playlistId: 'source-1',
+      );
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications++;
+      };
+
+      await IptvMediaStore.removeFavoritesByPlaylistId('source-1');
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      final states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+      );
+      expect(states, hasLength(2));
+      expect(states.map((row) => row['deleted']), everyElement(1));
+      expect(states.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+        3003,
+      });
+      expect(notifications, 1);
+    });
+
+    test('member reorder stamps every moved row with one stamp', () async {
+      var now = 3500;
+      IptvMediaStore.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(now++);
+      const urls = <String>[
+        'https://panel.invalid/live/1',
+        'https://panel.invalid/live/2',
+        'https://panel.invalid/live/3',
+      ];
+      for (final url in urls) {
+        await IptvMediaStore.setChannelFavorited(url, true);
+      }
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications++;
+      };
+
+      await IptvMediaStore.reorderListChannels(
+        IptvMediaStore.favoritesListId,
+        const <String>[
+          'https://panel.invalid/live/3',
+          'https://panel.invalid/live/1',
+          'https://panel.invalid/live/2',
+        ],
+      );
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      final states = await db.query(
+        'webdav_sync_record_state',
+        where: 'kind = ?',
+        whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+      );
+      expect(states.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+        3503,
+      });
+      expect(
+        (await db.query(
+          'iptv_list_channels',
+          orderBy: 'position',
+        )).map((row) => row['url']),
+        <String>[urls[2], urls[0], urls[1]],
+      );
+      expect(notifications, 1);
+    });
+
+    test(
+      'URL reconciliation tombstones old keys and stamps new keys',
+      () async {
+        var now = 4000;
+        IptvMediaStore.debugLibraryClock = () =>
+            DateTime.fromMillisecondsSinceEpoch(now++);
+        const oldUrl = 'http://h/live/u/p/7.m3u8';
+        const newUrl = 'http://h/live/u/p/7.ts';
+        await IptvMediaStore.setChannelFavorited(oldUrl, true);
+        var notifications = 0;
+        WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+          notifications++;
+        };
+
+        await IptvMediaStore.reconcileFavoriteUrls(<IptvChannel>[
+          IptvChannel(name: 'Seven', url: newUrl),
+        ]);
+
+        final db = DebrifyTvDatabase.debugDatabaseOverride!;
+        final states = await db.query(
+          'webdav_sync_record_state',
+          where: 'kind = ?',
+          whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+          orderBy: 'item_key',
+        );
+        expect(states, hasLength(2));
+        expect(
+          states.singleWhere((row) => row['item_key'] == oldUrl)['deleted'],
+          1,
+        );
+        expect(
+          states.singleWhere((row) => row['item_key'] == newUrl)['deleted'],
+          0,
+        );
+        expect(states.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+          4001,
+        });
+        expect(notifications, 1);
+      },
+    );
+
+    test('maintenance-origin list writes never stamp or notify', () async {
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () {
+        notifications++;
+      };
+      final listId = await IptvMediaStore.createList(
+        'Silent',
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+      await IptvMediaStore.renameList(
+        listId,
+        'Still silent',
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+      await IptvMediaStore.setChannelInList(
+        listId,
+        'https://panel.invalid/live/1',
+        true,
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+      await IptvMediaStore.deleteList(
+        listId,
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      expect(await db.query('webdav_sync_record_state'), isEmpty);
+      expect(
+        (await db.query(
+          'webdav_sync_meta',
+          where: 'key = ?',
+          whereArgs: const <Object>['mutation_revision'],
+        )).single['value'],
+        '0',
+      );
+      expect(notifications, 0);
+    });
   });
 
   group('category channel orders', () {

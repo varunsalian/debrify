@@ -2110,13 +2110,15 @@ Synced live, per record, under the same stamped-LWW rules as hot scalars:
 - IPTV personal state: hidden categories (`hidden_groups`), manual category
   arrangements (`category_manual_orders`), per-category channel arrangements
   (`iptv_category_channel_orders`), VOD watch history/continue watching
-  (`iptv_watch_history`), video resume (`video_resume`).
+  (`iptv_watch_history`), video resume (`video_resume`), custom-list metadata
+  (`iptv_lists`) and Favorites/custom-list membership
+  (`iptv_list_channels`).
 - Debrify TV: channels with their keywords (`tv_channels` +
   `tv_channel_keywords`, one record), and per-channel torrent hash pools
   (`tv_cached_torrents`) — the pool is the channel's playable inventory.
 
 Excluded by design: IPTV catalogs/EPG (each device re-downloads its
-playlists), custom IPTV lists, `tv_keyword_stats`, `tv_channel_cache_state`
+playlists), `tv_keyword_stats`, `tv_channel_cache_state`
 (both rebuildable device-local caches).
 
 ### 14.2 Wire placement
@@ -2136,6 +2138,8 @@ group names in the clear:
   (seeders, dates, sources_json) is deliberately not carried.
 - `iptv/order/<circleResourceId>/<sha256(group)>`,
   `iptv/watch/<circleResourceId>/<sha256(url)>`,
+  `iptv/list/<base64url(customListId)>`,
+  `iptv/list-ch/<base64url(listId)>/<sha256(url)>`,
   `resume/<circleResourceId-or-_>/<sha256(resumeKey)>`,
   `catalog/hidden/<circleResourceId>/<variant>/<sha256(group)>`,
   `catalog/category-order/<circleResourceId>/<variant>` with
@@ -2161,6 +2165,10 @@ wipe must never mint a circle-wide deletion. Deletions that ARE user
 intent write `deleted=1` tombstone rows (channels: per-channel tombstones
 on delete and clear-all).
 
+`debrify_tv.db` schema v10 seeds migration-origin `iptv_lists` stamps for
+existing custom lists and `iptv_list_channels` stamps for every membership,
+including Favorites, using `updated_at` / `added_at` as their initial times.
+
 ### 14.4 Pool generations
 
 Pools replace atomically, never row-by-row: every user pool save mints a
@@ -2180,6 +2188,10 @@ tombstones.
   sort by (desired number, channel id) and take the next free slot;
   occupied numbers are vacated to temporary values first so exchanges
   cannot trip the UNIQUE constraint mid-transaction.
+- Custom-list positions canonicalize by `(position, listId)` into a sequential
+  custom-list order; Favorites keeps its permanent local parent row. A custom
+  list tombstone suppresses all of its member leaves, and local foreign-key
+  cascade removes the materialized memberships.
 - Change detection is sidecar-stamp AND physical-row: a matching channel
   stamp with a missing physical row still materializes, and a matching
   pool-generation stamp is additionally probed by row count (first-join
@@ -2204,6 +2216,9 @@ the mounted Debrify TV screen through a dedicated MainPageBridge hook;
 `catalog/*` and `iptv/*` reuse the IPTV catalog/source signals; watch and
 resume records fire the playback-data notification. UI callbacks are
 best-effort and can never fail a committed batch.
+
+`iptv/list` and `iptv/list-ch` coalesce onto the IPTV media-store list revision
+so mounted Favorites/custom-list surfaces reload once per applied batch.
 
 ### 14.7 Adversarial review outcome (2026-09-04 night)
 

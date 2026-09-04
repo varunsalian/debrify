@@ -1,4 +1,5 @@
 import '../iptv_channel_order.dart';
+import '../iptv_media_store.dart';
 import '../main_page_bridge.dart';
 import '../storage_service.dart';
 
@@ -15,6 +16,7 @@ enum _WebDavSyncUiRefreshTarget {
   sidebarConfiguration,
   iptvCatalog,
   iptvSource,
+  iptvLists,
   playbackData,
   debrifyTvLibrary,
 }
@@ -33,6 +35,8 @@ abstract final class WebDavSyncUiRefresh {
     'catalog/hidden': {_WebDavSyncUiRefreshTarget.iptvCatalog},
     'catalog/category-order': {_WebDavSyncUiRefreshTarget.iptvCatalog},
     'iptv/order': {_WebDavSyncUiRefreshTarget.iptvSource},
+    'iptv/list': {_WebDavSyncUiRefreshTarget.iptvLists},
+    'iptv/list-ch': {_WebDavSyncUiRefreshTarget.iptvLists},
     'iptv/watch': {_WebDavSyncUiRefreshTarget.playbackData},
     'resume': {_WebDavSyncUiRefreshTarget.playbackData},
     // HomePageSettingsPage and SpotlightHeroSourcePage.
@@ -136,6 +140,8 @@ abstract final class WebDavSyncUiRefresh {
             IptvChannelOrderSignal.notifyCatalogChanged('');
           case _WebDavSyncUiRefreshTarget.iptvSource:
             IptvChannelOrderSignal.notifySourceChanged('');
+          case _WebDavSyncUiRefreshTarget.iptvLists:
+            IptvMediaStore.notifyListsChanged();
           case _WebDavSyncUiRefreshTarget.playbackData:
             MainPageBridge.notifyPlaybackDataChanged();
           case _WebDavSyncUiRefreshTarget.debrifyTvLibrary:

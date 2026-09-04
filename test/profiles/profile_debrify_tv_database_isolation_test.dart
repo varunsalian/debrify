@@ -644,6 +644,8 @@ void main() {
                 generationTarget,
               ],
               poolTargets: <WebDavSyncTvPoolTarget>[poolTarget],
+              listTargets: const <WebDavSyncIptvListTarget>[],
+              listChannelTargets: const <WebDavSyncIptvListChannelTarget>[],
               orderTargets: const <WebDavSyncIptvOrderTarget>[],
               watchTargets: const <WebDavSyncIptvWatchTarget>[],
               resumeTargets: const <WebDavSyncVideoResumeTarget>[],
@@ -747,6 +749,8 @@ void main() {
                 generationTarget,
               ],
               poolTargets: <WebDavSyncTvPoolTarget>[poolTarget],
+              listTargets: const <WebDavSyncIptvListTarget>[],
+              listChannelTargets: const <WebDavSyncIptvListChannelTarget>[],
               orderTargets: const <WebDavSyncIptvOrderTarget>[],
               watchTargets: const <WebDavSyncIptvWatchTarget>[],
               resumeTargets: const <WebDavSyncVideoResumeTarget>[],
@@ -770,6 +774,128 @@ void main() {
       );
       expect(pools, hasLength(1));
       expect(pools.single['infohash'], 'a' * 40);
+    },
+  );
+
+  test(
+    'two devices canonicalize custom lists and converge memberships',
+    () async {
+      final listALeaf = leaf(200, 'device-a', const <String, Object?>{
+        'name': 'Alpha',
+        'position': 7,
+        'createdAt': 10,
+      });
+      final listBLeaf = leaf(200, 'device-b', const <String, Object?>{
+        'name': 'Beta',
+        'position': 7,
+        'createdAt': 11,
+      });
+      WebDavSyncIptvListTarget listTarget(
+        String id,
+        String name,
+        int createdAt,
+        WebDavSyncCircleLeaf<Map<String, Object?>> value,
+      ) => WebDavSyncIptvListTarget(
+        listId: id,
+        name: name,
+        desiredPosition: 7,
+        createdAtMs: createdAt,
+        leaf: value,
+      );
+      WebDavSyncIptvListChannelTarget memberTarget(
+        String listId,
+        String url,
+        int position,
+      ) => WebDavSyncIptvListChannelTarget(
+        listId: listId,
+        url: url,
+        localSourceId: '',
+        leaf: leaf(210, 'device-a', <String, Object?>{
+          'url': url,
+          'name': url,
+          'logoUrl': '',
+          'group': 'News',
+          'sourceRef': '',
+          'addedAt': 20,
+          'position': position,
+        }),
+      );
+      final listA = listTarget('list_1_1', 'Alpha', 10, listALeaf);
+      final listB = listTarget('list_2_2', 'Beta', 11, listBLeaf);
+      final memberA = memberTarget(
+        'list_1_1',
+        'https://panel.invalid/live/1',
+        4,
+      );
+      final memberB = memberTarget(
+        'list_2_2',
+        'https://panel.invalid/live/2',
+        9,
+      );
+
+      Future<void> apply(
+        ProfileScope scope,
+        List<WebDavSyncIptvListTarget> lists,
+        List<WebDavSyncIptvListChannelTarget> members,
+      ) async {
+        final outcome = await DebrifyTvDatabase.instance
+            .applyWebDavSyncFamilies(
+              scope,
+              expectedRevision: 0,
+              channelTargets: const <WebDavSyncTvChannelTarget>[],
+              generationTargets: const <WebDavSyncTvPoolGenerationTarget>[],
+              poolTargets: const <WebDavSyncTvPoolTarget>[],
+              listTargets: lists,
+              listChannelTargets: members,
+              orderTargets: const <WebDavSyncIptvOrderTarget>[],
+              watchTargets: const <WebDavSyncIptvWatchTarget>[],
+              resumeTargets: const <WebDavSyncVideoResumeTarget>[],
+            );
+        expect(outcome.result, WebDavSyncLibraryApplyResult.applied);
+        expect(outcome.touchedNamespaces, <String>{
+          'iptv/list',
+          'iptv/list-ch',
+        });
+      }
+
+      await apply(
+        profileA,
+        <WebDavSyncIptvListTarget>[listB, listA],
+        <WebDavSyncIptvListChannelTarget>[memberB, memberA],
+      );
+      await apply(
+        profileB,
+        <WebDavSyncIptvListTarget>[listA, listB],
+        <WebDavSyncIptvListChannelTarget>[memberA, memberB],
+      );
+
+      Future<List<Map<String, Object?>>> rows(
+        ProfileScope scope,
+        String table,
+      ) => DebrifyTvDatabase.instance.runOneShotScoped(
+        scope,
+        (db) => db.query(
+          table,
+          where: table == 'iptv_lists' ? 'is_builtin = 0' : null,
+          orderBy: table == 'iptv_lists'
+              ? 'id'
+              : table == 'iptv_list_channels'
+              ? 'list_id, url'
+              : 'kind, owner_key, item_key',
+        ),
+      );
+      final listsA = await rows(profileA, 'iptv_lists');
+      final listsB = await rows(profileB, 'iptv_lists');
+      expect(listsA, listsB);
+      expect(listsA.map((row) => row['position']), <Object?>[1, 2]);
+      expect(
+        await rows(profileA, 'iptv_list_channels'),
+        await rows(profileB, 'iptv_list_channels'),
+      );
+      expect(
+        await rows(profileA, 'webdav_sync_record_state'),
+        await rows(profileB, 'webdav_sync_record_state'),
+      );
     },
   );
 

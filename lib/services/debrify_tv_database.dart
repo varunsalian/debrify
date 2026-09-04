@@ -259,6 +259,15 @@ class DebrifyTvDatabase {
       final channels = <String, Map<String, Object?>>{
         for (final row in channelRows) row['channel_id']! as String: row,
       };
+      final listRows = await txn.query('iptv_lists');
+      final lists = <String, Map<String, Object?>>{
+        for (final row in listRows) row['id']! as String: row,
+      };
+      final listChannelRows = await txn.query('iptv_list_channels');
+      final listChannels = <(String, String), Map<String, Object?>>{
+        for (final row in listChannelRows)
+          (row['list_id']! as String, row['url']! as String): row,
+      };
       final orderRows = await txn.query(
         'iptv_category_channel_orders',
         orderBy: 'source_id, channel_group, position, url, name, occurrence',
@@ -334,6 +343,20 @@ class DebrifyTvDatabase {
               final items = orders[(owner, item)];
               if (items != null) {
                 value = <String, Object?>{'group': item, 'items': items};
+              }
+            case WebDavSyncLibraryKinds.iptvLists:
+              final physical = lists[owner];
+              if (physical != null && physical['is_builtin'] == 0) {
+                value = <String, Object?>{
+                  'name': physical['name'] as String,
+                  'position': (physical['position'] as num).toInt(),
+                  'createdAt': (physical['created_at'] as num).toInt(),
+                };
+              }
+            case WebDavSyncLibraryKinds.iptvListChannels:
+              final physical = listChannels[(owner, item)];
+              if (physical != null) {
+                value = _listChannelSnapshotValue(physical);
               }
             case WebDavSyncLibraryKinds.iptvWatchHistory:
               final physical = history[item];
@@ -432,6 +455,8 @@ class DebrifyTvDatabase {
     required Iterable<WebDavSyncTvChannelTarget> channelTargets,
     required Iterable<WebDavSyncTvPoolGenerationTarget> generationTargets,
     required Iterable<WebDavSyncTvPoolTarget> poolTargets,
+    required Iterable<WebDavSyncIptvListTarget> listTargets,
+    required Iterable<WebDavSyncIptvListChannelTarget> listChannelTargets,
     required Iterable<WebDavSyncIptvOrderTarget> orderTargets,
     required Iterable<WebDavSyncIptvWatchTarget> watchTargets,
     required Iterable<WebDavSyncVideoResumeTarget> resumeTargets,
@@ -726,6 +751,150 @@ class DebrifyTvDatabase {
         touched.add('tv/pool');
       }
 
+      final lists = listTargets
+          .where((target) => target.listId != favoritesListId)
+          .toList(growable: false);
+      final liveLists =
+          lists
+              .where((target) => target.leaf.value != null)
+              .toList(growable: false)
+            ..sort((left, right) {
+              final desired = left.desiredPosition.compareTo(
+                right.desiredPosition,
+              );
+              return desired != 0
+                  ? desired
+                  : left.listId.compareTo(right.listId);
+            });
+      final assignedListPositions = <String, int>{
+        for (var index = 0; index < liveLists.length; index++)
+          liveLists[index].listId: index + 1,
+      };
+      final physicalListRows = await txn.query(
+        'iptv_lists',
+        where: 'is_builtin = 0',
+      );
+      final physicalListsById = <String, Map<String, Object?>>{
+        for (final row in physicalListRows) row['id']! as String: row,
+      };
+      var writeLists = false;
+      for (final target in lists) {
+        final stateChanged = await needsWrite(
+          WebDavSyncLibraryKinds.iptvLists,
+          target.listId,
+          '',
+          target.leaf,
+        );
+        final physical = physicalListsById[target.listId];
+        final physicalChanged = target.leaf.value == null
+            ? physical != null
+            : physical == null ||
+                  physical['name'] != target.name ||
+                  physical['position'] !=
+                      assignedListPositions[target.listId] ||
+                  physical['created_at'] != target.createdAtMs;
+        if (stateChanged || physicalChanged) writeLists = true;
+      }
+      if (writeLists) {
+        for (final target in lists.where(
+          (target) => target.leaf.value == null,
+        )) {
+          await txn.delete(
+            'iptv_lists',
+            where: 'id = ? AND is_builtin = 0',
+            whereArgs: <Object?>[target.listId],
+          );
+        }
+        for (final target in liveLists) {
+          final values = <String, Object?>{
+            'name': target.name,
+            'position': assignedListPositions[target.listId],
+            'is_builtin': 0,
+            'created_at': target.createdAtMs,
+            'updated_at': target.leaf.stamp.normalizedTimeMs,
+          };
+          if (physicalListsById.containsKey(target.listId)) {
+            await txn.update(
+              'iptv_lists',
+              values,
+              where: 'id = ? AND is_builtin = 0',
+              whereArgs: <Object?>[target.listId],
+            );
+          } else {
+            await txn.insert('iptv_lists', <String, Object?>{
+              'id': target.listId,
+              ...values,
+            });
+          }
+        }
+        for (final target in lists) {
+          await writeState(
+            WebDavSyncLibraryKinds.iptvLists,
+            target.listId,
+            '',
+            target.leaf,
+          );
+        }
+        touched.add('iptv/list');
+      }
+
+      final materializedListIds = <String>{
+        for (final row in await txn.query('iptv_lists', columns: ['id']))
+          row['id']! as String,
+      };
+      for (final target in listChannelTargets) {
+        if (!materializedListIds.contains(target.listId)) continue;
+        final physicalRows = await txn.query(
+          'iptv_list_channels',
+          where: 'list_id = ? AND url = ?',
+          whereArgs: <Object?>[target.listId, target.url],
+          limit: 1,
+        );
+        final physical = physicalRows.isEmpty ? null : physicalRows.single;
+        final stateChanged = await needsWrite(
+          WebDavSyncLibraryKinds.iptvListChannels,
+          target.listId,
+          target.url,
+          target.leaf,
+        );
+        final physicalChanged = target.leaf.value == null
+            ? physical != null
+            : physical == null || !_listChannelPhysicalEquals(physical, target);
+        if (!stateChanged && !physicalChanged) continue;
+        await txn.delete(
+          'iptv_list_channels',
+          where: 'list_id = ? AND url = ?',
+          whereArgs: <Object?>[target.listId, target.url],
+        );
+        final value = target.leaf.value;
+        if (value != null) {
+          final headers = value['httpHeaders'];
+          await txn.insert('iptv_list_channels', <String, Object?>{
+            'list_id': target.listId,
+            'url': target.url,
+            'name': value['name'],
+            'logo_url': value['logoUrl'],
+            'channel_group': value['group'],
+            'playlist_id': target.localSourceId,
+            'channel_number': value['channelNumber'],
+            'content_type': value['contentType'],
+            'duration': value['duration'],
+            'http_headers_json': headers is Map && headers.isNotEmpty
+                ? jsonEncode(headers)
+                : null,
+            'added_at': value['addedAt'],
+            'position': value['position'],
+          });
+        }
+        await writeState(
+          WebDavSyncLibraryKinds.iptvListChannels,
+          target.listId,
+          target.url,
+          target.leaf,
+        );
+        touched.add('iptv/list-ch');
+      }
+
       for (final target in orderTargets) {
         if (!await needsWrite(
           WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
@@ -899,7 +1068,7 @@ class DebrifyTvDatabase {
     bool singleInstance = true,
   }) => openDatabase(
     dbPath,
-    version: 9,
+    version: 10,
     singleInstance: singleInstance,
     onConfigure: (db) async {
       await db.execute('PRAGMA foreign_keys = ON');
@@ -1050,6 +1219,9 @@ class DebrifyTvDatabase {
     }
     if (oldVersion < 9 && newVersion >= 9) {
       await migrateWebDavSyncTvFamilies(db);
+    }
+    if (oldVersion < 10 && newVersion >= 10) {
+      await migrateWebDavSyncIptvListFamilies(db);
     }
   }
 
@@ -1366,6 +1538,38 @@ class DebrifyTvDatabase {
     }
   }
 
+  /// v10: custom-list metadata and every list membership become live
+  /// per-record library families. Favorites itself is a permanent built-in
+  /// parent, so only its member rows receive migration-origin stamps.
+  @visibleForTesting
+  static Future<void> migrateWebDavSyncIptvListFamilies(
+    DatabaseExecutor db,
+  ) async {
+    await createIptvStoreTables(db);
+    await createWebDavSyncSidecarTables(db);
+    await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      SELECT ?, id, '', updated_at, 'migration', 0, 0, NULL
+      FROM iptv_lists
+      WHERE is_builtin = 0
+      ''',
+      <Object?>[WebDavSyncLibraryKinds.iptvLists],
+    );
+    await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO webdav_sync_record_state
+        (kind, owner_key, item_key, updated_at_ms, origin_device_id,
+         normalized, deleted, aux)
+      SELECT ?, list_id, url, added_at, 'migration', 0, 0, NULL
+      FROM iptv_list_channels
+      ''',
+      <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+    );
+  }
+
   /// Private v3 library-sync sidecar. The shape is shared with
   /// `iptv_catalog.db`; family-specific rounds populate their own [kind]s.
   static Future<void> createWebDavSyncSidecarTables(DatabaseExecutor db) async {
@@ -1392,6 +1596,78 @@ class DebrifyTvDatabase {
       "INSERT OR IGNORE INTO webdav_sync_meta (key, value) "
       "VALUES ('mutation_revision', '0')",
     );
+  }
+
+  static Map<String, Object?> _listChannelSnapshotValue(
+    Map<String, Object?> row,
+  ) {
+    final headers = _decodeHeaders(row['http_headers_json']);
+    return <String, Object?>{
+      'url': row['url'] as String,
+      'name': row['name'] as String,
+      'logoUrl': row['logo_url'] as String,
+      'group': row['channel_group'] as String,
+      // Projected to a circle resource ID by the local adapter. This local
+      // field never enters the sealed library document.
+      'playlistId': row['playlist_id'] as String,
+      if (row['channel_number'] is num)
+        'channelNumber': (row['channel_number'] as num).toInt(),
+      if (row['content_type'] is String) 'contentType': row['content_type'],
+      if (row['duration'] is num) 'duration': (row['duration'] as num).toInt(),
+      if (headers != null && headers.isNotEmpty) 'httpHeaders': headers,
+      'addedAt': (row['added_at'] as num).toInt(),
+      'position': (row['position'] as num).toInt(),
+    };
+  }
+
+  static bool _listChannelPhysicalEquals(
+    Map<String, Object?> physical,
+    WebDavSyncIptvListChannelTarget target,
+  ) {
+    final value = target.leaf.value!;
+    return physical['name'] == value['name'] &&
+        physical['logo_url'] == value['logoUrl'] &&
+        physical['channel_group'] == value['group'] &&
+        physical['playlist_id'] == target.localSourceId &&
+        physical['channel_number'] == value['channelNumber'] &&
+        physical['content_type'] == value['contentType'] &&
+        physical['duration'] == value['duration'] &&
+        physical['added_at'] == value['addedAt'] &&
+        physical['position'] == value['position'] &&
+        _headersEqual(
+          _decodeHeaders(physical['http_headers_json']),
+          value['httpHeaders'],
+        );
+  }
+
+  static Map<String, String>? _decodeHeaders(Object? source) {
+    if (source is! String || source.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! Map) return null;
+      return <String, String>{
+        for (final entry in decoded.entries)
+          if (entry.key is String && entry.value is String)
+            entry.key as String: entry.value as String,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _headersEqual(Map<String, String>? left, Object? right) {
+    if (right == null) return left == null || left.isEmpty;
+    if (right is! Map || left == null || left.length != right.length) {
+      return false;
+    }
+    for (final entry in right.entries) {
+      if (entry.key is! String ||
+          entry.value is! String ||
+          left[entry.key] != entry.value) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static Map<String, Object?> _watchWireValue(Map<String, Object?> row) {

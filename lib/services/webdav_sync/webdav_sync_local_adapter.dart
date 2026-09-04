@@ -465,6 +465,45 @@ final class ProfileWebDavSyncLocalAdapter
         );
         continue;
       }
+      if (kind == WebDavSyncLibraryKinds.iptvLists) {
+        if (state.ownerKey == DebrifyTvDatabase.favoritesListId) continue;
+        final wireKey = 'iptv/list/${_base64Part(state.ownerKey)}';
+        if (!state.deleted && state.value == null) continue;
+        records[wireKey] = WebDavSyncCircleLeaf<Map<String, Object?>>(
+          stamp: state.stamp,
+          value: state.deleted ? null : state.value,
+        );
+        continue;
+      }
+      if (kind == WebDavSyncLibraryKinds.iptvListChannels) {
+        final wireKey =
+            'iptv/list-ch/${_base64Part(state.ownerKey)}/'
+            '${_sha256Text(state.itemKey)}';
+        if (!state.deleted && state.value == null) continue;
+        Map<String, Object?>? wireValue;
+        if (!state.deleted) {
+          final localValue = state.value!;
+          final playlistId = localValue['playlistId'];
+          wireValue = <String, Object?>{
+            for (final entry in localValue.entries)
+              if (entry.key != 'playlistId') entry.key: entry.value,
+            'sourceRef': playlistId is String && playlistId.isNotEmpty
+                ? request.identityMaps.localToCircleResources[playlistId] ?? ''
+                : '',
+          };
+        }
+        final candidate = WebDavSyncCircleLeaf<Map<String, Object?>>(
+          stamp: state.stamp,
+          value: wireValue,
+        );
+        final current = records[wireKey];
+        if (current == null ||
+            WebDavSyncLibraryMerge.compareLeaves(candidate, current) > 0) {
+          localIdentities[wireKey] = state.itemKey;
+          records[wireKey] = candidate;
+        }
+        continue;
+      }
       String? circleResourceId;
       if (kind == WebDavSyncLibraryKinds.videoResume && state.ownerKey == '_') {
         circleResourceId = '_';
@@ -564,6 +603,8 @@ final class ProfileWebDavSyncLocalAdapter
     final poolTargets = <WebDavSyncTvPoolTarget>[];
     final hiddenTargets = <WebDavSyncHiddenGroupTarget>[];
     final categoryOrderTargets = <WebDavSyncCategoryOrderTarget>[];
+    final listTargets = <WebDavSyncIptvListTarget>[];
+    final listChannelTargets = <WebDavSyncIptvListChannelTarget>[];
     final orderTargets = <WebDavSyncIptvOrderTarget>[];
     final watchTargets = <WebDavSyncIptvWatchTarget>[];
     final resumeTargets = <WebDavSyncVideoResumeTarget>[];
@@ -691,6 +732,57 @@ final class ProfileWebDavSyncLocalAdapter
         );
         continue;
       }
+      if (parts.length == 3 && parts[0] == 'iptv' && parts[1] == 'list') {
+        final listId = _decodeCanonicalBase64Part(parts[2]);
+        final value = entry.value.value;
+        final decoded = value == null ? null : _iptvListValue(value);
+        if (listId == null ||
+            listId == DebrifyTvDatabase.favoritesListId ||
+            !_validIptvListId.hasMatch(listId) ||
+            value != null && decoded == null) {
+          _diagnostic('Ignored an invalid IPTV-list library leaf');
+          continue;
+        }
+        listTargets.add(
+          WebDavSyncIptvListTarget(
+            listId: listId,
+            name: decoded?.name ?? '',
+            desiredPosition: decoded?.position ?? 1,
+            createdAtMs: decoded?.createdAtMs ?? 0,
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
+      if (parts.length == 4 && parts[0] == 'iptv' && parts[1] == 'list-ch') {
+        final listId = _decodeCanonicalBase64Part(parts[2]);
+        final value = entry.value.value;
+        final url = value == null
+            ? request.hiddenGroupNamesByWireKey[entry.key]
+            : value['url'] as String?;
+        if (listId == null ||
+            (listId != DebrifyTvDatabase.favoritesListId &&
+                !_validIptvListId.hasMatch(listId)) ||
+            url == null ||
+            url.isEmpty ||
+            _sha256Text(url) != parts[3] ||
+            (value != null && !_validIptvListChannelValue(value))) {
+          _diagnostic('Ignored an invalid IPTV-list member library leaf');
+          continue;
+        }
+        final sourceRef = value?['sourceRef'];
+        listChannelTargets.add(
+          WebDavSyncIptvListChannelTarget(
+            listId: listId,
+            url: url,
+            localSourceId: sourceRef is String && sourceRef.isNotEmpty
+                ? request.identityMaps.circleToLocalResources[sourceRef] ?? ''
+                : '',
+            leaf: entry.value,
+          ),
+        );
+        continue;
+      }
       if (parts.length == 4 && parts[0] == 'iptv' && parts[1] == 'order') {
         final sourceId = localSource(parts[2]);
         if (sourceId == null) continue;
@@ -789,6 +881,8 @@ final class ProfileWebDavSyncLocalAdapter
       channelTargets: channelTargets,
       generationTargets: applicableGenerations,
       poolTargets: applicablePools,
+      listTargets: listTargets,
+      listChannelTargets: listChannelTargets,
       orderTargets: orderTargets,
       watchTargets: watchTargets,
       resumeTargets: resumeTargets,
@@ -1887,6 +1981,93 @@ List<WebDavSyncIptvOrderItem>? _iptvOrderItems(Map<String, Object?> value) {
   return List<WebDavSyncIptvOrderItem>.unmodifiable(result);
 }
 
+({String name, int position, int createdAtMs})? _iptvListValue(
+  Map<String, Object?> value,
+) {
+  final name = value['name'];
+  final position = value['position'];
+  final createdAt = value['createdAt'];
+  if (value.length != 3 ||
+      name is! String ||
+      utf8.encode(name).length > 4096 ||
+      position is! int ||
+      position < 0 ||
+      position > 2147383647 ||
+      createdAt is! int ||
+      createdAt < 0 ||
+      createdAt > 0x7fffffffffffffff) {
+    return null;
+  }
+  return (name: name, position: position, createdAtMs: createdAt);
+}
+
+bool _validIptvListChannelValue(Map<String, Object?> value) {
+  const required = <String>{
+    'url',
+    'name',
+    'logoUrl',
+    'group',
+    'sourceRef',
+    'addedAt',
+    'position',
+  };
+  const allowed = <String>{
+    ...required,
+    'channelNumber',
+    'contentType',
+    'duration',
+    'httpHeaders',
+  };
+  if (!value.keys.toSet().containsAll(required) ||
+      !value.keys.every(allowed.contains)) {
+    return false;
+  }
+  for (final key in const <String>['url', 'name', 'logoUrl', 'group']) {
+    final item = value[key];
+    if (item is! String ||
+        (key == 'url' && item.isEmpty) ||
+        utf8.encode(item).length > 16384) {
+      return false;
+    }
+  }
+  final sourceRef = value['sourceRef'];
+  if (sourceRef is! String ||
+      (sourceRef.isNotEmpty && !_validWireResourceId.hasMatch(sourceRef))) {
+    return false;
+  }
+  final channelNumber = value['channelNumber'];
+  if (value.containsKey('channelNumber') &&
+      (channelNumber is! int ||
+          channelNumber < -0x8000000000000000 ||
+          channelNumber > 0x7fffffffffffffff)) {
+    return false;
+  }
+  final contentType = value['contentType'];
+  if (value.containsKey('contentType') &&
+      (contentType is! String || utf8.encode(contentType).length > 256)) {
+    return false;
+  }
+  final duration = value['duration'];
+  if (value.containsKey('duration') &&
+      (duration is! int ||
+          duration < -0x8000000000000000 ||
+          duration > 0x7fffffffffffffff)) {
+    return false;
+  }
+  for (final key in const <String>['addedAt', 'position']) {
+    final item = value[key];
+    if (item is! int || item < 0 || item > 0x7fffffffffffffff) return false;
+  }
+  final headers = value['httpHeaders'];
+  if (value.containsKey('httpHeaders')) {
+    if (headers is! Map || headers.isEmpty) return false;
+    for (final entry in headers.entries) {
+      if (entry.key is! String || entry.value is! String) return false;
+    }
+  }
+  return true;
+}
+
 bool _validWatchValue(Map<String, Object?> value) {
   if (value['url'] is! String ||
       (value['url']! as String).isEmpty ||
@@ -2036,3 +2217,7 @@ String _base64Part(String value) =>
 
 final RegExp _validGenerationId = RegExp(r'^[A-Za-z0-9_-]{1,96}$');
 final RegExp _validInfohash = RegExp(r'^[a-z0-9]{1,128}$');
+final RegExp _validIptvListId = RegExp(r'^list_[0-9]+_[0-9]+$');
+final RegExp _validWireResourceId = RegExp(
+  r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$',
+);

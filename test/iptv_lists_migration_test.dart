@@ -209,6 +209,18 @@ void main() {
     );
   }
 
+  Future<Database> upgradeToV10() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 10,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
   Future<bool> hasTable(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -577,5 +589,65 @@ void main() {
     expect(generationState['origin_device_id'], 'migration');
     expect(generationState['aux'], 'migration-gen');
     expect(generationState['updated_at_ms'], isNot(999999));
+  });
+
+  test('v9→v10 seeds custom lists and every membership', () async {
+    var db = await openAt(
+      9,
+      (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+    );
+    await db.insert('iptv_lists', <String, Object?>{
+      'id': 'list_100_1',
+      'name': 'Sports',
+      'position': 1,
+      'is_builtin': 0,
+      'created_at': 90,
+      'updated_at': 100,
+    });
+    await db.insert('iptv_list_channels', <String, Object?>{
+      'list_id': 'favorites',
+      'url': 'https://panel.invalid/live/1',
+      'added_at': 110,
+      'position': 0,
+    });
+    await db.insert('iptv_list_channels', <String, Object?>{
+      'list_id': 'list_100_1',
+      'url': 'https://panel.invalid/live/2',
+      'added_at': 120,
+      'position': 0,
+    });
+    await db.close();
+
+    db = await upgradeToV10();
+    addTearDown(db.close);
+    final listStates = await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvLists],
+    );
+    expect(listStates, hasLength(1));
+    expect(listStates.single['owner_key'], 'list_100_1');
+    expect(listStates.single['updated_at_ms'], 100);
+    expect(listStates.single['origin_device_id'], 'migration');
+
+    final memberStates = await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+      orderBy: 'owner_key',
+    );
+    expect(memberStates, hasLength(2));
+    expect(memberStates.map((row) => row['owner_key']).toSet(), <Object?>{
+      'favorites',
+      'list_100_1',
+    });
+    expect(memberStates.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+      110,
+      120,
+    });
+    expect(
+      memberStates.map((row) => row['origin_device_id']),
+      everyElement('migration'),
+    );
   });
 }
