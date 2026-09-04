@@ -221,6 +221,26 @@ class IptvMediaStore {
     final prefs = await ProfilePreferences.instance();
     final db = DebrifyTvDatabase.instance;
 
+    // Every family lands through one batch commit per transaction: a restored
+    // legacy blob can hold years of entries, and issuing two awaited platform
+    // calls per row once froze the shared connection for minutes while every
+    // screen queued behind it.
+    Map<String, Object?> migrationState({
+      required String kind,
+      required String ownerKey,
+      required String itemKey,
+      required int updatedAtMs,
+    }) => <String, Object?>{
+      'kind': kind,
+      'owner_key': ownerKey,
+      'item_key': itemKey,
+      'updated_at_ms': updatedAtMs,
+      'origin_device_id': WebDavSyncMutationOrigin.migration.name,
+      'normalized': 0,
+      'deleted': 0,
+      'aux': null,
+    };
+
     final favoritesRaw = prefs.getString(_legacyFavoritesKey);
     if (favoritesRaw != null) {
       final favorites = await _decodeLegacyMap(favoritesRaw);
@@ -228,13 +248,15 @@ class IptvMediaStore {
         // A very old install can reach v5 with the prefs blob still present,
         // so the import lands straight in the built-in Favorites list.
         await DebrifyTvDatabase.seedBuiltinList(txn);
+        final batch = txn.batch();
         for (final entry in favorites.entries) {
-          await txn.insert(
+          batch.insert(
             'iptv_list_channels',
             _favoriteRowFromLegacy(entry.key, entry.value),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       await prefs.remove(_legacyFavoritesKey);
     }
@@ -242,25 +264,39 @@ class IptvMediaStore {
     final historyRaw = prefs.getString(_legacyWatchHistoryKey);
     if (historyRaw != null) {
       final history = await _decodeLegacyMap(historyRaw);
+      // The store prunes history to [_watchHistoryMax] rows on every write;
+      // importing an unbounded legacy blob beyond that only feeds the prune.
+      final rows =
+          history.entries
+              .map((entry) => _historyRowFromLegacy(entry.key, entry.value))
+              .toList(growable: false)
+            ..sort(
+              (left, right) => (right['last_played_at']! as int).compareTo(
+                left['last_played_at']! as int,
+              ),
+            );
+      final kept = rows.take(_watchHistoryMax).toList(growable: false);
       await db.runTxn((txn) async {
-        for (final entry in history.entries) {
-          final row = _historyRowFromLegacy(entry.key, entry.value);
-          await txn.insert(
+        final batch = txn.batch();
+        for (final row in kept) {
+          batch.insert(
             'iptv_watch_history',
             row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
-          await _writeLibraryState(
-            txn,
-            kind: WebDavSyncLibraryKinds.iptvWatchHistory,
-            ownerKey: row['playlist_id']! as String,
-            itemKey: entry.key,
-            updatedAtMs: row['last_played_at']! as int,
-            deleted: false,
-            origin: WebDavSyncMutationOrigin.migration,
+          batch.insert(
+            'webdav_sync_record_state',
+            migrationState(
+              kind: WebDavSyncLibraryKinds.iptvWatchHistory,
+              ownerKey: row['playlist_id']! as String,
+              itemKey: row['url']! as String,
+              updatedAtMs: row['last_played_at']! as int,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
-        if (history.isNotEmpty) await _bumpLibraryRevision(txn);
+        await batch.commit(noResult: true);
+        if (kept.isNotEmpty) await _bumpLibraryRevision(txn);
       });
       await prefs.remove(_legacyWatchHistoryKey);
     }
@@ -269,41 +305,45 @@ class IptvMediaStore {
     if (resumeRaw != null) {
       final resume = await _decodeLegacyMap(resumeRaw);
       await db.runTxn((txn) async {
+        final historyRows = await txn.query(
+          'iptv_watch_history',
+          columns: const <String>['url', 'playlist_id'],
+        );
+        final sourceByUrl = <String, String?>{
+          for (final row in historyRows)
+            row['url']! as String: row['playlist_id'] as String?,
+        };
+        final batch = txn.batch();
         var imported = false;
         for (final entry in resume.entries) {
           final value = entry.value;
           if (value is! Map) continue;
-          final history = await txn.query(
-            'iptv_watch_history',
-            columns: const <String>['playlist_id'],
-            where: 'url = ?',
-            whereArgs: <Object?>[entry.key],
-            limit: 1,
-          );
-          final sourceId = history.isEmpty
-              ? null
-              : (history.single['playlist_id'] as String?);
+          final sourceId = sourceByUrl[entry.key];
           final row = _resumeRow(
             entry.key,
             Map<String, dynamic>.from(value),
             sourceId: sourceId,
           );
-          await txn.insert(
+          batch.insert(
             'video_resume',
             row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
-          await _writeLibraryState(
-            txn,
-            kind: WebDavSyncLibraryKinds.videoResume,
-            ownerKey: (sourceId == null || sourceId.isEmpty) ? '_' : sourceId,
-            itemKey: entry.key,
-            updatedAtMs: row['updated_at']! as int,
-            deleted: false,
-            origin: WebDavSyncMutationOrigin.migration,
+          batch.insert(
+            'webdav_sync_record_state',
+            migrationState(
+              kind: WebDavSyncLibraryKinds.videoResume,
+              ownerKey: (sourceId == null || sourceId.isEmpty)
+                  ? '_'
+                  : sourceId,
+              itemKey: entry.key,
+              updatedAtMs: row['updated_at']! as int,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
           );
           imported = true;
         }
+        await batch.commit(noResult: true);
         if (imported) await _bumpLibraryRevision(txn);
       });
       await prefs.remove(_legacyVideoResumeKey);

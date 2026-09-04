@@ -153,6 +153,39 @@ void main() {
       expect(notifications, 0);
     });
 
+    test('an oversized legacy history blob imports only the newest rows', () async {
+      final blob = <String, Object?>{
+        for (var i = 0; i < 250; i++)
+          'http://h/movie/$i.mp4': <String, Object?>{
+            'name': 'Movie $i',
+            'playlistId': 'p1',
+            'lastPlayedAt': 1000 + i,
+          },
+      };
+      SharedPreferences.setMockInitialValues({historyKey: jsonEncode(blob)});
+
+      final history = await StorageService.getIptvWatchHistory();
+      expect(history, hasLength(100));
+      expect(history.containsKey('http://h/movie/249.mp4'), isTrue);
+      expect(history.containsKey('http://h/movie/150.mp4'), isTrue);
+      expect(
+        history.containsKey('http://h/movie/149.mp4'),
+        isFalse,
+        reason: 'the import honors the same retention as the live writer',
+      );
+
+      final db = DebrifyTvDatabase.debugDatabaseOverride!;
+      expect(
+        await db.query(
+          'webdav_sync_record_state',
+          where: 'kind = ?',
+          whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvWatchHistory],
+        ),
+        hasLength(100),
+        reason: 'capped-out rows carry no migration stamps',
+      );
+    });
+
     test(
       'a corrupt legacy blob imports as empty, matching the old reader',
       () async {
