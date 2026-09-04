@@ -31,6 +31,8 @@ import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+// ignore: depend_on_referenced_packages
+import 'package:sqflite_common/sqflite_logger.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 String _sha(String value) => crypto.sha256.convert(value.codeUnits).toString();
@@ -160,6 +162,87 @@ void main() {
         clockOffsetMs: 0,
         serverNowMs: 100000,
       );
+
+  test(
+    'a 500-record apply uses a fixed number of database round trips',
+    () async {
+      await dbA.close();
+      final events = <SqfliteLoggerEvent>[];
+      // The sqflite logger is intentionally a test-only instrumentation API.
+      // ignore: experimental_member_use
+      final loggingFactory = SqfliteDatabaseFactoryLogger(
+        databaseFactoryFfiNoIsolate,
+        options: SqfliteLoggerOptions(log: events.add),
+      );
+      dbA = await loggingFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+          onCreate: (db, _) async {
+            await DebrifyTvDatabase.createTvStoreTables(db);
+            await DebrifyTvDatabase.createIptvStoreTables(db);
+          },
+        ),
+      );
+      DebrifyTvDatabase.debugDatabaseOverride = dbA;
+      events.clear();
+
+      final watchTargets = List<WebDavSyncIptvWatchTarget>.generate(500, (
+        index,
+      ) {
+        final url = 'https://panel.invalid/movie/$index';
+        return WebDavSyncIptvWatchTarget(
+          sourceId: sourceId,
+          url: url,
+          leaf: WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 10000 + index,
+              originDeviceId: 'device-b',
+            ),
+            value: <String, Object?>{
+              'url': url,
+              'name': 'Movie $index',
+              'logoUrl': '',
+              'group': 'Movies',
+              'lastPlayedAt': index,
+            },
+          ),
+        );
+      });
+      final outcome = await DebrifyTvDatabase.instance.applyWebDavSyncFamilies(
+        ProfileRuntime.capture(),
+        expectedRevision: 0,
+        channelTargets: const <WebDavSyncTvChannelTarget>[],
+        generationTargets: const <WebDavSyncTvPoolGenerationTarget>[],
+        poolTargets: const <WebDavSyncTvPoolTarget>[],
+        listTargets: const <WebDavSyncIptvListTarget>[],
+        listChannelTargets: const <WebDavSyncIptvListChannelTarget>[],
+        orderTargets: const <WebDavSyncIptvOrderTarget>[],
+        // Repeating an exact target must see the state queued by its first
+        // occurrence and avoid adding a second set of physical writes.
+        watchTargets: <WebDavSyncIptvWatchTarget>[
+          ...watchTargets,
+          watchTargets.first,
+        ],
+        resumeTargets: const <WebDavSyncVideoResumeTarget>[],
+      );
+
+      expect(outcome.result, WebDavSyncLibraryApplyResult.applied);
+      expect(outcome.touchedNamespaces, const <String>{'iptv/watch'});
+      expect(events.where((event) => event.name == 'query'), hasLength(10));
+      expect(events.where((event) => event.name == 'insert'), isEmpty);
+      final batch = events.whereType<SqfliteLoggerBatchEvent>().single;
+      expect(batch.operations, hasLength(1502));
+      expect(
+        events,
+        hasLength(13),
+        reason:
+            'BEGIN + ten fixed preloads + one batch + COMMIT must not grow '
+            'with record count',
+      );
+    },
+  );
 
   test(
     'one cycle carries IPTV and Debrify TV families A to B with exact stamps',

@@ -878,55 +878,77 @@ class IptvMediaStore {
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       int? sharedStamp;
       int stamp() => sharedStamp ??= _nextStampMs();
-      for (final entry in renames.entries) {
-        final rows = await txn.query(
-          'iptv_list_channels',
-          where: 'url = ?',
-          whereArgs: [entry.key],
+      // One preload plus one batch: a provider-wide URL migration can rename
+      // hundreds of stored rows, and per-row awaited calls held the shared
+      // database long enough to freeze every screen.
+      final renamedRows = <Map<String, Object?>>[];
+      final oldUrls = renames.keys.toList(growable: false);
+      for (var start = 0; start < oldUrls.length; start += 500) {
+        final chunk = oldUrls.sublist(
+          start,
+          start + 500 > oldUrls.length ? oldUrls.length : start + 500,
         );
-        if (rows.isEmpty) continue; // removed during the scan
-        final backfill = meta[entry.key];
-        for (final existing in rows) {
-          final row = Map<String, Object?>.from(existing);
-          row['url'] = entry.value;
-          if (backfill != null) {
-            row['content_type'] ??= backfill.contentType;
-            row['duration'] ??= backfill.duration;
-          }
-          await txn.delete(
+        renamedRows.addAll(
+          await txn.query(
             'iptv_list_channels',
-            where: 'list_id = ? AND url = ?',
-            whereArgs: [row['list_id'], entry.key],
-          );
-          await txn.insert(
-            'iptv_list_channels',
-            row,
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-          changed = true;
-          if (origin == WebDavSyncMutationOrigin.user) {
-            final now = stamp();
-            await _writeLibraryState(
-              txn,
+            where:
+                'url IN (${List.filled(chunk.length, '?').join(', ')})',
+            whereArgs: chunk,
+          ),
+        );
+      }
+      final renameBatch = txn.batch();
+      for (final existing in renamedRows) {
+        final oldUrl = existing['url']! as String;
+        final newUrl = renames[oldUrl];
+        if (newUrl == null) continue;
+        final row = Map<String, Object?>.from(existing);
+        row['url'] = newUrl;
+        final backfill = meta[oldUrl];
+        if (backfill != null) {
+          row['content_type'] ??= backfill.contentType;
+          row['duration'] ??= backfill.duration;
+        }
+        renameBatch.delete(
+          'iptv_list_channels',
+          where: 'list_id = ? AND url = ?',
+          whereArgs: [row['list_id'], oldUrl],
+        );
+        renameBatch.insert(
+          'iptv_list_channels',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          final now = stamp();
+          renameBatch.insert(
+            'webdav_sync_record_state',
+            _libraryStateRow(
               kind: WebDavSyncLibraryKinds.iptvListChannels,
               ownerKey: row['list_id']! as String,
-              itemKey: entry.key,
+              itemKey: oldUrl,
               updatedAtMs: now,
               deleted: true,
               origin: origin,
-            );
-            await _writeLibraryState(
-              txn,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          renameBatch.insert(
+            'webdav_sync_record_state',
+            _libraryStateRow(
               kind: WebDavSyncLibraryKinds.iptvListChannels,
               ownerKey: row['list_id']! as String,
-              itemKey: entry.value,
+              itemKey: newUrl,
               updatedAtMs: now,
               deleted: false,
               origin: origin,
-            );
-          }
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         }
       }
+      if (changed) await renameBatch.commit(noResult: true);
       // Rows that kept their URL but still need presentation metadata.
       // COALESCE so a known value is never overwritten by a later scan.
       for (final entry in meta.entries) {
@@ -1247,25 +1269,32 @@ class IptvMediaStore {
         final now = origin == WebDavSyncMutationOrigin.user
             ? _nextStampMs()
             : DateTime.now().millisecondsSinceEpoch;
+        // One batch commit: a large list reorder must not hold the shared
+        // database for one awaited call per moved row.
+        final batch = txn.batch();
         for (final item in moved) {
-          await txn.update(
+          batch.update(
             'iptv_list_channels',
             {'position': item.$2},
             where: 'list_id = ? AND url = ?',
             whereArgs: [listId, item.$1],
           );
           if (origin == WebDavSyncMutationOrigin.user) {
-            await _writeLibraryState(
-              txn,
-              kind: WebDavSyncLibraryKinds.iptvListChannels,
-              ownerKey: listId,
-              itemKey: item.$1,
-              updatedAtMs: now,
-              deleted: false,
-              origin: origin,
+            batch.insert(
+              'webdav_sync_record_state',
+              _libraryStateRow(
+                kind: WebDavSyncLibraryKinds.iptvListChannels,
+                ownerKey: listId,
+                itemKey: item.$1,
+                updatedAtMs: now,
+                deleted: false,
+                origin: origin,
+              ),
+              conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
         }
+        await batch.commit(noResult: true);
         changed = true;
         if (origin == WebDavSyncMutationOrigin.user) {
           await _bumpLibraryRevision(txn);
@@ -2217,6 +2246,26 @@ class IptvMediaStore {
     };
   }
 
+  static Map<String, Object?> _libraryStateRow({
+    required String kind,
+    required String ownerKey,
+    required String itemKey,
+    required int updatedAtMs,
+    required bool deleted,
+    required WebDavSyncMutationOrigin origin,
+  }) => <String, Object?>{
+    'kind': kind,
+    'owner_key': ownerKey,
+    'item_key': itemKey,
+    'updated_at_ms': updatedAtMs,
+    'origin_device_id': origin == WebDavSyncMutationOrigin.user
+        ? WebDavSyncLibraryMutation.originDeviceId
+        : origin.name,
+    'normalized': 0,
+    'deleted': deleted ? 1 : 0,
+    'aux': null,
+  };
+
   static Future<void> _writeLibraryState(
     DatabaseExecutor db, {
     required String kind,
@@ -2226,19 +2275,18 @@ class IptvMediaStore {
     required bool deleted,
     required WebDavSyncMutationOrigin origin,
   }) {
-    final deviceId = origin == WebDavSyncMutationOrigin.user
-        ? WebDavSyncLibraryMutation.originDeviceId
-        : origin.name;
-    return db.insert('webdav_sync_record_state', <String, Object?>{
-      'kind': kind,
-      'owner_key': ownerKey,
-      'item_key': itemKey,
-      'updated_at_ms': updatedAtMs,
-      'origin_device_id': deviceId,
-      'normalized': 0,
-      'deleted': deleted ? 1 : 0,
-      'aux': null,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    return db.insert(
+      'webdav_sync_record_state',
+      _libraryStateRow(
+        kind: kind,
+        ownerKey: ownerKey,
+        itemKey: itemKey,
+        updatedAtMs: updatedAtMs,
+        deleted: deleted,
+        origin: origin,
+      ),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   static Future<void> _bumpLibraryRevision(DatabaseExecutor db) {
