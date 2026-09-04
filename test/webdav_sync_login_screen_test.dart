@@ -96,11 +96,11 @@ void main() {
     expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
   });
 
-  testWidgets('unsupported provider failure stays clear and inline', (
+  testWidgets('non-linearizable provider failure stays clear and inline', (
     tester,
   ) async {
     await pumpLogin(tester, (_) async {
-      throw const WebDavSyncProviderUnsupportedException();
+      throw const WebDavSyncStoreNotLinearizableException();
     });
 
     await tester.enterText(field('webdav-sync-username'), 'alice@example.test');
@@ -109,7 +109,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text(WebDavSyncProviderUnsupportedException.userMessage),
+      find.text(WebDavSyncStoreNotLinearizableException.userMessage),
       findsOneWidget,
     );
     expect(find.byType(WebDavSyncLoginScreen), findsOneWidget);

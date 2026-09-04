@@ -201,6 +201,42 @@ final class WebDavSyncCodec {
     return _openRoot(immutableBytes, passphrase);
   }
 
+  Future<({WebDavSyncAuthorityFile authority, OpenedWebDavSyncRoot root})>
+  openAuthority(List<int> encoded, {bool runInBackground = false}) async {
+    final authority = WebDavSyncAuthorityFile.parse(encoded);
+    final root = await openRoot(
+      authority.markerBytes,
+      authority.syncPassphrase,
+      runInBackground: runInBackground,
+    );
+    return (authority: authority, root: root);
+  }
+
+  /// Opens a locally pinned authority. Legacy marker-only pins remain readable
+  /// until the authenticated repair path upgrades them.
+  Future<OpenedWebDavSyncRoot> openPinnedAuthority(
+    List<int> encoded,
+    String legacyPassphrase, {
+    bool runInBackground = false,
+  }) async {
+    try {
+      final opened = await openAuthority(
+        encoded,
+        runInBackground: runInBackground,
+      );
+      if (opened.authority.syncPassphrase != legacyPassphrase) {
+        throw const WebDavSyncWrongPassphraseException();
+      }
+      return opened.root;
+    } on WebDavSyncAuthorityFileException {
+      return openRoot(
+        encoded,
+        legacyPassphrase,
+        runInBackground: runInBackground,
+      );
+    }
+  }
+
   Future<OpenedWebDavSyncRoot> _openRoot(
     List<int> encoded,
     String passphrase,

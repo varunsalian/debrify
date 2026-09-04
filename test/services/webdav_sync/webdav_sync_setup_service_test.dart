@@ -142,8 +142,9 @@ void main() {
         );
 
         expect(inspection, isA<WebDavSyncFolderMissing>());
-        expect(methods, <String>['GET', 'GET']);
+        expect(methods, <String>['GET', 'GET', 'GET']);
         expect(paths, <String>[
+          '/dav/Family/debrify-sync/circle.authority',
           '/dav/Family/debrify-sync/circle.json.enc',
           '/dav/Family/debrify-sync/circle.key',
         ]);
@@ -214,10 +215,6 @@ void main() {
       context: WebDavSyncFolderInspectionContext.setup,
     );
     expect(orphan, isA<WebDavSyncFolderMissing>());
-    expect(
-      (orphan as WebDavSyncFolderMissing).rootKey?.syncPassphrase,
-      'orphan-secret',
-    );
 
     transport
       ..error = null
@@ -517,220 +514,279 @@ void main() {
     );
   });
 
-  test(
-    'legacy credential repair authenticates locally and provisions keyfile',
-    () async {
-      final installed = await installActiveBinding();
-      await store.markError(installed.binding.id, StateError('expired'));
-      transport.keyBytes = null;
-      const rotated = WebDavConfig(
-        id: 'server-1',
-        name: 'Server',
-        baseUrl: 'https://example.test/dav',
-        username: 'alice',
-        password: 'rotated-secret',
-      );
-
-      final inspection = await service.inspectFolder(
-        config: rotated,
-        folderPath: 'Family',
-        context: WebDavSyncFolderInspectionContext.repair,
-        repairBindingId: installed.binding.id,
-      );
-      final repaired = await service.configureExistingRoot(
-        inspection: inspection as WebDavSyncFolderExisting,
-      );
-
-      expect(transport.createKeyCalls, 1);
-      expect(
-        WebDavSyncRootKeyFile.parse(transport.keyBytes!).syncPassphrase,
-        'circle-secret',
-      );
-      expect(repaired.lifecycle, WebDavSyncLifecycle.active);
-      expect((await store.readSecrets(repaired)).password, 'rotated-secret');
-      expect(transport.conditionalCreateProbeCalls, 1);
-    },
-  );
-
-  test('legacy keyfile provisioning accepts a verified 200 create', () async {
-    final installed = await installActiveBinding();
-    transport
-      ..keyBytes = null
-      ..createKeyStatus = 200;
-
-    expect(
-      await service.inspectFolder(
-        config: _config,
-        folderPath: 'Family',
-        context: WebDavSyncFolderInspectionContext.repair,
-        repairBindingId: installed.binding.id,
-      ),
-      isA<WebDavSyncFolderExisting>(),
+  test('merged authority is opened and its exact bytes are pinned', () async {
+    final marker = await codec.sealRoot(
+      passphrase: 'authority-secret',
+      circleId: 'authority-circle',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final authorityBytes = WebDavSyncAuthorityFile(
+      markerBytes: marker,
+      syncPassphrase: 'authority-secret',
+    ).encode();
+    final authorityTransport = _AuthorityProbeTransport()
+      ..authorityBytes = authorityBytes;
+    final authorityService = WebDavSyncSetupService(
+      store: store,
+      codec: codec,
+      transportFactory: ({required endpoint, required credentials}) {
+        authorityTransport
+          ..endpoint = endpoint
+          ..credentials = credentials;
+        return authorityTransport;
+      },
     );
 
-    expect(transport.createKeyCalls, 1);
-    expect(diagnostics, isEmpty);
+    final inspection =
+        await authorityService.inspectFolder(
+              config: _config,
+              folderPath: 'Family',
+              context: WebDavSyncFolderInspectionContext.setup,
+            )
+            as WebDavSyncFolderExisting;
+    expect(inspection.markerBytes, orderedEquals(marker));
+    expect(inspection.authorityBytes, orderedEquals(authorityBytes));
+    expect(inspection.syncPassphrase, 'authority-secret');
+
+    final binding = await authorityService.configureExistingRoot(
+      inspection: inspection,
+    );
+    final snapshot = await store.load();
+    expect(binding.circleId, 'authority-circle');
+    expect(
+      snapshot.namespaceFor(binding)!.markerBytes,
+      orderedEquals(authorityBytes),
+    );
+    expect(authorityTransport.writeAuthorityCalls, 0);
   });
 
   test(
-    'legacy keyfile provisioning refuses a failed capability probe',
+    'malformed merged authority fails closed without a legacy overwrite',
     () async {
-      final installed = await installActiveBinding();
-      transport
-        ..keyBytes = null
-        ..conditionalCreateProbeError =
-            const WebDavSyncProviderUnsupportedException();
-
-      await expectLater(
-        service.inspectFolder(
-          config: _config,
-          folderPath: 'Family',
-          context: WebDavSyncFolderInspectionContext.repair,
-          repairBindingId: installed.binding.id,
+      final malformed = <Uint8List>[
+        Uint8List.fromList(utf8.encode('not-json')),
+        Uint8List.fromList(
+          utf8.encode('{"version":2,"marker":"AA==","syncPassphrase":"x"}'),
         ),
-        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
-      );
+        Uint8List.fromList(utf8.encode('{"version":1,"marker":"AA=="}')),
+        Uint8List.fromList(
+          List<int>.filled(WebDavSyncAuthorityFile.maxBytes + 1, 0),
+        ),
+      ];
+      for (final bytes in malformed) {
+        final authorityTransport = _AuthorityProbeTransport()
+          ..authorityBytes = bytes;
+        final authorityService = WebDavSyncSetupService(
+          store: store,
+          codec: codec,
+          transportFactory: ({required endpoint, required credentials}) {
+            authorityTransport.endpoint = endpoint;
+            return authorityTransport;
+          },
+        );
 
-      expect(transport.conditionalCreateProbeCalls, 1);
-      expect(transport.createKeyCalls, 0);
-      expect(transport.keyBytes, isNull);
-      final failed = (await store.load()).bindings[installed.binding.id]!;
-      expect(failed.lifecycle, WebDavSyncLifecycle.error);
-      expect(
-        failed.errorMessage,
-        WebDavSyncProviderUnsupportedException.userMessage,
-      );
+        await expectLater(
+          authorityService.inspectFolder(
+            config: _config,
+            folderPath: 'Family',
+            context: WebDavSyncFolderInspectionContext.setup,
+          ),
+          throwsA(isA<WebDavSyncAuthorityFileException>()),
+        );
+        expect(authorityTransport.writeAuthorityCalls, 0);
+        expect(authorityTransport.legacyMarkerReads, 0);
+      }
     },
   );
+
+  test('legacy marker-only repair provisions merged authority', () async {
+    final installed = await installActiveBinding();
+    await store.markError(installed.binding.id, StateError('expired'));
+    final authorityTransport = _AuthorityProbeTransport()
+      ..bytes = installed.marker
+      ..keyBytes = null;
+    final authorityService = WebDavSyncSetupService(
+      store: store,
+      codec: codec,
+      transportFactory: ({required endpoint, required credentials}) {
+        authorityTransport
+          ..endpoint = endpoint
+          ..credentials = credentials;
+        return authorityTransport;
+      },
+    );
+
+    final inspection =
+        await authorityService.inspectFolder(
+              config: _config,
+              folderPath: 'Family',
+              context: WebDavSyncFolderInspectionContext.repair,
+              repairBindingId: installed.binding.id,
+            )
+            as WebDavSyncFolderExisting;
+    final repaired = await authorityService.configureExistingRoot(
+      inspection: inspection,
+    );
+
+    expect(authorityTransport.writeAuthorityCalls, 1);
+    final authority = WebDavSyncAuthorityFile.parse(
+      authorityTransport.authorityBytes!,
+    );
+    expect(authority.markerBytes, orderedEquals(installed.marker));
+    expect(authority.syncPassphrase, 'circle-secret');
+    expect(repaired.lifecycle, WebDavSyncLifecycle.active);
+    expect(
+      (await store.load()).namespaceFor(repaired)!.markerBytes,
+      orderedEquals(authorityTransport.authorityBytes!),
+    );
+  });
+
+  test('legacy upgrade adopts a different valid read-back authority', () async {
+    final legacyMarker = await codec.sealRoot(
+      passphrase: 'legacy-secret',
+      circleId: 'legacy-circle',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final winnerMarker = await codec.sealRoot(
+      passphrase: 'winner-secret',
+      circleId: 'winner-circle',
+      createdAt: DateTime.utc(2026, 9, 2),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final winnerAuthority = WebDavSyncAuthorityFile(
+      markerBytes: winnerMarker,
+      syncPassphrase: 'winner-secret',
+    ).encode();
+    final authorityTransport = _AuthorityProbeTransport()
+      ..bytes = legacyMarker
+      ..keyBytes = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'legacy-secret',
+      ).encode()
+      ..authorityAfterWrite = winnerAuthority;
+    final authorityService = WebDavSyncSetupService(
+      store: store,
+      codec: codec,
+      transportFactory: ({required endpoint, required credentials}) {
+        authorityTransport
+          ..endpoint = endpoint
+          ..credentials = credentials;
+        return authorityTransport;
+      },
+    );
+
+    final inspection =
+        await authorityService.inspectFolder(
+              config: _config,
+              folderPath: 'Family',
+              context: WebDavSyncFolderInspectionContext.setup,
+            )
+            as WebDavSyncFolderExisting;
+
+    expect(authorityTransport.writeAuthorityCalls, 1);
+    expect(inspection.authorityBytes, orderedEquals(winnerAuthority));
+    expect(inspection.markerBytes, orderedEquals(winnerMarker));
+    expect(inspection.syncPassphrase, 'winner-secret');
+  });
 
   test(
-    'legacy keyfile provisioning preserves an inconclusive probe for retry',
+    'a detected authority replacement re-enters authenticated adoption',
     () async {
-      final installed = await installActiveBinding();
-      transport
-        ..keyBytes = null
-        ..conditionalCreateProbeError =
-            const WebDavSyncSetupInconclusiveException(
-              probeStep: 2,
-              statusCode: 503,
-            );
+      final firstMarker = await codec.sealRoot(
+        passphrase: 'first-circle-secret',
+        circleId: 'circle-first',
+        createdAt: DateTime.utc(2026, 9, 1),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final firstAuthority = WebDavSyncAuthorityFile(
+        markerBytes: firstMarker,
+        syncPassphrase: 'first-circle-secret',
+      ).encode();
+      final authorityTransport = _AuthorityProbeTransport()
+        ..authorityBytes = firstAuthority;
+      final authorityService = WebDavSyncSetupService(
+        store: store,
+        codec: codec,
+        transportFactory: ({required endpoint, required credentials}) {
+          authorityTransport
+            ..endpoint = endpoint
+            ..credentials = credentials;
+          return authorityTransport;
+        },
+      );
+      final firstInspection =
+          await authorityService.inspectFolder(
+                config: _config,
+                folderPath: 'Family',
+                context: WebDavSyncFolderInspectionContext.setup,
+              )
+              as WebDavSyncFolderExisting;
+      var active = await authorityService.configureExistingRoot(
+        inspection: firstInspection,
+      );
+      active = await store.setLifecycle(active.id, WebDavSyncLifecycle.active);
+      await store.promoteStaged(active.id);
+      final firstNamespace = (await store.load()).namespaceFor(active)!;
+
+      final replacementMarker = await codec.sealRoot(
+        passphrase: 'replacement-secret',
+        circleId: 'circle-replacement',
+        createdAt: DateTime.utc(2026, 9, 2),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final replacementAuthority = WebDavSyncAuthorityFile(
+        markerBytes: replacementMarker,
+        syncPassphrase: 'replacement-secret',
+      ).encode();
+      authorityTransport.authorityBytes = replacementAuthority;
 
       await expectLater(
-        service.inspectFolder(
-          config: _config,
-          folderPath: 'Family',
-          context: WebDavSyncFolderInspectionContext.repair,
-          repairBindingId: installed.binding.id,
-        ),
-        throwsA(isA<WebDavSyncSetupInconclusiveException>()),
+        authorityService.revalidate(active.id),
+        throwsA(isA<WebDavSyncRootChangedException>()),
       );
+      final repairInspection =
+          await authorityService.inspectFolder(
+                config: _config,
+                folderPath: 'Family',
+                context: WebDavSyncFolderInspectionContext.repair,
+                repairBindingId: active.id,
+              )
+              as WebDavSyncFolderExisting;
+      final reconnecting = await authorityService.configureExistingRoot(
+        inspection: repairInspection,
+        reconnectActive: true,
+      );
+      final snapshot = await store.load();
+      final replacementNamespace = snapshot.namespaceFor(reconnecting)!;
 
-      expect(transport.conditionalCreateProbeCalls, 1);
-      expect(transport.createKeyCalls, 0);
-      expect(transport.keyBytes, isNull);
+      expect(reconnecting.lifecycle, WebDavSyncLifecycle.rootVerified);
+      expect(reconnecting.circleId, 'circle-replacement');
       expect(
-        (await store.load()).bindings[installed.binding.id]!.errorMessage,
-        WebDavSyncSetupInconclusiveException.userMessage,
+        replacementNamespace.markerBytes,
+        orderedEquals(replacementAuthority),
+      );
+      expect(replacementNamespace.deviceId, isNot(firstNamespace.deviceId));
+      expect(
+        (await store.readSecrets(reconnecting)).syncPassphrase,
+        'replacement-secret',
       );
     },
   );
-
-  test(
-    'legacy keyfile provisioning accepts only a matching 412 winner',
-    () async {
-      final installed = await installActiveBinding();
-      transport
-        ..keyBytes = null
-        ..createKeyError = const WebDavException(
-          kind: WebDavErrorKind.preconditionFailed,
-          message: 'lost race',
-          statusCode: 412,
-        )
-        ..keyOnCreateError = const WebDavSyncRootKeyFile(
-          syncPassphrase: 'circle-secret',
-        ).encode();
-
-      expect(
-        await service.inspectFolder(
-          config: _config,
-          folderPath: 'Family',
-          context: WebDavSyncFolderInspectionContext.repair,
-          repairBindingId: installed.binding.id,
-        ),
-        isA<WebDavSyncFolderExisting>(),
-      );
-
-      transport
-        ..keyBytes = null
-        ..keyOnCreateError = const WebDavSyncRootKeyFile(
-          syncPassphrase: 'different-secret',
-        ).encode();
-      await expectLater(
-        service.inspectFolder(
-          config: _config,
-          folderPath: 'Family',
-          context: WebDavSyncFolderInspectionContext.repair,
-          repairBindingId: installed.binding.id,
-        ),
-        throwsA(isA<WebDavSyncRootKeyClaimException>()),
-      );
-      expect(
-        (await store.load()).bindings[installed.binding.id]!.lifecycle,
-        WebDavSyncLifecycle.error,
-      );
-      expect(diagnostics, <String>[
-        'WebDAV sync authority failure: provision, HTTP 412',
-      ]);
-    },
-  );
-
-  for (final status in <int>[403, 405, 409]) {
-    test('legacy provision accepts a matching HTTP $status winner', () async {
-      final installed = await installActiveBinding();
-      transport
-        ..keyBytes = null
-        ..createKeyError = WebDavException(
-          kind: status == 403
-              ? WebDavErrorKind.authentication
-              : status == 409
-              ? WebDavErrorKind.conflict
-              : WebDavErrorKind.unexpectedStatus,
-          message: 'conditional create rejected',
-          statusCode: status,
-        )
-        ..keyOnCreateError = const WebDavSyncRootKeyFile(
-          syncPassphrase: 'circle-secret',
-        ).encode();
-
-      expect(
-        await service.inspectFolder(
-          config: _config,
-          folderPath: 'Family',
-          context: WebDavSyncFolderInspectionContext.repair,
-          repairBindingId: installed.binding.id,
-        ),
-        isA<WebDavSyncFolderExisting>(),
-      );
-
-      expect(diagnostics, isEmpty);
-    });
-  }
 }
 
-final class _FakeProbeTransport
-    implements WebDavSyncProbeTransport, WebDavSyncRootKeyProvisionTransport {
+class _FakeProbeTransport implements WebDavSyncProbeTransport {
   Uri? endpoint;
   WebDavCredentials? credentials;
   Uint8List? _bytes;
   Uint8List? keyBytes;
   Object? error;
   Object? keyError;
-  Object? createKeyError;
-  Uint8List? keyOnCreateError;
-  int createKeyCalls = 0;
-  int createKeyStatus = 201;
-  int conditionalCreateProbeCalls = 0;
-  Object? conditionalCreateProbeError;
   final List<String> paths = <String>[];
 
   Uint8List? get bytes => _bytes;
@@ -790,39 +846,67 @@ final class _FakeProbeTransport
   }
 
   @override
-  Future<WebDavResponseMetadata> createRootKey({
+  void close() {}
+}
+
+final class _AuthorityProbeTransport extends _FakeProbeTransport
+    implements
+        WebDavSyncAuthorityProbeTransport,
+        WebDavSyncAuthorityProvisionTransport {
+  Uint8List? authorityBytes;
+  Object? authorityError;
+  Uint8List? authorityAfterWrite;
+  int writeAuthorityCalls = 0;
+  int legacyMarkerReads = 0;
+
+  @override
+  Future<WebDavBytesResult> readRootMarker({
     required String path,
-    required Uint8List bytes,
+    Future<void> Function()? beforeSend,
+  }) {
+    legacyMarkerReads++;
+    return super.readRootMarker(path: path, beforeSend: beforeSend);
+  }
+
+  @override
+  Future<WebDavBytesResult> readRootAuthority({
+    required String path,
     Future<void> Function()? beforeSend,
   }) async {
-    createKeyCalls++;
     paths.add(path);
     await beforeSend?.call();
-    if (createKeyError case final failure?) {
-      if (keyOnCreateError case final winner?) {
-        keyBytes = Uint8List.fromList(winner);
-      }
-      throw failure;
+    if (authorityError case final failure?) throw failure;
+    final body = authorityBytes;
+    if (body == null) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'missing',
+      );
     }
-    keyBytes = Uint8List.fromList(bytes);
-    return WebDavResponseMetadata(
-      statusCode: createKeyStatus,
-      uri: endpoint!.resolve(path),
-      headers: const <String, String>{},
+    return WebDavBytesResult(
+      bytes: body,
+      metadata: WebDavResponseMetadata(
+        statusCode: 200,
+        uri: endpoint!.resolve(path),
+        headers: const <String, String>{},
+      ),
     );
   }
 
   @override
-  Future<void> verifyConditionalCreate({
-    required String syncRootPath,
+  Future<WebDavResponseMetadata> writeRootAuthority({
+    required String path,
+    required Uint8List bytes,
     Future<void> Function()? beforeSend,
   }) async {
-    conditionalCreateProbeCalls++;
-    paths.add('$syncRootPath/.cond-probe');
+    writeAuthorityCalls++;
+    paths.add(path);
     await beforeSend?.call();
-    if (conditionalCreateProbeError case final failure?) throw failure;
+    authorityBytes = Uint8List.fromList(authorityAfterWrite ?? bytes);
+    return WebDavResponseMetadata(
+      statusCode: 201,
+      uri: endpoint!.resolve(path),
+      headers: const <String, String>{},
+    );
   }
-
-  @override
-  void close() {}
 }

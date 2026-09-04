@@ -473,8 +473,17 @@ final class WebDavSyncSeedActivationRecovery {
     } on FormatException {
       throw StateError('WebDAV sync interrupted seed candidate is invalid');
     }
+    if (candidateMarker.isEmpty ||
+        candidateMarker.length > WebDavSyncCodec.rootMarkerMaxBytes) {
+      throw StateError('WebDAV sync interrupted seed candidate is invalid');
+    }
 
-    if (!_bytesEqual(candidateMarker, pinnedMarker)) {
+    final secrets = await _bindingStore.readSecrets(staged);
+    final candidateAuthority = WebDavSyncAuthorityFile(
+      markerBytes: candidateMarker,
+      syncPassphrase: secrets.syncPassphrase,
+    ).encode();
+    if (!_bytesEqual(candidateAuthority, pinnedMarker)) {
       await _bindingStore.setLifecycle(
         staged.id,
         WebDavSyncLifecycle.awaitingAdoption,
@@ -569,88 +578,57 @@ final class WebDavSyncNewRootInitializer {
   Future<WebDavSyncInitializationOutcome> _initializeUntilStable({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
-  }) async {
-    var conditionalCreateVerified = false;
-    while (true) {
-      try {
-        return await _initializeAttempt(
-          bindingId: bindingId,
-          authorization: authorization,
-          verifyConditionalCreate: (transport, binding) async {
-            if (conditionalCreateVerified) return;
-            final folder = binding.location.folderPath;
-            await transport.verifyConditionalCreate(
-              syncRootPath: folder.isEmpty
-                  ? 'debrify-sync'
-                  : '$folder/debrify-sync',
-            );
-            conditionalCreateVerified = true;
-          },
-        );
-      } on _WebDavSyncCandidateRestart {
-        // A non-conforming server replaced the create-only key claim while
-        // this device seeded. Adoption invalidated the losing candidate; run
-        // the complete candidate transaction again under the observed key.
-        // An observed replacement is exactly when the conditional-create
-        // assumption deserves revalidation, so the retry re-probes.
-        conditionalCreateVerified = false;
-      }
-    }
-  }
+  }) => _initializeAttempt(bindingId: bindingId, authorization: authorization);
 
   Future<WebDavSyncInitializationOutcome> _initializeAttempt({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
-    required Future<void> Function(
-      WebDavSyncActivationTransport transport,
-      WebDavSyncBinding binding,
-    )
-    verifyConditionalCreate,
   }) async {
     final snapshot = await _bindingStore.load();
-    var binding =
+    final binding =
         snapshot.bindings[bindingId] ??
         (throw StateError('WebDAV sync binding is not ready to initialize'));
     if (binding.lifecycle != WebDavSyncLifecycle.awaitingSeedCommit ||
         binding.circleId != null) {
       throw StateError('WebDAV sync binding is not ready to initialize');
     }
-    var namespace =
+    final namespace =
         snapshot.namespaceFor(binding) ??
         (throw StateError('WebDAV sync candidate namespace is invalid'));
     if (namespace.markerBytes != null) {
       throw StateError('WebDAV sync candidate namespace is invalid');
     }
-    var secrets = await _bindingStore.readSecrets(binding);
+    final secrets = await _bindingStore.readSecrets(binding);
     final transport = _transportFactory(binding: binding, secrets: secrets);
     try {
-      // The root collection must be proven to exist before the immutable key
-      // claim. MKCOL 405 alone is ambiguous on several WebDAV providers.
+      // MKCOL 405 alone is ambiguous on several WebDAV providers, so verify
+      // the collection and then prove exact read-after-write behavior with a
+      // disposable sentinel. Conditional creation is not a requirement.
       await transport.ensureActivationLayout();
-      await verifyConditionalCreate(transport, binding);
+      final folder = binding.location.folderPath;
+      final syncRootPath = folder.isEmpty
+          ? 'debrify-sync'
+          : '$folder/debrify-sync';
+      await transport.verifyLinearizability(syncRootPath: syncRootPath);
 
-      // A committed candidate marker is stronger authority than a standing
-      // keyfile. Read it before claim/adoption so a resumed owner keeps the
-      // secret that sealed its marker and repairs the key toward that secret.
-      // This also covers marker-committed/key-missing process loss.
       var markerBeforeWrite = await _readMarkerIfPresent(transport);
-      final persistedCandidate = _persistedCandidateMarker(namespace);
+      final persistedInnerMarker = _persistedCandidateMarker(namespace);
+      final persistedCandidate = persistedInnerMarker == null
+          ? null
+          : WebDavSyncAuthorityFile(
+              markerBytes: persistedInnerMarker,
+              syncPassphrase: secrets.syncPassphrase,
+            ).encode();
       final resumesOwnCommittedRoot =
           markerBeforeWrite != null &&
           persistedCandidate != null &&
           _bytesEqual(markerBeforeWrite.bytes, persistedCandidate);
-      if (!resumesOwnCommittedRoot) {
-        binding = await _claimRootKey(
+      if (markerBeforeWrite != null && !resumesOwnCommittedRoot) {
+        return _followConcurrentRoot(
           binding: binding,
-          secrets: secrets,
           transport: transport,
+          markerBytes: markerBeforeWrite.bytes,
         );
-        await _deleteLosingCandidateDirectoryIfRequired(binding, transport);
-        await _resetCandidateStateIfRequired(binding);
-        final claimedSnapshot = await _bindingStore.load();
-        binding = claimedSnapshot.bindings[binding.id]!;
-        namespace = claimedSnapshot.namespaceFor(binding)!;
-        secrets = await _bindingStore.readSecrets(binding);
       }
       await transport.ensureOwnLayout(namespace.deviceId);
 
@@ -658,7 +636,7 @@ final class WebDavSyncNewRootInitializer {
         namespace: namespace,
         passphrase: secrets.syncPassphrase,
       );
-      final markerBytes = candidate.markerBytes;
+      final markerBytes = candidate.authorityBytes;
       final root = candidate.root;
       final circleId = root.document.circleId;
       final listing = await transport.listDeviceIds();
@@ -700,7 +678,6 @@ final class WebDavSyncNewRootInitializer {
         if (!_bytesEqual(markerBeforeWrite.bytes, markerBytes)) {
           return _followConcurrentRoot(
             binding: binding,
-            secrets: secrets,
             transport: transport,
             markerBytes: markerBeforeWrite.bytes,
           );
@@ -770,13 +747,6 @@ final class WebDavSyncNewRootInitializer {
         final existing = await _readMarkerIfPresent(transport);
         if (existing != null) {
           if (_bytesEqual(existing.bytes, markerBytes)) {
-            final concurrent = await _repairRootKeyAfterMarkerCommitIfRequired(
-              binding: binding,
-              secrets: secrets,
-              transport: transport,
-              markerBytes: markerBytes,
-            );
-            if (concurrent != null) return concurrent;
             return _finishCandidate(
               binding: binding,
               namespace: namespace,
@@ -790,87 +760,41 @@ final class WebDavSyncNewRootInitializer {
           }
           return _followConcurrentRoot(
             binding: binding,
-            secrets: secrets,
             transport: transport,
             markerBytes: existing.bytes,
           );
         }
 
-        // Revalidate local authority, then re-read the key claim at the final
-        // root-last edge. If a server ignored If-None-Match and replaced it
-        // while seeding, adopt that key and restart with a fresh candidate.
+        // A 2xx is not ownership. The single standing object returned by the
+        // mandatory read-back decides whether this candidate won or adopts.
         await seed.beforeRootCommit();
-        await _reverifyRootKeyBeforeMarkerCommit(
-          binding: binding,
-          secrets: secrets,
-          transport: transport,
-        );
+        Object? writeError;
         try {
           await transport.createRootMarker(markerBytes);
-        } on WebDavException catch (error) {
-          // HTTP 412 is conventional, but the stored marker decides the
-          // outcome for every conditional-PUT error on honest DAV dialects.
-          late final WebDavBytesResult? winner;
-          try {
-            winner = await _readMarkerIfPresent(transport);
-          } on WebDavException catch (readError) {
-            _recordAuthorityFailure('marker-commit', error: readError);
-            rethrow;
-          }
-          if (winner == null) {
-            _recordAuthorityFailure('marker-commit', error: error);
-            rethrow;
-          }
-          if (_bytesEqual(winner.bytes, markerBytes)) {
-            final concurrent = await _repairRootKeyAfterMarkerCommitIfRequired(
-              binding: binding,
-              secrets: secrets,
-              transport: transport,
-              markerBytes: markerBytes,
-            );
-            if (concurrent != null) return concurrent;
-            return _finishCandidate(
-              binding: binding,
-              namespace: namespace,
-              root: root,
-              markerBytes: markerBytes,
-              seed: seed,
-              manifest: verifiedManifest,
-              clock: clockDecision.state,
-              serverNowMs: clockDecision.serverNowMs!,
-            );
-          }
-          return _followConcurrentRootAfterMarkerCommit(
-            binding: binding,
-            secrets: secrets,
-            transport: transport,
-            markerBytes: winner.bytes,
-            error: error,
-          );
+        } on Object catch (error) {
+          writeError = error;
         }
-        late final WebDavBytesResult committed;
+        late final WebDavBytesResult? committed;
         try {
-          committed = await transport.readRootMarker();
+          committed = await _readMarkerIfPresent(transport);
         } on WebDavException catch (error) {
           _recordAuthorityFailure('marker-commit', error: error);
           rethrow;
         }
+        if (committed == null) {
+          _recordAuthorityFailure('marker-commit', error: writeError);
+          if (writeError case final WebDavException error) throw error;
+          throw const WebDavSyncAuthorityClaimException();
+        }
         if (!_bytesEqual(committed.bytes, markerBytes)) {
           return _followConcurrentRootAfterMarkerCommit(
             binding: binding,
-            secrets: secrets,
             transport: transport,
             markerBytes: committed.bytes,
+            error: writeError,
             statusCode: committed.metadata.statusCode,
           );
         }
-        final concurrent = await _repairRootKeyAfterMarkerCommitIfRequired(
-          binding: binding,
-          secrets: secrets,
-          transport: transport,
-          markerBytes: markerBytes,
-        );
-        if (concurrent != null) return concurrent;
         return _finishCandidate(
           binding: binding,
           namespace: namespace,
@@ -923,34 +847,34 @@ final class WebDavSyncNewRootInitializer {
 
   Future<WebDavSyncInitializationOutcome> _followConcurrentRoot({
     required WebDavSyncBinding binding,
-    required WebDavSyncSecrets secrets,
     required WebDavSyncActivationTransport transport,
     required Uint8List markerBytes,
   }) async {
+    late final ({WebDavSyncAuthorityFile authority, OpenedWebDavSyncRoot root})
+    opened;
+    try {
+      opened = await _codec.openAuthority(markerBytes, runInBackground: true);
+    } on WebDavSyncAuthorityFileException {
+      rethrow;
+    } on Object catch (error) {
+      _recordAuthorityFailure('authority-adopt', error: error);
+      throw const WebDavSyncAuthorityClaimException();
+    }
     final beforeKeyRefresh = await _bindingStore.load();
     final losingNamespace = beforeKeyRefresh.namespaceFor(binding);
     if (losingNamespace == null) {
       throw StateError('WebDAV sync candidate namespace is unavailable');
     }
-    final keyResult = await _readClaimedRootKey(transport);
-    final rootKey = _parseClaimedRootKey(keyResult.bytes);
     var currentBinding = binding;
-    if (rootKey.syncPassphrase != secrets.syncPassphrase) {
-      currentBinding = await _bindingStore.adoptSyncSecret(
-        binding.id,
-        rootKey.syncPassphrase,
-      );
-      await _resetCandidateStateIfRequired(currentBinding);
-    }
+    currentBinding = await _bindingStore.adoptSyncSecret(
+      binding.id,
+      opened.authority.syncPassphrase,
+      resetCandidate: true,
+    );
+    await _resetCandidateStateIfRequired(currentBinding);
     final currentSnapshot = await _bindingStore.load();
     currentBinding = currentSnapshot.bindings[currentBinding.id]!;
     final currentNamespace = currentSnapshot.namespaceFor(currentBinding)!;
-    final currentSecrets = await _bindingStore.readSecrets(currentBinding);
-    final winner = await _codec.openRoot(
-      markerBytes,
-      currentSecrets.syncPassphrase,
-      runInBackground: true,
-    );
     try {
       await transport.deleteDeviceDirectory(losingNamespace.deviceId);
     } on WebDavException catch (error) {
@@ -965,7 +889,7 @@ final class WebDavSyncNewRootInitializer {
     );
     final verified = await _bindingStore.markRootVerified(
       bindingId: currentBinding.id,
-      root: winner.document,
+      root: opened.root.document,
       markerBytes: markerBytes,
     );
     await _clearCandidateMarker(verified.namespaceId);
@@ -975,7 +899,7 @@ final class WebDavSyncNewRootInitializer {
     );
     return WebDavSyncConcurrentRoot(
       binding: awaiting,
-      root: winner,
+      root: opened.root,
       markerBytes: Uint8List.fromList(markerBytes),
     );
   }
@@ -983,7 +907,6 @@ final class WebDavSyncNewRootInitializer {
   Future<WebDavSyncInitializationOutcome>
   _followConcurrentRootAfterMarkerCommit({
     required WebDavSyncBinding binding,
-    required WebDavSyncSecrets secrets,
     required WebDavSyncActivationTransport transport,
     required Uint8List markerBytes,
     Object? error,
@@ -992,11 +915,10 @@ final class WebDavSyncNewRootInitializer {
     try {
       return await _followConcurrentRoot(
         binding: binding,
-        secrets: secrets,
         transport: transport,
         markerBytes: markerBytes,
       );
-    } on WebDavSyncRootKeyClaimException {
+    } on WebDavSyncAuthorityClaimException {
       _recordAuthorityFailure(
         'marker-commit',
         error: error,
@@ -1006,7 +928,7 @@ final class WebDavSyncNewRootInitializer {
     }
   }
 
-  Future<({Uint8List markerBytes, OpenedWebDavSyncRoot root})>
+  Future<({Uint8List authorityBytes, OpenedWebDavSyncRoot root})>
   _loadOrCreateCandidate({
     required WebDavSyncNamespace namespace,
     required String passphrase,
@@ -1018,28 +940,36 @@ final class WebDavSyncNewRootInitializer {
         passphrase,
         runInBackground: true,
       );
-      return (markerBytes: persisted, root: root);
+      final authorityBytes = WebDavSyncAuthorityFile(
+        markerBytes: persisted,
+        syncPassphrase: passphrase,
+      ).encode();
+      return (authorityBytes: authorityBytes, root: root);
     }
 
-    final markerBytes = await _codec.sealRoot(
+    final sealedMarkerBytes = await _codec.sealRoot(
       passphrase: passphrase,
       circleId: _mintId('circle'),
       createdAt: _clock().toUtc(),
       runInBackground: true,
     );
     final root = await _codec.openRoot(
-      markerBytes,
+      sealedMarkerBytes,
       passphrase,
       runInBackground: true,
     );
+    final authorityBytes = WebDavSyncAuthorityFile(
+      markerBytes: sealedMarkerBytes,
+      syncPassphrase: passphrase,
+    ).encode();
     await _bindingStore.updateNamespaceValues(namespace.id, (values) {
       final next = Map<String, Object?>.from(values);
       next[WebDavSyncBindingStore.seedCandidateMarkerValueKey] = base64Encode(
-        markerBytes,
+        sealedMarkerBytes,
       );
       return next;
     });
-    return (markerBytes: markerBytes, root: root);
+    return (authorityBytes: authorityBytes, root: root);
   }
 
   static Uint8List? _persistedCandidateMarker(WebDavSyncNamespace namespace) {
@@ -1062,78 +992,6 @@ final class WebDavSyncNewRootInitializer {
     return markerBytes;
   }
 
-  Future<WebDavSyncBinding> _claimRootKey({
-    required WebDavSyncBinding binding,
-    required WebDavSyncSecrets secrets,
-    required WebDavSyncActivationTransport transport,
-  }) async {
-    final existing = await _readRootKeyIfPresent(transport);
-    if (existing != null) {
-      late final WebDavSyncRootKeyFile key;
-      try {
-        key = _parseClaimedRootKey(existing.bytes);
-      } on WebDavSyncRootKeyClaimException {
-        _throwKeyClaimFailure(statusCode: existing.metadata.statusCode);
-      }
-      return _adoptRootKey(binding, secrets, key);
-    }
-
-    final proposed = WebDavSyncRootKeyFile(
-      syncPassphrase: secrets.syncPassphrase,
-    ).encode();
-    try {
-      await transport.createRootKey(proposed);
-    } on WebDavException catch (error) {
-      // HTTP 412 is the common conflict response. For every WebDAV error,
-      // presence plus a valid keyfile proves that another claimant won.
-      late final WebDavBytesResult? winner;
-      try {
-        winner = await _readRootKeyIfPresent(transport);
-      } on WebDavException catch (readError) {
-        _throwKeyClaimFailure(error: readError);
-      }
-      if (winner == null) {
-        _throwKeyClaimFailure(error: error);
-      }
-      late final WebDavSyncRootKeyFile key;
-      try {
-        key = _parseClaimedRootKey(winner.bytes);
-      } on WebDavSyncRootKeyClaimException {
-        _throwKeyClaimFailure(error: error);
-      }
-      return _adoptRootKey(binding, secrets, key);
-    }
-    late final WebDavBytesResult? committed;
-    try {
-      committed = await _readRootKeyIfPresent(transport);
-    } on WebDavException catch (error) {
-      _throwKeyClaimFailure(error: error);
-    }
-    if (committed == null) {
-      _throwKeyClaimFailure(
-        error: const WebDavException(
-          kind: WebDavErrorKind.notFound,
-          message: 'missing',
-        ),
-      );
-    }
-    if (!_bytesEqual(committed.bytes, proposed)) {
-      _throwKeyClaimFailure(statusCode: committed.metadata.statusCode);
-    }
-    late final WebDavSyncRootKeyFile key;
-    try {
-      key = _parseClaimedRootKey(committed.bytes);
-    } on WebDavSyncRootKeyClaimException {
-      _throwKeyClaimFailure(statusCode: committed.metadata.statusCode);
-    }
-    return _adoptRootKey(binding, secrets, key);
-  }
-
-  Never _throwKeyClaimFailure({Object? error, int? statusCode}) {
-    _recordAuthorityFailure('key-claim', error: error, statusCode: statusCode);
-    throw const WebDavSyncRootKeyClaimException();
-  }
-
   void _recordAuthorityFailure(String step, {Object? error, int? statusCode}) =>
       recordWebDavSyncAuthorityFailure(
         _diagnostic,
@@ -1141,15 +999,6 @@ final class WebDavSyncNewRootInitializer {
         error: error,
         statusCode: statusCode,
       );
-
-  Future<WebDavSyncBinding> _adoptRootKey(
-    WebDavSyncBinding binding,
-    WebDavSyncSecrets secrets,
-    WebDavSyncRootKeyFile key,
-  ) async {
-    if (key.syncPassphrase == secrets.syncPassphrase) return binding;
-    return _bindingStore.adoptSyncSecret(binding.id, key.syncPassphrase);
-  }
 
   Future<void> _resetCandidateStateIfRequired(WebDavSyncBinding binding) async {
     final snapshot = await _bindingStore.load();
@@ -1187,112 +1036,6 @@ final class WebDavSyncNewRootInitializer {
     });
   }
 
-  Future<void> _reverifyRootKeyBeforeMarkerCommit({
-    required WebDavSyncBinding binding,
-    required WebDavSyncSecrets secrets,
-    required WebDavSyncActivationTransport transport,
-  }) async {
-    final current = _parseClaimedRootKey(
-      (await _readClaimedRootKey(transport)).bytes,
-    );
-    if (current.syncPassphrase == secrets.syncPassphrase) return;
-    final adopted = await _adoptRootKey(binding, secrets, current);
-    await _deleteLosingCandidateDirectoryIfRequired(adopted, transport);
-    await _resetCandidateStateIfRequired(adopted);
-    throw const _WebDavSyncCandidateRestart();
-  }
-
-  Future<void> _deleteLosingCandidateDirectoryIfRequired(
-    WebDavSyncBinding binding,
-    WebDavSyncActivationTransport transport,
-  ) async {
-    final snapshot = await _bindingStore.load();
-    final current = snapshot.bindings[binding.id];
-    final namespace = current == null ? null : snapshot.namespaceFor(current);
-    final previousDeviceId = namespace
-        ?.values[WebDavSyncBindingStore.seedCandidateResetRequiredValueKey];
-    if (previousDeviceId is! String || previousDeviceId.isEmpty) return;
-    try {
-      await transport.deleteDeviceDirectory(previousDeviceId);
-    } on WebDavException catch (error) {
-      if (error.kind != WebDavErrorKind.notFound) rethrow;
-    }
-  }
-
-  Future<WebDavSyncInitializationOutcome?>
-  _repairRootKeyAfterMarkerCommitIfRequired({
-    required WebDavSyncBinding binding,
-    required WebDavSyncSecrets secrets,
-    required WebDavSyncActivationTransport transport,
-    required Uint8List markerBytes,
-  }) async {
-    try {
-      final markerBeforeRepair = await transport.readRootMarker();
-      if (!_bytesEqual(markerBeforeRepair.bytes, markerBytes)) {
-        // The marker is the committed authority. A server that replaced it
-        // despite create-only semantics made this candidate a loser, so
-        // follow the winner and never overwrite circle.key on its behalf.
-        return await _followConcurrentRoot(
-          binding: binding,
-          secrets: secrets,
-          transport: transport,
-          markerBytes: markerBeforeRepair.bytes,
-        );
-      }
-      final currentResult = await _readRootKeyIfPresent(transport);
-      final keyNeedsRepair =
-          currentResult == null ||
-          _parseClaimedRootKey(currentResult.bytes).syncPassphrase !=
-              secrets.syncPassphrase;
-      if (keyNeedsRepair) {
-        final markerBeforeOverwrite = await transport.readRootMarker();
-        if (!_bytesEqual(markerBeforeOverwrite.bytes, markerBytes)) {
-          return await _followConcurrentRoot(
-            binding: binding,
-            secrets: secrets,
-            transport: transport,
-            markerBytes: markerBeforeOverwrite.bytes,
-          );
-        }
-        final repair = transport;
-        if (repair is! WebDavSyncCommittedRootKeyRepairTransport) {
-          throw const WebDavSyncRootKeyClaimException();
-        }
-        final expected = WebDavSyncRootKeyFile(
-          syncPassphrase: secrets.syncPassphrase,
-        ).encode();
-        await (repair as WebDavSyncCommittedRootKeyRepairTransport)
-            .overwriteRootKey(expected);
-        final verified = await _readClaimedRootKey(transport);
-        if (!_bytesEqual(verified.bytes, expected)) {
-          throw const WebDavSyncRootKeyClaimException();
-        }
-        _parseClaimedRootKey(verified.bytes);
-      }
-
-      final markerAfterRepair = await transport.readRootMarker();
-      if (!_bytesEqual(markerAfterRepair.bytes, markerBytes)) {
-        return await _followConcurrentRoot(
-          binding: binding,
-          secrets: secrets,
-          transport: transport,
-          markerBytes: markerAfterRepair.bytes,
-        );
-      }
-      return null;
-    } on Object catch (error) {
-      _recordAuthorityFailure('marker-commit', error: error);
-      const failure = WebDavSyncRootKeyClaimException();
-      try {
-        await _bindingStore.markError(binding.id, failure);
-      } catch (_) {
-        // Preserve the typed activation failure even if status persistence is
-        // also unavailable.
-      }
-      throw failure;
-    }
-  }
-
   Future<void> _clearCandidateMarker(String namespaceId) =>
       _bindingStore.updateNamespaceValues(namespaceId, (values) {
         final next = Map<String, Object?>.from(values)
@@ -1308,39 +1051,6 @@ final class WebDavSyncNewRootInitializer {
     } on WebDavException catch (error) {
       if (error.kind == WebDavErrorKind.notFound) return null;
       rethrow;
-    }
-  }
-
-  static Future<WebDavBytesResult?> _readRootKeyIfPresent(
-    WebDavSyncActivationTransport transport,
-  ) async {
-    try {
-      return await transport.readRootKey();
-    } on WebDavException catch (error) {
-      if (error.kind == WebDavErrorKind.notFound) return null;
-      rethrow;
-    }
-  }
-
-  static Future<WebDavBytesResult> _readClaimedRootKey(
-    WebDavSyncActivationTransport transport,
-  ) async {
-    try {
-      final result = await _readRootKeyIfPresent(transport);
-      if (result == null) throw const WebDavSyncRootKeyClaimException();
-      return result;
-    } on WebDavSyncRootKeyClaimException {
-      rethrow;
-    } on Object {
-      throw const WebDavSyncRootKeyClaimException();
-    }
-  }
-
-  static WebDavSyncRootKeyFile _parseClaimedRootKey(List<int> bytes) {
-    try {
-      return WebDavSyncRootKeyFile.parse(bytes);
-    } on WebDavSyncRootKeyFileException {
-      throw const WebDavSyncRootKeyClaimException();
     }
   }
 
@@ -1396,8 +1106,4 @@ bool _bytesEqual(List<int> left, List<int> right) {
         (index < right.length ? right[index] : 0);
   }
   return difference == 0;
-}
-
-final class _WebDavSyncCandidateRestart implements Exception {
-  const _WebDavSyncCandidateRestart();
 }

@@ -58,6 +58,11 @@ final class WebDavSyncFolderLocation {
   final String folderPath;
   final String serverName;
 
+  String get rootAuthorityPath => folderPath.isEmpty
+      ? 'debrify-sync/circle.authority'
+      : '$folderPath/debrify-sync/circle.authority';
+
+  /// Legacy layout, retained only for authenticated repair/upgrade reads.
   String get rootMarkerPath => folderPath.isEmpty
       ? 'debrify-sync/circle.json.enc'
       : '$folderPath/debrify-sync/circle.json.enc';
@@ -156,11 +161,10 @@ final class WebDavSyncRootKeyFileVersionException
     : super('Unsupported WebDAV sync keyfile version');
 }
 
-/// The small, server-side secret which replaces setup-time passphrase entry.
+/// Legacy split-layout keyfile, retained only for authenticated read/upgrade.
 ///
-/// Parsing is deliberately strict because activation uses this file as the
-/// create-only ownership claim for a new sync root. No parse error includes
-/// the supplied bytes or the secret they may contain.
+/// Parsing remains strict and no parse error includes the supplied bytes or
+/// the secret they may contain. New circles never write this representation.
 final class WebDavSyncRootKeyFile {
   const WebDavSyncRootKeyFile({required this.syncPassphrase});
 
@@ -215,58 +219,154 @@ final class WebDavSyncRootKeyFile {
   }
 }
 
-/// Activation could not prove which keyfile bytes own the folder.
+sealed class WebDavSyncAuthorityFileException extends FormatException {
+  const WebDavSyncAuthorityFileException(super.message);
+}
+
+final class WebDavSyncAuthorityFileSizeException
+    extends WebDavSyncAuthorityFileException {
+  const WebDavSyncAuthorityFileSizeException()
+    : super('Invalid WebDAV sync authority size');
+}
+
+final class WebDavSyncAuthorityFileFormatException
+    extends WebDavSyncAuthorityFileException {
+  const WebDavSyncAuthorityFileFormatException()
+    : super('Invalid WebDAV sync authority');
+}
+
+final class WebDavSyncAuthorityFileVersionException
+    extends WebDavSyncAuthorityFileException {
+  const WebDavSyncAuthorityFileVersionException()
+    : super('Unsupported WebDAV sync authority version');
+}
+
+/// The circle's sole remote authority object.
 ///
-/// This intentionally collapses provider quirks and damaged-folder states
-/// into one non-secret-bearing failure instead of guessing. The only overwrite
-/// path is separately guarded by a marker this device just committed.
-final class WebDavSyncRootKeyClaimException implements Exception {
-  const WebDavSyncRootKeyClaimException();
+/// Keeping the sealed marker and its opening secret in one strictly parsed
+/// representation means an LWW WebDAV store can replace only a complete,
+/// internally consistent authority. The encoded bytes themselves are pinned.
+final class WebDavSyncAuthorityFile {
+  const WebDavSyncAuthorityFile({
+    required this.markerBytes,
+    required this.syncPassphrase,
+  });
+
+  static const int version = 1;
+  static const int maxBytes = 96 * 1024;
+
+  final Uint8List markerBytes;
+  final String syncPassphrase;
+
+  Uint8List encode() {
+    _validate();
+    final encoded = Uint8List.fromList(
+      utf8.encode(
+        jsonEncode(<String, Object?>{
+          'version': version,
+          'marker': base64Encode(markerBytes),
+          'syncPassphrase': syncPassphrase,
+        }),
+      ),
+    );
+    if (encoded.length > maxBytes) {
+      throw const WebDavSyncAuthorityFileSizeException();
+    }
+    return encoded;
+  }
+
+  factory WebDavSyncAuthorityFile.parse(List<int> rawBytes) {
+    if (rawBytes.isEmpty || rawBytes.length > maxBytes) {
+      throw const WebDavSyncAuthorityFileSizeException();
+    }
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(rawBytes));
+    } catch (_) {
+      throw const WebDavSyncAuthorityFileFormatException();
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded.length != 3 ||
+        decoded.keys.any(
+          (key) =>
+              key != 'version' && key != 'marker' && key != 'syncPassphrase',
+        )) {
+      throw const WebDavSyncAuthorityFileFormatException();
+    }
+    final encodedVersion = decoded['version'];
+    if (encodedVersion is! int || encodedVersion != version) {
+      throw const WebDavSyncAuthorityFileVersionException();
+    }
+    final encodedMarker = decoded['marker'];
+    final syncPassphrase = decoded['syncPassphrase'];
+    if (encodedMarker is! String || syncPassphrase is! String) {
+      throw const WebDavSyncAuthorityFileFormatException();
+    }
+    late final Uint8List markerBytes;
+    try {
+      markerBytes = Uint8List.fromList(base64Decode(encodedMarker));
+    } catch (_) {
+      throw const WebDavSyncAuthorityFileFormatException();
+    }
+    if (base64Encode(markerBytes) != encodedMarker) {
+      throw const WebDavSyncAuthorityFileFormatException();
+    }
+    final result = WebDavSyncAuthorityFile(
+      markerBytes: markerBytes,
+      syncPassphrase: syncPassphrase,
+    );
+    try {
+      result._validate();
+    } on ArgumentError {
+      throw const WebDavSyncAuthorityFileFormatException();
+    } on WebDavSyncAuthorityFileSizeException {
+      rethrow;
+    }
+    return result;
+  }
+
+  void _validate() {
+    if (markerBytes.isEmpty ||
+        markerBytes.length > WebDavSyncCodec.rootMarkerMaxBytes) {
+      throw const WebDavSyncAuthorityFileSizeException();
+    }
+    WebDavSyncCodec.validatePassphrase(syncPassphrase);
+  }
+}
+
+/// Activation could not establish a readable standing authority object.
+///
+/// The failure never includes remote bytes or secrets.
+final class WebDavSyncAuthorityClaimException implements Exception {
+  const WebDavSyncAuthorityClaimException();
 
   @override
   String toString() =>
       'This WebDAV provider is unsupported, or the sync folder is damaged.';
 }
 
-/// The provider failed the outcome-based conditional-create capability probe.
-///
-/// Sync setup relies on `If-None-Match: *` to make the root key and marker
-/// immutable. Providers proven to ignore that precondition, overwrite the
-/// sentinel, or lose it after a definite conflict are refused before either
-/// authority file is created or changed. Transient ambiguity has a separate
-/// retryable exception.
-final class WebDavSyncProviderUnsupportedException implements Exception {
-  const WebDavSyncProviderUnsupportedException({
+/// A successful sentinel write was not returned by the immediately following
+/// read. Such a store cannot provide the linearizable authority register sync
+/// requires. Conditional-create support is deliberately irrelevant.
+final class WebDavSyncStoreNotLinearizableException implements Exception {
+  const WebDavSyncStoreNotLinearizableException({
     this.probeStep,
     this.statusCode,
     this.exceptionKind,
   });
 
-  /// One-based probe operation shown without the private sentinel path.
   final int? probeStep;
   final int? statusCode;
   final WebDavErrorKind? exceptionKind;
 
   static const String userMessage =
-      'This WebDAV server cannot protect sync setup from conflicts. '
-      'Use Koofr or a server that supports conditional file creation.';
-
-  String get message {
-    final step = probeStep;
-    if (step == null) return userMessage;
-    final outcome = statusCode != null
-        ? 'HTTP $statusCode'
-        : exceptionKind != null
-        ? exceptionKind!.name
-        : 'unknown';
-    return '$userMessage (probe step $step: $outcome)';
-  }
+      'This WebDAV server does not reliably return newly written sync data.';
 
   @override
-  String toString() => message;
+  String toString() => userMessage;
 }
 
-/// The conditional-create capability probe could not reach a definitive
+/// The linearizability smoke check could not reach a definitive
 /// response-backed outcome. Setup may be retried without changing authority.
 final class WebDavSyncSetupInconclusiveException implements Exception {
   const WebDavSyncSetupInconclusiveException({
@@ -506,7 +606,8 @@ final class WebDavSyncNamespace {
     } on FormatException {
       throw const FormatException('Invalid WebDAV sync marker pin');
     }
-    if (marker != null && (marker.isEmpty || marker.length > 64 * 1024)) {
+    if (marker != null &&
+        (marker.isEmpty || marker.length > WebDavSyncAuthorityFile.maxBytes)) {
       throw const FormatException('Invalid WebDAV sync marker pin');
     }
     if ((id.startsWith('circle:') && marker == null) ||

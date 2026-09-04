@@ -94,7 +94,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
       throw StateError('WebDAV sync binding is not ready to publish');
     }
     final secrets = await _bindingStore.readSecrets(binding);
-    final root = await _codec.openRoot(
+    final root = await _codec.openPinnedAuthority(
       markerPin,
       secrets.syncPassphrase,
       runInBackground: true,

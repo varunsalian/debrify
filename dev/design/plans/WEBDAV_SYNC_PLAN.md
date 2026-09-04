@@ -91,29 +91,29 @@ pre-existing profile registries.
 `Debrify` folder is the sync identity.** The user never chooses “start” versus
 “join”, browses folders, names a circle, enters a passphrase, or handles an
 enrollment code. After login the app probes the hidden
-`Debrify/debrify-sync/circle.json.enc` marker and `circle.key`:
+`Debrify/debrify-sync/circle.authority`:
 
-- **unbound device + marker and keyfile both absent** → generate a machine
-  secret, stage a new encrypted sync set locally, and let M5 claim the keyfile
-  before performing the root-last marker commit;
-- **unbound device + marker absent + keyfile present** → treat the folder as a
-  new root and adopt the orphan keyfile secret at activation claim time;
-- **unbound device + marker and keyfile present** → authenticate the marker
-  with the keyfile secret, require at least one authentic complete
+- **unbound device + authority absent** → probe legacy names; if those are
+  absent, generate a machine secret and stage a new encrypted sync set locally;
+- **unbound device + valid authority present** → extract its secret,
+  authenticate its embedded marker, require at least one authentic complete
   bootstrap-bearing manifest, and connect automatically;
+- **malformed authority present** → fail closed without probing or overwriting
+  legacy names;
 - **unbound device + marker present + keyfile absent** → fail with the
   legacy-root recovery instruction; never ask for or guess a passphrase;
 - **repair/reconnect of a pinned legacy binding + marker present + keyfile
   absent** → authenticate the pinned marker with the locally sealed secret,
-  then provision the missing keyfile create-only;
-- **already-bound device + matching pinned marker** → continue normally;
-- **already-bound device + 404 or different marker bytes** → hard sync-root
-  error; never recreate, replace, or reinterpret the folder as new;
-- a malformed keyfile, authentication, network, malformed-response, or any
-  other error → stop and explain the error without server bodies or secrets;
-  never reinterpret the result as an empty folder. The sole keyfile overwrite
-  is the convergent repair immediately after this device commits and verifies
-  the immutable marker; that repair writes the marker's authenticated secret.
+  then provision and read back one merged authority object;
+- **already-bound device + matching pinned authority bytes** → continue
+  normally;
+- **already-bound device + 404 or different authority bytes** → hard
+  `RootChanged`; never recreate or reinterpret the folder as new. An explicit
+  reconnect may authenticate and adopt a valid replacement after that
+  detection;
+- a malformed authority/legacy keyfile, authentication, network,
+  malformed-response, or any other error → stop and explain the error without
+  server bodies or secrets; never reinterpret the result as an empty folder.
 
 Folder detection itself is non-destructive. **First connection to an existing
 root always requires replacement consent and a probe-verified safety backup:**
@@ -377,7 +377,7 @@ win merely because another key changed on the same device.
 | Encrypted envelope | `lib/services/profiles/portable_profile_package.dart:534` Argon2id(19MB, it=2 — sub-second) + AES-GCM, off-isolate, `probeFile`/`decryptFile` | at-rest crypto, reused as-is for the graph; small additive `sealSyncDocument`/`openSyncDocument` for hot docs using the same primitives + own AAD, but with a **circle-fixed KDF salt** (stored in `circle.json`) + per-file random AEAD nonces, so the key derives ONCE per cycle — the stock format's per-file random salt would force one 19MB Argon2id run per peer × section on every pull, colliding with the tvOS low-memory gate |
 | Pref portability policy | `lib/services/profiles/profile_preference_portability.dart` | hot doc contents = `_exportPreferences` output — which is **private today** (`lib/services/profiles/profile_package_service.dart:387`); expose it additively (round-7). **Null rule (round-7):** `prepareValue` deliberately exports device-sealed IPTV execution state and malformed blobs as EXPLICIT NULLS (`profile_preference_portability.dart:51`) so a one-shot RESTORE clears them — but a recurring merge honoring nulls would erase local device state every cycle. The doc builder therefore DROPS null-valued entries; hot deletion travels only as tombstones |
 | WebDAV client (protocol layer only) | `lib/services/webdav_service.dart` (PROPFIND, DELETE, basic auth) | transport; only PUT/MKCOL/GET-bytes are new. **NOT reused: `_authorize`** — it gates on the ACTIVE profile's `ProfileFeature.cloud` grant, which would break sync under non-admin/kid sessions. The engine holds its OWN device-level transport credentials (§5) |
-| Credential storage | **`DeviceKeyProvider` (round-7 — supersedes round-6's SecretVault choice, which was WRONG):** the repo already ships a platform-native secret store — the `debrify/device_secret` channel backed by Android Keystore AEAD (`android/.../security/DeviceSecretCipherPlugin.kt`), Apple Keychain including a tvOS implementation (`tvos/Runner/AppDelegate.swift`), Windows DPAPI (`windows/runner/flutter_window.cpp:105`), and a Linux passphrase-wrapped vault (`lib/services/profiles/device_key_provider.dart:10`). The connection-resource secrets inside the very graph packages sync ships are ALREADY sealed with it; `SecretVault`'s "OS keystores unavailable" header is stale in scope | engine transport credentials + the machine-generated `circle.key` secret sealed via `DeviceKeyProvider.cipher` with sync-specific AAD. Two encoded caveats: the **Linux vault can be LOCKED** — the cycle defers until unlock, exactly as profile resources already do; and sealed values are **device-bound, non-exportable**. Runtime cycles use this sealed copy and never read `circle.key`. `SecretVault` (obfuscation-grade, `lib/services/secret_vault.dart:12`) is NOT used for sync secrets |
+| Credential storage | **`DeviceKeyProvider` (round-7 — supersedes round-6's SecretVault choice, which was WRONG):** the repo already ships a platform-native secret store — the `debrify/device_secret` channel backed by Android Keystore AEAD (`android/.../security/DeviceSecretCipherPlugin.kt`), Apple Keychain including a tvOS implementation (`tvos/Runner/AppDelegate.swift`), Windows DPAPI (`windows/runner/flutter_window.cpp:105`), and a Linux passphrase-wrapped vault (`lib/services/profiles/device_key_provider.dart:10`). The connection-resource secrets inside the very graph packages sync ships are ALREADY sealed with it; `SecretVault`'s "OS keystores unavailable" header is stale in scope | engine transport credentials + the machine-generated sync secret copied from `circle.authority` and sealed via `DeviceKeyProvider.cipher` with sync-specific AAD. Two encoded caveats: the **Linux vault can be LOCKED** — the cycle defers until unlock, exactly as profile resources already do; and sealed values are **device-bound, non-exportable**. Runtime cycles use this sealed copy while pinning the exact authority bytes. `SecretVault` (obfuscation-grade, `lib/services/secret_vault.dart:12`) is NOT used for sync secrets |
 | Single-flight + scope-capture patterns | remote fast path (`_applyingRemotePayload` guard, captured authorization) | engine concurrency discipline |
 | Admin authorization for graph ops | remote receiver's pattern for `ConfigCommand.profileGraph` (`lib/services/remote_control/remote_command_router.dart:1088`) | graph build/apply authorization |
 
@@ -393,10 +393,8 @@ binding is enabled.
 
 ```
 <effective endpoint>/Debrify/debrify-sync/
-  circle.key                          # create-only JSON v1 machine secret
-  circle.json.enc                     # IMMUTABLE final initialization commit:
-                                      #   circle id, created-at, schema floor,
-                                      #   circle KDF salt, key-check
+  circle.authority                    # sole LWW authority, JSON v1:
+                                      #   sealed marker bytes + sync secret
   devices/<deviceId>/manifest.enc     # THE commit record: clockOffsetMs vs server
                                       #   Date + circleId maps (profiles+resources)
                                       #   for the current graph revision + this
@@ -422,32 +420,34 @@ This layout is deliberately hidden implementation detail. Signing into the
 same effective WebDAV endpoint is sufficient to discover the fixed `Debrify`
 folder; users do not browse into `debrify-sync/` or copy IDs between devices.
 
-**The root marker is committed LAST, never first.** New-folder activation in
+**The single authority object is committed LAST, never first.** New-folder activation in
 M5 is one ordered operation:
 
-1. Ensure and PROPFIND-verify the `debrify-sync` collection. Read `circle.key`;
-   if absent, create it with `If-None-Match: *`, accept any 2xx, and
-   byte-verify an immediate GET. Any conditional-PUT error triggers a winner
-   GET; a present valid key is adopted regardless of the provider's conflict
-   status dialect, while malformed or disappearing ownership fails closed.
-2. Adopt the claimed secret in sealed local storage before loading candidate
-   state. If a competing secret won, atomically reseal credentials and discard
-   the losing candidate marker, identity, and engine state.
-3. Generate the root metadata/key and profile/resource circle IDs locally.
+1. Ensure and PROPFIND-verify the `debrify-sync` collection. PUT a random
+   sentinel, GET it immediately, and require exact bytes; DELETE is
+   best-effort. This proves the linearizable read-after-write behavior the
+   authority register requires. Conditional-create behavior is irrelevant.
+2. Read `circle.authority`. A present strict/authentic object is joined; a
+   malformed object fails closed; only 404 permits initialization.
+3. Generate the secret, unchanged sealed root marker, root metadata/key, and
+   profile/resource circle IDs locally, then wrap marker+secret in one bounded
+   version-one authority object.
 4. Build, seal, upload, and hash-verify the initial `bootstrap`, `graph`, and
    hot/tombstone sections.
 5. Upload the seed device's manifest last and read-back verify it.
-6. Reconfirm the marker is a definitive 404, then create `circle.json.enc`
-   with `If-None-Match: *`. Any 2xx proceeds to byte-identical read-back; any
-   conditional-PUT error re-reads and follows the standing marker regardless
-   of its status-code dialect. Only the read-back outcome proves ownership or
-   identifies a concurrent winner, and the accepted bytes are pinned locally.
+6. Reconfirm the authority is a definitive 404, PUT `circle.authority`, then
+   always GET it. `If-None-Match: *` may be sent but is only opportunistic. A
+   2xx is never ownership proof. Exact read-back finishes this candidate;
+   different valid bytes are the winner and atomically drive secret adoption,
+   candidate identity/state reset, orphan cleanup, and existing-root adoption.
+   Malformed or absent read-back fails closed. The accepted authority bytes
+   are pinned locally exactly.
 
 Until step 6 succeeds, uploaded device objects are uncommitted orphans and no
 client may treat the folder as a sync set. A peer directory participates only
 when its manifest authenticates under the pinned root key and declares the
 same circle ID; pre-root/racing or malicious directories are ignored with a
-privacy-log diagnostic. If another marker wins concurrently, this initializer
+privacy-log diagnostic. If another authority wins concurrently, this initializer
 abandons its candidate root, cleans its own orphan directory when safe, and
 follows the existing-root path. If the app crashes before step 6, the folder
 still has no committed root and a later attempt may initialize it. The
@@ -515,8 +515,8 @@ device's doc is a complete hot bootstrap for a joiner.
 **Threat model:** §15 intentionally places the at-rest encryption secret beside
 the data. Encryption therefore no longer protects confidentiality from the
 storage provider or an attacker who can read the whole sync folder. AEAD still
-authenticates every file, defends against cross-folder/blob leakage where the
-matching `circle.key` is absent, and preserves the stable wire format and AAD
+authenticates every file, defends against isolated cross-folder/blob leakage,
+and preserves the stable inner-marker wire format and AAD
 bindings (deviceId + section name + schemaVersion). The server is trusted for
 availability and
 — documented, bounded in BOTH directions (round-6) — for **time** (§4.4):
@@ -938,27 +938,24 @@ needed) and **Migrate** (one-shot WebDAV backup/restore, M2). The words
   `https://app.koofr.net/dav/Koofr/`, hides the URL, identifies the username as
   the Koofr email, and explains Koofr app passwords. Custom exposes the URL and
   an explicit warning for `http://`. Both use the fixed `Debrify` folder.
-- The read-only setup probe GETs both
-  `Debrify/debrify-sync/circle.json.enc` and `circle.key`. Authentication
-  failures remain inline and generic; server bodies, credentials, and key
-  material never enter errors or diagnostics. Marker+key means existing root;
-  marker without key is a legacy-root error; key without marker is an orphan
-  claim for new-root activation; neither means a new root with a freshly
-  generated 32-byte base64url secret. A malformed keyfile always fails closed.
+- The read-only setup probe GETs `Debrify/debrify-sync/circle.authority` first.
+  Authentication failures remain inline and generic; server bodies,
+  credentials, and secret material never enter errors or diagnostics. A valid
+  authority means an existing root; 404 permits legacy-name probes and then a
+  new root if those are also absent. A malformed authority always fails closed.
 - There is no passphrase field, folder picker, start/join choice, sync name, or
   invitation code. The machine secret is sealed locally after setup/claim.
   WebDAV app passwords may legitimately differ by device or be rotated without
   changing the encrypted sync identity.
 - **Hidden initialization safety:** M5 uploads and verifies the initial
-  sections and non-empty seed manifest first, then writes the marker LAST with
-  a final 404 preflight + `If-None-Match: *`. Only 201 Created is accepted;
-  412 follows the concurrent winner, while 204/ambiguity fails loudly and
-  never activates. A post-201 byte mismatch also abandons the candidate.
-  Conditional PUT enforcement is required; a provider that ignores the marker
-  precondition is unsupported. Every active device additionally pins the
-  accepted marker bytes and verifies them on each cycle's first GET. A later
-  deletion or replacement becomes a loud sync-root error, never a silent fork
-  or automatic reset.
+  sections and non-empty seed manifest first, then writes the one authority
+  LAST and always reads it back. Exact bytes finish; different valid bytes
+  enter adoption. Conditional PUT is opportunistic, all 2xx responses are
+  provisional, and Koofr's unconditional overwrite behavior is supported.
+  Every active device pins the accepted authority bytes and verifies them on
+  each cycle's first GET. A later deletion or replacement becomes a loud
+  sync-root error and an internally consistent re-adoption, never an
+  unopenable marker/secret split.
 - **Existing local data:** finding an existing marker changes nothing by
   itself. **First connection to an existing root always shows** one explicit
   prompt: *“Use sync data from this account? Existing profiles and
@@ -1002,21 +999,22 @@ needed) and **Migrate** (one-shot WebDAV backup/restore, M2). The words
 **Deliberate limits of automatic detection:** it checks only the fixed
 `Debrify` folder under the effective endpoint; it does not scan parents,
 siblings, or the whole WebDAV account. Possession of the WebDAV credentials is
-sufficient in v1 because the server-side keyfile is readable with the data;
+sufficient in v1 because the server-side authority includes the secret with
+the sealed marker;
 there is no separate device-approval ceremony. Changing only the WebDAV
 password does not rotate the sync encryption key. Creating a new sync
-set also requires reliable WebDAV create semantics: a server returning 204 or
-another ambiguous result for the create-only root cannot initialize that
-folder safely (though it may still connect to an already-committed root).
+set requires a linearizable object store: the disposable sentinel PUT must be
+returned exactly by its immediate GET. Conditional-create status and overwrite
+behavior are irrelevant because the standing authority read-back decides.
 
 M3 delivers the fresh-setup read-only login probe, local pending-binding state,
-unchanged root wire format, strict keyfile parser, and marker
-verification/pinning. It does not validate peer data or write a root or
-manifest; authenticated repair may provision a missing legacy keyfile as
-specified in §15. M4
+unchanged inner root wire format, strict authority/keyfile parsers, and exact
+authority verification/pinning. It does not validate peer data or write a new
+root or manifest; an authenticated legacy open may provision the merged
+authority as specified in §15. M4
 delivers the inactive hot-state engine against fixture/injected maps. M5
 validates bootstrap-bearing manifests, completes the same single user flow,
-claims/adopts the keyfile before candidate use, commits or adopts the root,
+proves linearizability, commits or adopts the single authority,
 establishes real mappings, and is the first
 milestone allowed to expose Active sync or profile replacement.
 
@@ -1067,10 +1065,10 @@ map dependency makes that safer than exposing a temporary incompatible format.
 | --- | --- | --- | --- |
 | M1 | WebDAV protocol client: `putBytes`/`uploadFile` (streamed from disk) with MKCOL-on-409 for parents, `getBytes` (capped)/`downloadToFile` (streamed), `exists`; typed error contract; **transport hardening (round-6):** the sync client sets `followRedirects = false` and refuses cross-origin / scheme-downgrade redirects (the current client follows redirects with `dart:io` defaults, which replay the Basic credentials at the new location; `_baseUri` upgrades only scheme-LESS URLs — an explicit `http://` goes out as-is, `lib/services/webdav_service.dart:186`); explicit `http://` stays allowed but is labeled insecure in the WebDAV server config UI from M1 onward (round-11; LAN Nextcloud/rclone reality — hard-requiring HTTPS was rejected); full acceptance criteria below (rounds 10–11) | ~400 LoC protocol client + tests | 1–1.5 |
 | M2 | Backup to/restore from WebDAV (phone + TV UI) — lands in the NEW **Settings → Sync and Migrate** section ("Migrate" half), NOT on the Backup & Restore page (§6); acceptance criteria below (round-10) | transport-neutral backup entry points + picker mode + new settings section | 1.5–2 |
-| M3 | Login-first binding foundation: dedicated Koofr/Custom credentials that never enter Cloud accounts; fixed `Debrify` folder; persisted lifecycle states; fresh-setup read-only marker + strict 4 KiB keyfile probe implementing the four-state matrix; pinned legacy repair may provision the missing keyfile create-only as specified in §15; existing-root keyfile-secret/key-check verification + local marker pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + machine secret sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-account staging; frozen bounded root/manifest envelope codecs and golden/tamper/version/keyfile tests. **M3 publishes no root, manifest, hot data, or graph.** | binding service + login/setup component + codec tests | 1.5–2 |
+| M3 | Login-first binding foundation: dedicated Koofr/Custom credentials that never enter Cloud accounts; fixed `Debrify` folder; persisted lifecycle states; fresh-setup read-only strict authority probe with authenticated legacy marker/key fallback; an authenticated legacy open may provision the merged authority as specified in §15; existing-root embedded-secret/key-check verification + exact authority pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + machine secret sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-account staging; frozen bounded root/manifest/authority codecs and golden/tamper/version tests. **M3 publishes no new-circle authority, manifest, hot data, or graph.** | binding service + login/setup component + codec tests | 1.5–2 |
 | M4 | **Inactive hot-state engine** requiring an injected root context + authenticated profile AND resource circle↔local maps—absence is no-op and local IDs are never used on wire: peer discovery + peer-count/doc-size bounds; server-`Date` clockOffset capture, monotonic high-water mark, offset-delta damping, and normalized-time arbitration; hot-document semantic digests; deletion-path audit (**normative** — ships a test matching audited APIs to helper call sites) → tombstone helpers + replication + pending-until-published; two-part hot doc with `origin` stamps; merge module (pure functions, heavy unit tests: LWW + key-union + deterministic tie-break, alias-keyed playback unions + order stamps, completion diff-stamping, tombstones + cutoff exemption, dormant-rejoin, last-pushed dirty compare + convergence-stops-traffic, publish-time clamp, CW re-cap, **null-dropping doc build + never-delete-on-null apply, tombstone horizon from first publication — round-7**; **playlist per-item union by `computePlaylistDedupeKey` + diff-stamps + tombstones + order value, lossy-twin projection-equality rule — round-8**); `_exportPreferences` exposed additively; **scope-captured BATCH apply op (one tvOS checkpoint + one native projection — round-7) guarded by a persisted pending-apply target (round-8)**; trigger plumbing remains unarmed until M5, whose bounded seed/adoption transaction may invoke builders explicitly | merge module + helpers + gated glue | 5.5–6 |
-| M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, prove honest conditional creation by outcome with a disposable sentinel, check whether a standing marker is the persisted candidate, otherwise claim `circle.key` before candidate use (`If-None-Match: *`, any 2xx plus read-back; any conditional-PUT error re-reads and adopts a valid winner; ambiguity fails closed), atomically reseal a winning secret and invalidate stale candidate identity/state, then mint circle IDs; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; create immutable root LAST with the unchanged marker race protocol. Concurrent-root follow defensively re-reads and persists the winning key before opening the marker. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
-| M6 | Device-matrix hardening: simulated phone ↔ Mi Box ↔ tvOS ↔ desktop convergence; bounded/LRU hot-section cache; disk-staged large WebDAV transfer and integrity verification; tvOS memory/path audit; explicit scenarios for the marker/keyfile four-state matrix, malformed keyfile fail-closed, key-claim crash recovery, marker deletion/replacement, concurrent initializers, 30+ day bootstrap discovery, bootstrap-less-marker rejection, mandatory first-connection consent, account rebind isolation, and M4 remaining inactive without maps. Physical-device soak remains a manual gate. | fixes + matrix tests | 1–1.5 |
+| M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, prove linearizable exact read-after-write with one disposable sentinel, check whether a standing authority is the persisted candidate, then mint the single marker+secret authority; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; PUT authority LAST and always read it back. Exact bytes win; a different valid authority atomically reseals its secret, invalidates stale candidate identity/state, and enters existing-root adoption. Conditional-create behavior never decides the result. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
+| M6 | Device-matrix hardening: simulated phone ↔ Mi Box ↔ tvOS ↔ desktop convergence; bounded/LRU hot-section cache; disk-staged large WebDAV transfer and integrity verification; tvOS memory/path audit; explicit scenarios for strict authority parsing, legacy upgrade, LWW concurrent initializers, authority deletion/replacement, 30+ day bootstrap discovery, bootstrap-less-authority rejection, mandatory first-connection consent, account rebind isolation, and M4 remaining inactive without maps. Physical-device soak remains a manual gate. | fixes + matrix tests | 1–1.5 |
 
 Post-M6 correctness work is tracked separately in §13. Although M4's original
 whole-scalar implementation passed its fixture matrix, the physical Koofr
@@ -1079,14 +1077,16 @@ ship-ready until §13's per-setting convergence gates pass.
 
 ### M3–M6 boundary acceptance gates
 
-- Fresh M3 setup performs read-only marker + keyfile probing and writes only
-  local pending state; authenticated repair of a pinned legacy binding may
-  issue the bounded create-only keyfile upgrade described in §15. UI
+- Fresh M3 setup reads `circle.authority` first and only probes the legacy
+  marker/keyfile names after a definitive 404. Ordinary missing/merged-layout
+  inspection writes only local pending state; an authenticated legacy open in
+  setup or repair may provision and read back the bounded merged authority
+  described in §15. UI
   tests cover Koofr/Custom login, fixed folder, HTTP warning, generic inline
   authentication failures, and no Cloud-registry write or passphrase dialog.
-- M3 persists lifecycle state and the exact accepted marker bytes. After a
-  restart, a pinned 404, changed bytes, missing legacy keyfile, or key/marker
-  authentication failure is an error and
+- M3 persists lifecycle state and the exact accepted authority bytes (or the
+  legacy marker pin until upgrade). After a restart, a pinned 404, changed
+  bytes, malformed authority, or marker/secret authentication failure is an error and
   cannot enter `awaitingSeedCommit`.
 - Root/manifest envelope golden vectors prove deterministic parsing, bounded
   KDF parameters, authenticated outer header, random nonce use, wrong-key and
@@ -1100,30 +1100,21 @@ ship-ready until §13's per-setting convergence gates pass.
   network, local apply, timestamping, tombstone expiry, and manifest writes.
   Fixtures prove no serialized path or payload ever contains a local profile
   or resource ID.
-- M5 new-root tests assert wire order: collection verification → conditional-
-  create capability probe and cleanup → standing-marker/candidate resume check
-  → create-only key claim/adoption when required → candidate generation → all bounded/hash-verified
-  sections → non-empty read-back-verified seed manifest → final marker-404
-  preflight → create-only root returning any 2xx → root read-back pin. A
-  mismatching or absent keyfile/marker read-back never activates; failure/crash
-  before the last step leaves no accepted root. Restart resolves key ownership
-  before candidate use, discards state sealed with a losing secret, and cleans
-  only that device's orphan. A never-returning creator's directory remains
-  ignored accepted litter; peers issue no cross-device cleanup request.
-- Concurrent-initializer tests cover keyfile and marker winners reported with
-  403, 405, 409, or 412 conflict dialects
-  adoption. Correctness requires the provider to honor conditional PUT for the
-  immutable marker and initial key claim. Activation proves that capability
-  up front with a disposable create/read-back/delete sentinel and refuses a
-  provider that overwrites its second `If-None-Match: *` PUT. Activation also
-  re-verifies the key immediately before marker creation and restarts under an
-  observed replacement, and every own-marker resume/error/read-back path repairs
-  divergence to the current marker's secret only after confirming that marker
-  still wins. These checks converge keyfile races on quirky providers; a
-  server that ignores marker preconditions is refused up front with a typed
-  unsupported-provider error. At each guarded commit edge they either converge the
-  observed keyfile/marker pair or reject activation instead of knowingly
-  accepting divergence.
+- M5 new-root tests assert wire order: collection verification → linearizable
+  sentinel write/read/cleanup → standing-authority/candidate resume check →
+  candidate generation → all bounded/hash-verified sections → non-empty
+  read-back-verified seed manifest → final authority-404 preflight → one
+  authority PUT → mandatory exact/valid-winner read-back. A malformed or absent
+  read-back never activates; failure/crash before the last step leaves no
+  accepted root. Adoption discards state sealed for a losing authority and
+  cleans only that device's orphan. A never-returning creator's directory
+  remains ignored accepted litter; peers issue no cross-device cleanup request.
+- Concurrent-initializer tests use an unconditional-overwrite, linearizable
+  LWW fake. Both read-backs converge on its one standing authority; the loser
+  adopts the matching marker+secret together. Koofr-style ignored
+  `If-None-Match` succeeds. Separate tests cover own-write 2xx followed by a
+  different valid winner, non-persisting smoke-check failure, transient retry,
+  strict authority parse failures, join, and authenticated legacy upgrade.
 - M5 refuses Active when a marker has no authentic recoverable
   bootstrap-bearing manifest, when adoption's required backup fails its
   decrypt probe, carries an unknown/malformed omission, or whenever any
@@ -1362,24 +1353,26 @@ resource hardening while retaining the named physical-device manual gates.
    authentication failure into cross-device deletion.
 6. **Root-last initialization; manifest-last ordinary commits;
    content-addressed and hash-verified throughout.** Never publish an empty
-   manifest and never expose the immutable root marker before a complete seed
-   manifest is uploaded and read-back verified. Before candidate use, keyfile
-   ownership requires a verified collection, create-only PUT, any 2xx plus
-   byte-identical read-back, or valid winner adoption after any conditional-PUT
-   error. Root ownership then requires a final 404 preflight, create-only PUT,
-   and byte-identical read-back; missing/mismatching outcomes never activate. A pre-root/racing peer
-   directory participates only if it authenticates under the pinned root and
-   declares the same circle ID. Never overwrite a section blob in place.
+   manifest and never expose `circle.authority` before a complete seed manifest
+   is uploaded and read-back verified. Before candidate use, a verified
+   collection and exact sentinel write/read prove the required storage
+   semantics. Root ownership requires a final 404 preflight, one authority
+   PUT, and mandatory read-back: exact bytes win, while a different valid
+   authority is adopted. A missing or malformed read-back never activates. A
+   pre-root/racing peer directory participates only if it authenticates under
+   the pinned root and declares the same circle ID. Never overwrite a section
+   blob in place.
    Dirty detection compares
    SEMANTIC digests of canonical plaintext with circle-ID normalization,
    never sealed bytes and never local IDs — **against the device's own
    last-PUSHED digest only**. The adopted-digest echo-kill is REMOVED
    (round-6): every device republishes its merged union so state outlives
    its original author's manifest; convergence, not suppression, ends the
-   traffic. Every device **pins its `circle.json.enc` bytes** and re-verifies
-   them on each cycle's first GET — missing or changed bytes are a loud hard
-   error, never a silent split or automatic reset (round-7). M3 freezes the
-   bounded root envelope: its canonical outer KDF header is authenticated as
+   traffic. Every device **pins its exact `circle.authority` bytes** and
+   re-verifies them on each cycle's first GET — missing or changed bytes are a
+   loud `RootChanged`; explicit reconnect authenticates the replacement and
+   transitions into re-adoption, never a silent or unopenable split. M3 freezes
+   the inner bounded root envelope: its canonical outer KDF header is authenticated as
    AAD and its encrypted body owns circle ID/schema/key-check; M4/M5 never
    mutate or reinterpret that root format.
 7. **Skew never destroys**: unknown/newer sections preserved and skipped;
@@ -2386,7 +2379,7 @@ pool-generation, and materialization contracts above are unchanged.
   human-scale performance hazard while leaving the deliberately large TV
   inventory on its explicit foreground path.
 
-## 15. Login-first setup & circle keyfile
+## 15. Login-first setup & single circle authority
 
 This section is the normative setup amendment for WebDAV Sync. Where older
 passages describe selecting a Cloud WebDAV account/folder or entering a sync
@@ -2400,104 +2393,86 @@ passphrase, this section supersedes them.
 - The folder is always `Debrify` below the effective endpoint, yielding
   `Debrify/debrify-sync/...`. Setup never presents a folder picker. The normal
   Cloud WebDAV add/browse flow is unchanged.
-- `circle.key` is strict JSON
-  `{"version":1,"syncPassphrase":"<string>"}`, limited to 4096 raw bytes,
-  rejecting unknown keys, unsupported versions, invalid secrets, and malformed
-  JSON without echoing content. New secrets are 32 secure random bytes encoded
-  as 43-character unpadded base64url.
+- `circle.authority` is the only existence/authority object. Its strict JSON is
+  `{"version":1,"marker":"<base64 sealed marker>","syncPassphrase":"<string>"}`.
+  It rejects unknown/missing keys, unsupported versions, invalid secrets,
+  malformed JSON, markers over the existing 64 KiB root-marker limit, and
+  whole objects over 96 KiB without echoing content. New secrets are 32 secure
+  random bytes encoded as 43-character unpadded base64url. The embedded
+  marker's Argon2id + AEAD wire format and AAD are unchanged.
 - Setup authorization captures an Admin session and revalidates before each
   send/commit without requiring a Cloud connection resource ID or revision.
-  The fresh-setup probe remains GET-only; the authenticated legacy repair
-  exception is described below. The shared connect controller owns
+  The merged-authority probe remains GET-only; the authenticated legacy
+  compatibility upgrade is the sole inspection-time write exception described
+  below. The shared connect controller owns
   inspect → configure → initialize/connect and reports cancellation, Active,
   adoption-finishing, and pre/post-handoff failures. UI confirmation and
   runtime pause/resume remain with the caller. Onboarding uses the same
   controller and acknowledges its durable completion intent only after the
   profile-scoped setup-complete write succeeds.
-- New-root activation proves the collection exists, then runs a disposable
-  conditional-create probe before any key claim or marker work. The first
-  sentinel PUT may return any 2xx and must read back as the first random body.
-  The second create-only PUT proves enforcement only with a response-backed
-  403, 405, 409, or 412 rejection, after which a fresh GET must still retain
-  the first body; cleanup is best-effort. Transport/no-response failures,
-  408/429/5xx responses, unclassified statuses, and an immediate first
-  read-back visibility 404 are inconclusive. The whole probe is retried a
-  bounded three times, then
-  surfaces a typed retryable setup error rather than unsupported-provider.
-  Any failure while consuming an already-received response body retains that response's status, so a received 2xx on the conflicting probe PUT is treated as an ignorer regardless of the stream error type.
-  An overwritten body or absent conflict read-back likewise refuses the
-  provider. The result is cached for that
-  initialization attempt. A resumed initializer
-  reads the standing marker before key claim/adoption: when it byte-matches
-  the persisted candidate, that marker owns the root, so the initializer keeps
-  its pre-adoption secret and repairs a missing or divergent key toward it.
-  Otherwise activation resolves key ownership before creating candidate
-  state. Any 2xx claim must read back byte-identically; any conditional-PUT
-  error adopts a present valid winner; malformed, missing-after-conflict, or
-  mismatching behavior fails closed. Immediately
-  before the immutable marker commit it re-reads the key and restarts candidate
-  construction under any newly observed secret. Every path that observes its
-  own candidate marker already committed (resume, same-marker error, or 2xx
-  read-back) rechecks the key and convergently repairs it to that marker's
-  secret. A repairer re-reads the marker before any overwrite and follows a
-  replacement winner instead of writing for a losing marker; it confirms the
-  marker again before activating. Repair/follow failure records the typed
-  damaged-folder/unsupported-provider state.
-  Secret adoption atomically preserves username/password/lifecycle while
-  resealing the winning secret and invalidating candidate marker, device
-  identity, and both device-ID-derived file sentinels. A persisted reset
-  journal creates fresh engine state and best-effort removes the old device's
-  state file after crashes.
-- Concurrent-root follow re-reads `circle.key`, persists any winning secret,
-  and only then opens the winning marker. Discovery and ordinary cycles never
-  read the keyfile; sealed binding secrets remain their sole runtime source.
+- New-root activation proves the collection exists, then performs only a
+  linearizability smoke check: unconditional PUT of a random sentinel followed
+  by an exact GET and best-effort DELETE. A definite missing/mismatching GET is
+  a typed non-linearizable-store failure. Transport/no-response failures,
+  408/429/5xx responses, and response-drain failures are bounded-retry
+  inconclusive outcomes. A failure after response headers retains that HTTP
+  status in redacted diagnostics. No path, body, error object, or secret is
+  logged. Koofr passes because overwriting and ignored `If-None-Match` are not
+  disqualifiers.
+- Activation reads the single authority before candidate use, persists only
+  the candidate's sealed inner marker locally (the secret remains in the
+  device-sealed binding), deterministically wraps them for comparison, uploads
+  and verifies the complete seed, and
+  writes the authority last. It always reads the authority after its PUT. An
+  exact match wins; a different valid/authentic authority is adopted. The
+  existing secret-reseal and reset journal atomically preserve WebDAV login
+  and lifecycle while invalidating losing candidate bytes, device identity,
+  engine state, and device-ID-derived sentinels. Malformed standing bytes fail
+  closed and are never overwritten. Conditional create may be sent as an
+  optimization but its response never decides ownership.
+- Concurrent-root follow extracts the secret and sealed marker from the same
+  winning object, persists the secret, resets the losing candidate, and only
+  then enters existing-root adoption. Discovery and ordinary cycles pin and
+  compare exact `circle.authority` bytes; sealed binding secrets remain their
+  runtime copy.
   Existing bindings are not relocated, including the deployed Koofr `/dav/` +
   `Koofr/Koofr sync` shape with no keyfile.
-- Credential repair asks only for username/password, then reads `circle.key`
-  from the binding's stored endpoint/folder. Missing-state reconnect uses the
-  same stored location in a credentials-only login. When a pinned legacy root
-  has no keyfile, repair/reconnect opens its exact pinned marker with the local
-  sealed secret and provisions `circle.key` create-only. Any conditional-PUT
-  error is accepted only when the winner contains that same verified secret;
-  all other outcomes fail with the damaged-folder/unsupported-provider error.
-  The same conditional-create capability probe runs before this exceptional
-  legacy provisioning.
+- Credential repair asks only for username/password, then reads
+  `circle.authority` from the binding's stored endpoint/folder. Missing-state
+  reconnect uses the same stored location. If authority is absent, the
+  read-only compatibility path probes legacy `circle.json.enc` and
+  `circle.key`. A marker-only repair uses the locally sealed secret; a keyfile
+  supplies it where present. Only after authenticating the legacy marker does
+  repair opportunistically provision one merged authority with write +
+  mandatory read-back. A different valid object is adopted; malformed bytes
+  fail closed. Conditional create is never required. A crash after remote
+  upgrade but before local repinning is recoverable because the embedded
+  marker can exactly match the prior legacy pin.
 
-Final contract: sync initialization requires a WebDAV server with honest
-conditional creation, proven by outcome: the probe's conditional PUT is
-refused by a response-backed definite conflict status and the stored bytes
-remain unchanged. An absent response, timeout/network/TLS/unsafe-redirect
-failure, transient HTTP status, or other unclassified response never proves
-enforcement: it is inconclusive-and-retryable, never a pass and never labeled
-unsupported-provider. Strict 201 creation is replaced by any-2xx creation plus
-read-back verification, gated behind the successful probe, throughout key
-claim, marker commit, and legacy keyfile provision. A non-conforming server is
-refused before authority mutation; each typed probe, claim, commit, or
-provision failure first records only its redacted step and HTTP status or
-exception kind, and the unsupported-provider message includes the compact
-probe step/status. The verify/repair ladder still guarantees that a standing
-marker matches `circle.key`. A candidate restart triggered by an observed key
-replacement resets the probe cache, so the retry revalidates the assumption it
-just watched fail.
+Final contract: sync initialization requires a linearizable WebDAV object
+store, not honest conditional creation. Koofr's confirmed behavior—an
+`If-None-Match: *` PUT to an existing path returns 201 and overwrites—is
+supported. Because marker+secret are one LWW register, all racing read-backs
+observe a single internally consistent authority and losers use the existing
+adoption ladder. A transient smoke-check result remains retryable; a definite
+non-persisting/mismatching store is the only typed provider-capability failure.
+Every failure diagnostic contains only step plus HTTP status or exception kind
+and nulls the error object.
 
-Scope of the probe, stated honestly: it validates one sequential request
-stream against one sentinel, which detects servers that ignore
-`If-None-Match` outright but cannot prove global linearizability. A
-multi-replica, eventually consistent WebDAV backend could pass the probe on
-each replica and still let two devices both "create" the authority files.
-This is not a new exposure introduced by the keyfile: the root-marker race
-itself has always required linearizable create-only PUT — on such a backend
-two devices could silently fork the circle with or without a keyfile.
-Single-endpoint providers in this feature's support envelope (Koofr,
-Nextcloud, and typical personal WebDAV services) provide per-object
-linearizable preconditions; replicated eventually-consistent DAV bridges are
-outside the support envelope, and the probe narrows — not closes — that
-residual by design.
+Residual, stated honestly: a device can finish and become Active just before a
+long-paused concurrent first creator overwrites the authority. Its next cycle
+compares the exact pinned bytes and raises `RootChanged`; the existing explicit
+reconnect path authenticates the complete replacement, rotates its root-scoped
+namespace, and re-enters adoption. The observed replacement is a complete
+openable marker+secret, never a silent or unopenable split. This negligible
+detected-and-repaired window does not occur in sequential personal setup. An
+eventually consistent store that fails read-after-write is rejected by the
+smoke check; no finite client probe proves all possible multi-replica histories.
 
-The accepted trust change is deliberate: because the at-rest secret sits next
-to the encrypted data, encryption no longer protects the user from the storage
-provider or any principal that can read the entire folder. It still protects
-against cross-folder blob leakage when the matching keyfile is absent,
-authenticates all wire documents, and avoids a wire-format/KDF migration. A
-local automatic sync safety backup and the server keyfile together are enough
-to decrypt that backup; they must be treated as one recovery trust domain.
+The accepted trust change is deliberate: because the at-rest secret sits in
+the authority beside the encrypted data, encryption no longer protects the
+user from the storage provider or any principal that can read the entire
+folder. It still protects against isolated blob leakage, authenticates all
+wire documents, and avoids an inner marker/KDF migration. A local automatic
+sync safety backup and the server authority together are enough to decrypt
+that backup; they must be treated as one recovery trust domain.

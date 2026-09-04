@@ -328,7 +328,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           setState(() {
             _connectingWebDav = false;
             _webDavError = switch (error) {
-              WebDavSyncProviderUnsupportedException() => error.message,
+              WebDavSyncStoreNotLinearizableException() =>
+                WebDavSyncStoreNotLinearizableException.userMessage,
               WebDavSyncSetupInconclusiveException() =>
                 WebDavSyncSetupInconclusiveException.userMessage,
               _ =>
@@ -365,7 +366,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       setState(() {
         _connectingWebDav = false;
         _webDavError = switch (error) {
-          WebDavSyncProviderUnsupportedException() => error.message,
+          WebDavSyncStoreNotLinearizableException() =>
+            WebDavSyncStoreNotLinearizableException.userMessage,
           WebDavSyncSetupInconclusiveException() =>
             WebDavSyncSetupInconclusiveException.userMessage,
           _ =>

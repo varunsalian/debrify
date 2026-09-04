@@ -7,7 +7,6 @@ import 'package:xml/xml.dart';
 import 'package:http/http.dart' as http;
 
 import '../webdav_protocol_client.dart';
-import 'webdav_sync_codec.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_models.dart';
@@ -258,10 +257,10 @@ abstract interface class WebDavSyncSectionGcTransport {
   Future<void> deleteOwnSection(String deviceId, String contentHash);
 }
 
-/// Setup-only capability check for the conditional creation primitive that
-/// protects the immutable root key and marker.
-abstract interface class WebDavSyncConditionalCreateProbeTransport {
-  Future<void> verifyConditionalCreate({
+/// Setup-only smoke check for the linearizable read-after-write behavior used
+/// by the single authority object.
+abstract interface class WebDavSyncLinearizabilityProbeTransport {
+  Future<void> verifyLinearizability({
     required String syncRootPath,
     Future<void> Function()? beforeSend,
   });
@@ -270,30 +269,21 @@ abstract interface class WebDavSyncConditionalCreateProbeTransport {
 /// M5-only mutation surface. Ordinary M4 cycles receive the narrower
 /// [WebDavSyncTransport] and therefore cannot create or delete a sync root.
 abstract interface class WebDavSyncActivationTransport
-    implements WebDavSyncTransport, WebDavSyncConditionalCreateProbeTransport {
+    implements WebDavSyncTransport, WebDavSyncLinearizabilityProbeTransport {
   Future<void> ensureActivationLayout();
 
-  Future<WebDavBytesResult> readRootKey();
-
-  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes);
-
+  /// Writes the complete `circle.authority` object in one PUT.
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes);
 
   Future<void> deleteDeviceDirectory(String deviceId);
 }
 
-/// Narrow exceptional surface for repairing a keyfile after this device has
-/// just proven ownership of the immutable marker it sealed.
-abstract interface class WebDavSyncCommittedRootKeyRepairTransport {
-  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes);
-}
-
 final class ProtocolWebDavSyncTransport
     implements
         WebDavSyncActivationTransport,
-        WebDavSyncCommittedRootKeyRepairTransport,
         WebDavSyncFileTransport,
-        WebDavSyncSectionGcTransport {
+        WebDavSyncSectionGcTransport,
+        WebDavSyncLinearizabilityProbeTransport {
   ProtocolWebDavSyncTransport({
     required WebDavSyncFolderLocation location,
     required WebDavCredentials credentials,
@@ -324,18 +314,18 @@ final class ProtocolWebDavSyncTransport
   String get _devices => _join(_syncRoot, 'devices');
 
   @override
-  Future<void> verifyConditionalCreate({
+  Future<void> verifyLinearizability({
     required String syncRootPath,
     Future<void> Function()? beforeSend,
-  }) => WebDavSyncConditionalCreateProbe(
+  }) => WebDavSyncLinearizabilityProbe(
     _client,
     diagnostic: _diagnostic,
   ).verify(syncRootPath: syncRootPath, beforeSend: beforeSend);
 
   @override
   Future<WebDavBytesResult> readRootMarker() => _client.getBytes(
-    path: _location.rootMarkerPath,
-    maxBytes: WebDavSyncCodec.rootMarkerMaxBytes,
+    path: _location.rootAuthorityPath,
+    maxBytes: WebDavSyncAuthorityFile.maxBytes,
   );
 
   @override
@@ -480,11 +470,11 @@ final class ProtocolWebDavSyncTransport
       final isCollection = document.descendants.whereType<XmlElement>().any(
         (element) => element.name.local == 'collection',
       );
-      if (!isCollection) throw const WebDavSyncRootKeyClaimException();
-    } on WebDavSyncRootKeyClaimException {
+      if (!isCollection) throw const WebDavSyncAuthorityClaimException();
+    } on WebDavSyncAuthorityClaimException {
       rethrow;
     } on Object {
-      throw const WebDavSyncRootKeyClaimException();
+      throw const WebDavSyncAuthorityClaimException();
     }
   }
 
@@ -536,37 +526,11 @@ final class ProtocolWebDavSyncTransport
   }
 
   @override
-  Future<WebDavBytesResult> readRootKey() => _client.getBytes(
-    path: _location.rootKeyPath,
-    maxBytes: WebDavSyncRootKeyFile.maxBytes,
-  );
-
-  @override
-  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
-    return _client.putBytes(
-      path: _location.rootKeyPath,
-      bytes: bytes,
-      maxBytes: WebDavSyncRootKeyFile.maxBytes,
-      ifNoneMatch: '*',
-      createParents: false,
-    );
-  }
-
-  @override
-  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes) =>
-      _client.putBytes(
-        path: _location.rootKeyPath,
-        bytes: bytes,
-        maxBytes: WebDavSyncRootKeyFile.maxBytes,
-        createParents: false,
-      );
-
-  @override
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes) async {
     return _client.putBytes(
-      path: _location.rootMarkerPath,
+      path: _location.rootAuthorityPath,
       bytes: bytes,
-      maxBytes: WebDavSyncCodec.rootMarkerMaxBytes,
+      maxBytes: WebDavSyncAuthorityFile.maxBytes,
       ifNoneMatch: '*',
       createParents: false,
     );
@@ -699,14 +663,13 @@ final class ProtocolWebDavSyncTransport
 
 final RegExp _safeDeviceId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$');
 
-const Set<int> _conditionalCreateConflictStatuses = <int>{403, 405, 409, 412};
-const int _conditionalCreateProbeMaxAttempts = 3;
-const Duration _conditionalCreateProbeRetrySpacing = Duration(milliseconds: 50);
+const int _linearizabilityProbeMaxAttempts = 3;
+const Duration _linearizabilityProbeRetrySpacing = Duration(milliseconds: 50);
 
-/// Exercises create-only PUT against a disposable sentinel before setup relies
-/// on the same precondition for either root authority file.
-final class WebDavSyncConditionalCreateProbe {
-  const WebDavSyncConditionalCreateProbe(
+/// Writes a disposable sentinel and requires the immediately following GET to
+/// return its exact bytes. This is the only storage-semantic setup gate.
+final class WebDavSyncLinearizabilityProbe {
+  const WebDavSyncLinearizabilityProbe(
     this._client, {
     WebDavSyncAuthorityDiagnostic? diagnostic,
   }) : _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic;
@@ -721,7 +684,7 @@ final class WebDavSyncConditionalCreateProbe {
     _WebDavSyncProbeInconclusive? lastInconclusive;
     for (
       var attempt = 1;
-      attempt <= _conditionalCreateProbeMaxAttempts;
+      attempt <= _linearizabilityProbeMaxAttempts;
       attempt++
     ) {
       try {
@@ -732,8 +695,8 @@ final class WebDavSyncConditionalCreateProbe {
         return;
       } on _WebDavSyncProbeInconclusive catch (error) {
         lastInconclusive = error;
-        if (attempt < _conditionalCreateProbeMaxAttempts) {
-          await Future<void>.delayed(_conditionalCreateProbeRetrySpacing);
+        if (attempt < _linearizabilityProbeMaxAttempts) {
+          await Future<void>.delayed(_linearizabilityProbeRetrySpacing);
         }
       }
     }
@@ -767,14 +730,12 @@ final class WebDavSyncConditionalCreateProbe {
     final first = Uint8List.fromList(
       List<int>.generate(16, (_) => random.nextInt(256)),
     );
-    final second = Uint8List.fromList(first);
-    second[0] ^= 0xff;
     final suffix = nameBytes
         .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
         .join();
     final path = ProtocolWebDavSyncTransport._join(
       syncRootPath,
-      '.cond-probe-$suffix',
+      '.linear-probe-$suffix',
     );
     var mayExist = false;
     try {
@@ -786,90 +747,13 @@ final class WebDavSyncConditionalCreateProbe {
           path: path,
           bytes: first,
           maxBytes: first.length,
-          ifNoneMatch: '*',
           createParents: false,
           beforeSend: beforeSend,
         );
       } on WebDavException catch (error) {
-        if (_isTransientOrTransport(error) ||
-            error.statusCode == HttpStatus.unauthorized ||
-            error.statusCode == HttpStatus.forbidden) {
-          _throwInconclusive(step: 'probe-create', probeStep: 1, error: error);
-        }
-        _throwUnsupported(step: 'probe-create', probeStep: 1, error: error);
+        _throwInconclusive(step: 'probe-write', probeStep: 1, error: error);
       } on Object catch (error) {
-        _throwInconclusive(step: 'probe-create', probeStep: 1, error: error);
-      }
-      try {
-        final createdReadBack = await _client.getBytes(
-          path: path,
-          maxBytes: first.length,
-          beforeSend: beforeSend,
-        );
-        if (!_constantTimeBytesEqual(createdReadBack.bytes, first)) {
-          _throwUnsupported(
-            step: 'probe-readback',
-            probeStep: 1,
-            statusCode: createdReadBack.metadata.statusCode,
-          );
-        }
-      } on WebDavSyncProviderUnsupportedException {
-        rethrow;
-      } on WebDavException catch (error) {
-        if (_isTransientOrTransport(error) ||
-            error.statusCode == HttpStatus.notFound) {
-          _throwInconclusive(
-            step: 'probe-readback',
-            probeStep: 1,
-            error: error,
-          );
-        }
-        _throwUnsupported(step: 'probe-readback', probeStep: 1, error: error);
-      } on Object catch (error) {
-        _throwInconclusive(step: 'probe-readback', probeStep: 1, error: error);
-      }
-
-      WebDavResponseMetadata? conflictingSuccess;
-      _WebDavSyncProbeInconclusive? conflictingInconclusive;
-      var conflictEnforced = false;
-      try {
-        conflictingSuccess = await _client.putBytes(
-          path: path,
-          bytes: second,
-          maxBytes: second.length,
-          ifNoneMatch: '*',
-          createParents: false,
-          beforeSend: beforeSend,
-        );
-      } on WebDavException catch (error) {
-        final status = error.statusCode;
-        if (status != null && status >= 200 && status < 300) {
-          _throwUnsupported(
-            step: 'probe-conflict',
-            probeStep: 2,
-            error: error,
-            statusCode: status,
-          );
-        }
-        if (status != null &&
-            _conditionalCreateConflictStatuses.contains(status)) {
-          // 403 is safe only here: this exact probe already proved write
-          // access with the successful first create, so it is a refusal of
-          // the conflicting create rather than an authentication guess.
-          conflictEnforced = true;
-        } else {
-          conflictingInconclusive = _WebDavSyncProbeInconclusive(
-            step: 'probe-conflict',
-            probeStep: 2,
-            error: error,
-          );
-        }
-      } on Object catch (error) {
-        conflictingInconclusive = _WebDavSyncProbeInconclusive(
-          step: 'probe-conflict',
-          probeStep: 2,
-          error: error,
-        );
+        _throwInconclusive(step: 'probe-write', probeStep: 1, error: error);
       }
 
       late final WebDavBytesResult readBack;
@@ -880,48 +764,29 @@ final class WebDavSyncConditionalCreateProbe {
           beforeSend: beforeSend,
         );
       } on WebDavException catch (error) {
-        if (conflictingSuccess != null) {
-          _throwUnsupported(
-            step: 'probe-conflict',
-            probeStep: 2,
-            statusCode: conflictingSuccess.statusCode,
-          );
-        }
         if (_isTransientOrTransport(error)) {
           _throwInconclusive(
             step: 'probe-readback',
-            probeStep: 2,
+            probeStep: 1,
             error: error,
           );
         }
-        _throwUnsupported(step: 'probe-readback', probeStep: 2, error: error);
-      } on Object catch (error) {
-        if (conflictingSuccess != null) {
-          _throwUnsupported(
-            step: 'probe-conflict',
-            probeStep: 2,
-            statusCode: conflictingSuccess.statusCode,
-          );
-        }
-        _throwInconclusive(step: 'probe-readback', probeStep: 2, error: error);
-      }
-      if (conflictingSuccess != null) {
-        _throwUnsupported(
-          step: 'probe-conflict',
-          probeStep: 2,
-          statusCode: conflictingSuccess.statusCode,
+        _throwNotLinearizable(
+          step: 'probe-readback',
+          probeStep: 1,
+          error: error,
         );
+      } on Object catch (error) {
+        _throwInconclusive(step: 'probe-readback', probeStep: 1, error: error);
       }
       if (!_constantTimeBytesEqual(readBack.bytes, first)) {
-        _throwUnsupported(
+        _throwNotLinearizable(
           step: 'probe-readback',
-          probeStep: 2,
+          probeStep: 1,
           statusCode: readBack.metadata.statusCode,
         );
       }
-      if (conflictEnforced) return;
-      throw conflictingInconclusive!;
-    } on WebDavSyncProviderUnsupportedException {
+    } on WebDavSyncStoreNotLinearizableException {
       rethrow;
     } finally {
       if (mayExist) {
@@ -961,7 +826,7 @@ final class WebDavSyncConditionalCreateProbe {
     );
   }
 
-  Never _throwUnsupported({
+  Never _throwNotLinearizable({
     required String step,
     required int probeStep,
     Object? error,
@@ -973,7 +838,7 @@ final class WebDavSyncConditionalCreateProbe {
       error: error,
       statusCode: statusCode,
     );
-    throw WebDavSyncProviderUnsupportedException(
+    throw WebDavSyncStoreNotLinearizableException(
       probeStep: probeStep,
       statusCode:
           statusCode ?? (error is WebDavException ? error.statusCode : null),

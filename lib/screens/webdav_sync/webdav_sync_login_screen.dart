@@ -135,8 +135,8 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
 
   static String _inlineError(Object error) {
     if (error is WebDavSyncLegacyRootException) return error.message;
-    if (error is WebDavSyncProviderUnsupportedException) {
-      return error.message;
+    if (error is WebDavSyncStoreNotLinearizableException) {
+      return WebDavSyncStoreNotLinearizableException.userMessage;
     }
     if (error is WebDavSyncSetupInconclusiveException) {
       return WebDavSyncSetupInconclusiveException.userMessage;

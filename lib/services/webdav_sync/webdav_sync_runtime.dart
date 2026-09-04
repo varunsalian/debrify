@@ -1299,7 +1299,7 @@ final class WebDavSyncRuntime
         _cachedRootRevision != rootRevision ||
         !_sameByteLists(_cachedRootMarker, marker)) {
       final secrets = await bindingStore.readSecrets(binding);
-      root = await WebDavSyncCodec().openRoot(
+      root = await WebDavSyncCodec().openPinnedAuthority(
         marker,
         secrets.syncPassphrase,
         runInBackground: true,

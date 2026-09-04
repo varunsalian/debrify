@@ -128,34 +128,29 @@ void main() {
     diagnostic: diagnostic,
   );
 
-  test(
-    'conditional-create probe failure aborts before root mutation',
-    () async {
-      transport.conditionalCreateProbeError =
-          const WebDavSyncProviderUnsupportedException();
+  test('non-linearizable store failure aborts before root mutation', () async {
+    transport.linearizabilityProbeError =
+        const WebDavSyncStoreNotLinearizableException();
 
-      await expectLater(
-        initializer().initialize(
-          bindingId: binding.id,
-          authorization: authorization,
-        ),
-        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
-      );
+    await expectLater(
+      initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      ),
+      throwsA(isA<WebDavSyncStoreNotLinearizableException>()),
+    );
 
-      expect(transport.conditionalCreateProbeCalls, 1);
-      expect(transport.events, isNot(contains('read:key')));
-      expect(transport.events, isNot(contains('read:root')));
-      expect(transport.events, isNot(contains('create:key')));
-      expect(transport.events, isNot(contains('create:root')));
-      expect(transport.marker, isNull);
-      expect((await bindingStore.load()).activeBinding, isNull);
-    },
-  );
+    expect(transport.linearizabilityProbeCalls, 1);
+    expect(transport.events, isNot(contains('read:root')));
+    expect(transport.events, isNot(contains('create:root')));
+    expect(transport.marker, isNull);
+    expect((await bindingStore.load()).activeBinding, isNull);
+  });
 
   test(
-    'inconclusive conditional-create probe aborts before authority writes',
+    'inconclusive linearizability probe aborts before authority writes',
     () async {
-      transport.conditionalCreateProbeError =
+      transport.linearizabilityProbeError =
           const WebDavSyncSetupInconclusiveException(
             probeStep: 2,
             exceptionKind: WebDavErrorKind.timeout,
@@ -169,10 +164,8 @@ void main() {
         throwsA(isA<WebDavSyncSetupInconclusiveException>()),
       );
 
-      expect(transport.conditionalCreateProbeCalls, 1);
-      expect(transport.events, isNot(contains('read:key')));
+      expect(transport.linearizabilityProbeCalls, 1);
       expect(transport.events, isNot(contains('read:root')));
-      expect(transport.events, isNot(contains('create:key')));
       expect(transport.events, isNot(contains('create:root')));
       expect(transport.marker, isNull);
       expect((await bindingStore.load()).activeBinding, isNull);
@@ -240,460 +233,19 @@ void main() {
     },
   );
 
-  test('claims a missing keyfile and verifies its exact read-back', () async {
-    transport.rootKey = null;
-
-    final outcome = await initializer().initialize(
-      bindingId: binding.id,
-      authorization: authorization,
-    );
-
-    expect(outcome, isA<WebDavSyncInitialized>());
-    expect(transport.events, contains('create:key'));
-    expect(
-      transport.events.indexOf('create:key'),
-      lessThan(transport.events.indexOf('create:root')),
-    );
-    expect(transport.keyReadCount, greaterThanOrEqualTo(2));
-    expect(
-      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
-      'circle-secret',
-    );
-  });
-
-  test(
-    '200 creates pass the complete key and marker read-back ladder',
-    () async {
-      transport
-        ..rootKey = null
-        ..keyCreateStatus = 200
-        ..markerCreateStatus = 200;
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(outcome, isA<WebDavSyncInitialized>());
-      expect(transport.marker, isNotNull);
-      expect(
-        transport.events,
-        containsAll(<String>['create:key', 'create:root']),
-      );
-    },
-  );
-
-  test(
-    'a malformed existing keyfile fails closed before candidate use',
-    () async {
-      transport.rootKey = Uint8List.fromList(utf8.encode('{"version":1}'));
-
-      await expectLater(
-        initializer().initialize(
-          bindingId: binding.id,
-          authorization: authorization,
-        ),
-        throwsA(isA<WebDavSyncRootKeyClaimException>()),
-      );
-
-      expect(transport.events, isNot(contains('create:key')));
-      expect(transport.events, isNot(contains('create:root')));
-    },
-  );
-
-  test('a keyfile disappearing after a 412 claim fails closed', () async {
-    transport
-      ..rootKey = null
-      ..createKeyError = const WebDavException(
-        kind: WebDavErrorKind.preconditionFailed,
-        message: 'lost key claim',
-      );
-
-    await expectLater(
-      initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      ),
-      throwsA(isA<WebDavSyncRootKeyClaimException>()),
-    );
-
-    expect(transport.keyReadCount, 2);
-    expect(transport.events, isNot(contains('create:root')));
-  });
-
-  test('a mismatched keyfile read-back fails closed', () async {
-    transport
-      ..rootKey = null
-      ..replaceKeyAfterCreate = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'different-machine-secret',
-      ).encode();
-
-    await expectLater(
-      initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      ),
-      throwsA(isA<WebDavSyncRootKeyClaimException>()),
-    );
-
-    expect(transport.events, isNot(contains('create:root')));
-  });
-
-  test(
-    'a failed key create with no winner logs once and fails closed',
-    () async {
-      final diagnostics = <String>[];
-      transport
-        ..rootKey = null
-        ..createKeyError = const WebDavException(
-          kind: WebDavErrorKind.unexpectedStatus,
-          message: 'ambiguous create',
-          statusCode: 204,
-        );
-
-      await expectLater(
-        initializer(
-          diagnostic: (message, _) => diagnostics.add(message),
-        ).initialize(bindingId: binding.id, authorization: authorization),
-        throwsA(isA<WebDavSyncRootKeyClaimException>()),
-      );
-
-      expect(transport.events, isNot(contains('create:root')));
-      expect(diagnostics, <String>[
-        'WebDAV sync authority failure: key-claim, HTTP 204',
-      ]);
-    },
-  );
-
-  test(
-    'a 412 key claimant adopts the winner before candidate creation',
-    () async {
-      final winnerKey = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'winning-machine-secret',
-      ).encode();
-      transport
-        ..rootKey = null
-        ..createKeyError = const WebDavException(
-          kind: WebDavErrorKind.preconditionFailed,
-          message: 'lost key claim',
-        )
-        ..keyOnCreateError = winnerKey;
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-      final active = (outcome as WebDavSyncInitialized).binding;
-      final secrets = await bindingStore.readSecrets(active);
-
-      expect(secrets.username, 'alice');
-      expect(secrets.password, 'secret');
-      expect(secrets.syncPassphrase, 'winning-machine-secret');
-      expect(
-        await WebDavSyncCodec().openRoot(
-          transport.marker!,
-          'winning-machine-secret',
-          runInBackground: true,
-        ),
-        isA<OpenedWebDavSyncRoot>(),
-      );
-    },
-  );
-
-  for (final status in <int>[403, 405, 409]) {
-    test('an HTTP $status key claimant adopts the valid winner', () async {
-      final winnerKey = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'winning-machine-secret',
-      ).encode();
-      transport
-        ..rootKey = null
-        ..createKeyError = WebDavException(
-          kind: status == 403
-              ? WebDavErrorKind.authentication
-              : status == 409
-              ? WebDavErrorKind.conflict
-              : WebDavErrorKind.unexpectedStatus,
-          message: 'conditional create rejected',
-          statusCode: status,
-        )
-        ..keyOnCreateError = winnerKey;
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(outcome, isA<WebDavSyncInitialized>());
-      expect(
-        (await bindingStore.readSecrets(
-          (outcome as WebDavSyncInitialized).binding,
-        )).syncPassphrase,
-        'winning-machine-secret',
-      );
-    });
-  }
-
-  test(
-    'a key overwrite during seeding is adopted before marker commit',
-    () async {
-      final losingDeviceId = (await bindingStore.load())
-          .namespaceFor(binding)!
-          .deviceId;
-      final winnerSecret = 'winning-machine-secret';
-      transport.rootKeyOnRead[2] = WebDavSyncRootKeyFile(
-        syncPassphrase: winnerSecret,
-      ).encode();
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-      final active = (outcome as WebDavSyncInitialized).binding;
-
-      expect(seeds.prepareCalls, 2);
-      // The observed key replacement restarts the candidate AND resets the
-      // probe cache: watching create-only fail is exactly when the
-      // conditional-create assumption deserves revalidation.
-      expect(transport.conditionalCreateProbeCalls, 2);
-      expect(
-        transport.events.where((event) => event == 'create:root'),
-        hasLength(1),
-      );
-      expect(transport.events, contains('delete:$losingDeviceId'));
-      expect(
-        (await bindingStore.readSecrets(active)).syncPassphrase,
-        winnerSecret,
-      );
-      expect(
-        await WebDavSyncCodec().openRoot(
-          transport.marker!,
-          winnerSecret,
-          runInBackground: true,
-        ),
-        isA<OpenedWebDavSyncRoot>(),
-      );
-    },
-  );
-
-  test(
-    'a key overwrite at marker commit is repaired to marker authority',
-    () async {
-      transport.rootKeyAfterMarkerCreate = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'racing-machine-secret',
-      ).encode();
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(outcome, isA<WebDavSyncInitialized>());
-      expect(transport.overwriteKeyCalls, 1);
-      expect(
-        WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
-        'circle-secret',
-      );
-      expect(
-        transport.events.indexOf('overwrite:key'),
-        greaterThan(transport.events.indexOf('create:root')),
-      );
-    },
-  );
-
-  test(
-    'entry-state divergence resumes from its marker and repairs the key',
-    () async {
-      final resumedMarker = await WebDavSyncCodec().sealRoot(
-        passphrase: 'circle-secret',
-        circleId: 'resumed-circle',
-        createdAt: DateTime.utc(2026, 9, 1),
-        runInBackground: true,
-      );
-      await bindingStore.updateNamespaceValues(
-        binding.namespaceId,
-        (values) => <String, Object?>{
-          ...values,
-          WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
-            resumedMarker,
-          ),
-        },
-      );
-      transport
-        ..marker = resumedMarker
-        ..rootKey = const WebDavSyncRootKeyFile(
-          syncPassphrase: 'delayed-claimant-secret',
-        ).encode();
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(outcome, isA<WebDavSyncInitialized>());
-      expect(transport.overwriteKeyCalls, 1);
-      expect(
-        WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
-        'circle-secret',
-      );
-      expect(
-        transport.events.indexOf('read:root'),
-        lessThan(transport.events.indexOf('read:key')),
-      );
-      expect(
-        (await bindingStore.readSecrets(
-          (await bindingStore.load()).activeBinding!,
-        )).syncPassphrase,
-        'circle-secret',
-      );
-      expect(transport.events, isNot(contains('create:root')));
-    },
-  );
-
-  test('a marker-committed resume provisions its missing key', () async {
-    final resumedMarker = await WebDavSyncCodec().sealRoot(
-      passphrase: 'circle-secret',
-      circleId: 'resumed-circle',
-      createdAt: DateTime.utc(2026, 9, 1),
-      runInBackground: true,
-    );
-    await bindingStore.updateNamespaceValues(
-      binding.namespaceId,
-      (values) => <String, Object?>{
-        ...values,
-        WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
-          resumedMarker,
-        ),
-      },
-    );
-    transport
-      ..marker = resumedMarker
-      ..rootKey = null;
-
-    final outcome = await initializer().initialize(
-      bindingId: binding.id,
-      authorization: authorization,
-    );
-
-    expect(outcome, isA<WebDavSyncInitialized>());
-    expect(transport.overwriteKeyCalls, 1);
-    expect(
-      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
-      'circle-secret',
-    );
-    expect(transport.events, isNot(contains('create:key')));
-    expect(transport.events, isNot(contains('create:root')));
-  });
-
-  test('same-marker 412 repairs a key overwritten with the response', () async {
-    transport
-      ..createError = const WebDavException(
-        kind: WebDavErrorKind.preconditionFailed,
-        message: 'response says another initializer won',
-        statusCode: 412,
-      )
-      ..rootKeyOnCreateError = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'delayed-claimant-secret',
-      ).encode()
-      ..afterSectionWrite = () async {
-        final snapshot = await bindingStore.load();
-        final encoded = snapshot
-            .namespaceFor(snapshot.bindings[binding.id]!)!
-            .values[WebDavSyncBindingStore.seedCandidateMarkerValueKey]!;
-        transport.markerOnCreateError = Uint8List.fromList(
-          base64Decode(encoded as String),
-        );
-      };
-
-    final outcome = await initializer().initialize(
-      bindingId: binding.id,
-      authorization: authorization,
-    );
-
-    expect(outcome, isA<WebDavSyncInitialized>());
-    expect(transport.overwriteKeyCalls, 1);
-    expect(
-      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
-      'circle-secret',
-    );
-  });
-
-  for (final status in <int>[403, 405, 409]) {
-    test('same-marker HTTP $status follows the marker winner path', () async {
-      transport
-        ..createError = WebDavException(
-          kind: status == 403
-              ? WebDavErrorKind.authentication
-              : status == 409
-              ? WebDavErrorKind.conflict
-              : WebDavErrorKind.unexpectedStatus,
-          message: 'conditional marker create rejected',
-          statusCode: status,
-        )
-        ..rootKeyOnCreateError = const WebDavSyncRootKeyFile(
-          syncPassphrase: 'delayed-claimant-secret',
-        ).encode()
-        ..afterSectionWrite = () async {
-          final snapshot = await bindingStore.load();
-          final encoded = snapshot
-              .namespaceFor(snapshot.bindings[binding.id]!)!
-              .values[WebDavSyncBindingStore.seedCandidateMarkerValueKey]!;
-          transport.markerOnCreateError = Uint8List.fromList(
-            base64Decode(encoded as String),
-          );
-        };
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(outcome, isA<WebDavSyncInitialized>());
-      expect(transport.overwriteKeyCalls, 1);
-    });
-  }
-
-  test(
-    'marker commit failure without a winner records one safe diagnostic',
-    () async {
-      final diagnostics = <String>[];
-      transport.createError = const WebDavException(
-        kind: WebDavErrorKind.conflict,
-        message: 'conditional marker create rejected',
-        statusCode: 409,
-      );
-
-      await expectLater(
-        initializer(
-          diagnostic: (message, _) => diagnostics.add(message),
-        ).initialize(bindingId: binding.id, authorization: authorization),
-        throwsA(
-          isA<WebDavException>().having(
-            (error) => error.statusCode,
-            'status',
-            409,
-          ),
-        ),
-      );
-
-      expect(diagnostics, <String>[
-        'WebDAV sync authority failure: marker-commit, HTTP 409',
-      ]);
-    },
-  );
-
-  test('key repair does not overwrite after the marker changes', () async {
-    const winnerSecret = 'replacement-winner-secret';
+  test('a different valid authority on create read-back is adopted', () async {
     final winnerMarker = await WebDavSyncCodec().sealRoot(
-      passphrase: winnerSecret,
-      circleId: 'replacement-winner-circle',
+      passphrase: 'winner-secret',
+      circleId: 'winner-circle',
       createdAt: DateTime.utc(2026, 9, 1),
-      runInBackground: true,
+      memoryKiB: 64,
+      iterations: 1,
     );
-    transport
-      ..markerOnRead[5] = winnerMarker
-      ..rootKeyOnMarkerRead[5] = const WebDavSyncRootKeyFile(
-        syncPassphrase: winnerSecret,
-      ).encode();
+    final winnerAuthority = WebDavSyncAuthorityFile(
+      markerBytes: winnerMarker,
+      syncPassphrase: 'winner-secret',
+    ).encode();
+    transport.replaceMarkerAfterCreate = winnerAuthority;
 
     final outcome = await initializer().initialize(
       bindingId: binding.id,
@@ -701,262 +253,19 @@ void main() {
     );
 
     expect(outcome, isA<WebDavSyncConcurrentRoot>());
-    expect(transport.overwriteKeyCalls, 0);
-    expect(transport.marker, orderedEquals(winnerMarker));
+    final stored = await bindingStore.load();
+    final adopted = stored.bindings[binding.id]!;
+    expect(adopted.circleId, 'winner-circle');
+    expect(adopted.lifecycle, WebDavSyncLifecycle.awaitingAdoption);
     expect(
-      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
-      winnerSecret,
+      (await bindingStore.readSecrets(adopted)).syncPassphrase,
+      'winner-secret',
+    );
+    expect(
+      stored.namespaceFor(adopted)!.markerBytes,
+      orderedEquals(winnerAuthority),
     );
   });
-
-  test('post-commit key repair failure leaves a typed error binding', () async {
-    final diagnostics = <String>[];
-    transport
-      ..rootKeyAfterMarkerCreate = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'racing-machine-secret',
-      ).encode()
-      ..overwriteKeyError = const WebDavException(
-        kind: WebDavErrorKind.network,
-        message: 'repair failed',
-      );
-
-    await expectLater(
-      initializer(
-        diagnostic: (message, _) => diagnostics.add(message),
-      ).initialize(bindingId: binding.id, authorization: authorization),
-      throwsA(isA<WebDavSyncRootKeyClaimException>()),
-    );
-
-    final failed = (await bindingStore.load()).bindings[binding.id]!;
-    expect(failed.lifecycle, WebDavSyncLifecycle.error);
-    expect(
-      failed.errorMessage,
-      const WebDavSyncRootKeyClaimException().toString(),
-    );
-    expect(transport.marker, isNotNull);
-    expect(diagnostics, <String>[
-      'WebDAV sync authority failure: marker-commit, kind network',
-    ]);
-  });
-
-  test(
-    'ignored marker precondition converges to the read-back winner',
-    () async {
-      final winnerMarker = await WebDavSyncCodec().sealRoot(
-        passphrase: 'circle-secret',
-        circleId: 'overwrite-winner-circle',
-        createdAt: DateTime.utc(2026, 9, 1),
-        memoryKiB: 64,
-        iterations: 1,
-      );
-      transport.replaceMarkerAfterCreate = winnerMarker;
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(outcome, isA<WebDavSyncConcurrentRoot>());
-      expect(
-        (outcome as WebDavSyncConcurrentRoot).root.document.circleId,
-        'overwrite-winner-circle',
-      );
-      expect((await bindingStore.load()).activeBindingId, isNull);
-    },
-  );
-
-  test(
-    'key adoption discards a stale candidate and its engine state',
-    () async {
-      final staleMarker = await WebDavSyncCodec().sealRoot(
-        passphrase: 'circle-secret',
-        circleId: 'stale-circle',
-        createdAt: DateTime.utc(2026, 8, 31),
-        runInBackground: true,
-      );
-      await bindingStore.updateNamespaceValues(
-        binding.namespaceId,
-        (values) => <String, Object?>{
-          ...values,
-          WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
-            staleMarker,
-          ),
-        },
-      );
-      states.state = const WebDavSyncEngineState(
-        currentDeviceIds: <String>{'stale-device'},
-      );
-      transport.rootKey = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'winning-machine-secret',
-      ).encode();
-
-      await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-
-      expect(transport.marker, isNot(orderedEquals(staleMarker)));
-      expect(states.state.currentDeviceIds, isNot(contains('stale-device')));
-      expect(
-        (await bindingStore.load()).activeBinding!.lifecycle,
-        WebDavSyncLifecycle.active,
-      );
-    },
-  );
-
-  test('resume clears stale state after a crash during key adoption', () async {
-    final staleMarker = await WebDavSyncCodec().sealRoot(
-      passphrase: 'circle-secret',
-      circleId: 'stale-circle',
-      createdAt: DateTime.utc(2026, 8, 31),
-      runInBackground: true,
-    );
-    await bindingStore.updateNamespaceValues(
-      binding.namespaceId,
-      (values) => <String, Object?>{
-        ...values,
-        WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
-          staleMarker,
-        ),
-      },
-    );
-    states.state = const WebDavSyncEngineState(
-      currentDeviceIds: <String>{'stale-device'},
-    );
-    binding = await bindingStore.adoptSyncSecret(
-      binding.id,
-      'winning-machine-secret',
-    );
-    transport.rootKey = const WebDavSyncRootKeyFile(
-      syncPassphrase: 'winning-machine-secret',
-    ).encode();
-
-    await initializer().initialize(
-      bindingId: binding.id,
-      authorization: authorization,
-    );
-
-    final snapshot = await bindingStore.load();
-    final namespace = snapshot.namespaceFor(snapshot.activeBinding!)!;
-    expect(states.state.currentDeviceIds, isNot(contains('stale-device')));
-    expect(
-      namespace.values,
-      isNot(
-        contains(WebDavSyncBindingStore.seedCandidateResetRequiredValueKey),
-      ),
-    );
-  });
-
-  test(
-    'crash-shaped secret adoption rotates file state and converges fresh',
-    () async {
-      final fileStates = WebDavSyncEngineStateStore(
-        bindingStore: bindingStore,
-        directoryProvider: () async => supportDirectory,
-      );
-      await fileStates.update(
-        binding.namespaceId,
-        (_) => const WebDavSyncEngineState(
-          currentDeviceIds: <String>{'stale-device'},
-        ),
-      );
-      await bindingStore.updateNamespaceValues(
-        binding.namespaceId,
-        (values) => <String, Object?>{
-          ...values,
-          WebDavSyncBindingStore.registryTombstonesFileValueKey: const {
-            'version': 1,
-            'storage': 'file',
-          },
-        },
-      );
-      final oldDeviceId = (await bindingStore.load())
-          .namespaceFor(binding)!
-          .deviceId;
-      binding = await bindingStore.adoptSyncSecret(
-        binding.id,
-        'winning-machine-secret',
-      );
-      var adoptedNamespace = (await bindingStore.load()).namespaceFor(binding)!;
-      expect(adoptedNamespace.deviceId, isNot(oldDeviceId));
-      expect(
-        adoptedNamespace.values.keys,
-        isNot(contains(WebDavSyncBindingStore.engineStateFileValueKey)),
-      );
-      expect(
-        adoptedNamespace.values.keys,
-        isNot(contains(WebDavSyncBindingStore.registryTombstonesFileValueKey)),
-      );
-      transport.rootKey = const WebDavSyncRootKeyFile(
-        syncPassphrase: 'winning-machine-secret',
-      ).encode();
-      final fileInitializer = WebDavSyncNewRootInitializer(
-        bindingStore: bindingStore,
-        stateRepository: fileStates,
-        seedSource: seeds,
-        transportFactory: ({required binding, required secrets}) => transport,
-        clock: () => DateTime.utc(2026, 9, 1),
-      );
-
-      expect(
-        await fileInitializer.initialize(
-          bindingId: binding.id,
-          authorization: authorization,
-        ),
-        isA<WebDavSyncInitialized>(),
-      );
-
-      adoptedNamespace = (await bindingStore.load()).namespaceFor(
-        (await bindingStore.load()).activeBinding!,
-      )!;
-      expect(
-        adoptedNamespace.values,
-        isNot(
-          contains(WebDavSyncBindingStore.seedCandidateResetRequiredValueKey),
-        ),
-      );
-      final stateFiles = Directory(
-        p.join(supportDirectory.path, 'webdav-sync', 'engine-state-v1'),
-      ).listSync().whereType<File>().toList();
-      expect(stateFiles, hasLength(1));
-    },
-  );
-
-  test(
-    'concurrent-root follow re-reads and persists the winning key',
-    () async {
-      final losingDeviceId = (await bindingStore.load())
-          .namespaceFor(binding)!
-          .deviceId;
-      final winnerSecret = 'winning-machine-secret';
-      final winnerMarker = await WebDavSyncCodec().sealRoot(
-        passphrase: winnerSecret,
-        circleId: 'winner-circle',
-        createdAt: DateTime.utc(2026, 9, 1),
-        runInBackground: true,
-      );
-      transport
-        ..marker = winnerMarker
-        ..rootKeyAfterFirstRead = WebDavSyncRootKeyFile(
-          syncPassphrase: winnerSecret,
-        ).encode();
-
-      final outcome = await initializer().initialize(
-        bindingId: binding.id,
-        authorization: authorization,
-      );
-      final concurrent = outcome as WebDavSyncConcurrentRoot;
-
-      expect(concurrent.root.document.circleId, 'winner-circle');
-      expect(
-        (await bindingStore.readSecrets(concurrent.binding)).syncPassphrase,
-        winnerSecret,
-      );
-      expect(transport.keyReadCount, greaterThanOrEqualTo(2));
-      expect(transport.events, contains('delete:$losingDeviceId'));
-    },
-  );
-
   test(
     'ambiguous MKCOL 405 with a missing root collection fails closed',
     () async {
@@ -967,10 +276,9 @@ void main() {
           bindingId: binding.id,
           authorization: authorization,
         ),
-        throwsA(isA<WebDavSyncRootKeyClaimException>()),
+        throwsA(isA<WebDavSyncAuthorityClaimException>()),
       );
 
-      expect(transport.events, isNot(contains('read:key')));
       expect(transport.marker, isNull);
       expect((await bindingStore.load()).activeBinding, isNull);
     },
@@ -1133,6 +441,24 @@ void main() {
         interruptedNamespace.values,
         contains(WebDavSyncBindingStore.seedCandidateMarkerValueKey),
       );
+      final persistedCandidate = Uint8List.fromList(
+        base64Decode(
+          interruptedNamespace.values[WebDavSyncBindingStore
+                  .seedCandidateMarkerValueKey]
+              as String,
+        ),
+      );
+      expect(
+        () => WebDavSyncAuthorityFile.parse(persistedCandidate),
+        throwsA(isA<WebDavSyncAuthorityFileException>()),
+      );
+      expect(
+        (await WebDavSyncCodec().openRoot(
+          persistedCandidate,
+          'circle-secret',
+        )).document.circleId,
+        isNotEmpty,
+      );
       expect(transport.sections, isNotEmpty);
       expect(transport.manifest, isNull);
       expect(transport.marker, isNull);
@@ -1173,13 +499,17 @@ void main() {
     'a concurrent winner is pinned and enters adoption, not Active',
     () async {
       final codec = WebDavSyncCodec();
-      transport.marker = await codec.sealRoot(
+      final winningMarker = await codec.sealRoot(
         passphrase: 'circle-secret',
         circleId: 'winning-circle',
         createdAt: DateTime.utc(2026, 8, 31),
         memoryKiB: 64,
         iterations: 1,
       );
+      transport.marker = WebDavSyncAuthorityFile(
+        markerBytes: winningMarker,
+        syncPassphrase: 'circle-secret',
+      ).encode();
 
       final outcome = await initializer().initialize(
         bindingId: binding.id,
@@ -1195,12 +525,6 @@ void main() {
       expect(
         transport.events.where((event) => event.startsWith('delete:')),
         hasLength(1),
-      );
-      expect(
-        transport.events.indexOf('barrier'),
-        lessThan(
-          transport.events.indexWhere((event) => event.startsWith('delete:')),
-        ),
       );
       expect(
         transport.events,
@@ -1230,7 +554,10 @@ void main() {
         deviceId: (await bindingStore.load()).namespaceFor(binding)!.deviceId,
       ),
     );
-    transport.markerOnCreateError = winningMarker;
+    transport.markerOnCreateError = WebDavSyncAuthorityFile(
+      markerBytes: winningMarker,
+      syncPassphrase: 'circle-secret',
+    ).encode();
     transport.createError = const WebDavException(
       kind: WebDavErrorKind.preconditionFailed,
       message: 'another initializer won',
@@ -1278,7 +605,10 @@ void main() {
     binding = await bindingStore.markRootVerified(
       bindingId: binding.id,
       root: root.document,
-      markerBytes: marker,
+      markerBytes: WebDavSyncAuthorityFile(
+        markerBytes: marker,
+        syncPassphrase: 'circle-secret',
+      ).encode(),
     );
     final namespace = (await bindingStore.load()).namespaceFor(binding)!;
     states.state = WebDavSyncEngineState(
@@ -1342,7 +672,10 @@ void main() {
     binding = await bindingStore.markRootVerified(
       bindingId: binding.id,
       root: winningRoot.document,
-      markerBytes: winningMarker,
+      markerBytes: WebDavSyncAuthorityFile(
+        markerBytes: winningMarker,
+        syncPassphrase: 'circle-secret',
+      ).encode(),
     );
 
     final recovered = await WebDavSyncSeedActivationRecovery(
@@ -1382,148 +715,144 @@ void main() {
     expect((await bindingStore.load()).activeBindingId, isNull);
   });
 
-  test(
-    'a server ignoring create-only is refused before the TOCTOU window',
-    () async {
-      transport.conditionalCreateProbeError =
-          const WebDavSyncProviderUnsupportedException();
+  test('Koofr-style overwrite semantics pass the authority flow', () async {
+    final outcome = await initializer().initialize(
+      bindingId: binding.id,
+      authorization: authorization,
+    );
 
-      await expectLater(
-        initializer().initialize(
-          bindingId: binding.id,
-          authorization: authorization,
-        ),
-        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
-      );
+    expect(outcome, isA<WebDavSyncInitialized>());
+    expect(transport.linearizabilityProbeCalls, 1);
+    final authority = WebDavSyncAuthorityFile.parse(transport.marker!);
+    expect(authority.syncPassphrase, 'circle-secret');
+    expect((await bindingStore.load()).activeBindingId, binding.id);
+  });
 
-      expect(transport.events, isNot(contains('read:key')));
-      expect(transport.events, isNot(contains('read:root')));
-      expect(transport.events, isNot(contains('create:key')));
-      expect(transport.events, isNot(contains('create:root')));
-      expect((await bindingStore.load()).activeBindingId, isNull);
-    },
-  );
+  test('two LWW initializers converge on the one standing authority', () async {
+    final server = _IgnoringPreconditionsServer();
+    final firstSecret = WebDavSyncCodec.generateSyncSecret();
+    final secondSecret = WebDavSyncCodec.generateSyncSecret();
+    expect(firstSecret, isNot(secondSecret));
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
 
-  test(
-    'two initializers with independent secrets refuse an ignore-all server',
-    () async {
-      final server = _IgnoringPreconditionsServer();
-      final firstSecret = WebDavSyncCodec.generateSyncSecret();
-      final secondSecret = WebDavSyncCodec.generateSyncSecret();
-      expect(firstSecret, isNot(secondSecret));
+    final firstStore = WebDavSyncBindingStore();
+    final secondStore = WebDavSyncBindingStore(
+      debugStorageKey: 'webdav_sync_db_adoption_gate_v1',
+    );
 
-      final firstLocation = WebDavSyncFolderLocation(
-        endpoint: 'https://first-device.test/dav',
-        folderPath: 'Family',
-        serverName: 'First device',
-      );
-      var firstBinding = await bindingStore.stageBinding(
-        location: firstLocation,
-        config: WebDavConfig(
-          id: 'first-device',
-          name: 'First device',
-          baseUrl: firstLocation.endpoint.toString(),
-          username: 'alice',
-          password: 'first-password',
-        ),
-        syncPassphrase: firstSecret,
-      );
-      firstBinding = await bindingStore.markAwaitingSeedCommit(firstBinding.id);
-      final firstSnapshot = await bindingStore.load();
+    final firstLocation = WebDavSyncFolderLocation(
+      endpoint: 'https://first-device.test/dav',
+      folderPath: 'Family',
+      serverName: 'First device',
+    );
+    var firstBinding = await firstStore.stageBinding(
+      location: firstLocation,
+      config: WebDavConfig(
+        id: 'first-device',
+        name: 'First device',
+        baseUrl: firstLocation.endpoint.toString(),
+        username: 'alice',
+        password: 'first-password',
+      ),
+      syncPassphrase: firstSecret,
+    );
+    firstBinding = await firstStore.markAwaitingSeedCommit(firstBinding.id);
 
-      final secondLocation = WebDavSyncFolderLocation(
-        endpoint: 'https://second-device.test/dav',
-        folderPath: 'Family',
-        serverName: 'Second device',
-      );
-      var secondBinding = await bindingStore.stageBinding(
-        location: secondLocation,
-        config: WebDavConfig(
-          id: 'second-device',
-          name: 'Second device',
-          baseUrl: secondLocation.endpoint.toString(),
-          username: 'bob',
-          password: 'second-password',
-        ),
-        syncPassphrase: secondSecret,
-      );
-      secondBinding = await bindingStore.markAwaitingSeedCommit(
-        secondBinding.id,
-      );
-      final secondSnapshot = await bindingStore.load();
-      final combined = WebDavSyncStoreSnapshot(
-        stagedBindingId: secondBinding.id,
-        bindings: <String, WebDavSyncBinding>{
-          firstBinding.id: firstBinding,
-          secondBinding.id: secondBinding,
-        },
-        namespaces: <String, WebDavSyncNamespace>{
-          firstBinding.namespaceId: firstSnapshot.namespaceFor(firstBinding)!,
-          secondBinding.namespaceId: secondSnapshot.namespaceFor(
-            secondBinding,
-          )!,
-        },
-      );
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setString(
-        WebDavSyncBindingStore.storageKey,
-        jsonEncode(combined.toJson()),
-      );
+    final secondLocation = WebDavSyncFolderLocation(
+      endpoint: 'https://second-device.test/dav',
+      folderPath: 'Family',
+      serverName: 'Second device',
+    );
+    var secondBinding = await secondStore.stageBinding(
+      location: secondLocation,
+      config: WebDavConfig(
+        id: 'second-device',
+        name: 'Second device',
+        baseUrl: secondLocation.endpoint.toString(),
+        username: 'bob',
+        password: 'second-password',
+      ),
+      syncPassphrase: secondSecret,
+    );
+    secondBinding = await secondStore.markAwaitingSeedCommit(secondBinding.id);
+    var prepared = 0;
+    final bothPrepared = Completer<void>();
+    Future<void> holdUntilBothPrepared() async {
+      prepared++;
+      if (prepared == 2) bothPrepared.complete();
+      await bothPrepared.future;
+    }
 
-      final first = WebDavSyncNewRootInitializer(
-        bindingStore: bindingStore,
-        stateRepository: _MemoryStateRepository(),
-        seedSource: _FakeSeedSource(),
-        transportFactory: ({required binding, required secrets}) =>
-            server.connect(),
-        clock: () => DateTime.utc(2026, 9, 1),
-      );
-      final second = WebDavSyncNewRootInitializer(
-        bindingStore: bindingStore,
-        stateRepository: _MemoryStateRepository(),
-        seedSource: _FakeSeedSource(),
-        transportFactory: ({required binding, required secrets}) =>
-            server.connect(),
-        clock: () => DateTime.utc(2026, 9, 1),
-      );
+    final firstSeeds = _FakeSeedSource()..beforeReturn = holdUntilBothPrepared;
+    final secondSeeds = _FakeSeedSource()..beforeReturn = holdUntilBothPrepared;
 
-      Future<Object> settle(
-        Future<WebDavSyncInitializationOutcome> operation,
-      ) async {
-        try {
-          return await operation;
-        } catch (error) {
-          return error;
-        }
+    final first = WebDavSyncNewRootInitializer(
+      bindingStore: firstStore,
+      stateRepository: _MemoryStateRepository(),
+      seedSource: firstSeeds,
+      transportFactory: ({required binding, required secrets}) =>
+          server.connect(),
+      clock: () => DateTime.utc(2026, 9, 1),
+    );
+    final second = WebDavSyncNewRootInitializer(
+      bindingStore: secondStore,
+      stateRepository: _MemoryStateRepository(),
+      seedSource: secondSeeds,
+      transportFactory: ({required binding, required secrets}) =>
+          server.connect(),
+      clock: () => DateTime.utc(2026, 9, 1),
+    );
+
+    Future<Object> settle(
+      Future<WebDavSyncInitializationOutcome> operation,
+    ) async {
+      try {
+        return await operation;
+      } catch (error) {
+        return error;
       }
+    }
 
-      final results = await Future.wait(<Future<Object>>[
-        settle(
-          first.initialize(
-            bindingId: firstBinding.id,
-            authorization: authorization,
+    final results =
+        await Future.wait(<Future<Object>>[
+          settle(
+            first.initialize(
+              bindingId: firstBinding.id,
+              authorization: authorization,
+            ),
           ),
-        ),
-        settle(
-          second.initialize(
-            bindingId: secondBinding.id,
-            authorization: authorization,
+          settle(
+            second.initialize(
+              bindingId: secondBinding.id,
+              authorization: authorization,
+            ),
           ),
-        ),
-      ]);
+        ]).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw StateError(
+            'race stalled: probes=${server.probeCalls}, prepared=$prepared, '
+            'writes=${server.markerCreateCalls}',
+          ),
+        );
 
-      expect(server.probeCalls, 2);
-      expect(server.keyCreateCalls, 0);
-      expect(server.markerCreateCalls, 0);
-      expect(server.rootKey, isNull);
-      expect(server.marker, isNull);
-      expect(
-        results,
-        everyElement(isA<WebDavSyncProviderUnsupportedException>()),
-        reason: 'both initializers must refuse before the race can mutate',
-      );
-    },
-  );
+    expect(server.probeCalls, 2);
+    expect(server.markerCreateCalls, 2);
+    final standing = WebDavSyncAuthorityFile.parse(server.marker!);
+    expect(results.whereType<WebDavSyncInitialized>(), hasLength(1));
+    expect(results.whereType<WebDavSyncConcurrentRoot>(), hasLength(1));
+    final firstFinal = (await firstStore.load()).bindings[firstBinding.id]!;
+    final secondFinal = (await secondStore.load()).bindings[secondBinding.id]!;
+    expect(firstFinal.circleId, secondFinal.circleId);
+    expect(firstFinal.circleId, isNotNull);
+    expect(
+      (await firstStore.readSecrets(firstFinal)).syncPassphrase,
+      standing.syncPassphrase,
+    );
+    expect(
+      (await secondStore.readSecrets(secondFinal)).syncPassphrase,
+      standing.syncPassphrase,
+    );
+  });
 
   test('local mutation prevents a stale full-manifest republish', () async {
     final marker = await WebDavSyncCodec().sealRoot(
@@ -1687,6 +1016,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
   String? seenCircleId;
   WebDavSyncCircleKey? seenCircleKey;
   int prepareCalls = 0;
+  Future<void> Function()? beforeReturn;
 
   final maps = WebDavSyncIdentityMaps(
     circleToLocalProfiles: const <String, String>{
@@ -1793,49 +1123,32 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
       ),
     );
 
-    return guardPreferences
+    final result = await (guardPreferences
         ? ProfilePreferences.captureMutationSnapshot(build)
-        : build(null);
+        : build(null));
+    await beforeReturn?.call();
+    return result;
   }
 }
 
-class _FakeActivationTransport
-    implements
-        WebDavSyncActivationTransport,
-        WebDavSyncCommittedRootKeyRepairTransport {
+class _FakeActivationTransport implements WebDavSyncActivationTransport {
   final List<String> events = <String>[];
   final Map<String, Uint8List> sections = <String, Uint8List>{};
   Uint8List? manifest;
   Uint8List? marker;
-  Uint8List? rootKey = const WebDavSyncRootKeyFile(
-    syncPassphrase: 'circle-secret',
-  ).encode();
-  Uint8List? rootKeyAfterFirstRead;
-  final Map<int, Uint8List> rootKeyOnRead = <int, Uint8List>{};
-  Uint8List? rootKeyAfterMarkerCreate;
-  int keyReadCount = 0;
   int markerReadCount = 0;
   final Map<int, Uint8List> markerOnRead = <int, Uint8List>{};
-  final Map<int, Uint8List> rootKeyOnMarkerRead = <int, Uint8List>{};
-  WebDavException? createKeyError;
-  int keyCreateStatus = 201;
-  Uint8List? keyOnCreateError;
-  Uint8List? replaceKeyAfterCreate;
-  Object? overwriteKeyError;
-  Uint8List? replaceKeyAfterOverwrite;
-  int overwriteKeyCalls = 0;
   bool activationLayoutExists = true;
   WebDavException? createError;
   int markerCreateStatus = 201;
   WebDavException? manifestWriteError;
   Uint8List? replaceMarkerAfterCreate;
   Uint8List? markerOnCreateError;
-  Uint8List? rootKeyOnCreateError;
   bool createStoresThenThrows = false;
   List<String> deviceIds = const <String>[];
   Future<void> Function()? afterSectionWrite;
-  Object? conditionalCreateProbeError;
-  int conditionalCreateProbeCalls = 0;
+  Object? linearizabilityProbeError;
+  int linearizabilityProbeCalls = 0;
 
   WebDavResponseMetadata get metadata => WebDavResponseMetadata(
     statusCode: 200,
@@ -1853,18 +1166,18 @@ class _FakeActivationTransport
   Future<void> ensureActivationLayout() async {
     events.add('ensure:activation');
     if (!activationLayoutExists) {
-      throw const WebDavSyncRootKeyClaimException();
+      throw const WebDavSyncAuthorityClaimException();
     }
   }
 
   @override
-  Future<void> verifyConditionalCreate({
+  Future<void> verifyLinearizability({
     required String syncRootPath,
     Future<void> Function()? beforeSend,
   }) async {
-    conditionalCreateProbeCalls++;
-    events.add('probe:conditional');
-    if (conditionalCreateProbeError case final failure?) throw failure;
+    linearizabilityProbeCalls++;
+    events.add('probe:linearizable');
+    if (linearizabilityProbeError case final failure?) throw failure;
   }
 
   @override
@@ -1932,9 +1245,6 @@ class _FakeActivationTransport
     if (markerOnRead.remove(markerReadCount) case final replacement?) {
       marker = Uint8List.fromList(replacement);
     }
-    if (rootKeyOnMarkerRead.remove(markerReadCount) case final replacement?) {
-      rootKey = Uint8List.fromList(replacement);
-    }
     final value = marker;
     if (value == null) {
       throw const WebDavException(
@@ -1946,58 +1256,15 @@ class _FakeActivationTransport
   }
 
   @override
-  Future<WebDavBytesResult> readRootKey() async {
-    events.add('read:key');
-    keyReadCount++;
-    if (rootKeyOnRead.remove(keyReadCount) case final replacement?) {
-      rootKey = Uint8List.fromList(replacement);
-    }
-    final value = keyReadCount > 1 && rootKeyAfterFirstRead != null
-        ? rootKeyAfterFirstRead
-        : rootKey;
-    if (value == null) {
-      throw const WebDavException(
-        kind: WebDavErrorKind.notFound,
-        message: 'missing',
-      );
-    }
-    return WebDavBytesResult(bytes: value, metadata: metadata);
-  }
-
-  @override
-  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
-    events.add('create:key');
-    final error = createKeyError;
-    if (error != null) {
-      final winner = keyOnCreateError;
-      if (winner != null) rootKey = Uint8List.fromList(winner);
-      throw error;
-    }
-    rootKey = Uint8List.fromList(replaceKeyAfterCreate ?? bytes);
-    return WebDavResponseMetadata(
-      statusCode: keyCreateStatus,
-      uri: metadata.uri,
-      headers: const <String, String>{},
-      serverDate: metadata.serverDate,
-    );
-  }
-
-  @override
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes) async {
     events.add('create:root');
     final error = createError;
     if (error != null) {
       final winningMarker = markerOnCreateError;
       if (winningMarker != null) marker = Uint8List.fromList(winningMarker);
-      final winningKey = rootKeyOnCreateError;
-      if (winningKey != null) rootKey = Uint8List.fromList(winningKey);
       throw error;
     }
     marker = Uint8List.fromList(replaceMarkerAfterCreate ?? bytes);
-    if (rootKeyAfterMarkerCreate case final replacement?) {
-      rootKey = Uint8List.fromList(replacement);
-      rootKeyAfterMarkerCreate = null;
-    }
     if (createStoresThenThrows) {
       createStoresThenThrows = false;
       throw const WebDavException(
@@ -2014,16 +1281,6 @@ class _FakeActivationTransport
   }
 
   @override
-  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes) async {
-    events.add('overwrite:key');
-    overwriteKeyCalls++;
-    if (overwriteKeyError case final failure?) throw failure;
-    rootKey = Uint8List.fromList(replaceKeyAfterOverwrite ?? bytes);
-    rootKeyAfterFirstRead = null;
-    return metadata;
-  }
-
-  @override
   Future<void> deleteDeviceDirectory(String deviceId) async {
     events.add('delete:$deviceId');
   }
@@ -2035,68 +1292,35 @@ class _FakeActivationTransport
 }
 
 final class _IgnoringPreconditionsServer {
-  Uint8List? rootKey;
   Uint8List? marker;
   int probeCalls = 0;
-  int keyCreateCalls = 0;
   int markerCreateCalls = 0;
-  int _initialKeyReads = 0;
-  int _initialMarkerReads = 0;
-  final Completer<void> _bothKeyReads = Completer<void>();
-  final Completer<void> _bothMarkerReads = Completer<void>();
-  final Completer<void> _bothKeyCreates = Completer<void>();
   final Completer<void> _bothMarkerCreates = Completer<void>();
+  final List<Uint8List> _pendingAuthorities = <Uint8List>[];
 
   _IgnoringPreconditionsTransport connect() =>
       _IgnoringPreconditionsTransport(this);
 
-  Future<WebDavBytesResult> readKey(WebDavResponseMetadata metadata) async {
-    final existing = rootKey;
-    if (existing != null) {
-      return WebDavBytesResult(bytes: existing, metadata: metadata);
-    }
-    _initialKeyReads++;
-    if (_initialKeyReads == 2) _bothKeyReads.complete();
-    await _bothKeyReads.future;
-    throw const WebDavException(
-      kind: WebDavErrorKind.notFound,
-      message: 'missing',
-    );
-  }
-
-  Future<WebDavBytesResult> readMarker(
-    WebDavResponseMetadata metadata, {
-    required bool initialRead,
-  }) async {
+  Future<WebDavBytesResult> readMarker(WebDavResponseMetadata metadata) async {
     final existing = marker;
     if (existing != null) {
       return WebDavBytesResult(bytes: existing, metadata: metadata);
     }
-    if (initialRead) {
-      _initialMarkerReads++;
-      if (_initialMarkerReads == 2) _bothMarkerReads.complete();
-      await _bothMarkerReads.future;
-    }
     throw const WebDavException(
       kind: WebDavErrorKind.notFound,
       message: 'missing',
     );
   }
 
-  Future<void> createKey(Uint8List bytes) async {
-    keyCreateCalls++;
-    if (keyCreateCalls == 2) _bothKeyCreates.complete();
-    await _bothKeyCreates.future;
-    // Deliberately ignore If-None-Match and overwrite the shared resource.
-    rootKey = Uint8List.fromList(bytes);
-  }
-
   Future<void> createMarker(Uint8List bytes) async {
     markerCreateCalls++;
-    if (markerCreateCalls == 2) _bothMarkerCreates.complete();
-    await _bothMarkerCreates.future;
     // Deliberately ignore If-None-Match and overwrite the shared resource.
-    marker = Uint8List.fromList(bytes);
+    _pendingAuthorities.add(Uint8List.fromList(bytes));
+    if (markerCreateCalls == 2) {
+      marker = Uint8List.fromList(_pendingAuthorities.last);
+      _bothMarkerCreates.complete();
+    }
+    await _bothMarkerCreates.future;
   }
 }
 
@@ -2104,42 +1328,20 @@ final class _IgnoringPreconditionsTransport extends _FakeActivationTransport {
   _IgnoringPreconditionsTransport(this.server) : super();
 
   final _IgnoringPreconditionsServer server;
-  bool _initialMarkerRead = true;
 
   @override
-  Future<void> verifyConditionalCreate({
+  Future<void> verifyLinearizability({
     required String syncRootPath,
     Future<void> Function()? beforeSend,
   }) async {
     server.probeCalls++;
-    events.add('probe:conditional');
-    throw const WebDavSyncProviderUnsupportedException();
-  }
-
-  @override
-  Future<WebDavBytesResult> readRootKey() {
-    events.add('read:key');
-    return server.readKey(metadata);
-  }
-
-  @override
-  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
-    events.add('create:key');
-    await server.createKey(bytes);
-    return WebDavResponseMetadata(
-      statusCode: 201,
-      uri: metadata.uri,
-      headers: const <String, String>{},
-      serverDate: metadata.serverDate,
-    );
+    events.add('probe:linearizable');
   }
 
   @override
   Future<WebDavBytesResult> readRootMarker() async {
     events.add('read:root');
-    final initialRead = _initialMarkerRead;
-    _initialMarkerRead = false;
-    return server.readMarker(metadata, initialRead: initialRead);
+    return server.readMarker(metadata);
   }
 
   @override
@@ -2152,12 +1354,5 @@ final class _IgnoringPreconditionsTransport extends _FakeActivationTransport {
       headers: const <String, String>{},
       serverDate: metadata.serverDate,
     );
-  }
-
-  @override
-  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes) async {
-    events.add('overwrite:key');
-    server.rootKey = Uint8List.fromList(bytes);
-    return metadata;
   }
 }

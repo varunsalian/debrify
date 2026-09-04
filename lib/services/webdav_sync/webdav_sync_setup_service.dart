@@ -7,7 +7,6 @@ import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_models.dart';
-import 'webdav_sync_transport.dart';
 
 sealed class WebDavSyncSetupException implements Exception {
   const WebDavSyncSetupException(this.message);
@@ -60,11 +59,7 @@ final class WebDavSyncFolderMissing extends WebDavSyncFolderInspection {
   const WebDavSyncFolderMissing({
     required super.location,
     required super.config,
-    this.rootKey,
   });
-
-  /// An orphan create-only claim. Activation adopts it before minting a root.
-  final WebDavSyncRootKeyFile? rootKey;
 }
 
 final class WebDavSyncFolderExisting extends WebDavSyncFolderInspection {
@@ -73,12 +68,19 @@ final class WebDavSyncFolderExisting extends WebDavSyncFolderInspection {
     required super.config,
     required this.markerBytes,
     required this.metadata,
-    required this.rootKey,
+    required this.syncPassphrase,
+    this.authorityBytes,
   });
 
+  /// The unchanged inner AEAD marker bytes.
   final Uint8List markerBytes;
+
+  /// Exact bytes pinned for the merged layout; null only for a legacy result.
+  final Uint8List? authorityBytes;
   final WebDavResponseMetadata metadata;
-  final WebDavSyncRootKeyFile rootKey;
+  final String syncPassphrase;
+
+  List<int> get pinBytes => authorityBytes ?? markerBytes;
 }
 
 abstract interface class WebDavSyncProbeTransport {
@@ -95,9 +97,17 @@ abstract interface class WebDavSyncProbeTransport {
   void close();
 }
 
-abstract interface class WebDavSyncRootKeyProvisionTransport
-    implements WebDavSyncConditionalCreateProbeTransport {
-  Future<WebDavResponseMetadata> createRootKey({
+/// Merged-layout capability. Legacy test/embedding transports that do not yet
+/// expose it continue to exercise only the compatibility read path.
+abstract interface class WebDavSyncAuthorityProbeTransport {
+  Future<WebDavBytesResult> readRootAuthority({
+    required String path,
+    Future<void> Function()? beforeSend,
+  });
+}
+
+abstract interface class WebDavSyncAuthorityProvisionTransport {
+  Future<WebDavResponseMetadata> writeRootAuthority({
     required String path,
     required Uint8List bytes,
     Future<void> Function()? beforeSend,
@@ -111,28 +121,19 @@ typedef WebDavSyncProbeTransportFactory =
     });
 
 final class ProtocolWebDavSyncProbeTransport
-    implements WebDavSyncProbeTransport, WebDavSyncRootKeyProvisionTransport {
+    implements
+        WebDavSyncProbeTransport,
+        WebDavSyncAuthorityProbeTransport,
+        WebDavSyncAuthorityProvisionTransport {
   ProtocolWebDavSyncProbeTransport({
     required Uri endpoint,
     required WebDavCredentials credentials,
-    WebDavSyncAuthorityDiagnostic? diagnostic,
   }) : _client = WebDavProtocolClient(
          endpoint: endpoint,
          credentials: credentials,
-       ),
-       _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic;
+       );
 
   final WebDavProtocolClient _client;
-  final WebDavSyncAuthorityDiagnostic _diagnostic;
-
-  @override
-  Future<void> verifyConditionalCreate({
-    required String syncRootPath,
-    Future<void> Function()? beforeSend,
-  }) => WebDavSyncConditionalCreateProbe(
-    _client,
-    diagnostic: _diagnostic,
-  ).verify(syncRootPath: syncRootPath, beforeSend: beforeSend);
 
   @override
   Future<WebDavBytesResult> readRootMarker({
@@ -140,7 +141,19 @@ final class ProtocolWebDavSyncProbeTransport
     Future<void> Function()? beforeSend,
   }) => _client.getBytes(
     path: path,
-    maxBytes: WebDavSyncCodec.rootMarkerMaxBytes,
+    maxBytes: path.endsWith('/circle.authority') || path == 'circle.authority'
+        ? WebDavSyncAuthorityFile.maxBytes
+        : WebDavSyncCodec.rootMarkerMaxBytes,
+    beforeSend: beforeSend,
+  );
+
+  @override
+  Future<WebDavBytesResult> readRootAuthority({
+    required String path,
+    Future<void> Function()? beforeSend,
+  }) => _client.getBytes(
+    path: path,
+    maxBytes: WebDavSyncAuthorityFile.maxBytes,
     beforeSend: beforeSend,
   );
 
@@ -155,27 +168,25 @@ final class ProtocolWebDavSyncProbeTransport
   );
 
   @override
-  Future<WebDavResponseMetadata> createRootKey({
+  Future<WebDavResponseMetadata> writeRootAuthority({
     required String path,
     required Uint8List bytes,
     Future<void> Function()? beforeSend,
-  }) async {
-    return _client.putBytes(
-      path: path,
-      bytes: bytes,
-      maxBytes: WebDavSyncRootKeyFile.maxBytes,
-      ifNoneMatch: '*',
-      createParents: false,
-      beforeSend: beforeSend,
-    );
-  }
+  }) => _client.putBytes(
+    path: path,
+    bytes: bytes,
+    maxBytes: WebDavSyncAuthorityFile.maxBytes,
+    ifNoneMatch: '*',
+    createParents: false,
+    beforeSend: beforeSend,
+  );
 
   @override
   void close() => _client.close();
 }
 
-/// Setup probes are read-only. Repair probes may make the one authenticated,
-/// create-only keyfile write needed to upgrade a pinned legacy circle.
+/// Setup probes inspect the merged authority first. An authenticated legacy
+/// open may provision the one merged authority object and verify its read-back.
 final class WebDavSyncSetupService {
   WebDavSyncSetupService({
     WebDavSyncBindingStore? store,
@@ -192,7 +203,6 @@ final class WebDavSyncSetupService {
                ProtocolWebDavSyncProbeTransport(
                  endpoint: endpoint,
                  credentials: credentials,
-                 diagnostic: diagnostic ?? recordWebDavSyncDiagnostic,
                ));
 
   final WebDavSyncBindingStore store;
@@ -235,6 +245,59 @@ final class WebDavSyncSetupService {
       ),
     );
     try {
+      final authorityTransport = transport is WebDavSyncAuthorityProbeTransport
+          ? transport as WebDavSyncAuthorityProbeTransport
+          : null;
+      final authorityResult = authorityTransport == null
+          ? null
+          : await _readIfPresent(
+              () => authorityTransport.readRootAuthority(
+                path: location.rootAuthorityPath,
+                beforeSend: beforeSend,
+              ),
+            );
+      if (authorityResult != null) {
+        final opened = await codec.openAuthority(
+          authorityResult.bytes,
+          runInBackground: runCryptoInBackground,
+        );
+        if (context == WebDavSyncFolderInspectionContext.repair) {
+          final matchesPinnedAuthority = _bytesEqual(
+            priorMarker!,
+            authorityResult.bytes,
+          );
+          final upgradesPinnedLegacyMarker = _bytesEqual(
+            priorMarker,
+            opened.authority.markerBytes,
+          );
+          final resumesDetectedAuthorityReplacement =
+              priorBinding!.lifecycle == WebDavSyncLifecycle.error &&
+              priorBinding.errorMessage ==
+                  const WebDavSyncRootChangedException().message;
+          if ((!matchesPinnedAuthority &&
+                  !upgradesPinnedLegacyMarker &&
+                  !resumesDetectedAuthorityReplacement) ||
+              opened.root.document.circleId != priorBinding.circleId &&
+                  !resumesDetectedAuthorityReplacement) {
+            await store.markError(
+              priorBinding.id,
+              const WebDavSyncRootChangedException(),
+            );
+            throw const WebDavSyncRootChangedException();
+          }
+        }
+        return WebDavSyncFolderExisting(
+          location: location,
+          config: config,
+          markerBytes: Uint8List.fromList(opened.authority.markerBytes),
+          authorityBytes: Uint8List.fromList(authorityResult.bytes),
+          metadata: authorityResult.metadata,
+          syncPassphrase: opened.authority.syncPassphrase,
+        );
+      }
+
+      // Compatibility reads are reached only when the merged authority is
+      // definitively absent. Malformed authority never falls through here.
       final marker = await _readIfPresent(
         () => transport.readRootMarker(
           path: location.rootMarkerPath,
@@ -255,14 +318,7 @@ final class WebDavSyncSetupService {
           );
           throw const WebDavSyncRootMissingException();
         }
-        final rootKey = keyResult == null
-            ? null
-            : WebDavSyncRootKeyFile.parse(keyResult.bytes);
-        return WebDavSyncFolderMissing(
-          location: location,
-          config: config,
-          rootKey: rootKey,
-        );
+        return WebDavSyncFolderMissing(location: location, config: config);
       }
       if (context == WebDavSyncFolderInspectionContext.repair &&
           !_bytesEqual(priorMarker!, marker.bytes)) {
@@ -272,137 +328,144 @@ final class WebDavSyncSetupService {
         );
         throw const WebDavSyncRootChangedException();
       }
-      late final WebDavSyncRootKeyFile rootKey;
-      if (keyResult == null) {
-        if (context == WebDavSyncFolderInspectionContext.setup) {
-          throw const WebDavSyncLegacyRootException();
+      if (keyResult == null &&
+          context == WebDavSyncFolderInspectionContext.setup) {
+        throw const WebDavSyncLegacyRootException();
+      }
+      final rootKey = keyResult == null
+          ? WebDavSyncRootKeyFile(
+              syncPassphrase: (await store.readSecrets(
+                priorBinding!,
+              )).syncPassphrase,
+            )
+          : WebDavSyncRootKeyFile.parse(keyResult.bytes);
+      try {
+        final legacyRoot = await codec.openRoot(
+          marker.bytes,
+          rootKey.syncPassphrase,
+          runInBackground: runCryptoInBackground,
+        );
+        if (context == WebDavSyncFolderInspectionContext.repair &&
+            legacyRoot.document.circleId != priorBinding!.circleId) {
+          throw const WebDavSyncRootChangedException();
         }
-        final secrets = await store.readSecrets(priorBinding!);
-        rootKey = WebDavSyncRootKeyFile(syncPassphrase: secrets.syncPassphrase);
-        try {
-          final opened = await codec.openRoot(
-            marker.bytes,
-            rootKey.syncPassphrase,
-            runInBackground: runCryptoInBackground,
+        if (transport is! WebDavSyncAuthorityProvisionTransport) {
+          return WebDavSyncFolderExisting(
+            location: location,
+            config: config,
+            markerBytes: Uint8List.fromList(marker.bytes),
+            metadata: marker.metadata,
+            syncPassphrase: rootKey.syncPassphrase,
           );
-          if (opened.document.circleId != priorBinding.circleId) {
-            throw const WebDavSyncRootChangedException();
-          }
-          await _provisionLegacyRootKey(
-            transport: transport,
-            syncRootPath: location.folderPath.isEmpty
-                ? 'debrify-sync'
-                : '${location.folderPath}/debrify-sync',
-            path: location.rootKeyPath,
-            rootKey: rootKey,
-            beforeSend: beforeSend,
-          );
-        } catch (error) {
+        }
+        final provisioned = await _provisionLegacyAuthority(
+          transport: transport,
+          location: location,
+          markerBytes: marker.bytes,
+          syncPassphrase: rootKey.syncPassphrase,
+          beforeSend: beforeSend,
+        );
+        // A concurrent merged authority may have won the write/read-back
+        // race. Return that complete winner so reconnect can use the normal
+        // authenticated adoption ladder rather than preserving the legacy
+        // marker merely because it was read first.
+        return WebDavSyncFolderExisting(
+          location: location,
+          config: config,
+          markerBytes: provisioned.authority.markerBytes,
+          authorityBytes: provisioned.bytes,
+          metadata: provisioned.metadata,
+          syncPassphrase: provisioned.authority.syncPassphrase,
+        );
+      } catch (error) {
+        if (context == WebDavSyncFolderInspectionContext.repair) {
           final failure =
               error is WebDavSyncRootChangedException ||
-                  error is WebDavSyncProviderUnsupportedException ||
+                  error is WebDavSyncAuthorityFileException ||
                   error is WebDavSyncSetupInconclusiveException
               ? error
-              : const WebDavSyncRootKeyClaimException();
+              : const WebDavSyncAuthorityClaimException();
           try {
-            await store.markError(priorBinding.id, failure);
+            await store.markError(priorBinding!.id, failure);
           } catch (_) {
-            // Keep the non-secret-bearing repair failure actionable even when
-            // local status persistence is independently unavailable.
+            // Preserve the actionable authority failure if status persistence
+            // is independently unavailable.
           }
           throw failure;
         }
-      } else {
-        rootKey = WebDavSyncRootKeyFile.parse(keyResult.bytes);
+        rethrow;
       }
-      return WebDavSyncFolderExisting(
-        location: location,
-        config: config,
-        markerBytes: Uint8List.fromList(marker.bytes),
-        metadata: marker.metadata,
-        rootKey: rootKey,
-      );
     } finally {
       transport.close();
     }
   }
 
-  Future<void> _provisionLegacyRootKey({
+  Future<
+    ({
+      Uint8List bytes,
+      WebDavResponseMetadata metadata,
+      WebDavSyncAuthorityFile authority,
+      OpenedWebDavSyncRoot root,
+    })
+  >
+  _provisionLegacyAuthority({
     required WebDavSyncProbeTransport transport,
-    required String syncRootPath,
-    required String path,
-    required WebDavSyncRootKeyFile rootKey,
+    required WebDavSyncFolderLocation location,
+    required List<int> markerBytes,
+    required String syncPassphrase,
     Future<void> Function()? beforeSend,
   }) async {
     final provision = transport;
-    if (provision is! WebDavSyncRootKeyProvisionTransport) {
+    if (provision is! WebDavSyncAuthorityProvisionTransport ||
+        transport is! WebDavSyncAuthorityProbeTransport) {
       _throwProvisionFailure();
     }
+    final expected = WebDavSyncAuthorityFile(
+      markerBytes: Uint8List.fromList(markerBytes),
+      syncPassphrase: syncPassphrase,
+    ).encode();
+    Object? writeError;
     try {
-      await (provision as WebDavSyncRootKeyProvisionTransport)
-          .verifyConditionalCreate(
-            syncRootPath: syncRootPath,
+      await (provision as WebDavSyncAuthorityProvisionTransport)
+          .writeRootAuthority(
+            path: location.rootAuthorityPath,
+            bytes: expected,
             beforeSend: beforeSend,
           );
-    } on WebDavSyncProviderUnsupportedException {
-      // The probe records its own more precise step/status diagnostic.
-      rethrow;
-    } on WebDavSyncSetupInconclusiveException {
-      // The probe records its own more precise step/status diagnostic.
-      rethrow;
     } on Object catch (error) {
-      _throwProvisionFailure(error: error);
-    }
-    final expected = rootKey.encode();
-    try {
-      await (provision as WebDavSyncRootKeyProvisionTransport).createRootKey(
-        path: path,
-        bytes: expected,
-        beforeSend: beforeSend,
-      );
-    } on WebDavException catch (error) {
-      // HTTP 412 is conventional, but honest servers also report 403, 405,
-      // or 409 for a refused conditional create. A valid matching winner is
-      // the authority regardless of that dialect.
-      try {
-        final winnerResult = await transport.readRootKey(
-          path: path,
-          beforeSend: beforeSend,
-        );
-        final winner = WebDavSyncRootKeyFile.parse(winnerResult.bytes);
-        if (winner.syncPassphrase != rootKey.syncPassphrase) {
-          _throwProvisionFailure(error: error);
-        }
-        return;
-      } on WebDavSyncRootKeyClaimException {
-        rethrow;
-      } on WebDavException catch (readError) {
-        _throwProvisionFailure(
-          error: readError.kind == WebDavErrorKind.notFound ? error : readError,
-        );
-      } on Object {
-        _throwProvisionFailure(error: error);
-      }
-    } on Object catch (error) {
-      _throwProvisionFailure(error: error);
+      // A lost/failed response can still leave either our object or a valid
+      // concurrent winner. The standing object, never the response, decides.
+      writeError = error;
     }
 
-    late final WebDavBytesResult verified;
+    late final WebDavBytesResult standing;
     try {
-      verified = await transport.readRootKey(
-        path: path,
-        beforeSend: beforeSend,
-      );
-      if (!_bytesEqual(verified.bytes, expected)) {
-        _throwProvisionFailure(statusCode: verified.metadata.statusCode);
-      }
-      WebDavSyncRootKeyFile.parse(verified.bytes);
-    } on WebDavSyncRootKeyClaimException {
-      rethrow;
+      standing = await (transport as WebDavSyncAuthorityProbeTransport)
+          .readRootAuthority(
+            path: location.rootAuthorityPath,
+            beforeSend: beforeSend,
+          );
     } on WebDavException catch (error) {
-      _throwProvisionFailure(error: error);
-    } on Object {
-      _throwProvisionFailure(statusCode: verified.metadata.statusCode);
+      _throwProvisionFailure(error: writeError ?? error);
+    }
+    try {
+      final opened = await codec.openAuthority(
+        standing.bytes,
+        runInBackground: runCryptoInBackground,
+      );
+      return (
+        bytes: Uint8List.fromList(standing.bytes),
+        metadata: standing.metadata,
+        authority: opened.authority,
+        root: opened.root,
+      );
+    } on WebDavSyncAuthorityFileException {
+      rethrow;
+    } on Object catch (error) {
+      _throwProvisionFailure(
+        error: error,
+        statusCode: standing.metadata.statusCode,
+      );
     }
   }
 
@@ -413,7 +476,7 @@ final class WebDavSyncSetupService {
       error: error,
       statusCode: statusCode,
     );
-    throw const WebDavSyncRootKeyClaimException();
+    throw const WebDavSyncAuthorityClaimException();
   }
 
   Future<WebDavSyncBinding> configureNewRoot({
@@ -446,33 +509,52 @@ final class WebDavSyncSetupService {
     // pin. A typo leaves the prior binding untouched and retryable.
     final opened = await codec.openRoot(
       inspection.markerBytes,
-      inspection.rootKey.syncPassphrase,
+      inspection.syncPassphrase,
       runInBackground: runCryptoInBackground,
     );
     final snapshot = await store.load();
     final resumesCommittedCandidate = _matchesCommittedCandidate(
       snapshot,
       inspection.location.fingerprint,
-      inspection.markerBytes,
+      inspection.pinBytes,
+      inspection.syncPassphrase,
     );
     final prior = snapshot.bindings[inspection.location.fingerprint];
     final sameAsActive =
         snapshot.activeBindingId == inspection.location.fingerprint;
+    final priorPin = prior == null
+        ? null
+        : snapshot.namespaceFor(prior)?.markerBytes;
+    final upgradesPinnedLegacyMarker =
+        sameAsActive &&
+        inspection.authorityBytes != null &&
+        priorPin != null &&
+        _bytesEqual(priorPin, inspection.markerBytes);
     final reconnectPinnedActive =
         sameAsActive &&
         (reconnectActive ||
+            upgradesPinnedLegacyMarker ||
             prior?.lifecycle == WebDavSyncLifecycle.rootVerified ||
             prior?.lifecycle == WebDavSyncLifecycle.awaitingAdoption);
     final preserveActive = sameAsActive && !reconnectPinnedActive;
-    if (sameAsActive && opened.document.circleId != prior?.circleId) {
+    if (sameAsActive &&
+        opened.document.circleId != prior?.circleId &&
+        !(reconnectActive && inspection.authorityBytes != null)) {
       throw const WebDavSyncRootChangedException();
     }
+    if (upgradesPinnedLegacyMarker) {
+      return store.upgradeLegacyActiveAuthority(
+        bindingId: prior!.id,
+        config: inspection.config,
+        syncPassphrase: inspection.syncPassphrase,
+        root: opened.document,
+        legacyMarkerBytes: inspection.markerBytes,
+        authorityBytes: inspection.authorityBytes!,
+        beforeSave: beforeCommit,
+      );
+    }
     if (preserveActive) {
-      final markerPin = prior == null
-          ? null
-          : snapshot.namespaceFor(prior)?.markerBytes;
-      if (markerPin == null ||
-          !_bytesEqual(markerPin, inspection.markerBytes)) {
+      if (priorPin == null || !_bytesEqual(priorPin, inspection.pinBytes)) {
         // Never reseal replacement credentials beneath an old marker pin.
         // A legitimate marker change must use reconnect verification, which
         // republishes the pin and secrets together.
@@ -482,7 +564,7 @@ final class WebDavSyncSetupService {
     final binding = await store.stageBinding(
       location: inspection.location,
       config: inspection.config,
-      syncPassphrase: inspection.rootKey.syncPassphrase,
+      syncPassphrase: inspection.syncPassphrase,
       preserveActive: preserveActive,
       reconnectActive: reconnectPinnedActive,
       completeOnboarding: completeOnboarding,
@@ -500,7 +582,8 @@ final class WebDavSyncSetupService {
     return store.markRootVerified(
       bindingId: binding.id,
       root: opened.document,
-      markerBytes: inspection.markerBytes,
+      markerBytes: inspection.pinBytes,
+      allowPinReplacement: reconnectPinnedActive,
       beforeSave: beforeCommit,
     );
   }
@@ -530,14 +613,20 @@ final class WebDavSyncSetupService {
         ),
       );
       try {
-        final result = await transport.readRootMarker(
-          path: binding.location.rootMarkerPath,
-          beforeSend: beforeSend,
-        );
+        final result = transport is WebDavSyncAuthorityProbeTransport
+            ? await (transport as WebDavSyncAuthorityProbeTransport)
+                  .readRootAuthority(
+                    path: binding.location.rootAuthorityPath,
+                    beforeSend: beforeSend,
+                  )
+            : await transport.readRootMarker(
+                path: binding.location.rootMarkerPath,
+                beforeSend: beforeSend,
+              );
         if (!_bytesEqual(markerPin, result.bytes)) {
           throw const WebDavSyncRootChangedException();
         }
-        final opened = await codec.openRoot(
+        final opened = await codec.openPinnedAuthority(
           result.bytes,
           secrets.syncPassphrase,
           runInBackground: runCryptoInBackground,
@@ -575,6 +664,7 @@ final class WebDavSyncSetupService {
     WebDavSyncStoreSnapshot snapshot,
     String bindingId,
     List<int> remoteMarker,
+    String syncPassphrase,
   ) {
     final binding = snapshot.bindings[bindingId];
     if (binding == null ||
@@ -592,8 +682,17 @@ final class WebDavSyncSetupService {
     }
     try {
       final candidate = base64Decode(encoded);
-      return candidate.isNotEmpty &&
-          candidate.length <= WebDavSyncCodec.rootMarkerMaxBytes &&
+      if (candidate.isEmpty ||
+          candidate.length > WebDavSyncCodec.rootMarkerMaxBytes) {
+        return false;
+      }
+      final authority = WebDavSyncAuthorityFile(
+        markerBytes: Uint8List.fromList(candidate),
+        syncPassphrase: syncPassphrase,
+      ).encode();
+      // The raw comparison is only for an interrupted pre-upgrade legacy
+      // candidate. New candidates pin the complete authority bytes.
+      return _bytesEqual(authority, remoteMarker) ||
           _bytesEqual(candidate, remoteMarker);
     } on FormatException {
       throw const FormatException('Invalid WebDAV sync seed candidate');

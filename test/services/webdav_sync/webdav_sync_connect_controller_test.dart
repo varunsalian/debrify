@@ -295,10 +295,10 @@ void main() {
 
   for (final scenario in <({String name, Object error})>[
     (name: 'clock validation', error: StateError('server clock unavailable')),
-    (name: 'key claim', error: const WebDavSyncRootKeyClaimException()),
+    (name: 'authority claim', error: const WebDavSyncAuthorityClaimException()),
     (
-      name: 'conditional-create capability',
-      error: const WebDavSyncProviderUnsupportedException(),
+      name: 'non-linearizable store',
+      error: const WebDavSyncStoreNotLinearizableException(),
     ),
     (
       name: 'temporarily inconclusive conditional-create capability',
@@ -324,10 +324,10 @@ void main() {
             );
 
         expect(outcome, isA<WebDavSyncConnectPreHandoffFailure>());
-        if (scenario.error is WebDavSyncProviderUnsupportedException) {
+        if (scenario.error is WebDavSyncStoreNotLinearizableException) {
           expect(
             (outcome as WebDavSyncConnectPreHandoffFailure).error,
-            isA<WebDavSyncProviderUnsupportedException>(),
+            isA<WebDavSyncStoreNotLinearizableException>(),
           );
         }
         if (scenario.error is WebDavSyncSetupInconclusiveException) {

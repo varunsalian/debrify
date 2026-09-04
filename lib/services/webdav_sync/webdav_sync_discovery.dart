@@ -162,7 +162,7 @@ final class WebDavSyncExistingRootDiscovery
       if (!_bytesEqual(markerPin, rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
-      final root = await _codec.openRoot(
+      final root = await _codec.openPinnedAuthority(
         rootRead.bytes,
         secrets.syncPassphrase,
         runInBackground: true,
@@ -265,7 +265,7 @@ final class WebDavSyncExistingRootDiscovery
       if (!_bytesEqual(markerPin, rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
-      final root = await _codec.openRoot(
+      final root = await _codec.openPinnedAuthority(
         rootRead.bytes,
         secrets.syncPassphrase,
         runInBackground: true,

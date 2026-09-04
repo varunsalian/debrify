@@ -270,13 +270,13 @@ void main() {
     },
   );
 
-  test('root commit keeps create-only header and accepts any 2xx', () async {
+  test('root commit keeps opportunistic header and accepts any 2xx', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),
       credentials: const WebDavCredentials(username: '', password: ''),
       client: MockClient((request) async {
         expect(request.method, 'PUT');
-        expect(request.url.path, '/dav/Family/debrify-sync/circle.json.enc');
+        expect(request.url.path, '/dav/Family/debrify-sync/circle.authority');
         expect(request.headers['if-none-match'], '*');
         return http.Response('', 204);
       }),
@@ -290,231 +290,104 @@ void main() {
     transport.close();
   });
 
-  for (final conflictStatus in <int>[403, 405, 409, 412]) {
-    test(
-      'conditional-create probe accepts HTTP $conflictStatus conflict dialect',
-      () async {
-        final methods = <String>[];
-        Uri? sentinel;
-        Uint8List? firstBody;
-        Uint8List? secondBody;
-        var putCount = 0;
-        final transport = ProtocolWebDavSyncTransport(
-          location: location(),
-          credentials: const WebDavCredentials(username: '', password: ''),
-          client: MockClient((request) async {
-            methods.add(request.method);
-            sentinel ??= request.url;
-            expect(request.url, sentinel);
-            expect(
-              request.url.path,
-              matches(
-                RegExp(r'^/dav/Family/debrify-sync/\.cond-probe-[0-9a-f]{32}$'),
-              ),
-            );
-            if (request.method == 'PUT') {
-              expect(request.headers['if-none-match'], '*');
-              putCount++;
-              if (putCount == 1) {
-                firstBody = Uint8List.fromList(request.bodyBytes);
-                return http.Response('', 200);
-              }
-              secondBody = Uint8List.fromList(request.bodyBytes);
-              return http.Response('', conflictStatus);
-            }
-            if (request.method == 'GET') {
-              return http.Response.bytes(firstBody!, 200);
-            }
-            if (request.method == 'DELETE') return http.Response('', 204);
-            return http.Response('', 500);
-          }),
-        );
-
-        await transport.verifyConditionalCreate(
-          syncRootPath: 'Family/debrify-sync',
-        );
-
-        expect(methods, <String>['PUT', 'GET', 'PUT', 'GET', 'DELETE']);
-        expect(firstBody, hasLength(16));
-        expect(secondBody, hasLength(16));
-        expect(secondBody, isNot(orderedEquals(firstBody!)));
-        transport.close();
-      },
+  test('linearizability smoke check accepts exact read-after-write', () async {
+    final methods = <String>[];
+    Uint8List? stored;
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((request) async {
+        methods.add(request.method);
+        if (request.method == 'PUT') {
+          expect(request.headers['if-none-match'], isNull);
+          stored = Uint8List.fromList(request.bodyBytes);
+          return http.Response('', 201);
+        }
+        if (request.method == 'GET') {
+          return http.Response.bytes(stored!, 200);
+        }
+        if (request.method == 'DELETE') return http.Response('', 204);
+        return http.Response('', 500);
+      }),
     );
-  }
 
-  for (final scenario
-      in <({String name, int? status, Object? error, WebDavErrorKind? kind})>[
-        (
-          name: 'HTTP 503',
-          status: 503,
-          error: null,
-          kind: WebDavErrorKind.transient,
-        ),
-        (
-          name: 'HTTP 429',
-          status: 429,
-          error: null,
-          kind: WebDavErrorKind.transient,
-        ),
-        (
-          name: 'no response',
-          status: null,
-          error: const WebDavException(
-            kind: WebDavErrorKind.network,
-            message: 'connection dropped',
-          ),
-          kind: WebDavErrorKind.network,
-        ),
-        (
-          name: 'timeout',
-          status: null,
-          error: TimeoutException('request timed out'),
-          kind: WebDavErrorKind.timeout,
-        ),
-      ]) {
-    test(
-      'conditional-create probe retries inconclusive ${scenario.name}',
-      () async {
-        final diagnostics = <String>[];
-        Uint8List? stored;
-        var putCount = 0;
-        final transport = ProtocolWebDavSyncTransport(
-          location: location(),
-          credentials: const WebDavCredentials(username: '', password: ''),
-          diagnostic: (message, _) => diagnostics.add(message),
-          client: MockClient((request) async {
-            if (request.method == 'PUT') {
-              putCount++;
-              if (putCount.isOdd) {
-                stored = Uint8List.fromList(request.bodyBytes);
-                return http.Response('', 201);
-              }
-              if (scenario.error case final error?) throw error;
-              return http.Response('', scenario.status!);
-            }
-            if (request.method == 'GET') {
-              return http.Response.bytes(stored!, 200);
-            }
-            if (request.method == 'DELETE') return http.Response('', 204);
-            return http.Response('', 500);
-          }),
-        );
+    await transport.verifyLinearizability(syncRootPath: 'Family/debrify-sync');
 
-        await expectLater(
-          transport.verifyConditionalCreate(
-            syncRootPath: 'Family/debrify-sync',
-          ),
-          throwsA(
-            isA<WebDavSyncSetupInconclusiveException>()
-                .having((error) => error.probeStep, 'step', 2)
-                .having((error) => error.statusCode, 'status', scenario.status)
-                .having((error) => error.exceptionKind, 'kind', scenario.kind),
-          ),
-        );
-
-        expect(putCount, 6);
-        expect(diagnostics, hasLength(1));
-        expect(
-          diagnostics.single,
-          scenario.status != null
-              ? 'WebDAV sync authority failure: probe-conflict, '
-                    'HTTP ${scenario.status}'
-              : 'WebDAV sync authority failure: probe-conflict, '
-                    'kind ${scenario.kind!.name}',
-        );
-        transport.close();
-      },
-    );
-  }
+    expect(methods, <String>['PUT', 'GET', 'DELETE']);
+    transport.close();
+  });
 
   test(
-    'conditional-create probe passes after a transient whole attempt',
+    'non-persisting store fails the smoke check with a typed error',
     () async {
       final diagnostics = <String>[];
-      Uint8List? stored;
-      var putCount = 0;
       final transport = ProtocolWebDavSyncTransport(
         location: location(),
         credentials: const WebDavCredentials(username: '', password: ''),
         diagnostic: (message, _) => diagnostics.add(message),
         client: MockClient((request) async {
-          if (request.method == 'PUT') {
-            putCount++;
-            if (putCount.isOdd) {
-              stored = Uint8List.fromList(request.bodyBytes);
-              return http.Response('', 201);
-            }
-            return http.Response('', putCount == 2 ? 503 : 412);
-          }
+          if (request.method == 'PUT') return http.Response('', 201);
           if (request.method == 'GET') {
-            return http.Response.bytes(stored!, 200);
+            return http.Response.bytes(List<int>.filled(16, 0), 200);
           }
           if (request.method == 'DELETE') return http.Response('', 204);
           return http.Response('', 500);
         }),
       );
 
-      await transport.verifyConditionalCreate(
-        syncRootPath: 'Family/debrify-sync',
+      await expectLater(
+        transport.verifyLinearizability(syncRootPath: 'Family/debrify-sync'),
+        throwsA(isA<WebDavSyncStoreNotLinearizableException>()),
       );
-
-      expect(putCount, 4);
-      expect(diagnostics, isEmpty);
+      expect(diagnostics, <String>[
+        'WebDAV sync authority failure: probe-readback, HTTP 200',
+      ]);
       transport.close();
     },
   );
 
-  for (final scenario in <({String name, Object error})>[
-    (
-      name: 'HTTP client error',
-      error: http.ClientException('response interrupted'),
-    ),
-    (
-      name: 'decoder-style format error',
-      error: const FormatException('invalid compressed response'),
-    ),
-    (name: 'generic error', error: Exception('response interrupted')),
-  ]) {
-    test('conditional-create probe refuses received 2xx with '
-        '${scenario.name} while draining', () async {
-      final methods = <String>[];
+  test('transient smoke-check failures remain retryable', () async {
+    var writes = 0;
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((request) async {
+        if (request.method == 'PUT') {
+          writes++;
+          return http.Response('', 503);
+        }
+        if (request.method == 'DELETE') return http.Response('', 204);
+        return http.Response('', 500);
+      }),
+    );
+
+    await expectLater(
+      transport.verifyLinearizability(syncRootPath: 'Family/debrify-sync'),
+      throwsA(isA<WebDavSyncSetupInconclusiveException>()),
+    );
+    expect(writes, 3);
+    transport.close();
+  });
+
+  test(
+    'smoke check retains a received status when body draining fails',
+    () async {
       final diagnostics = <String>[];
-      Uint8List? stored;
-      Uri? sentinel;
-      var putCount = 0;
+      var writes = 0;
       final transport = ProtocolWebDavSyncTransport(
         location: location(),
         credentials: const WebDavCredentials(username: '', password: ''),
-        diagnostic: (message, _) => diagnostics.add(message),
+        diagnostic: (message, error) {
+          expect(error, isNull);
+          diagnostics.add(message);
+        },
         client: _StreamingClient((request) async {
-          methods.add(request.method);
-          sentinel ??= request.url;
-          expect(request.url, sentinel);
           if (request.method == 'PUT') {
-            putCount++;
-            final body = await request.finalize().fold<List<int>>(
-              <int>[],
-              (bytes, chunk) => bytes..addAll(chunk),
-            );
-            if (putCount == 1) {
-              stored = Uint8List.fromList(body);
-              return http.StreamedResponse(
-                const Stream<List<int>>.empty(),
-                201,
-                request: request,
-              );
-            }
+            writes++;
+            await request.finalize().drain<void>();
             return http.StreamedResponse(
-              Stream<List<int>>.error(scenario.error),
+              Stream<List<int>>.error(Exception('response interrupted')),
               201,
-              request: request,
-            );
-          }
-          if (request.method == 'GET') {
-            return http.StreamedResponse(
-              Stream<List<int>>.value(stored!),
-              200,
               request: request,
             );
           }
@@ -534,10 +407,10 @@ void main() {
       );
 
       await expectLater(
-        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
+        transport.verifyLinearizability(syncRootPath: 'Family/debrify-sync'),
         throwsA(
-          isA<WebDavSyncProviderUnsupportedException>()
-              .having((error) => error.probeStep, 'step', 2)
+          isA<WebDavSyncSetupInconclusiveException>()
+              .having((error) => error.probeStep, 'step', 1)
               .having((error) => error.statusCode, 'status', 201)
               .having(
                 (error) => error.exceptionKind,
@@ -546,316 +419,13 @@ void main() {
               ),
         ),
       );
-
-      expect(methods, <String>['PUT', 'GET', 'PUT', 'DELETE']);
-      expect(putCount, 2);
-      expect(
-        sentinel!.path,
-        matches(
-          RegExp(r'^/dav/Family/debrify-sync/\.cond-probe-[0-9a-f]{32}$'),
-        ),
-      );
+      expect(writes, 3);
       expect(diagnostics, <String>[
-        'WebDAV sync authority failure: probe-conflict, HTTP 201',
-      ]);
-      transport.close();
-    });
-  }
-
-  test('conditional-create probe retries received 2xx create with generic '
-      'body failure', () async {
-    final methods = <String>[];
-    final diagnostics = <String>[];
-    var putCount = 0;
-    final transport = ProtocolWebDavSyncTransport(
-      location: location(),
-      credentials: const WebDavCredentials(username: '', password: ''),
-      diagnostic: (message, _) => diagnostics.add(message),
-      client: _StreamingClient((request) async {
-        methods.add(request.method);
-        if (request.method == 'PUT') {
-          putCount++;
-          await request.finalize().drain<void>();
-          return http.StreamedResponse(
-            Stream<List<int>>.error(Exception('response interrupted')),
-            201,
-            request: request,
-          );
-        }
-        if (request.method == 'DELETE') {
-          return http.StreamedResponse(
-            const Stream<List<int>>.empty(),
-            204,
-            request: request,
-          );
-        }
-        return http.StreamedResponse(
-          const Stream<List<int>>.empty(),
-          500,
-          request: request,
-        );
-      }),
-    );
-
-    await expectLater(
-      transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
-      throwsA(
-        isA<WebDavSyncSetupInconclusiveException>()
-            .having((error) => error.probeStep, 'step', 1)
-            .having((error) => error.statusCode, 'status', 201)
-            .having(
-              (error) => error.exceptionKind,
-              'kind',
-              WebDavErrorKind.network,
-            ),
-      ),
-    );
-
-    expect(putCount, 3);
-    expect(methods, <String>[
-      'PUT',
-      'DELETE',
-      'PUT',
-      'DELETE',
-      'PUT',
-      'DELETE',
-    ]);
-    expect(diagnostics, <String>[
-      'WebDAV sync authority failure: probe-create, HTTP 201',
-    ]);
-    transport.close();
-  });
-
-  test('conditional-create probe retries a transient first create', () async {
-    final diagnostics = <String>[];
-    var putCount = 0;
-    final transport = ProtocolWebDavSyncTransport(
-      location: location(),
-      credentials: const WebDavCredentials(username: '', password: ''),
-      diagnostic: (message, _) => diagnostics.add(message),
-      client: MockClient((request) async {
-        if (request.method == 'PUT') {
-          putCount++;
-          return http.Response('', 503);
-        }
-        if (request.method == 'DELETE') return http.Response('', 204);
-        return http.Response('', 500);
-      }),
-    );
-
-    await expectLater(
-      transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
-      throwsA(
-        isA<WebDavSyncSetupInconclusiveException>()
-            .having((error) => error.probeStep, 'step', 1)
-            .having((error) => error.statusCode, 'status', 503),
-      ),
-    );
-
-    expect(putCount, 3);
-    expect(diagnostics, <String>[
-      'WebDAV sync authority failure: probe-create, HTTP 503',
-    ]);
-    transport.close();
-  });
-
-  test(
-    'conditional-create probe retries a post-create 404 read-back',
-    () async {
-      final diagnostics = <String>[];
-      var putCount = 0;
-      var getCount = 0;
-      final transport = ProtocolWebDavSyncTransport(
-        location: location(),
-        credentials: const WebDavCredentials(username: '', password: ''),
-        diagnostic: (message, _) => diagnostics.add(message),
-        client: MockClient((request) async {
-          if (request.method == 'PUT') {
-            putCount++;
-            return http.Response('', 201);
-          }
-          if (request.method == 'GET') {
-            getCount++;
-            return http.Response('', 404);
-          }
-          if (request.method == 'DELETE') return http.Response('', 204);
-          return http.Response('', 500);
-        }),
-      );
-
-      await expectLater(
-        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
-        throwsA(
-          isA<WebDavSyncSetupInconclusiveException>()
-              .having((error) => error.probeStep, 'step', 1)
-              .having((error) => error.statusCode, 'status', 404),
-        ),
-      );
-
-      expect(putCount, 3);
-      expect(getCount, 3);
-      expect(diagnostics, <String>[
-        'WebDAV sync authority failure: probe-readback, HTTP 404',
+        'WebDAV sync authority failure: probe-write, HTTP 201',
       ]);
       transport.close();
     },
   );
-
-  test(
-    'conditional-create probe refuses an overwrite lie and cleans up',
-    () async {
-      final methods = <String>[];
-      final diagnostics = <String>[];
-      Uint8List? stored;
-      final transport = ProtocolWebDavSyncTransport(
-        location: location(),
-        credentials: const WebDavCredentials(username: '', password: ''),
-        diagnostic: (message, _) => diagnostics.add(message),
-        client: MockClient((request) async {
-          methods.add(request.method);
-          if (request.method == 'PUT') {
-            stored = Uint8List.fromList(request.bodyBytes);
-            return http.Response('', 201);
-          }
-          if (request.method == 'GET') {
-            return http.Response.bytes(stored!, 200);
-          }
-          if (request.method == 'DELETE') return http.Response('', 204);
-          return http.Response('', 500);
-        }),
-      );
-
-      await expectLater(
-        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
-        throwsA(
-          isA<WebDavSyncProviderUnsupportedException>()
-              .having(
-                (error) => error.toString(),
-                'message',
-                contains('(probe step 2: HTTP 201)'),
-              )
-              .having((error) => error.probeStep, 'step', 2)
-              .having((error) => error.statusCode, 'status', 201),
-        ),
-      );
-
-      expect(methods, <String>['PUT', 'GET', 'PUT', 'GET', 'DELETE']);
-      expect(diagnostics, <String>[
-        'WebDAV sync authority failure: probe-conflict, HTTP 201',
-      ]);
-      transport.close();
-    },
-  );
-
-  test(
-    'conditional-create probe refuses an absent conflict read-back',
-    () async {
-      final diagnostics = <String>[];
-      var putCount = 0;
-      var getCount = 0;
-      Uint8List? stored;
-      final transport = ProtocolWebDavSyncTransport(
-        location: location(),
-        credentials: const WebDavCredentials(username: '', password: ''),
-        diagnostic: (message, _) => diagnostics.add(message),
-        client: MockClient((request) async {
-          if (request.method == 'PUT') {
-            putCount++;
-            if (putCount == 1) {
-              stored = Uint8List.fromList(request.bodyBytes);
-              return http.Response('', 201);
-            }
-            return http.Response('', 409);
-          }
-          if (request.method == 'GET') {
-            getCount++;
-            return getCount == 1
-                ? http.Response.bytes(stored!, 200)
-                : http.Response('', 404);
-          }
-          if (request.method == 'DELETE') return http.Response('', 204);
-          return http.Response('', 500);
-        }),
-      );
-
-      await expectLater(
-        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
-        throwsA(
-          isA<WebDavSyncProviderUnsupportedException>()
-              .having((error) => error.probeStep, 'step', 2)
-              .having((error) => error.statusCode, 'status', 404),
-        ),
-      );
-
-      expect(diagnostics, <String>[
-        'WebDAV sync authority failure: probe-readback, HTTP 404',
-      ]);
-      transport.close();
-    },
-  );
-
-  test('root key claim keeps create-only header and accepts any 2xx', () async {
-    final transport = ProtocolWebDavSyncTransport(
-      location: location(),
-      credentials: const WebDavCredentials(username: '', password: ''),
-      client: MockClient((request) async {
-        expect(request.method, 'PUT');
-        expect(request.url.path, '/dav/Family/debrify-sync/circle.key');
-        expect(request.headers['if-none-match'], '*');
-        return http.Response('', 200);
-      }),
-    );
-
-    final metadata = await transport.createRootKey(
-      const WebDavSyncRootKeyFile(syncPassphrase: 'machine-secret').encode(),
-    );
-
-    expect(metadata.statusCode, 200);
-    transport.close();
-  });
-
-  test(
-    'root key claim returns 204 for caller read-back verification',
-    () async {
-      final transport = ProtocolWebDavSyncTransport(
-        location: location(),
-        credentials: const WebDavCredentials(username: '', password: ''),
-        client: MockClient((_) async => http.Response('', 204)),
-      );
-
-      final metadata = await transport.createRootKey(
-        const WebDavSyncRootKeyFile(syncPassphrase: 'machine-secret').encode(),
-      );
-      expect(metadata.statusCode, 204);
-      transport.close();
-    },
-  );
-
-  test('root key reads enforce the 4 KiB cap', () async {
-    final transport = ProtocolWebDavSyncTransport(
-      location: location(),
-      credentials: const WebDavCredentials(username: '', password: ''),
-      client: MockClient(
-        (request) async => http.Response.bytes(
-          Uint8List(WebDavSyncRootKeyFile.maxBytes + 1),
-          200,
-        ),
-      ),
-    );
-
-    await expectLater(
-      transport.readRootKey(),
-      throwsA(
-        isA<WebDavException>().having(
-          (error) => error.kind,
-          'kind',
-          WebDavErrorKind.invalidRequest,
-        ),
-      ),
-    );
-    transport.close();
-  });
-
   test(
     'activation verifies the root collection after ambiguous MKCOL 405',
     () async {
@@ -873,7 +443,7 @@ void main() {
 
       await expectLater(
         transport.ensureActivationLayout(),
-        throwsA(isA<WebDavSyncRootKeyClaimException>()),
+        throwsA(isA<WebDavSyncAuthorityClaimException>()),
       );
 
       expect(requests.first, startsWith('MKCOL '));
@@ -903,7 +473,7 @@ void main() {
     await transport.readRootMarker();
 
     expect(requests, <String>[
-      'GET /dav/Koofr/Koofr%20sync/debrify-sync/circle.json.enc',
+      'GET /dav/Koofr/Koofr%20sync/debrify-sync/circle.authority',
     ]);
     expect(requests.single, isNot(contains('circle.key')));
     transport.close();

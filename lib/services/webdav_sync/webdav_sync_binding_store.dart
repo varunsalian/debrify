@@ -38,8 +38,10 @@ final class WebDavSyncBindingStore {
   WebDavSyncBindingStore({
     DateTime Function()? clock,
     Uint8List Function(int length)? randomBytes,
+    String? debugStorageKey,
   }) : _clock = clock ?? DateTime.now,
-       _randomBytes = randomBytes ?? _secureRandomBytes;
+       _randomBytes = randomBytes ?? _secureRandomBytes,
+       _storageKey = debugStorageKey ?? storageKey;
 
   static const String storageKey = 'webdav_sync_state_v1';
   static const String seedCandidateMarkerValueKey = 'm5SeedCandidateMarker';
@@ -59,10 +61,11 @@ final class WebDavSyncBindingStore {
 
   final DateTime Function() _clock;
   final Uint8List Function(int length) _randomBytes;
+  final String _storageKey;
 
   Future<WebDavSyncStoreSnapshot> load() async {
     final device = await DevicePreferences.instance();
-    final encoded = device.getString(storageKey);
+    final encoded = device.getString(_storageKey);
     if (encoded == null || encoded.isEmpty) {
       return const WebDavSyncStoreSnapshot();
     }
@@ -197,10 +200,11 @@ final class WebDavSyncBindingStore {
     required String bindingId,
     required WebDavSyncRootDocument root,
     required List<int> markerBytes,
+    bool allowPinReplacement = false,
     Future<void> Function()? beforeSave,
   }) => _writeLock.synchronized(() async {
     if (markerBytes.isEmpty ||
-        markerBytes.length > WebDavSyncCodec.rootMarkerMaxBytes) {
+        markerBytes.length > WebDavSyncAuthorityFile.maxBytes) {
       throw ArgumentError('Invalid WebDAV sync marker size');
     }
     final snapshot = await load();
@@ -211,15 +215,25 @@ final class WebDavSyncBindingStore {
       snapshot.namespaces,
     );
     final existing = namespaces[namespaceId];
+    final replacesPinnedAuthority =
+        allowPinReplacement &&
+        existing?.markerBytes != null &&
+        !_bytesEqual(existing!.markerBytes!, markerBytes);
     if (existing?.markerBytes case final existingMarker?) {
-      if (!_bytesEqual(existingMarker, markerBytes)) {
+      if (!allowPinReplacement && !_bytesEqual(existingMarker, markerBytes)) {
         throw StateError('Authenticated sync root conflicts with its pin');
       }
     }
-    final namespace = (existing ?? previousNamespace).copyWith(
-      id: namespaceId,
-      markerBytes: Uint8List.fromList(markerBytes),
-    );
+    final replacesVerifiedCircle =
+        binding.circleId != null && binding.circleId != root.circleId;
+    final namespace =
+        (replacesVerifiedCircle || replacesPinnedAuthority
+                ? WebDavSyncNamespace(id: namespaceId, deviceId: _uuidV4())
+                : existing ?? previousNamespace)
+            .copyWith(
+              id: namespaceId,
+              markerBytes: Uint8List.fromList(markerBytes),
+            );
     namespaces[namespaceId] = namespace;
     if (previousNamespace.id != namespaceId &&
         !_namespaceIsReferenced(
@@ -244,6 +258,65 @@ final class WebDavSyncBindingStore {
     await _save(
       WebDavSyncStoreSnapshot(
         activeBindingId: snapshot.activeBindingId,
+        stagedBindingId: snapshot.stagedBindingId,
+        bindings: bindings,
+        namespaces: namespaces,
+      ),
+    );
+    return updated;
+  });
+
+  /// Atomically upgrades an authenticated legacy marker pin to the merged
+  /// authority bytes without routing an otherwise healthy Active circle
+  /// through first-join adoption.
+  Future<WebDavSyncBinding> upgradeLegacyActiveAuthority({
+    required String bindingId,
+    required WebDavConfig config,
+    required String syncPassphrase,
+    required WebDavSyncRootDocument root,
+    required List<int> legacyMarkerBytes,
+    required List<int> authorityBytes,
+    Future<void> Function()? beforeSave,
+  }) => _writeLock.synchronized(() async {
+    _requireVault();
+    WebDavSyncCodec.validatePassphrase(syncPassphrase);
+    if (authorityBytes.isEmpty ||
+        authorityBytes.length > WebDavSyncAuthorityFile.maxBytes) {
+      throw ArgumentError('Invalid WebDAV sync authority size');
+    }
+    final snapshot = await load();
+    final binding = _requireBinding(snapshot, bindingId);
+    final namespace = _requireNamespace(snapshot, binding);
+    if (snapshot.activeBindingId != bindingId ||
+        binding.circleId != root.circleId ||
+        namespace.markerBytes == null ||
+        !_bytesEqual(namespace.markerBytes!, legacyMarkerBytes)) {
+      throw StateError('Legacy WebDAV sync authority changed during upgrade');
+    }
+    final updated = binding.copyWith(
+      lifecycle: WebDavSyncLifecycle.active,
+      sealedSecrets: await _sealSecrets(
+        binding.id,
+        WebDavSyncSecrets(
+          username: config.username,
+          password: config.password,
+          syncPassphrase: syncPassphrase,
+        ),
+      ),
+      updatedAt: _clock().toUtc(),
+      clearError: true,
+    );
+    final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings)
+      ..[bindingId] = updated;
+    final namespaces =
+        Map<String, WebDavSyncNamespace>.from(snapshot.namespaces)
+          ..[namespace.id] = namespace.copyWith(
+            markerBytes: Uint8List.fromList(authorityBytes),
+          );
+    await beforeSave?.call();
+    await _save(
+      WebDavSyncStoreSnapshot(
+        activeBindingId: bindingId,
         stagedBindingId: snapshot.stagedBindingId,
         bindings: bindings,
         namespaces: namespaces,
@@ -454,7 +527,7 @@ final class WebDavSyncBindingStore {
     );
   }
 
-  /// Atomically adopts the create-only keyfile winner without changing the
+  /// Atomically adopts the standing authority object's secret without changing
   /// WebDAV login or the binding lifecycle.
   ///
   /// Candidate marker bytes and the candidate device identity are derived
@@ -463,18 +536,22 @@ final class WebDavSyncBindingStore {
   /// store before rebuilding, including after a crash between those writes.
   Future<WebDavSyncBinding> adoptSyncSecret(
     String bindingId,
-    String syncPassphrase,
-  ) => _writeLock.synchronized(() async {
+    String syncPassphrase, {
+    bool resetCandidate = false,
+  }) => _writeLock.synchronized(() async {
     _requireVault();
     WebDavSyncCodec.validatePassphrase(syncPassphrase);
     final snapshot = await load();
     final binding = _requireBinding(snapshot, bindingId);
     final secrets = await readSecrets(binding);
-    if (secrets.syncPassphrase == syncPassphrase) return binding;
+    if (secrets.syncPassphrase == syncPassphrase && !resetCandidate) {
+      return binding;
+    }
 
     final namespace = _requireNamespace(snapshot, binding);
     var updatedNamespace = namespace;
-    if (binding.circleId == null) {
+    if (binding.circleId == null &&
+        (resetCandidate || secrets.syncPassphrase != syncPassphrase)) {
       final pendingReset = namespace.values[seedCandidateResetRequiredValueKey];
       final previousDeviceId = pendingReset is String && pendingReset.isNotEmpty
           ? pendingReset
@@ -602,7 +679,7 @@ final class WebDavSyncBindingStore {
       throw const FormatException('WebDAV sync state exceeds its limit');
     }
     final device = await DevicePreferences.instance();
-    if (!await device.setBudgetedString(storageKey, encoded)) {
+    if (!await device.setBudgetedString(_storageKey, encoded)) {
       throw StateError('Could not persist WebDAV sync state');
     }
   }

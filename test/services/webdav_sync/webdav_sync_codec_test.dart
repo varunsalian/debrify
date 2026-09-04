@@ -145,6 +145,63 @@ void main() {
     );
   });
 
+  test('circle authority parser is strict and bounded', () async {
+    final marker = await createRoot();
+    final valid = WebDavSyncAuthorityFile(
+      markerBytes: marker,
+      syncPassphrase: 'correct horse',
+    ).encode();
+    final parsed = WebDavSyncAuthorityFile.parse(valid);
+    expect(parsed.markerBytes, orderedEquals(marker));
+    expect(parsed.syncPassphrase, 'correct horse');
+    expect(
+      (await codec.openAuthority(valid)).root.document.circleId,
+      'circle-test-1',
+    );
+
+    final cases = <(List<int>, Matcher)>[
+      (
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'version': 2,
+            'marker': base64Encode(marker),
+            'syncPassphrase': 'correct horse',
+          }),
+        ),
+        isA<WebDavSyncAuthorityFileVersionException>(),
+      ),
+      (
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'version': 1,
+            'marker': base64Encode(marker),
+          }),
+        ),
+        isA<WebDavSyncAuthorityFileFormatException>(),
+      ),
+      (utf8.encode('not-json'), isA<WebDavSyncAuthorityFileFormatException>()),
+      (
+        List<int>.filled(WebDavSyncAuthorityFile.maxBytes + 1, 0),
+        isA<WebDavSyncAuthorityFileSizeException>(),
+      ),
+      (
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'version': 1,
+            'marker': base64Encode(
+              List<int>.filled(WebDavSyncCodec.rootMarkerMaxBytes + 1, 0),
+            ),
+            'syncPassphrase': 'correct horse',
+          }),
+        ),
+        isA<WebDavSyncAuthorityFileSizeException>(),
+      ),
+    ];
+    for (final (bytes, matcher) in cases) {
+      expect(() => WebDavSyncAuthorityFile.parse(bytes), throwsA(matcher));
+    }
+  });
+
   test('root header tampering is authenticated', () async {
     final encoded = await createRoot();
     final envelope = jsonDecode(utf8.decode(encoded)) as Map<String, dynamic>;
