@@ -17,6 +17,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:debrify/utils/app_storage.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -25,6 +26,35 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('lifecycle pause decision keeps a desktop window polling', () {
+    expect(
+      webDavSyncLifecyclePausesPolling(
+        AppLifecycleState.paused,
+        isDesktop: true,
+      ),
+      isFalse,
+      reason: 'occluded/minimized desktop windows keep the idle poll',
+    );
+    expect(
+      webDavSyncLifecyclePausesPolling(
+        AppLifecycleState.paused,
+        isDesktop: false,
+      ),
+      isTrue,
+      reason: 'phones and TVs pause for process freezing and battery',
+    );
+    for (final isDesktop in const <bool>[true, false]) {
+      expect(
+        webDavSyncLifecyclePausesPolling(
+          AppLifecycleState.detached,
+          isDesktop: isDesktop,
+        ),
+        isTrue,
+        reason: 'termination always stops polling',
+      );
+    }
+  });
 
   test(
     'remote watch activity is no-op safe, profile agnostic, and disarmed',

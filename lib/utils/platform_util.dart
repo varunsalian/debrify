@@ -46,6 +46,12 @@ class PlatformUtil {
   /// nPlayer handoff, which Apple TV has no working equivalent for).
   static bool get isIosMobile => Platform.isIOS && !isTvOS;
 
+  /// A windowed desktop OS. Unlike phones and televisions, a "paused"
+  /// lifecycle state here usually means the window is merely occluded or
+  /// minimized while the machine keeps running on wall power.
+  static bool get isDesktop =>
+      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
   /// Whether this device is a TELEVISION — Android TV **or** Apple TV.
   ///
   /// This is the right question for anything about the EXPERIENCE: 10-foot

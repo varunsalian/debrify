@@ -223,6 +223,28 @@ final class WebDavSyncScheduler {
     _scheduleLocalChange(immediate: true);
   }
 
+  /// A lifecycle handoff (the app going inactive ahead of a possible
+  /// process freeze) flushes an unpublished local change immediately.
+  /// Unlike a checkpoint this requires a pending intent: shade pulls,
+  /// dialogs, and focus flips with nothing to say spend no cycle. The
+  /// immediate local-change path is exempt from the 45s trigger debounce,
+  /// which would otherwise swallow exactly the post-churn handoffs this
+  /// exists for.
+  void flushPendingLocalChangeForLifecycle() {
+    if (_contextProvider == null ||
+        _pendingLocalChangeSequence == null ||
+        _gateHolds) {
+      return;
+    }
+    // A running cycle needs no dirty flags here: if it started at or after
+    // the pending sequence it clears the intent itself, and if it started
+    // earlier the outcome handler rearms the durable retry at its 1s floor.
+    // Setting the immediate flags instead would schedule a redundant cycle
+    // after a covering run.
+    if (_running) return;
+    _scheduleLocalChange(immediate: true);
+  }
+
   /// Applied remote watch activity means another device is mid-session:
   /// keep the fast poll cadence alive for the duration of that session.
   void extendWarmSession() {
@@ -551,7 +573,14 @@ final class WebDavSyncScheduler {
   }
 
   Future<WebDavSyncCycleReport> signal(WebDavSyncTrigger trigger) async {
-    final pollCompletion = trigger == WebDavSyncTrigger.remoteChange
+    // A local change never queues behind an in-flight poll probe: the probe
+    // can hold its completer for a full request deadline, which is exactly
+    // the window an OS process freeze eats after a lifecycle handoff. The
+    // overlap is benign — the poll owns a private transport, and a
+    // late 'remote changed' conclusion is swallowed by the running guard.
+    final pollCompletion =
+        trigger == WebDavSyncTrigger.remoteChange ||
+            trigger == WebDavSyncTrigger.localChange
         ? null
         : _pollCompletion;
     if (pollCompletion != null) await pollCompletion.future;

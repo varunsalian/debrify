@@ -289,6 +289,112 @@ void main() {
     });
   });
 
+  test('lifecycle flush runs immediately only with a pending intent', () {
+    fakeAsync((async) {
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+
+      // Nothing pending: a focus flip or shade pull spends no cycle.
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 1, reason: 'the flush bypasses the 2s window');
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.localChange,
+      ]);
+
+      // The completed cycle cleared the intent; the next flip is free again.
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  test('lifecycle flush is not blocked by an in-flight poll probe', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: const <String, WebDavSyncManifestProbe>{
+          'device-b': WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..probeBlocker = Completer<void>();
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // Reach the first idle probe and leave its request hanging, the way a
+      // slow server holds a poll open across a lifecycle handoff.
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isNotEmpty);
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(
+        runner.runs,
+        1,
+        reason: 'the flush cycle must start while the probe still hangs',
+      );
+
+      transport.probeBlocker!.complete();
+      async.flushMicrotasks();
+      scheduler.dispose();
+    });
+  });
+
+  test('flush during a covering cycle adds no redundant follow-up', () {
+    fakeAsync((async) {
+      final firstRun = Completer<void>();
+      final runner = _Runner()..blocker = firstRun;
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      // The running cycle started at the pending sequence: it covers the
+      // intent, so the lifecycle flush must not order another cycle.
+      scheduler.flushPendingLocalChangeForLifecycle();
+      runner.blocker = null;
+      firstRun.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
   test('local-change visibility reports only the most recent key', () {
     fakeAsync((async) {
       final observedKeys = <String>[];
@@ -1646,10 +1752,13 @@ final class _PollTransport implements WebDavSyncTransport {
   final List<int> probeSeconds = <int>[];
   int failuresRemaining = 0;
 
+  Completer<void>? probeBlocker;
+
   @override
   Future<WebDavSyncManifestProbe> probeManifest(String deviceId) async {
     probedDeviceIds.add(deviceId);
     probeSeconds.add(clock().difference(DateTime.utc(2026, 9, 1)).inSeconds);
+    if (probeBlocker != null) await probeBlocker!.future;
     if (failuresRemaining > 0) {
       failuresRemaining--;
       throw const WebDavException(

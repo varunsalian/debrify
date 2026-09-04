@@ -82,6 +82,21 @@ void dispatchWebDavSyncAppliedKeysForActiveProfile(
   WebDavSyncUiRefresh.dispatch(appliedKeys);
 }
 
+/// Whether a lifecycle transition stops remote polling.
+///
+/// Termination always stops it. A paused desktop window keeps polling: on
+/// macOS/Windows/Linux "paused" means occluded or minimized on a machine
+/// that is still running, and a companion device's changes should keep
+/// landing without window focus. Phones and televisions pause to respect
+/// process freezing and battery.
+@visibleForTesting
+bool webDavSyncLifecyclePausesPolling(
+  AppLifecycleState state, {
+  required bool isDesktop,
+}) =>
+    state == AppLifecycleState.detached ||
+    (state == AppLifecycleState.paused && !isDesktop);
+
 @visibleForTesting
 bool suppressWebDavSyncActiveProfileRetirement(WebDavSyncEngineState state) =>
     state.pendingActiveProfile != null &&
@@ -648,9 +663,20 @@ final class WebDavSyncRuntime
     if (state == AppLifecycleState.resumed) {
       scheduler.resumeRemotePolling();
       unawaited(_handleForeground());
+    } else if (state == AppLifecycleState.inactive) {
+      // Mobile OSes can freeze the process moments after full backgrounding,
+      // which kills the pause-time flush mid-cycle; inactive is the last
+      // state where a short cycle reliably completes. The scheduler makes
+      // this a no-op unless a coalesced local change is still unpublished.
+      scheduler.flushPendingLocalChangeForLifecycle();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      scheduler.pauseRemotePolling();
+      if (webDavSyncLifecyclePausesPolling(
+        state,
+        isDesktop: PlatformUtil.isDesktop,
+      )) {
+        scheduler.pauseRemotePolling();
+      }
       unawaited(_signalAutomatically(WebDavSyncTrigger.background));
     }
   }
