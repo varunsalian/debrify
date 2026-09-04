@@ -7,6 +7,7 @@ import '../../models/profiles/profile_policy.dart';
 import '../diagnostic_log.dart' as app_diagnostics;
 import '../debrify_tv_database.dart';
 import '../main_page_bridge.dart';
+import '../storage_service.dart';
 import '../profiles/connection_resource_service.dart';
 import '../profiles/device_key_provider.dart';
 import '../profiles/profile_app_lifecycle_participant.dart';
@@ -150,6 +151,27 @@ Future<bool> applyLegacyWebDavSyncActiveProfileDeletion({
     ),
   );
   return result == SyncedRegistryApplyResult.applied;
+}
+
+@visibleForTesting
+Future<bool> recoverWebDavSyncOnboardingIntent({
+  required WebDavSyncBindingStore bindingStore,
+  required Future<void> Function(bool value) setInitialSetupComplete,
+  WebDavSyncDiagnostic? diagnostic,
+}) async {
+  final active = (await bindingStore.load()).activeBinding;
+  if (active == null || !active.completeOnboarding) return false;
+  try {
+    await setInitialSetupComplete(true);
+    await bindingStore.acknowledgeOnboardingIntent(active.id);
+    return true;
+  } catch (error) {
+    diagnostic?.call(
+      'WebDAV sync onboarding completion recovery remains pending',
+      error,
+    );
+    return false;
+  }
 }
 
 abstract interface class WebDavSyncActivationController {
@@ -404,6 +426,11 @@ final class WebDavSyncRuntime
       if (enableRuntime) {
         await _firstJoinAutoResume.resumeIfNeeded(
           reconfigurationPaused: _reconfigurationPaused,
+        );
+        await recoverWebDavSyncOnboardingIntent(
+          bindingStore: bindingStore,
+          setInitialSetupComplete: StorageService.setInitialSetupComplete,
+          diagnostic: recordWebDavSyncDiagnostic,
         );
         await _armIfActive();
       }
@@ -745,7 +772,14 @@ final class WebDavSyncRuntime
           replacementConfirmed: replacementConfirmed,
         );
         _startupRecoveryUnavailable = false;
-        await _armIfActive();
+        try {
+          await _armIfActive();
+        } catch (error, stackTrace) {
+          Error.throwWithStackTrace(
+            WebDavSyncPostHandoffException(error),
+            stackTrace,
+          );
+        }
         return result;
       } catch (error) {
         try {

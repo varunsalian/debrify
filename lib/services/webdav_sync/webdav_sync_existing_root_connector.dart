@@ -48,97 +48,132 @@ final class WebDavSyncExistingRootConnector {
     required bool replacementConfirmed,
     bool completeOnboarding = false,
   }) async {
-    if (!replacementConfirmed) {
-      throw StateError(
-        'Replacing local profiles requires explicit confirmation',
-      );
-    }
-    final resumed = await _finishInterruptedPromotion(bindingId);
-    if (resumed != null) return resumed;
-
-    final beforeDiscovery = await _bindingStore.load();
-    final pendingBinding =
-        beforeDiscovery.bindings[bindingId] ??
-        (throw StateError('WebDAV sync binding is unavailable'));
-    var currentAuthorization = authorization;
-    var state = await _stateRepository.load(pendingBinding.namespaceId);
-    if (state.adoption != null) {
-      await _adoption.recover(pendingBinding.namespaceId);
-      currentAuthorization = await recaptureAuthorization();
-    }
-
-    final snapshot = await _discovery.discover(bindingId: bindingId);
-    final secrets = await _bindingStore.readSecrets(snapshot.binding);
-    state = await _stateRepository.load(snapshot.namespace.id);
-
-    final bootstrapDigest = snapshot.bootstrap.document.semanticDigest;
-    final adoptedBootstrapBelongsToActiveProfiles =
-        state.hasAuthenticatedMaps &&
-        state.circleToLocalProfiles!.containsValue(
-          currentAuthorization.profileId,
+    var authorityCommitted = false;
+    try {
+      if (!replacementConfirmed) {
+        throw StateError(
+          'Replacing local profiles requires explicit confirmation',
         );
-    if (!adoptedBootstrapBelongsToActiveProfiles) {
-      await _adoption.adopt(
-        WebDavSyncAdoptionRequest(
-          namespaceId: snapshot.namespace.id,
-          mode: WebDavSyncAdoptionMode.firstJoin,
-          package: snapshot.bootstrap.document.package,
-          graphSemanticDigest: bootstrapDigest,
-          profileMap: snapshot.bootstrap.manifest.profileMap,
-          resourceMap: snapshot.bootstrap.manifest.resourceMap,
-          passphrase: secrets.syncPassphrase,
+      }
+      final beforeResume = await _bindingStore.load();
+      authorityCommitted =
+          beforeResume.bindings[bindingId]?.lifecycle ==
+          WebDavSyncLifecycle.active;
+      final resumed = await _finishInterruptedPromotion(bindingId);
+      if (resumed != null) {
+        if (!completeOnboarding) return resumed;
+        authorityCommitted = true;
+        await _bindingStore.acknowledgeOnboardingIntent(bindingId);
+        return (await _bindingStore.load()).activeBinding!;
+      }
+
+      final beforeDiscovery = await _bindingStore.load();
+      final pendingBinding =
+          beforeDiscovery.bindings[bindingId] ??
+          (throw StateError('WebDAV sync binding is unavailable'));
+      var currentAuthorization = authorization;
+      var state = await _stateRepository.load(pendingBinding.namespaceId);
+      if (state.adoption != null) {
+        final recovered = await _adoption.recover(pendingBinding.namespaceId);
+        authorityCommitted = recovered != null;
+        currentAuthorization = await recaptureAuthorization();
+        state = await _stateRepository.load(pendingBinding.namespaceId);
+      }
+      authorityCommitted =
+          authorityCommitted ||
+          state.hasAuthenticatedMaps &&
+              state.circleToLocalProfiles!.containsValue(
+                currentAuthorization.profileId,
+              );
+
+      final snapshot = await _discovery.discover(bindingId: bindingId);
+      final secrets = await _bindingStore.readSecrets(snapshot.binding);
+      state = await _stateRepository.load(snapshot.namespace.id);
+
+      final bootstrapDigest = snapshot.bootstrap.document.semanticDigest;
+      final adoptedBootstrapBelongsToActiveProfiles =
+          state.hasAuthenticatedMaps &&
+          state.circleToLocalProfiles!.containsValue(
+            currentAuthorization.profileId,
+          );
+      authorityCommitted =
+          authorityCommitted || adoptedBootstrapBelongsToActiveProfiles;
+      if (!adoptedBootstrapBelongsToActiveProfiles) {
+        await _adoption.adopt(
+          WebDavSyncAdoptionRequest(
+            namespaceId: snapshot.namespace.id,
+            mode: WebDavSyncAdoptionMode.firstJoin,
+            package: snapshot.bootstrap.document.package,
+            graphSemanticDigest: bootstrapDigest,
+            profileMap: snapshot.bootstrap.manifest.profileMap,
+            resourceMap: snapshot.bootstrap.manifest.resourceMap,
+            passphrase: secrets.syncPassphrase,
+            authorization: currentAuthorization,
+            replacementConfirmed: true,
+            completeOnboarding: completeOnboarding,
+          ),
+        );
+        authorityCommitted = true;
+        currentAuthorization = await recaptureAuthorization();
+        state = await _stateRepository.load(snapshot.namespace.id);
+      }
+      if (state.adoption != null || !state.hasAuthenticatedMaps) {
+        throw StateError('WebDAV sync adoption did not finish safely');
+      }
+
+      final published = await _retryPreferenceFence(
+        () => _publisher.publish(
+          bindingId: bindingId,
           authorization: currentAuthorization,
-          replacementConfirmed: true,
-          completeOnboarding: completeOnboarding,
         ),
       );
-      currentAuthorization = await recaptureAuthorization();
+      if (published == null) return _awaitingBinding(bindingId);
       state = await _stateRepository.load(snapshot.namespace.id);
-    }
-    if (state.adoption != null || !state.hasAuthenticatedMaps) {
-      throw StateError('WebDAV sync adoption did not finish safely');
-    }
-
-    final published = await _retryPreferenceFence(
-      () => _publisher.publish(
-        bindingId: bindingId,
-        authorization: currentAuthorization,
-      ),
-    );
-    if (published == null) return _awaitingBinding(bindingId);
-    state = await _stateRepository.load(snapshot.namespace.id);
-    final report = await _retryPreferenceFence(
-      () => _engine.runCycle(
-        WebDavSyncCycleContext(
-          namespaceId: snapshot.namespace.id,
-          deviceId: snapshot.namespace.deviceId,
-          markerPin: snapshot.markerBytes,
-          root: snapshot.root,
-          circleToLocalProfiles: state.circleToLocalProfiles,
-          circleToLocalResources: state.circleToLocalResources,
-          wireProfileMap: published.manifest.profileMap,
-          wireResourceMap: published.manifest.resourceMap,
-          active: false,
+      final report = await _retryPreferenceFence(
+        () => _engine.runCycle(
+          WebDavSyncCycleContext(
+            namespaceId: snapshot.namespace.id,
+            deviceId: snapshot.namespace.deviceId,
+            markerPin: snapshot.markerBytes,
+            root: snapshot.root,
+            circleToLocalProfiles: state.circleToLocalProfiles,
+            circleToLocalResources: state.circleToLocalResources,
+            wireProfileMap: published.manifest.profileMap,
+            wireResourceMap: published.manifest.resourceMap,
+            active: false,
+          ),
+          allowPreActivation: true,
         ),
-        allowPreActivation: true,
-      ),
-    );
-    if (report == null) return _awaitingBinding(bindingId);
-    if (report.disposition != WebDavSyncCycleDisposition.completed) {
-      throw StateError('WebDAV sync could not complete its first merge');
+      );
+      if (report == null) return _awaitingBinding(bindingId);
+      if (report.disposition != WebDavSyncCycleDisposition.completed) {
+        throw StateError('WebDAV sync could not complete its first merge');
+      }
+      state = await _stateRepository.load(snapshot.namespace.id);
+      if (state.adoption != null ||
+          !state.hasAuthenticatedMaps ||
+          state.ownManifest == null) {
+        throw StateError('WebDAV sync activation state is incomplete');
+      }
+      await _bindingStore.activateAndPromoteStaged(bindingId);
+      final active = (await _bindingStore.load()).activeBinding;
+      if (active == null || active.id != bindingId) {
+        throw StateError('WebDAV sync binding promotion failed');
+      }
+      if (completeOnboarding) {
+        await _bindingStore.acknowledgeOnboardingIntent(bindingId);
+        return (await _bindingStore.load()).activeBinding!;
+      }
+      return active;
+    } catch (error, stackTrace) {
+      if (!authorityCommitted || error is WebDavSyncPostHandoffException) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      Error.throwWithStackTrace(
+        WebDavSyncPostHandoffException(error),
+        stackTrace,
+      );
     }
-    state = await _stateRepository.load(snapshot.namespace.id);
-    if (state.adoption != null ||
-        !state.hasAuthenticatedMaps ||
-        state.ownManifest == null) {
-      throw StateError('WebDAV sync activation state is incomplete');
-    }
-    await _bindingStore.activateAndPromoteStaged(bindingId);
-    final active = (await _bindingStore.load()).activeBinding;
-    if (active == null || active.id != bindingId) {
-      throw StateError('WebDAV sync binding promotion failed');
-    }
-    return active;
   }
 
   /// Retries only an optimistic profile-preference fence. Callers place this

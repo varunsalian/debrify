@@ -31,16 +31,19 @@ class ProfileLifecycleCoordinator {
     Future<bool> Function(UserProfile target)? unlock,
     bool completeOnboarding = false,
     Future<void> Function()? afterDeactivateBeforeCommit,
+    void Function()? afterAuthorityCommitted,
     Future<void> Function()? afterCommitBeforeInitialize,
   }) => _switchLock.synchronized(() async {
     final current = ProfileRuntime.capture();
     if (current.profileId == targetProfileId) {
       if (afterDeactivateBeforeCommit == null &&
+          afterAuthorityCommitted == null &&
           afterCommitBeforeInitialize == null) {
         return true;
       }
       switching.value = true;
       try {
+        afterAuthorityCommitted?.call();
         for (final participant in participants) {
           await participant.prepareDeactivate(current);
         }
@@ -104,6 +107,7 @@ class ProfileLifecycleCoordinator {
         completeOnboarding: completeOnboarding,
       );
       committed = true;
+      afterAuthorityCommitted?.call();
       ProfileRuntime.publish(candidate);
       await afterCommitBeforeInitialize?.call();
       // Candidate warming touches process-global caches and controllers. Do it

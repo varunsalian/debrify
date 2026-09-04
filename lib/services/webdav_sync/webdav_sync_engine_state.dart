@@ -1080,6 +1080,13 @@ abstract interface class WebDavSyncEngineStateRepository {
   );
 }
 
+abstract interface class WebDavSyncCandidateStateResetter {
+  Future<void> resetCandidateState(
+    String namespaceId, {
+    String? previousDeviceId,
+  });
+}
+
 typedef WebDavSyncStateDirectoryProvider = Future<Directory> Function();
 
 final class WebDavSyncEngineStateMissingException implements Exception {
@@ -1090,14 +1097,16 @@ final class WebDavSyncEngineStateMissingException implements Exception {
 }
 
 final class WebDavSyncEngineStateStore
-    implements WebDavSyncEngineStateRepository {
+    implements
+        WebDavSyncEngineStateRepository,
+        WebDavSyncCandidateStateResetter {
   WebDavSyncEngineStateStore({
     WebDavSyncBindingStore? bindingStore,
     WebDavSyncStateDirectoryProvider? directoryProvider,
   }) : bindingStore = bindingStore ?? WebDavSyncBindingStore(),
        _directoryProvider = directoryProvider ?? AppStorage.support;
 
-  static const String valueKey = 'm4Engine';
+  static const String valueKey = WebDavSyncBindingStore.engineStateFileValueKey;
   static const int _fileVersion = 1;
   // A crash window can hold the last-applied and pending 256 MiB resources
   // documents at once. The section limits still police each document.
@@ -1159,6 +1168,43 @@ final class WebDavSyncEngineStateStore
       await _persistFileMarker(namespaceId);
     }
     return result;
+  });
+
+  @override
+  Future<void> resetCandidateState(
+    String namespaceId, {
+    String? previousDeviceId,
+  }) => _fileLock.synchronized(() async {
+    final snapshot = await bindingStore.load();
+    final namespace = snapshot.namespaces[namespaceId];
+    if (namespace == null) {
+      throw StateError('WebDAV sync namespace is unavailable');
+    }
+    _namespaceDeviceIds[namespaceId] = namespace.deviceId;
+    await _writeFile(
+      await _stateFile(namespaceId),
+      const WebDavSyncEngineState(),
+    );
+    if (!_isFileMarker(namespace.values[valueKey])) {
+      await _persistFileMarker(namespaceId);
+    }
+    if (previousDeviceId == null || previousDeviceId == namespace.deviceId) {
+      return;
+    }
+    try {
+      final root = await _directoryProvider();
+      final oldFile = File(
+        p.join(
+          root.path,
+          'webdav-sync',
+          'engine-state-v1',
+          '${contentHashOf(utf8.encode(previousDeviceId))}.json',
+        ),
+      );
+      if (await oldFile.exists()) await oldFile.delete();
+    } catch (_) {
+      // The old identity is no longer referenced. Its file is only cleanup.
+    }
   });
 
   /// Recreates only a journal that was already proven missing.

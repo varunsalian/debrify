@@ -101,14 +101,19 @@ enrollment code. After login the app probes the hidden
 - **unbound device + marker and keyfile present** → authenticate the marker
   with the keyfile secret, require at least one authentic complete
   bootstrap-bearing manifest, and connect automatically;
-- **marker present + keyfile absent** → fail with the legacy-root recovery
-  instruction; never ask for or guess a passphrase;
+- **unbound device + marker present + keyfile absent** → fail with the
+  legacy-root recovery instruction; never ask for or guess a passphrase;
+- **repair/reconnect of a pinned legacy binding + marker present + keyfile
+  absent** → authenticate the pinned marker with the locally sealed secret,
+  then provision the missing keyfile create-only;
 - **already-bound device + matching pinned marker** → continue normally;
 - **already-bound device + 404 or different marker bytes** → hard sync-root
   error; never recreate, replace, or reinterpret the folder as new;
 - a malformed keyfile, authentication, network, malformed-response, or any
   other error → stop and explain the error without server bodies or secrets;
-  never overwrite the keyfile or reinterpret the result as an empty folder.
+  never reinterpret the result as an empty folder. The sole keyfile overwrite
+  is the convergent repair immediately after this device commits and verifies
+  the immutable marker; that repair writes the marker's authenticated secret.
 
 Folder detection itself is non-destructive. **First connection to an existing
 root always requires replacement consent and a probe-verified safety backup:**
@@ -948,10 +953,11 @@ needed) and **Migrate** (one-shot WebDAV backup/restore, M2). The words
   a final 404 preflight + `If-None-Match: *`. Only 201 Created is accepted;
   412 follows the concurrent winner, while 204/ambiguity fails loudly and
   never activates. A post-201 byte mismatch also abandons the candidate.
-  Because some WebDAV servers ignore the precondition, every active device
-  pins the accepted marker bytes and verifies them on each cycle's first GET.
-  A deletion or racing replacement becomes a loud sync-root error, never a
-  silent fork or automatic reset.
+  Conditional PUT enforcement is required; a provider that ignores the marker
+  precondition is unsupported. Every active device additionally pins the
+  accepted marker bytes and verifies them on each cycle's first GET. A later
+  deletion or replacement becomes a loud sync-root error, never a silent fork
+  or automatic reset.
 - **Existing local data:** finding an existing marker changes nothing by
   itself. **First connection to an existing root always shows** one explicit
   prompt: *“Use sync data from this account? Existing profiles and
@@ -1002,9 +1008,11 @@ set also requires reliable WebDAV create semantics: a server returning 204 or
 another ambiguous result for the create-only root cannot initialize that
 folder safely (though it may still connect to an already-committed root).
 
-M3 delivers the read-only login probe, local pending-binding state, unchanged
-root wire format, strict keyfile parser, and marker verification/pinning. It
-does not validate peer data or write a keyfile, root, or manifest. M4
+M3 delivers the fresh-setup read-only login probe, local pending-binding state,
+unchanged root wire format, strict keyfile parser, and marker
+verification/pinning. It does not validate peer data or write a root or
+manifest; authenticated repair may provision a missing legacy keyfile as
+specified in §15. M4
 delivers the inactive hot-state engine against fixture/injected maps. M5
 validates bootstrap-bearing manifests, completes the same single user flow,
 claims/adopts the keyfile before candidate use, commits or adopts the root,
@@ -1058,7 +1066,7 @@ map dependency makes that safer than exposing a temporary incompatible format.
 | --- | --- | --- | --- |
 | M1 | WebDAV protocol client: `putBytes`/`uploadFile` (streamed from disk) with MKCOL-on-409 for parents, `getBytes` (capped)/`downloadToFile` (streamed), `exists`; typed error contract; **transport hardening (round-6):** the sync client sets `followRedirects = false` and refuses cross-origin / scheme-downgrade redirects (the current client follows redirects with `dart:io` defaults, which replay the Basic credentials at the new location; `_baseUri` upgrades only scheme-LESS URLs — an explicit `http://` goes out as-is, `lib/services/webdav_service.dart:186`); explicit `http://` stays allowed but is labeled insecure in the WebDAV server config UI from M1 onward (round-11; LAN Nextcloud/rclone reality — hard-requiring HTTPS was rejected); full acceptance criteria below (rounds 10–11) | ~400 LoC protocol client + tests | 1–1.5 |
 | M2 | Backup to/restore from WebDAV (phone + TV UI) — lands in the NEW **Settings → Sync and Migrate** section ("Migrate" half), NOT on the Backup & Restore page (§6); acceptance criteria below (round-10) | transport-neutral backup entry points + picker mode + new settings section | 1.5–2 |
-| M3 | Login-first binding foundation: dedicated Koofr/Custom credentials that never enter Cloud accounts; fixed `Debrify` folder; persisted lifecycle states; read-only marker + strict 4 KiB keyfile probe implementing the four-state matrix; existing-root keyfile-secret/key-check verification + local marker pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + machine secret sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-account staging; frozen bounded root/manifest envelope codecs and golden/tamper/version/keyfile tests. **M3 publishes no keyfile, root, manifest, hot data, or graph.** | binding service + login/setup component + codec tests | 1.5–2 |
+| M3 | Login-first binding foundation: dedicated Koofr/Custom credentials that never enter Cloud accounts; fixed `Debrify` folder; persisted lifecycle states; fresh-setup read-only marker + strict 4 KiB keyfile probe implementing the four-state matrix; pinned legacy repair may provision the missing keyfile create-only as specified in §15; existing-root keyfile-secret/key-check verification + local marker pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + machine secret sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-account staging; frozen bounded root/manifest envelope codecs and golden/tamper/version/keyfile tests. **M3 publishes no root, manifest, hot data, or graph.** | binding service + login/setup component + codec tests | 1.5–2 |
 | M4 | **Inactive hot-state engine** requiring an injected root context + authenticated profile AND resource circle↔local maps—absence is no-op and local IDs are never used on wire: peer discovery + peer-count/doc-size bounds; server-`Date` clockOffset capture, monotonic high-water mark, offset-delta damping, and normalized-time arbitration; hot-document semantic digests; deletion-path audit (**normative** — ships a test matching audited APIs to helper call sites) → tombstone helpers + replication + pending-until-published; two-part hot doc with `origin` stamps; merge module (pure functions, heavy unit tests: LWW + key-union + deterministic tie-break, alias-keyed playback unions + order stamps, completion diff-stamping, tombstones + cutoff exemption, dormant-rejoin, last-pushed dirty compare + convergence-stops-traffic, publish-time clamp, CW re-cap, **null-dropping doc build + never-delete-on-null apply, tombstone horizon from first publication — round-7**; **playlist per-item union by `computePlaylistDedupeKey` + diff-stamps + tombstones + order value, lossy-twin projection-equality rule — round-8**); `_exportPreferences` exposed additively; **scope-captured BATCH apply op (one tvOS checkpoint + one native projection — round-7) guarded by a persisted pending-apply target (round-8)**; trigger plumbing remains unarmed until M5, whose bounded seed/adoption transaction may invoke builders explicitly | merge module + helpers + gated glue | 5.5–6 |
 | M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, claim `circle.key` before candidate use (`If-None-Match: *`, strict 201/read-back; 412 adopts winner; ambiguity fails closed), atomically reseal a winning secret and invalidate stale candidate identity/state, then mint circle IDs; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; create immutable root LAST with the unchanged marker race protocol. Concurrent-root follow defensively re-reads and persists the winning key before opening the marker. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
 | M6 | Device-matrix hardening: simulated phone ↔ Mi Box ↔ tvOS ↔ desktop convergence; bounded/LRU hot-section cache; disk-staged large WebDAV transfer and integrity verification; tvOS memory/path audit; explicit scenarios for the marker/keyfile four-state matrix, malformed keyfile fail-closed, key-claim crash recovery, marker deletion/replacement, concurrent initializers, 30+ day bootstrap discovery, bootstrap-less-marker rejection, mandatory first-connection consent, account rebind isolation, and M4 remaining inactive without maps. Physical-device soak remains a manual gate. | fixes + matrix tests | 1–1.5 |
@@ -1070,8 +1078,9 @@ ship-ready until §13's per-setting convergence gates pass.
 
 ### M3–M6 boundary acceptance gates
 
-- M3 performs read-only marker + keyfile probing and writes only local pending
-  state; fake-server logs prove it sends no MKCOL, PUT, MOVE, or DELETE. UI
+- Fresh M3 setup performs read-only marker + keyfile probing and writes only
+  local pending state; authenticated repair of a pinned legacy binding may
+  issue the bounded create-only keyfile upgrade described in §15. UI
   tests cover Koofr/Custom login, fixed folder, HTTP warning, generic inline
   authentication failures, and no Cloud-registry write or passphrase dialog.
 - M3 persists lifecycle state and the exact accepted marker bytes. After a
@@ -1099,10 +1108,14 @@ ship-ready until §13's per-setting convergence gates pass.
   before candidate use, discards state sealed with a losing secret, and cleans
   only that device's orphan. A never-returning creator's directory remains
   ignored accepted litter; peers issue no cross-device cleanup request.
-- Concurrent-initializer tests cover both keyfile and marker races, including
-  412 winner adoption and a fake server that ignores `If-None-Match`; a losing
-  candidate never becomes Active. Before following the winning-root path it
-  re-reads and persists the winner's key, then continues with prune consent.
+- Concurrent-initializer tests cover both keyfile and marker 412 winner
+  adoption. Correctness requires the provider to honor conditional PUT for the
+  immutable marker (and therefore for the initial key claim). Activation also
+  re-verifies the key immediately before marker creation and restarts under an
+  observed replacement, then re-verifies it after a successful 201 marker
+  commit and unconditionally repairs divergence to the marker's secret. These
+  checks narrow and converge keyfile races on quirky providers, but do not
+  make a server that ignores marker preconditions supported.
 - M5 refuses Active when a marker has no authentic recoverable
   bootstrap-bearing manifest, when adoption's required backup fails its
   decrypt probe, carries an unknown/malformed omission, or whenever any
@@ -2384,26 +2397,46 @@ passphrase, this section supersedes them.
   as 43-character unpadded base64url.
 - Setup authorization captures an Admin session and revalidates before each
   send/commit without requiring a Cloud connection resource ID or revision.
-  The setup probe remains GET-only. The shared connect controller owns
+  The fresh-setup probe remains GET-only; the authenticated legacy repair
+  exception is described below. The shared connect controller owns
   inspect → configure → initialize/connect and reports cancellation, Active,
   adoption-finishing, and pre/post-handoff failures. UI confirmation and
-  runtime pause/resume remain with the caller. Goal 5 onboarding is separate
-  work; these typed outcomes are the only preparation included here.
+  runtime pause/resume remain with the caller. Onboarding uses the same
+  controller and acknowledges its durable completion intent only after the
+  profile-scoped setup-complete write succeeds.
 - New-root activation proves the collection exists, then resolves key
-  ownership before reading or creating candidate state. It never overwrites a
-  keyfile. A 201 claim must read back byte-identically; a 412 adopts the winner;
-  malformed, missing-after-conflict, 204, or ambiguous behavior fails closed.
+  ownership before reading or creating candidate state. A 201 claim must read
+  back byte-identically; a 412 adopts the winner; malformed,
+  missing-after-conflict, 204, or ambiguous behavior fails closed. Immediately
+  before the immutable marker commit it re-reads the key and restarts candidate
+  construction under any newly observed secret. Immediately after a successful
+  201 plus marker read-back it checks again; divergence triggers the one
+  permitted unconditional keyfile overwrite and read-back, converging every
+  repairer on the immutable marker's secret. Repair failure records the typed
+  damaged-folder/unsupported-provider state.
   Secret adoption atomically preserves username/password/lifecycle while
-  resealing the winning secret and invalidating candidate marker and identity.
-  A persisted reset journal clears dependent engine state after crashes.
+  resealing the winning secret and invalidating candidate marker, device
+  identity, and both device-ID-derived file sentinels. A persisted reset
+  journal creates fresh engine state and best-effort removes the old device's
+  state file after crashes.
 - Concurrent-root follow re-reads `circle.key`, persists any winning secret,
   and only then opens the winning marker. Discovery and ordinary cycles never
   read the keyfile; sealed binding secrets remain their sole runtime source.
-  Existing bindings are not normalized or rewritten, including the deployed
-  Koofr `/dav/` + `Koofr/Koofr sync` shape with no keyfile.
+  Existing bindings are not relocated, including the deployed Koofr `/dav/` +
+  `Koofr/Koofr sync` shape with no keyfile.
 - Credential repair asks only for username/password, then reads `circle.key`
-  from the binding's stored endpoint/folder. A missing keyfile is the same
-  explicit legacy-root error as initial setup.
+  from the binding's stored endpoint/folder. Missing-state reconnect uses the
+  same stored location in a credentials-only login. When a pinned legacy root
+  has no keyfile, repair/reconnect opens its exact pinned marker with the local
+  sealed secret and provisions `circle.key` create-only. A 412 is accepted only
+  when the winner contains that same verified secret; all other outcomes fail
+  with the damaged-folder/unsupported-provider error.
+
+Conditional PUT support remains a server requirement: in particular, a
+provider that ignores the immutable marker's `If-None-Match: *` is unsupported.
+The pre-commit re-verification and post-commit convergent repair cover keyfile
+replacement windows around a valid marker commit; they are not a substitute
+for marker precondition enforcement.
 
 The accepted trust change is deliberate: because the at-rest secret sits next
 to the encrypted data, encryption no longer protects the user from the storage

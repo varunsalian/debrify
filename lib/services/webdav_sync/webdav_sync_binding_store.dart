@@ -45,6 +45,12 @@ final class WebDavSyncBindingStore {
   static const String seedCandidateMarkerValueKey = 'm5SeedCandidateMarker';
   static const String seedCandidateResetRequiredValueKey =
       'm5SeedCandidateResetRequired';
+  static const String engineStateFileValueKey = 'm4Engine';
+  static const String registryTombstonesFileValueKey = 'm11RegistryTombstones';
+  static const Set<String> deviceIdDerivedNamespaceValueKeys = <String>{
+    engineStateFileValueKey,
+    registryTombstonesFileValueKey,
+  };
   // This value lives in UserDefaults on tvOS. Keep one sync store comfortably
   // below the platform's warning threshold and also run it through the shared
   // database-wide preference budget before every write.
@@ -309,7 +315,6 @@ final class WebDavSyncBindingStore {
           lifecycle: WebDavSyncLifecycle.active,
           updatedAt: _clock().toUtc(),
           clearError: true,
-          completeOnboarding: false,
         );
         bindings[bindingId] = updated;
         final oldActiveId = snapshot.activeBindingId;
@@ -343,7 +348,7 @@ final class WebDavSyncBindingStore {
           throw StateError('Only an active staged binding can be promoted');
         }
         final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings);
-        bindings[bindingId] = binding.copyWith(completeOnboarding: false);
+        bindings[bindingId] = binding;
         final oldActiveId = snapshot.activeBindingId;
         if (oldActiveId != null && oldActiveId != bindingId) {
           final old = bindings[oldActiveId];
@@ -363,33 +368,67 @@ final class WebDavSyncBindingStore {
         );
       });
 
-  Future<void> discardStaged() => _writeLock.synchronized(() async {
-    final snapshot = await load();
-    final stagedId = snapshot.stagedBindingId;
-    if (stagedId == null) return;
-    final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings);
-    final staged = bindings[stagedId];
-    if (stagedId != snapshot.activeBindingId) {
-      bindings.remove(stagedId);
-    } else if (staged != null && staged.completeOnboarding) {
-      bindings[stagedId] = staged.copyWith(completeOnboarding: false);
-    }
-    final namespaces = Map<String, WebDavSyncNamespace>.from(
-      snapshot.namespaces,
-    );
-    if (staged != null &&
-        stagedId != snapshot.activeBindingId &&
-        !_namespaceIsReferenced(bindings.values, staged.namespaceId)) {
-      namespaces.remove(staged.namespaceId);
-    }
-    await _save(
-      WebDavSyncStoreSnapshot(
-        activeBindingId: snapshot.activeBindingId,
-        bindings: bindings,
-        namespaces: namespaces,
-      ),
-    );
-  });
+  /// Clears first-run intent only after profile-scoped onboarding completion
+  /// is durable. A retained intent is deliberately restart-recoverable.
+  Future<void> acknowledgeOnboardingIntent(String bindingId) =>
+      _writeLock.synchronized(() async {
+        final snapshot = await load();
+        final binding = _requireBinding(snapshot, bindingId);
+        if (snapshot.activeBindingId != bindingId ||
+            binding.lifecycle != WebDavSyncLifecycle.active) {
+          throw StateError(
+            'Only the active WebDAV sync binding can acknowledge onboarding',
+          );
+        }
+        if (!binding.completeOnboarding) return;
+        final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings)
+          ..[bindingId] = binding.copyWith(completeOnboarding: false);
+        await _save(
+          WebDavSyncStoreSnapshot(
+            activeBindingId: snapshot.activeBindingId,
+            stagedBindingId: snapshot.stagedBindingId,
+            bindings: bindings,
+            namespaces: snapshot.namespaces,
+          ),
+        );
+      });
+
+  Future<void> discardStaged() => _discardStaged();
+
+  Future<void> discardStagedMatching(String bindingId) =>
+      _discardStaged(expectedBindingId: bindingId);
+
+  Future<void> _discardStaged({String? expectedBindingId}) =>
+      _writeLock.synchronized(() async {
+        final snapshot = await load();
+        final stagedId = snapshot.stagedBindingId;
+        if (stagedId == null ||
+            expectedBindingId != null && stagedId != expectedBindingId) {
+          return;
+        }
+        final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings);
+        final staged = bindings[stagedId];
+        if (stagedId != snapshot.activeBindingId) {
+          bindings.remove(stagedId);
+        } else if (staged != null && staged.completeOnboarding) {
+          bindings[stagedId] = staged.copyWith(completeOnboarding: false);
+        }
+        final namespaces = Map<String, WebDavSyncNamespace>.from(
+          snapshot.namespaces,
+        );
+        if (staged != null &&
+            stagedId != snapshot.activeBindingId &&
+            !_namespaceIsReferenced(bindings.values, staged.namespaceId)) {
+          namespaces.remove(staged.namespaceId);
+        }
+        await _save(
+          WebDavSyncStoreSnapshot(
+            activeBindingId: snapshot.activeBindingId,
+            bindings: bindings,
+            namespaces: namespaces,
+          ),
+        );
+      });
 
   Future<WebDavSyncSecrets> readSecrets(WebDavSyncBinding binding) async {
     _requireVault();
@@ -436,9 +475,16 @@ final class WebDavSyncBindingStore {
     final namespace = _requireNamespace(snapshot, binding);
     var updatedNamespace = namespace;
     if (binding.circleId == null) {
+      final pendingReset = namespace.values[seedCandidateResetRequiredValueKey];
+      final previousDeviceId = pendingReset is String && pendingReset.isNotEmpty
+          ? pendingReset
+          : namespace.deviceId;
       final values = Map<String, Object?>.from(namespace.values)
-        ..remove(seedCandidateMarkerValueKey)
-        ..[seedCandidateResetRequiredValueKey] = true;
+        ..remove(seedCandidateMarkerValueKey);
+      for (final key in deviceIdDerivedNamespaceValueKeys) {
+        values.remove(key);
+      }
+      values[seedCandidateResetRequiredValueKey] = previousDeviceId;
       updatedNamespace = WebDavSyncNamespace(
         id: namespace.id,
         deviceId: _uuidV4(),

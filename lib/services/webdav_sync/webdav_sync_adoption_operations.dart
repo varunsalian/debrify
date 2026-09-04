@@ -21,6 +21,7 @@ import '../profiles/profile_registry.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../profiles/profile_scope.dart';
 import 'webdav_sync_adoption.dart';
+import 'webdav_sync_models.dart';
 
 typedef WebDavSyncImportedAdminUnlock =
     Future<bool> Function(UserProfile target);
@@ -180,13 +181,27 @@ final class DefaultWebDavSyncAdoptionOperations
     required bool completeOnboarding,
     required Future<void> Function() beforeCommit,
     required Future<void> Function() beforeTargetInitialize,
-  }) => lifecycleCoordinator.switchTo(
-    targetProfileId,
-    unlock: unlockImportedAdmin,
-    completeOnboarding: completeOnboarding,
-    afterDeactivateBeforeCommit: beforeCommit,
-    afterCommitBeforeInitialize: beforeTargetInitialize,
-  );
+  }) async {
+    var authorityCommitted = false;
+    try {
+      return await lifecycleCoordinator.switchTo(
+        targetProfileId,
+        unlock: unlockImportedAdmin,
+        completeOnboarding: completeOnboarding,
+        afterDeactivateBeforeCommit: beforeCommit,
+        afterAuthorityCommitted: () => authorityCommitted = true,
+        afterCommitBeforeInitialize: beforeTargetInitialize,
+      );
+    } catch (error, stackTrace) {
+      if (!authorityCommitted || error is WebDavSyncPostHandoffException) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      Error.throwWithStackTrace(
+        WebDavSyncPostHandoffException(error),
+        stackTrace,
+      );
+    }
+  }
 
   @override
   Future<void> pruneProfile(String profileId) async {

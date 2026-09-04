@@ -30,6 +30,52 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('startup recovers durable onboarding intent after activation', () async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.filled(32, 7)),
+    );
+    addTearDown(DeviceKeyProvider.debugReset);
+    final store = WebDavSyncBindingStore();
+    const config = WebDavConfig(
+      id: 'server',
+      name: 'Server',
+      baseUrl: 'https://example.test/dav',
+      username: 'alice',
+      password: 'secret',
+    );
+    var binding = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(config, 'Debrify'),
+      config: config,
+      syncPassphrase: 'circle-secret',
+      completeOnboarding: true,
+    );
+    binding = await store.markRootVerified(
+      bindingId: binding.id,
+      root: WebDavSyncRootDocument(
+        circleId: 'circle-one',
+        createdAt: DateTime.utc(2026, 9, 4),
+        schemaFloor: 1,
+        kdfSalt: Uint8List(16),
+      ),
+      markerBytes: const <int>[1, 2, 3],
+    );
+    await store.activateAndPromoteStaged(binding.id);
+    expect((await store.load()).activeBinding!.completeOnboarding, isTrue);
+    var setupComplete = false;
+
+    expect(
+      await recoverWebDavSyncOnboardingIntent(
+        bindingStore: store,
+        setInitialSetupComplete: (value) async => setupComplete = value,
+      ),
+      isTrue,
+    );
+
+    expect(setupComplete, isTrue);
+    expect((await store.load()).activeBinding!.completeOnboarding, isFalse);
+  });
+
   test('lifecycle pause decision keeps a desktop window polling', () {
     expect(
       webDavSyncLifecyclePausesPolling(

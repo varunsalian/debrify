@@ -287,7 +287,7 @@ void main() {
     },
   );
 
-  testWidgets('cancelled WebDAV login returns to mode and discards staging', (
+  testWidgets('cancelled WebDAV login leaves unrelated staging untouched', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(const <String, Object>{});
@@ -329,7 +329,7 @@ void main() {
 
     expect(find.text('Log in with WebDAV'), findsOneWidget);
     expect(result.value, isNull);
-    expect((await store.load()).stagedBinding, isNull);
+    expect((await store.load()).stagedBinding, isNotNull);
   });
 
   testWidgets('WebDAV authentication failure returns inline on mode', (
@@ -376,6 +376,48 @@ void main() {
     expect(find.text('Log in with WebDAV'), findsOneWidget);
     expect(result.value, isNull);
     expect((await store.load()).stagedBinding, isNull);
+  });
+
+  testWidgets('new-circle activation failure stays inline before handoff', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.filled(32, 8)),
+    );
+    addTearDown(DeviceKeyProvider.debugReset);
+    final store = WebDavSyncBindingStore();
+    final controller = createWebDavSyncConnectController(
+      setupService: WebDavSyncSetupService(
+        store: store,
+        transportFactory: ({required endpoint, required credentials}) =>
+            const _OnboardingWebDavProbe(),
+      ),
+      authorization: const _OnboardingWebDavAuthorization(),
+      activation: const _FailingNewCircleActivation(),
+    );
+    final result = ValueNotifier<bool?>(null);
+    addTearDown(result.dispose);
+    await _pumpWebDavOnboarding(
+      tester,
+      controller: controller,
+      result: result,
+      login: (_, __) async => _webDavCredentials,
+    );
+
+    await tester.tap(find.text('Log in with WebDAV'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Could not connect this account. Check your details and try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Log in with WebDAV'), findsOneWidget);
+    expect(result.value, isNull);
+    expect(await StorageService.isInitialSetupComplete(), isFalse);
+    expect((await store.load()).bindings, isEmpty);
   });
 
   testWidgets('new WebDAV circle blocks, then finishes onboarding normally', (
@@ -486,6 +528,69 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('post-handoff failure completes already-committed onboarding', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.filled(32, 8)),
+    );
+    addTearDown(DeviceKeyProvider.debugReset);
+    final store = WebDavSyncBindingStore();
+    final codec = WebDavSyncCodec(
+      randomBytes: (length) => Uint8List.fromList(
+        List<int>.generate(length, (index) => index & 0xff),
+      ),
+    );
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'existing-circle',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final controller = createWebDavSyncConnectController(
+      setupService: WebDavSyncSetupService(
+        store: store,
+        codec: codec,
+        runCryptoInBackground: false,
+        transportFactory: ({required endpoint, required credentials}) =>
+            _ExistingOnboardingWebDavProbe(marker),
+      ),
+      authorization: const _OnboardingWebDavAuthorization(),
+      activation: const _PostHandoffActivation(),
+    );
+    final result = ValueNotifier<bool?>(null);
+    addTearDown(result.dispose);
+    await _pumpWebDavOnboarding(
+      tester,
+      controller: controller,
+      result: result,
+      login: (_, __) async => _webDavCredentials,
+    );
+
+    await tester.tap(find.text('Log in with WebDAV'));
+    // The connecting spinner animates behind the awaited confirmation dialog,
+    // so settling can never end; pump bounded frames until the dialog shows.
+    for (
+      var i = 0;
+      i < 20 && find.text('Use synced setup').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.tap(find.text('Use synced setup'));
+    // The flow keeps its finishing spinner up after a committed handoff (the
+    // profile remount replaces it in production), so settling never ends.
+    // Pump bounded frames until the flow reports completion instead.
+    for (var i = 0; i < 20 && result.value == null; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(result.value, isTrue);
+    expect(await StorageService.isInitialSetupComplete(), isTrue);
   });
 
   testWidgets('Back cancels an in-flight engine import transition', (
@@ -779,6 +884,50 @@ final class _NewCircleActivation implements WebDavSyncActivationController {
   Future<WebDavSyncCycleReport> syncNow() => throw UnimplementedError();
 }
 
+final class _FailingNewCircleActivation
+    implements WebDavSyncActivationController {
+  const _FailingNewCircleActivation();
+
+  @override
+  Future<WebDavSyncInitializationOutcome> initializeNew(String bindingId) =>
+      throw StateError('seed upload failed');
+
+  @override
+  Future<void> inspectExisting(String bindingId) async {}
+
+  @override
+  Future<WebDavSyncBinding> connectExisting(
+    String bindingId, {
+    required bool replacementConfirmed,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<WebDavSyncCycleReport> syncNow() => throw UnimplementedError();
+}
+
+final class _PostHandoffActivation implements WebDavSyncActivationController {
+  const _PostHandoffActivation();
+
+  @override
+  Future<void> inspectExisting(String bindingId) async {}
+
+  @override
+  Future<WebDavSyncBinding> connectExisting(
+    String bindingId, {
+    required bool replacementConfirmed,
+  }) async {
+    await StorageService.setInitialSetupComplete(true);
+    throw WebDavSyncPostHandoffException(StateError('warmup failed'));
+  }
+
+  @override
+  Future<WebDavSyncInitializationOutcome> initializeNew(String bindingId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<WebDavSyncCycleReport> syncNow() => throw UnimplementedError();
+}
+
 final class _AdoptedCircleActivation implements WebDavSyncActivationController {
   _AdoptedCircleActivation(this.store);
 
@@ -799,7 +948,9 @@ final class _AdoptedCircleActivation implements WebDavSyncActivationController {
     onboardingCompletedAtomically = true;
     started.complete();
     await release.future;
-    return store.activateAndPromoteStaged(bindingId);
+    await store.activateAndPromoteStaged(bindingId);
+    await store.acknowledgeOnboardingIntent(bindingId);
+    return (await store.load()).activeBinding!;
   }
 
   @override

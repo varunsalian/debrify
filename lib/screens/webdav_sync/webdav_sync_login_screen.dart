@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/webdav_protocol_client.dart';
 import '../../services/webdav_sync/webdav_sync_connect_controller.dart';
+import '../../services/webdav_sync/webdav_sync_models.dart';
 import '../../services/webdav_sync/webdav_sync_setup_service.dart';
 import '../../widgets/tv_text_field.dart';
 import '../settings/widgets/settings_widgets.dart';
@@ -16,11 +17,20 @@ typedef WebDavSyncLoginInspector =
 /// Credentials stay in memory and are returned to the owning setup flow. This
 /// screen deliberately has no dependency on the normal cloud-account registry.
 final class WebDavSyncLoginScreen extends StatefulWidget {
-  const WebDavSyncLoginScreen({super.key, this.connectController, this.inspect})
-    : assert(
-        connectController != null || inspect != null,
-        'A WebDAV Sync inspector is required',
-      );
+  const WebDavSyncLoginScreen({
+    super.key,
+    this.connectController,
+    this.inspect,
+    this.repairBinding,
+    this.initialUsername,
+  }) : assert(
+         connectController != null || inspect != null,
+         'A WebDAV Sync inspector is required',
+       ),
+       assert(
+         repairBinding == null || connectController != null,
+         'A repair login requires the sync controller',
+       );
 
   static final Uri koofrEndpoint = Uri.parse(
     'https://app.koofr.net/dav/Koofr/',
@@ -28,6 +38,8 @@ final class WebDavSyncLoginScreen extends StatefulWidget {
 
   final WebDavSyncConnectController? connectController;
   final WebDavSyncLoginInspector? inspect;
+  final WebDavSyncBinding? repairBinding;
+  final String? initialUsername;
 
   @override
   State<WebDavSyncLoginScreen> createState() => _WebDavSyncLoginScreenState();
@@ -42,9 +54,18 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
   String? _error;
   bool _connecting = false;
 
+  bool get _isRepair => widget.repairBinding != null;
+
   bool get _isInsecure =>
+      !_isRepair &&
       _provider == WebDavSyncProviderPreset.custom &&
       WebDavProtocolClient.isInsecureUrl(_url.text);
+
+  @override
+  void initState() {
+    super.initState();
+    _username.text = widget.initialUsername ?? '';
+  }
 
   @override
   void dispose() {
@@ -71,7 +92,9 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
 
     late final Uri endpoint;
     try {
-      endpoint = _provider == WebDavSyncProviderPreset.koofr
+      endpoint = _isRepair
+          ? widget.repairBinding!.location.endpoint
+          : _provider == WebDavSyncProviderPreset.koofr
           ? WebDavSyncLoginScreen.koofrEndpoint
           : WebDavProtocolClient.parseEndpoint(_url.text);
     } on Object {
@@ -83,7 +106,9 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
       endpoint: endpoint,
       username: username,
       password: password,
-      serverName: _provider == WebDavSyncProviderPreset.koofr
+      serverName: _isRepair
+          ? widget.repairBinding!.location.serverName
+          : _provider == WebDavSyncProviderPreset.koofr
           ? 'Koofr'
           : endpoint.host,
     );
@@ -92,7 +117,13 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
       _error = null;
     });
     try {
-      await (widget.inspect ?? widget.connectController!.inspect)(result);
+      if (widget.inspect case final inspect?) {
+        await inspect(result);
+      } else if (_isRepair) {
+        await widget.connectController!.inspectReconnect(result);
+      } else {
+        await widget.connectController!.inspect(result);
+      }
       if (mounted) Navigator.of(context).pop(result);
     } catch (error) {
       if (!mounted) return;
@@ -124,39 +155,57 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DropdownButtonFormField<WebDavSyncProviderPreset>(
-                  key: const ValueKey('webdav-sync-provider'),
-                  initialValue: _provider,
-                  decoration: const InputDecoration(labelText: 'Provider'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: WebDavSyncProviderPreset.koofr,
-                      child: Text('Koofr'),
+                if (_isRepair) ...[
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'WebDAV server',
                     ),
-                    DropdownMenuItem(
-                      value: WebDavSyncProviderPreset.custom,
-                      child: Text('Custom'),
+                    child: SelectableText(
+                      widget.repairBinding!.location.endpoint.toString(),
                     ),
-                  ],
-                  onChanged: _connecting
-                      ? null
-                      : (provider) {
-                          if (provider == null) return;
-                          setState(() {
-                            _provider = provider;
-                            _error = null;
-                          });
-                        },
-                ),
-                const SizedBox(height: 16),
-                if (_provider == WebDavSyncProviderPreset.koofr) ...[
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Sync folder: '
+                    '${widget.repairBinding!.location.folderPath}',
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  DropdownButtonFormField<WebDavSyncProviderPreset>(
+                    key: const ValueKey('webdav-sync-provider'),
+                    initialValue: _provider,
+                    decoration: const InputDecoration(labelText: 'Provider'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: WebDavSyncProviderPreset.koofr,
+                        child: Text('Koofr'),
+                      ),
+                      DropdownMenuItem(
+                        value: WebDavSyncProviderPreset.custom,
+                        child: Text('Custom'),
+                      ),
+                    ],
+                    onChanged: _connecting
+                        ? null
+                        : (provider) {
+                            if (provider == null) return;
+                            setState(() {
+                              _provider = provider;
+                              _error = null;
+                            });
+                          },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (!_isRepair &&
+                    _provider == WebDavSyncProviderPreset.koofr) ...[
                   const Text(
                     'Koofr needs an app password — Koofr → Settings → '
                     'Password → App passwords. Your username is your Koofr '
                     'email.',
                   ),
                   const SizedBox(height: 16),
-                ] else ...[
+                ] else if (!_isRepair) ...[
                   TvTextField(
                     key: const ValueKey('webdav-sync-url'),
                     controller: _url,
@@ -184,7 +233,9 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
                   enabled: !_connecting,
                   autofocus: true,
                   decoration: InputDecoration(
-                    labelText: _provider == WebDavSyncProviderPreset.koofr
+                    labelText:
+                        !_isRepair &&
+                            _provider == WebDavSyncProviderPreset.koofr
                         ? 'Koofr email'
                         : 'WebDAV username',
                   ),
@@ -199,7 +250,9 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
                   textInputAction: TextInputAction.done,
                   keyboardSubmitLabel: 'Connect',
                   decoration: InputDecoration(
-                    labelText: _provider == WebDavSyncProviderPreset.koofr
+                    labelText:
+                        !_isRepair &&
+                            _provider == WebDavSyncProviderPreset.koofr
                         ? 'Koofr app password'
                         : 'WebDAV password',
                   ),

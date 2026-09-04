@@ -55,6 +55,29 @@ void main() {
 
   tearDown(DeviceKeyProvider.debugReset);
 
+  Future<({WebDavSyncBinding binding, Uint8List marker})>
+  installActiveBinding() async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    transport.bytes = marker;
+    final inspection = await service.inspectFolder(
+      config: _config,
+      folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.setup,
+    );
+    var binding = await service.configureExistingRoot(
+      inspection: inspection as WebDavSyncFolderExisting,
+    );
+    binding = await store.setLifecycle(binding.id, WebDavSyncLifecycle.active);
+    await store.promoteStaged(binding.id);
+    return (binding: binding, marker: marker);
+  }
+
   test(
     'unbound 404 is read-only and creates only local pending state',
     () async {
@@ -66,6 +89,7 @@ void main() {
       final inspection = await service.inspectFolder(
         config: _config,
         folderPath: '/Family/',
+        context: WebDavSyncFolderInspectionContext.setup,
         beforeSend: () async => barrierCalls++,
       );
 
@@ -111,6 +135,7 @@ void main() {
             password: 'secret',
           ),
           folderPath: 'Family',
+          context: WebDavSyncFolderInspectionContext.setup,
         );
 
         expect(inspection, isA<WebDavSyncFolderMissing>());
@@ -136,6 +161,7 @@ void main() {
       final inspection = await service.inspectFolder(
         config: _config,
         folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.setup,
       );
 
       await expectLater(
@@ -163,7 +189,11 @@ void main() {
       ..bytes = marker
       ..keyBytes = null;
     await expectLater(
-      service.inspectFolder(config: _config, folderPath: 'Family'),
+      service.inspectFolder(
+        config: _config,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.setup,
+      ),
       throwsA(isA<WebDavSyncLegacyRootException>()),
     );
 
@@ -178,6 +208,7 @@ void main() {
     final orphan = await service.inspectFolder(
       config: _config,
       folderPath: 'Other',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     expect(orphan, isA<WebDavSyncFolderMissing>());
     expect(
@@ -190,7 +221,11 @@ void main() {
       ..bytes = marker
       ..keyBytes = Uint8List.fromList(utf8.encode('{"version":1}'));
     await expectLater(
-      service.inspectFolder(config: _config, folderPath: 'Damaged'),
+      service.inspectFolder(
+        config: _config,
+        folderPath: 'Damaged',
+        context: WebDavSyncFolderInspectionContext.setup,
+      ),
       throwsA(isA<WebDavSyncRootKeyFileException>()),
     );
     expect((await store.load()).bindings, isEmpty);
@@ -208,6 +243,7 @@ void main() {
     final inspection = await service.inspectFolder(
       config: _config,
       folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     final binding = await service.configureExistingRoot(
       inspection: inspection as WebDavSyncFolderExisting,
@@ -231,6 +267,7 @@ void main() {
     final firstInspection = await service.inspectFolder(
       config: _config,
       folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     final verified = await service.configureExistingRoot(
       inspection: firstInspection as WebDavSyncFolderExisting,
@@ -249,6 +286,8 @@ void main() {
     final repairInspection = await service.inspectFolder(
       config: rotated,
       folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.repair,
+      repairBindingId: verified.id,
     );
     final repaired = await service.configureExistingRoot(
       inspection: repairInspection as WebDavSyncFolderExisting,
@@ -273,6 +312,7 @@ void main() {
       final firstInspection = await service.inspectFolder(
         config: _config,
         folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.setup,
       );
       final verified = await service.configureExistingRoot(
         inspection: firstInspection as WebDavSyncFolderExisting,
@@ -283,6 +323,8 @@ void main() {
       final reconnectInspection = await service.inspectFolder(
         config: _config,
         folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.repair,
+        repairBindingId: verified.id,
       );
       final reconnecting = await service.configureExistingRoot(
         inspection: reconnectInspection as WebDavSyncFolderExisting,
@@ -304,6 +346,7 @@ void main() {
     final missing = await service.inspectFolder(
       config: _config,
       folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     final candidate = await service.configureNewRoot(
       inspection: missing as WebDavSyncFolderMissing,
@@ -333,6 +376,7 @@ void main() {
     final existing = await service.inspectFolder(
       config: _config,
       folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     final resumed = await service.configureExistingRoot(
       inspection: existing as WebDavSyncFolderExisting,
@@ -357,7 +401,11 @@ void main() {
     );
 
     await expectLater(
-      service.inspectFolder(config: _config, folderPath: 'Family'),
+      service.inspectFolder(
+        config: _config,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.setup,
+      ),
       throwsA(
         isA<WebDavException>().having(
           (error) => error.kind,
@@ -381,6 +429,7 @@ void main() {
     final inspection = await service.inspectFolder(
       config: _config,
       folderPath: 'Family',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     final binding = await service.configureExistingRoot(
       inspection: inspection as WebDavSyncFolderExisting,
@@ -393,7 +442,12 @@ void main() {
         message: 'missing',
       );
     await expectLater(
-      service.inspectFolder(config: _config, folderPath: 'Family'),
+      service.inspectFolder(
+        config: _config,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.repair,
+        repairBindingId: binding.id,
+      ),
       throwsA(isA<WebDavSyncRootMissingException>()),
     );
     expect(
@@ -405,19 +459,107 @@ void main() {
       ..error = null
       ..bytes = Uint8List.fromList(<int>[...marker]..[0] ^= 1);
     await expectLater(
-      service.inspectFolder(config: _config, folderPath: 'Family'),
+      service.inspectFolder(
+        config: _config,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.repair,
+        repairBindingId: binding.id,
+      ),
       throwsA(isA<WebDavSyncRootChangedException>()),
     );
   });
+
+  test(
+    'legacy credential repair authenticates locally and provisions keyfile',
+    () async {
+      final installed = await installActiveBinding();
+      await store.markError(installed.binding.id, StateError('expired'));
+      transport.keyBytes = null;
+      const rotated = WebDavConfig(
+        id: 'server-1',
+        name: 'Server',
+        baseUrl: 'https://example.test/dav',
+        username: 'alice',
+        password: 'rotated-secret',
+      );
+
+      final inspection = await service.inspectFolder(
+        config: rotated,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.repair,
+        repairBindingId: installed.binding.id,
+      );
+      final repaired = await service.configureExistingRoot(
+        inspection: inspection as WebDavSyncFolderExisting,
+      );
+
+      expect(transport.createKeyCalls, 1);
+      expect(
+        WebDavSyncRootKeyFile.parse(transport.keyBytes!).syncPassphrase,
+        'circle-secret',
+      );
+      expect(repaired.lifecycle, WebDavSyncLifecycle.active);
+      expect((await store.readSecrets(repaired)).password, 'rotated-secret');
+    },
+  );
+
+  test(
+    'legacy keyfile provisioning accepts only a matching 412 winner',
+    () async {
+      final installed = await installActiveBinding();
+      transport
+        ..keyBytes = null
+        ..createKeyError = const WebDavException(
+          kind: WebDavErrorKind.preconditionFailed,
+          message: 'lost race',
+        )
+        ..keyOnCreateError = const WebDavSyncRootKeyFile(
+          syncPassphrase: 'circle-secret',
+        ).encode();
+
+      expect(
+        await service.inspectFolder(
+          config: _config,
+          folderPath: 'Family',
+          context: WebDavSyncFolderInspectionContext.repair,
+          repairBindingId: installed.binding.id,
+        ),
+        isA<WebDavSyncFolderExisting>(),
+      );
+
+      transport
+        ..keyBytes = null
+        ..keyOnCreateError = const WebDavSyncRootKeyFile(
+          syncPassphrase: 'different-secret',
+        ).encode();
+      await expectLater(
+        service.inspectFolder(
+          config: _config,
+          folderPath: 'Family',
+          context: WebDavSyncFolderInspectionContext.repair,
+          repairBindingId: installed.binding.id,
+        ),
+        throwsA(isA<WebDavSyncRootKeyClaimException>()),
+      );
+      expect(
+        (await store.load()).bindings[installed.binding.id]!.lifecycle,
+        WebDavSyncLifecycle.error,
+      );
+    },
+  );
 }
 
-final class _FakeProbeTransport implements WebDavSyncProbeTransport {
+final class _FakeProbeTransport
+    implements WebDavSyncProbeTransport, WebDavSyncRootKeyProvisionTransport {
   Uri? endpoint;
   WebDavCredentials? credentials;
   Uint8List? _bytes;
   Uint8List? keyBytes;
   Object? error;
   Object? keyError;
+  Object? createKeyError;
+  Uint8List? keyOnCreateError;
+  int createKeyCalls = 0;
   final List<String> paths = <String>[];
 
   Uint8List? get bytes => _bytes;
@@ -473,6 +615,29 @@ final class _FakeProbeTransport implements WebDavSyncProbeTransport {
         uri: endpoint!.resolve(path),
         headers: const <String, String>{},
       ),
+    );
+  }
+
+  @override
+  Future<WebDavResponseMetadata> createRootKey({
+    required String path,
+    required Uint8List bytes,
+    Future<void> Function()? beforeSend,
+  }) async {
+    createKeyCalls++;
+    paths.add(path);
+    await beforeSend?.call();
+    if (createKeyError case final failure?) {
+      if (keyOnCreateError case final winner?) {
+        keyBytes = Uint8List.fromList(winner);
+      }
+      throw failure;
+    }
+    keyBytes = Uint8List.fromList(bytes);
+    return WebDavResponseMetadata(
+      statusCode: 201,
+      uri: endpoint!.resolve(path),
+      headers: const <String, String>{},
     );
   }
 

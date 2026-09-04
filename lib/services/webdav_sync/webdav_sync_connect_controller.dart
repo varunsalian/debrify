@@ -108,10 +108,43 @@ final class WebDavSyncConnectController {
       (beforeSend) => setupService.inspectFolder(
         config: config,
         folderPath: folderPath,
+        context: WebDavSyncFolderInspectionContext.setup,
         beforeSend: beforeSend,
       ),
     );
     _lastInspection = _InspectedLogin(credentials, inspection);
+    return inspection;
+  }
+
+  Future<WebDavSyncFolderInspection> inspectReconnect(
+    WebDavSyncLoginCredentials credentials,
+  ) async {
+    final snapshot = await setupService.store.load();
+    final binding = snapshot.activeBinding;
+    if (binding == null) {
+      throw StateError('WebDAV sync active binding is unavailable');
+    }
+    final config = WebDavConfig(
+      id: 'webdav-sync-reconnect',
+      name: binding.location.serverName,
+      baseUrl: binding.location.endpoint.toString(),
+      username: credentials.username,
+      password: credentials.password,
+    );
+    final inspection = await authorization.runForActiveBinding(
+      (beforeSend) => setupService.inspectFolder(
+        config: config,
+        folderPath: binding.location.folderPath,
+        context: WebDavSyncFolderInspectionContext.repair,
+        repairBindingId: binding.id,
+        beforeSend: beforeSend,
+      ),
+    );
+    _lastInspection = _InspectedLogin(
+      credentials,
+      inspection,
+      repairBindingId: binding.id,
+    );
     return inspection;
   }
 
@@ -122,22 +155,37 @@ final class WebDavSyncConnectController {
     bool completeOnboarding = false,
   }) async {
     if (credentials == null) {
-      if (completeOnboarding) await setupService.store.discardStaged();
+      _lastInspection = null;
       return const WebDavSyncConnectCancelled();
     }
-    var handedOff = false;
+    String? stagedByThisAttempt;
     try {
+      final reconnectBindingId = reconnectActive
+          ? (await setupService.store.load()).activeBindingId
+          : null;
+      if (reconnectActive && reconnectBindingId == null) {
+        throw StateError('WebDAV sync active binding is unavailable');
+      }
       final cached = _lastInspection;
-      final inspection = cached != null && cached.matches(credentials)
+      final inspection =
+          cached != null &&
+              cached.matches(credentials) &&
+              cached.repairBindingId == reconnectBindingId
           ? cached.inspection
+          : reconnectActive
+          ? await inspectReconnect(credentials)
           : await inspect(credentials);
       final binding = await authorization.runForAdminSession((beforeCommit) {
         if (inspection is WebDavSyncFolderMissing) {
+          if (reconnectActive) {
+            throw const WebDavSyncRootMissingException();
+          }
           return setupService.configureNewRoot(
             inspection: inspection,
             syncPassphrase: WebDavSyncCodec.generateSyncSecret(),
             completeOnboarding: completeOnboarding,
             beforeCommit: beforeCommit,
+            afterStaged: (binding) => stagedByThisAttempt = binding.id,
           );
         }
         if (inspection is WebDavSyncFolderExisting) {
@@ -146,26 +194,29 @@ final class WebDavSyncConnectController {
             reconnectActive: reconnectActive,
             completeOnboarding: completeOnboarding,
             beforeCommit: beforeCommit,
+            afterStaged: (binding) => stagedByThisAttempt = binding.id,
           );
         }
         throw StateError('Unexpected WebDAV sync inspection result');
       });
-      handedOff = true;
+      stagedByThisAttempt ??= binding.id;
       return await _activate(
         binding,
         confirmExistingReplacement: confirmExistingReplacement,
       );
     } catch (error) {
-      if (!handedOff && completeOnboarding) {
+      if (error is! WebDavSyncPostHandoffException &&
+          completeOnboarding &&
+          stagedByThisAttempt != null) {
         try {
-          await setupService.store.discardStaged();
+          await setupService.store.discardStagedMatching(stagedByThisAttempt!);
         } catch (_) {
           // Preserve the actionable setup failure. A later login replaces the
           // same candidate, and startup never treats it as active authority.
         }
       }
-      return handedOff
-          ? WebDavSyncConnectPostHandoffFailure(error)
+      return error is WebDavSyncPostHandoffException
+          ? WebDavSyncConnectPostHandoffFailure(error.error)
           : WebDavSyncConnectPreHandoffFailure(error);
     } finally {
       _lastInspection = null;
@@ -201,7 +252,7 @@ final class WebDavSyncConnectController {
 
     await controller.inspectExisting(binding.id);
     if (!await confirmExistingReplacement()) {
-      await setupService.store.discardStaged();
+      await setupService.store.discardStagedMatching(binding.id);
       return const WebDavSyncConnectCancelled();
     }
     binding = await controller.connectExisting(
@@ -215,10 +266,15 @@ final class WebDavSyncConnectController {
 }
 
 final class _InspectedLogin {
-  const _InspectedLogin(this.credentials, this.inspection);
+  const _InspectedLogin(
+    this.credentials,
+    this.inspection, {
+    this.repairBindingId,
+  });
 
   final WebDavSyncLoginCredentials credentials;
   final WebDavSyncFolderInspection inspection;
+  final String? repairBindingId;
 
   bool matches(WebDavSyncLoginCredentials other) =>
       credentials.endpoint == other.endpoint &&

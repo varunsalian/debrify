@@ -218,13 +218,25 @@ final class WebDavSyncRootKeyFile {
 /// Activation could not prove which keyfile bytes own the folder.
 ///
 /// This intentionally collapses provider quirks and damaged-folder states
-/// into one non-secret-bearing failure instead of guessing or overwriting.
+/// into one non-secret-bearing failure instead of guessing. The only overwrite
+/// path is separately guarded by a marker this device just committed.
 final class WebDavSyncRootKeyClaimException implements Exception {
   const WebDavSyncRootKeyClaimException();
 
   @override
   String toString() =>
       'This WebDAV provider is unsupported, or the sync folder is damaged.';
+}
+
+/// The imported profile has already become local authority. The original
+/// failure remains available for diagnostics, but setup must roll forward.
+final class WebDavSyncPostHandoffException implements Exception {
+  const WebDavSyncPostHandoffException(this.error);
+
+  final Object error;
+
+  @override
+  String toString() => error.toString();
 }
 
 final class WebDavSyncRootDocument {

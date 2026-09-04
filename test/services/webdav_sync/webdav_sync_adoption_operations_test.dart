@@ -11,6 +11,7 @@ import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_operations.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -368,6 +369,37 @@ void main() {
       expect(await handoff, isTrue);
     },
   );
+
+  test('handoff wraps failures only after profile authority commits', () async {
+    await expectLater(
+      operations.handoff(
+        targetProfileId: newId,
+        completeOnboarding: false,
+        beforeCommit: () async => throw StateError('before commit'),
+        beforeTargetInitialize: () async {},
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect((await registry.activeProfile())?.id, oldId);
+
+    await expectLater(
+      operations.handoff(
+        targetProfileId: newId,
+        completeOnboarding: true,
+        beforeCommit: () async {},
+        beforeTargetInitialize: () async => throw StateError('after commit'),
+      ),
+      throwsA(
+        isA<WebDavSyncPostHandoffException>().having(
+          (error) => error.error,
+          'original error',
+          isA<StateError>(),
+        ),
+      ),
+    );
+    expect((await registry.activeProfile())?.id, newId);
+    expect((await registry.getProfile(newId))?.setupComplete, isTrue);
+  });
 }
 
 final class _BlockingActivationParticipant

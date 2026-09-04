@@ -271,9 +271,16 @@ abstract interface class WebDavSyncActivationTransport
   Future<void> deleteDeviceDirectory(String deviceId);
 }
 
+/// Narrow exceptional surface for repairing a keyfile after this device has
+/// just proven ownership of the immutable marker it sealed.
+abstract interface class WebDavSyncCommittedRootKeyRepairTransport {
+  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes);
+}
+
 final class ProtocolWebDavSyncTransport
     implements
         WebDavSyncActivationTransport,
+        WebDavSyncCommittedRootKeyRepairTransport,
         WebDavSyncFileTransport,
         WebDavSyncSectionGcTransport {
   ProtocolWebDavSyncTransport({
@@ -530,6 +537,15 @@ final class ProtocolWebDavSyncTransport
     }
     return metadata;
   }
+
+  @override
+  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes) =>
+      _client.putBytes(
+        path: _location.rootKeyPath,
+        bytes: bytes,
+        maxBytes: WebDavSyncRootKeyFile.maxBytes,
+        createParents: false,
+      );
 
   @override
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes) async {

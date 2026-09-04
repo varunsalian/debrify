@@ -555,7 +555,35 @@ final class WebDavSyncNewRootInitializer {
   Future<WebDavSyncInitializationOutcome> initialize({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
-  }) => _lock.synchronized(() async {
+  }) => _lock.synchronized(
+    () => _initializeUntilStable(
+      bindingId: bindingId,
+      authorization: authorization,
+    ),
+  );
+
+  Future<WebDavSyncInitializationOutcome> _initializeUntilStable({
+    required String bindingId,
+    required ProfileAuthorizationContext authorization,
+  }) async {
+    while (true) {
+      try {
+        return await _initializeAttempt(
+          bindingId: bindingId,
+          authorization: authorization,
+        );
+      } on _WebDavSyncCandidateRestart {
+        // A non-conforming server replaced the create-only key claim while
+        // this device seeded. Adoption invalidated the losing candidate; run
+        // the complete candidate transaction again under the observed key.
+      }
+    }
+  }
+
+  Future<WebDavSyncInitializationOutcome> _initializeAttempt({
+    required String bindingId,
+    required ProfileAuthorizationContext authorization,
+  }) async {
     final snapshot = await _bindingStore.load();
     var binding =
         snapshot.bindings[bindingId] ??
@@ -581,6 +609,7 @@ final class WebDavSyncNewRootInitializer {
         secrets: secrets,
         transport: transport,
       );
+      await _deleteLosingCandidateDirectoryIfRequired(binding, transport);
       await _resetCandidateStateIfRequired(binding);
       final claimedSnapshot = await _bindingStore.load();
       binding = claimedSnapshot.bindings[binding.id]!;
@@ -724,11 +753,15 @@ final class WebDavSyncNewRootInitializer {
           );
         }
 
-        // The marker probe is a network boundary. Revalidate the captured
-        // profile/registry scope immediately before the root-last commit so a
-        // profile switch or graph mutation during that probe cannot authorize a
-        // new circle with stale setup state.
+        // Revalidate local authority, then re-read the key claim at the final
+        // root-last edge. If a server ignored If-None-Match and replaced it
+        // while seeding, adopt that key and restart with a fresh candidate.
         await seed.beforeRootCommit();
+        await _reverifyRootKeyBeforeMarkerCommit(
+          binding: binding,
+          secrets: secrets,
+          transport: transport,
+        );
         try {
           await transport.createRootMarker(markerBytes);
         } on WebDavException catch (error) {
@@ -762,6 +795,11 @@ final class WebDavSyncNewRootInitializer {
             markerBytes: committed.bytes,
           );
         }
+        await _repairRootKeyAfterMarkerCommitIfRequired(
+          binding: binding,
+          secrets: secrets,
+          transport: transport,
+        );
         return _finishCandidate(
           binding: binding,
           namespace: namespace,
@@ -776,7 +814,7 @@ final class WebDavSyncNewRootInitializer {
     } finally {
       transport.close();
     }
-  });
+  }
 
   Future<WebDavSyncInitializationOutcome> _finishCandidate({
     required WebDavSyncBinding binding,
@@ -966,20 +1004,104 @@ final class WebDavSyncNewRootInitializer {
     final snapshot = await _bindingStore.load();
     final current = snapshot.bindings[binding.id];
     final namespace = current == null ? null : snapshot.namespaceFor(current);
-    if (namespace?.values[WebDavSyncBindingStore
-            .seedCandidateResetRequiredValueKey] !=
-        true) {
+    final reset = namespace
+        ?.values[WebDavSyncBindingStore.seedCandidateResetRequiredValueKey];
+    if (reset != true && reset is! String) {
       return;
     }
-    await _stateRepository.update(
-      namespace!.id,
-      (_) => const WebDavSyncEngineState(),
-    );
-    await _bindingStore.updateNamespaceValues(namespace.id, (values) {
+    final candidateNamespace = namespace!;
+    final previousDeviceId = reset is String ? reset : null;
+    final resetter = _stateRepository;
+    if (resetter is WebDavSyncCandidateStateResetter) {
+      await (resetter as WebDavSyncCandidateStateResetter).resetCandidateState(
+        candidateNamespace.id,
+        previousDeviceId: previousDeviceId,
+      );
+    } else {
+      try {
+        await _stateRepository.update(
+          candidateNamespace.id,
+          (_) => const WebDavSyncEngineState(),
+        );
+      } on WebDavSyncEngineStateMissingException {
+        // File-backed production repositories use the reset surface above to
+        // create an empty file. For legacy repositories, absence already
+        // proves that the losing candidate state cannot be reused.
+      }
+    }
+    await _bindingStore.updateNamespaceValues(candidateNamespace.id, (values) {
       final next = Map<String, Object?>.from(values)
         ..remove(WebDavSyncBindingStore.seedCandidateResetRequiredValueKey);
       return next;
     });
+  }
+
+  Future<void> _reverifyRootKeyBeforeMarkerCommit({
+    required WebDavSyncBinding binding,
+    required WebDavSyncSecrets secrets,
+    required WebDavSyncActivationTransport transport,
+  }) async {
+    final current = _parseClaimedRootKey(
+      (await _readClaimedRootKey(transport)).bytes,
+    );
+    if (current.syncPassphrase == secrets.syncPassphrase) return;
+    final adopted = await _adoptRootKey(binding, secrets, current);
+    await _deleteLosingCandidateDirectoryIfRequired(adopted, transport);
+    await _resetCandidateStateIfRequired(adopted);
+    throw const _WebDavSyncCandidateRestart();
+  }
+
+  Future<void> _deleteLosingCandidateDirectoryIfRequired(
+    WebDavSyncBinding binding,
+    WebDavSyncActivationTransport transport,
+  ) async {
+    final snapshot = await _bindingStore.load();
+    final current = snapshot.bindings[binding.id];
+    final namespace = current == null ? null : snapshot.namespaceFor(current);
+    final previousDeviceId = namespace
+        ?.values[WebDavSyncBindingStore.seedCandidateResetRequiredValueKey];
+    if (previousDeviceId is! String || previousDeviceId.isEmpty) return;
+    try {
+      await transport.deleteDeviceDirectory(previousDeviceId);
+    } on WebDavException catch (error) {
+      if (error.kind != WebDavErrorKind.notFound) rethrow;
+    }
+  }
+
+  Future<void> _repairRootKeyAfterMarkerCommitIfRequired({
+    required WebDavSyncBinding binding,
+    required WebDavSyncSecrets secrets,
+    required WebDavSyncActivationTransport transport,
+  }) async {
+    try {
+      final current = _parseClaimedRootKey(
+        (await _readClaimedRootKey(transport)).bytes,
+      );
+      if (current.syncPassphrase == secrets.syncPassphrase) return;
+      final repair = transport;
+      if (repair is! WebDavSyncCommittedRootKeyRepairTransport) {
+        throw const WebDavSyncRootKeyClaimException();
+      }
+      final expected = WebDavSyncRootKeyFile(
+        syncPassphrase: secrets.syncPassphrase,
+      ).encode();
+      await (repair as WebDavSyncCommittedRootKeyRepairTransport)
+          .overwriteRootKey(expected);
+      final verified = await _readClaimedRootKey(transport);
+      if (!_bytesEqual(verified.bytes, expected)) {
+        throw const WebDavSyncRootKeyClaimException();
+      }
+      _parseClaimedRootKey(verified.bytes);
+    } on Object {
+      const failure = WebDavSyncRootKeyClaimException();
+      try {
+        await _bindingStore.markError(binding.id, failure);
+      } catch (_) {
+        // Preserve the typed activation failure even if status persistence is
+        // also unavailable.
+      }
+      throw failure;
+    }
   }
 
   Future<void> _clearCandidateMarker(String namespaceId) =>
@@ -1085,4 +1207,8 @@ bool _bytesEqual(List<int> left, List<int> right) {
         (index < right.length ? right[index] : 0);
   }
   return difference == 0;
+}
+
+final class _WebDavSyncCandidateRestart implements Exception {
+  const _WebDavSyncCandidateRestart();
 }

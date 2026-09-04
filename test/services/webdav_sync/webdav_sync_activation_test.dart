@@ -29,6 +29,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late Directory temporaryDirectory;
+  late Directory supportDirectory;
   late ProfileRegistry registry;
   late ProfileAuthorizationContext authorization;
   late WebDavSyncBindingStore bindingStore;
@@ -53,18 +54,18 @@ void main() {
       'webdav-sync-activation-',
     );
     final documents = Directory(p.join(temporaryDirectory.path, 'documents'));
-    final support = Directory(p.join(temporaryDirectory.path, 'support'));
+    supportDirectory = Directory(p.join(temporaryDirectory.path, 'support'));
     final cache = Directory(p.join(temporaryDirectory.path, 'cache'));
     await documents.create(recursive: true);
-    await support.create(recursive: true);
+    await supportDirectory.create(recursive: true);
     await cache.create(recursive: true);
     AppStorage.debugOverride(
       documents: documents,
-      support: support,
+      support: supportDirectory,
       cache: cache,
     );
     registry = await ProfileRegistry.open(
-      path: p.join(support.path, 'profiles.db'),
+      path: p.join(supportDirectory.path, 'profiles.db'),
     );
     final admin = await registry.createProfile(
       name: 'Admin',
@@ -317,6 +318,96 @@ void main() {
   );
 
   test(
+    'a key overwrite during seeding is adopted before marker commit',
+    () async {
+      final losingDeviceId = (await bindingStore.load())
+          .namespaceFor(binding)!
+          .deviceId;
+      final winnerSecret = 'winning-machine-secret';
+      transport.rootKeyOnRead[2] = WebDavSyncRootKeyFile(
+        syncPassphrase: winnerSecret,
+      ).encode();
+
+      final outcome = await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+      final active = (outcome as WebDavSyncInitialized).binding;
+
+      expect(seeds.prepareCalls, 2);
+      expect(
+        transport.events.where((event) => event == 'create:root'),
+        hasLength(1),
+      );
+      expect(transport.events, contains('delete:$losingDeviceId'));
+      expect(
+        (await bindingStore.readSecrets(active)).syncPassphrase,
+        winnerSecret,
+      );
+      expect(
+        await WebDavSyncCodec().openRoot(
+          transport.marker!,
+          winnerSecret,
+          runInBackground: true,
+        ),
+        isA<OpenedWebDavSyncRoot>(),
+      );
+    },
+  );
+
+  test(
+    'a key overwrite at marker commit is repaired to marker authority',
+    () async {
+      transport.rootKeyAfterMarkerCreate = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'racing-machine-secret',
+      ).encode();
+
+      final outcome = await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+
+      expect(outcome, isA<WebDavSyncInitialized>());
+      expect(transport.overwriteKeyCalls, 1);
+      expect(
+        WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
+        'circle-secret',
+      );
+      expect(
+        transport.events.indexOf('overwrite:key'),
+        greaterThan(transport.events.indexOf('create:root')),
+      );
+    },
+  );
+
+  test('post-commit key repair failure leaves a typed error binding', () async {
+    transport
+      ..rootKeyAfterMarkerCreate = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'racing-machine-secret',
+      ).encode()
+      ..overwriteKeyError = const WebDavException(
+        kind: WebDavErrorKind.network,
+        message: 'repair failed',
+      );
+
+    await expectLater(
+      initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      ),
+      throwsA(isA<WebDavSyncRootKeyClaimException>()),
+    );
+
+    final failed = (await bindingStore.load()).bindings[binding.id]!;
+    expect(failed.lifecycle, WebDavSyncLifecycle.error);
+    expect(
+      failed.errorMessage,
+      const WebDavSyncRootKeyClaimException().toString(),
+    );
+    expect(transport.marker, isNotNull);
+  });
+
+  test(
     'key adoption discards a stale candidate and its engine state',
     () async {
       final staleMarker = await WebDavSyncCodec().sealRoot(
@@ -397,6 +488,81 @@ void main() {
       ),
     );
   });
+
+  test(
+    'crash-shaped secret adoption rotates file state and converges fresh',
+    () async {
+      final fileStates = WebDavSyncEngineStateStore(
+        bindingStore: bindingStore,
+        directoryProvider: () async => supportDirectory,
+      );
+      await fileStates.update(
+        binding.namespaceId,
+        (_) => const WebDavSyncEngineState(
+          currentDeviceIds: <String>{'stale-device'},
+        ),
+      );
+      await bindingStore.updateNamespaceValues(
+        binding.namespaceId,
+        (values) => <String, Object?>{
+          ...values,
+          WebDavSyncBindingStore.registryTombstonesFileValueKey: const {
+            'version': 1,
+            'storage': 'file',
+          },
+        },
+      );
+      final oldDeviceId = (await bindingStore.load())
+          .namespaceFor(binding)!
+          .deviceId;
+      binding = await bindingStore.adoptSyncSecret(
+        binding.id,
+        'winning-machine-secret',
+      );
+      var adoptedNamespace = (await bindingStore.load()).namespaceFor(binding)!;
+      expect(adoptedNamespace.deviceId, isNot(oldDeviceId));
+      expect(
+        adoptedNamespace.values.keys,
+        isNot(contains(WebDavSyncBindingStore.engineStateFileValueKey)),
+      );
+      expect(
+        adoptedNamespace.values.keys,
+        isNot(contains(WebDavSyncBindingStore.registryTombstonesFileValueKey)),
+      );
+      transport.rootKey = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'winning-machine-secret',
+      ).encode();
+      final fileInitializer = WebDavSyncNewRootInitializer(
+        bindingStore: bindingStore,
+        stateRepository: fileStates,
+        seedSource: seeds,
+        transportFactory: ({required binding, required secrets}) => transport,
+        clock: () => DateTime.utc(2026, 9, 1),
+      );
+
+      expect(
+        await fileInitializer.initialize(
+          bindingId: binding.id,
+          authorization: authorization,
+        ),
+        isA<WebDavSyncInitialized>(),
+      );
+
+      adoptedNamespace = (await bindingStore.load()).namespaceFor(
+        (await bindingStore.load()).activeBinding!,
+      )!;
+      expect(
+        adoptedNamespace.values,
+        isNot(
+          contains(WebDavSyncBindingStore.seedCandidateResetRequiredValueKey),
+        ),
+      );
+      final stateFiles = Directory(
+        p.join(supportDirectory.path, 'webdav-sync', 'engine-state-v1'),
+      ).listSync().whereType<File>().toList();
+      expect(stateFiles, hasLength(1));
+    },
+  );
 
   test(
     'concurrent-root follow re-reads and persists the winning key',
@@ -1081,6 +1247,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
   String? omittedSection;
   String? seenCircleId;
   WebDavSyncCircleKey? seenCircleKey;
+  int prepareCalls = 0;
 
   final maps = WebDavSyncIdentityMaps(
     circleToLocalProfiles: const <String, String>{
@@ -1100,6 +1267,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
     String? circleId,
     WebDavSyncCircleKey? circleKey,
   }) async {
+    prepareCalls++;
     seenCircleId = circleId;
     seenCircleKey = circleKey;
     Future<WebDavSyncSeedMaterial> build(
@@ -1192,7 +1360,10 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
   }
 }
 
-final class _FakeActivationTransport implements WebDavSyncActivationTransport {
+final class _FakeActivationTransport
+    implements
+        WebDavSyncActivationTransport,
+        WebDavSyncCommittedRootKeyRepairTransport {
   final List<String> events = <String>[];
   final Map<String, Uint8List> sections = <String, Uint8List>{};
   Uint8List? manifest;
@@ -1201,10 +1372,15 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
     syncPassphrase: 'circle-secret',
   ).encode();
   Uint8List? rootKeyAfterFirstRead;
+  final Map<int, Uint8List> rootKeyOnRead = <int, Uint8List>{};
+  Uint8List? rootKeyAfterMarkerCreate;
   int keyReadCount = 0;
   WebDavException? createKeyError;
   Uint8List? keyOnCreateError;
   Uint8List? replaceKeyAfterCreate;
+  Object? overwriteKeyError;
+  Uint8List? replaceKeyAfterOverwrite;
+  int overwriteKeyCalls = 0;
   bool activationLayoutExists = true;
   WebDavException? createError;
   WebDavException? manifestWriteError;
@@ -1309,6 +1485,9 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
   Future<WebDavBytesResult> readRootKey() async {
     events.add('read:key');
     keyReadCount++;
+    if (rootKeyOnRead.remove(keyReadCount) case final replacement?) {
+      rootKey = Uint8List.fromList(replacement);
+    }
     final value = keyReadCount > 1 && rootKeyAfterFirstRead != null
         ? rootKeyAfterFirstRead
         : rootKey;
@@ -1349,6 +1528,10 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
       throw error;
     }
     marker = Uint8List.fromList(replaceMarkerAfterCreate ?? bytes);
+    if (rootKeyAfterMarkerCreate case final replacement?) {
+      rootKey = Uint8List.fromList(replacement);
+      rootKeyAfterMarkerCreate = null;
+    }
     if (createStoresThenThrows) {
       createStoresThenThrows = false;
       throw const WebDavException(
@@ -1362,6 +1545,16 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
       headers: const <String, String>{},
       serverDate: metadata.serverDate,
     );
+  }
+
+  @override
+  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes) async {
+    events.add('overwrite:key');
+    overwriteKeyCalls++;
+    if (overwriteKeyError case final failure?) throw failure;
+    rootKey = Uint8List.fromList(replaceKeyAfterOverwrite ?? bytes);
+    rootKeyAfterFirstRead = null;
+    return metadata;
   }
 
   @override

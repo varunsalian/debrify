@@ -173,9 +173,20 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         _syncActivation is WebDavSyncReconfigurationController
         ? _syncActivation as WebDavSyncReconfigurationController
         : null;
+    var didPause = false;
     try {
       await _syncAuthorization.requireAdmin();
-      reconfiguration?.pauseForReconfiguration();
+      if (reconfiguration != null) {
+        reconfiguration.pauseForReconfiguration();
+        didPause = true;
+      }
+      if (!mounted) return;
+      final reconnectBinding = _syncBinding?.requiresStateReconnect == true
+          ? _syncBinding
+          : null;
+      final reconnectUsername = reconnectBinding == null
+          ? null
+          : (await _syncService.store.readSecrets(reconnectBinding)).username;
       if (!mounted) return;
       final credentials = widget.launchSyncLogin != null
           ? await widget.launchSyncLogin!(context, _syncConnectController)
@@ -183,13 +194,15 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
               MaterialPageRoute(
                 builder: (_) => WebDavSyncLoginScreen(
                   connectController: _syncConnectController,
+                  repairBinding: reconnectBinding,
+                  initialUsername: reconnectUsername,
                 ),
               ),
             );
       if (!mounted) return;
       final outcome = await _syncConnectController.connect(
         credentials: credentials,
-        reconnectActive: _syncBinding?.requiresStateReconnect == true,
+        reconnectActive: reconnectBinding != null,
         confirmExistingReplacement: _confirmExistingReplacement,
       );
       if (!mounted) return;
@@ -210,7 +223,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       if (mounted) _showError(error);
     } finally {
       try {
-        await reconfiguration?.resumeAfterReconfiguration();
+        if (didPause) await reconfiguration!.resumeAfterReconfiguration();
         if (mounted) await _loadActiveSyncState();
       } catch (error) {
         if (mounted) _showError(error);
@@ -348,6 +361,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         ? _syncActivation as WebDavSyncReconfigurationController
         : null;
     var reloadAfterResume = false;
+    var didPause = false;
     try {
       await _syncAuthorization.requireAdmin();
       final currentSecrets = await _syncService.store.readSecrets(binding);
@@ -359,7 +373,10 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
             _SyncCredentialDialog(initialUsername: currentSecrets.username),
       );
       if (input == null || !mounted) return;
-      reconfiguration?.pauseForReconfiguration();
+      if (reconfiguration != null) {
+        reconfiguration.pauseForReconfiguration();
+        didPause = true;
+      }
       final config = WebDavConfig(
         id: 'webdav-sync-credentials',
         name: binding.location.serverName,
@@ -373,6 +390,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         final inspection = await _syncService.inspectFolder(
           config: config,
           folderPath: binding.location.folderPath,
+          context: WebDavSyncFolderInspectionContext.repair,
+          repairBindingId: binding.id,
           beforeSend: beforeSend,
         );
         if (inspection is! WebDavSyncFolderExisting) {
@@ -393,7 +412,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       if (mounted) _showError(error);
     } finally {
       try {
-        await reconfiguration?.resumeAfterReconfiguration();
+        if (didPause) await reconfiguration!.resumeAfterReconfiguration();
       } catch (error) {
         if (mounted) _showError(error);
       } finally {

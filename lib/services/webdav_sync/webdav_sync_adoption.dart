@@ -7,6 +7,7 @@ import '../profiles/profile_authorization.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import 'webdav_sync_adoption_models.dart';
 import 'webdav_sync_engine_state.dart';
+import 'webdav_sync_models.dart';
 import 'webdav_sync_safety_backup.dart';
 
 final class WebDavSyncAdoptionRequest {
@@ -406,8 +407,10 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
   ) async {
     var record = initial;
     var gateReleased = false;
+    var authorityCommitted = false;
     try {
       if (record.phase == WebDavSyncAdoptionPhase.complete) {
+        authorityCommitted = true;
         await _operations.releaseDatabaseGate();
         gateReleased = true;
         await _finalize(namespaceId, record);
@@ -415,6 +418,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
       }
       _requireRestoredRecord(record);
       final active = await _operations.activeProfileId();
+      authorityCommitted = active == record.targetAdminProfileId;
       final deferredOldProfile = record.oldToNewProfiles.containsKey(active)
           ? active
           : _unfinishedSource(record);
@@ -521,6 +525,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
       if (!switched) {
         throw StateError('Could not activate the imported Admin profile');
       }
+      authorityCommitted = true;
 
       final backupRetained = await _safetyBackups.verifyRetained(
         WebDavSyncSafetyBackup(
@@ -593,7 +598,11 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
           );
         }
       }
-      Error.throwWithStackTrace(error, stackTrace);
+      final surfaced =
+          authorityCommitted && error is! WebDavSyncPostHandoffException
+          ? WebDavSyncPostHandoffException(error)
+          : error;
+      Error.throwWithStackTrace(surfaced, stackTrace);
     } finally {
       if (!gateReleased) {
         try {

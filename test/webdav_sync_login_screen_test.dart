@@ -2,6 +2,9 @@ import 'package:debrify/screens/webdav_sync/webdav_sync_login_screen.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_connect_controller.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_setup_authorization.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_setup_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
@@ -92,4 +95,67 @@ void main() {
     expect(find.textContaining('provider body'), findsNothing);
     expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
   });
+
+  testWidgets('reconnect variant pins location and asks only for credentials', (
+    tester,
+  ) async {
+    final theme = AppThemes.byId('spotlight');
+    final binding = WebDavSyncBinding(
+      id: 'binding',
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://stored.example.test/dav',
+        folderPath: 'Legacy/Sync',
+        serverName: 'Stored server',
+      ),
+      lifecycle: WebDavSyncLifecycle.error,
+      namespaceId: 'circle:circle-one',
+      sealedSecrets: 'sealed',
+      updatedAt: DateTime.utc(2026, 9, 4),
+      circleId: 'circle-one',
+    );
+    final controller = WebDavSyncConnectController(
+      setupService: WebDavSyncSetupService(),
+      authorization: const _LoginAuthorization(),
+      activation: null,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeAdapter.themed(theme, TextBrightness.bright),
+        builder: (context, child) => AppThemeScope(theme: theme, child: child!),
+        home: WebDavSyncLoginScreen(
+          connectController: controller,
+          repairBinding: binding,
+          initialUsername: 'alice',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('webdav-sync-provider')), findsNothing);
+    expect(find.byKey(const ValueKey('webdav-sync-url')), findsNothing);
+    expect(find.text('https://stored.example.test/dav/'), findsOneWidget);
+    expect(find.text('Sync folder: Legacy/Sync'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(field('webdav-sync-username')).controller?.text,
+      'alice',
+    );
+    expect(find.byType(TextField), findsNWidgets(2));
+  });
+}
+
+final class _LoginAuthorization implements WebDavSyncSetupAuthorization {
+  const _LoginAuthorization();
+
+  @override
+  Future<void> requireAdmin() async {}
+
+  @override
+  Future<T> runForAdminSession<T>(
+    Future<T> Function(Future<void> Function()? beforeSend) body,
+  ) => body(null);
+
+  @override
+  Future<T> runForActiveBinding<T>(
+    Future<T> Function(Future<void> Function()? beforeSend) body,
+  ) => body(null);
 }

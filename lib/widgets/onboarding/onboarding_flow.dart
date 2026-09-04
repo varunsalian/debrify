@@ -323,7 +323,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
             (_) => _requestLanding(),
           );
         case WebDavSyncConnectPreHandoffFailure(:final error):
-          debugPrint('Onboarding WebDAV login failed: $error');
+          debugPrint('Onboarding WebDAV login failed (${error.runtimeType})');
           setState(() {
             _connectingWebDav = false;
             _webDavError =
@@ -332,23 +332,30 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => _requestLanding(),
           );
-        case WebDavSyncConnectActive(:final createdNewCircle):
+        case WebDavSyncConnectActive(:final binding, :final createdNewCircle):
           _hasConfigured = true;
           if (createdNewCircle) {
             _connectingWebDav = false;
-            await _finish();
+            await _finish(
+              afterSetupComplete: () => _webDavSyncConnectController
+                  .setupService
+                  .store
+                  .acknowledgeOnboardingIntent(binding.id),
+            );
           } else {
             _completeAfterWebDavHandoff();
           }
         case WebDavSyncConnectAdoptedFinishing():
           _completeAfterWebDavHandoff();
         case WebDavSyncConnectPostHandoffFailure(:final error):
-          debugPrint('Onboarding WebDAV handoff is finishing: $error');
+          debugPrint(
+            'Onboarding WebDAV handoff is finishing (${error.runtimeType})',
+          );
           _completeAfterWebDavHandoff();
       }
     } catch (error) {
       if (!mounted) return;
-      debugPrint('Onboarding WebDAV login failed: $error');
+      debugPrint('Onboarding WebDAV login failed (${error.runtimeType})');
       setState(() {
         _connectingWebDav = false;
         _webDavError =

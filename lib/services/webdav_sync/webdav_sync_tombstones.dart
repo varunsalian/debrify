@@ -275,7 +275,8 @@ final class WebDavSyncRegistryTombstoneStore
   }) : _bindingStore = bindingStore ?? WebDavSyncBindingStore(),
        _directoryProvider = directoryProvider ?? AppStorage.support;
 
-  static const String valueKey = 'm11RegistryTombstones';
+  static const String valueKey =
+      WebDavSyncBindingStore.registryTombstonesFileValueKey;
   static const int _fileVersion = 1;
   static const int _maxRecords = 100000;
   static const int _maxFileBytes = 64 * 1024 * 1024;

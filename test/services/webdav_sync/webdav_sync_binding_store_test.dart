@@ -115,6 +115,14 @@ void main() {
       binding.namespaceId,
       (_) => <String, Object?>{
         WebDavSyncBindingStore.seedCandidateMarkerValueKey: 'candidate',
+        WebDavSyncBindingStore.engineStateFileValueKey: const {
+          'version': 1,
+          'storage': 'file',
+        },
+        WebDavSyncBindingStore.registryTombstonesFileValueKey: const {
+          'version': 1,
+          'storage': 'file',
+        },
         'unrelated': true,
       },
     );
@@ -139,7 +147,15 @@ void main() {
     expect(
       namespace.values[WebDavSyncBindingStore
           .seedCandidateResetRequiredValueKey],
-      isTrue,
+      before.deviceId,
+    );
+    expect(
+      namespace.values,
+      isNot(contains(WebDavSyncBindingStore.engineStateFileValueKey)),
+    );
+    expect(
+      namespace.values,
+      isNot(contains(WebDavSyncBindingStore.registryTombstonesFileValueKey)),
     );
     expect(namespace.values['unrelated'], isTrue);
   });
@@ -222,7 +238,7 @@ void main() {
   );
 
   test(
-    'onboarding intent survives restart and clears on discard or activation',
+    'onboarding intent survives activation until it is acknowledged',
     () async {
       final first = await store.stageBinding(
         location: WebDavSyncFolderLocation.fromConfig(_config, 'First'),
@@ -278,6 +294,10 @@ void main() {
       await restartedStore.activateAndPromoteStaged(verifiedRetry.id);
       snapshot = await restartedStore.load();
       expect(snapshot.activeBindingId, retry.id);
+      expect(snapshot.activeBinding?.completeOnboarding, isTrue);
+
+      await restartedStore.acknowledgeOnboardingIntent(retry.id);
+      snapshot = await restartedStore.load();
       expect(snapshot.activeBinding?.completeOnboarding, isFalse);
     },
   );

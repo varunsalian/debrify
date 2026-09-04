@@ -141,6 +141,20 @@ void main() {
     expect(find.text('Save backup to WebDAV'), findsOneWidget);
   });
 
+  testWidgets('failed Admin check does not resume an unpaused runtime', (
+    tester,
+  ) async {
+    final activation = _FakeActivation(store);
+    authorization.adminError = StateError('Admin required');
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    await tester.tap(find.text('Enable WebDAV Sync'));
+    await tester.pumpAndSettle();
+
+    expect(activation.pauses, 0);
+    expect(activation.resumes, 0);
+  });
+
   testWidgets('login launcher creates fixed-folder pending state', (
     tester,
   ) async {
@@ -235,6 +249,23 @@ void main() {
       (await store.readSecrets((await store.load()).activeBinding!)).password,
       'rotated-password',
     );
+  });
+
+  testWidgets('failed repair Admin check does not resume an unpaused runtime', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final active = (await store.load()).activeBinding!;
+    await store.markError(active.id, StateError('credentials expired'));
+    final activation = _FakeActivation(store);
+    authorization.adminError = StateError('Admin required');
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    await tester.tap(find.text('Re-enter WebDAV password'));
+    await tester.pumpAndSettle();
+
+    expect(activation.pauses, 0);
+    expect(activation.resumes, 0);
   });
 
   testWidgets('awaiting first sync is progress, not an error', (tester) async {
@@ -633,6 +664,7 @@ void main() {
     final inspection = await service.inspectFolder(
       config: _config,
       folderPath: 'Debrify',
+      context: WebDavSyncFolderInspectionContext.setup,
     );
     var active = await service.configureExistingRoot(
       inspection: inspection as WebDavSyncFolderExisting,
@@ -664,6 +696,7 @@ void main() {
       final missing = await service.inspectFolder(
         config: _config,
         folderPath: 'Debrify',
+        context: WebDavSyncFolderInspectionContext.setup,
       );
       final candidate = await service.configureNewRoot(
         inspection: missing as WebDavSyncFolderMissing,
@@ -790,9 +823,13 @@ void main() {
 final class _AllowAuthorization implements WebDavSyncSetupAuthorization {
   int adminChecks = 0;
   int barriers = 0;
+  Object? adminError;
 
   @override
-  Future<void> requireAdmin() async => adminChecks++;
+  Future<void> requireAdmin() async {
+    adminChecks++;
+    if (adminError case final failure?) throw failure;
+  }
 
   @override
   Future<T> runForAdminSession<T>(
