@@ -836,6 +836,45 @@ void main() {
   );
 
   test(
+    'inner body WebDavException with a mismatched status is re-stamped',
+    () async {
+      // A 412 riding on a 201 response body must never mask the real 201:
+      // the exit carries the response status so a conflicting-PUT 2xx cannot
+      // be laundered into a "conflict enforced" signal.
+      const mismatchedBodyError = WebDavException(
+        kind: WebDavErrorKind.preconditionFailed,
+        message: 'inner precondition on a created response',
+        statusCode: HttpStatus.preconditionFailed,
+      );
+      client.close();
+      client = WebDavProtocolClient(
+        endpoint: await endpointFor(server),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: _StreamingClient(
+          (request) async => http.StreamedResponse(
+            Stream<List<int>>.error(mismatchedBodyError),
+            HttpStatus.created,
+            request: request,
+          ),
+        ),
+      );
+
+      await expectLater(
+        client.getBytes(path: 'invalid', maxBytes: 100),
+        throwsA(
+          isA<WebDavException>()
+              .having((error) => error.statusCode, 'status', HttpStatus.created)
+              .having(
+                (error) => error.cause,
+                'cause',
+                same(mismatchedBodyError),
+              ),
+        ),
+      );
+    },
+  );
+
+  test(
     'maps timeout, network, and TLS transport failures distinctly',
     () async {
       Future<void> expectKind(
