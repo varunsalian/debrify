@@ -8,8 +8,18 @@ import 'package:synchronized/synchronized.dart';
 final class WebDavSyncOperationCoordinator {
   final Lock _lock = Lock(reentrant: true);
 
+  bool get isRunning => _lock.locked;
+
   Future<T> run<T>(FutureOr<T> Function() operation) =>
       _lock.synchronized(operation);
+
+  Future<T> runIfIdle<T>(
+    FutureOr<T> Function() operation, {
+    required T whenBusy,
+  }) {
+    if (_lock.locked) return Future<T>.value(whenBusy);
+    return _lock.synchronized(operation);
+  }
 }
 
 /// Keeps the post-switch retirement apply on the same exclusion boundary as

@@ -250,18 +250,15 @@ class DebrifyTvCacheService {
           WebDavSyncLibraryMutation.nextTvStampMs(),
         );
         await _incrementWebDavSyncRevision(txn);
+        await DebrifyTvDatabase.markWebDavTvChangesPending(txn);
       }
     });
-    if (generationId != null) {
-      WebDavSyncLibraryMutation.notifyUserMutation();
-    }
   }
 
   static Future<void> removeEntry(
     String channelId, {
     WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) async {
-    var stamped = false;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       final channelExists =
           origin == WebDavSyncMutationOrigin.user &&
@@ -296,16 +293,14 @@ class DebrifyTvCacheService {
           WebDavSyncLibraryMutation.nextTvStampMs(),
         );
         await _incrementWebDavSyncRevision(txn);
-        stamped = true;
+        await DebrifyTvDatabase.markWebDavTvChangesPending(txn);
       }
     });
-    if (stamped) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   static Future<void> clearAll({
     WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) async {
-    var stamped = false;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       final channelIds = origin == WebDavSyncMutationOrigin.user
           ? (await txn.query(
@@ -319,8 +314,7 @@ class DebrifyTvCacheService {
       await txn.delete('tv_keyword_stats');
       await txn.delete('tv_channel_cache_state');
       if (channelIds.isNotEmpty) {
-        final now =
-            WebDavSyncLibraryMutation.nextTvStampMs();
+        final now = WebDavSyncLibraryMutation.nextTvStampMs();
         for (final channelId in channelIds) {
           final existing = await _poolGeneration(txn, channelId);
           await _writePoolGeneration(
@@ -333,10 +327,9 @@ class DebrifyTvCacheService {
           );
         }
         await _incrementWebDavSyncRevision(txn);
-        stamped = true;
+        await DebrifyTvDatabase.markWebDavTvChangesPending(txn);
       }
     });
-    if (stamped) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   static CachedTorrent _rowToCachedTorrent(Map<String, Object?> row) {

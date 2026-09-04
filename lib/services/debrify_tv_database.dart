@@ -20,6 +20,9 @@ class DebrifyTvDatabase {
   DebrifyTvDatabase._();
 
   static final DebrifyTvDatabase instance = DebrifyTvDatabase._();
+  static const String webDavTvChangesPendingMetaKey = 'tvChangesPending';
+  static const String webDavTvPendingRevisionMetaKey = 'tvPendingRevision';
+  static const String webDavTvLastSyncedMsMetaKey = 'tvLastSyncedMs';
 
   /// Tests inject an in-memory database here (sqflite_common_ffi) so store
   /// logic runs against the real schema without path_provider.
@@ -197,6 +200,87 @@ class DebrifyTvDatabase {
     return runScoped((db) => db.transaction(action, exclusive: false));
   }
 
+  /// Marks a user-authored Debrify TV change in the same transaction as its
+  /// sidecar stamp. This marker deliberately has no scheduler callback.
+  static Future<void> markWebDavTvChangesPending(DatabaseExecutor db) async {
+    await db.execute(
+      'UPDATE webdav_sync_meta SET value = ? WHERE key = ?',
+      <Object?>['1', webDavTvChangesPendingMetaKey],
+    );
+    await db.execute('''
+      UPDATE webdav_sync_meta
+      SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+      WHERE key = '$webDavTvPendingRevisionMetaKey'
+    ''');
+  }
+
+  Future<WebDavSyncTvSyncMetadata> readWebDavTvSyncMetadata() => runScoped((
+    db,
+  ) async {
+    final rows = await db.query(
+      'webdav_sync_meta',
+      columns: const <String>['key', 'value'],
+      where: 'key IN (?, ?, ?)',
+      whereArgs: const <Object>[
+        webDavTvChangesPendingMetaKey,
+        webDavTvPendingRevisionMetaKey,
+        webDavTvLastSyncedMsMetaKey,
+      ],
+    );
+    final values = <String, String>{
+      for (final row in rows) row['key']! as String: row['value']! as String,
+    };
+    final pendingRevision = int.tryParse(
+      values[webDavTvPendingRevisionMetaKey] ?? '',
+    );
+    final lastSyncedMs = int.tryParse(
+      values[webDavTvLastSyncedMsMetaKey] ?? '',
+    );
+    if (pendingRevision == null || pendingRevision < 0) {
+      throw StateError('Debrify TV pending revision is invalid');
+    }
+    return WebDavSyncTvSyncMetadata(
+      changesPending: values[webDavTvChangesPendingMetaKey] == '1',
+      pendingRevision: pendingRevision,
+      lastSyncedMs: lastSyncedMs,
+    );
+  });
+
+  /// Records a completed manifest-last manual sync. A TV write that landed
+  /// after the operation's snapshot keeps the pending hint set for next time.
+  Future<void> completeWebDavTvSync(
+    ProfileScope scope, {
+    required int expectedPendingRevision,
+    required int syncedAtMs,
+  }) => runOneShotScoped(scope, (db) {
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'webdav_sync_meta',
+        columns: const <String>['value'],
+        where: 'key = ?',
+        whereArgs: const <Object>[webDavTvPendingRevisionMetaKey],
+      );
+      final current = rows.length == 1
+          ? int.tryParse(rows.single['value']! as String)
+          : null;
+      if (current == null || current < 0) {
+        throw StateError('Debrify TV pending revision is invalid');
+      }
+      if (current == expectedPendingRevision) {
+        await txn.update(
+          'webdav_sync_meta',
+          const <String, Object?>{'value': '0'},
+          where: 'key = ?',
+          whereArgs: const <Object>[webDavTvChangesPendingMetaKey],
+        );
+      }
+      await txn.insert('webdav_sync_meta', <String, Object?>{
+        'key': webDavTvLastSyncedMsMetaKey,
+        'value': syncedAtMs.toString(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  });
+
   /// Opens one temporary connection for [scope] without swapping [_db]. It
   /// participates in the existing active-operation drain, so a profile switch
   /// cannot close or redirect a library snapshot/apply midway through.
@@ -244,34 +328,50 @@ class DebrifyTvDatabase {
     ProfileScope scope, {
     required int clockOffsetMs,
     required int serverNowMs,
+    bool includeTvFamilies = true,
+    bool includeAmbientFamilies = true,
   }) => runOneShotScoped(scope, (db) {
     return db.transaction((txn) async {
-      final channelRows = await txn.query('tv_channels');
+      if (!includeTvFamilies && !includeAmbientFamilies) {
+        throw ArgumentError('At least one WebDAV library family is required');
+      }
+      final channelRows = includeTvFamilies
+          ? await txn.query('tv_channels')
+          : const <Map<String, Object?>>[];
       final channelKeywords = <String, List<String>>{};
-      for (final row in await txn.query(
-        'tv_channel_keywords',
-        orderBy: 'channel_id, position',
-      )) {
-        channelKeywords
-            .putIfAbsent(row['channel_id']! as String, () => <String>[])
-            .add(row['keyword']! as String);
+      if (includeTvFamilies) {
+        for (final row in await txn.query(
+          'tv_channel_keywords',
+          orderBy: 'channel_id, position',
+        )) {
+          channelKeywords
+              .putIfAbsent(row['channel_id']! as String, () => <String>[])
+              .add(row['keyword']! as String);
+        }
       }
       final channels = <String, Map<String, Object?>>{
         for (final row in channelRows) row['channel_id']! as String: row,
       };
-      final listRows = await txn.query('iptv_lists');
+      final listRows = includeAmbientFamilies
+          ? await txn.query('iptv_lists')
+          : const <Map<String, Object?>>[];
       final lists = <String, Map<String, Object?>>{
         for (final row in listRows) row['id']! as String: row,
       };
-      final listChannelRows = await txn.query('iptv_list_channels');
+      final listChannelRows = includeAmbientFamilies
+          ? await txn.query('iptv_list_channels')
+          : const <Map<String, Object?>>[];
       final listChannels = <(String, String), Map<String, Object?>>{
         for (final row in listChannelRows)
           (row['list_id']! as String, row['url']! as String): row,
       };
-      final orderRows = await txn.query(
-        'iptv_category_channel_orders',
-        orderBy: 'source_id, channel_group, position, url, name, occurrence',
-      );
+      final orderRows = includeAmbientFamilies
+          ? await txn.query(
+              'iptv_category_channel_orders',
+              orderBy:
+                  'source_id, channel_group, position, url, name, occurrence',
+            )
+          : const <Map<String, Object?>>[];
       final orders = <(String, String), List<Map<String, Object?>>>{};
       for (final row in orderRows) {
         orders
@@ -285,11 +385,15 @@ class DebrifyTvDatabase {
               'occurrence': (row['occurrence'] as num).toInt(),
             });
       }
-      final historyRows = await txn.query('iptv_watch_history');
+      final historyRows = includeAmbientFamilies
+          ? await txn.query('iptv_watch_history')
+          : const <Map<String, Object?>>[];
       final history = <String, Map<String, Object?>>{
         for (final row in historyRows) row['url']! as String: row,
       };
-      final resumeRows = await txn.query('video_resume');
+      final resumeRows = includeAmbientFamilies
+          ? await txn.query('video_resume')
+          : const <Map<String, Object?>>[];
       final resumes = <String, Map<String, Object?>>{
         for (final row in resumeRows) row['resume_key']! as String: row,
       };
@@ -305,6 +409,9 @@ class DebrifyTvDatabase {
       final normalization = txn.batch();
       var normalizationPending = false;
       for (final row in rawStates) {
+        final kind = row['kind']! as String;
+        final isTv = WebDavSyncLibraryKinds.isTvKind(kind);
+        if (isTv ? !includeTvFamilies : !includeAmbientFamilies) continue;
         var updatedAtMs = (row['updated_at_ms'] as num).toInt();
         if (row['normalized'] != 1) {
           updatedAtMs = (updatedAtMs + clockOffsetMs)
@@ -322,7 +429,6 @@ class DebrifyTvDatabase {
           );
           normalizationPending = true;
         }
-        final kind = row['kind']! as String;
         final owner = row['owner_key']! as String;
         final item = row['item_key']! as String;
         final deleted = row['deleted'] == 1;
@@ -418,10 +524,13 @@ class DebrifyTvDatabase {
       final pools = <WebDavSyncTvPoolSnapshot>[];
       String? rankedChannel;
       var rank = 0;
-      for (final row in await txn.query(
-        'tv_cached_torrents',
-        orderBy: 'channel_id ASC, added_at DESC, infohash ASC',
-      )) {
+      final poolRows = includeTvFamilies
+          ? await txn.query(
+              'tv_cached_torrents',
+              orderBy: 'channel_id ASC, added_at DESC, infohash ASC',
+            )
+          : const <Map<String, Object?>>[];
+      for (final row in poolRows) {
         final channelId = row['channel_id']! as String;
         final generation = poolGenerations[channelId];
         final generationId = generation?.value?['generationId'];
@@ -452,10 +561,28 @@ class DebrifyTvDatabase {
       if (meta.length != 1) {
         throw StateError('Debrify TV sync revision is unavailable');
       }
+      var tvPendingRevision = 0;
+      if (includeTvFamilies) {
+        final pendingRevisionRows = await txn.query(
+          'webdav_sync_meta',
+          columns: const <String>['value'],
+          where: 'key = ?',
+          whereArgs: const <Object>[webDavTvPendingRevisionMetaKey],
+        );
+        if (pendingRevisionRows.length != 1) {
+          throw StateError('Debrify TV pending revision is unavailable');
+        }
+        tvPendingRevision =
+            int.tryParse(pendingRevisionRows.single['value']! as String) ?? -1;
+        if (tvPendingRevision < 0) {
+          throw StateError('Debrify TV pending revision is invalid');
+        }
+      }
       return WebDavSyncDatabaseStateSnapshot(
         mutationRevision: int.parse(meta.single['value']! as String),
         records: List<WebDavSyncRecordState>.unmodifiable(records),
         tvPools: List<WebDavSyncTvPoolSnapshot>.unmodifiable(pools),
+        tvPendingRevision: tvPendingRevision,
       );
     }, exclusive: true);
   });
@@ -475,6 +602,7 @@ class DebrifyTvDatabase {
     required Iterable<WebDavSyncIptvOrderTarget> orderTargets,
     required Iterable<WebDavSyncIptvWatchTarget> watchTargets,
     required Iterable<WebDavSyncVideoResumeTarget> resumeTargets,
+    bool includeTvFamilies = true,
   }) => runOneShotScoped(scope, (db) {
     return db.transaction((txn) async {
       final revisionRows = await txn.query(
@@ -515,21 +643,25 @@ class DebrifyTvDatabase {
             row['item_key']! as String,
           ): row,
       };
-      final physicalChannelRows = await txn.query('tv_channels');
+      final physicalChannelRows = includeTvFamilies
+          ? await txn.query('tv_channels')
+          : const <Map<String, Object?>>[];
       final physicalById = <String, Map<String, Object?>>{
         for (final row in physicalChannelRows)
           row['channel_id']! as String: row,
       };
       final initialPhysicalChannelIds = physicalById.keys.toSet();
       final keywordsByChannel = <String, List<String>>{};
-      for (final row in await txn.query(
-        'tv_channel_keywords',
-        columns: const <String>['channel_id', 'keyword'],
-        orderBy: 'channel_id, position',
-      )) {
-        keywordsByChannel
-            .putIfAbsent(row['channel_id']! as String, () => <String>[])
-            .add(row['keyword']! as String);
+      if (includeTvFamilies) {
+        for (final row in await txn.query(
+          'tv_channel_keywords',
+          columns: const <String>['channel_id', 'keyword'],
+          orderBy: 'channel_id, position',
+        )) {
+          keywordsByChannel
+              .putIfAbsent(row['channel_id']! as String, () => <String>[])
+              .add(row['keyword']! as String);
+        }
       }
       final physicalListRows = await txn.query('iptv_lists');
       final physicalListsById = <String, Map<String, Object?>>{
@@ -563,13 +695,15 @@ class DebrifyTvDatabase {
         for (final row in await txn.query('video_resume'))
           row['resume_key']! as String: row,
       };
-      final poolCountsByChannel = <String, int>{
-        for (final row in await txn.rawQuery(
-          'SELECT channel_id, COUNT(*) AS row_count '
-          'FROM tv_cached_torrents GROUP BY channel_id',
-        ))
-          row['channel_id']! as String: (row['row_count'] as num).toInt(),
-      };
+      final poolCountsByChannel = includeTvFamilies
+          ? <String, int>{
+              for (final row in await txn.rawQuery(
+                'SELECT channel_id, COUNT(*) AS row_count '
+                'FROM tv_cached_torrents GROUP BY channel_id',
+              ))
+                row['channel_id']! as String: (row['row_count'] as num).toInt(),
+            }
+          : <String, int>{};
 
       final touched = <String>{};
       final batch = txn.batch();
@@ -1217,6 +1351,7 @@ class DebrifyTvDatabase {
     onDowngrade: onDatabaseDowngradeDelete,
     onCreate: _createSchema,
     onUpgrade: runUpgrade,
+    onOpen: ensureWebDavSyncMetaDefaults,
   );
 
   static Future<void> _createSchema(Database db, int _) async {
@@ -1732,9 +1867,21 @@ class DebrifyTvDatabase {
         value TEXT NOT NULL
       )
     ''');
+    await ensureWebDavSyncMetaDefaults(db);
+  }
+
+  static Future<void> ensureWebDavSyncMetaDefaults(DatabaseExecutor db) async {
     await db.execute(
       "INSERT OR IGNORE INTO webdav_sync_meta (key, value) "
       "VALUES ('mutation_revision', '0')",
+    );
+    await db.execute(
+      "INSERT OR IGNORE INTO webdav_sync_meta (key, value) "
+      "VALUES ('$webDavTvChangesPendingMetaKey', '0')",
+    );
+    await db.execute(
+      "INSERT OR IGNORE INTO webdav_sync_meta (key, value) "
+      "VALUES ('$webDavTvPendingRevisionMetaKey', '0')",
     );
   }
 

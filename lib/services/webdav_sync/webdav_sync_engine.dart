@@ -37,9 +37,49 @@ enum WebDavSyncTrigger {
 enum WebDavSyncCycleDisposition {
   inactive,
   adoptionBlocked,
+  capacityBlocked,
   clockPaused,
   seedRepairRequired,
   completed,
+}
+
+enum WebDavSyncTvManualStage { reading, merging, applying, publishing }
+
+enum WebDavSyncTvManualDisposition {
+  completed,
+  cancelled,
+  inactive,
+  firstJoinPending,
+  cycleRunning,
+  televisionPlayback,
+  tvOsLowMemory,
+  clockPaused,
+  conflict,
+}
+
+final class WebDavSyncTvCancellationToken {
+  bool _cancelled = false;
+
+  bool get isCancelled => _cancelled;
+
+  void cancel() => _cancelled = true;
+}
+
+typedef WebDavSyncTvStageCallback =
+    void Function(WebDavSyncTvManualStage stage);
+
+final class WebDavSyncTvManualReport {
+  const WebDavSyncTvManualReport({
+    required this.disposition,
+    this.peerCount = 0,
+    this.sectionsPushed = 0,
+    this.syncedAtMs,
+  });
+
+  final WebDavSyncTvManualDisposition disposition;
+  final int peerCount;
+  final int sectionsPushed;
+  final int? syncedAtMs;
 }
 
 final class WebDavSyncCycleReport {
@@ -160,6 +200,14 @@ abstract interface class WebDavSyncCycleRunner {
   });
 }
 
+abstract interface class WebDavSyncTvManualRunner {
+  Future<WebDavSyncTvManualReport> runTvSync(
+    WebDavSyncCycleContext? context, {
+    required WebDavSyncTvCancellationToken cancellationToken,
+    WebDavSyncTvStageCallback? onStage,
+  });
+}
+
 /// Optional lifecycle owned by cycle runners that retain transport resources
 /// between scheduler signals.
 abstract interface class WebDavSyncCycleTransportOwner {
@@ -168,7 +216,8 @@ abstract interface class WebDavSyncCycleTransportOwner {
 
 /// Dormant until M5 supplies an active, root-authenticated context and both ID
 /// maps. Merely constructing this engine never schedules work.
-final class WebDavSyncEngine implements WebDavSyncCycleRunner {
+final class WebDavSyncEngine
+    implements WebDavSyncCycleRunner, WebDavSyncTvManualRunner {
   WebDavSyncEngine({
     required WebDavSyncEngineStateRepository stateRepository,
     required WebDavSyncLocalAdapter localAdapter,
@@ -194,6 +243,9 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
   static const Duration unreferencedSectionRetention = Duration(days: 7);
   static const String _outboxStatusHint =
       'Circle changes are waiting for deletion history to be saved';
+  static const String _ambientCapacityStatusHint =
+      'Sync paused because saved IPTV and playback activity exceeds 20,000 '
+      'items. Remove older history or lists, then press Sync now.';
   static const String _adminSafetyDiagnostic =
       'Deferred a WebDAV sync admin change for local safety';
   final WebDavSyncEngineStateRepository _stateRepository;
@@ -224,6 +276,293 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       trigger: trigger,
     ),
   );
+
+  @override
+  Future<WebDavSyncTvManualReport> runTvSync(
+    WebDavSyncCycleContext? context, {
+    required WebDavSyncTvCancellationToken cancellationToken,
+    WebDavSyncTvStageCallback? onStage,
+  }) {
+    if (_cycleLock.locked) {
+      return Future<WebDavSyncTvManualReport>.value(
+        const WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.cycleRunning,
+        ),
+      );
+    }
+    return _cycleLock.synchronized(
+      () => _runTvSync(
+        context,
+        cancellationToken: cancellationToken,
+        onStage: onStage,
+      ),
+    );
+  }
+
+  Future<WebDavSyncTvManualReport> _runTvSync(
+    WebDavSyncCycleContext? context, {
+    required WebDavSyncTvCancellationToken cancellationToken,
+    required WebDavSyncTvStageCallback? onStage,
+  }) async {
+    if (cancellationToken.isCancelled) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.cancelled,
+      );
+    }
+    if (context == null || !context.isComplete || !context.active) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.inactive,
+      );
+    }
+    final tvAdapter = _localAdapter is WebDavSyncTvLibraryLocalAdapter
+        ? _localAdapter as WebDavSyncTvLibraryLocalAdapter
+        : null;
+    if (tvAdapter == null) {
+      throw StateError('WebDAV sync Debrify TV adapter is unavailable');
+    }
+    final namespaceId = context.namespaceId!;
+    final deviceId = context.deviceId!;
+    final root = context.root!;
+    var state = await _stateRepository.load(namespaceId);
+    if (state.blocksAllPushes || state.ownManifest == null) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.firstJoinPending,
+      );
+    }
+    final identityMaps = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: context.circleToLocalProfiles!,
+      circleToLocalResources: context.circleToLocalResources!,
+    );
+    _validatePersistedMaps(state, identityMaps);
+    final persistedManifest = state.ownManifest!;
+    if (persistedManifest.circleId != root.document.circleId ||
+        persistedManifest.deviceId != deviceId) {
+      throw StateError('WebDAV sync local manifest identity is invalid');
+    }
+
+    final instrumentation = _CycleInstrumentation(WebDavSyncTrigger.manual);
+    final appliedKeysByLocalProfile = <String, Set<String>>{};
+    final transport = _transportFactory(context);
+    var peerCount = 0;
+    try {
+      _reportTvStage(onStage, WebDavSyncTvManualStage.reading);
+      final rootRead = await _readRequiredRoot(transport, instrumentation);
+      if (!_bytesEqual(context.markerPin!, rootRead.bytes)) {
+        throw const WebDavSyncRootChangedException();
+      }
+      instrumentation.requestStarted();
+      final listing = await transport.listDeviceIds();
+      peerCount = listing.deviceIds
+          .where((listedDeviceId) => listedDeviceId != deviceId)
+          .length;
+      instrumentation.peerCount = peerCount;
+      final localNowMs = _clock().toUtc().millisecondsSinceEpoch;
+      final clockDecision = WebDavSyncClockPolicy.observe(
+        prior: state.clock,
+        localNowMs: localNowMs,
+        serverDate: rootRead.metadata.serverDate ?? listing.metadata.serverDate,
+      );
+      state = await _stateRepository.update(
+        namespaceId,
+        (current) => current.copyWith(
+          clock: clockDecision.state,
+          deviceClockWarning: clockDecision.deviceClockWarning,
+          lastClockPauseReason: clockDecision.pauseReason,
+          clearClockPauseReason: clockDecision.pauseReason == null,
+        ),
+      );
+      if (!clockDecision.mayPublish) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.clockPaused,
+          peerCount: peerCount,
+        );
+      }
+      if (!listing.deviceIds.contains(deviceId)) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.inactive,
+          peerCount: peerCount,
+        );
+      }
+      final serverNowMs = clockDecision.serverNowMs!;
+      final manifestReads = await _readManifests(
+        transport: transport,
+        context: context,
+        deviceIds: listing.deviceIds,
+        state: state,
+        serverNowMs: serverNowMs,
+        instrumentation: instrumentation,
+      );
+      final manifests = <String, WebDavSyncManifest>{
+        for (final entry in manifestReads.entries)
+          entry.key: entry.value.manifest,
+      };
+      final verifiedOwnManifest = manifests[deviceId];
+      if (verifiedOwnManifest != null &&
+          verifiedOwnManifest.updatedAtMs >= state.ownManifest!.updatedAtMs) {
+        state = await _stateRepository.update(
+          namespaceId,
+          (current) => current.copyWith(ownManifest: verifiedOwnManifest),
+        );
+      }
+      final ownManifest = state.ownManifest!;
+      final session = await _localAdapter.beginCycle();
+      final localProfileId = session.scope.profileId;
+      final circleProfileId =
+          identityMaps.localToCircleProfiles[localProfileId];
+      if (circleProfileId == null) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.inactive,
+          peerCount: peerCount,
+        );
+      }
+      final local = await tvAdapter.readTvLibrary(
+        session,
+        localProfileId,
+        WebDavSyncLibraryBuildRequest(
+          circleProfileId: circleProfileId,
+          identityMaps: identityMaps,
+          clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+          serverNowMs: serverNowMs,
+        ),
+      );
+      final peerData = await _readTvLibraryPeerData(
+        transport: transport,
+        root: root,
+        ownDeviceId: deviceId,
+        ownManifest: ownManifest,
+        manifests: manifests,
+        circleProfileId: circleProfileId,
+        lastMergedPeerSections: state.lastMergedPeerSections,
+        serverNowMs: serverNowMs,
+        instrumentation: instrumentation,
+      );
+      if (cancellationToken.isCancelled) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.cancelled,
+          peerCount: peerCount,
+        );
+      }
+
+      _reportTvStage(onStage, WebDavSyncTvManualStage.merging);
+      final merged = WebDavSyncLibraryMerge.merge(
+        circleProfileId: circleProfileId,
+        documents: <WebDavSyncLibraryDocument>[
+          if (peerData.ownBaseline != null) peerData.ownBaseline!,
+          local.document,
+          ...peerData.peerDocuments,
+        ],
+      ).onlyTvRecords();
+      final target = await _finalizeLibraryTargetOffMain(identityMaps, merged);
+      if (cancellationToken.isCancelled) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.cancelled,
+          peerCount: peerCount,
+        );
+      }
+
+      _reportTvStage(onStage, WebDavSyncTvManualStage.applying);
+      final outcome = await tvAdapter.applyTvLibrary(
+        session,
+        localProfileId,
+        WebDavSyncLibraryApplyRequest(
+          circleProfileId: circleProfileId,
+          identityMaps: identityMaps,
+          document: target,
+          observedRevisions: local.revisions,
+          hiddenGroupNamesByWireKey: const <String, String>{},
+        ),
+      );
+      if (outcome.result == WebDavSyncLibraryApplyResult.conflict) {
+        _diagnostic(
+          'Deferred manual Debrify TV sync after a concurrent local change',
+          null,
+        );
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.conflict,
+          peerCount: peerCount,
+        );
+      }
+      _recordAppliedKeys(
+        appliedKeysByLocalProfile,
+        localProfileId,
+        outcome.appliedNamespaces,
+      );
+      if (cancellationToken.isCancelled) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.cancelled,
+          peerCount: peerCount,
+        );
+      }
+
+      _reportTvStage(onStage, WebDavSyncTvManualStage.publishing);
+      final pushed = await _pushTvLibrary(
+        transport: transport,
+        context: context,
+        session: session,
+        root: root,
+        identityMaps: identityMaps,
+        manifest: ownManifest,
+        circleProfileId: circleProfileId,
+        document: target,
+        serverNowMs: serverNowMs,
+        clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
+        instrumentation: instrumentation,
+      );
+      if (cancellationToken.isCancelled) {
+        return WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.cancelled,
+          peerCount: peerCount,
+          sectionsPushed: pushed.sectionsPushed,
+        );
+      }
+      await _stateRepository.update(namespaceId, (current) {
+        final currentDevices = <String>{
+          ...current.currentDeviceIds,
+          ...manifests.keys,
+        };
+        final consumed = _ConsumedPeerSections()
+          ..addAll(peerData.peerReferences);
+        return current.copyWith(
+          ownManifest: pushed.manifest,
+          lastMergedPeerSections: consumed.mergeInto(
+            current.lastMergedPeerSections,
+            currentDeviceIds: currentDevices,
+          ),
+        );
+      });
+      await tvAdapter.completeTvLibrarySync(
+        session,
+        localProfileId,
+        expectedPendingRevision: local.tvPendingRevision,
+        syncedAtMs: serverNowMs,
+      );
+      instrumentation.disposition = 'tvCompleted';
+      return WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.completed,
+        peerCount: peerCount,
+        sectionsPushed: pushed.sectionsPushed,
+        syncedAtMs: serverNowMs,
+      );
+    } catch (_) {
+      instrumentation.disposition = 'tvFailed';
+      rethrow;
+    } finally {
+      transport.close();
+      _publishAppliedKeys(appliedKeysByLocalProfile);
+      instrumentation.record();
+    }
+  }
+
+  void _reportTvStage(
+    WebDavSyncTvStageCallback? callback,
+    WebDavSyncTvManualStage stage,
+  ) {
+    try {
+      callback?.call(stage);
+    } catch (error) {
+      _diagnostic('Ignored a failed Debrify TV progress callback', error);
+    }
+  }
 
   Future<WebDavSyncCycleReport> _runInstrumentedCycle(
     WebDavSyncCycleContext? context, {
@@ -700,13 +1039,20 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             );
             final replayed = WebDavSyncLibraryMerge.merge(
               circleProfileId: entry.key,
-              documents: <WebDavSyncLibraryDocument>[
+              documents: _ambientLibraryDocuments(<WebDavSyncLibraryDocument>[
                 if (entry.value.libraryBaseline != null)
                   entry.value.libraryBaseline!,
                 fresh.document,
                 pending.target,
-              ],
+              ]),
             );
+            if (!_ambientLibraryFits(replayed)) {
+              return _persistAmbientCapacityBlock(
+                namespaceId: namespaceId,
+                peerCount: listing.deviceIds.length,
+                deviceClockWarning: clockDecision.deviceClockWarning,
+              );
+            }
             final outcome = await libraryAdapter.applyLibrary(
               session,
               pending.localProfileId,
@@ -1214,13 +1560,20 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
             );
             final mergedLibraryTarget = WebDavSyncLibraryMerge.merge(
               circleProfileId: circleProfileId,
-              documents: <WebDavSyncLibraryDocument>[
+              documents: _ambientLibraryDocuments(<WebDavSyncLibraryDocument>[
                 if (profileState.libraryBaseline != null)
                   profileState.libraryBaseline!,
                 localLibrary.document,
                 ...peerData.libraryDocuments,
-              ],
+              ]),
             );
+            if (!_ambientLibraryFits(mergedLibraryTarget)) {
+              return _persistAmbientCapacityBlock(
+                namespaceId: namespaceId,
+                peerCount: manifests.length,
+                deviceClockWarning: clockDecision.deviceClockWarning,
+              );
+            }
             // The merge itself is sub-100 ms at the 60k-leaf field scale. Its
             // canonical digest and full identity scan are larger traversals,
             // so keep those off the UI isolate and retain the digest on the
@@ -1423,6 +1776,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               (forceCompressionMigration &&
                   push.sectionsPushed > 0 &&
                   !cycleConflicted),
+          clearStatusHint: current.statusHint == _ambientCapacityStatusHint,
         );
       });
       return WebDavSyncCycleReport(
@@ -1637,6 +1991,122 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       ),
       libraryReferences: List<_PeerSectionReference>.unmodifiable(
         peers.expand((peer) => peer.libraryReferences),
+      ),
+    );
+  }
+
+  Future<_TvLibraryPeerData> _readTvLibraryPeerData({
+    required WebDavSyncTransport transport,
+    required OpenedWebDavSyncRoot root,
+    required String ownDeviceId,
+    required WebDavSyncManifest ownManifest,
+    required Map<String, WebDavSyncManifest> manifests,
+    required String circleProfileId,
+    required Map<String, Map<String, WebDavSyncSectionReference>>
+    lastMergedPeerSections,
+    required int serverNowMs,
+    required _CycleInstrumentation instrumentation,
+  }) async {
+    Future<_TvLibraryRead> readOne(
+      String deviceId,
+      WebDavSyncManifest manifest, {
+      required bool own,
+      required bool hasBaseline,
+    }) async {
+      final tvReference = manifest.section('tv-library/$circleProfileId');
+      final fallback = !own && tvReference == null;
+      final reference =
+          tvReference ??
+          (fallback ? manifest.section('library/$circleProfileId') : null);
+      if (reference == null ||
+          reference.schemaVersion != WebDavSyncLibraryDocument.schemaVersion) {
+        return const _TvLibraryRead();
+      }
+      if (reference.size > WebDavSyncLibraryDocument.maxEncodedBytes) {
+        _diagnostic('Ignored an oversized Debrify TV library section', null);
+        return const _TvLibraryRead();
+      }
+      if (!own &&
+          !fallback &&
+          _shouldSkipMergedPeerSection(
+            deviceId: deviceId,
+            ownDeviceId: ownDeviceId,
+            reference: reference,
+            hasBaseline: hasBaseline,
+            lastMergedPeerSections: lastMergedPeerSections,
+            instrumentation: instrumentation,
+          )) {
+        return const _TvLibraryRead();
+      }
+      try {
+        final raw = await _readLibrarySection(
+          transport,
+          root,
+          deviceId,
+          reference,
+          circleProfileId,
+          instrumentation,
+        );
+        if (!fallback &&
+            raw.records.keys.any(
+              (key) => !WebDavSyncLibraryKinds.isTvWireKey(key),
+            )) {
+          _diagnostic(
+            'Ignored non-TV records in a Debrify TV library section',
+            null,
+          );
+        }
+        return _TvLibraryRead(
+          document: raw.onlyTvRecords(),
+          // Ambient owns library/P reference tracking. A mixed-version
+          // fallback must neither consult nor advance that shared cursor.
+          reference: own || fallback
+              ? null
+              : _PeerSectionReference(deviceId: deviceId, reference: reference),
+        );
+      } on WebDavException catch (error) {
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
+        _diagnostic('Ignored a removed Debrify TV library section', error);
+      } on Exception catch (error) {
+        _diagnostic('Ignored an invalid Debrify TV library section', error);
+      }
+      return const _TvLibraryRead();
+    }
+
+    final own = await readOne(
+      ownDeviceId,
+      ownManifest,
+      own: true,
+      hasBaseline: false,
+    );
+    final entries =
+        manifests.entries
+            .where((entry) => entry.key != ownDeviceId)
+            .toList(growable: false)
+          ..sort((left, right) => left.key.compareTo(right.key));
+    final reads =
+        await _mapConcurrentOrdered<
+          MapEntry<String, WebDavSyncManifest>,
+          _TvLibraryRead
+        >(
+          entries,
+          limit: readConcurrency,
+          operation: (entry) => readOne(
+            entry.key,
+            entry.value,
+            own: false,
+            hasBaseline: own.document != null,
+          ),
+        );
+    return _TvLibraryPeerData(
+      ownBaseline: own.document,
+      peerDocuments: List<WebDavSyncLibraryDocument>.unmodifiable(
+        reads
+            .map((read) => read.document)
+            .whereType<WebDavSyncLibraryDocument>(),
+      ),
+      peerReferences: List<_PeerSectionReference>.unmodifiable(
+        reads.map((read) => read.reference).whereType<_PeerSectionReference>(),
       ),
     );
   }
@@ -2649,6 +3119,106 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     );
   }
 
+  Future<_TvLibraryPushResult> _pushTvLibrary({
+    required WebDavSyncTransport transport,
+    required WebDavSyncCycleContext context,
+    required WebDavSyncLocalSession session,
+    required OpenedWebDavSyncRoot root,
+    required WebDavSyncIdentityMaps identityMaps,
+    required WebDavSyncManifest manifest,
+    required String circleProfileId,
+    required WebDavSyncLibraryDocument document,
+    required int serverNowMs,
+    required int clockOffsetMs,
+    required _CycleInstrumentation instrumentation,
+  }) async {
+    final logicalName = 'tv-library/$circleProfileId';
+    final currentReference = manifest.section(logicalName);
+    if (currentReference?.semanticDigest == document.semanticDigest) {
+      return _TvLibraryPushResult(manifest: manifest, sectionsPushed: 0);
+    }
+    final deviceId = context.deviceId!;
+    session.validate();
+    instrumentation.requestStarted();
+    await transport.ensureOwnLayout(deviceId);
+    instrumentation.requestStarted();
+    final reference = await WebDavSyncLargeSectionIo(codec: _codec)
+        .sealWriteVerify(
+          transport: transport,
+          key: root.key,
+          circleId: root.document.circleId,
+          deviceId: deviceId,
+          logicalName: logicalName,
+          schemaVersion: WebDavSyncLibraryDocument.schemaVersion,
+          payload: document,
+          payloadEncoder: encodeWebDavSyncLibraryDocument,
+          semanticDigest: document.semanticDigest,
+          updatedAtMs: serverNowMs,
+          maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
+        );
+    final sections = <String, WebDavSyncSectionReference>{
+      for (final section in manifest.sections) section.name: section,
+      reference.name: reference,
+    };
+    final updated = WebDavSyncManifest(
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      updatedAtMs: serverNowMs,
+      clockOffsetMs: clockOffsetMs,
+      graphSchemaClaim: manifest.graphSchemaClaim,
+      profileMap: context.wireProfileMap.isNotEmpty
+          ? context.wireProfileMap
+          : manifest.profileMap,
+      resourceMap: context.wireResourceMap.isNotEmpty
+          ? context.wireResourceMap
+          : manifest.resourceMap,
+      sections: List<WebDavSyncSectionReference>.unmodifiable(
+        sections.values.toList()..sort((left, right) {
+          return left.name.compareTo(right.name);
+        }),
+      ),
+    );
+    identityMaps.assertContainsNoLocalIds(updated.toJson());
+    final encodedManifest = await _codec.sealDocument(
+      key: root.key,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: 'manifest',
+      schemaVersion: WebDavSyncManifest.schemaVersion,
+      payload: updated.toJson(),
+      maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+    final commitRoot = await _readRequiredRoot(transport, instrumentation);
+    if (!_bytesEqual(context.markerPin!, commitRoot.bytes)) {
+      throw const WebDavSyncRootChangedException();
+    }
+    session.validate();
+    instrumentation.requestStarted(bytesUp: encodedManifest.length);
+    await transport.writeManifest(deviceId, encodedManifest);
+    instrumentation.requestStarted();
+    final readBack = await transport.readManifest(deviceId);
+    instrumentation.received(readBack.bytes.length);
+    if (!_bytesEqual(readBack.bytes, encodedManifest)) {
+      throw StateError('WebDAV sync manifest read-back verification failed');
+    }
+    final opened = await _codec.openDocument(
+      key: root.key,
+      encoded: readBack.bytes,
+      circleId: root.document.circleId,
+      deviceId: deviceId,
+      logicalName: 'manifest',
+      schemaVersion: WebDavSyncManifest.schemaVersion,
+      maxBytes: WebDavSyncLimits.maxManifestBytes,
+    );
+    final verified = WebDavSyncManifest.fromJson(opened);
+    _cache(
+      _sectionCacheKey(root.document.circleId, deviceId, reference, 'library'),
+      document,
+      reference.size,
+    );
+    return _TvLibraryPushResult(manifest: verified, sectionsPushed: 1);
+  }
+
   Future<_SealedSection> _sealSection({
     required OpenedWebDavSyncRoot root,
     required String deviceId,
@@ -2897,7 +3467,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
 
   static int _maxBytesFor(String name) {
     if (name == 'resources') return WebDavSyncLimits.maxGraphDocumentBytes;
-    if (name.startsWith('library/')) {
+    if (name.startsWith('library/') || name.startsWith('tv-library/')) {
       return WebDavSyncLibraryDocument.maxEncodedBytes;
     }
     if (name.startsWith('tombstones/')) {
@@ -3028,6 +3598,54 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     });
   }
 
+  List<WebDavSyncLibraryDocument> _ambientLibraryDocuments(
+    Iterable<WebDavSyncLibraryDocument> documents,
+  ) {
+    final source = documents.toList(growable: false);
+    if (source.any(
+      (document) =>
+          document.records.keys.any(WebDavSyncLibraryKinds.isTvWireKey),
+    )) {
+      _diagnostic(
+        'Ignored Debrify TV records in an ambient library section',
+        null,
+      );
+    }
+    return <WebDavSyncLibraryDocument>[
+      for (final document in source) document.withoutTvRecords(),
+    ];
+  }
+
+  bool _ambientLibraryFits(WebDavSyncLibraryDocument document) {
+    if (document.records.length <= WebDavSyncLibraryDocument.maxAmbientLeaves) {
+      return true;
+    }
+    _diagnostic(
+      'Refused WebDAV ambient library build above 20,000 records',
+      null,
+    );
+    return false;
+  }
+
+  Future<WebDavSyncCycleReport> _persistAmbientCapacityBlock({
+    required String namespaceId,
+    required int peerCount,
+    required bool deviceClockWarning,
+  }) async {
+    await _stateRepository.update(
+      namespaceId,
+      (current) => current.statusHint == _ambientCapacityStatusHint
+          ? current
+          : current.copyWith(statusHint: _ambientCapacityStatusHint),
+    );
+    return WebDavSyncCycleReport(
+      disposition: WebDavSyncCycleDisposition.capacityBlocked,
+      peerCount: peerCount,
+      deviceClockWarning: deviceClockWarning,
+      statusHint: _ambientCapacityStatusHint,
+    );
+  }
+
   void _publishAppliedKeys(Map<String, Set<String>> appliedKeysByLocalProfile) {
     for (final entry in appliedKeysByLocalProfile.entries) {
       try {
@@ -3135,6 +3753,25 @@ final class _PeerProfileData {
   final List<WebDavSyncLibraryDocument> libraryDocuments;
   final List<_PeerSectionReference> hotAndTombstoneReferences;
   final List<_PeerSectionReference> libraryReferences;
+}
+
+final class _TvLibraryRead {
+  const _TvLibraryRead({this.document, this.reference});
+
+  final WebDavSyncLibraryDocument? document;
+  final _PeerSectionReference? reference;
+}
+
+final class _TvLibraryPeerData {
+  const _TvLibraryPeerData({
+    required this.ownBaseline,
+    required this.peerDocuments,
+    required this.peerReferences,
+  });
+
+  final WebDavSyncLibraryDocument? ownBaseline;
+  final List<WebDavSyncLibraryDocument> peerDocuments;
+  final List<_PeerSectionReference> peerReferences;
 }
 
 Future<List<R>> _mapConcurrentOrdered<T, R>(
@@ -3297,6 +3934,16 @@ final class _PushResult {
   final Map<String, _PublishedProfile> publishedProfiles;
   final String? publishedProfilesDigest;
   final String? publishedResourcesDigest;
+}
+
+final class _TvLibraryPushResult {
+  const _TvLibraryPushResult({
+    required this.manifest,
+    required this.sectionsPushed,
+  });
+
+  final WebDavSyncManifest manifest;
+  final int sectionsPushed;
 }
 
 enum _CyclePhase {

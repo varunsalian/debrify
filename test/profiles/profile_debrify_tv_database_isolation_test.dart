@@ -417,7 +417,7 @@ void main() {
       );
       expect(states.single['updated_at_ms'], 300);
       expect(states.single['deleted'], 1);
-      expect(notifications, 3);
+      expect(notifications, 0, reason: 'TV writers never wake ambient sync');
       expect(
         (await db.query(
           'webdav_sync_meta',
@@ -426,6 +426,23 @@ void main() {
         )).single['value'],
         '3',
       );
+      var tvStatus = await DebrifyTvDatabase.instance
+          .readWebDavTvSyncMetadata();
+      expect(tvStatus.changesPending, isTrue);
+      expect(tvStatus.pendingRevision, 3);
+      await DebrifyTvDatabase.instance.closeScope(profileA);
+      DebrifyTvDatabase.instance.activateScope(profileA);
+      tvStatus = await DebrifyTvDatabase.instance.readWebDavTvSyncMetadata();
+      expect(tvStatus.changesPending, isTrue);
+      expect(tvStatus.pendingRevision, 3);
+      await DebrifyTvDatabase.instance.completeWebDavTvSync(
+        profileA,
+        expectedPendingRevision: 3,
+        syncedAtMs: 400,
+      );
+      tvStatus = await DebrifyTvDatabase.instance.readWebDavTvSyncMetadata();
+      expect(tvStatus.changesPending, isFalse);
+      expect(tvStatus.lastSyncedMs, 400);
     },
   );
 
@@ -456,7 +473,7 @@ void main() {
         where: 'key = ?',
         whereArgs: const <Object>['mutation_revision'],
       )).single['value'];
-      expect(notifications, 2);
+      expect(notifications, 0);
 
       await DebrifyTvCacheService.saveEntry(
         cache('channel-a', <CachedTorrent>[torrent('b' * 40, 'Restored')]),
@@ -468,7 +485,7 @@ void main() {
         whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
       )).single;
       expect(after['aux'], before['aux']);
-      expect(notifications, 2);
+      expect(notifications, 0);
       expect(
         (await db.query(
           'webdav_sync_meta',
@@ -489,7 +506,7 @@ void main() {
       )).single;
       expect(after['aux'], before['aux']);
       expect(await db.query('tv_cached_torrents'), isEmpty);
-      expect(notifications, 2);
+      expect(notifications, 0);
     },
   );
 
@@ -517,7 +534,7 @@ void main() {
     expect(state['aux'], 'generation-2');
     expect(state['deleted'], 0);
     expect(await db.query('tv_cached_torrents'), isEmpty);
-    expect(notifications, 3);
+    expect(notifications, 0);
   });
 
   test(

@@ -2310,3 +2310,46 @@ rejected with reasoning:
   race inside one propagation window, and one more unfavorite sticks.
   Keying by canonical channel identity was judged a redesign not worth
   the migration.
+
+### 14.9 Debrify TV foreground-only carve-out (2026-09-04)
+
+This subsection supersedes the Debrify TV placement and propagation parts
+of §§14.2, 14.5, and 14.6. The IPTV, history, resume, stamp, origin, merge,
+pool-generation, and materialization contracts above are unchanged.
+
+- Debrify TV records live in the per-profile `tv-library/<circleProfileId>`
+  section. It uses the existing schema-1 library document, shared codec,
+  compression and large-section path, with the existing 64 MiB / 100k-leaf
+  fail-closed caps. The ambient `library/<circleProfileId>` build emits no
+  `tv/ch`, `tv/pool-gen`, or `tv/pool` records.
+- Ambient apply ignores TV records found in a peer's old main library
+  section and emits one content-free audited diagnostic per affected merge.
+  Those stale records are also excluded from the merged publish target, so
+  the first post-update ambient republish naturally replaces the old main
+  section with a TV-free document.
+- TV user writers retain the same sidecar stamps, mutation revisions,
+  origins, tombstones, and pool generations, but no longer notify the
+  scheduler or create durable ambient intent. In the same transaction they
+  set a lightweight per-profile `tvChangesPending` marker and advance its
+  pending revision. A completed manual sync clears the marker only if no
+  newer TV user mutation raced the operation, and records its completion
+  time.
+- The only operation that reads, applies, or publishes TV wire records is
+  **Sync Debrify TV now** in WebDAV settings. It runs in the foreground,
+  shares ordinary-cycle serialization, and refuses inactive bindings,
+  pending first joins, and concurrent cycles. Its stages are Reading,
+  Merging, Applying, and Publishing; Stop is checked between stages. A
+  stopped run leaves committed work consistent, consumes no peer reference
+  until publication succeeds, and a later run resumes normally. Unchanged
+  peer TV sections reuse the ordinary per-device/section reference skip.
+- The settings block shows the pending hint and last successful completion
+  time. The modal progress surface is blocking while the foreground
+  operation runs and exposes the stage-granular Stop control. Product copy
+  says Debrify TV syncs only when run manually and calls out running it
+  after connecting another device or importing channels.
+- The ambient library has a separate 20,000-leaf soft cap. Both local build
+  and final merged-publish checks fail closed with an audited, visible
+  error. The TV section retains the 100k-leaf / 64 MiB bounds. This makes
+  ambient history/resume growth visible long before it can become a
+  human-scale performance hazard while leaving the deliberately large TV
+  inventory on its explicit foreground path.

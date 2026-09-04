@@ -52,6 +52,10 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   WebDavSyncRuntimeStatus? _runtimeStatus;
   String? _syncStateMessage;
   bool _syncBusy = false;
+  bool _tvSyncLaunching = false;
+  _DebrifyTvSyncOperation? _tvSyncOperation;
+  WebDavSyncTvManualAvailability _tvManualAvailability =
+      WebDavSyncTvManualAvailability.inactive;
 
   bool get _syncFeatureEnabled =>
       widget.syncFeatureEnabled ?? WebDavSyncFeature.enabled;
@@ -74,6 +78,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
 
   @override
   void dispose() {
+    _tvSyncOperation?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -99,9 +104,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       setState(() {
         _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
       });
-      if (_syncBinding?.lifecycle == WebDavSyncLifecycle.active) {
-        unawaited(_loadActiveSyncState());
-      }
+      unawaited(_loadActiveSyncState());
     } catch (error) {
       if (!mounted) return;
       _showError(error);
@@ -113,17 +116,26 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       ? _syncActivation as WebDavSyncManagementController
       : null;
 
+  WebDavSyncTvManualController? get _tvManualController =>
+      _syncActivation is WebDavSyncTvManualController
+      ? _syncActivation as WebDavSyncTvManualController
+      : null;
+
   Future<void> _loadActiveSyncState() async {
     final management = _management;
     if (management == null) return;
     try {
       final status = await management.status();
+      final tvAvailability =
+          await _tvManualController?.tvManualAvailability() ??
+          WebDavSyncTvManualAvailability.inactive;
       final snapshot = await _syncService.store.load();
       if (status.localStateMissing) {
         if (!mounted) return;
         setState(() {
           _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
           _runtimeStatus = status;
+          _tvManualAvailability = tvAvailability;
           _syncStateMessage =
               'Local sync state was cleared. Verify this folder again to reconnect safely.';
         });
@@ -133,6 +145,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       setState(() {
         _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
         _runtimeStatus = status;
+        _tvManualAvailability = tvAvailability;
         _syncStateMessage = status.adminPruneBlocked
             ? status.safetyCleanupBlocked
                   ? 'Safety backup unavailable; kept ${status.pruneBlockingProfiles.join(', ')} on this device'
@@ -275,6 +288,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     } finally {
       try {
         await reconfiguration?.resumeAfterReconfiguration();
+        if (mounted) await _loadActiveSyncState();
       } catch (error) {
         if (mounted) _showError(error);
       } finally {
@@ -323,6 +337,9 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           'Sync is paused because the device or server clock needs attention.',
         WebDavSyncCycleDisposition.adoptionBlocked =>
           'Sync is waiting for profile replacement to finish.',
+        WebDavSyncCycleDisposition.capacityBlocked =>
+          'Sync is over its saved-activity limit. Clear older history or '
+              'lists, then try again.',
         WebDavSyncCycleDisposition.seedRepairRequired =>
           'Sync data for this device is being rebuilt.',
         WebDavSyncCycleDisposition.inactive => 'Sync is currently paused.',
@@ -336,6 +353,66 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     } finally {
       if (mounted) setState(() => _syncBusy = false);
     }
+  }
+
+  Future<void> _syncDebrifyTv() async {
+    final controller = _tvManualController;
+    if (_syncBusy || _tvSyncLaunching || controller == null) return;
+    _tvSyncLaunching = true;
+    _DebrifyTvSyncOperation? operation;
+    try {
+      final availability = await controller.tvManualAvailability();
+      if (!mounted) return;
+      setState(() => _tvManualAvailability = availability);
+      if (availability != WebDavSyncTvManualAvailability.available) return;
+      setState(() => _syncBusy = true);
+      operation = _DebrifyTvSyncOperation(controller);
+      _tvSyncOperation = operation;
+      var report = await showSettingsDialog<WebDavSyncTvManualReport>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _DebrifyTvSyncProgressDialog(operation: operation!),
+      );
+      report ??= await operation.terminal;
+      if (!mounted) return;
+      final message = switch (report.disposition) {
+        WebDavSyncTvManualDisposition.completed =>
+          'Debrify TV sync is up to date.',
+        WebDavSyncTvManualDisposition.cancelled =>
+          'Debrify TV sync stopped safely.',
+        WebDavSyncTvManualDisposition.inactive =>
+          'Enable WebDAV Sync before syncing Debrify TV.',
+        WebDavSyncTvManualDisposition.firstJoinPending =>
+          'Finish the first sync before syncing Debrify TV.',
+        WebDavSyncTvManualDisposition.cycleRunning =>
+          'Another sync is running. Try Debrify TV again when it finishes.',
+        WebDavSyncTvManualDisposition.televisionPlayback =>
+          'Stop TV playback, then run Debrify TV sync again.',
+        WebDavSyncTvManualDisposition.tvOsLowMemory =>
+          'Apple TV is low on memory. Wait a few minutes, then try again.',
+        WebDavSyncTvManualDisposition.clockPaused =>
+          'Debrify TV sync is paused because the device or server clock needs attention.',
+        WebDavSyncTvManualDisposition.conflict =>
+          'Debrify TV changed during sync. Run it again to finish.',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (error) {
+      if (mounted) _showError(error);
+    } finally {
+      if (operation != null) {
+        try {
+          await operation.cancelAndWait();
+        } catch (_) {
+          // The operation error was already surfaced by the owning handler.
+        }
+      }
+      if (identical(_tvSyncOperation, operation)) _tvSyncOperation = null;
+      _tvSyncLaunching = false;
+      if (mounted && _syncBusy) setState(() => _syncBusy = false);
+    }
+    if (mounted) await _loadActiveSyncState();
   }
 
   Future<void> _repairCredentials() async {
@@ -601,6 +678,29 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         _syncBinding?.lifecycle == WebDavSyncLifecycle.error &&
         _syncBinding?.circleId != null &&
         _syncBinding?.requiresStateReconnect != true;
+    final tvControllerAvailable = _tvManualController != null;
+    final tvButtonEnabled =
+        active &&
+        tvControllerAvailable &&
+        !_syncBusy &&
+        _tvManualAvailability == WebDavSyncTvManualAvailability.available;
+    final tvSubtitle = switch (_tvManualAvailability) {
+      WebDavSyncTvManualAvailability.available
+          when _runtimeStatus?.tvChangesPending == true =>
+        'Changes are waiting for a manual sync',
+      WebDavSyncTvManualAvailability.available =>
+        'Channels and saved pools sync only when you run this',
+      WebDavSyncTvManualAvailability.inactive =>
+        'Enable WebDAV Sync to use manual TV sync',
+      WebDavSyncTvManualAvailability.firstJoinPending =>
+        'Finish the first sync before syncing Debrify TV',
+      WebDavSyncTvManualAvailability.cycleRunning =>
+        'Wait for the current sync to finish',
+      WebDavSyncTvManualAvailability.televisionPlayback =>
+        'Stop TV playback, then try again',
+      WebDavSyncTvManualAvailability.tvOsLowMemory =>
+        'Apple TV is low on memory; wait a few minutes, then try again',
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -648,6 +748,31 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
               ),
           ],
         ),
+        const SizedBox(height: 16),
+        SettingsSection(
+          title: 'Debrify TV',
+          blurb: 'A foreground, one-time sync for channels and saved pools.',
+          children: [
+            SettingsTile(
+              icon: Icons.live_tv_rounded,
+              title: 'Sync Debrify TV now',
+              subtitle: tvControllerAvailable
+                  ? tvSubtitle
+                  : 'Manual Debrify TV sync is unavailable',
+              enabled: tvButtonEnabled,
+              onTap: _syncDebrifyTv,
+            ),
+          ],
+        ),
+        if (active) ...[
+          const SizedBox(height: 8),
+          Text(
+            _runtimeStatus?.lastTvSyncMs == null
+                ? 'Debrify TV has not been synced manually yet'
+                : 'Debrify TV last synced ${_formatSyncTime(_runtimeStatus!.lastTvSyncMs!)}',
+            style: const TextStyle(fontSize: 12.5),
+          ),
+        ],
         if (_syncBinding != null) ...[
           const SizedBox(height: 8),
           Text(
@@ -689,9 +814,10 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         ],
         const SizedBox(height: 20),
         const Text(
-          'IPTV sources, favorites, history, resume state and Debrify TV '
-          'channels stay in sync. Each device rebuilds its channel and '
-          'guide caches.',
+          'IPTV sources, favorites, history and resume state stay in sync. '
+          'Debrify TV syncs only when run manually — run it after connecting '
+          'another device or importing channels. Each device rebuilds its '
+          'channel and guide caches.',
           style: TextStyle(fontSize: 12.5),
         ),
         const SizedBox(height: 20),
@@ -781,6 +907,112 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         ),
       ),
     );
+  }
+}
+
+final class _DebrifyTvSyncProgressDialog extends StatefulWidget {
+  const _DebrifyTvSyncProgressDialog({required this.operation});
+
+  final _DebrifyTvSyncOperation operation;
+
+  @override
+  State<_DebrifyTvSyncProgressDialog> createState() =>
+      _DebrifyTvSyncProgressDialogState();
+}
+
+final class _DebrifyTvSyncProgressDialogState
+    extends State<_DebrifyTvSyncProgressDialog> {
+  WebDavSyncTvManualStage _stage = WebDavSyncTvManualStage.reading;
+  bool _stopping = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_run());
+  }
+
+  Future<void> _run() async {
+    try {
+      final report = await widget.operation.start(
+        onStage: (stage) {
+          if (mounted) setState(() => _stage = stage);
+        },
+      );
+      if (mounted) Navigator.of(context).pop(report);
+    } catch (_) {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
+  void _stop() {
+    if (_stopping) return;
+    widget.operation.cancel();
+    setState(() => _stopping = true);
+  }
+
+  @override
+  void dispose() {
+    widget.operation.cancel();
+    super.dispose();
+  }
+
+  String get _stageLabel => switch (_stage) {
+    WebDavSyncTvManualStage.reading => 'Reading',
+    WebDavSyncTvManualStage.merging => 'Merging',
+    WebDavSyncTvManualStage.applying => 'Applying',
+    WebDavSyncTvManualStage.publishing => 'Publishing',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: const Text('Syncing Debrify TV'),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(width: 16),
+            Text(_stopping ? 'Stopping after this stage…' : _stageLabel),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: _stopping ? null : _stop,
+            child: const Text('Stop'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _DebrifyTvSyncOperation {
+  _DebrifyTvSyncOperation(this._controller);
+
+  final WebDavSyncTvManualController _controller;
+  final WebDavSyncTvCancellationToken _token = WebDavSyncTvCancellationToken();
+  Future<WebDavSyncTvManualReport>? _terminal;
+
+  Future<WebDavSyncTvManualReport> start({
+    WebDavSyncTvStageCallback? onStage,
+  }) => _terminal ??= _controller.syncDebrifyTv(
+    cancellationToken: _token,
+    onStage: onStage,
+  );
+
+  Future<WebDavSyncTvManualReport> get terminal => _terminal!;
+
+  void cancel() => _token.cancel();
+
+  Future<void> cancelAndWait() async {
+    cancel();
+    final terminal = _terminal;
+    if (terminal != null) await terminal;
   }
 }
 

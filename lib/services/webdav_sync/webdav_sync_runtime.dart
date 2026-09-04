@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../models/profiles/profile_policy.dart';
 import '../diagnostic_log.dart' as app_diagnostics;
+import '../debrify_tv_database.dart';
 import '../main_page_bridge.dart';
 import '../profiles/connection_resource_service.dart';
 import '../profiles/device_key_provider.dart';
@@ -40,6 +41,7 @@ import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_library_mutation.dart';
+import 'webdav_sync_library_models.dart';
 import 'webdav_sync_manifest_publisher.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_operation_coordinator.dart';
@@ -171,6 +173,72 @@ abstract interface class WebDavSyncManagementController {
   Future<void> forgetDevice(String deviceId);
 }
 
+enum WebDavSyncTvManualAvailability {
+  available,
+  inactive,
+  firstJoinPending,
+  cycleRunning,
+  televisionPlayback,
+  tvOsLowMemory,
+}
+
+WebDavSyncTvManualAvailability webDavSyncTvManualPlatformAvailability(
+  WebDavSyncRuntimeGate gate,
+) {
+  if (gate.playbackActiveOnTelevision) {
+    return WebDavSyncTvManualAvailability.televisionPlayback;
+  }
+  if (gate.tvOsLowMemory) {
+    return WebDavSyncTvManualAvailability.tvOsLowMemory;
+  }
+  return WebDavSyncTvManualAvailability.available;
+}
+
+@visibleForTesting
+Future<WebDavSyncTvManualReport> runWebDavSyncTvManualAfterLockGate({
+  required WebDavSyncOperationCoordinator operations,
+  required WebDavSyncRuntimeGate gate,
+  required Future<WebDavSyncTvManualReport> Function() operation,
+}) => operations.runIfIdle(
+  () {
+    final availability = webDavSyncTvManualPlatformAvailability(gate);
+    if (availability != WebDavSyncTvManualAvailability.available) {
+      return _tvManualUnavailableReport(availability);
+    }
+    return operation();
+  },
+  whenBusy: _tvManualUnavailableReport(
+    WebDavSyncTvManualAvailability.cycleRunning,
+  ),
+);
+
+WebDavSyncTvManualReport _tvManualUnavailableReport(
+  WebDavSyncTvManualAvailability availability,
+) => WebDavSyncTvManualReport(
+  disposition: switch (availability) {
+    WebDavSyncTvManualAvailability.available ||
+    WebDavSyncTvManualAvailability.inactive =>
+      WebDavSyncTvManualDisposition.inactive,
+    WebDavSyncTvManualAvailability.firstJoinPending =>
+      WebDavSyncTvManualDisposition.firstJoinPending,
+    WebDavSyncTvManualAvailability.cycleRunning =>
+      WebDavSyncTvManualDisposition.cycleRunning,
+    WebDavSyncTvManualAvailability.televisionPlayback =>
+      WebDavSyncTvManualDisposition.televisionPlayback,
+    WebDavSyncTvManualAvailability.tvOsLowMemory =>
+      WebDavSyncTvManualDisposition.tvOsLowMemory,
+  },
+);
+
+abstract interface class WebDavSyncTvManualController {
+  Future<WebDavSyncTvManualAvailability> tvManualAvailability();
+
+  Future<WebDavSyncTvManualReport> syncDebrifyTv({
+    required WebDavSyncTvCancellationToken cancellationToken,
+    WebDavSyncTvStageCallback? onStage,
+  });
+}
+
 /// Lets the settings flow pause the old folder while an isolated replacement
 /// is being verified, then resume whichever binding remains authoritative.
 abstract interface class WebDavSyncReconfigurationController {
@@ -193,6 +261,8 @@ final class WebDavSyncRuntimeStatus {
     this.pruneBlockingProfiles = const <String>[],
     this.safetyCleanupBlocked = false,
     this.statusHint,
+    this.tvChangesPending = false,
+    this.lastTvSyncMs,
   });
 
   final int? lastSuccessfulSyncMs;
@@ -207,6 +277,8 @@ final class WebDavSyncRuntimeStatus {
   final List<String> pruneBlockingProfiles;
   final bool safetyCleanupBlocked;
   final String? statusHint;
+  final bool tvChangesPending;
+  final int? lastTvSyncMs;
 }
 
 /// Production owner of WebDAV sync composition and trigger arming.
@@ -217,6 +289,7 @@ final class WebDavSyncRuntime
     implements
         WebDavSyncActivationController,
         WebDavSyncManagementController,
+        WebDavSyncTvManualController,
         WebDavSyncReconfigurationController,
         WebDavSyncRuntimeGate {
   WebDavSyncRuntime._() {
@@ -313,6 +386,7 @@ final class WebDavSyncRuntime
         stateRepository: stateStore,
         localAdapter: ProfileWebDavSyncLocalAdapter(ProfileBootstrap.registry),
         operations: _operations,
+        gate: this,
       );
       _scheduler = WebDavSyncScheduler(
         runner: _cycleRunner!,
@@ -435,6 +509,54 @@ final class WebDavSyncRuntime
   }
 
   @override
+  Future<WebDavSyncTvManualAvailability> tvManualAvailability() async {
+    await initialize();
+    final stored = await bindingStore.load();
+    final staged = stored.stagedBinding;
+    if (staged?.lifecycle == WebDavSyncLifecycle.configured ||
+        staged?.lifecycle == WebDavSyncLifecycle.awaitingSeedCommit ||
+        staged?.lifecycle == WebDavSyncLifecycle.rootVerified ||
+        staged?.lifecycle == WebDavSyncLifecycle.awaitingAdoption) {
+      return WebDavSyncTvManualAvailability.firstJoinPending;
+    }
+    final active = stored.activeBinding;
+    if (active == null || active.lifecycle != WebDavSyncLifecycle.active) {
+      return WebDavSyncTvManualAvailability.inactive;
+    }
+    final platformAvailability = webDavSyncTvManualPlatformAvailability(this);
+    if (platformAvailability != WebDavSyncTvManualAvailability.available) {
+      return platformAvailability;
+    }
+    if (_operations.isRunning) {
+      return WebDavSyncTvManualAvailability.cycleRunning;
+    }
+    return WebDavSyncTvManualAvailability.available;
+  }
+
+  @override
+  Future<WebDavSyncTvManualReport> syncDebrifyTv({
+    required WebDavSyncTvCancellationToken cancellationToken,
+    WebDavSyncTvStageCallback? onStage,
+  }) async {
+    await initialize();
+    final availability = await tvManualAvailability();
+    if (availability != WebDavSyncTvManualAvailability.available) {
+      return _tvManualUnavailableReport(availability);
+    }
+    final context = await _activeContext();
+    if (context == null || _cycleRunner == null) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.inactive,
+      );
+    }
+    return _cycleRunner!.runTvSync(
+      context,
+      cancellationToken: cancellationToken,
+      onStage: onStage,
+    );
+  }
+
+  @override
   Future<WebDavSyncRuntimeStatus> status() async {
     await initialize();
     return _operations.run(() async {
@@ -493,6 +615,19 @@ final class WebDavSyncRuntime
           blockingNames.addAll(blockingIds);
         }
       }
+      WebDavSyncTvSyncMetadata tvMetadata = const WebDavSyncTvSyncMetadata(
+        changesPending: false,
+        pendingRevision: 0,
+      );
+      try {
+        tvMetadata = await DebrifyTvDatabase.instance
+            .readWebDavTvSyncMetadata();
+      } catch (error) {
+        recordWebDavSyncDiagnostic(
+          'Could not read Debrify TV manual sync status',
+          error,
+        );
+      }
       return WebDavSyncRuntimeStatus(
         lastSuccessfulSyncMs: state.lastSuccessfulSyncMs,
         peerCount: peerCount,
@@ -507,6 +642,8 @@ final class WebDavSyncRuntime
         pruneBlockingProfiles: List<String>.unmodifiable(blockingNames),
         safetyCleanupBlocked: state.safetyProtectedProfileIds.isNotEmpty,
         statusHint: state.statusHint,
+        tvChangesPending: tvMetadata.changesPending,
+        lastTvSyncMs: tvMetadata.lastSyncedMs,
       );
     });
   }
@@ -1430,12 +1567,16 @@ final class _WebDavSyncGenerationClient extends http.BaseClient {
 }
 
 final class _ProductionCycleRunner
-    implements WebDavSyncCycleRunner, WebDavSyncCycleTransportOwner {
+    implements
+        WebDavSyncCycleRunner,
+        WebDavSyncTvManualRunner,
+        WebDavSyncCycleTransportOwner {
   _ProductionCycleRunner({
     required this.bindingStore,
     required this.stateRepository,
     required this.localAdapter,
     required this.operations,
+    required this.gate,
     WebDavSyncBindingHttpClientOwner? httpClientOwner,
   }) : _httpClientOwner = httpClientOwner ?? WebDavSyncBindingHttpClientOwner();
 
@@ -1443,6 +1584,7 @@ final class _ProductionCycleRunner
   final WebDavSyncEngineStateRepository stateRepository;
   final WebDavSyncLocalAdapter localAdapter;
   final WebDavSyncOperationCoordinator operations;
+  final WebDavSyncRuntimeGate gate;
   final WebDavSyncBindingHttpClientOwner _httpClientOwner;
   final WebDavSyncAuthenticationFailureTracker _authenticationFailures =
       WebDavSyncAuthenticationFailureTracker();
@@ -1507,6 +1649,99 @@ final class _ProductionCycleRunner
       trigger: trigger,
     ),
   );
+
+  @override
+  Future<WebDavSyncTvManualReport> runTvSync(
+    WebDavSyncCycleContext? context, {
+    required WebDavSyncTvCancellationToken cancellationToken,
+    WebDavSyncTvStageCallback? onStage,
+  }) => runWebDavSyncTvManualAfterLockGate(
+    operations: operations,
+    gate: gate,
+    operation: () => _runTvSync(
+      context,
+      cancellationToken: cancellationToken,
+      onStage: onStage,
+    ),
+  );
+
+  Future<WebDavSyncTvManualReport> _runTvSync(
+    WebDavSyncCycleContext? context, {
+    required WebDavSyncTvCancellationToken cancellationToken,
+    required WebDavSyncTvStageCallback? onStage,
+  }) async {
+    final clientGeneration = _httpClientOwner.generation;
+    if (context == null || context.namespaceId == null || !context.active) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.inactive,
+      );
+    }
+    final stored = await bindingStore.load();
+    final binding = stored.bindingForCycle(
+      namespaceId: context.namespaceId!,
+      preActivation: false,
+    );
+    final namespace = binding == null ? null : stored.namespaceFor(binding);
+    if (binding == null ||
+        binding.lifecycle != WebDavSyncLifecycle.active ||
+        namespace == null ||
+        binding.circleId != context.root?.document.circleId ||
+        namespace.deviceId != context.deviceId ||
+        !_sameBytes(namespace.markerBytes, context.markerPin)) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.inactive,
+      );
+    }
+    final secrets = await bindingStore.readSecrets(binding);
+    final borrow = _httpClientOwner.borrowIfGeneration(
+      binding.id,
+      clientGeneration,
+    );
+    if (borrow == null) {
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.inactive,
+      );
+    }
+    final engine = WebDavSyncEngine(
+      stateRepository: stateRepository,
+      localAdapter: localAdapter,
+      sectionCache: _sectionCache,
+      transportFactory: (_) => ProtocolWebDavSyncTransport(
+        location: binding.location,
+        credentials: WebDavCredentials(
+          username: secrets.username,
+          password: secrets.password,
+        ),
+        client: borrow.client,
+      ),
+      diagnostic: recordWebDavSyncDiagnostic,
+      appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+    );
+    try {
+      final report = await engine.runTvSync(
+        context,
+        cancellationToken: cancellationToken,
+        onStage: onStage,
+      );
+      _authenticationFailures.recordSuccess(binding.id);
+      return report;
+    } on WebDavSyncSetupException catch (error) {
+      _authenticationFailures.recordSuccess(binding.id);
+      await bindingStore.markError(binding.id, error);
+      rethrow;
+    } on WebDavException catch (error) {
+      if (error.kind == WebDavErrorKind.authentication &&
+          _authenticationFailures.recordFailure(binding.id)) {
+        await bindingStore.markError(binding.id, error);
+      } else if (error.kind != WebDavErrorKind.authentication) {
+        _authenticationFailures.recordSuccess(binding.id);
+      }
+      rethrow;
+    } catch (_) {
+      _authenticationFailures.recordSuccess(binding.id);
+      rethrow;
+    }
+  }
 
   Future<WebDavSyncCycleReport> _runCycle(
     WebDavSyncCycleContext? context, {

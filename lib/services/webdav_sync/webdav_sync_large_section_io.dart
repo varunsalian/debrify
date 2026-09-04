@@ -46,7 +46,7 @@ final class WebDavSyncLargeSectionIo {
             (logicalName == 'bootstrap' ||
                 logicalName == 'graph' ||
                 logicalName == 'resources' ||
-                logicalName.startsWith('library/'))
+                _isLibrarySection(logicalName))
         ? transport as WebDavSyncFileTransport
         : null;
     if (fileTransport == null) {
@@ -63,7 +63,7 @@ final class WebDavSyncLargeSectionIo {
             logicalName == 'bootstrap' ||
             logicalName == 'graph' ||
             logicalName == 'resources' ||
-            logicalName.startsWith('library/'),
+            _isLibrarySection(logicalName),
       );
       final reference = _reference(
         logicalName: logicalName,
@@ -91,7 +91,7 @@ final class WebDavSyncLargeSectionIo {
             logicalName == 'bootstrap' ||
             logicalName == 'graph' ||
             logicalName == 'resources' ||
-            logicalName.startsWith('library/'),
+            _isLibrarySection(logicalName),
       );
       return reference;
     }
@@ -337,7 +337,11 @@ final class WebDavSyncLargeSectionIo {
       logicalName == 'graph' ||
       logicalName == 'profiles' ||
       logicalName == 'resources' ||
-      logicalName.startsWith('library/');
+      _isLibrarySection(logicalName);
+
+  static bool _isLibrarySection(String logicalName) =>
+      logicalName.startsWith('library/') ||
+      logicalName.startsWith('tv-library/');
 
   static bool _bytesEqual(List<int> left, List<int> right) {
     var difference = left.length ^ right.length;

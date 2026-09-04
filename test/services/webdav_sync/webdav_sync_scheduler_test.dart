@@ -558,6 +558,38 @@ void main() {
     });
   });
 
+  test('capacity block suppresses retries until the next local write', () {
+    fakeAsync((async) {
+      final runner = _Runner()
+        ..nextDisposition = WebDavSyncCycleDisposition.capacityBlocked;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        remotePollingEnabled: false,
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(const Duration(minutes: 31));
+      async.flushMicrotasks();
+      unawaited(scheduler.signal(WebDavSyncTrigger.foreground));
+      unawaited(scheduler.signal(WebDavSyncTrigger.remoteChange));
+      async.flushMicrotasks();
+      expect(runner.runs, 1, reason: 'the over-cap revision stays latched');
+
+      runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 2, reason: 'a new local revision re-arms sync');
+      scheduler.dispose();
+    });
+  });
+
   test('registry conflict overrides a pending debounce with one follow-up', () {
     fakeAsync((async) {
       final runner = _Runner()..requestFollowUpOnNextRun = true;

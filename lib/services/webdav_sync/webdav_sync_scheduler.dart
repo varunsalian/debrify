@@ -100,6 +100,7 @@ final class WebDavSyncScheduler {
   bool _pollDisabledNoValidators = false;
   bool _dirtyDuringRun = false;
   bool _immediateDirtyDuringRun = false;
+  bool _capacityBlocked = false;
   String? _pendingLocalChangeKey;
 
   /// Durable local-change intent: the latest admitted write not yet flushed by
@@ -185,6 +186,7 @@ final class WebDavSyncScheduler {
   /// so profile persistence never waits for, or owns, sync scheduling.
   void notifyLocalChange(String logicalKey) {
     if (_contextProvider == null || !admitsLocalChangeKey(logicalKey)) return;
+    _capacityBlocked = false;
     _pendingLocalChangeKey = logicalKey;
     _localChangeSequence++;
     _pendingLocalChangeSequence = _localChangeSequence;
@@ -602,6 +604,11 @@ final class WebDavSyncScheduler {
         disposition: WebDavSyncCycleDisposition.inactive,
       );
     }
+    if (_capacityBlocked && trigger != WebDavSyncTrigger.manual) {
+      return const WebDavSyncCycleReport(
+        disposition: WebDavSyncCycleDisposition.inactive,
+      );
+    }
     if (_running) {
       if (trigger == WebDavSyncTrigger.localChange) _dirtyDuringRun = true;
       return const WebDavSyncCycleReport(
@@ -654,8 +661,14 @@ final class WebDavSyncScheduler {
       }
       final report = await _runner.runCycle(context, trigger: trigger);
       intentCycleCompleted =
-          report.disposition == WebDavSyncCycleDisposition.completed;
+          report.disposition == WebDavSyncCycleDisposition.completed ||
+          report.disposition == WebDavSyncCycleDisposition.capacityBlocked;
       intentCycleRequestedFollowUp = report.localChangeFollowUp;
+      if (report.disposition == WebDavSyncCycleDisposition.capacityBlocked) {
+        _capacityBlocked = _localChangeSequence <= intentSequenceAtStart;
+      } else if (report.disposition == WebDavSyncCycleDisposition.completed) {
+        _capacityBlocked = false;
+      }
       if (intentCycleCompleted &&
           _consecutivePollFailures > 0 &&
           !_pollBackoffHoldsThroughCycles) {

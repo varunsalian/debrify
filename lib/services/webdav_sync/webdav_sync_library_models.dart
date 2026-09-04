@@ -8,9 +8,10 @@ import 'webdav_sync_hot_models.dart';
 
 /// Why a durable library row is being changed.
 ///
-/// Only [user] mutations create local stamps and schedule recurring sync.
-/// Sync materialization has its own exact-stamp writer; the remaining origins
-/// deliberately leave the sidecar untouched.
+/// Only [user] mutations create local stamps. Ambient-library writers also
+/// schedule recurring sync; Debrify TV writers instead set their per-profile
+/// manual-sync marker. Sync materialization has its own exact-stamp writer;
+/// the remaining origins deliberately leave the sidecar untouched.
 enum WebDavSyncMutationOrigin {
   user,
   syncApply,
@@ -30,6 +31,11 @@ abstract final class WebDavSyncLibraryKinds {
   static const String iptvListChannels = 'iptv_list_channels';
   static const String iptvWatchHistory = 'iptv_watch_history';
   static const String videoResume = 'video_resume';
+
+  static bool isTvKind(String kind) =>
+      kind == tvChannels || kind == tvPoolGeneration;
+
+  static bool isTvWireKey(String key) => key.startsWith('tv/');
 }
 
 final class WebDavSyncTvChannelTarget {
@@ -116,11 +122,25 @@ final class WebDavSyncDatabaseStateSnapshot {
     required this.mutationRevision,
     this.records = const <WebDavSyncRecordState>[],
     this.tvPools = const <WebDavSyncTvPoolSnapshot>[],
+    this.tvPendingRevision = 0,
   });
 
   final int mutationRevision;
   final List<WebDavSyncRecordState> records;
   final List<WebDavSyncTvPoolSnapshot> tvPools;
+  final int tvPendingRevision;
+}
+
+final class WebDavSyncTvSyncMetadata {
+  const WebDavSyncTvSyncMetadata({
+    required this.changesPending,
+    required this.pendingRevision,
+    this.lastSyncedMs,
+  });
+
+  final bool changesPending;
+  final int pendingRevision;
+  final int? lastSyncedMs;
 }
 
 final class WebDavSyncTvPoolSnapshot {
@@ -358,6 +378,7 @@ final class WebDavSyncLibraryDocument {
   static const int schemaVersion = 1;
   static const int maxEncodedBytes = 64 * 1024 * 1024;
   static const int maxLeaves = 100000;
+  static const int maxAmbientLeaves = 20000;
 
   final String circleProfileId;
   final Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> records;
@@ -385,6 +406,36 @@ final class WebDavSyncLibraryDocument {
       circleProfileId: circleProfileId,
       records: records,
       semanticDigest: semanticDigestOf(toJson()),
+    );
+  }
+
+  WebDavSyncLibraryDocument withoutTvRecords() {
+    if (!records.keys.any(WebDavSyncLibraryKinds.isTvWireKey)) return this;
+    return WebDavSyncLibraryDocument(
+      circleProfileId: circleProfileId,
+      records:
+          Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>>.unmodifiable(
+            <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+              for (final entry in records.entries)
+                if (!WebDavSyncLibraryKinds.isTvWireKey(entry.key))
+                  entry.key: entry.value,
+            },
+          ),
+    );
+  }
+
+  WebDavSyncLibraryDocument onlyTvRecords() {
+    if (records.keys.every(WebDavSyncLibraryKinds.isTvWireKey)) return this;
+    return WebDavSyncLibraryDocument(
+      circleProfileId: circleProfileId,
+      records:
+          Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>>.unmodifiable(
+            <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+              for (final entry in records.entries)
+                if (WebDavSyncLibraryKinds.isTvWireKey(entry.key))
+                  entry.key: entry.value,
+            },
+          ),
     );
   }
 

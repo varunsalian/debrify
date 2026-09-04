@@ -163,6 +163,94 @@ void main() {
         serverNowMs: 100000,
       );
 
+  test('ambient build emits no TV records with a 50k saved pool', () async {
+    await DebrifyTvRepository.instance.upsertChannel(
+      DebrifyTvChannelRecord(
+        channelId: 'large-channel',
+        name: 'Large',
+        keywords: const <String>['large'],
+        avoidNsfw: true,
+        channelNumber: 1,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(1),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(2),
+      ),
+    );
+    await dbA.execute('''
+      WITH RECURSIVE rows(n) AS (
+        SELECT 1
+        UNION ALL
+        SELECT n + 1 FROM rows WHERE n < 50000
+      )
+      INSERT INTO tv_cached_torrents
+        (channel_id, infohash, name, size_bytes, created_unix, seeders,
+         leechers, completed, scraped_date, keywords_json, sources_json,
+         added_at)
+      SELECT 'large-channel', printf('%040x', n), 'Saved', 1, 0, 0,
+             0, 0, 0, '[]', '[]', n
+      FROM rows
+    ''');
+
+    final ambient = await adapter.readLibrary(
+      session,
+      profileId,
+      buildRequest(maps),
+    );
+
+    expect(
+      ambient.document.records.keys,
+      everyElement(isNot(startsWith('tv/'))),
+    );
+  });
+
+  test('ambient apply ignores injected legacy TV records once', () async {
+    final diagnostics = <String>[];
+    final guardedAdapter = ProfileWebDavSyncLocalAdapter(
+      registry,
+      diagnostic: diagnostics.add,
+    );
+    final blank = await guardedAdapter.readLibrary(
+      session,
+      profileId,
+      buildRequest(maps),
+    );
+    final document = WebDavSyncLibraryDocument(
+      circleProfileId: circleProfileId,
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        'tv/ch/${_part('legacy-channel')}': WebDavSyncCircleLeaf(
+          stamp: const WebDavSyncStamp(
+            normalizedTimeMs: 10,
+            originDeviceId: 'device-b',
+          ),
+          value: const <String, Object?>{
+            'name': 'Legacy',
+            'avoidNsfw': true,
+            'channelNumber': 1,
+            'createdAt': 1,
+            'keywords': <String>['legacy'],
+          },
+        ),
+      },
+    );
+
+    final outcome = await guardedAdapter.applyLibrary(
+      session,
+      profileId,
+      WebDavSyncLibraryApplyRequest(
+        circleProfileId: circleProfileId,
+        identityMaps: maps,
+        document: document,
+        observedRevisions: blank.revisions,
+        hiddenGroupNamesByWireKey: const <String, String>{},
+      ),
+    );
+
+    expect(outcome.result, WebDavSyncLibraryApplyResult.applied);
+    expect(await DebrifyTvRepository.instance.fetchAllChannels(), isEmpty);
+    expect(diagnostics, <String>[
+      'Ignored Debrify TV records in an ambient library section',
+    ]);
+  });
+
   test(
     'a 500-record apply uses a fixed number of database round trips',
     () async {
@@ -245,7 +333,7 @@ void main() {
   );
 
   test(
-    'one cycle carries IPTV and Debrify TV families A to B with exact stamps',
+    'one ambient and one manual apply carry IPTV and Debrify TV families A to B with exact stamps',
     () async {
       var now = 1000;
       IptvMediaStore.debugLibraryClock = () =>
@@ -364,7 +452,12 @@ void main() {
         profileId,
         buildRequest(maps),
       );
-      expect(fromA.document.records, hasLength(11));
+      final tvFromA = await adapter.readTvLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      expect(fromA.document.records, hasLength(8));
       expect(
         fromA.document.records.keys,
         containsAll(<String>[
@@ -376,6 +469,16 @@ void main() {
           'iptv/watch/$circleResourceId/${_sha('https://panel.invalid/movie/9')}',
           'resume/$circleResourceId/${_sha('https://panel.invalid/movie/9')}',
           'resume/_/${_sha('generic-title')}',
+        ]),
+      );
+      expect(
+        fromA.document.records.keys,
+        everyElement(isNot(startsWith('tv/'))),
+      );
+      expect(tvFromA.document.records, hasLength(3));
+      expect(
+        tvFromA.document.records.keys,
+        containsAll(<String>[
           'tv/ch/${_part('channel-a')}',
           'tv/pool-gen/${_part('channel-a')}',
           'tv/pool/${_part('channel-a')}/${'a' * 40}',
@@ -388,7 +491,7 @@ void main() {
             ?.value?['sourceRef'],
         circleResourceId,
       );
-      final poolValue = fromA
+      final poolValue = tvFromA
           .document
           .records['tv/pool/${_part('channel-a')}/${'a' * 40}']!
           .value!;
@@ -454,9 +557,27 @@ void main() {
         'iptv/order',
         'iptv/watch',
         'resume',
-        'tv/ch',
-        'tv/pool',
       });
+      expect(await DebrifyTvRepository.instance.fetchAllChannels(), isEmpty);
+      expect(await DebrifyTvCacheService.getEntry('channel-a'), isNull);
+      final beforeTv = await adapter.readTvLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      final tvOutcome = await adapter.applyTvLibrary(
+        session,
+        profileId,
+        WebDavSyncLibraryApplyRequest(
+          circleProfileId: circleProfileId,
+          identityMaps: maps,
+          document: tvFromA.document,
+          observedRevisions: beforeTv.revisions,
+          hiddenGroupNamesByWireKey: const <String, String>{},
+        ),
+      );
+      expect(tvOutcome.result, WebDavSyncLibraryApplyResult.applied);
+      expect(tvOutcome.appliedNamespaces, <String>{'tv/ch', 'tv/pool'});
       final tvChannels = await DebrifyTvRepository.instance.fetchAllChannels();
       expect(tvChannels.single.name, 'TV Alpha');
       expect(tvChannels.single.keywords, <String>['Alpha', 'Beta']);
@@ -516,7 +637,13 @@ void main() {
         profileId,
         buildRequest(maps),
       );
+      final tvFromB = await adapter.readTvLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
       expect(fromB.document.semanticDigest, fromA.document.semanticDigest);
+      expect(tvFromB.document.semanticDigest, tvFromA.document.semanticDigest);
       final stampsA = <String, WebDavSyncStamp>{
         for (final entry in fromA.document.records.entries)
           entry.key: entry.value.stamp,
@@ -531,6 +658,24 @@ void main() {
         },
         <String, Object?>{
           for (final entry in stampsA.entries) entry.key: entry.value.toJson(),
+        },
+      );
+      final tvStampsA = <String, WebDavSyncStamp>{
+        for (final entry in tvFromA.document.records.entries)
+          entry.key: entry.value.stamp,
+      };
+      final tvStampsB = <String, WebDavSyncStamp>{
+        for (final entry in tvFromB.document.records.entries)
+          entry.key: entry.value.stamp,
+      };
+      expect(
+        <String, Object?>{
+          for (final entry in tvStampsB.entries)
+            entry.key: entry.value.toJson(),
+        },
+        <String, Object?>{
+          for (final entry in tvStampsA.entries)
+            entry.key: entry.value.toJson(),
         },
       );
     },

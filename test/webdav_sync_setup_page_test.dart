@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/screens/settings/sync_and_migrate_page.dart';
+import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/screens/webdav/webdav_files_screen.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/text_brightness.dart';
@@ -98,6 +100,33 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
     }
+  }
+
+  Future<void> installActiveBinding() async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final root = await codec.openRoot(
+      marker,
+      'circle-secret',
+      runInBackground: false,
+    );
+    var active = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      config: _config,
+      syncPassphrase: 'circle-secret',
+    );
+    active = await store.markRootVerified(
+      bindingId: active.id,
+      root: root.document,
+      markerBytes: marker,
+    );
+    active = await store.setLifecycle(active.id, WebDavSyncLifecycle.active);
+    await store.promoteStaged(active.id);
   }
 
   testWidgets('M3 setup stays hidden behind its rollout gate', (tester) async {
@@ -269,17 +298,28 @@ void main() {
       markerBytes: marker,
     );
     await store.setLifecycle(waiting.id, WebDavSyncLifecycle.awaitingAdoption);
-    final activation = _FakeActivation(store);
+    final activation = _FakeActivation(store)
+      ..tvAvailability = WebDavSyncTvManualAvailability.firstJoinPending;
     // The finishing spinner animates indefinitely, so a settling pump would
     // never complete; use the helper's bounded pumps until promotion lands.
-    await pumpPage(tester, enabled: true, activation: activation, settle: false);
+    await pumpPage(
+      tester,
+      enabled: true,
+      activation: activation,
+      settle: false,
+    );
     expect(find.text('Finishing first sync…'), findsOneWidget);
+    expect(
+      find.text('Finish the first sync before syncing Debrify TV'),
+      findsOneWidget,
+    );
 
     await store.activateAndPromoteStaged(waiting.id);
+    activation.tvAvailability = WebDavSyncTvManualAvailability.available;
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
 
-    expect(activation.statusReads, 1);
+    expect(activation.statusReads, greaterThanOrEqualTo(2));
     expect(find.text('Finishing first sync…'), findsNothing);
     expect(find.text('Sync is active'), findsOneWidget);
     expect(find.text('Change sync folder'), findsOneWidget);
@@ -323,19 +363,169 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('setup discloses the bounded TV database fallback', (
-    tester,
-  ) async {
+  testWidgets('setup discloses manual-only Debrify TV sync', (tester) async {
     await pumpPage(tester, enabled: true);
 
     expect(
       find.text(
-        'IPTV sources, favorites, history, resume state and Debrify TV '
-        'channels stay in sync. Each device rebuilds its channel and '
-        'guide caches.',
+        'IPTV sources, favorites, history and resume state stay in sync. '
+        'Debrify TV syncs only when run manually — run it after connecting '
+        'another device or importing channels. Each device rebuilds its '
+        'channel and guide caches.',
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('manual Debrify TV block shows pending status and Stop works', (
+    tester,
+  ) async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    final root = await codec.openRoot(
+      marker,
+      'circle-secret',
+      runInBackground: false,
+    );
+    var active = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      config: _config,
+      syncPassphrase: 'circle-secret',
+    );
+    active = await store.markRootVerified(
+      bindingId: active.id,
+      root: root.document,
+      markerBytes: marker,
+    );
+    active = await store.setLifecycle(active.id, WebDavSyncLifecycle.active);
+    await store.promoteStaged(active.id);
+    final release = Completer<void>();
+    final activation = _FakeActivation(store)
+      ..tvChangesPending = true
+      ..lastTvSyncMs = DateTime.utc(2026, 9, 3).millisecondsSinceEpoch
+      ..tvStageRelease = release;
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    expect(find.text('DEBRIFY TV'), findsOneWidget);
+    expect(find.text('Sync Debrify TV now'), findsOneWidget);
+    expect(find.text('Changes are waiting for a manual sync'), findsOneWidget);
+    expect(find.textContaining('Debrify TV last synced'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Sync Debrify TV now'));
+    await tester.tap(find.text('Sync Debrify TV now'));
+    await tester.pump();
+    expect(find.text('Syncing Debrify TV'), findsOneWidget);
+    expect(find.text('Reading'), findsOneWidget);
+    expect(find.text('Stop'), findsOneWidget);
+    await tester.tap(find.text('Stop'));
+    await tester.pump();
+    expect(find.text('Stopping after this stage…'), findsOneWidget);
+    release.complete();
+    await tester.pumpAndSettle();
+
+    expect(activation.tvSyncs, 1);
+    expect(find.text('Debrify TV sync stopped safely.'), findsOneWidget);
+  });
+
+  testWidgets('manual TV platform gates show actionable disabled reasons', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final activation = _FakeActivation(store)
+      ..tvAvailability = WebDavSyncTvManualAvailability.televisionPlayback;
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    expect(find.text('Stop TV playback, then try again'), findsOneWidget);
+    expect(
+      tester
+          .widget<SettingsTile>(
+            find.ancestor(
+              of: find.text('Sync Debrify TV now'),
+              matching: find.byType(SettingsTile),
+            ),
+          )
+          .enabled,
+      isFalse,
+    );
+
+    activation.tvAvailability = WebDavSyncTvManualAvailability.tvOsLowMemory;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Apple TV is low on memory; wait a few minutes, then try again',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ambient capacity status is visible with recovery action', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final activation = _FakeActivation(store)
+      ..statusHint =
+          'Sync paused because saved IPTV and playback activity exceeds '
+          '20,000 items. Remove older history or lists, then press Sync now.';
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    expect(find.text(activation.statusHint!), findsOneWidget);
+  });
+
+  testWidgets('disposing the TV dialog cancels at the read-stage boundary', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final readRelease = Completer<void>();
+    final terminal = Completer<void>();
+    final activation = _FakeActivation(store)
+      ..tvStageRelease = readRelease
+      ..tvTerminal = terminal;
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    await tester.ensureVisible(find.text('Sync Debrify TV now'));
+    await tester.tap(find.text('Sync Debrify TV now'));
+    await tester.pump();
+    expect(find.text('Reading'), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    readRelease.complete();
+    await terminal.future;
+    await tester.pump();
+
+    expect(activation.tvCancellationObserved, isTrue);
+    expect(activation.tvStages, <WebDavSyncTvManualStage>[
+      WebDavSyncTvManualStage.reading,
+    ]);
+  });
+
+  testWidgets('two immediate TV sync presses launch one dialog and operation', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final availabilityRelease = Completer<void>();
+    final readRelease = Completer<void>();
+    final activation = _FakeActivation(store)..tvStageRelease = readRelease;
+    await pumpPage(tester, enabled: true, activation: activation);
+    activation.tvAvailabilityReads = 0;
+    activation.tvAvailabilityRelease = availabilityRelease;
+
+    await tester.ensureVisible(find.text('Sync Debrify TV now'));
+    await tester.tap(find.text('Sync Debrify TV now'));
+    await tester.tap(find.text('Sync Debrify TV now'));
+    availabilityRelease.complete();
+    await tester.pump();
+
+    expect(activation.tvAvailabilityReads, 1);
+    expect(activation.tvSyncs, 1);
+    expect(find.text('Syncing Debrify TV'), findsOneWidget);
+    readRelease.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('low-level failures cannot leak protocol vocabulary', (
@@ -425,6 +615,14 @@ void main() {
       expect(activation.connections, 1);
       expect(find.text('Sync is active'), findsOneWidget);
       expect(find.text('Sync now'), findsOneWidget);
+      final tvTile = tester.widget<SettingsTile>(
+        find.ancestor(
+          of: find.text('Sync Debrify TV now'),
+          matching: find.byType(SettingsTile),
+        ),
+      );
+      expect(tvTile.enabled, isTrue);
+      expect(activation.statusReads, greaterThanOrEqualTo(1));
     },
   );
 
@@ -657,6 +855,7 @@ final class _FakeActivation
     implements
         WebDavSyncActivationController,
         WebDavSyncManagementController,
+        WebDavSyncTvManualController,
         WebDavSyncReconfigurationController {
   _FakeActivation(this.store, {this.onInitialize});
 
@@ -670,6 +869,18 @@ final class _FakeActivation
   int resumes = 0;
   int statusReads = 0;
   Object? syncError;
+  String? statusHint;
+  bool tvChangesPending = false;
+  int? lastTvSyncMs;
+  int tvSyncs = 0;
+  int tvAvailabilityReads = 0;
+  bool tvCancellationObserved = false;
+  final List<WebDavSyncTvManualStage> tvStages = <WebDavSyncTvManualStage>[];
+  WebDavSyncTvManualAvailability tvAvailability =
+      WebDavSyncTvManualAvailability.available;
+  Completer<void>? tvAvailabilityRelease;
+  Completer<void>? tvStageRelease;
+  Completer<void>? tvTerminal;
 
   @override
   void pauseForReconfiguration() => pauses++;
@@ -716,13 +927,54 @@ final class _FakeActivation
   @override
   Future<WebDavSyncRuntimeStatus> status() async {
     statusReads++;
-    return const WebDavSyncRuntimeStatus(
+    return WebDavSyncRuntimeStatus(
       lastSuccessfulSyncMs: null,
       peerCount: 0,
       adminPruneBlocked: false,
       deviceClockWarning: false,
       clockPauseReason: null,
+      statusHint: statusHint,
+      tvChangesPending: tvChangesPending,
+      lastTvSyncMs: lastTvSyncMs,
     );
+  }
+
+  @override
+  Future<WebDavSyncTvManualAvailability> tvManualAvailability() async {
+    tvAvailabilityReads++;
+    await tvAvailabilityRelease?.future;
+    return tvAvailability;
+  }
+
+  @override
+  Future<WebDavSyncTvManualReport> syncDebrifyTv({
+    required WebDavSyncTvCancellationToken cancellationToken,
+    WebDavSyncTvStageCallback? onStage,
+  }) async {
+    tvSyncs++;
+    try {
+      tvStages.add(WebDavSyncTvManualStage.reading);
+      onStage?.call(WebDavSyncTvManualStage.reading);
+      await tvStageRelease?.future;
+      if (cancellationToken.isCancelled) {
+        tvCancellationObserved = true;
+        return const WebDavSyncTvManualReport(
+          disposition: WebDavSyncTvManualDisposition.cancelled,
+        );
+      }
+      tvStages.add(WebDavSyncTvManualStage.merging);
+      onStage?.call(WebDavSyncTvManualStage.merging);
+      tvStages.add(WebDavSyncTvManualStage.applying);
+      onStage?.call(WebDavSyncTvManualStage.applying);
+      tvStages.add(WebDavSyncTvManualStage.publishing);
+      onStage?.call(WebDavSyncTvManualStage.publishing);
+      return const WebDavSyncTvManualReport(
+        disposition: WebDavSyncTvManualDisposition.completed,
+      );
+    } finally {
+      final terminal = tvTerminal;
+      if (terminal != null && !terminal.isCompleted) terminal.complete();
+    }
   }
 
   @override

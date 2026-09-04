@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -3658,6 +3659,426 @@ void main() {
       );
     },
   );
+
+  test(
+    'cutover strips stale TV records from the next main publication',
+    () async {
+      final diagnostics = <String>[];
+      final ambient = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          'future/ambient': const WebDavSyncCircleLeaf(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 1,
+              originDeviceId: 'device-a',
+            ),
+            value: <String, Object?>{'value': 'kept'},
+          ),
+        },
+      );
+      local = _FakeLibraryLocalAdapter(<String, Object?>{}, document: ambient);
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: sectionCache,
+        clock: () => now,
+        diagnostic: (message, _) => diagnostics.add(message),
+      );
+      final stalePeer = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          ...ambient.records,
+          'tv/ch/bGVnYWN5': const WebDavSyncCircleLeaf(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 2,
+              originDeviceId: 'device-b',
+            ),
+            value: <String, Object?>{'name': 'legacy'},
+          ),
+        },
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        library: stalePeer,
+      );
+
+      await runFixture(context());
+
+      final manifest = await openManifest('device-a');
+      final reference = manifest.section('library/profile-circle')!;
+      final payload = await codec.openDocument(
+        key: root.key,
+        encoded: transport.sections['device-a:${reference.contentHash}']!,
+        circleId: root.document.circleId,
+        deviceId: 'device-a',
+        logicalName: reference.name,
+        schemaVersion: reference.schemaVersion,
+        payloadDecoder: decodeWebDavSyncLibraryDocument,
+        maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
+      );
+      final published = payload as WebDavSyncLibraryDocument;
+      expect(published.records, contains('future/ambient'));
+      expect(published.records.keys, everyElement(isNot(startsWith('tv/'))));
+      expect(
+        diagnostics.where(
+          (message) =>
+              message ==
+              'Ignored Debrify TV records in an ambient library section',
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'TV data moves only when the foreground manual operation runs',
+    () async {
+      final tvLocal = _FakeTvLibraryLocalAdapter(
+        <String, Object?>{},
+        document: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+        tvDocument: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+      );
+      local = tvLocal;
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: tvLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: sectionCache,
+        clock: () => now,
+      );
+      await runFixture(context());
+      final remote = _tvLibraryDocument(
+        name: 'Remote channel',
+        time: now.millisecondsSinceEpoch - 2,
+        infohash: 'a' * 40,
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        tvLibrary: remote,
+      );
+
+      await engine.runCycle(context(active: true));
+      expect(tvLocal.tvDocument.records, isEmpty);
+      expect(
+        transport.events,
+        isNot(contains('read:section:device-b:tv-library/profile-circle')),
+      );
+
+      final first = await engine.runTvSync(
+        context(active: true),
+        cancellationToken: WebDavSyncTvCancellationToken(),
+      );
+      expect(first.disposition, WebDavSyncTvManualDisposition.completed);
+      expect(tvLocal.tvDocument.semanticDigest, remote.semanticDigest);
+      expect(
+        (await openManifest('device-a')).section('tv-library/profile-circle'),
+        isNotNull,
+      );
+
+      transport.events.clear();
+      final unchanged = await engine.runTvSync(
+        context(active: true),
+        cancellationToken: WebDavSyncTvCancellationToken(),
+      );
+      expect(unchanged.disposition, WebDavSyncTvManualDisposition.completed);
+      expect(
+        transport.events,
+        isNot(contains('read:section:device-b:tv-library/profile-circle')),
+        reason: 'the merged peer reference is skipped on the next manual run',
+      );
+
+      final updated = _tvLibraryDocument(
+        name: 'Updated remote channel',
+        time: now.millisecondsSinceEpoch - 1,
+        infohash: 'b' * 40,
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        tvLibrary: updated,
+      );
+      await engine.runCycle(context(active: true));
+      expect(tvLocal.tvDocument.semanticDigest, remote.semanticDigest);
+      final second = await engine.runTvSync(
+        context(active: true),
+        cancellationToken: WebDavSyncTvCancellationToken(),
+      );
+      expect(second.disposition, WebDavSyncTvManualDisposition.completed);
+      expect(tvLocal.tvDocument.semanticDigest, updated.semanticDigest);
+    },
+  );
+
+  test(
+    'manual TV sync imports an old peer main library without consuming it',
+    () async {
+      final tvLocal = _FakeTvLibraryLocalAdapter(
+        <String, Object?>{},
+        document: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+        tvDocument: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+      );
+      local = tvLocal;
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: tvLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      await runFixture(context());
+      final oldPeerTv = _tvLibraryDocument(
+        name: 'Old-app channel',
+        time: now.millisecondsSinceEpoch - 1,
+        infohash: 'd' * 40,
+      );
+      final mixedOldPeer = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          ...oldPeerTv.records,
+          'future/ambient': WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: now.millisecondsSinceEpoch - 1,
+              originDeviceId: 'device-b',
+            ),
+            value: const <String, Object?>{'kept': true},
+          ),
+        },
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'device-b',
+        manifestTime: now,
+        hot: _document(),
+        tombstones: const WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: <String, WebDavSyncTombstone>{},
+        ),
+        library: mixedOldPeer,
+      );
+
+      final manual = await engine.runTvSync(
+        context(active: true),
+        cancellationToken: WebDavSyncTvCancellationToken(),
+      );
+
+      expect(manual.disposition, WebDavSyncTvManualDisposition.completed);
+      expect(tvLocal.tvDocument.semanticDigest, oldPeerTv.semanticDigest);
+      expect(
+        states.state.lastMergedPeerSections['device-b'],
+        isNot(contains('library/profile-circle')),
+      );
+
+      await engine.runCycle(context(active: true));
+      expect(tvLocal.document.records, contains('future/ambient'));
+      expect(
+        tvLocal.document.records.keys,
+        everyElement(isNot(startsWith('tv/'))),
+      );
+      expect(
+        states.state.lastMergedPeerSections['device-b'],
+        contains('library/profile-circle'),
+        reason: 'the ambient cycle tracks its own main-library reference',
+      );
+    },
+  );
+
+  test('manual TV cancellation after apply is resumable', () async {
+    final tvLocal = _FakeTvLibraryLocalAdapter(
+      <String, Object?>{},
+      document: const WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+      ),
+      tvDocument: const WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+      ),
+    );
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: tvLocal,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+    );
+    await runFixture(context());
+    final remote = _tvLibraryDocument(
+      name: 'Remote channel',
+      time: now.millisecondsSinceEpoch - 1,
+      infohash: 'c' * 40,
+    );
+    await transport.addPeer(
+      codec: codec,
+      root: root,
+      deviceId: 'device-b',
+      manifestTime: now,
+      hot: _document(),
+      tombstones: const WebDavSyncTombstoneDocument(
+        circleProfileId: 'profile-circle',
+        items: <String, WebDavSyncTombstone>{},
+      ),
+      tvLibrary: remote,
+    );
+    final token = WebDavSyncTvCancellationToken();
+
+    final cancelled = await engine.runTvSync(
+      context(active: true),
+      cancellationToken: token,
+      onStage: (stage) {
+        if (stage == WebDavSyncTvManualStage.applying) token.cancel();
+      },
+    );
+
+    expect(cancelled.disposition, WebDavSyncTvManualDisposition.cancelled);
+    expect(tvLocal.tvDocument.semanticDigest, remote.semanticDigest);
+    expect(
+      (await openManifest('device-a')).section('tv-library/profile-circle'),
+      isNull,
+    );
+    expect(tvLocal.completedTvSyncs, 0);
+    final resumed = await engine.runTvSync(
+      context(active: true),
+      cancellationToken: WebDavSyncTvCancellationToken(),
+    );
+    expect(resumed.disposition, WebDavSyncTvManualDisposition.completed);
+    expect(tvLocal.completedTvSyncs, 1);
+  });
+
+  test(
+    'manual TV sync refuses inactive, first-join, and running cycles',
+    () async {
+      final tvLocal = _FakeTvLibraryLocalAdapter(
+        <String, Object?>{},
+        document: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+        tvDocument: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{},
+        ),
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: tvLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      expect(
+        (await engine.runTvSync(
+          context(),
+          cancellationToken: WebDavSyncTvCancellationToken(),
+        )).disposition,
+        WebDavSyncTvManualDisposition.inactive,
+      );
+      expect(
+        (await engine.runTvSync(
+          context(active: true),
+          cancellationToken: WebDavSyncTvCancellationToken(),
+        )).disposition,
+        WebDavSyncTvManualDisposition.firstJoinPending,
+      );
+      await runFixture(context());
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      tvLocal.beforeProfileRead = () async {
+        if (!entered.isCompleted) entered.complete();
+        await release.future;
+      };
+      final ambientCycle = engine.runCycle(context(active: true));
+      await entered.future;
+      final refused = await engine.runTvSync(
+        context(active: true),
+        cancellationToken: WebDavSyncTvCancellationToken(),
+      );
+      expect(refused.disposition, WebDavSyncTvManualDisposition.cycleRunning);
+      release.complete();
+      await ambientCycle;
+    },
+  );
+
+  test('ambient library persists an actionable 20k capacity block', () async {
+    final diagnostics = <String>[];
+    final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+      for (
+        var index = 0;
+        index <= WebDavSyncLibraryDocument.maxAmbientLeaves;
+        index++
+      )
+        'future/$index': WebDavSyncCircleLeaf(
+          stamp: const WebDavSyncStamp(
+            normalizedTimeMs: 1,
+            originDeviceId: 'device-a',
+          ),
+          value: <String, Object?>{'index': index},
+        ),
+    };
+    local = _FakeLibraryLocalAdapter(
+      <String, Object?>{},
+      document: WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: records,
+      ),
+    );
+    engine = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: local,
+      transportFactory: (_) => transport,
+      codec: codec,
+      clock: () => now,
+      diagnostic: (message, _) => diagnostics.add(message),
+    );
+
+    final report = await runFixture(context());
+
+    expect(report.disposition, WebDavSyncCycleDisposition.capacityBlocked);
+    expect(report.statusHint, contains('Remove older history or lists'));
+    expect(states.state.statusHint, report.statusHint);
+    expect(
+      diagnostics,
+      contains('Refused WebDAV ambient library build above 20,000 records'),
+    );
+    expect(transport.events, isNot(contains('write:manifest')));
+  });
 }
 
 WebDavSyncHotDocument _document({
@@ -3706,6 +4127,45 @@ WebDavSyncHotDocument _document({
       records: records,
       orders: const <String, WebDavSyncOrderValue>{},
     ),
+  );
+}
+
+WebDavSyncLibraryDocument _tvLibraryDocument({
+  required String name,
+  required int time,
+  required String infohash,
+}) {
+  const channel = 'Y2hhbm5lbA';
+  final generation = 'generation-${infohash.substring(0, 1)}';
+  WebDavSyncCircleLeaf<Map<String, Object?>> leaf(Map<String, Object?> value) =>
+      WebDavSyncCircleLeaf<Map<String, Object?>>(
+        stamp: WebDavSyncStamp(
+          normalizedTimeMs: time,
+          originDeviceId: 'device-b',
+        ),
+        value: value,
+      );
+  return WebDavSyncLibraryDocument(
+    circleProfileId: 'profile-circle',
+    records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+      'tv/ch/$channel': leaf(<String, Object?>{
+        'name': name,
+        'avoidNsfw': true,
+        'channelNumber': 1,
+        'createdAt': 1,
+        'keywords': <String>['channel'],
+      }),
+      'tv/pool-gen/$channel': leaf(<String, Object?>{
+        'generationId': generation,
+      }),
+      'tv/pool/$channel/$infohash': leaf(<String, Object?>{
+        'generationId': generation,
+        'name': name,
+        'sizeBytes': 1,
+        'keywords': <String>['channel'],
+        'rank': 0,
+      }),
+    },
   );
 }
 
@@ -3821,6 +4281,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
   void Function()? beforeConflict;
   bool sessionValid = true;
   void Function()? afterApply;
+  Future<void> Function()? beforeProfileRead;
   Set<String>? appliedKeysOverride;
   final List<bool> replayingPendingFlags = <bool>[];
 
@@ -3845,6 +4306,7 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     String localProfileId,
   ) async {
     events.add('read:$localProfileId');
+    await beforeProfileRead?.call();
     if (unavailableProfileIds.contains(localProfileId)) {
       throw WebDavSyncMappedProfileUnavailable();
     }
@@ -3948,6 +4410,65 @@ final class _FakeLibraryLocalAdapter extends _FakeLocalAdapter
       result: WebDavSyncLibraryApplyResult.applied,
       appliedNamespaces: <String>{'catalog/hidden'},
     );
+  }
+}
+
+final class _FakeTvLibraryLocalAdapter extends _FakeLibraryLocalAdapter
+    implements WebDavSyncTvLibraryLocalAdapter {
+  _FakeTvLibraryLocalAdapter(
+    super.preferences, {
+    required super.document,
+    required this.tvDocument,
+    String activeProfileId = 'local-profile',
+  }) {
+    this.activeProfileId = activeProfileId;
+  }
+
+  WebDavSyncLibraryDocument tvDocument;
+  int tvRevision = 0;
+  int tvPendingRevision = 1;
+  int completedTvSyncs = 0;
+  final List<WebDavSyncLibraryDocument> appliedTvLibraries =
+      <WebDavSyncLibraryDocument>[];
+
+  @override
+  Future<WebDavSyncLocalLibrarySnapshot> readTvLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request,
+  ) async => WebDavSyncLocalLibrarySnapshot(
+    document: tvDocument,
+    revisions: WebDavSyncDatabaseRevisions(
+      debrifyTv: tvRevision,
+      iptvCatalog: 0,
+    ),
+    tvPendingRevision: tvPendingRevision,
+  );
+
+  @override
+  Future<WebDavSyncLibraryApplyOutcome> applyTvLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request,
+  ) async {
+    appliedTvLibraries.add(request.document);
+    tvDocument = request.document;
+    tvRevision++;
+    return const WebDavSyncLibraryApplyOutcome(
+      result: WebDavSyncLibraryApplyResult.applied,
+      appliedNamespaces: <String>{'tv/ch', 'tv/pool'},
+    );
+  }
+
+  @override
+  Future<void> completeTvLibrarySync(
+    WebDavSyncLocalSession session,
+    String localProfileId, {
+    required int expectedPendingRevision,
+    required int syncedAtMs,
+  }) async {
+    expect(expectedPendingRevision, tvPendingRevision);
+    completedTvSyncs++;
   }
 }
 
@@ -4266,6 +4787,7 @@ class _FakeTransport implements WebDavSyncTransport {
     WebDavSyncProfilesDocument? profiles,
     WebDavSyncResourcesDocument? resources,
     WebDavSyncLibraryDocument? library,
+    WebDavSyncLibraryDocument? tvLibrary,
   }) async {
     Future<WebDavSyncSectionReference> addSection(
       String name,
@@ -4337,6 +4859,15 @@ class _FakeTransport implements WebDavSyncTransport {
             WebDavSyncLibraryDocument.maxEncodedBytes,
             WebDavSyncLibraryDocument.schemaVersion,
           );
+    final tvLibraryRef = tvLibrary == null
+        ? null
+        : await addSection(
+            'tv-library/${tvLibrary.circleProfileId}',
+            tvLibrary.toJson(),
+            tvLibrary.semanticDigest,
+            WebDavSyncLibraryDocument.maxEncodedBytes,
+            WebDavSyncLibraryDocument.schemaVersion,
+          );
     final manifest = WebDavSyncManifest(
       circleId: root.document.circleId,
       deviceId: deviceId,
@@ -4351,6 +4882,7 @@ class _FakeTransport implements WebDavSyncTransport {
         if (profileRef != null) profileRef,
         if (resourceRef != null) resourceRef,
         if (libraryRef != null) libraryRef,
+        if (tvLibraryRef != null) tvLibraryRef,
       ],
     );
     manifests[deviceId] = await codec.sealDocument(

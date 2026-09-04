@@ -11,10 +11,13 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_feature.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_operation_coordinator.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
@@ -122,6 +125,54 @@ void main() {
     tracker.recordSuccess('binding-a');
     expect(tracker.recordFailure('binding-a'), isFalse);
   });
+
+  test(
+    'manual TV platform refusals are rechecked after the operation lock',
+    () async {
+      expect(
+        webDavSyncTvManualPlatformAvailability(
+          _ManualTvGate(televisionPlayback: true),
+        ),
+        WebDavSyncTvManualAvailability.televisionPlayback,
+      );
+      expect(
+        webDavSyncTvManualPlatformAvailability(_ManualTvGate(lowMemory: true)),
+        WebDavSyncTvManualAvailability.tvOsLowMemory,
+      );
+
+      for (final fixture
+          in <
+            ({_ManualTvGate gate, WebDavSyncTvManualDisposition disposition})
+          >[
+            (
+              gate: _ManualTvGate(televisionPlayback: true),
+              disposition: WebDavSyncTvManualDisposition.televisionPlayback,
+            ),
+            (
+              gate: _ManualTvGate(lowMemory: true),
+              disposition: WebDavSyncTvManualDisposition.tvOsLowMemory,
+            ),
+          ]) {
+        final operations = WebDavSyncOperationCoordinator();
+        fixture.gate.onRead = () => expect(operations.isRunning, isTrue);
+        var ran = false;
+
+        final report = await runWebDavSyncTvManualAfterLockGate(
+          operations: operations,
+          gate: fixture.gate,
+          operation: () async {
+            ran = true;
+            return const WebDavSyncTvManualReport(
+              disposition: WebDavSyncTvManualDisposition.completed,
+            );
+          },
+        );
+
+        expect(report.disposition, fixture.disposition);
+        expect(ran, isFalse);
+      }
+    },
+  );
 
   test(
     'two cycle transports and a poll reuse one binding client until disarm',
@@ -337,6 +388,29 @@ final class _CountingClient extends http.BaseClient {
   void close() {
     closeCalls++;
     super.close();
+  }
+}
+
+final class _ManualTvGate implements WebDavSyncRuntimeGate {
+  _ManualTvGate({this.televisionPlayback = false, this.lowMemory = false});
+
+  final bool televisionPlayback;
+  final bool lowMemory;
+  void Function()? onRead;
+
+  @override
+  bool get playbackActive => televisionPlayback;
+
+  @override
+  bool get playbackActiveOnTelevision {
+    onRead?.call();
+    return televisionPlayback;
+  }
+
+  @override
+  bool get tvOsLowMemory {
+    onRead?.call();
+    return lowMemory;
   }
 }
 

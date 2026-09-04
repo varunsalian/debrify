@@ -191,6 +191,7 @@ final class WebDavSyncLocalLibrarySnapshot {
     required this.document,
     required this.revisions,
     this.hiddenGroupNamesByWireKey = const <String, String>{},
+    this.tvPendingRevision = 0,
   });
 
   final WebDavSyncLibraryDocument document;
@@ -200,6 +201,7 @@ final class WebDavSyncLocalLibrarySnapshot {
   /// field kept its Round 2a name for adapter compatibility; it now also
   /// carries IPTV group, URL, and resume-key identities and is never encoded.
   final Map<String, String> hiddenGroupNamesByWireKey;
+  final int tvPendingRevision;
 }
 
 final class WebDavSyncLibraryBuildRequest {
@@ -260,12 +262,36 @@ abstract interface class WebDavSyncLibraryLocalAdapter {
   });
 }
 
+/// Foreground-only Debrify TV boundary. Keeping it separate lets ambient-only
+/// adapters and existing engine fixtures remain small.
+abstract interface class WebDavSyncTvLibraryLocalAdapter {
+  Future<WebDavSyncLocalLibrarySnapshot> readTvLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request,
+  );
+
+  Future<WebDavSyncLibraryApplyOutcome> applyTvLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request,
+  );
+
+  Future<void> completeTvLibrarySync(
+    WebDavSyncLocalSession session,
+    String localProfileId, {
+    required int expectedPendingRevision,
+    required int syncedAtMs,
+  });
+}
+
 /// ProfilePreferences-backed adapter used once M5 arms the engine.
 final class ProfileWebDavSyncLocalAdapter
     implements
         WebDavSyncLocalAdapter,
         WebDavSyncCircleLocalAdapter,
         WebDavSyncLibraryLocalAdapter,
+        WebDavSyncTvLibraryLocalAdapter,
         WebDavSyncRegistryTombstoneOutboxDrainer {
   ProfileWebDavSyncLocalAdapter(
     this.registry, {
@@ -393,24 +419,57 @@ final class ProfileWebDavSyncLocalAdapter
     WebDavSyncLocalSession session,
     String localProfileId,
     WebDavSyncLibraryBuildRequest request,
-  ) async {
+  ) => _readLibraryFamilies(
+    session,
+    localProfileId,
+    request,
+    includeTvFamilies: false,
+    includeAmbientFamilies: true,
+  );
+
+  @override
+  Future<WebDavSyncLocalLibrarySnapshot> readTvLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request,
+  ) => _readLibraryFamilies(
+    session,
+    localProfileId,
+    request,
+    includeTvFamilies: true,
+    includeAmbientFamilies: false,
+  );
+
+  Future<WebDavSyncLocalLibrarySnapshot> _readLibraryFamilies(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryBuildRequest request, {
+    required bool includeTvFamilies,
+    required bool includeAmbientFamilies,
+  }) async {
     _validateSession(session);
     final scope = await _profileScope(session, localProfileId);
-    final mappings = await _catalogWireMappings(
-      session,
-      localProfileId,
-      request.identityMaps,
-    );
+    final mappings = includeAmbientFamilies
+        ? await _catalogWireMappings(
+            session,
+            localProfileId,
+            request.identityMaps,
+          )
+        : const _CatalogWireMappings();
     final tv = await DebrifyTvDatabase.instance.readWebDavSyncState(
       scope,
       clockOffsetMs: request.clockOffsetMs,
       serverNowMs: request.serverNowMs,
+      includeTvFamilies: includeTvFamilies,
+      includeAmbientFamilies: includeAmbientFamilies,
     );
-    final catalog = await IptvCatalogDb.readWebDavSyncState(
-      scope,
-      clockOffsetMs: request.clockOffsetMs,
-      serverNowMs: request.serverNowMs,
-    );
+    final catalog = includeAmbientFamilies
+        ? await IptvCatalogDb.readWebDavSyncState(
+            scope,
+            clockOffsetMs: request.clockOffsetMs,
+            serverNowMs: request.serverNowMs,
+          )
+        : const WebDavSyncDatabaseStateSnapshot(mutationRevision: 0);
     _validateSession(session);
     final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{};
     final localIdentities = <String, String>{};
@@ -590,6 +649,7 @@ final class ProfileWebDavSyncLocalAdapter
       hiddenGroupNamesByWireKey: Map<String, String>.unmodifiable(
         localIdentities,
       ),
+      tvPendingRevision: tv.tvPendingRevision,
     );
   }
 
@@ -600,14 +660,45 @@ final class ProfileWebDavSyncLocalAdapter
     WebDavSyncLibraryApplyRequest request, {
     Future<void> Function()? beforeWrite,
     bool replayingPending = false,
+  }) => _applyLibraryFamilies(
+    session,
+    localProfileId,
+    request,
+    includeTvFamilies: false,
+    includeAmbientFamilies: true,
+    beforeWrite: beforeWrite,
+  );
+
+  @override
+  Future<WebDavSyncLibraryApplyOutcome> applyTvLibrary(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request,
+  ) => _applyLibraryFamilies(
+    session,
+    localProfileId,
+    request,
+    includeTvFamilies: true,
+    includeAmbientFamilies: false,
+  );
+
+  Future<WebDavSyncLibraryApplyOutcome> _applyLibraryFamilies(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    WebDavSyncLibraryApplyRequest request, {
+    required bool includeTvFamilies,
+    required bool includeAmbientFamilies,
+    Future<void> Function()? beforeWrite,
   }) async {
     _validateSession(session);
     final scope = await _profileScope(session, localProfileId);
-    final mappings = await _catalogWireMappings(
-      session,
-      localProfileId,
-      request.identityMaps,
-    );
+    final mappings = includeAmbientFamilies
+        ? await _catalogWireMappings(
+            session,
+            localProfileId,
+            request.identityMaps,
+          )
+        : const _CatalogWireMappings();
     final channelTargets = <WebDavSyncTvChannelTarget>[];
     final generationTargets = <WebDavSyncTvPoolGenerationTarget>[];
     final poolTargets = <WebDavSyncTvPoolTarget>[];
@@ -618,6 +709,7 @@ final class ProfileWebDavSyncLocalAdapter
     final orderTargets = <WebDavSyncIptvOrderTarget>[];
     final watchTargets = <WebDavSyncIptvWatchTarget>[];
     final resumeTargets = <WebDavSyncVideoResumeTarget>[];
+    var ignoredTvInAmbientLibrary = false;
     String? localSource(String circleResourceId) {
       final local =
           request.identityMaps.circleToLocalResources[circleResourceId];
@@ -627,6 +719,12 @@ final class ProfileWebDavSyncLocalAdapter
     }
 
     for (final entry in request.document.records.entries) {
+      final isTvWireKey = WebDavSyncLibraryKinds.isTvWireKey(entry.key);
+      if (isTvWireKey && !includeTvFamilies) {
+        ignoredTvInAmbientLibrary = true;
+        continue;
+      }
+      if (!isTvWireKey && !includeAmbientFamilies) continue;
       final parts = entry.key.split('/');
       if (parts.length == 3 && parts[0] == 'tv' && parts[1] == 'ch') {
         final channelId = _decodeCanonicalBase64Part(parts[2]);
@@ -889,6 +987,9 @@ final class ProfileWebDavSyncLocalAdapter
               generationByChannel[target.channelId] == target.generationId,
         )
         .toList(growable: false);
+    if (ignoredTvInAmbientLibrary) {
+      _diagnostic('Ignored Debrify TV records in an ambient library section');
+    }
     await beforeWrite?.call();
     _validateSession(session);
     final tvResult = await DebrifyTvDatabase.instance.applyWebDavSyncFamilies(
@@ -902,31 +1003,53 @@ final class ProfileWebDavSyncLocalAdapter
       orderTargets: orderTargets,
       watchTargets: watchTargets,
       resumeTargets: resumeTargets,
+      includeTvFamilies: includeTvFamilies,
     );
     if (tvResult.result == WebDavSyncLibraryApplyResult.conflict) {
       return const WebDavSyncLibraryApplyOutcome(
         result: WebDavSyncLibraryApplyResult.conflict,
       );
     }
-    final catalogResult = await IptvCatalogDb.applyWebDavCatalogFamilies(
-      scope,
-      expectedRevision: request.observedRevisions.iptvCatalog,
-      hiddenTargets: hiddenTargets,
-      categoryOrderTargets: categoryOrderTargets,
-    );
-    _validateSession(session);
-    if (catalogResult.result == WebDavSyncLibraryApplyResult.conflict) {
-      return const WebDavSyncLibraryApplyOutcome(
-        result: WebDavSyncLibraryApplyResult.conflict,
+    var catalogNamespaces = const <String>{};
+    if (includeAmbientFamilies) {
+      final catalogResult = await IptvCatalogDb.applyWebDavCatalogFamilies(
+        scope,
+        expectedRevision: request.observedRevisions.iptvCatalog,
+        hiddenTargets: hiddenTargets,
+        categoryOrderTargets: categoryOrderTargets,
       );
+      _validateSession(session);
+      if (catalogResult.result == WebDavSyncLibraryApplyResult.conflict) {
+        return const WebDavSyncLibraryApplyOutcome(
+          result: WebDavSyncLibraryApplyResult.conflict,
+        );
+      }
+      catalogNamespaces = catalogResult.touchedNamespaces;
     }
     return WebDavSyncLibraryApplyOutcome(
       result: WebDavSyncLibraryApplyResult.applied,
       appliedNamespaces: Set<String>.unmodifiable(<String>{
         ...tvResult.touchedNamespaces,
-        ...catalogResult.touchedNamespaces,
+        ...catalogNamespaces,
       }),
     );
+  }
+
+  @override
+  Future<void> completeTvLibrarySync(
+    WebDavSyncLocalSession session,
+    String localProfileId, {
+    required int expectedPendingRevision,
+    required int syncedAtMs,
+  }) async {
+    _validateSession(session);
+    final scope = await _profileScope(session, localProfileId);
+    await DebrifyTvDatabase.instance.completeWebDavTvSync(
+      scope,
+      expectedPendingRevision: expectedPendingRevision,
+      syncedAtMs: syncedAtMs,
+    );
+    _validateSession(session);
   }
 
   Future<ProfileScope> _profileScope(
