@@ -934,8 +934,19 @@ final class WebDavProtocolClient {
         uri: uri,
         cause: error,
       );
-    } on WebDavException {
-      rethrow;
+    } on WebDavException catch (error) {
+      // A response already exists here, so its status is always known. If an
+      // inner WebDavException surfaced without one, fill it in so the
+      // invariant "any post-response body failure retains the response status"
+      // holds for every exit, not only the ones we wrap below.
+      if (error.statusCode != null) rethrow;
+      throw WebDavException(
+        kind: error.kind,
+        message: error.message,
+        statusCode: response.statusCode,
+        uri: error.uri ?? uri,
+        cause: error.cause ?? error,
+      );
     } catch (error) {
       throw WebDavException(
         kind: WebDavErrorKind.network,

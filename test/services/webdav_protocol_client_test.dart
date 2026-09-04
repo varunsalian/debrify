@@ -804,6 +804,38 @@ void main() {
   });
 
   test(
+    'inner body WebDavException without a status inherits the response status',
+    () async {
+      const statuslessBodyError = WebDavException(
+        kind: WebDavErrorKind.network,
+        message: 'inner body failure without a status',
+      );
+      client.close();
+      client = WebDavProtocolClient(
+        endpoint: await endpointFor(server),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: _StreamingClient(
+          (request) async => http.StreamedResponse(
+            Stream<List<int>>.error(statuslessBodyError),
+            HttpStatus.ok,
+            request: request,
+          ),
+        ),
+      );
+
+      await expectLater(
+        client.getBytes(path: 'invalid', maxBytes: 100),
+        throwsA(
+          isA<WebDavException>()
+              .having((error) => error.statusCode, 'status', HttpStatus.ok)
+              .having((error) => error.kind, 'kind', WebDavErrorKind.network)
+              .having((error) => error.cause, 'cause', same(statuslessBodyError)),
+        ),
+      );
+    },
+  );
+
+  test(
     'maps timeout, network, and TLS transport failures distinctly',
     () async {
       Future<void> expectKind(
