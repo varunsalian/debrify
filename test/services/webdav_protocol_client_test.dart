@@ -699,11 +699,44 @@ void main() {
     await expectLater(
       client.getBytes(path: 'stalled', maxBytes: 100),
       throwsA(
-        isA<WebDavException>().having(
-          (error) => error.kind,
-          'kind',
-          WebDavErrorKind.timeout,
+        isA<WebDavException>()
+            .having((error) => error.kind, 'kind', WebDavErrorKind.timeout)
+            .having((error) => error.statusCode, 'status', HttpStatus.ok),
+      ),
+    );
+  });
+
+  test('successful PUT preserves status when its body drain fails', () async {
+    client.close();
+    client = WebDavProtocolClient(
+      endpoint: await endpointFor(server),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: _StreamingClient(
+        (request) async => http.StreamedResponse(
+          Stream<List<int>>.error(
+            const SocketException('response interrupted'),
+          ),
+          HttpStatus.noContent,
+          request: request,
         ),
+      ),
+    );
+
+    await expectLater(
+      client.putBytes(
+        path: 'status-preserved',
+        bytes: const <int>[1],
+        maxBytes: 1,
+        createParents: false,
+      ),
+      throwsA(
+        isA<WebDavException>()
+            .having((error) => error.kind, 'kind', WebDavErrorKind.network)
+            .having(
+              (error) => error.statusCode,
+              'status',
+              HttpStatus.noContent,
+            ),
       ),
     );
   });
@@ -726,7 +759,9 @@ void main() {
         await expectLater(
           client.getBytes(path: 'failure', maxBytes: 100),
           throwsA(
-            isA<WebDavException>().having((error) => error.kind, 'kind', kind),
+            isA<WebDavException>()
+                .having((error) => error.kind, 'kind', kind)
+                .having((error) => error.statusCode, 'status', isNull),
           ),
         );
       }

@@ -2424,8 +2424,9 @@ passphrase, this section supersedes them.
   read-back visibility 404 are inconclusive. The whole probe is retried a
   bounded three times, then
   surfaces a typed retryable setup error rather than unsupported-provider.
-  Any 2xx conflicting PUT, overwritten body, or absent conflict read-back
-  still refuses the provider as an ignorer. The result is cached for that
+  A received 2xx on the conflicting probe PUT is treated as an ignorer even if its body fails to drain.
+  An overwritten body or absent conflict read-back likewise refuses the
+  provider. The result is cached for that
   initialization attempt. A resumed initializer
   reads the standing marker before key claim/adoption: when it byte-matches
   the persisted candidate, that marker owns the root, so the initializer keeps

@@ -465,6 +465,95 @@ void main() {
     },
   );
 
+  test(
+    'conditional-create probe refuses received 2xx when body drain fails',
+    () async {
+      final methods = <String>[];
+      final diagnostics = <String>[];
+      Uint8List? stored;
+      Uri? sentinel;
+      var putCount = 0;
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        diagnostic: (message, _) => diagnostics.add(message),
+        client: _StreamingClient((request) async {
+          methods.add(request.method);
+          sentinel ??= request.url;
+          expect(request.url, sentinel);
+          if (request.method == 'PUT') {
+            putCount++;
+            final body = await request.finalize().fold<List<int>>(
+              <int>[],
+              (bytes, chunk) => bytes..addAll(chunk),
+            );
+            if (putCount == 1) {
+              stored = Uint8List.fromList(body);
+              return http.StreamedResponse(
+                const Stream<List<int>>.empty(),
+                201,
+                request: request,
+              );
+            }
+            return http.StreamedResponse(
+              Stream<List<int>>.error(
+                http.ClientException('response interrupted'),
+              ),
+              201,
+              request: request,
+            );
+          }
+          if (request.method == 'GET') {
+            return http.StreamedResponse(
+              Stream<List<int>>.value(stored!),
+              200,
+              request: request,
+            );
+          }
+          if (request.method == 'DELETE') {
+            return http.StreamedResponse(
+              const Stream<List<int>>.empty(),
+              204,
+              request: request,
+            );
+          }
+          return http.StreamedResponse(
+            const Stream<List<int>>.empty(),
+            500,
+            request: request,
+          );
+        }),
+      );
+
+      await expectLater(
+        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
+        throwsA(
+          isA<WebDavSyncProviderUnsupportedException>()
+              .having((error) => error.probeStep, 'step', 2)
+              .having((error) => error.statusCode, 'status', 201)
+              .having(
+                (error) => error.exceptionKind,
+                'kind',
+                WebDavErrorKind.network,
+              ),
+        ),
+      );
+
+      expect(methods, <String>['PUT', 'GET', 'PUT', 'DELETE']);
+      expect(putCount, 2);
+      expect(
+        sentinel!.path,
+        matches(
+          RegExp(r'^/dav/Family/debrify-sync/\.cond-probe-[0-9a-f]{32}$'),
+        ),
+      );
+      expect(diagnostics, <String>[
+        'WebDAV sync authority failure: probe-conflict, HTTP 201',
+      ]);
+      transport.close();
+    },
+  );
+
   test('conditional-create probe retries a transient first create', () async {
     final diagnostics = <String>[];
     var putCount = 0;
@@ -866,3 +955,14 @@ String _sectionListingBatch(List<String> hashes) =>
         'Thu, 20 Aug 2026 00:00:00 GMT</D:getlastmodified>'
         '</D:prop></D:propstat></D:response>').join()}'
     '</D:multistatus>';
+
+final class _StreamingClient extends http.BaseClient {
+  _StreamingClient(this.handler);
+
+  final Future<http.StreamedResponse> Function(http.BaseRequest request)
+  handler;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      handler(request);
+}

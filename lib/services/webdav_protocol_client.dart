@@ -906,6 +906,7 @@ final class WebDavProtocolClient {
       throw WebDavException(
         kind: WebDavErrorKind.timeout,
         message: 'WebDAV response timed out',
+        statusCode: response.statusCode,
         uri: uri,
         cause: error,
       );
@@ -913,6 +914,7 @@ final class WebDavProtocolClient {
       throw WebDavException(
         kind: WebDavErrorKind.tls,
         message: 'WebDAV secure connection failed',
+        statusCode: response.statusCode,
         uri: uri,
         cause: error,
       );
@@ -920,6 +922,7 @@ final class WebDavProtocolClient {
       throw WebDavException(
         kind: WebDavErrorKind.network,
         message: 'WebDAV response was interrupted',
+        statusCode: response.statusCode,
         uri: uri,
         cause: error,
       );
@@ -927,6 +930,7 @@ final class WebDavProtocolClient {
       throw WebDavException(
         kind: WebDavErrorKind.network,
         message: 'WebDAV response was interrupted',
+        statusCode: response.statusCode,
         uri: uri,
         cause: error,
       );

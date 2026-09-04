@@ -842,8 +842,17 @@ final class WebDavSyncConditionalCreateProbe {
           beforeSend: beforeSend,
         );
       } on WebDavException catch (error) {
-        if (error.statusCode case final status?
-            when _conditionalCreateConflictStatuses.contains(status)) {
+        final status = error.statusCode;
+        if (status != null && status >= 200 && status < 300) {
+          _throwUnsupported(
+            step: 'probe-conflict',
+            probeStep: 2,
+            error: error,
+            statusCode: status,
+          );
+        }
+        if (status != null &&
+            _conditionalCreateConflictStatuses.contains(status)) {
           // 403 is safe only here: this exact probe already proved write
           // access with the successful first create, so it is a refusal of
           // the conflicting create rather than an authentication guess.
