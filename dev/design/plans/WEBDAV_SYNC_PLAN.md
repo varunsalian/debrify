@@ -426,9 +426,10 @@ folder; users do not browse into `debrify-sync/` or copy IDs between devices.
 M5 is one ordered operation:
 
 1. Ensure and PROPFIND-verify the `debrify-sync` collection. Read `circle.key`;
-   if absent, create it with `If-None-Match: *`, accept only 201, and
-   byte-verify an immediate GET. A 412 adopts the winner after GET. Malformed,
-   disappearing, 204, or otherwise ambiguous key ownership fails closed.
+   if absent, create it with `If-None-Match: *`, accept any 2xx, and
+   byte-verify an immediate GET. Any conditional-PUT error triggers a winner
+   GET; a present valid key is adopted regardless of the provider's conflict
+   status dialect, while malformed or disappearing ownership fails closed.
 2. Adopt the claimed secret in sealed local storage before loading candidate
    state. If a competing secret won, atomically reseal credentials and discard
    the losing candidate marker, identity, and engine state.
@@ -437,10 +438,10 @@ M5 is one ordered operation:
    hot/tombstone sections.
 5. Upload the seed device's manifest last and read-back verify it.
 6. Reconfirm the marker is a definitive 404, then create `circle.json.enc`
-   with `If-None-Match: *`. Only **201 Created** proves ownership; 412 follows
-   the winner, while 204 or any ambiguous success is a hard unsafe-server
-   error and never activates this candidate. After 201, read the marker back
-   byte-for-byte and pin the accepted bytes locally.
+   with `If-None-Match: *`. Any 2xx proceeds to byte-identical read-back; any
+   conditional-PUT error re-reads and follows the standing marker regardless
+   of its status-code dialect. Only the read-back outcome proves ownership or
+   identifies a concurrent winner, and the accepted bytes are pinned locally.
 
 Until step 6 succeeds, uploaded device objects are uncommitted orphans and no
 client may treat the folder as a sync set. A peer directory participates only
@@ -1068,7 +1069,7 @@ map dependency makes that safer than exposing a temporary incompatible format.
 | M2 | Backup to/restore from WebDAV (phone + TV UI) — lands in the NEW **Settings → Sync and Migrate** section ("Migrate" half), NOT on the Backup & Restore page (§6); acceptance criteria below (round-10) | transport-neutral backup entry points + picker mode + new settings section | 1.5–2 |
 | M3 | Login-first binding foundation: dedicated Koofr/Custom credentials that never enter Cloud accounts; fixed `Debrify` folder; persisted lifecycle states; fresh-setup read-only marker + strict 4 KiB keyfile probe implementing the four-state matrix; pinned legacy repair may provision the missing keyfile create-only as specified in §15; existing-root keyfile-secret/key-check verification + local marker pin (**peer/bootstrap validation waits for M5**); engine-owned transport credentials + machine secret sealed via `DeviceKeyProvider` (Linux locked-vault deferral); per-root device UUID/state namespace + isolated Change-account staging; frozen bounded root/manifest envelope codecs and golden/tamper/version/keyfile tests. **M3 publishes no root, manifest, hot data, or graph.** | binding service + login/setup component + codec tests | 1.5–2 |
 | M4 | **Inactive hot-state engine** requiring an injected root context + authenticated profile AND resource circle↔local maps—absence is no-op and local IDs are never used on wire: peer discovery + peer-count/doc-size bounds; server-`Date` clockOffset capture, monotonic high-water mark, offset-delta damping, and normalized-time arbitration; hot-document semantic digests; deletion-path audit (**normative** — ships a test matching audited APIs to helper call sites) → tombstone helpers + replication + pending-until-published; two-part hot doc with `origin` stamps; merge module (pure functions, heavy unit tests: LWW + key-union + deterministic tie-break, alias-keyed playback unions + order stamps, completion diff-stamping, tombstones + cutoff exemption, dormant-rejoin, last-pushed dirty compare + convergence-stops-traffic, publish-time clamp, CW re-cap, **null-dropping doc build + never-delete-on-null apply, tombstone horizon from first publication — round-7**; **playlist per-item union by `computePlaylistDedupeKey` + diff-stamps + tombstones + order value, lossy-twin projection-equality rule — round-8**); `_exportPreferences` exposed additively; **scope-captured BATCH apply op (one tvOS checkpoint + one native projection — round-7) guarded by a persisted pending-apply target (round-8)**; trigger plumbing remains unarmed until M5, whose bounded seed/adoption transaction may invoke builders explicitly | merge module + helpers + gated glue | 5.5–6 |
-| M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, prove honest conditional creation with a disposable sentinel, check whether a standing marker is the persisted candidate, otherwise claim `circle.key` before candidate use (`If-None-Match: *`, strict 201/read-back; 412 adopts winner; ambiguity fails closed), atomically reseal a winning secret and invalidate stale candidate identity/state, then mint circle IDs; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; create immutable root LAST with the unchanged marker race protocol. Concurrent-root follow defensively re-reads and persists the winning key before opening the marker. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
+| M5 | **Activation + graph tier.** New root: ensure + PROPFIND-verify the collection, prove honest conditional creation by outcome with a disposable sentinel, check whether a standing marker is the persisted candidate, otherwise claim `circle.key` before candidate use (`If-None-Match: *`, any 2xx plus read-back; any conditional-PUT error re-reads and adopts a valid winner; ambiguity fails closed), atomically reseal a winning secret and invalidate stale candidate identity/state, then mint circle IDs; build/seal/upload/hash-verify initial sections; write/read-verify a non-empty seed manifest; create immutable root LAST with the unchanged marker race protocol. Concurrent-root follow defensively re-reads and persists the winning key before opening the marker. Existing root: discover the newest complete bootstrap across authentic manifests **regardless of 30-day dormancy**, require first-connection replacement consent, then bootstrap→latest eligible graph→hot merge. Shared graph/adoption safety remains unchanged. Only after seed/adoption and real maps succeed does M5 transition Active and arm M4. | activation + graph/adoption flows + glue | 6–6.5 |
 | M6 | Device-matrix hardening: simulated phone ↔ Mi Box ↔ tvOS ↔ desktop convergence; bounded/LRU hot-section cache; disk-staged large WebDAV transfer and integrity verification; tvOS memory/path audit; explicit scenarios for the marker/keyfile four-state matrix, malformed keyfile fail-closed, key-claim crash recovery, marker deletion/replacement, concurrent initializers, 30+ day bootstrap discovery, bootstrap-less-marker rejection, mandatory first-connection consent, account rebind isolation, and M4 remaining inactive without maps. Physical-device soak remains a manual gate. | fixes + matrix tests | 1–1.5 |
 
 Post-M6 correctness work is tracked separately in §13. Although M4's original
@@ -1103,19 +1104,20 @@ ship-ready until §13's per-setting convergence gates pass.
   create capability probe and cleanup → standing-marker/candidate resume check
   → create-only key claim/adoption when required → candidate generation → all bounded/hash-verified
   sections → non-empty read-back-verified seed manifest → final marker-404
-  preflight → create-only root returning 201 → root read-back pin. A
-  204/ambiguous keyfile or marker response never activates; failure/crash
+  preflight → create-only root returning any 2xx → root read-back pin. A
+  mismatching or absent keyfile/marker read-back never activates; failure/crash
   before the last step leaves no accepted root. Restart resolves key ownership
   before candidate use, discards state sealed with a losing secret, and cleans
   only that device's orphan. A never-returning creator's directory remains
   ignored accepted litter; peers issue no cross-device cleanup request.
-- Concurrent-initializer tests cover both keyfile and marker 412 winner
+- Concurrent-initializer tests cover keyfile and marker winners reported with
+  403, 405, 409, or 412 conflict dialects
   adoption. Correctness requires the provider to honor conditional PUT for the
   immutable marker and initial key claim. Activation proves that capability
   up front with a disposable create/read-back/delete sentinel and refuses a
   provider that overwrites its second `If-None-Match: *` PUT. Activation also
   re-verifies the key immediately before marker creation and restarts under an
-  observed replacement, and every own-marker resume/412/read-back path repairs
+  observed replacement, and every own-marker resume/error/read-back path repairs
   divergence to the current marker's secret only after confirming that marker
   still wins. These checks converge keyfile races on quirky providers; a
   server that ignores marker preconditions is refused up front with a typed
@@ -1362,10 +1364,10 @@ resource hardening while retaining the named physical-device manual gates.
    content-addressed and hash-verified throughout.** Never publish an empty
    manifest and never expose the immutable root marker before a complete seed
    manifest is uploaded and read-back verified. Before candidate use, keyfile
-   ownership requires a verified collection, create-only PUT, **201 Created**
-   plus byte-identical read-back, or 412 winner adoption. Root ownership then
-   requires a final 404 preflight, create-only PUT, **201 Created**, and
-   byte-identical read-back; 204/ambiguity at either claim never activates. A pre-root/racing peer
+   ownership requires a verified collection, create-only PUT, any 2xx plus
+   byte-identical read-back, or valid winner adoption after any conditional-PUT
+   error. Root ownership then requires a final 404 preflight, create-only PUT,
+   and byte-identical read-back; missing/mismatching outcomes never activate. A pre-root/racing peer
    directory participates only if it authenticates under the pinned root and
    declares the same circle ID. Never overwrite a section blob in place.
    Dirty detection compares
@@ -2412,19 +2414,20 @@ passphrase, this section supersedes them.
   profile-scoped setup-complete write succeeds.
 - New-root activation proves the collection exists, then runs a disposable
   conditional-create probe before any key claim or marker work. The first
-  sentinel PUT must return 201, the second create-only PUT must return 412,
-  and read-back must retain the first random body; cleanup is best-effort. The
+  sentinel PUT may return any 2xx and must read back as the first random body.
+  The second create-only PUT must be refused (with any non-2xx status) and a
+  fresh GET must still retain the first body; cleanup is best-effort. The
   result is cached for that initialization attempt. A resumed initializer
   reads the standing marker before key claim/adoption: when it byte-matches
   the persisted candidate, that marker owns the root, so the initializer keeps
   its pre-adoption secret and repairs a missing or divergent key toward it.
   Otherwise activation resolves key ownership before creating candidate
-  state. A 201 claim must read
-  back byte-identically; a 412 adopts the winner; malformed,
-  missing-after-conflict, 204, or ambiguous behavior fails closed. Immediately
+  state. Any 2xx claim must read back byte-identically; any conditional-PUT
+  error adopts a present valid winner; malformed, missing-after-conflict, or
+  mismatching behavior fails closed. Immediately
   before the immutable marker commit it re-reads the key and restarts candidate
   construction under any newly observed secret. Every path that observes its
-  own candidate marker already committed (resume, same-marker 412, or 201
+  own candidate marker already committed (resume, same-marker error, or 2xx
   read-back) rechecks the key and convergently repairs it to that marker's
   secret. A repairer re-reads the marker before any overwrite and follows a
   replacement winner instead of writing for a losing marker; it confirms the
@@ -2444,18 +2447,23 @@ passphrase, this section supersedes them.
   from the binding's stored endpoint/folder. Missing-state reconnect uses the
   same stored location in a credentials-only login. When a pinned legacy root
   has no keyfile, repair/reconnect opens its exact pinned marker with the local
-  sealed secret and provisions `circle.key` create-only. A 412 is accepted only
-  when the winner contains that same verified secret; all other outcomes fail
-  with the damaged-folder/unsupported-provider error. The same conditional-
-  create capability probe runs before this exceptional legacy provisioning.
+  sealed secret and provisions `circle.key` create-only. Any conditional-PUT
+  error is accepted only when the winner contains that same verified secret;
+  all other outcomes fail with the damaged-folder/unsupported-provider error.
+  The same conditional-create capability probe runs before this exceptional
+  legacy provisioning.
 
 Final contract: sync initialization requires a WebDAV server with honest
-conditional creation, and the capability probe enforces that requirement
-before any key claim, marker mutation, or legacy keyfile provision. On a
-conforming server, immutable key/marker creation plus the verify/repair ladder
-guarantees that a standing marker always matches `circle.key`. A
-non-conforming server is refused before those authority files are mutated,
-instead of risking key/marker divergence. A candidate restart triggered by an
+conditional creation, proven by outcome: the probe's conditional PUT is
+refused and the stored bytes remain unchanged. HTTP success and conflict codes
+are provider dialect, not ownership proof. Strict 201 creation is replaced by
+any-2xx creation plus read-back verification, gated behind the successful
+probe, throughout key claim, marker commit, and legacy keyfile provision. A
+non-conforming server is refused before authority mutation; each typed probe,
+claim, commit, or provision failure first records only its redacted step and
+HTTP status or exception kind, and the unsupported-provider message includes
+the compact probe step/status. The verify/repair ladder still guarantees that
+a standing marker matches `circle.key`. A candidate restart triggered by an
 observed key replacement resets the probe cache, so the retry revalidates the
 assumption it just watched fail.
 

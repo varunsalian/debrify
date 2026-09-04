@@ -25,6 +25,7 @@ void main() {
   late WebDavSyncCodec codec;
   late _FakeProbeTransport transport;
   late WebDavSyncSetupService service;
+  late List<String> diagnostics;
 
   setUp(() {
     SharedPreferences.setMockInitialValues(const <String, Object>{});
@@ -42,9 +43,11 @@ void main() {
           Uint8List.fromList(List<int>.generate(length, (index) => index)),
     );
     transport = _FakeProbeTransport();
+    diagnostics = <String>[];
     service = WebDavSyncSetupService(
       store: store,
       codec: codec,
+      diagnostic: (message, _) => diagnostics.add(message),
       transportFactory: ({required endpoint, required credentials}) {
         transport.endpoint = endpoint;
         transport.credentials = credentials;
@@ -549,6 +552,26 @@ void main() {
     },
   );
 
+  test('legacy keyfile provisioning accepts a verified 200 create', () async {
+    final installed = await installActiveBinding();
+    transport
+      ..keyBytes = null
+      ..createKeyStatus = 200;
+
+    expect(
+      await service.inspectFolder(
+        config: _config,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.repair,
+        repairBindingId: installed.binding.id,
+      ),
+      isA<WebDavSyncFolderExisting>(),
+    );
+
+    expect(transport.createKeyCalls, 1);
+    expect(diagnostics, isEmpty);
+  });
+
   test(
     'legacy keyfile provisioning refuses a failed capability probe',
     () async {
@@ -589,6 +612,7 @@ void main() {
         ..createKeyError = const WebDavException(
           kind: WebDavErrorKind.preconditionFailed,
           message: 'lost race',
+          statusCode: 412,
         )
         ..keyOnCreateError = const WebDavSyncRootKeyFile(
           syncPassphrase: 'circle-secret',
@@ -622,8 +646,43 @@ void main() {
         (await store.load()).bindings[installed.binding.id]!.lifecycle,
         WebDavSyncLifecycle.error,
       );
+      expect(diagnostics, <String>[
+        'WebDAV sync authority failure: provision, HTTP 412',
+      ]);
     },
   );
+
+  for (final status in <int>[403, 405, 409]) {
+    test('legacy provision accepts a matching HTTP $status winner', () async {
+      final installed = await installActiveBinding();
+      transport
+        ..keyBytes = null
+        ..createKeyError = WebDavException(
+          kind: status == 403
+              ? WebDavErrorKind.authentication
+              : status == 409
+              ? WebDavErrorKind.conflict
+              : WebDavErrorKind.unexpectedStatus,
+          message: 'conditional create rejected',
+          statusCode: status,
+        )
+        ..keyOnCreateError = const WebDavSyncRootKeyFile(
+          syncPassphrase: 'circle-secret',
+        ).encode();
+
+      expect(
+        await service.inspectFolder(
+          config: _config,
+          folderPath: 'Family',
+          context: WebDavSyncFolderInspectionContext.repair,
+          repairBindingId: installed.binding.id,
+        ),
+        isA<WebDavSyncFolderExisting>(),
+      );
+
+      expect(diagnostics, isEmpty);
+    });
+  }
 }
 
 final class _FakeProbeTransport
@@ -637,6 +696,7 @@ final class _FakeProbeTransport
   Object? createKeyError;
   Uint8List? keyOnCreateError;
   int createKeyCalls = 0;
+  int createKeyStatus = 201;
   int conditionalCreateProbeCalls = 0;
   Object? conditionalCreateProbeError;
   final List<String> paths = <String>[];
@@ -714,7 +774,7 @@ final class _FakeProbeTransport
     }
     keyBytes = Uint8List.fromList(bytes);
     return WebDavResponseMetadata(
-      statusCode: 201,
+      statusCode: createKeyStatus,
       uri: endpoint!.resolve(path),
       headers: const <String, String>{},
     );

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_models.dart';
 
@@ -297,7 +298,9 @@ final class ProtocolWebDavSyncTransport
     required WebDavSyncFolderLocation location,
     required WebDavCredentials credentials,
     http.Client? client,
+    WebDavSyncAuthorityDiagnostic? diagnostic,
   }) : _location = location,
+       _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic,
        _client = WebDavProtocolClient(
          endpoint: location.endpoint,
          credentials: credentials,
@@ -315,6 +318,7 @@ final class ProtocolWebDavSyncTransport
 
   final WebDavSyncFolderLocation _location;
   final WebDavProtocolClient _client;
+  final WebDavSyncAuthorityDiagnostic _diagnostic;
 
   String get _syncRoot => _join(_location.folderPath, 'debrify-sync');
   String get _devices => _join(_syncRoot, 'devices');
@@ -325,6 +329,7 @@ final class ProtocolWebDavSyncTransport
     Future<void> Function()? beforeSend,
   }) => WebDavSyncConditionalCreateProbe(
     _client,
+    diagnostic: _diagnostic,
   ).verify(syncRootPath: syncRootPath, beforeSend: beforeSend);
 
   @override
@@ -538,22 +543,13 @@ final class ProtocolWebDavSyncTransport
 
   @override
   Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
-    final metadata = await _client.putBytes(
+    return _client.putBytes(
       path: _location.rootKeyPath,
       bytes: bytes,
       maxBytes: WebDavSyncRootKeyFile.maxBytes,
       ifNoneMatch: '*',
       createParents: false,
     );
-    if (metadata.statusCode != 201) {
-      throw WebDavException(
-        kind: WebDavErrorKind.unexpectedStatus,
-        message: 'WebDAV did not prove create-only sync key ownership',
-        statusCode: metadata.statusCode,
-        uri: metadata.uri,
-      );
-    }
-    return metadata;
   }
 
   @override
@@ -567,22 +563,13 @@ final class ProtocolWebDavSyncTransport
 
   @override
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes) async {
-    final metadata = await _client.putBytes(
+    return _client.putBytes(
       path: _location.rootMarkerPath,
       bytes: bytes,
       maxBytes: WebDavSyncCodec.rootMarkerMaxBytes,
       ifNoneMatch: '*',
       createParents: false,
     );
-    if (metadata.statusCode != 201) {
-      throw WebDavException(
-        kind: WebDavErrorKind.unexpectedStatus,
-        message: 'WebDAV did not prove create-only sync root ownership',
-        statusCode: metadata.statusCode,
-        uri: metadata.uri,
-      );
-    }
-    return metadata;
   }
 
   @override
@@ -715,9 +702,13 @@ final RegExp _safeDeviceId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$');
 /// Exercises create-only PUT against a disposable sentinel before setup relies
 /// on the same precondition for either root authority file.
 final class WebDavSyncConditionalCreateProbe {
-  const WebDavSyncConditionalCreateProbe(this._client);
+  const WebDavSyncConditionalCreateProbe(
+    this._client, {
+    WebDavSyncAuthorityDiagnostic? diagnostic,
+  }) : _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic;
 
   final WebDavProtocolClient _client;
+  final WebDavSyncAuthorityDiagnostic _diagnostic;
 
   Future<void> verify({
     required String syncRootPath,
@@ -742,7 +733,7 @@ final class WebDavSyncConditionalCreateProbe {
       // Set before the request goes out: a lost response can still have
       // created the sentinel server-side, and cleanup must cover that.
       mayExist = true;
-      final created = await _client.putBytes(
+      await _client.putBytes(
         path: path,
         bytes: first,
         maxBytes: first.length,
@@ -750,13 +741,28 @@ final class WebDavSyncConditionalCreateProbe {
         createParents: false,
         beforeSend: beforeSend,
       );
-      if (created.statusCode != HttpStatus.created) {
-        throw const WebDavSyncProviderUnsupportedException();
+      try {
+        final createdReadBack = await _client.getBytes(
+          path: path,
+          maxBytes: first.length,
+          beforeSend: beforeSend,
+        );
+        if (!_constantTimeBytesEqual(createdReadBack.bytes, first)) {
+          _throwUnsupported(
+            step: 'probe-readback',
+            probeStep: 1,
+            statusCode: createdReadBack.metadata.statusCode,
+          );
+        }
+      } on WebDavSyncProviderUnsupportedException {
+        rethrow;
+      } on WebDavException catch (error) {
+        _throwUnsupported(step: 'probe-readback', probeStep: 1, error: error);
       }
 
-      var secondWasRejected = false;
+      WebDavResponseMetadata? conflictingSuccess;
       try {
-        await _client.putBytes(
+        conflictingSuccess = await _client.putBytes(
           path: path,
           bytes: second,
           maxBytes: second.length,
@@ -765,25 +771,49 @@ final class WebDavSyncConditionalCreateProbe {
           beforeSend: beforeSend,
         );
       } on WebDavException catch (error) {
-        if (error.kind != WebDavErrorKind.preconditionFailed) {
-          throw const WebDavSyncProviderUnsupportedException();
+        // HTTP 412 is the conventional fast path. Other honest WebDAV
+        // dialects use statuses such as 403, 405, or 409 for the same refused
+        // create. The unchanged read-back below is the ownership proof.
+        if (error.kind == WebDavErrorKind.preconditionFailed) {
+          // Recognized conventional conflict; still verify stored bytes.
         }
-        secondWasRejected = true;
       }
 
-      final readBack = await _client.getBytes(
-        path: path,
-        maxBytes: first.length,
-        beforeSend: beforeSend,
-      );
-      if (!secondWasRejected ||
-          !_constantTimeBytesEqual(readBack.bytes, first)) {
-        throw const WebDavSyncProviderUnsupportedException();
+      late final WebDavBytesResult readBack;
+      try {
+        readBack = await _client.getBytes(
+          path: path,
+          maxBytes: first.length,
+          beforeSend: beforeSend,
+        );
+      } on WebDavException catch (error) {
+        if (conflictingSuccess != null) {
+          _throwUnsupported(
+            step: 'probe-conflict',
+            probeStep: 2,
+            statusCode: conflictingSuccess.statusCode,
+          );
+        }
+        _throwUnsupported(step: 'probe-readback', probeStep: 2, error: error);
+      }
+      if (conflictingSuccess != null) {
+        _throwUnsupported(
+          step: 'probe-conflict',
+          probeStep: 2,
+          statusCode: conflictingSuccess.statusCode,
+        );
+      }
+      if (!_constantTimeBytesEqual(readBack.bytes, first)) {
+        _throwUnsupported(
+          step: 'probe-readback',
+          probeStep: 2,
+          statusCode: readBack.metadata.statusCode,
+        );
       }
     } on WebDavSyncProviderUnsupportedException {
       rethrow;
-    } on WebDavException {
-      throw const WebDavSyncProviderUnsupportedException();
+    } on WebDavException catch (error) {
+      _throwUnsupported(step: 'probe-create', probeStep: 1, error: error);
     } finally {
       if (mayExist) {
         try {
@@ -793,6 +823,26 @@ final class WebDavSyncConditionalCreateProbe {
         }
       }
     }
+  }
+
+  Never _throwUnsupported({
+    required String step,
+    required int probeStep,
+    Object? error,
+    int? statusCode,
+  }) {
+    recordWebDavSyncAuthorityFailure(
+      _diagnostic,
+      step: step,
+      error: error,
+      statusCode: statusCode,
+    );
+    throw WebDavSyncProviderUnsupportedException(
+      probeStep: probeStep,
+      statusCode:
+          statusCode ?? (error is WebDavException ? error.statusCode : null),
+      exceptionKind: error is WebDavException ? error.kind : null,
+    );
   }
 }
 

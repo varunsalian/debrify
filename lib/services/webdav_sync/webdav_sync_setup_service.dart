@@ -5,6 +5,7 @@ import '../../models/webdav_item.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_transport.dart';
 
@@ -114,12 +115,15 @@ final class ProtocolWebDavSyncProbeTransport
   ProtocolWebDavSyncProbeTransport({
     required Uri endpoint,
     required WebDavCredentials credentials,
+    WebDavSyncAuthorityDiagnostic? diagnostic,
   }) : _client = WebDavProtocolClient(
          endpoint: endpoint,
          credentials: credentials,
-       );
+       ),
+       _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic;
 
   final WebDavProtocolClient _client;
+  final WebDavSyncAuthorityDiagnostic _diagnostic;
 
   @override
   Future<void> verifyConditionalCreate({
@@ -127,6 +131,7 @@ final class ProtocolWebDavSyncProbeTransport
     Future<void> Function()? beforeSend,
   }) => WebDavSyncConditionalCreateProbe(
     _client,
+    diagnostic: _diagnostic,
   ).verify(syncRootPath: syncRootPath, beforeSend: beforeSend);
 
   @override
@@ -155,7 +160,7 @@ final class ProtocolWebDavSyncProbeTransport
     required Uint8List bytes,
     Future<void> Function()? beforeSend,
   }) async {
-    final metadata = await _client.putBytes(
+    return _client.putBytes(
       path: path,
       bytes: bytes,
       maxBytes: WebDavSyncRootKeyFile.maxBytes,
@@ -163,15 +168,6 @@ final class ProtocolWebDavSyncProbeTransport
       createParents: false,
       beforeSend: beforeSend,
     );
-    if (metadata.statusCode != 201) {
-      throw WebDavException(
-        kind: WebDavErrorKind.unexpectedStatus,
-        message: 'WebDAV did not prove create-only sync key ownership',
-        statusCode: metadata.statusCode,
-        uri: metadata.uri,
-      );
-    }
-    return metadata;
   }
 
   @override
@@ -185,21 +181,25 @@ final class WebDavSyncSetupService {
     WebDavSyncBindingStore? store,
     WebDavSyncCodec? codec,
     WebDavSyncProbeTransportFactory? transportFactory,
+    WebDavSyncAuthorityDiagnostic? diagnostic,
     this.runCryptoInBackground = true,
   }) : store = store ?? WebDavSyncBindingStore(),
        codec = codec ?? WebDavSyncCodec(),
+       _diagnostic = diagnostic ?? recordWebDavSyncDiagnostic,
        _transportFactory =
            transportFactory ??
            (({required endpoint, required credentials}) =>
                ProtocolWebDavSyncProbeTransport(
                  endpoint: endpoint,
                  credentials: credentials,
+                 diagnostic: diagnostic ?? recordWebDavSyncDiagnostic,
                ));
 
   final WebDavSyncBindingStore store;
   final WebDavSyncCodec codec;
   final bool runCryptoInBackground;
   final WebDavSyncProbeTransportFactory _transportFactory;
+  final WebDavSyncAuthorityDiagnostic _diagnostic;
 
   Future<WebDavSyncFolderInspection> inspectFolder({
     required WebDavConfig config,
@@ -335,13 +335,20 @@ final class WebDavSyncSetupService {
   }) async {
     final provision = transport;
     if (provision is! WebDavSyncRootKeyProvisionTransport) {
-      throw const WebDavSyncRootKeyClaimException();
+      _throwProvisionFailure();
     }
-    await (provision as WebDavSyncRootKeyProvisionTransport)
-        .verifyConditionalCreate(
-          syncRootPath: syncRootPath,
-          beforeSend: beforeSend,
-        );
+    try {
+      await (provision as WebDavSyncRootKeyProvisionTransport)
+          .verifyConditionalCreate(
+            syncRootPath: syncRootPath,
+            beforeSend: beforeSend,
+          );
+    } on WebDavSyncProviderUnsupportedException {
+      // The probe records its own more precise step/status diagnostic.
+      rethrow;
+    } on Object catch (error) {
+      _throwProvisionFailure(error: error);
+    }
     final expected = rootKey.encode();
     try {
       await (provision as WebDavSyncRootKeyProvisionTransport).createRootKey(
@@ -349,38 +356,60 @@ final class WebDavSyncSetupService {
         bytes: expected,
         beforeSend: beforeSend,
       );
-      final verified = await transport.readRootKey(
+    } on WebDavException catch (error) {
+      // HTTP 412 is conventional, but honest servers also report 403, 405,
+      // or 409 for a refused conditional create. A valid matching winner is
+      // the authority regardless of that dialect.
+      try {
+        final winnerResult = await transport.readRootKey(
+          path: path,
+          beforeSend: beforeSend,
+        );
+        final winner = WebDavSyncRootKeyFile.parse(winnerResult.bytes);
+        if (winner.syncPassphrase != rootKey.syncPassphrase) {
+          _throwProvisionFailure(error: error);
+        }
+        return;
+      } on WebDavSyncRootKeyClaimException {
+        rethrow;
+      } on WebDavException catch (readError) {
+        _throwProvisionFailure(
+          error: readError.kind == WebDavErrorKind.notFound ? error : readError,
+        );
+      } on Object {
+        _throwProvisionFailure(error: error);
+      }
+    } on Object catch (error) {
+      _throwProvisionFailure(error: error);
+    }
+
+    late final WebDavBytesResult verified;
+    try {
+      verified = await transport.readRootKey(
         path: path,
         beforeSend: beforeSend,
       );
       if (!_bytesEqual(verified.bytes, expected)) {
-        throw const WebDavSyncRootKeyClaimException();
+        _throwProvisionFailure(statusCode: verified.metadata.statusCode);
       }
       WebDavSyncRootKeyFile.parse(verified.bytes);
-    } on WebDavException catch (error) {
-      if (error.kind != WebDavErrorKind.preconditionFailed) {
-        throw const WebDavSyncRootKeyClaimException();
-      }
-      try {
-        final winner = WebDavSyncRootKeyFile.parse(
-          (await transport.readRootKey(
-            path: path,
-            beforeSend: beforeSend,
-          )).bytes,
-        );
-        if (winner.syncPassphrase != rootKey.syncPassphrase) {
-          throw const WebDavSyncRootKeyClaimException();
-        }
-      } on WebDavSyncRootKeyClaimException {
-        rethrow;
-      } on Object {
-        throw const WebDavSyncRootKeyClaimException();
-      }
     } on WebDavSyncRootKeyClaimException {
       rethrow;
+    } on WebDavException catch (error) {
+      _throwProvisionFailure(error: error);
     } on Object {
-      throw const WebDavSyncRootKeyClaimException();
+      _throwProvisionFailure(statusCode: verified.metadata.statusCode);
     }
+  }
+
+  Never _throwProvisionFailure({Object? error, int? statusCode}) {
+    recordWebDavSyncAuthorityFailure(
+      _diagnostic,
+      step: 'provision',
+      error: error,
+      statusCode: statusCode,
+    );
+    throw const WebDavSyncRootKeyClaimException();
   }
 
   Future<WebDavSyncBinding> configureNewRoot({

@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../diagnostic_log.dart';
+import '../webdav_protocol_client.dart';
+
+typedef WebDavSyncAuthorityDiagnostic =
+    void Function(String message, Object? error);
 
 /// Production sink for audited WebDAV sync notes.
 ///
@@ -25,6 +29,26 @@ void recordWebDavSyncDiagnostic(String message, Object? _) {
   } catch (_) {
     // Observability must never affect sync work.
   }
+}
+
+/// Records only the audited authority step and a non-secret-bearing status.
+///
+/// Never pass the underlying error to the sink: protocol exceptions may carry
+/// a credentialed endpoint or a private path.
+void recordWebDavSyncAuthorityFailure(
+  WebDavSyncAuthorityDiagnostic diagnostic, {
+  required String step,
+  Object? error,
+  int? statusCode,
+}) {
+  final resolvedStatus =
+      statusCode ?? (error is WebDavException ? error.statusCode : null);
+  final outcome = resolvedStatus != null
+      ? 'HTTP $resolvedStatus'
+      : error is WebDavException
+      ? 'kind ${error.kind.name}'
+      : 'kind exception';
+  diagnostic('WebDAV sync authority failure: $step, $outcome', null);
 }
 
 String _webDavSyncMessageLabel(String message) {

@@ -269,7 +269,7 @@ void main() {
     },
   );
 
-  test('root commit is create-only and accepts exactly 201', () async {
+  test('root commit keeps create-only header and accepts any 2xx', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),
       credentials: const WebDavCredentials(username: '', password: ''),
@@ -277,7 +277,7 @@ void main() {
         expect(request.method, 'PUT');
         expect(request.url.path, '/dav/Family/debrify-sync/circle.json.enc');
         expect(request.headers['if-none-match'], '*');
-        return http.Response('', 201);
+        return http.Response('', 204);
       }),
     );
 
@@ -285,65 +285,73 @@ void main() {
       Uint8List.fromList(<int>[1, 2, 3]),
     );
 
-    expect(metadata.statusCode, 201);
+    expect(metadata.statusCode, 204);
     transport.close();
   });
 
-  test('conditional-create probe verifies first body and cleans up', () async {
-    final methods = <String>[];
-    Uri? sentinel;
-    Uint8List? firstBody;
-    Uint8List? secondBody;
-    final transport = ProtocolWebDavSyncTransport(
-      location: location(),
-      credentials: const WebDavCredentials(username: '', password: ''),
-      client: MockClient((request) async {
-        methods.add(request.method);
-        sentinel ??= request.url;
-        expect(request.url, sentinel);
-        expect(
-          request.url.path,
-          matches(
-            RegExp(r'^/dav/Family/debrify-sync/\.cond-probe-[0-9a-f]{32}$'),
-          ),
+  for (final conflictStatus in <int>[403, 405, 409, 412]) {
+    test(
+      'conditional-create probe accepts HTTP $conflictStatus conflict dialect',
+      () async {
+        final methods = <String>[];
+        Uri? sentinel;
+        Uint8List? firstBody;
+        Uint8List? secondBody;
+        var putCount = 0;
+        final transport = ProtocolWebDavSyncTransport(
+          location: location(),
+          credentials: const WebDavCredentials(username: '', password: ''),
+          client: MockClient((request) async {
+            methods.add(request.method);
+            sentinel ??= request.url;
+            expect(request.url, sentinel);
+            expect(
+              request.url.path,
+              matches(
+                RegExp(r'^/dav/Family/debrify-sync/\.cond-probe-[0-9a-f]{32}$'),
+              ),
+            );
+            if (request.method == 'PUT') {
+              expect(request.headers['if-none-match'], '*');
+              putCount++;
+              if (putCount == 1) {
+                firstBody = Uint8List.fromList(request.bodyBytes);
+                return http.Response('', 200);
+              }
+              secondBody = Uint8List.fromList(request.bodyBytes);
+              return http.Response('', conflictStatus);
+            }
+            if (request.method == 'GET') {
+              return http.Response.bytes(firstBody!, 200);
+            }
+            if (request.method == 'DELETE') return http.Response('', 204);
+            return http.Response('', 500);
+          }),
         );
-        if (request.method == 'PUT' && firstBody == null) {
-          expect(request.headers['if-none-match'], '*');
-          firstBody = Uint8List.fromList(request.bodyBytes);
-          return http.Response('', 201);
-        }
-        if (request.method == 'PUT') {
-          expect(request.headers['if-none-match'], '*');
-          secondBody = Uint8List.fromList(request.bodyBytes);
-          return http.Response('', 412);
-        }
-        if (request.method == 'GET') {
-          return http.Response.bytes(firstBody!, 200);
-        }
-        if (request.method == 'DELETE') return http.Response('', 204);
-        return http.Response('', 500);
-      }),
-    );
 
-    await transport.verifyConditionalCreate(
-      syncRootPath: 'Family/debrify-sync',
-    );
+        await transport.verifyConditionalCreate(
+          syncRootPath: 'Family/debrify-sync',
+        );
 
-    expect(methods, <String>['PUT', 'PUT', 'GET', 'DELETE']);
-    expect(firstBody, hasLength(16));
-    expect(secondBody, hasLength(16));
-    expect(secondBody, isNot(orderedEquals(firstBody!)));
-    transport.close();
-  });
+        expect(methods, <String>['PUT', 'GET', 'PUT', 'GET', 'DELETE']);
+        expect(firstBody, hasLength(16));
+        expect(secondBody, hasLength(16));
+        expect(secondBody, isNot(orderedEquals(firstBody!)));
+        transport.close();
+      },
+    );
+  }
 
   test(
     'conditional-create probe refuses an overwrite lie and cleans up',
     () async {
       final methods = <String>[];
+      final diagnostics = <String>[];
       Uint8List? stored;
       final transport = ProtocolWebDavSyncTransport(
         location: location(),
         credentials: const WebDavCredentials(username: '', password: ''),
+        diagnostic: (message, _) => diagnostics.add(message),
         client: MockClient((request) async {
           methods.add(request.method);
           if (request.method == 'PUT') {
@@ -360,15 +368,74 @@ void main() {
 
       await expectLater(
         transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
-        throwsA(isA<WebDavSyncProviderUnsupportedException>()),
+        throwsA(
+          isA<WebDavSyncProviderUnsupportedException>()
+              .having(
+                (error) => error.toString(),
+                'message',
+                contains('(probe step 2: HTTP 201)'),
+              )
+              .having((error) => error.probeStep, 'step', 2)
+              .having((error) => error.statusCode, 'status', 201),
+        ),
       );
 
-      expect(methods, <String>['PUT', 'PUT', 'GET', 'DELETE']);
+      expect(methods, <String>['PUT', 'GET', 'PUT', 'GET', 'DELETE']);
+      expect(diagnostics, <String>[
+        'WebDAV sync authority failure: probe-conflict, HTTP 201',
+      ]);
       transport.close();
     },
   );
 
-  test('root key claim is create-only and accepts exactly 201', () async {
+  test(
+    'conditional-create probe refuses an absent conflict read-back',
+    () async {
+      final diagnostics = <String>[];
+      var putCount = 0;
+      var getCount = 0;
+      Uint8List? stored;
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        diagnostic: (message, _) => diagnostics.add(message),
+        client: MockClient((request) async {
+          if (request.method == 'PUT') {
+            putCount++;
+            if (putCount == 1) {
+              stored = Uint8List.fromList(request.bodyBytes);
+              return http.Response('', 201);
+            }
+            return http.Response('', 409);
+          }
+          if (request.method == 'GET') {
+            getCount++;
+            return getCount == 1
+                ? http.Response.bytes(stored!, 200)
+                : http.Response('', 404);
+          }
+          if (request.method == 'DELETE') return http.Response('', 204);
+          return http.Response('', 500);
+        }),
+      );
+
+      await expectLater(
+        transport.verifyConditionalCreate(syncRootPath: 'Family/debrify-sync'),
+        throwsA(
+          isA<WebDavSyncProviderUnsupportedException>()
+              .having((error) => error.probeStep, 'step', 2)
+              .having((error) => error.statusCode, 'status', 404),
+        ),
+      );
+
+      expect(diagnostics, <String>[
+        'WebDAV sync authority failure: probe-readback, HTTP 404',
+      ]);
+      transport.close();
+    },
+  );
+
+  test('root key claim keeps create-only header and accepts any 2xx', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),
       credentials: const WebDavCredentials(username: '', password: ''),
@@ -376,7 +443,7 @@ void main() {
         expect(request.method, 'PUT');
         expect(request.url.path, '/dav/Family/debrify-sync/circle.key');
         expect(request.headers['if-none-match'], '*');
-        return http.Response('', 201);
+        return http.Response('', 200);
       }),
     );
 
@@ -384,33 +451,26 @@ void main() {
       const WebDavSyncRootKeyFile(syncPassphrase: 'machine-secret').encode(),
     );
 
-    expect(metadata.statusCode, 201);
+    expect(metadata.statusCode, 200);
     transport.close();
   });
 
-  test('root key claim rejects ambiguous 204 success', () async {
-    final transport = ProtocolWebDavSyncTransport(
-      location: location(),
-      credentials: const WebDavCredentials(username: '', password: ''),
-      client: MockClient((_) async => http.Response('', 204)),
-    );
+  test(
+    'root key claim returns 204 for caller read-back verification',
+    () async {
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((_) async => http.Response('', 204)),
+      );
 
-    await expectLater(
-      transport.createRootKey(
+      final metadata = await transport.createRootKey(
         const WebDavSyncRootKeyFile(syncPassphrase: 'machine-secret').encode(),
-      ),
-      throwsA(
-        isA<WebDavException>()
-            .having(
-              (error) => error.kind,
-              'kind',
-              WebDavErrorKind.unexpectedStatus,
-            )
-            .having((error) => error.statusCode, 'status', 204),
-      ),
-    );
-    transport.close();
-  });
+      );
+      expect(metadata.statusCode, 204);
+      transport.close();
+    },
+  );
 
   test('root key reads enforce the 4 KiB cap', () async {
     final transport = ProtocolWebDavSyncTransport(
@@ -490,25 +550,17 @@ void main() {
     transport.close();
   });
 
-  test('root commit rejects ambiguous 204 success', () async {
+  test('root commit returns 204 for caller read-back verification', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),
       credentials: const WebDavCredentials(username: '', password: ''),
       client: MockClient((_) async => http.Response('', 204)),
     );
 
-    await expectLater(
-      transport.createRootMarker(Uint8List.fromList(<int>[1, 2, 3])),
-      throwsA(
-        isA<WebDavException>()
-            .having(
-              (error) => error.kind,
-              'kind',
-              WebDavErrorKind.unexpectedStatus,
-            )
-            .having((error) => error.statusCode, 'status', 204),
-      ),
+    final metadata = await transport.createRootMarker(
+      Uint8List.fromList(<int>[1, 2, 3]),
     );
+    expect(metadata.statusCode, 204);
     transport.close();
   });
 

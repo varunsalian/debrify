@@ -228,22 +228,41 @@ final class WebDavSyncRootKeyClaimException implements Exception {
       'This WebDAV provider is unsupported, or the sync folder is damaged.';
 }
 
-/// The provider accepted a second create-only write instead of rejecting it.
+/// The provider failed the outcome-based conditional-create capability probe.
 ///
 /// Sync setup relies on `If-None-Match: *` to make the root key and marker
-/// immutable. Providers that do not enforce that precondition are refused
-/// before either authority file is created or changed.
+/// immutable. Providers that do not enforce that precondition, or cannot
+/// prove the sentinel outcome by read-back, are refused before either
+/// authority file is created or changed.
 final class WebDavSyncProviderUnsupportedException implements Exception {
-  const WebDavSyncProviderUnsupportedException();
+  const WebDavSyncProviderUnsupportedException({
+    this.probeStep,
+    this.statusCode,
+    this.exceptionKind,
+  });
+
+  /// One-based probe operation shown without the private sentinel path.
+  final int? probeStep;
+  final int? statusCode;
+  final WebDavErrorKind? exceptionKind;
 
   static const String userMessage =
       'This WebDAV server cannot protect sync setup from conflicts. '
       'Use Koofr or a server that supports conditional file creation.';
 
-  String get message => userMessage;
+  String get message {
+    final step = probeStep;
+    if (step == null) return userMessage;
+    final outcome = statusCode != null
+        ? 'HTTP $statusCode'
+        : exceptionKind != null
+        ? exceptionKind!.name
+        : 'unknown';
+    return '$userMessage (probe step $step: $outcome)';
+  }
 
   @override
-  String toString() => userMessage;
+  String toString() => message;
 }
 
 /// The imported profile has already become local authority. The original
