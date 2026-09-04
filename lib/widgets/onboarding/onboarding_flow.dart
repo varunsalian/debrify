@@ -327,9 +327,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
           debugPrint('Onboarding WebDAV login failed (${error.runtimeType})');
           setState(() {
             _connectingWebDav = false;
-            _webDavError = error is WebDavSyncProviderUnsupportedException
-                ? error.message
-                : 'Could not connect this account. Check your details and try again.';
+            _webDavError = switch (error) {
+              WebDavSyncProviderUnsupportedException() => error.message,
+              WebDavSyncSetupInconclusiveException() =>
+                WebDavSyncSetupInconclusiveException.userMessage,
+              _ =>
+                'Could not connect this account. Check your details and try again.',
+            };
           });
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => _requestLanding(),
@@ -360,9 +364,13 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       debugPrint('Onboarding WebDAV login failed (${error.runtimeType})');
       setState(() {
         _connectingWebDav = false;
-        _webDavError = error is WebDavSyncProviderUnsupportedException
-            ? error.message
-            : 'Could not connect this account. Check your details and try again.';
+        _webDavError = switch (error) {
+          WebDavSyncProviderUnsupportedException() => error.message,
+          WebDavSyncSetupInconclusiveException() =>
+            WebDavSyncSetupInconclusiveException.userMessage,
+          _ =>
+            'Could not connect this account. Check your details and try again.',
+        };
       });
     }
   }

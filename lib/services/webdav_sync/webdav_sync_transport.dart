@@ -699,6 +699,10 @@ final class ProtocolWebDavSyncTransport
 
 final RegExp _safeDeviceId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$');
 
+const Set<int> _conditionalCreateConflictStatuses = <int>{403, 405, 409, 412};
+const int _conditionalCreateProbeMaxAttempts = 3;
+const Duration _conditionalCreateProbeRetrySpacing = Duration(milliseconds: 50);
+
 /// Exercises create-only PUT against a disposable sentinel before setup relies
 /// on the same precondition for either root authority file.
 final class WebDavSyncConditionalCreateProbe {
@@ -713,6 +717,50 @@ final class WebDavSyncConditionalCreateProbe {
   Future<void> verify({
     required String syncRootPath,
     Future<void> Function()? beforeSend,
+  }) async {
+    _WebDavSyncProbeInconclusive? lastInconclusive;
+    for (
+      var attempt = 1;
+      attempt <= _conditionalCreateProbeMaxAttempts;
+      attempt++
+    ) {
+      try {
+        await _verifyAttempt(
+          syncRootPath: syncRootPath,
+          beforeSend: beforeSend,
+        );
+        return;
+      } on _WebDavSyncProbeInconclusive catch (error) {
+        lastInconclusive = error;
+        if (attempt < _conditionalCreateProbeMaxAttempts) {
+          await Future<void>.delayed(_conditionalCreateProbeRetrySpacing);
+        }
+      }
+    }
+
+    final failure = lastInconclusive!;
+    recordWebDavSyncAuthorityFailure(
+      _diagnostic,
+      step: failure.step,
+      error: failure.error,
+      statusCode: failure.statusCode,
+    );
+    throw WebDavSyncSetupInconclusiveException(
+      probeStep: failure.probeStep,
+      statusCode:
+          failure.statusCode ??
+          (failure.error is WebDavException
+              ? (failure.error as WebDavException).statusCode
+              : null),
+      exceptionKind: failure.error is WebDavException
+          ? (failure.error as WebDavException).kind
+          : null,
+    );
+  }
+
+  Future<void> _verifyAttempt({
+    required String syncRootPath,
+    required Future<void> Function()? beforeSend,
   }) async {
     final random = Random.secure();
     final nameBytes = List<int>.generate(16, (_) => random.nextInt(256));
@@ -733,14 +781,25 @@ final class WebDavSyncConditionalCreateProbe {
       // Set before the request goes out: a lost response can still have
       // created the sentinel server-side, and cleanup must cover that.
       mayExist = true;
-      await _client.putBytes(
-        path: path,
-        bytes: first,
-        maxBytes: first.length,
-        ifNoneMatch: '*',
-        createParents: false,
-        beforeSend: beforeSend,
-      );
+      try {
+        await _client.putBytes(
+          path: path,
+          bytes: first,
+          maxBytes: first.length,
+          ifNoneMatch: '*',
+          createParents: false,
+          beforeSend: beforeSend,
+        );
+      } on WebDavException catch (error) {
+        if (_isTransientOrTransport(error) ||
+            error.statusCode == HttpStatus.unauthorized ||
+            error.statusCode == HttpStatus.forbidden) {
+          _throwInconclusive(step: 'probe-create', probeStep: 1, error: error);
+        }
+        _throwUnsupported(step: 'probe-create', probeStep: 1, error: error);
+      } on Object catch (error) {
+        _throwInconclusive(step: 'probe-create', probeStep: 1, error: error);
+      }
       try {
         final createdReadBack = await _client.getBytes(
           path: path,
@@ -757,10 +816,22 @@ final class WebDavSyncConditionalCreateProbe {
       } on WebDavSyncProviderUnsupportedException {
         rethrow;
       } on WebDavException catch (error) {
+        if (_isTransientOrTransport(error) ||
+            error.statusCode == HttpStatus.notFound) {
+          _throwInconclusive(
+            step: 'probe-readback',
+            probeStep: 1,
+            error: error,
+          );
+        }
         _throwUnsupported(step: 'probe-readback', probeStep: 1, error: error);
+      } on Object catch (error) {
+        _throwInconclusive(step: 'probe-readback', probeStep: 1, error: error);
       }
 
       WebDavResponseMetadata? conflictingSuccess;
+      _WebDavSyncProbeInconclusive? conflictingInconclusive;
+      var conflictEnforced = false;
       try {
         conflictingSuccess = await _client.putBytes(
           path: path,
@@ -771,12 +842,25 @@ final class WebDavSyncConditionalCreateProbe {
           beforeSend: beforeSend,
         );
       } on WebDavException catch (error) {
-        // HTTP 412 is the conventional fast path. Other honest WebDAV
-        // dialects use statuses such as 403, 405, or 409 for the same refused
-        // create. The unchanged read-back below is the ownership proof.
-        if (error.kind == WebDavErrorKind.preconditionFailed) {
-          // Recognized conventional conflict; still verify stored bytes.
+        if (error.statusCode case final status?
+            when _conditionalCreateConflictStatuses.contains(status)) {
+          // 403 is safe only here: this exact probe already proved write
+          // access with the successful first create, so it is a refusal of
+          // the conflicting create rather than an authentication guess.
+          conflictEnforced = true;
+        } else {
+          conflictingInconclusive = _WebDavSyncProbeInconclusive(
+            step: 'probe-conflict',
+            probeStep: 2,
+            error: error,
+          );
         }
+      } on Object catch (error) {
+        conflictingInconclusive = _WebDavSyncProbeInconclusive(
+          step: 'probe-conflict',
+          probeStep: 2,
+          error: error,
+        );
       }
 
       late final WebDavBytesResult readBack;
@@ -794,7 +878,23 @@ final class WebDavSyncConditionalCreateProbe {
             statusCode: conflictingSuccess.statusCode,
           );
         }
+        if (_isTransientOrTransport(error)) {
+          _throwInconclusive(
+            step: 'probe-readback',
+            probeStep: 2,
+            error: error,
+          );
+        }
         _throwUnsupported(step: 'probe-readback', probeStep: 2, error: error);
+      } on Object catch (error) {
+        if (conflictingSuccess != null) {
+          _throwUnsupported(
+            step: 'probe-conflict',
+            probeStep: 2,
+            statusCode: conflictingSuccess.statusCode,
+          );
+        }
+        _throwInconclusive(step: 'probe-readback', probeStep: 2, error: error);
       }
       if (conflictingSuccess != null) {
         _throwUnsupported(
@@ -810,10 +910,10 @@ final class WebDavSyncConditionalCreateProbe {
           statusCode: readBack.metadata.statusCode,
         );
       }
+      if (conflictEnforced) return;
+      throw conflictingInconclusive!;
     } on WebDavSyncProviderUnsupportedException {
       rethrow;
-    } on WebDavException catch (error) {
-      _throwUnsupported(step: 'probe-create', probeStep: 1, error: error);
     } finally {
       if (mayExist) {
         try {
@@ -823,6 +923,33 @@ final class WebDavSyncConditionalCreateProbe {
         }
       }
     }
+  }
+
+  bool _isTransientOrTransport(WebDavException error) {
+    final status = error.statusCode;
+    return error.kind == WebDavErrorKind.transient ||
+        error.kind == WebDavErrorKind.timeout ||
+        error.kind == WebDavErrorKind.network ||
+        error.kind == WebDavErrorKind.tls ||
+        error.kind == WebDavErrorKind.unsafeRedirect ||
+        status == null ||
+        status == HttpStatus.requestTimeout ||
+        status == HttpStatus.tooManyRequests ||
+        (status >= 500 && status <= 599);
+  }
+
+  Never _throwInconclusive({
+    required String step,
+    required int probeStep,
+    Object? error,
+    int? statusCode,
+  }) {
+    throw _WebDavSyncProbeInconclusive(
+      step: step,
+      probeStep: probeStep,
+      error: error,
+      statusCode: statusCode,
+    );
   }
 
   Never _throwUnsupported({
@@ -844,6 +971,20 @@ final class WebDavSyncConditionalCreateProbe {
       exceptionKind: error is WebDavException ? error.kind : null,
     );
   }
+}
+
+final class _WebDavSyncProbeInconclusive implements Exception {
+  const _WebDavSyncProbeInconclusive({
+    required this.step,
+    required this.probeStep,
+    this.error,
+    this.statusCode,
+  });
+
+  final String step;
+  final int probeStep;
+  final Object? error;
+  final int? statusCode;
 }
 
 bool _constantTimeBytesEqual(List<int> left, List<int> right) {

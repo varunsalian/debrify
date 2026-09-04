@@ -1859,10 +1859,12 @@ New device directories are still discovered only by the full cycles
   accepted. Keep byte-for-byte read-back for bootstrap, profiles, resources,
   the large-section path, and the **manifest** commit record. Sections are
   immutable, content-addressed, and AEAD-sealed; every reader independently
-  checks content hash, AEAD, and semantic digest. A 412 section PUT remains
-  accepted as the pre-existing immutable object. If this device later rejects
-  one of its own referenced sections, clear its last-pushed digest so the next
-  cycle republishes it.
+  checks content hash, AEAD, and semantic digest. After any failed immutable
+  section PUT, regardless of the provider's conflict status dialect, the
+  content-addressed object is read back and accepted only when its hash and
+  size match the local bytes and it authenticates; a mismatch rethrows the PUT
+  failure. If this device later rejects one of its own referenced sections,
+  clear its last-pushed digest so the next cycle republishes it.
 - Production cycles and the remote-change poll borrow one long-lived HTTP
   client plus its generation for the active binding, preserving per-request
   credentials while reusing connections/TLS. Per-transport `close()` does not
@@ -2415,9 +2417,16 @@ passphrase, this section supersedes them.
 - New-root activation proves the collection exists, then runs a disposable
   conditional-create probe before any key claim or marker work. The first
   sentinel PUT may return any 2xx and must read back as the first random body.
-  The second create-only PUT must be refused (with any non-2xx status) and a
-  fresh GET must still retain the first body; cleanup is best-effort. The
-  result is cached for that initialization attempt. A resumed initializer
+  The second create-only PUT proves enforcement only with a response-backed
+  403, 405, 409, or 412 rejection, after which a fresh GET must still retain
+  the first body; cleanup is best-effort. Transport/no-response failures,
+  408/429/5xx responses, unclassified statuses, and an immediate first
+  read-back visibility 404 are inconclusive. The whole probe is retried a
+  bounded three times, then
+  surfaces a typed retryable setup error rather than unsupported-provider.
+  Any 2xx conflicting PUT, overwritten body, or absent conflict read-back
+  still refuses the provider as an ignorer. The result is cached for that
+  initialization attempt. A resumed initializer
   reads the standing marker before key claim/adoption: when it byte-matches
   the persisted candidate, that marker owns the root, so the initializer keeps
   its pre-adoption secret and repairs a missing or divergent key toward it.
@@ -2455,17 +2464,20 @@ passphrase, this section supersedes them.
 
 Final contract: sync initialization requires a WebDAV server with honest
 conditional creation, proven by outcome: the probe's conditional PUT is
-refused and the stored bytes remain unchanged. HTTP success and conflict codes
-are provider dialect, not ownership proof. Strict 201 creation is replaced by
-any-2xx creation plus read-back verification, gated behind the successful
-probe, throughout key claim, marker commit, and legacy keyfile provision. A
-non-conforming server is refused before authority mutation; each typed probe,
-claim, commit, or provision failure first records only its redacted step and
-HTTP status or exception kind, and the unsupported-provider message includes
-the compact probe step/status. The verify/repair ladder still guarantees that
-a standing marker matches `circle.key`. A candidate restart triggered by an
-observed key replacement resets the probe cache, so the retry revalidates the
-assumption it just watched fail.
+refused by a response-backed definite conflict status and the stored bytes
+remain unchanged. An absent response, timeout/network/TLS/unsafe-redirect
+failure, transient HTTP status, or other unclassified response never proves
+enforcement: it is inconclusive-and-retryable, never a pass and never labeled
+unsupported-provider. Strict 201 creation is replaced by any-2xx creation plus
+read-back verification, gated behind the successful probe, throughout key
+claim, marker commit, and legacy keyfile provision. A non-conforming server is
+refused before authority mutation; each typed probe, claim, commit, or
+provision failure first records only its redacted step and HTTP status or
+exception kind, and the unsupported-provider message includes the compact
+probe step/status. The verify/repair ladder still guarantees that a standing
+marker matches `circle.key`. A candidate restart triggered by an observed key
+replacement resets the probe cache, so the retry revalidates the assumption it
+just watched fail.
 
 Scope of the probe, stated honestly: it validates one sequential request
 stream against one sentinel, which detects servers that ignore

@@ -231,9 +231,10 @@ final class WebDavSyncRootKeyClaimException implements Exception {
 /// The provider failed the outcome-based conditional-create capability probe.
 ///
 /// Sync setup relies on `If-None-Match: *` to make the root key and marker
-/// immutable. Providers that do not enforce that precondition, or cannot
-/// prove the sentinel outcome by read-back, are refused before either
-/// authority file is created or changed.
+/// immutable. Providers proven to ignore that precondition, overwrite the
+/// sentinel, or lose it after a definite conflict are refused before either
+/// authority file is created or changed. Transient ambiguity has a separate
+/// retryable exception.
 final class WebDavSyncProviderUnsupportedException implements Exception {
   const WebDavSyncProviderUnsupportedException({
     this.probeStep,
@@ -260,6 +261,30 @@ final class WebDavSyncProviderUnsupportedException implements Exception {
         : 'unknown';
     return '$userMessage (probe step $step: $outcome)';
   }
+
+  @override
+  String toString() => message;
+}
+
+/// The conditional-create capability probe could not reach a definitive
+/// response-backed outcome. Setup may be retried without changing authority.
+final class WebDavSyncSetupInconclusiveException implements Exception {
+  const WebDavSyncSetupInconclusiveException({
+    this.probeStep,
+    this.statusCode,
+    this.exceptionKind,
+  });
+
+  /// One-based probe operation shown without the private sentinel path.
+  final int? probeStep;
+  final int? statusCode;
+  final WebDavErrorKind? exceptionKind;
+
+  static const String userMessage =
+      "Couldn't verify the sync server right now. "
+      'Check your connection and try again.';
+
+  String get message => userMessage;
 
   @override
   String toString() => message;

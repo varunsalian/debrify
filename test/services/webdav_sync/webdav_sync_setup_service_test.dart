@@ -604,6 +604,38 @@ void main() {
   );
 
   test(
+    'legacy keyfile provisioning preserves an inconclusive probe for retry',
+    () async {
+      final installed = await installActiveBinding();
+      transport
+        ..keyBytes = null
+        ..conditionalCreateProbeError =
+            const WebDavSyncSetupInconclusiveException(
+              probeStep: 2,
+              statusCode: 503,
+            );
+
+      await expectLater(
+        service.inspectFolder(
+          config: _config,
+          folderPath: 'Family',
+          context: WebDavSyncFolderInspectionContext.repair,
+          repairBindingId: installed.binding.id,
+        ),
+        throwsA(isA<WebDavSyncSetupInconclusiveException>()),
+      );
+
+      expect(transport.conditionalCreateProbeCalls, 1);
+      expect(transport.createKeyCalls, 0);
+      expect(transport.keyBytes, isNull);
+      expect(
+        (await store.load()).bindings[installed.binding.id]!.errorMessage,
+        WebDavSyncSetupInconclusiveException.userMessage,
+      );
+    },
+  );
+
+  test(
     'legacy keyfile provisioning accepts only a matching 412 winner',
     () async {
       final installed = await installActiveBinding();

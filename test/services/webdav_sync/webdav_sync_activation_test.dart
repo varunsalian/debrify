@@ -153,6 +153,33 @@ void main() {
   );
 
   test(
+    'inconclusive conditional-create probe aborts before authority writes',
+    () async {
+      transport.conditionalCreateProbeError =
+          const WebDavSyncSetupInconclusiveException(
+            probeStep: 2,
+            exceptionKind: WebDavErrorKind.timeout,
+          );
+
+      await expectLater(
+        initializer().initialize(
+          bindingId: binding.id,
+          authorization: authorization,
+        ),
+        throwsA(isA<WebDavSyncSetupInconclusiveException>()),
+      );
+
+      expect(transport.conditionalCreateProbeCalls, 1);
+      expect(transport.events, isNot(contains('read:key')));
+      expect(transport.events, isNot(contains('read:root')));
+      expect(transport.events, isNot(contains('create:key')));
+      expect(transport.events, isNot(contains('create:root')));
+      expect(transport.marker, isNull);
+      expect((await bindingStore.load()).activeBinding, isNull);
+    },
+  );
+
+  test(
     'publishes complete seed and manifest before creating root last',
     () async {
       final outcome = await initializer().initialize(

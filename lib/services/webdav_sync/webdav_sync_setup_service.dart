@@ -300,7 +300,8 @@ final class WebDavSyncSetupService {
         } catch (error) {
           final failure =
               error is WebDavSyncRootChangedException ||
-                  error is WebDavSyncProviderUnsupportedException
+                  error is WebDavSyncProviderUnsupportedException ||
+                  error is WebDavSyncSetupInconclusiveException
               ? error
               : const WebDavSyncRootKeyClaimException();
           try {
@@ -344,6 +345,9 @@ final class WebDavSyncSetupService {
             beforeSend: beforeSend,
           );
     } on WebDavSyncProviderUnsupportedException {
+      // The probe records its own more precise step/status diagnostic.
+      rethrow;
+    } on WebDavSyncSetupInconclusiveException {
       // The probe records its own more precise step/status diagnostic.
       rethrow;
     } on Object catch (error) {

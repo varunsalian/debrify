@@ -446,25 +446,66 @@ void main() {
     expect(transport.events, isNot(contains('write:manifest')));
   });
 
-  test('pre-existing hot sections remain 412 tolerant without GETs', () async {
-    transport.sectionWritesPreconditionFail = true;
+  for (final status in <int>[403, 405, 409, 412]) {
+    test(
+      'pre-existing hot sections accept HTTP $status by read-back',
+      () async {
+        transport.sectionWriteFailure = WebDavException(
+          kind: switch (status) {
+            403 => WebDavErrorKind.authentication,
+            409 => WebDavErrorKind.conflict,
+            412 => WebDavErrorKind.preconditionFailed,
+            _ => WebDavErrorKind.unexpectedStatus,
+          },
+          message: 'immutable section already exists',
+          statusCode: status,
+        );
 
-    final report = await runFixture(context());
+        final report = await runFixture(context());
 
-    expect(report.disposition, WebDavSyncCycleDisposition.completed);
-    expect(report.sectionsPushed, 2);
-    expect(
-      transport.events,
-      isNot(contains(startsWith('read:section:device-a:'))),
+        expect(report.disposition, WebDavSyncCycleDisposition.completed);
+        expect(report.sectionsPushed, 2);
+        expect(
+          transport.events,
+          contains(startsWith('read:section:device-a:')),
+        );
+        expect(
+          transport.events.sublist(
+            transport.events.indexOf('write:manifest'),
+            transport.events.indexOf('write:manifest') + 2,
+          ),
+          <String>['write:manifest', 'read:manifest:device-a'],
+        );
+      },
     );
-    expect(
-      transport.events.sublist(
-        transport.events.indexOf('write:manifest'),
-        transport.events.indexOf('write:manifest') + 2,
-      ),
-      <String>['write:manifest', 'read:manifest:device-a'],
-    );
-  });
+  }
+
+  test(
+    'immutable hot replay rethrows when the existing hash differs',
+    () async {
+      transport
+        ..sectionWriteFailure = const WebDavException(
+          kind: WebDavErrorKind.conflict,
+          message: 'immutable section already exists',
+          statusCode: 409,
+        )
+        ..corruptSectionOnWriteFailure = true;
+
+      await expectLater(
+        runFixture(context()),
+        throwsA(
+          isA<WebDavException>().having(
+            (error) => error.statusCode,
+            'status',
+            409,
+          ),
+        ),
+      );
+
+      expect(transport.events, contains(startsWith('read:section:device-a:')));
+      expect(transport.events, isNot(contains('write:manifest')));
+    },
+  );
 
   test(
     'hot PUT has no GET while profiles and resources PUTs read back',
@@ -4618,7 +4659,8 @@ class _FakeTransport implements WebDavSyncTransport {
   final Set<String> listedWithoutManifest = <String>{};
   WebDavException? rootError;
   WebDavResponseMetadata? sectionWriteMetadata;
-  bool sectionWritesPreconditionFail = false;
+  WebDavException? sectionWriteFailure;
+  bool corruptSectionOnWriteFailure = false;
   bool corruptLargeSectionWrites = false;
   int factories = 0;
   Duration readDelay = Duration.zero;
@@ -4755,11 +4797,11 @@ class _FakeTransport implements WebDavSyncTransport {
       sections['$deviceId:$contentHash']![0] ^= 0xff;
     }
     writtenText.add(String.fromCharCodes(bytes));
-    if (sectionWritesPreconditionFail) {
-      throw const WebDavException(
-        kind: WebDavErrorKind.preconditionFailed,
-        message: 'immutable section already exists',
-      );
+    if (sectionWriteFailure case final error?) {
+      if (corruptSectionOnWriteFailure) {
+        sections['$deviceId:$contentHash']![0] ^= 0xff;
+      }
+      throw error;
     }
     return sectionWriteMetadata ?? _metadata;
   }

@@ -2928,6 +2928,8 @@ final class WebDavSyncEngine
       session.validate();
       phaseStarted = instrumentation.startPhase();
       WebDavResponseMetadata? metadata;
+      WebDavException? writeFailure;
+      StackTrace? writeFailureStackTrace;
       try {
         instrumentation.requestStarted(bytesUp: section.bytes.length);
         metadata = await transport.writeSection(
@@ -2936,14 +2938,15 @@ final class WebDavSyncEngine
           section.bytes,
           maxBytes: _maxBytesFor(section.reference.name),
         );
-      } on WebDavException catch (error) {
-        if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
+      } on WebDavException catch (error, stackTrace) {
+        writeFailure = error;
+        writeFailureStackTrace = stackTrace;
       } finally {
         instrumentation.finishPhase(_CyclePhase.push, phaseStarted);
       }
       phaseStarted = instrumentation.startPhase();
       try {
-        if (section.reference.name == 'profiles') {
+        if (writeFailure != null || section.reference.name == 'profiles') {
           instrumentation.requestStarted();
           final readBack = await transport.readSection(
             deviceId,
@@ -2951,9 +2954,22 @@ final class WebDavSyncEngine
             maxBytes: _maxBytesFor(section.reference.name),
           );
           instrumentation.received(readBack.bytes.length);
-          if (!_bytesEqual(readBack.bytes, section.bytes)) {
+          if (readBack.bytes.length != section.reference.size ||
+              contentHashOf(readBack.bytes) != section.reference.contentHash ||
+              !_bytesEqual(readBack.bytes, section.bytes)) {
             throw StateError(
               'WebDAV sync section read-back verification failed',
+            );
+          }
+          if (writeFailure != null) {
+            await _codec.openDocument(
+              key: root.key,
+              encoded: readBack.bytes,
+              circleId: root.document.circleId,
+              deviceId: deviceId,
+              logicalName: section.reference.name,
+              schemaVersion: section.reference.schemaVersion,
+              maxBytes: _maxBytesFor(section.reference.name),
             );
           }
         } else if (metadata != null) {
@@ -2962,6 +2978,11 @@ final class WebDavSyncEngine
             expectedBytes: section.bytes.length,
           );
         }
+      } on Object {
+        if (writeFailure != null) {
+          Error.throwWithStackTrace(writeFailure, writeFailureStackTrace!);
+        }
+        rethrow;
       } finally {
         instrumentation.finishPhase(_CyclePhase.readBack, phaseStarted);
       }

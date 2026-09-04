@@ -72,7 +72,7 @@ final class WebDavSyncLargeSectionIo {
         schemaVersion: schemaVersion,
         encoded: encoded,
       );
-      await _writeBytes(
+      final verified = await _writeBytes(
         transport: transport,
         deviceId: deviceId,
         reference: reference,
@@ -81,7 +81,7 @@ final class WebDavSyncLargeSectionIo {
       );
       await _codec.openDocument(
         key: key,
-        encoded: encoded,
+        encoded: verified,
         circleId: circleId,
         deviceId: deviceId,
         logicalName: logicalName,
@@ -113,6 +113,8 @@ final class WebDavSyncLargeSectionIo {
         updatedAtMs: updatedAtMs,
         maxBytes: maxBytes,
       );
+      WebDavException? writeFailure;
+      StackTrace? writeFailureStackTrace;
       try {
         await fileTransport.writeSectionFile(
           deviceId,
@@ -120,31 +122,39 @@ final class WebDavSyncLargeSectionIo {
           upload,
           maxBytes: maxBytes,
         );
-      } on WebDavException catch (error) {
-        if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
+      } on WebDavException catch (error, stackTrace) {
+        writeFailure = error;
+        writeFailureStackTrace = stackTrace;
       }
-      final download = File('${scratch.path}/read-back.enc');
-      final result = await fileTransport.readSectionToFile(
-        deviceId,
-        staged,
-        download,
-        maxBytes: maxBytes,
-      );
-      if (result.bytesWritten != staged.size ||
-          await _sha256File(download) != staged.contentHash) {
-        throw StateError('WebDAV sync section read-back verification failed');
+      try {
+        final download = File('${scratch.path}/read-back.enc');
+        final result = await fileTransport.readSectionToFile(
+          deviceId,
+          staged,
+          download,
+          maxBytes: maxBytes,
+        );
+        if (result.bytesWritten != staged.size ||
+            await _sha256File(download) != staged.contentHash) {
+          throw StateError('WebDAV sync section read-back verification failed');
+        }
+        final verified = await _readBounded(download, maxBytes);
+        await _codec.openDocument(
+          key: key,
+          encoded: verified,
+          circleId: circleId,
+          deviceId: deviceId,
+          logicalName: logicalName,
+          schemaVersion: schemaVersion,
+          maxBytes: maxBytes,
+          runInBackground: true,
+        );
+      } on Object {
+        if (writeFailure != null) {
+          Error.throwWithStackTrace(writeFailure, writeFailureStackTrace!);
+        }
+        rethrow;
       }
-      final verified = await _readBounded(download, maxBytes);
-      await _codec.openDocument(
-        key: key,
-        encoded: verified,
-        circleId: circleId,
-        deviceId: deviceId,
-        logicalName: logicalName,
-        schemaVersion: schemaVersion,
-        maxBytes: maxBytes,
-        runInBackground: true,
-      );
       return staged;
     } catch (error) {
       operationFailure = error;
@@ -251,7 +261,7 @@ final class WebDavSyncLargeSectionIo {
     return reference;
   }
 
-  static Future<void> _writeBytes({
+  static Future<Uint8List> _writeBytes({
     required WebDavSyncTransport transport,
     required String deviceId,
     required WebDavSyncSectionReference reference,
@@ -259,6 +269,8 @@ final class WebDavSyncLargeSectionIo {
     required int maxBytes,
   }) async {
     WebDavResponseMetadata? metadata;
+    WebDavException? writeFailure;
+    StackTrace? writeFailureStackTrace;
     try {
       metadata = await transport.writeSection(
         deviceId,
@@ -266,23 +278,34 @@ final class WebDavSyncLargeSectionIo {
         encoded,
         maxBytes: maxBytes,
       );
-    } on WebDavException catch (error) {
-      if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
+    } on WebDavException catch (error, stackTrace) {
+      writeFailure = error;
+      writeFailureStackTrace = stackTrace;
     }
-    if (_requiresReadBack(reference.name)) {
-      final readBack = await transport.readSection(
-        deviceId,
-        reference,
-        maxBytes: maxBytes,
-      );
-      if (!_bytesEqual(encoded, readBack.bytes)) {
-        throw StateError('WebDAV sync section read-back verification failed');
+    try {
+      if (writeFailure != null || _requiresReadBack(reference.name)) {
+        final readBack = await transport.readSection(
+          deviceId,
+          reference,
+          maxBytes: maxBytes,
+        );
+        if (!_bytesEqual(encoded, readBack.bytes)) {
+          throw StateError('WebDAV sync section read-back verification failed');
+        }
+        _requireReference(readBack.bytes, reference);
+        return readBack.bytes;
+      } else if (metadata != null) {
+        validateWebDavSyncSectionWriteMetadata(
+          metadata,
+          expectedBytes: reference.size,
+        );
       }
-    } else if (metadata != null) {
-      validateWebDavSyncSectionWriteMetadata(
-        metadata,
-        expectedBytes: reference.size,
-      );
+      return encoded;
+    } on Object {
+      if (writeFailure != null) {
+        Error.throwWithStackTrace(writeFailure, writeFailureStackTrace!);
+      }
+      rethrow;
     }
   }
 

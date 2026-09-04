@@ -138,6 +138,9 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
     if (error is WebDavSyncProviderUnsupportedException) {
       return error.message;
     }
+    if (error is WebDavSyncSetupInconclusiveException) {
+      return WebDavSyncSetupInconclusiveException.userMessage;
+    }
     if (error is WebDavException &&
         error.kind == WebDavErrorKind.authentication) {
       return 'WebDAV login failed. Check your username and password.';

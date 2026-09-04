@@ -115,6 +115,25 @@ void main() {
     expect(find.byType(WebDavSyncLoginScreen), findsOneWidget);
   });
 
+  testWidgets('inconclusive setup failure stays retryable and inline', (
+    tester,
+  ) async {
+    await pumpLogin(tester, (_) async {
+      throw const WebDavSyncSetupInconclusiveException();
+    });
+
+    await tester.enterText(field('webdav-sync-username'), 'alice@example.test');
+    await tester.enterText(field('webdav-sync-password'), 'app-password');
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(WebDavSyncSetupInconclusiveException.userMessage),
+      findsOneWidget,
+    );
+    expect(find.byType(WebDavSyncLoginScreen), findsOneWidget);
+  });
+
   testWidgets('reconnect variant pins location and asks only for credentials', (
     tester,
   ) async {

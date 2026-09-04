@@ -301,6 +301,10 @@ void main() {
       error: const WebDavSyncProviderUnsupportedException(),
     ),
     (
+      name: 'temporarily inconclusive conditional-create capability',
+      error: const WebDavSyncSetupInconclusiveException(),
+    ),
+    (
       name: 'seed upload',
       error: const WebDavException(
         kind: WebDavErrorKind.network,
@@ -324,6 +328,12 @@ void main() {
           expect(
             (outcome as WebDavSyncConnectPreHandoffFailure).error,
             isA<WebDavSyncProviderUnsupportedException>(),
+          );
+        }
+        if (scenario.error is WebDavSyncSetupInconclusiveException) {
+          expect(
+            (outcome as WebDavSyncConnectPreHandoffFailure).error,
+            isA<WebDavSyncSetupInconclusiveException>(),
           );
         }
         expect(

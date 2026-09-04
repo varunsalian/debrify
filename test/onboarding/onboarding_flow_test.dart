@@ -420,6 +420,46 @@ void main() {
     expect((await store.load()).bindings, isEmpty);
   });
 
+  testWidgets('inconclusive WebDAV setup stays open with retryable message', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.filled(32, 8)),
+    );
+    addTearDown(DeviceKeyProvider.debugReset);
+    final store = WebDavSyncBindingStore();
+    final controller = createWebDavSyncConnectController(
+      setupService: WebDavSyncSetupService(
+        store: store,
+        transportFactory: ({required endpoint, required credentials}) =>
+            const _OnboardingWebDavProbe(),
+      ),
+      authorization: const _OnboardingWebDavAuthorization(),
+      activation: const _InconclusiveNewCircleActivation(),
+    );
+    final result = ValueNotifier<bool?>(null);
+    addTearDown(result.dispose);
+    await _pumpWebDavOnboarding(
+      tester,
+      controller: controller,
+      result: result,
+      login: (_, __) async => _webDavCredentials,
+    );
+
+    await tester.tap(find.text('Log in with WebDAV'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(WebDavSyncSetupInconclusiveException.userMessage),
+      findsOneWidget,
+    );
+    expect(find.text('Log in with WebDAV'), findsOneWidget);
+    expect(result.value, isNull);
+    expect(await StorageService.isInitialSetupComplete(), isFalse);
+    expect((await store.load()).bindings, isEmpty);
+  });
+
   testWidgets('new WebDAV circle blocks, then finishes onboarding normally', (
     tester,
   ) async {
@@ -891,6 +931,27 @@ final class _FailingNewCircleActivation
   @override
   Future<WebDavSyncInitializationOutcome> initializeNew(String bindingId) =>
       throw StateError('seed upload failed');
+
+  @override
+  Future<void> inspectExisting(String bindingId) async {}
+
+  @override
+  Future<WebDavSyncBinding> connectExisting(
+    String bindingId, {
+    required bool replacementConfirmed,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<WebDavSyncCycleReport> syncNow() => throw UnimplementedError();
+}
+
+final class _InconclusiveNewCircleActivation
+    implements WebDavSyncActivationController {
+  const _InconclusiveNewCircleActivation();
+
+  @override
+  Future<WebDavSyncInitializationOutcome> initializeNew(String bindingId) =>
+      throw const WebDavSyncSetupInconclusiveException();
 
   @override
   Future<void> inspectExisting(String bindingId) async {}

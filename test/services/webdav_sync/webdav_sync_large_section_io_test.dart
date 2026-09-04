@@ -212,27 +212,79 @@ void main() {
     );
   });
 
-  test('pre-existing immutable section remains 412 tolerant', () async {
-    transport.preconditionFailure = true;
+  for (final status in <int>[403, 405, 409, 412]) {
+    test(
+      'pre-existing immutable section accepts HTTP $status by read-back',
+      () async {
+        transport.writeFailure = WebDavException(
+          kind: switch (status) {
+            403 => WebDavErrorKind.authentication,
+            409 => WebDavErrorKind.conflict,
+            412 => WebDavErrorKind.preconditionFailed,
+            _ => WebDavErrorKind.unexpectedStatus,
+          },
+          message: 'already exists',
+          statusCode: status,
+        );
 
-    final reference = await io.sealWriteVerify(
-      transport: transport,
-      key: key,
-      circleId: 'circle-test-1',
-      deviceId: 'device-test-1',
-      logicalName: 'resources',
-      schemaVersion: 1,
-      payload: const <String, Object?>{'kind': 'resources'},
-      semanticDigest: List<String>.filled(64, 'e').join(),
-      updatedAtMs: 9013,
-      maxBytes: 1024 * 1024,
+        final reference = await io.sealWriteVerify(
+          transport: transport,
+          key: key,
+          circleId: 'circle-test-1',
+          deviceId: 'device-test-1',
+          logicalName: 'resources',
+          schemaVersion: 1,
+          payload: const <String, Object?>{'kind': 'resources'},
+          semanticDigest: List<String>.filled(64, 'e').join(),
+          updatedAtMs: 9013,
+          maxBytes: 1024 * 1024,
+        );
+
+        expect(reference.size, greaterThan(0));
+        expect(transport.fileWrites, 1);
+        expect(transport.fileReads, 1);
+        expect(await stagingBase.list().toList(), isEmpty);
+      },
     );
+  }
 
-    expect(reference.size, greaterThan(0));
-    expect(transport.fileWrites, 1);
-    expect(transport.fileReads, 1);
-    expect(await stagingBase.list().toList(), isEmpty);
-  });
+  test(
+    'immutable section replay rethrows when the existing hash differs',
+    () async {
+      transport
+        ..writeFailure = const WebDavException(
+          kind: WebDavErrorKind.conflict,
+          message: 'already exists',
+          statusCode: 409,
+        )
+        ..corruptOnWriteFailure = true;
+
+      await expectLater(
+        io.sealWriteVerify(
+          transport: transport,
+          key: key,
+          circleId: 'circle-test-1',
+          deviceId: 'device-test-1',
+          logicalName: 'resources',
+          schemaVersion: 1,
+          payload: const <String, Object?>{'kind': 'resources'},
+          semanticDigest: List<String>.filled(64, 'e').join(),
+          updatedAtMs: 9013,
+          maxBytes: 1024 * 1024,
+        ),
+        throwsA(
+          isA<WebDavException>().having(
+            (error) => error.statusCode,
+            'status',
+            409,
+          ),
+        ),
+      );
+
+      expect(transport.fileReads, 1);
+      expect(await stagingBase.list().toList(), isEmpty);
+    },
+  );
 
   test(
     'per-profile library uses the verified file path and fails closed',
@@ -302,7 +354,8 @@ final class _FileTransport
   int byteWrites = 0;
   int byteReads = 0;
   bool corruptReadBack = false;
-  bool preconditionFailure = false;
+  bool corruptOnWriteFailure = false;
+  WebDavException? writeFailure;
 
   static final WebDavResponseMetadata _metadata = WebDavResponseMetadata(
     statusCode: 200,
@@ -322,11 +375,9 @@ final class _FileTransport
     final bytes = await file.readAsBytes();
     if (bytes.length > maxBytes) throw StateError('test section too large');
     sections[contentHash] = Uint8List.fromList(bytes);
-    if (preconditionFailure) {
-      throw const WebDavException(
-        kind: WebDavErrorKind.preconditionFailed,
-        message: 'already exists',
-      );
+    if (writeFailure case final error?) {
+      if (corruptOnWriteFailure) sections[contentHash]![0] ^= 0xff;
+      throw error;
     }
     return _metadata;
   }
