@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../profiles/profile_preference_portability.dart';
+import '../webdav_protocol_client.dart' show WebDavException;
 import '../profiles/profile_preferences.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_hot_merge.dart';
@@ -111,6 +112,7 @@ final class WebDavSyncScheduler {
   static const Duration localChangeRetryFloor = Duration(seconds: 1);
   static const Duration localChangeRetryCap = Duration(minutes: 2);
   int _consecutivePollFailures = 0;
+  bool _pollBackoffHoldsThroughCycles = false;
   int _pollGeneration = 0;
   int _pollTimerGeneration = 0;
   Completer<void>? _pollCompletion;
@@ -493,7 +495,11 @@ final class WebDavSyncScheduler {
       }
       final completedOutcomes = outcomes.cast<_PollOutcome>();
       if (completedOutcomes.any((outcome) => outcome.error != null)) {
-        _recordPollFailure();
+        _recordPollFailure(
+          completedOutcomes
+              .firstWhere((outcome) => outcome.error != null)
+              .error,
+        );
         return;
       }
       _resetPollBackoff();
@@ -516,10 +522,10 @@ final class WebDavSyncScheduler {
         _remotePollTimer?.cancel();
         _remotePollTimer = null;
       }
-    } catch (_) {
+    } catch (error) {
       // A metadata hint never becomes a sync error. The ordinary lifecycle
       // and 15-minute cycles remain the durable retry and reporting path.
-      _recordPollFailure();
+      _recordPollFailure(error);
     } finally {
       context?.transport.close();
       _polling = false;
@@ -528,7 +534,12 @@ final class WebDavSyncScheduler {
     }
   }
 
-  void _recordPollFailure() {
+  void _recordPollFailure(Object? error) {
+    // A failure the server ANSWERED (429/5xx) is the server asking for
+    // space: that backoff holds even while full cycles succeed. A failure
+    // with no status is connectivity, which a completed cycle disproves.
+    _pollBackoffHoldsThroughCycles =
+        error is WebDavException && error.statusCode != null;
     _consecutivePollFailures++;
     var delayMs = idlePollPeriod.inMilliseconds;
     for (var index = 1; index < _consecutivePollFailures; index++) {
@@ -545,6 +556,7 @@ final class WebDavSyncScheduler {
   void _resetPollBackoff() {
     _consecutivePollFailures = 0;
     _nextRemotePollAt = null;
+    _pollBackoffHoldsThroughCycles = false;
   }
 
   void disarm() {
@@ -644,6 +656,17 @@ final class WebDavSyncScheduler {
       intentCycleCompleted =
           report.disposition == WebDavSyncCycleDisposition.completed;
       intentCycleRequestedFollowUp = report.localChangeFollowUp;
+      if (intentCycleCompleted &&
+          _consecutivePollFailures > 0 &&
+          !_pollBackoffHoldsThroughCycles) {
+        // This cycle just proved the server reachable. Connectivity backoff
+        // measures an outage and must not outlive one — a launch-time
+        // network flap otherwise jails remote pulls for up to fifteen
+        // minutes while pushes visibly succeed. Server-answered backoff
+        // (rate limiting) deliberately stays.
+        _resetPollBackoff();
+        _armRemotePollTimer();
+      }
       if (trigger == WebDavSyncTrigger.localChange ||
           trigger == WebDavSyncTrigger.manual) {
         _rearmWarmPolling();

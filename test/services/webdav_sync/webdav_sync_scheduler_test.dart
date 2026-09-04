@@ -395,6 +395,64 @@ void main() {
     });
   });
 
+  test('a completed cycle releases remote-poll backoff jail', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: const <String, WebDavSyncManifestProbe>{
+          'device-b': WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )
+        ..failuresRemaining = 3
+        ..failWithoutStatus = true;
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // Three connectivity failures (no HTTP status) escalate to a 240s jail.
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 120));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(3));
+
+      // A completed local-change cycle proves the server reachable.
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      // The next probe runs at the warm cadence, not 240 seconds later.
+      async.elapse(const Duration(seconds: 6));
+      async.flushMicrotasks();
+      expect(
+        transport.probedDeviceIds.length,
+        greaterThan(3),
+        reason: 'poll backoff must not outlive a proven-reachable server',
+      );
+      scheduler.dispose();
+    });
+  });
+
   test('local-change visibility reports only the most recent key', () {
     fakeAsync((async) {
       final observedKeys = <String>[];
@@ -1753,6 +1811,7 @@ final class _PollTransport implements WebDavSyncTransport {
   int failuresRemaining = 0;
 
   Completer<void>? probeBlocker;
+  bool failWithoutStatus = false;
 
   @override
   Future<WebDavSyncManifestProbe> probeManifest(String deviceId) async {
@@ -1761,6 +1820,12 @@ final class _PollTransport implements WebDavSyncTransport {
     if (probeBlocker != null) await probeBlocker!.future;
     if (failuresRemaining > 0) {
       failuresRemaining--;
+      if (failWithoutStatus) {
+        throw const WebDavException(
+          kind: WebDavErrorKind.transient,
+          message: 'offline',
+        );
+      }
       throw const WebDavException(
         kind: WebDavErrorKind.transient,
         message: 'rate limited',
