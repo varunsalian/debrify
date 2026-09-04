@@ -8,17 +8,21 @@ class ModeStep extends StatelessWidget {
   const ModeStep({
     super.key,
     required this.focusController,
+    required this.onWebDavLogin,
     required this.onSetupHere,
     required this.onImport,
     this.onRestore,
     required this.onSkip,
+    this.webDavError,
   });
 
   final OnboardFocusController focusController;
+  final VoidCallback onWebDavLogin;
   final VoidCallback onSetupHere;
   final VoidCallback onImport;
   final VoidCallback? onRestore;
   final VoidCallback onSkip;
+  final String? webDavError;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +32,23 @@ class ModeStep extends StatelessWidget {
         _ModeRow(
           controller: focusController,
           cell: const OnboardCell(0, 0),
+          icon: Icons.login_rounded,
+          title: 'Log in with WebDAV',
+          subtitle:
+              'Connect your sync account and pull your setup from your other devices.',
+          onPressed: onWebDavLogin,
+        ),
+        if (webDavError case final error?) ...[
+          const SizedBox(height: 8),
+          Text(
+            error,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+          ),
+        ],
+        const SizedBox(height: 12),
+        _ModeRow(
+          controller: focusController,
+          cell: const OnboardCell(1, 0),
           icon: Icons.tune_rounded,
           title: 'Set it up here',
           subtitle:
@@ -37,7 +58,7 @@ class ModeStep extends StatelessWidget {
         const SizedBox(height: 12),
         _ModeRow(
           controller: focusController,
-          cell: const OnboardCell(1, 0),
+          cell: const OnboardCell(2, 0),
           icon: Icons.sync_alt_rounded,
           title: 'Bring it from another device',
           subtitle:
@@ -49,7 +70,7 @@ class ModeStep extends StatelessWidget {
           const SizedBox(height: 12),
           _ModeRow(
             controller: focusController,
-            cell: const OnboardCell(2, 0),
+            cell: const OnboardCell(3, 0),
             icon: Icons.restore_rounded,
             title: 'Restore from a backup',
             subtitle:
@@ -62,7 +83,7 @@ class ModeStep extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: OnboardFocusable(
             controller: focusController,
-            cell: OnboardCell(onRestore == null ? 2 : 3, 0),
+            cell: OnboardCell(onRestore == null ? 3 : 4, 0),
             onActivate: onSkip,
             shape: ParallaxShape.pill,
             radius: BorderRadius.circular(18),

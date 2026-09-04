@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -323,4 +324,69 @@ void main() {
     expect(await registry.getProfile(newId), isNull);
     expect(await registry.getProfile(unrelated.id), isNotNull);
   });
+
+  test(
+    'handoff atomically completes an imported Admin before the await returns',
+    () async {
+      expect((await registry.getProfile(newId))?.setupComplete, isFalse);
+      lifecycle.dispose();
+      final participant = _BlockingActivationParticipant();
+      lifecycle = ProfileLifecycleCoordinator(
+        registry: registry,
+        participants: <ProfileLifecycleParticipant>[participant],
+      );
+      operations = DefaultWebDavSyncAdoptionOperations(
+        registry: registry,
+        restoreCoordinator: ProfileRestoreCoordinator(
+          registry: registry,
+          cipher: MemoryDeviceSecretCipher(List<int>.filled(32, 5)),
+        ),
+        lifecycleCoordinator: lifecycle,
+      );
+      var returned = false;
+
+      final handoff = operations
+          .handoff(
+            targetProfileId: newId,
+            completeOnboarding: true,
+            beforeCommit: () async {},
+            beforeTargetInitialize: () async {},
+          )
+          .whenComplete(() => returned = true);
+      await participant.initializeStarted.future;
+
+      expect(returned, isFalse, reason: 'the handoff await is still pending');
+      expect((await registry.activeProfile())?.id, newId);
+      expect(
+        (await registry.getProfile(newId))?.setupComplete,
+        isTrue,
+        reason:
+            'activation and setup completion must be visible in one registry publication',
+      );
+
+      participant.release.complete();
+      expect(await handoff, isTrue);
+    },
+  );
+}
+
+final class _BlockingActivationParticipant
+    implements ProfileLifecycleParticipant {
+  final Completer<void> initializeStarted = Completer<void>();
+  final Completer<void> release = Completer<void>();
+
+  @override
+  Future<void> prepareDeactivate(ProfileScope current) async {}
+
+  @override
+  Future<void> initializeCandidate(ProfileScope candidate) async {
+    initializeStarted.complete();
+    await release.future;
+  }
+
+  @override
+  Future<void> didActivate(ProfileScope active) async {}
+
+  @override
+  Future<void> rollback(ProfileScope restored) async {}
 }

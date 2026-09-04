@@ -20,6 +20,7 @@ final class WebDavSyncAdoptionRequest {
     required this.passphrase,
     required this.authorization,
     required this.replacementConfirmed,
+    this.completeOnboarding = false,
   });
 
   final String namespaceId;
@@ -31,6 +32,7 @@ final class WebDavSyncAdoptionRequest {
   final String passphrase;
   final ProfileAuthorizationContext authorization;
   final bool replacementConfirmed;
+  final bool completeOnboarding;
 }
 
 abstract interface class WebDavSyncAdoptionOperations {
@@ -76,6 +78,7 @@ abstract interface class WebDavSyncAdoptionOperations {
   /// after publication and before target profile services initialize.
   Future<bool> handoff({
     required String targetProfileId,
+    required bool completeOnboarding,
     required Future<void> Function() beforeCommit,
     required Future<void> Function() beforeTargetInitialize,
   });
@@ -174,6 +177,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
       backupPath: backup.path,
       backupSha256: backup.sha256Hex,
       backupVerified: true,
+      completeOnboarding: request.completeOnboarding,
     );
     await _stateRepository.update(request.namespaceId, (current) {
       if (current.adoption != null) {
@@ -498,6 +502,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
             );
       final switched = await _operations.handoff(
         targetProfileId: record.targetAdminProfileId!,
+        completeOnboarding: record.completeOnboarding,
         beforeCommit: () async {
           if (deferred != null) {
             record = await _completePair(
@@ -772,6 +777,12 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
   }
 
   static void _validateRequest(WebDavSyncAdoptionRequest request) {
+    if (request.completeOnboarding &&
+        request.mode != WebDavSyncAdoptionMode.firstJoin) {
+      throw ArgumentError(
+        'Onboarding completion is only valid for a first join',
+      );
+    }
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(request.graphSemanticDigest) ||
         request.package.mode != 'deviceGraph' ||
         request.package.profiles.isEmpty ||

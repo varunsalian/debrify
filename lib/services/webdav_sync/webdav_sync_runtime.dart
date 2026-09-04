@@ -767,6 +767,11 @@ final class WebDavSyncRuntime
     String bindingId, {
     bool replacementConfirmed = true,
   }) async {
+    final stored = await bindingStore.load();
+    final completeOnboarding = stored.bindings[bindingId]?.completeOnboarding;
+    if (completeOnboarding == null) {
+      throw StateError('WebDAV sync binding is unavailable');
+    }
     final authorization = await _captureManagingAdmin();
     final components = _components();
     final connector = WebDavSyncExistingRootConnector(
@@ -790,6 +795,7 @@ final class WebDavSyncRuntime
       authorization: authorization,
       recaptureAuthorization: _captureManagingAdmin,
       replacementConfirmed: replacementConfirmed,
+      completeOnboarding: completeOnboarding,
     );
   }
 

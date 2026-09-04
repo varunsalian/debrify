@@ -116,10 +116,13 @@ void main() {
     expect(bubbled, 1);
   });
 
-  testWidgets('mode focus traverses restore before Skip', (tester) async {
+  testWidgets('mode focus traverses WebDAV first, restore, then Skip', (
+    tester,
+  ) async {
     final controller = OnboardFocusController();
     addTearDown(controller.dispose);
     var restored = false;
+    var webDavLogin = false;
 
     await tester.binding.setSurfaceSize(const Size(960, 540));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -127,6 +130,7 @@ void main() {
       onboardingApp(
         ModeStep(
           focusController: controller,
+          onWebDavLogin: () => webDavLogin = true,
           onSetupHere: () {},
           onImport: () {},
           onRestore: () => restored = true,
@@ -137,13 +141,26 @@ void main() {
 
     controller.focusLanding(OnboardStep.mode);
     await tester.pump();
+    expect(
+      tester.binding.focusManager.primaryFocus?.debugLabel,
+      'onboarding-0-0',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(webDavLogin, isTrue);
+    expect(find.text('Log in with WebDAV'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Log in with WebDAV')).dy,
+      lessThan(tester.getTopLeft(find.text('Set it up here')).dy),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     expect(
       tester.binding.focusManager.primaryFocus?.debugLabel,
-      'onboarding-2-0',
+      'onboarding-3-0',
     );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -152,7 +169,7 @@ void main() {
     await tester.pump();
     expect(
       tester.binding.focusManager.primaryFocus?.debugLabel,
-      'onboarding-3-0',
+      'onboarding-4-0',
     );
   });
 
@@ -166,6 +183,7 @@ void main() {
       onboardingApp(
         ModeStep(
           focusController: controller,
+          onWebDavLogin: () {},
           onSetupHere: () {},
           onImport: () {},
           onSkip: () {},
@@ -174,7 +192,10 @@ void main() {
     );
 
     expect(find.text('Restore from a backup'), findsNothing);
+    expect(find.text('Log in with WebDAV'), findsOneWidget);
     controller.focusLanding(OnboardStep.mode);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
@@ -182,7 +203,7 @@ void main() {
     await tester.pump();
     expect(
       tester.binding.focusManager.primaryFocus?.debugLabel,
-      'onboarding-2-0',
+      'onboarding-3-0',
       reason: 'Skip closes the focus gap when restore is unavailable',
     );
   });

@@ -76,6 +76,7 @@ final class WebDavSyncBindingStore {
     required String syncPassphrase,
     bool preserveActive = false,
     bool reconnectActive = false,
+    bool completeOnboarding = false,
     Future<void> Function()? beforeSave,
   }) => _writeLock.synchronized(() async {
     _requireVault();
@@ -140,6 +141,7 @@ final class WebDavSyncBindingStore {
       ),
       updatedAt: _clock().toUtc(),
       circleId: existing?.circleId,
+      completeOnboarding: completeOnboarding,
     );
     final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings)
       ..[id] = binding;
@@ -307,6 +309,7 @@ final class WebDavSyncBindingStore {
           lifecycle: WebDavSyncLifecycle.active,
           updatedAt: _clock().toUtc(),
           clearError: true,
+          completeOnboarding: false,
         );
         bindings[bindingId] = updated;
         final oldActiveId = snapshot.activeBindingId;
@@ -340,6 +343,7 @@ final class WebDavSyncBindingStore {
           throw StateError('Only an active staged binding can be promoted');
         }
         final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings);
+        bindings[bindingId] = binding.copyWith(completeOnboarding: false);
         final oldActiveId = snapshot.activeBindingId;
         if (oldActiveId != null && oldActiveId != bindingId) {
           final old = bindings[oldActiveId];
@@ -365,7 +369,11 @@ final class WebDavSyncBindingStore {
     if (stagedId == null) return;
     final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings);
     final staged = bindings[stagedId];
-    if (stagedId != snapshot.activeBindingId) bindings.remove(stagedId);
+    if (stagedId != snapshot.activeBindingId) {
+      bindings.remove(stagedId);
+    } else if (staged != null && staged.completeOnboarding) {
+      bindings[stagedId] = staged.copyWith(completeOnboarding: false);
+    }
     final namespaces = Map<String, WebDavSyncNamespace>.from(
       snapshot.namespaces,
     );

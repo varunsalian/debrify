@@ -37,9 +37,10 @@ final class WebDavSyncConnectCancelled extends WebDavSyncConnectOutcome {
 }
 
 final class WebDavSyncConnectActive extends WebDavSyncConnectOutcome {
-  const WebDavSyncConnectActive(this.binding);
+  const WebDavSyncConnectActive(this.binding, {this.createdNewCircle = false});
 
   final WebDavSyncBinding binding;
+  final bool createdNewCircle;
 }
 
 final class WebDavSyncConnectAdoptedFinishing extends WebDavSyncConnectOutcome {
@@ -63,6 +64,20 @@ final class WebDavSyncConnectPostHandoffFailure
 }
 
 typedef WebDavSyncReplacementConfirmation = Future<bool> Function();
+
+WebDavSyncConnectController createWebDavSyncConnectController({
+  WebDavSyncSetupService? setupService,
+  WebDavSyncSetupAuthorization? authorization,
+  WebDavSyncActivationController? activation,
+}) {
+  final usesProductionSetup = setupService == null;
+  return WebDavSyncConnectController(
+    setupService: setupService ?? WebDavSyncSetupService(),
+    authorization: authorization ?? const ProfileWebDavSyncSetupAuthorization(),
+    activation:
+        activation ?? (usesProductionSetup ? WebDavSyncRuntime.instance : null),
+  );
+}
 
 /// Shared login-first orchestration used by Settings and future onboarding.
 ///
@@ -104,8 +119,12 @@ final class WebDavSyncConnectController {
     required WebDavSyncLoginCredentials? credentials,
     required WebDavSyncReplacementConfirmation confirmExistingReplacement,
     bool reconnectActive = false,
+    bool completeOnboarding = false,
   }) async {
-    if (credentials == null) return const WebDavSyncConnectCancelled();
+    if (credentials == null) {
+      if (completeOnboarding) await setupService.store.discardStaged();
+      return const WebDavSyncConnectCancelled();
+    }
     var handedOff = false;
     try {
       final cached = _lastInspection;
@@ -117,6 +136,7 @@ final class WebDavSyncConnectController {
           return setupService.configureNewRoot(
             inspection: inspection,
             syncPassphrase: WebDavSyncCodec.generateSyncSecret(),
+            completeOnboarding: completeOnboarding,
             beforeCommit: beforeCommit,
           );
         }
@@ -124,6 +144,7 @@ final class WebDavSyncConnectController {
           return setupService.configureExistingRoot(
             inspection: inspection,
             reconnectActive: reconnectActive,
+            completeOnboarding: completeOnboarding,
             beforeCommit: beforeCommit,
           );
         }
@@ -135,6 +156,14 @@ final class WebDavSyncConnectController {
         confirmExistingReplacement: confirmExistingReplacement,
       );
     } catch (error) {
+      if (!handedOff && completeOnboarding) {
+        try {
+          await setupService.store.discardStaged();
+        } catch (_) {
+          // Preserve the actionable setup failure. A later login replaces the
+          // same candidate, and startup never treats it as active authority.
+        }
+      }
       return handedOff
           ? WebDavSyncConnectPostHandoffFailure(error)
           : WebDavSyncConnectPreHandoffFailure(error);
@@ -158,7 +187,10 @@ final class WebDavSyncConnectController {
     if (binding.lifecycle == WebDavSyncLifecycle.awaitingSeedCommit) {
       final initialized = await controller.initializeNew(binding.id);
       if (initialized is WebDavSyncInitialized) {
-        return WebDavSyncConnectActive(initialized.binding);
+        return WebDavSyncConnectActive(
+          initialized.binding,
+          createdNewCircle: true,
+        );
       }
       if (initialized is WebDavSyncConcurrentRoot) {
         binding = initialized.binding;

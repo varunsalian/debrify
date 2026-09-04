@@ -221,6 +221,67 @@ void main() {
     },
   );
 
+  test(
+    'onboarding intent survives restart and clears on discard or activation',
+    () async {
+      final first = await store.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(_config, 'First'),
+        config: _config,
+        syncPassphrase: 'circle-secret',
+      );
+      final verifiedFirst = await store.markRootVerified(
+        bindingId: first.id,
+        root: WebDavSyncRootDocument(
+          circleId: 'circle-1',
+          createdAt: DateTime.utc(2026, 9, 1),
+          schemaFloor: 1,
+          kdfSalt: Uint8List(16),
+        ),
+        markerBytes: const <int>[1],
+      );
+      await store.activateAndPromoteStaged(verifiedFirst.id);
+
+      final candidate = await store.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(_config, 'Second'),
+        config: _config,
+        syncPassphrase: 'other-secret',
+        completeOnboarding: true,
+      );
+      final restartedStore = WebDavSyncBindingStore();
+      expect(
+        (await restartedStore.load()).stagedBinding?.completeOnboarding,
+        isTrue,
+      );
+
+      await restartedStore.discardStaged();
+      var snapshot = await restartedStore.load();
+      expect(snapshot.activeBindingId, verifiedFirst.id);
+      expect(snapshot.activeBinding?.completeOnboarding, isFalse);
+      expect(snapshot.bindings, isNot(contains(candidate.id)));
+
+      final retry = await restartedStore.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(_config, 'Second'),
+        config: _config,
+        syncPassphrase: 'other-secret',
+        completeOnboarding: true,
+      );
+      final verifiedRetry = await restartedStore.markRootVerified(
+        bindingId: retry.id,
+        root: WebDavSyncRootDocument(
+          circleId: 'circle-2',
+          createdAt: DateTime.utc(2026, 9, 2),
+          schemaFloor: 1,
+          kdfSalt: Uint8List(16),
+        ),
+        markerBytes: const <int>[2],
+      );
+      await restartedStore.activateAndPromoteStaged(verifiedRetry.id);
+      snapshot = await restartedStore.load();
+      expect(snapshot.activeBindingId, retry.id);
+      expect(snapshot.activeBinding?.completeOnboarding, isFalse);
+    },
+  );
+
   test('activation promotes the staged folder in one snapshot', () async {
     final first = await store.stageBinding(
       location: WebDavSyncFolderLocation.fromConfig(_config, 'First'),

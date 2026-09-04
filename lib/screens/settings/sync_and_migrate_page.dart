@@ -75,7 +75,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     _syncActivation =
         widget.syncActivation ??
         (widget.syncService == null ? WebDavSyncRuntime.instance : null);
-    _syncConnectController = WebDavSyncConnectController(
+    _syncConnectController = createWebDavSyncConnectController(
       setupService: _syncService,
       authorization: _syncAuthorization,
       activation: _syncActivation,

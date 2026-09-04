@@ -232,6 +232,7 @@ final class WebDavSyncSetupService {
   Future<WebDavSyncBinding> configureNewRoot({
     required WebDavSyncFolderMissing inspection,
     required String syncPassphrase,
+    bool completeOnboarding = false,
     Future<void> Function()? beforeCommit,
   }) async {
     WebDavSyncCodec.validatePassphrase(syncPassphrase);
@@ -239,6 +240,7 @@ final class WebDavSyncSetupService {
       location: inspection.location,
       config: inspection.config,
       syncPassphrase: syncPassphrase,
+      completeOnboarding: completeOnboarding,
       beforeSave: beforeCommit,
     );
     return store.markAwaitingSeedCommit(binding.id, beforeSave: beforeCommit);
@@ -247,6 +249,7 @@ final class WebDavSyncSetupService {
   Future<WebDavSyncBinding> configureExistingRoot({
     required WebDavSyncFolderExisting inspection,
     bool reconnectActive = false,
+    bool completeOnboarding = false,
     Future<void> Function()? beforeCommit,
   }) async {
     // Authenticate the remote bytes before persisting a passphrase or marker
@@ -280,6 +283,7 @@ final class WebDavSyncSetupService {
       syncPassphrase: inspection.rootKey.syncPassphrase,
       preserveActive: preserveActive,
       reconnectActive: reconnectPinnedActive,
+      completeOnboarding: completeOnboarding,
       beforeSave: beforeCommit,
     );
     if (preserveActive) return binding;

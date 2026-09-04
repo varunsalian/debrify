@@ -251,6 +251,7 @@ final class WebDavSyncBinding {
     required this.updatedAt,
     this.circleId,
     this.errorMessage,
+    this.completeOnboarding = false,
   });
 
   final String id;
@@ -261,6 +262,9 @@ final class WebDavSyncBinding {
   final DateTime updatedAt;
   final String? circleId;
   final String? errorMessage;
+
+  /// Local-only first-run intent. This is never included in circle data.
+  final bool completeOnboarding;
 
   bool get isExistingRoot => circleId != null;
 
@@ -277,6 +281,7 @@ final class WebDavSyncBinding {
     bool clearCircleId = false,
     String? errorMessage,
     bool clearError = false,
+    bool? completeOnboarding,
   }) => WebDavSyncBinding(
     id: id,
     location: location,
@@ -286,6 +291,7 @@ final class WebDavSyncBinding {
     updatedAt: updatedAt ?? this.updatedAt,
     circleId: clearCircleId ? null : (circleId ?? this.circleId),
     errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+    completeOnboarding: completeOnboarding ?? this.completeOnboarding,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -297,6 +303,7 @@ final class WebDavSyncBinding {
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     if (circleId != null) 'circleId': circleId,
     if (errorMessage != null) 'errorMessage': errorMessage,
+    if (completeOnboarding) 'completeOnboarding': true,
   };
 
   factory WebDavSyncBinding.fromJson(Map<String, dynamic> json) {
@@ -326,8 +333,10 @@ final class WebDavSyncBinding {
     }
     final circleId = json['circleId'];
     final error = json['errorMessage'];
+    final completeOnboarding = json['completeOnboarding'] ?? false;
     if (circleId != null && circleId is! String ||
-        error != null && error is! String) {
+        error != null && error is! String ||
+        completeOnboarding is! bool) {
       throw const FormatException('Invalid WebDAV sync binding metadata');
     }
     final typedCircleId = circleId as String?;
@@ -363,6 +372,7 @@ final class WebDavSyncBinding {
       updatedAt: parsedTime.toUtc(),
       circleId: typedCircleId,
       errorMessage: error as String?,
+      completeOnboarding: completeOnboarding,
     );
   }
 }

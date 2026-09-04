@@ -46,6 +46,7 @@ final class WebDavSyncExistingRootConnector {
     required ProfileAuthorizationContext authorization,
     required WebDavSyncAuthorizationRecapture recaptureAuthorization,
     required bool replacementConfirmed,
+    bool completeOnboarding = false,
   }) async {
     if (!replacementConfirmed) {
       throw StateError(
@@ -88,6 +89,7 @@ final class WebDavSyncExistingRootConnector {
           passphrase: secrets.syncPassphrase,
           authorization: currentAuthorization,
           replacementConfirmed: true,
+          completeOnboarding: completeOnboarding,
         ),
       );
       currentAuthorization = await recaptureAuthorization();

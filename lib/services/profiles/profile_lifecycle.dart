@@ -29,6 +29,7 @@ class ProfileLifecycleCoordinator {
   Future<bool> switchTo(
     String targetProfileId, {
     Future<bool> Function(UserProfile target)? unlock,
+    bool completeOnboarding = false,
     Future<void> Function()? afterDeactivateBeforeCommit,
     Future<void> Function()? afterCommitBeforeInitialize,
   }) => _switchLock.synchronized(() async {
@@ -98,7 +99,10 @@ class ProfileLifecycleCoordinator {
       // the target's database bytes. A failure here can safely abort back to
       // the current profile rather than exposing a half-copied target.
       await afterDeactivateBeforeCommit?.call();
-      await registry.commitActivation(targetProfileId: target.id);
+      await registry.commitActivation(
+        targetProfileId: target.id,
+        completeOnboarding: completeOnboarding,
+      );
       committed = true;
       ProfileRuntime.publish(candidate);
       await afterCommitBeforeInitialize?.call();

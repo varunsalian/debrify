@@ -21,6 +21,7 @@ final class WebDavSyncAdoptionRecord {
     required this.backupPath,
     required this.backupSha256,
     required this.backupVerified,
+    this.completeOnboarding = false,
     this.safetyBackupRetained = true,
     this.circleProfileToNewLocal = const <String, String>{},
     this.circleResourceToNewLocal = const <String, String>{},
@@ -43,6 +44,7 @@ final class WebDavSyncAdoptionRecord {
   final String backupPath;
   final String backupSha256;
   final bool backupVerified;
+  final bool completeOnboarding;
   final bool safetyBackupRetained;
   final Map<String, String> circleProfileToNewLocal;
   final Map<String, String> circleResourceToNewLocal;
@@ -81,6 +83,7 @@ final class WebDavSyncAdoptionRecord {
     backupPath: backupPath,
     backupSha256: backupSha256,
     backupVerified: backupVerified,
+    completeOnboarding: completeOnboarding,
     safetyBackupRetained: safetyBackupRetained ?? this.safetyBackupRetained,
     circleProfileToNewLocal:
         circleProfileToNewLocal ?? this.circleProfileToNewLocal,
@@ -111,6 +114,7 @@ final class WebDavSyncAdoptionRecord {
     'backupPath': backupPath,
     'backupSha256': backupSha256,
     'backupVerified': backupVerified,
+    if (completeOnboarding) 'completeOnboarding': true,
     if (!safetyBackupRetained) 'safetyBackupRetained': false,
     'circleProfileToNewLocal': circleProfileToNewLocal,
     'circleResourceToNewLocal': circleResourceToNewLocal,
@@ -137,6 +141,7 @@ final class WebDavSyncAdoptionRecord {
         json['backupPath'] is! String ||
         json['backupSha256'] is! String ||
         json['backupVerified'] is! bool ||
+        (json['completeOnboarding'] ?? false) is! bool ||
         (json['safetyBackupRetained'] ?? true) is! bool) {
       throw const FormatException('Invalid WebDAV sync adoption record');
     }
@@ -175,6 +180,7 @@ final class WebDavSyncAdoptionRecord {
       backupPath: json['backupPath'] as String,
       backupSha256: backupHash,
       backupVerified: json['backupVerified'] as bool,
+      completeOnboarding: (json['completeOnboarding'] ?? false) as bool,
       safetyBackupRetained: (json['safetyBackupRetained'] ?? true) as bool,
       circleProfileToNewLocal: _stringMap(
         json['circleProfileToNewLocal'],

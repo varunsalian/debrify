@@ -60,6 +60,40 @@ void main() {
   );
 
   test(
+    'restart during first join retains onboarding completion intent',
+    () async {
+      operations.handoffFailure = StateError('process stopped before handoff');
+
+      await expectLater(
+        adoption.adopt(
+          _request(
+            mode: WebDavSyncAdoptionMode.firstJoin,
+            completeOnboarding: true,
+          ),
+        ),
+        throwsStateError,
+      );
+
+      final persisted = states.state.adoption;
+      expect(persisted?.phase, WebDavSyncAdoptionPhase.handingOff);
+      expect(persisted?.completeOnboarding, isTrue);
+      expect(
+        WebDavSyncAdoptionRecord.fromJson(
+          persisted!.toJson(),
+        ).completeOnboarding,
+        isTrue,
+      );
+
+      operations.handoffFailure = null;
+      final resumed = await adoption.recover('circle:one');
+
+      expect(resumed?.phase, WebDavSyncAdoptionPhase.complete);
+      expect(operations.handoffCompleteOnboarding, isTrue);
+      expect(states.state.adoption, isNull);
+    },
+  );
+
+  test(
     'refresh copies inactive pair and drains active pair in handoff',
     () async {
       states.state = const WebDavSyncEngineState(
@@ -398,21 +432,24 @@ void main() {
   );
 }
 
-WebDavSyncAdoptionRequest _request({required WebDavSyncAdoptionMode mode}) =>
-    WebDavSyncAdoptionRequest(
-      namespaceId: 'circle:one',
-      mode: mode,
-      package: _package(),
-      graphSemanticDigest: 'a' * 64,
-      profileMap: const <String, String>{
-        'profile-0': 'circle-admin',
-        'profile-1': 'circle-kid',
-      },
-      resourceMap: const <String, String>{'resource-0': 'circle-resource'},
-      passphrase: 'circle-secret',
-      authorization: _authorization,
-      replacementConfirmed: true,
-    );
+WebDavSyncAdoptionRequest _request({
+  required WebDavSyncAdoptionMode mode,
+  bool completeOnboarding = false,
+}) => WebDavSyncAdoptionRequest(
+  namespaceId: 'circle:one',
+  mode: mode,
+  package: _package(),
+  graphSemanticDigest: 'a' * 64,
+  profileMap: const <String, String>{
+    'profile-0': 'circle-admin',
+    'profile-1': 'circle-kid',
+  },
+  resourceMap: const <String, String>{'resource-0': 'circle-resource'},
+  passphrase: 'circle-secret',
+  authorization: _authorization,
+  replacementConfirmed: true,
+  completeOnboarding: completeOnboarding,
+);
 
 PortableProfilePackage _package() => PortableProfilePackage(
   mode: 'deviceGraph',
@@ -494,6 +531,8 @@ final class _FakeAdoptionOperations implements WebDavSyncAdoptionOperations {
   String active = 'old-admin';
   List<String> importedProfileIds = <String>['new-admin', 'new-kid'];
   String targetAdmin = 'new-admin';
+  Object? handoffFailure;
+  bool? handoffCompleteOnboarding;
 
   @override
   Future<Set<String>> listProfileIds() async {
@@ -574,10 +613,13 @@ final class _FakeAdoptionOperations implements WebDavSyncAdoptionOperations {
   @override
   Future<bool> handoff({
     required String targetProfileId,
+    required bool completeOnboarding,
     required Future<void> Function() beforeCommit,
     required Future<void> Function() beforeTargetInitialize,
   }) async {
     events.add('handoff:start:$targetProfileId');
+    handoffCompleteOnboarding = completeOnboarding;
+    if (handoffFailure case final error?) throw error;
     await beforeCommit();
     active = targetProfileId;
     await beforeTargetInitialize();

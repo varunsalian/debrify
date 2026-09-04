@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../screens/settings/profile_backup_flows.dart';
+import '../../screens/webdav_sync/webdav_sync_login_screen.dart';
 import '../../services/account_service.dart';
 import '../../services/alldebrid_account_service.dart';
 import '../../services/analytics_service.dart';
@@ -23,6 +24,7 @@ import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
+import '../../services/webdav_sync/webdav_sync_connect_controller.dart';
 import '../../utils/platform_util.dart';
 import '../pikpak_folder_picker_dialog.dart';
 import 'controllers/tracker_auth_controller.dart';
@@ -57,6 +59,12 @@ typedef OnboardingBackupRestoreOverride =
 typedef OnboardingBackupHandoffOverride =
     Future<void> Function(ProfileGraphRestoreReport report);
 
+typedef OnboardingWebDavSyncLoginOverride =
+    Future<WebDavSyncLoginCredentials?> Function(
+      BuildContext context,
+      WebDavSyncConnectController controller,
+    );
+
 class InitialSetupFlow extends StatefulWidget {
   const InitialSetupFlow({
     super.key,
@@ -66,6 +74,8 @@ class InitialSetupFlow extends StatefulWidget {
     this.backupHandoffOverride,
     this.validationOverride,
     this.isTelevisionOverride,
+    this.webDavSyncConnectController,
+    this.webDavSyncLoginOverride,
   });
 
   final RemoteEngineManager? engineManager;
@@ -74,6 +84,8 @@ class InitialSetupFlow extends StatefulWidget {
   final OnboardingBackupHandoffOverride? backupHandoffOverride;
   final OnboardingValidationOverride? validationOverride;
   final bool? isTelevisionOverride;
+  final WebDavSyncConnectController? webDavSyncConnectController;
+  final OnboardingWebDavSyncLoginOverride? webDavSyncLoginOverride;
 
   static Future<bool> show(BuildContext context) async {
     final parentFocusScope = FocusScope.of(context);
@@ -118,6 +130,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   late final RemoteEngineManager _engineManager =
       widget.engineManager ?? RemoteEngineManager();
   late final bool _ownsEngineManager = widget.engineManager == null;
+  late final WebDavSyncConnectController _webDavSyncConnectController =
+      widget.webDavSyncConnectController ?? createWebDavSyncConnectController();
 
   final OnboardFocusController _focus = OnboardFocusController();
   final TvKeyboardSession _keyboardSession = TvKeyboardSession();
@@ -157,6 +171,8 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   bool _hasConfigured = false;
   bool _finishing = false;
   bool _restoringBackup = false;
+  bool _connectingWebDav = false;
+  String? _webDavError;
 
   ReceiverLease? _importLease;
   int _importAttempt = 0;
@@ -225,6 +241,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   Future<void> _handleBack() async {
     if (_keyboardSession.ownsBack) return;
+    if (_connectingWebDav) return;
     if (_step == OnboardStep.key &&
         _keyPhase == KeyValidationPhase.validating) {
       return;
@@ -272,6 +289,105 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   }
 
   void _chooseSetupHere() => _transition(OnboardStep.services);
+
+  Future<void> _loginWithWebDav() async {
+    if (_connectingWebDav || _finishing || _restoringBackup) return;
+    if (_webDavError != null) setState(() => _webDavError = null);
+    try {
+      final credentials = widget.webDavSyncLoginOverride != null
+          ? await widget.webDavSyncLoginOverride!(
+              context,
+              _webDavSyncConnectController,
+            )
+          : await Navigator.of(context).push<WebDavSyncLoginCredentials>(
+              MaterialPageRoute(
+                builder: (_) => WebDavSyncLoginScreen(
+                  connectController: _webDavSyncConnectController,
+                ),
+              ),
+            );
+      if (!mounted) return;
+      if (credentials != null) {
+        setState(() => _connectingWebDav = true);
+      }
+      final outcome = await _webDavSyncConnectController.connect(
+        credentials: credentials,
+        completeOnboarding: true,
+        confirmExistingReplacement: _confirmWebDavReplacement,
+      );
+      if (!mounted) return;
+      switch (outcome) {
+        case WebDavSyncConnectCancelled():
+          setState(() => _connectingWebDav = false);
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _requestLanding(),
+          );
+        case WebDavSyncConnectPreHandoffFailure(:final error):
+          debugPrint('Onboarding WebDAV login failed: $error');
+          setState(() {
+            _connectingWebDav = false;
+            _webDavError =
+                'Could not connect this account. Check your details and try again.';
+          });
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _requestLanding(),
+          );
+        case WebDavSyncConnectActive(:final createdNewCircle):
+          _hasConfigured = true;
+          if (createdNewCircle) {
+            _connectingWebDav = false;
+            await _finish();
+          } else {
+            _completeAfterWebDavHandoff();
+          }
+        case WebDavSyncConnectAdoptedFinishing():
+          _completeAfterWebDavHandoff();
+        case WebDavSyncConnectPostHandoffFailure(:final error):
+          debugPrint('Onboarding WebDAV handoff is finishing: $error');
+          _completeAfterWebDavHandoff();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      debugPrint('Onboarding WebDAV login failed: $error');
+      setState(() {
+        _connectingWebDav = false;
+        _webDavError =
+            'Could not connect this account. Check your details and try again.';
+      });
+    }
+  }
+
+  Future<bool> _confirmWebDavReplacement() async {
+    if (!mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Use this synced setup?'),
+            content: const Text(
+              'Your profiles and connections on this device will be replaced '
+              'with the setup from your other devices.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Use synced setup'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  void _completeAfterWebDavHandoff() {
+    if (!mounted) return;
+    _finishing = true;
+    Navigator.of(context).pop(true);
+  }
 
   void _toggleService(IntegrationType type) {
     setState(() {
@@ -884,15 +1000,28 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         title = "Let's set\nDebrify up.";
         subtitle =
             'About two minutes. Every step can be skipped, and everything lives in Settings afterwards.';
-        content = ModeStep(
-          focusController: _focus,
-          onSetupHere: _chooseSetupHere,
-          onImport: () => unawaited(_enterImport()),
-          onRestore: PlatformUtil.isTvOS
-              ? null
-              : () => unawaited(_restoreBackup()),
-          onSkip: () => unawaited(_leave()),
-        );
+        content = _connectingWebDav
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 14),
+                    Text('Connecting your setup…'),
+                  ],
+                ),
+              )
+            : ModeStep(
+                focusController: _focus,
+                onWebDavLogin: () => unawaited(_loginWithWebDav()),
+                onSetupHere: _chooseSetupHere,
+                onImport: () => unawaited(_enterImport()),
+                onRestore: PlatformUtil.isTvOS
+                    ? null
+                    : () => unawaited(_restoreBackup()),
+                onSkip: () => unawaited(_leave()),
+                webDavError: _webDavError,
+              );
       case OnboardStep.services:
         eyebrow = 'Step 1 of 4';
         title = 'Which services\ndo you have?';
@@ -1039,8 +1168,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       footer: footer,
       keyStep: keyStep,
       backEnabled:
-          _step != OnboardStep.key ||
-          _keyPhase != KeyValidationPhase.validating,
+          !_connectingWebDav &&
+          (_step != OnboardStep.key ||
+              _keyPhase != KeyValidationPhase.validating),
     );
   }
 }

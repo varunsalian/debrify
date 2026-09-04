@@ -177,11 +177,13 @@ final class DefaultWebDavSyncAdoptionOperations
   @override
   Future<bool> handoff({
     required String targetProfileId,
+    required bool completeOnboarding,
     required Future<void> Function() beforeCommit,
     required Future<void> Function() beforeTargetInitialize,
   }) => lifecycleCoordinator.switchTo(
     targetProfileId,
     unlock: unlockImportedAdmin,
+    completeOnboarding: completeOnboarding,
     afterDeactivateBeforeCommit: beforeCommit,
     afterCommitBeforeInitialize: beforeTargetInitialize,
   );

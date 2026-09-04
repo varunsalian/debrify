@@ -247,6 +247,23 @@ void main() {
     expect((await bindingStore.load()).activeBindingId, binding.id);
   });
 
+  test(
+    'first join forwards the persisted onboarding intent to adoption',
+    () async {
+      final adoption = _FakeAdoption(states, events);
+
+      await connector(adoption: adoption).connect(
+        bindingId: binding.id,
+        authorization: authorization,
+        recaptureAuthorization: () async => authorization,
+        replacementConfirmed: true,
+        completeOnboarding: true,
+      );
+
+      expect(adoption.completeOnboarding, isTrue);
+    },
+  );
+
   test('retry after bootstrap adoption skips destructive adoption', () async {
     states.state = WebDavSyncEngineState(
       circleToLocalProfiles: <String, String>{
@@ -443,12 +460,14 @@ final class _FakeAdoption implements WebDavSyncAdoptionRunner {
   int restoreCalls = 0;
   int copyForwardCalls = 0;
   int mapMintCalls = 0;
+  bool? completeOnboarding;
 
   @override
   Future<WebDavSyncAdoptionRecord> adopt(
     WebDavSyncAdoptionRequest request,
   ) async {
     events.add('adopt:${request.mode.name}');
+    completeOnboarding = request.completeOnboarding;
     restoreCalls++;
     copyForwardCalls++;
     mapMintCalls++;

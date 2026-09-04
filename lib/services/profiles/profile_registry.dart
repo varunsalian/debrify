@@ -1286,7 +1286,10 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
-  Future<void> commitActivation({required String targetProfileId}) async {
+  Future<void> commitActivation({
+    required String targetProfileId,
+    bool completeOnboarding = false,
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
       final rows = await txn.query(
@@ -1302,7 +1305,19 @@ class ProfileRegistry {
       if (state is! Map || state['targetProfileId'] != targetProfileId) {
         throw StateError('Activation target does not match journal');
       }
-      await txn.rawUpdate(
+      if (completeOnboarding) {
+        final completed = await txn.update(
+          'user_profiles',
+          <String, Object?>{'profile_setup_complete': 1, 'updated_at_ms': now},
+          where:
+              "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+          whereArgs: <Object>[targetProfileId],
+        );
+        if (completed != 1) {
+          throw StateError('Activation target is unavailable');
+        }
+      }
+      final activated = await txn.rawUpdate(
         '''UPDATE device_state
            SET active_profile_id = ?,
                activation_revision = activation_revision + 1,
@@ -1311,6 +1326,9 @@ class ProfileRegistry {
            WHERE singleton_id = 1''',
         <Object>[targetProfileId, now],
       );
+      if (activated != 1) {
+        throw StateError('Device state is not initialized');
+      }
     });
     await checkpointTvOsRecovery();
   }

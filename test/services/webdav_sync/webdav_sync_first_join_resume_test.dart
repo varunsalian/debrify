@@ -38,6 +38,7 @@ void main() {
       location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
       config: config,
       syncPassphrase: 'circle-secret',
+      completeOnboarding: true,
     );
     binding = await store.markRootVerified(
       bindingId: binding.id,
@@ -78,6 +79,11 @@ void main() {
       final policy = resumePolicy(
         connect: (bindingId) async {
           publishes++;
+          expect(
+            (await store.load()).bindings[bindingId]?.completeOnboarding,
+            isTrue,
+            reason: 'restart must retain the first-run completion intent',
+          );
           await store.setLifecycle(bindingId, WebDavSyncLifecycle.active);
           await store.promoteStaged(bindingId);
           return (await store.load()).activeBinding!;

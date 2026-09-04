@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
@@ -66,11 +67,41 @@ void main() {
     expect(authorization.calls, 0);
   });
 
+  test('onboarding cancellation discards only the staged candidate', () async {
+    await store.stageBinding(
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://other.test/dav',
+        folderPath: 'Debrify',
+        serverName: 'Other',
+      ),
+      config: const WebDavConfig(
+        id: 'other',
+        name: 'Other',
+        baseUrl: 'https://other.test/dav',
+        username: 'alice',
+        password: 'secret',
+      ),
+      syncPassphrase: 'circle-secret',
+      completeOnboarding: true,
+    );
+
+    final outcome = await controller().connect(
+      credentials: null,
+      completeOnboarding: true,
+      confirmExistingReplacement: () async => true,
+    );
+
+    expect(outcome, isA<WebDavSyncConnectCancelled>());
+    expect((await store.load()).stagedBinding, isNull);
+    expect((await store.load()).bindings, isEmpty);
+  });
+
   test(
     'new login uses the fixed folder and reports adoption finishing',
     () async {
       final outcome = await controller().connect(
         credentials: credentials,
+        completeOnboarding: true,
         confirmExistingReplacement: () async => true,
       );
 
@@ -84,8 +115,27 @@ void main() {
         (await store.readSecrets(finishing.binding)).syncPassphrase,
         hasLength(43),
       );
+      expect((await store.load()).stagedBinding?.completeOnboarding, isTrue);
     },
   );
+
+  test('pre-handoff failure removes the onboarding candidate', () async {
+    var saves = 0;
+    authorization.beforeCommit = () async {
+      saves++;
+      if (saves == 2) throw StateError('commit fence changed');
+    };
+
+    final outcome = await controller().connect(
+      credentials: credentials,
+      completeOnboarding: true,
+      confirmExistingReplacement: () async => true,
+    );
+
+    expect(outcome, isA<WebDavSyncConnectPreHandoffFailure>());
+    expect((await store.load()).stagedBinding, isNull);
+    expect((await store.load()).bindings, isEmpty);
+  });
 
   test('inspection errors are pre-handoff failures', () async {
     authorization.error = StateError('authorization changed');
@@ -116,6 +166,7 @@ void main() {
 final class _Authorization implements WebDavSyncSetupAuthorization {
   Object? error;
   int calls = 0;
+  Future<void> Function()? beforeCommit;
 
   @override
   Future<void> requireAdmin() async {}
@@ -126,7 +177,7 @@ final class _Authorization implements WebDavSyncSetupAuthorization {
   ) async {
     calls++;
     if (error case final failure?) throw failure;
-    return body(null);
+    return body(beforeCommit);
   }
 
   @override
