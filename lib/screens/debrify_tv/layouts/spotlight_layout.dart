@@ -85,6 +85,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
   static const _kAdd = 'add';
   static const _kImport = 'import';
   static const _kExport = 'export';
+  static const _kDeleteAll = 'deleteAll';
   static const _kSettings = 'settings';
   static const _kSearch = 'search';
 
@@ -94,6 +95,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     _kAdd,
     _kImport,
     _kExport,
+    _kDeleteAll,
     _kSettings,
   ];
   static const _kPlay = 'act:play';
@@ -834,6 +836,13 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
           view.busy || view.channels.isEmpty ? null : view.onExport,
         ),
         const SizedBox(width: 7),
+        button(
+          _kDeleteAll,
+          Icons.delete_sweep_rounded,
+          'Delete all',
+          view.busy || view.channels.isEmpty ? null : view.onDeleteAll,
+        ),
+        const SizedBox(width: 7),
         button(_kSettings, Icons.settings_rounded, 'Settings', view.onSettings),
         const SizedBox(width: 9),
         Expanded(
@@ -845,6 +854,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                 _kAdd: 'Add channel',
                 _kImport: 'Import',
                 _kExport: 'Export',
+                _kDeleteAll: 'Delete all',
                 _kSettings: 'Settings',
               };
               String caption = '';

@@ -7939,6 +7939,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       onAdd: _handleAddChannel,
       onImport: _handleImportChannels,
       onExport: _handleExportChannels,
+      onDeleteAll: _handleDeleteAllChannels,
       onSettings: _showGlobalSettingsDialog,
       onWatch: _watchChannel,
       onEdit: _handleEditChannel,

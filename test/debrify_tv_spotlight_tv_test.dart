@@ -27,6 +27,7 @@ void main() {
       tester,
       onSettings: () => settingsOpened = true,
       onExport: () => exportOpened = true,
+      onDeleteAll: _noop,
       onWatch: (channel) => watched.add(channel.id),
     );
 
@@ -49,6 +50,10 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     expect(exportOpened, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(find.text('Delete all'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
@@ -142,6 +147,7 @@ Future<FocusNode> _pumpTv(
   WidgetTester tester, {
   VoidCallback? onSettings,
   VoidCallback? onExport,
+  VoidCallback? onDeleteAll,
   ValueChanged<DebrifyTvChannel>? onWatch,
 }) async {
   PlatformUtil.debugSetAndroidTvCached(true);
@@ -185,6 +191,7 @@ Future<FocusNode> _pumpTv(
             onAdd: _noop,
             onImport: _noop,
             onExport: onExport ?? _noop,
+            onDeleteAll: onDeleteAll ?? _noop,
             onSettings: onSettings ?? _noop,
             onWatch: onWatch ?? _noopChannel,
             onEdit: _noopChannel,

@@ -36,6 +36,7 @@ class DebrifyTvView {
   final VoidCallback onAdd;
   final VoidCallback onImport;
   final VoidCallback onExport;
+  final VoidCallback onDeleteAll;
   final VoidCallback onSettings;
 
   final void Function(DebrifyTvChannel) onWatch;
@@ -65,6 +66,7 @@ class DebrifyTvView {
     required this.onAdd,
     required this.onImport,
     required this.onExport,
+    required this.onDeleteAll,
     required this.onSettings,
     required this.onWatch,
     required this.onEdit,
