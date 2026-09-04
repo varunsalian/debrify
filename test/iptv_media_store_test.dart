@@ -209,6 +209,77 @@ void main() {
         expect(prefs.getString(favoritesKey), isNull);
       },
     );
+
+    test(
+      'replayed legacy rows cannot overwrite their tombstoned sidecars',
+      () async {
+        const favoriteUrl = 'https://panel.invalid/live/tombstoned';
+        const mediaUrl = 'https://panel.invalid/movie/tombstoned';
+        SharedPreferences.setMockInitialValues({
+          favoritesKey: jsonEncode({
+            favoriteUrl: <String, Object?>{
+              'name': 'Stale favorite',
+              'playlistId': 'source-1',
+              'addedAt': 10,
+            },
+          }),
+          historyKey: jsonEncode({
+            mediaUrl: <String, Object?>{
+              'name': 'Stale history',
+              'playlistId': 'source-1',
+              'lastPlayedAt': 11,
+            },
+          }),
+          resumeKey: jsonEncode({
+            mediaUrl: <String, Object?>{
+              'positionMs': 12,
+              'durationMs': 120,
+              'updatedAt': 12,
+            },
+          }),
+        });
+        final db = DebrifyTvDatabase.debugDatabaseOverride!;
+        final batch = db.batch();
+        for (final state in <(String, String, String)>[
+          (
+            WebDavSyncLibraryKinds.iptvListChannels,
+            IptvMediaStore.favoritesListId,
+            favoriteUrl,
+          ),
+          (WebDavSyncLibraryKinds.iptvWatchHistory, 'source-1', mediaUrl),
+          (WebDavSyncLibraryKinds.videoResume, 'source-1', mediaUrl),
+        ]) {
+          batch.insert('webdav_sync_record_state', <String, Object?>{
+            'kind': state.$1,
+            'owner_key': state.$2,
+            'item_key': state.$3,
+            'updated_at_ms': 99,
+            'origin_device_id': 'device-b',
+            'normalized': 1,
+            'deleted': 1,
+            'aux': null,
+          });
+        }
+        await batch.commit(noResult: true);
+
+        expect(await StorageService.getIptvFavoriteChannels(), isEmpty);
+        expect(await db.query('iptv_list_channels'), isEmpty);
+        expect(await db.query('iptv_watch_history'), isEmpty);
+        expect(await db.query('video_resume'), isEmpty);
+        final states = await db.query(
+          'webdav_sync_record_state',
+          orderBy: 'kind',
+        );
+        expect(states, hasLength(3));
+        expect(states.map((state) => state['updated_at_ms']), everyElement(99));
+        expect(
+          states.map((state) => state['origin_device_id']),
+          everyElement('device-b'),
+        );
+        expect(states.map((state) => state['normalized']), everyElement(1));
+        expect(states.map((state) => state['deleted']), everyElement(1));
+      },
+    );
   });
 
   group('list library sync', () {
@@ -224,6 +295,9 @@ void main() {
 
       final alpha = await IptvMediaStore.createList('Alpha');
       final beta = await IptvMediaStore.createList('Beta');
+      expect(alpha, matches(RegExp(r'^list_1000_[A-Za-z0-9_-]{11}$')));
+      expect(beta, matches(RegExp(r'^list_1001_[A-Za-z0-9_-]{11}$')));
+      expect(alpha, isNot(beta));
       await IptvMediaStore.renameList(alpha, 'Renamed');
 
       final db = DebrifyTvDatabase.debugDatabaseOverride!;

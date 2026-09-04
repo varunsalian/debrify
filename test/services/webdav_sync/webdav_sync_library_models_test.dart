@@ -168,39 +168,96 @@ void main() {
     expect(ab.records[key]!.value!['name'], 'B');
   });
 
-  test(
-    'channel-number collision canonicalization is merge-order invariant',
-    () {
-      final a = WebDavSyncLibraryDocument(
-        circleProfileId: 'profile-circle',
-        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
-          'tv/ch/Y2hhbm5lbC1h': leaf(10, 'device-a', const <String, Object?>{
-            'name': 'A',
-            'channelNumber': 7,
-          }),
-        },
-      );
-      final b = WebDavSyncLibraryDocument(
-        circleProfileId: 'profile-circle',
-        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
-          'tv/ch/Y2hhbm5lbC1i': leaf(10, 'device-b', const <String, Object?>{
-            'name': 'B',
-            'channelNumber': 7,
-          }),
-        },
-      );
-      final ab = WebDavSyncLibraryMerge.merge(
-        circleProfileId: 'profile-circle',
-        documents: <WebDavSyncLibraryDocument>[a, b],
-      );
-      final ba = WebDavSyncLibraryMerge.merge(
-        circleProfileId: 'profile-circle',
-        documents: <WebDavSyncLibraryDocument>[b, a],
-      );
+  test('TV desired numbers survive ordered and replayed merges verbatim', () {
+    WebDavSyncLibraryDocument document(
+      String key,
+      String origin,
+      String name,
+    ) => WebDavSyncLibraryDocument(
+      circleProfileId: 'profile-circle',
+      records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        key: leaf(10, origin, <String, Object?>{
+          'name': name,
+          'channelNumber': 1,
+        }),
+      },
+    );
+    final a = document('tv/ch/YQ', 'device-a', 'A');
+    final b = document('tv/ch/Yg', 'device-b', 'B');
+    final c = document('tv/ch/Yw', 'device-c', 'C');
 
-      expect(ab.toJson(), ba.toJson());
-      expect(ab.records['tv/ch/Y2hhbm5lbC1h']!.value!['channelNumber'], 7);
-      expect(ab.records['tv/ch/Y2hhbm5lbC1i']!.value!['channelNumber'], 8);
+    for (final documents in <List<WebDavSyncLibraryDocument>>[
+      <WebDavSyncLibraryDocument>[a, b, c],
+      <WebDavSyncLibraryDocument>[a, c, b],
+      <WebDavSyncLibraryDocument>[b, a, c],
+      <WebDavSyncLibraryDocument>[b, c, a],
+      <WebDavSyncLibraryDocument>[c, a, b],
+      <WebDavSyncLibraryDocument>[c, b, a],
+    ]) {
+      final merged = WebDavSyncLibraryMerge.merge(
+        circleProfileId: 'profile-circle',
+        documents: documents,
+      );
+      for (final replayed in documents) {
+        final replay = WebDavSyncLibraryMerge.merge(
+          circleProfileId: 'profile-circle',
+          documents: <WebDavSyncLibraryDocument>[merged, replayed],
+        );
+        expect(replay.semanticDigest, merged.semanticDigest);
+      }
+      expect(
+        merged.records.values.map((item) => item.value!['channelNumber']),
+        everyElement(1),
+      );
+    }
+  });
+
+  test(
+    'IPTV desired positions survive ordered and replayed merges verbatim',
+    () {
+      WebDavSyncLibraryDocument document(
+        String key,
+        String origin,
+        String name,
+        int position,
+        int createdAt,
+      ) => WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          key: leaf(10, origin, <String, Object?>{
+            'name': name,
+            'position': position,
+            'createdAt': createdAt,
+          }),
+        },
+      );
+      final a = document('iptv/list/YQ', 'device-a', 'A', 0, 0);
+      final b = document('iptv/list/Yg', 'device-b', 'B', 0, 1);
+      final c = document('iptv/list/Yw', 'device-c', 'C', 1, 2);
+
+      for (final documents in <List<WebDavSyncLibraryDocument>>[
+        <WebDavSyncLibraryDocument>[a, b, c],
+        <WebDavSyncLibraryDocument>[a, c, b],
+        <WebDavSyncLibraryDocument>[b, a, c],
+        <WebDavSyncLibraryDocument>[b, c, a],
+        <WebDavSyncLibraryDocument>[c, a, b],
+        <WebDavSyncLibraryDocument>[c, b, a],
+      ]) {
+        final merged = WebDavSyncLibraryMerge.merge(
+          circleProfileId: 'profile-circle',
+          documents: documents,
+        );
+        for (final replayed in documents) {
+          final replay = WebDavSyncLibraryMerge.merge(
+            circleProfileId: 'profile-circle',
+            documents: <WebDavSyncLibraryDocument>[merged, replayed],
+          );
+          expect(replay.semanticDigest, merged.semanticDigest);
+        }
+        expect(merged.records['iptv/list/YQ']!.value!['position'], 0);
+        expect(merged.records['iptv/list/Yg']!.value!['position'], 0);
+        expect(merged.records['iptv/list/Yw']!.value!['position'], 1);
+      }
     },
   );
 

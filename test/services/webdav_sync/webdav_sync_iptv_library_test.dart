@@ -922,6 +922,148 @@ void main() {
   );
 
   test(
+    'a malformed member is retained on wire and skipped without aborting apply',
+    () async {
+      final diagnostics = <String>[];
+      adapter = ProfileWebDavSyncLocalAdapter(
+        registry,
+        diagnostic: diagnostics.add,
+      );
+      session = await adapter.beginCycle();
+      final blank = await adapter.readLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      const validUrl = 'https://panel.invalid/live/valid';
+      const malformedIdentity = 'malformed-member';
+      final validKey =
+          'iptv/list-ch/${_part(IptvMediaStore.favoritesListId)}/'
+          '${_sha(validUrl)}';
+      final malformedKey =
+          'iptv/list-ch/${_part(IptvMediaStore.favoritesListId)}/'
+          '${_sha(malformedIdentity)}';
+      final remote = WebDavSyncLibraryDocument(
+        circleProfileId: circleProfileId,
+        records: <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+          validKey: const WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 49,
+              originDeviceId: 'device-b',
+            ),
+            value: <String, Object?>{
+              'url': validUrl,
+              'name': 'Valid',
+              'logoUrl': '',
+              'group': '',
+              'sourceRef': '',
+              'addedAt': 49,
+              'position': 0,
+            },
+          ),
+          malformedKey: const WebDavSyncCircleLeaf<Map<String, Object?>>(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 50,
+              originDeviceId: 'device-b',
+            ),
+            value: <String, Object?>{'url': 7},
+          ),
+        },
+      );
+      final merged = WebDavSyncLibraryMerge.merge(
+        circleProfileId: circleProfileId,
+        documents: <WebDavSyncLibraryDocument>[remote],
+      );
+      expect(merged.semanticDigest, remote.semanticDigest);
+      expect(merged.records[malformedKey]!.value, const <String, Object?>{
+        'url': 7,
+      });
+
+      final outcome = await adapter.applyLibrary(
+        session,
+        profileId,
+        WebDavSyncLibraryApplyRequest(
+          circleProfileId: circleProfileId,
+          identityMaps: maps,
+          document: merged,
+          observedRevisions: blank.revisions,
+          hiddenGroupNamesByWireKey: const <String, String>{},
+        ),
+      );
+
+      expect(outcome.result, WebDavSyncLibraryApplyResult.applied);
+      expect(outcome.appliedNamespaces, const <String>{'iptv/list-ch'});
+      expect((await dbA.query('iptv_list_channels')).single['url'], validUrl);
+      expect(
+        diagnostics,
+        contains('Ignored an invalid IPTV-list member library leaf'),
+      );
+    },
+  );
+
+  test(
+    'oversized member headers stay local and peers materialize headerless',
+    () async {
+      final diagnostics = <String>[];
+      adapter = ProfileWebDavSyncLocalAdapter(
+        registry,
+        diagnostic: diagnostics.add,
+      );
+      session = await adapter.beginCycle();
+      const url = 'https://panel.invalid/live/oversized-headers';
+      final headers = <String, String>{'Authorization': 'x' * 2100};
+      await IptvMediaStore.setChannelFavorited(url, true, httpHeaders: headers);
+      expect(
+        (await StorageService.getIptvFavoriteChannels())[url]?['httpHeaders'],
+        headers,
+      );
+
+      final snapshot = await adapter.readLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      final key =
+          'iptv/list-ch/${_part(IptvMediaStore.favoritesListId)}/${_sha(url)}';
+      expect(snapshot.document.records[key], isNotNull);
+      expect(
+        snapshot.document.records[key]!.value,
+        isNot(contains('httpHeaders')),
+      );
+      expect(
+        diagnostics,
+        contains('Omitted oversized IPTV-list member HTTP headers'),
+      );
+      expect(
+        (await dbA.query('iptv_list_channels')).single['http_headers_json'],
+        isNotNull,
+      );
+
+      await dbA.delete(
+        'iptv_list_channels',
+        where: 'url = ?',
+        whereArgs: const <Object?>[url],
+      );
+      final outcome = await adapter.applyLibrary(
+        session,
+        profileId,
+        WebDavSyncLibraryApplyRequest(
+          circleProfileId: circleProfileId,
+          identityMaps: maps,
+          document: snapshot.document,
+          observedRevisions: snapshot.revisions,
+          hiddenGroupNamesByWireKey: snapshot.hiddenGroupNamesByWireKey,
+        ),
+      );
+      expect(outcome.appliedNamespaces, const <String>{'iptv/list-ch'});
+      expect(
+        (await dbA.query('iptv_list_channels')).single['http_headers_json'],
+        isNull,
+      );
+    },
+  );
+
+  test(
     'malformed sealed values never leak URLs or headers to diagnostics',
     () async {
       final diagnostics = <String>[];

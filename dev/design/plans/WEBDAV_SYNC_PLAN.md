@@ -2277,3 +2277,36 @@ reasoning recorded here so they are not re-litigated:
   durable intent retries at the saturated 2-minute backoff with no
   network cost. A deterministic post-merge age trim for watch/resume
   families is the designated follow-up if anyone approaches the bound.
+
+### 14.8 Lists round adversarial triage (2026-09-04)
+
+Seven findings on the favorites/custom-lists round; five fixed, two
+rejected with reasoning:
+
+- **Fixed — merge-time canonicalization was unstable.** Rewriting winner
+  values under unchanged stamps broke idempotence (proven with divergent
+  digests). Both merge-time canonicalizers are gone: wire documents keep
+  desired numbers/positions byte-for-byte; the SQLite materializer alone
+  assigns collision-free physical values, and sync apply retains the
+  desired value in sidecar `aux` so the build republishes the stamped
+  desired value, never the physical assignment. A user edit resets aux,
+  adopting the visible value under a fresh stamp.
+- **Fixed — malformed leaves quarantined**, not thrown: full validation
+  before any typed read; invalid leaves skip materialization with a
+  content-free diagnostic and stay in the merged document.
+- **Fixed — wire header budget**: member httpHeaders over 2048 encoded
+  bytes are omitted from the sealed value (row still syncs; local
+  playback keeps local headers).
+- **Fixed — idempotent legacy import**: the import pre-loads existing
+  sidecar states and never overwrites one (a tombstone written between
+  import attempts survives replay); a failed prefs.remove is audited.
+- **Fixed — list id entropy**: 64 secure random bits.
+- **Rejected: row-granularity LWW** (a reorder can beat a concurrent
+  rename of the same row): consistent with every v3 family — channels
+  carry name+number+keywords under one stamp too. Self-corrects by
+  redoing the edit.
+- **Rejected: reconcile-alias vs unfavorite race** (an unfavorite of a
+  URL being renamed can resurface under the new URL): rare, requires the
+  race inside one propagation window, and one more unfavorite sticks.
+  Keying by canonical channel identity was judged a redesign not worth
+  the migration.

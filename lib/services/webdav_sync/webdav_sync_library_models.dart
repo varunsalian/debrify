@@ -438,8 +438,8 @@ abstract final class WebDavSyncLibraryMerge {
         }
       }
     }
-    _canonicalizeTvChannelNumbers(winners);
-    _canonicalizeIptvListPositions(winners);
+    // Winner values stay byte-for-byte attached to their stamps. SQLite-only
+    // number/position collision repair belongs to the materializer.
     _pruneSuppressedTvChildren(winners);
     _pruneSuppressedIptvListChildren(winners);
     return WebDavSyncLibraryDocument(
@@ -516,117 +516,6 @@ abstract final class WebDavSyncLibraryMerge {
           parts[1] == 'list-ch' &&
           deadLists.contains(parts[2]);
     });
-  }
-
-  /// Canonicalize concurrent number collisions without minting a new stamp.
-  /// Desired numbers sort first, then the decoded portable channel ID; each
-  /// collision takes the next free positive number. Doing this in the pure
-  /// merge as well as the SQLite materializer keeps the published target and
-  /// every device's physical UNIQUE column identical across merge orders.
-  static void _canonicalizeTvChannelNumbers(
-    Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> winners,
-  ) {
-    final channels =
-        <
-          ({
-            String key,
-            String channelId,
-            int desired,
-            WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
-          })
-        >[];
-    for (final entry in winners.entries) {
-      final parts = entry.key.split('/');
-      final value = entry.value.value;
-      if (parts.length != 3 ||
-          parts[0] != 'tv' ||
-          parts[1] != 'ch' ||
-          value == null ||
-          value['channelNumber'] is! int ||
-          (value['channelNumber']! as int) <= 0) {
-        continue;
-      }
-      final channelId = _tryDecodeBase64Part(parts[2]);
-      if (channelId == null) continue;
-      channels.add((
-        key: entry.key,
-        channelId: channelId,
-        desired: value['channelNumber']! as int,
-        leaf: entry.value,
-      ));
-    }
-    channels.sort((left, right) {
-      final desired = left.desired.compareTo(right.desired);
-      return desired != 0 ? desired : left.channelId.compareTo(right.channelId);
-    });
-    final used = <int>{};
-    for (final channel in channels) {
-      var assigned = channel.desired;
-      while (used.contains(assigned)) {
-        assigned += 1;
-      }
-      used.add(assigned);
-      if (assigned == channel.desired) continue;
-      winners[channel.key] = WebDavSyncCircleLeaf<Map<String, Object?>>(
-        stamp: channel.leaf.stamp,
-        value: Map<String, Object?>.unmodifiable(<String, Object?>{
-          ...channel.leaf.value!,
-          'channelNumber': assigned,
-        }),
-      );
-    }
-  }
-
-  /// Custom-list positions are a compact deterministic sequence. Favorites
-  /// has no metadata leaf and is therefore never moved by library merge.
-  static void _canonicalizeIptvListPositions(
-    Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> winners,
-  ) {
-    final lists =
-        <
-          ({
-            String key,
-            String listId,
-            int desired,
-            WebDavSyncCircleLeaf<Map<String, Object?>> leaf,
-          })
-        >[];
-    for (final entry in winners.entries) {
-      final parts = entry.key.split('/');
-      final value = entry.value.value;
-      if (parts.length != 3 ||
-          parts[0] != 'iptv' ||
-          parts[1] != 'list' ||
-          value == null ||
-          value['position'] is! int ||
-          (value['position']! as int) < 0) {
-        continue;
-      }
-      final listId = _tryDecodeBase64Part(parts[2]);
-      if (listId == null || listId == 'favorites') continue;
-      lists.add((
-        key: entry.key,
-        listId: listId,
-        desired: value['position']! as int,
-        leaf: entry.value,
-      ));
-    }
-    lists.sort((left, right) {
-      final desired = left.desired.compareTo(right.desired);
-      return desired != 0 ? desired : left.listId.compareTo(right.listId);
-    });
-    for (var index = 0; index < lists.length; index++) {
-      final list = lists[index];
-      final assigned = index + 1;
-      if (assigned == list.desired) continue;
-      winners[list.key] = WebDavSyncCircleLeaf<Map<String, Object?>>(
-        stamp: list.leaf.stamp,
-        value: Map<String, Object?>.unmodifiable(<String, Object?>{
-          ...list.leaf.value!,
-          'position': assigned,
-        }),
-      );
-    }
   }
 
   static int compareLeaves(

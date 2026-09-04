@@ -329,7 +329,11 @@ class DebrifyTvDatabase {
                 value = <String, Object?>{
                   'name': physical['name'] as String,
                   'avoidNsfw': physical['avoid_nsfw'] == 1,
-                  'channelNumber': (physical['channel_number'] as num).toInt(),
+                  // Sync apply stores the unchanged desired number in aux;
+                  // the UNIQUE physical number may have been reassigned.
+                  'channelNumber':
+                      int.tryParse(row['aux'] as String? ?? '') ??
+                      (physical['channel_number'] as num).toInt(),
                   'createdAt': (physical['created_at'] as num).toInt(),
                   'keywords': channelKeywords[owner] ?? const <String>[],
                 };
@@ -349,7 +353,11 @@ class DebrifyTvDatabase {
               if (physical != null && physical['is_builtin'] == 0) {
                 value = <String, Object?>{
                   'name': physical['name'] as String,
-                  'position': (physical['position'] as num).toInt(),
+                  // Keep publishing the stamped desired position, not the
+                  // compact physical position assigned by sync apply.
+                  'position':
+                      int.tryParse(row['aux'] as String? ?? '') ??
+                      (physical['position'] as num).toInt(),
                   'createdAt': (physical['created_at'] as num).toInt(),
                 };
               }
@@ -560,11 +568,15 @@ class DebrifyTvDatabase {
 
       var writeChannels = false;
       for (final target in channels) {
+        final desiredNumber = target.leaf.value == null
+            ? null
+            : target.desiredChannelNumber.toString();
         final stateChanged = await needsWrite(
           WebDavSyncLibraryKinds.tvChannels,
           target.channelId,
           '',
           target.leaf,
+          aux: desiredNumber,
         );
         final physical = physicalById[target.channelId];
         final value = target.leaf.value;
@@ -667,6 +679,9 @@ class DebrifyTvDatabase {
             target.channelId,
             '',
             target.leaf,
+            aux: target.leaf.value == null
+                ? null
+                : target.desiredChannelNumber.toString(),
           );
         }
         touched.add('tv/ch');
@@ -779,11 +794,15 @@ class DebrifyTvDatabase {
       };
       var writeLists = false;
       for (final target in lists) {
+        final desiredPosition = target.leaf.value == null
+            ? null
+            : target.desiredPosition.toString();
         final stateChanged = await needsWrite(
           WebDavSyncLibraryKinds.iptvLists,
           target.listId,
           '',
           target.leaf,
+          aux: desiredPosition,
         );
         final physical = physicalListsById[target.listId];
         final physicalChanged = target.leaf.value == null
@@ -833,6 +852,9 @@ class DebrifyTvDatabase {
             target.listId,
             '',
             target.leaf,
+            aux: target.leaf.value == null
+                ? null
+                : target.desiredPosition.toString(),
           );
         }
         touched.add('iptv/list');

@@ -484,9 +484,19 @@ final class ProfileWebDavSyncLocalAdapter
         if (!state.deleted) {
           final localValue = state.value!;
           final playlistId = localValue['playlistId'];
+          final headers = localValue['httpHeaders'];
+          final oversizedHeaders =
+              headers != null &&
+              utf8.encode(jsonEncode(headers)).length >
+                  _maxIptvListMemberHeaderBytes;
+          if (oversizedHeaders) {
+            _diagnostic('Omitted oversized IPTV-list member HTTP headers');
+          }
           wireValue = <String, Object?>{
             for (final entry in localValue.entries)
-              if (entry.key != 'playlistId') entry.key: entry.value,
+              if (entry.key != 'playlistId' &&
+                  (!oversizedHeaders || entry.key != 'httpHeaders'))
+                entry.key: entry.value,
             'sourceRef': playlistId is String && playlistId.isNotEmpty
                 ? request.identityMaps.localToCircleResources[playlistId] ?? ''
                 : '',
@@ -757,16 +767,22 @@ final class ProfileWebDavSyncLocalAdapter
       if (parts.length == 4 && parts[0] == 'iptv' && parts[1] == 'list-ch') {
         final listId = _decodeCanonicalBase64Part(parts[2]);
         final value = entry.value.value;
-        final url = value == null
-            ? request.hiddenGroupNamesByWireKey[entry.key]
-            : value['url'] as String?;
+        String? url;
+        if (value == null) {
+          url = request.hiddenGroupNamesByWireKey[entry.key];
+        } else {
+          if (!_validIptvListChannelValue(value)) {
+            _diagnostic('Ignored an invalid IPTV-list member library leaf');
+            continue;
+          }
+          url = value['url']! as String;
+        }
         if (listId == null ||
             (listId != DebrifyTvDatabase.favoritesListId &&
                 !_validIptvListId.hasMatch(listId)) ||
             url == null ||
             url.isEmpty ||
-            _sha256Text(url) != parts[3] ||
-            (value != null && !_validIptvListChannelValue(value))) {
+            _sha256Text(url) != parts[3]) {
           _diagnostic('Ignored an invalid IPTV-list member library leaf');
           continue;
         }
@@ -2217,7 +2233,8 @@ String _base64Part(String value) =>
 
 final RegExp _validGenerationId = RegExp(r'^[A-Za-z0-9_-]{1,96}$');
 final RegExp _validInfohash = RegExp(r'^[a-z0-9]{1,128}$');
-final RegExp _validIptvListId = RegExp(r'^list_[0-9]+_[0-9]+$');
+const int _maxIptvListMemberHeaderBytes = 2048;
+final RegExp _validIptvListId = RegExp(r'^list_[0-9]+_[A-Za-z0-9_-]+$');
 final RegExp _validWireResourceId = RegExp(
   r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$',
 );

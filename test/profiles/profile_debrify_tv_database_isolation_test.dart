@@ -694,6 +694,18 @@ void main() {
         ),
         everyElement(containsPair('updated_at_ms', 100)),
       );
+      final projected = await DebrifyTvDatabase.instance.readWebDavSyncState(
+        profileA,
+        clockOffsetMs: 0,
+        serverNowMs: 1000,
+      );
+      expect(
+        projected.records
+            .where((record) => record.kind == WebDavSyncLibraryKinds.tvChannels)
+            .map((record) => record.value!['channelNumber']),
+        everyElement(7),
+        reason: 'physical collision repair must not rewrite desired wire data',
+      );
     },
   );
 
@@ -896,6 +908,56 @@ void main() {
         await rows(profileA, 'webdav_sync_record_state'),
         await rows(profileB, 'webdav_sync_record_state'),
       );
+      final projected = await DebrifyTvDatabase.instance.readWebDavSyncState(
+        profileA,
+        clockOffsetMs: 0,
+        serverNowMs: 1000,
+      );
+      expect(
+        projected.records
+            .where((record) => record.kind == WebDavSyncLibraryKinds.iptvLists)
+            .map((record) => record.value!['position']),
+        everyElement(7),
+        reason: 'physical compaction must not rewrite desired wire data',
+      );
+
+      final drifted = await DebrifyTvDatabase.instance.runOneShotScoped(
+        profileA,
+        (db) => db.update(
+          'iptv_lists',
+          <String, Object?>{'position': 99},
+          where: 'id = ?',
+          whereArgs: const <Object?>['list_1_1'],
+        ),
+      );
+      expect(drifted, 1);
+      final healed = await DebrifyTvDatabase.instance.applyWebDavSyncFamilies(
+        profileA,
+        expectedRevision: projected.mutationRevision,
+        channelTargets: const <WebDavSyncTvChannelTarget>[],
+        generationTargets: const <WebDavSyncTvPoolGenerationTarget>[],
+        poolTargets: const <WebDavSyncTvPoolTarget>[],
+        listTargets: <WebDavSyncIptvListTarget>[listA, listB],
+        listChannelTargets: <WebDavSyncIptvListChannelTarget>[memberA, memberB],
+        orderTargets: const <WebDavSyncIptvOrderTarget>[],
+        watchTargets: const <WebDavSyncIptvWatchTarget>[],
+        resumeTargets: const <WebDavSyncVideoResumeTarget>[],
+      );
+      expect(healed.result, WebDavSyncLibraryApplyResult.applied);
+      expect(healed.touchedNamespaces, const <String>{'iptv/list'});
+      expect(
+        (await rows(profileA, 'iptv_lists')).map((row) => row['position']),
+        <Object?>[1, 2],
+      );
+      final favorites = await DebrifyTvDatabase.instance.runOneShotScoped(
+        profileA,
+        (db) => db.query(
+          'iptv_lists',
+          where: 'id = ?',
+          whereArgs: const <Object?>[DebrifyTvDatabase.favoritesListId],
+        ),
+      );
+      expect(favorites.single['position'], 0);
     },
   );
 

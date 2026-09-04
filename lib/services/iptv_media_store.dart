@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/iptv_playlist.dart';
 import '../utils/json_isolate.dart';
 import 'debrify_tv_database.dart';
+import 'diagnostic_log.dart' as app_diagnostics;
 import 'iptv_catalog_db.dart';
 import 'iptv_channel_order.dart';
 import 'profiles/profile_preferences.dart';
@@ -245,6 +246,39 @@ class IptvMediaStore {
       'aux': null,
     };
 
+    Future<
+      ({
+        Set<(String, String, String)> keys,
+        Set<(String, String)> physicalItems,
+      })
+    >
+    existingStateKeys(DatabaseExecutor txn) async {
+      final rows = await txn.query(
+        'webdav_sync_record_state',
+        columns: const <String>['kind', 'owner_key', 'item_key'],
+      );
+      return (
+        keys: <(String, String, String)>{
+          for (final row in rows)
+            (
+              row['kind']! as String,
+              row['owner_key']! as String,
+              row['item_key']! as String,
+            ),
+        },
+        physicalItems: <(String, String)>{
+          for (final row in rows)
+            (row['kind']! as String, row['item_key']! as String),
+        },
+      );
+    }
+
+    Future<void> removeImportedPreference(String key) async {
+      if (!await prefs.remove(key)) {
+        _recordLegacyPreferenceRemovalFailure();
+      }
+    }
+
     final favoritesRaw = prefs.getString(_legacyFavoritesKey);
     if (favoritesRaw != null) {
       final favorites = await _decodeLegacyMap(favoritesRaw);
@@ -252,8 +286,16 @@ class IptvMediaStore {
         // A very old install can reach v5 with the prefs blob still present,
         // so the import lands straight in the built-in Favorites list.
         await DebrifyTvDatabase.seedBuiltinList(txn);
+        final existing = await existingStateKeys(txn);
         final batch = txn.batch();
+        var imported = false;
         for (final entry in favorites.entries) {
+          final stateKey = (
+            WebDavSyncLibraryKinds.iptvListChannels,
+            favoritesListId,
+            entry.key,
+          );
+          if (existing.keys.contains(stateKey)) continue;
           final row = _favoriteRowFromLegacy(entry.key, entry.value);
           batch.insert(
             'iptv_list_channels',
@@ -270,11 +312,14 @@ class IptvMediaStore {
             ),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          existing.keys.add(stateKey);
+          existing.physicalItems.add((stateKey.$1, stateKey.$3));
+          imported = true;
         }
         await batch.commit(noResult: true);
-        if (favorites.isNotEmpty) await _bumpLibraryRevision(txn);
+        if (imported) await _bumpLibraryRevision(txn);
       });
-      await prefs.remove(_legacyFavoritesKey);
+      await removeImportedPreference(_legacyFavoritesKey);
     }
 
     final historyRaw = prefs.getString(_legacyWatchHistoryKey);
@@ -293,8 +338,18 @@ class IptvMediaStore {
             );
       final kept = rows.take(_watchHistoryMax).toList(growable: false);
       await db.runTxn((txn) async {
+        final existing = await existingStateKeys(txn);
         final batch = txn.batch();
+        var imported = false;
         for (final row in kept) {
+          final stateKey = (
+            WebDavSyncLibraryKinds.iptvWatchHistory,
+            row['playlist_id']! as String,
+            row['url']! as String,
+          );
+          if (existing.physicalItems.contains((stateKey.$1, stateKey.$3))) {
+            continue;
+          }
           batch.insert(
             'iptv_watch_history',
             row,
@@ -310,17 +365,21 @@ class IptvMediaStore {
             ),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          existing.keys.add(stateKey);
+          existing.physicalItems.add((stateKey.$1, stateKey.$3));
+          imported = true;
         }
         await batch.commit(noResult: true);
-        if (kept.isNotEmpty) await _bumpLibraryRevision(txn);
+        if (imported) await _bumpLibraryRevision(txn);
       });
-      await prefs.remove(_legacyWatchHistoryKey);
+      await removeImportedPreference(_legacyWatchHistoryKey);
     }
 
     final resumeRaw = prefs.getString(_legacyVideoResumeKey);
     if (resumeRaw != null) {
       final resume = await _decodeLegacyMap(resumeRaw);
       await db.runTxn((txn) async {
+        final existing = await existingStateKeys(txn);
         final historyRows = await txn.query(
           'iptv_watch_history',
           columns: const <String>['url', 'playlist_id'],
@@ -335,6 +394,17 @@ class IptvMediaStore {
           final value = entry.value;
           if (value is! Map) continue;
           final sourceId = sourceByUrl[entry.key];
+          final ownerKey = (sourceId == null || sourceId.isEmpty)
+              ? '_'
+              : sourceId;
+          final stateKey = (
+            WebDavSyncLibraryKinds.videoResume,
+            ownerKey,
+            entry.key,
+          );
+          if (existing.physicalItems.contains((stateKey.$1, stateKey.$3))) {
+            continue;
+          }
           final row = _resumeRow(
             entry.key,
             Map<String, dynamic>.from(value),
@@ -349,19 +419,34 @@ class IptvMediaStore {
             'webdav_sync_record_state',
             migrationState(
               kind: WebDavSyncLibraryKinds.videoResume,
-              ownerKey: (sourceId == null || sourceId.isEmpty) ? '_' : sourceId,
+              ownerKey: ownerKey,
               itemKey: entry.key,
               updatedAtMs: row['updated_at']! as int,
             ),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          existing.keys.add(stateKey);
+          existing.physicalItems.add((stateKey.$1, stateKey.$3));
           imported = true;
         }
         await batch.commit(noResult: true);
         if (imported) await _bumpLibraryRevision(txn);
       });
-      await prefs.remove(_legacyVideoResumeKey);
+      await removeImportedPreference(_legacyVideoResumeKey);
     }
+  }
+
+  static void _recordLegacyPreferenceRemovalFailure() {
+    app_diagnostics.DiagnosticLog.instance.recordEvent(
+      source: 'iptv_media_store',
+      event: 'legacy_preference_remove_failed',
+      level: app_diagnostics.DiagnosticLevel.warning,
+      fields: const <String, Object?>{
+        'reason': app_diagnostics.DiagnosticLabel(
+          'legacy_import_cleanup_failed',
+        ),
+      },
+    );
   }
 
   /// Decoded off the UI isolate: the resume blob in particular can have
@@ -463,7 +548,11 @@ class IptvMediaStore {
       final now = origin == WebDavSyncMutationOrigin.user
           ? _nextStampMs()
           : DateTime.now().millisecondsSinceEpoch;
-      final id = 'list_${now}_${math.Random().nextInt(1 << 20)}';
+      final random = math.Random.secure();
+      final suffix = base64UrlEncode(
+        List<int>.generate(8, (_) => random.nextInt(256), growable: false),
+      ).replaceAll('=', '');
+      final id = 'list_${now}_$suffix';
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         final maxRow = await txn.rawQuery(
           'SELECT MAX(position) AS p FROM iptv_lists',
