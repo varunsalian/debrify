@@ -1405,12 +1405,19 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
           lastRemoteChangeMs: trigger == WebDavSyncTrigger.remoteChange
               ? serverNowMs
               : current.lastRemoteChangeMs,
-          lastMergedPeerSections: cycleConflicted
-              ? current.lastMergedPeerSections
-              : consumedPeerSections.mergeInto(
-                  current.lastMergedPeerSections,
-                  currentDeviceIds: manifests.keys,
-                ),
+          // Reference advancement is vetoed per tier, never globally: a
+          // circle-tier conflict must not doom every peer hot/library
+          // section to be re-downloaded forever (a perpetual circle
+          // follow-up once held 5MB re-reads and 15s of processing on
+          // every cycle). Library references for conflicted profiles were
+          // never consumed, so no further filter is needed for them.
+          lastMergedPeerSections: consumedPeerSections.mergeInto(
+            current.lastMergedPeerSections,
+            currentDeviceIds: manifests.keys,
+            excludeSectionNames: circleConflict
+                ? const <String>{'profiles', 'resources'}
+                : const <String>{},
+          ),
           sealedCompressionMigrated:
               current.sealedCompressionMigrated ||
               (forceCompressionMigration &&
@@ -3218,6 +3225,7 @@ final class _ConsumedPeerSections {
   Map<String, Map<String, WebDavSyncSectionReference>> mergeInto(
     Map<String, Map<String, WebDavSyncSectionReference>> current, {
     required Iterable<String> currentDeviceIds,
+    Set<String> excludeSectionNames = const <String>{},
   }) {
     final currentDevices = currentDeviceIds.toSet();
     final merged = <String, Map<String, WebDavSyncSectionReference>>{
@@ -3229,9 +3237,12 @@ final class _ConsumedPeerSections {
     };
     for (final device in _references.entries) {
       if (!currentDevices.contains(device.key)) continue;
-      (merged[device.key] ??= <String, WebDavSyncSectionReference>{}).addAll(
-        device.value,
-      );
+      final target = merged[device.key] ??=
+          <String, WebDavSyncSectionReference>{};
+      for (final section in device.value.entries) {
+        if (excludeSectionNames.contains(section.key)) continue;
+        target[section.key] = section.value;
+      }
     }
     if (merged.length > WebDavSyncLimits.maxPeers ||
         merged.values.any(

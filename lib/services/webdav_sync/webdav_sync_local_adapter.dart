@@ -16,7 +16,7 @@ import '../profiles/profile_preferences.dart';
 import '../profiles/profile_registry.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
-import '../diagnostic_log.dart';
+import 'webdav_sync_diagnostics.dart';
 import '../debrify_tv_database.dart';
 import '../iptv_catalog_db.dart';
 import '../iptv_catalog_key.dart';
@@ -1918,12 +1918,10 @@ final class ProfileWebDavSyncLocalAdapter
   }
 
   static void _recordRedactedDiagnostic(String message) {
-    DiagnosticLog.instance.recordEvent(
-      source: 'webdav_sync',
-      event: 'resource_secret_leaf_ignored',
-      level: DiagnosticLevel.warning,
-      fields: <String, Object?>{'reason': DiagnosticLabel(message)},
-    );
+    // The message is one of this adapter's fixed audited strings; route it
+    // through the shared sink so it reaches the console AND the retained
+    // log with its label, instead of an anonymous legacy event name.
+    recordWebDavSyncDiagnostic(message, null);
   }
 }
 

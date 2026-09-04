@@ -2874,7 +2874,15 @@ void main() {
     final report = await runFixture(context());
 
     expect(report.localChangeFollowUp, isTrue);
-    expect(states.state.lastMergedPeerSections, isEmpty);
+    // The veto is per tier: the conflicted circle tier must not advance its
+    // profiles/resources references, while the peer's hot/tombstone tier
+    // applied cleanly and advances — a perpetual circle follow-up must not
+    // doom every peer section to be re-downloaded forever.
+    final deviceSections = states.state.lastMergedPeerSections['device-b'];
+    expect(deviceSections, isNotNull);
+    expect(deviceSections!.keys, isNot(contains('profiles')));
+    expect(deviceSections.keys, isNot(contains('resources')));
+    expect(deviceSections.keys, contains('hot/profile-circle'));
   });
 
   test('compression migration republishes once only while active', () async {
