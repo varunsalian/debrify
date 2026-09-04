@@ -260,6 +260,12 @@ abstract interface class WebDavSyncSectionGcTransport {
 /// [WebDavSyncTransport] and therefore cannot create or delete a sync root.
 abstract interface class WebDavSyncActivationTransport
     implements WebDavSyncTransport {
+  Future<void> ensureActivationLayout();
+
+  Future<WebDavBytesResult> readRootKey();
+
+  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes);
+
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes);
 
   Future<void> deleteDeviceDirectory(String deviceId);
@@ -430,6 +436,29 @@ final class ProtocolWebDavSyncTransport
   }
 
   @override
+  Future<void> ensureActivationLayout() async {
+    await _client.ensureCollection(_syncRoot);
+    try {
+      final verified = await _client.propfind(
+        path: _syncRoot,
+        depth: 0,
+        body: _listingBody,
+        collection: true,
+        maxBytes: WebDavProtocolClient.defaultSmallDocumentLimit,
+      );
+      final document = XmlDocument.parse(utf8.decode(verified.bytes));
+      final isCollection = document.descendants.whereType<XmlElement>().any(
+        (element) => element.name.local == 'collection',
+      );
+      if (!isCollection) throw const WebDavSyncRootKeyClaimException();
+    } on WebDavSyncRootKeyClaimException {
+      rethrow;
+    } on Object {
+      throw const WebDavSyncRootKeyClaimException();
+    }
+  }
+
+  @override
   Future<WebDavResponseMetadata> writeSection(
     String deviceId,
     String contentHash,
@@ -474,6 +503,32 @@ final class ProtocolWebDavSyncTransport
       bytes: bytes,
       maxBytes: WebDavSyncLimits.maxManifestBytes,
     );
+  }
+
+  @override
+  Future<WebDavBytesResult> readRootKey() => _client.getBytes(
+    path: _location.rootKeyPath,
+    maxBytes: WebDavSyncRootKeyFile.maxBytes,
+  );
+
+  @override
+  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
+    final metadata = await _client.putBytes(
+      path: _location.rootKeyPath,
+      bytes: bytes,
+      maxBytes: WebDavSyncRootKeyFile.maxBytes,
+      ifNoneMatch: '*',
+      createParents: false,
+    );
+    if (metadata.statusCode != 201) {
+      throw WebDavException(
+        kind: WebDavErrorKind.unexpectedStatus,
+        message: 'WebDAV did not prove create-only sync key ownership',
+        statusCode: metadata.statusCode,
+        uri: metadata.uri,
+      );
+    }
+    return metadata;
   }
 
   @override

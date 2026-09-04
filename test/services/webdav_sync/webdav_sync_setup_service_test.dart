@@ -70,10 +70,13 @@ void main() {
       );
 
       expect(inspection, isA<WebDavSyncFolderMissing>());
-      expect(transport.paths, <String>['Family/debrify-sync/circle.json.enc']);
+      expect(transport.paths, <String>[
+        'Family/debrify-sync/circle.json.enc',
+        'Family/debrify-sync/circle.key',
+      ]);
       expect(transport.endpoint, Uri.parse('https://example.test/dav/'));
       expect(transport.credentials!.username, 'alice');
-      expect(barrierCalls, 1);
+      expect(barrierCalls, 2);
       expect((await store.load()).bindings, isEmpty);
 
       final binding = await service.configureNewRoot(
@@ -81,7 +84,7 @@ void main() {
         syncPassphrase: 'circle-secret',
       );
       expect(binding.lifecycle, WebDavSyncLifecycle.awaitingSeedCommit);
-      expect(transport.paths, hasLength(1));
+      expect(transport.paths, hasLength(2));
     },
   );
 
@@ -111,8 +114,11 @@ void main() {
         );
 
         expect(inspection, isA<WebDavSyncFolderMissing>());
-        expect(methods, <String>['GET']);
-        expect(paths, <String>['/dav/Family/debrify-sync/circle.json.enc']);
+        expect(methods, <String>['GET', 'GET']);
+        expect(paths, <String>[
+          '/dav/Family/debrify-sync/circle.json.enc',
+          '/dav/Family/debrify-sync/circle.key',
+        ]);
         expect((await store.load()).bindings, isEmpty);
       } finally {
         await server.close(force: true);
@@ -144,6 +150,52 @@ void main() {
     },
   );
 
+  test('marker and keyfile state matrix is fail-closed', () async {
+    final marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+
+    transport
+      ..bytes = marker
+      ..keyBytes = null;
+    await expectLater(
+      service.inspectFolder(config: _config, folderPath: 'Family'),
+      throwsA(isA<WebDavSyncLegacyRootException>()),
+    );
+
+    transport
+      ..error = const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'missing',
+      )
+      ..keyBytes = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'orphan-secret',
+      ).encode();
+    final orphan = await service.inspectFolder(
+      config: _config,
+      folderPath: 'Other',
+    );
+    expect(orphan, isA<WebDavSyncFolderMissing>());
+    expect(
+      (orphan as WebDavSyncFolderMissing).rootKey?.syncPassphrase,
+      'orphan-secret',
+    );
+
+    transport
+      ..error = null
+      ..bytes = marker
+      ..keyBytes = Uint8List.fromList(utf8.encode('{"version":1}'));
+    await expectLater(
+      service.inspectFolder(config: _config, folderPath: 'Damaged'),
+      throwsA(isA<WebDavSyncRootKeyFileException>()),
+    );
+    expect((await store.load()).bindings, isEmpty);
+  });
+
   test('existing marker authenticates and pins exact bytes', () async {
     final marker = await codec.sealRoot(
       passphrase: 'circle-secret',
@@ -159,7 +211,6 @@ void main() {
     );
     final binding = await service.configureExistingRoot(
       inspection: inspection as WebDavSyncFolderExisting,
-      syncPassphrase: 'circle-secret',
     );
     final snapshot = await store.load();
 
@@ -183,7 +234,6 @@ void main() {
     );
     final verified = await service.configureExistingRoot(
       inspection: firstInspection as WebDavSyncFolderExisting,
-      syncPassphrase: 'circle-secret',
     );
     await store.setLifecycle(verified.id, WebDavSyncLifecycle.active);
     await store.promoteStaged(verified.id);
@@ -202,7 +252,6 @@ void main() {
     );
     final repaired = await service.configureExistingRoot(
       inspection: repairInspection as WebDavSyncFolderExisting,
-      syncPassphrase: 'circle-secret',
     );
 
     expect(repaired.lifecycle, WebDavSyncLifecycle.active);
@@ -227,7 +276,6 @@ void main() {
       );
       final verified = await service.configureExistingRoot(
         inspection: firstInspection as WebDavSyncFolderExisting,
-        syncPassphrase: 'circle-secret',
       );
       await store.setLifecycle(verified.id, WebDavSyncLifecycle.active);
       await store.promoteStaged(verified.id);
@@ -238,7 +286,6 @@ void main() {
       );
       final reconnecting = await service.configureExistingRoot(
         inspection: reconnectInspection as WebDavSyncFolderExisting,
-        syncPassphrase: 'circle-secret',
         reconnectActive: true,
       );
       final snapshot = await store.load();
@@ -289,7 +336,6 @@ void main() {
     );
     final resumed = await service.configureExistingRoot(
       inspection: existing as WebDavSyncFolderExisting,
-      syncPassphrase: 'circle-secret',
     );
     final snapshot = await store.load();
 
@@ -338,7 +384,6 @@ void main() {
     );
     final binding = await service.configureExistingRoot(
       inspection: inspection as WebDavSyncFolderExisting,
-      syncPassphrase: 'circle-secret',
     );
 
     transport
@@ -369,9 +414,22 @@ void main() {
 final class _FakeProbeTransport implements WebDavSyncProbeTransport {
   Uri? endpoint;
   WebDavCredentials? credentials;
-  Uint8List? bytes;
+  Uint8List? _bytes;
+  Uint8List? keyBytes;
   Object? error;
+  Object? keyError;
   final List<String> paths = <String>[];
+
+  Uint8List? get bytes => _bytes;
+
+  set bytes(Uint8List? value) {
+    _bytes = value;
+    if (value != null) {
+      keyBytes ??= const WebDavSyncRootKeyFile(
+        syncPassphrase: 'circle-secret',
+      ).encode();
+    }
+  }
 
   @override
   Future<WebDavBytesResult> readRootMarker({
@@ -382,7 +440,32 @@ final class _FakeProbeTransport implements WebDavSyncProbeTransport {
     await beforeSend?.call();
     final failure = error;
     if (failure != null) throw failure;
-    final body = bytes ?? Uint8List(0);
+    final body = _bytes ?? Uint8List(0);
+    return WebDavBytesResult(
+      bytes: body,
+      metadata: WebDavResponseMetadata(
+        statusCode: 200,
+        uri: endpoint!.resolve(path),
+        headers: const <String, String>{},
+      ),
+    );
+  }
+
+  @override
+  Future<WebDavBytesResult> readRootKey({
+    required String path,
+    Future<void> Function()? beforeSend,
+  }) async {
+    paths.add(path);
+    await beforeSend?.call();
+    if (keyError case final failure?) throw failure;
+    final body = keyBytes;
+    if (body == null) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'missing',
+      );
+    }
     return WebDavBytesResult(
       bytes: body,
       metadata: WebDavResponseMetadata(

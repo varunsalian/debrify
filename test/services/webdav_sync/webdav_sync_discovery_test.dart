@@ -108,6 +108,48 @@ void main() {
     },
   );
 
+  test(
+    'live-shape binding stays compatible without a circle keyfile',
+    () async {
+      const liveConfig = WebDavConfig(
+        id: 'koofr-live',
+        name: 'Koofr',
+        baseUrl: 'https://app.koofr.net/dav/',
+        username: 'live-user',
+        password: 'live-password',
+      );
+      binding = await store.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(
+          liveConfig,
+          'Koofr/Koofr sync',
+        ),
+        config: liveConfig,
+        syncPassphrase: 'circle-secret',
+      );
+      binding = await store.markRootVerified(
+        bindingId: binding.id,
+        root: root.document,
+        markerBytes: marker,
+      );
+      await transport.addPeer(
+        codec: codec,
+        root: root,
+        deviceId: 'live-peer',
+        manifestTime: now,
+        bootstrapTime: now,
+      );
+
+      final found = await discovery().discover(bindingId: binding.id);
+
+      expect(
+        found.binding.location.endpoint,
+        Uri.parse('https://app.koofr.net/dav/'),
+      );
+      expect(found.binding.location.folderPath, 'Koofr/Koofr sync');
+      expect(found.bootstrap.manifest.deviceId, 'live-peer');
+    },
+  );
+
   test('legacy graph metadata is ignored during bootstrap discovery', () async {
     await transport.addPeer(
       codec: codec,

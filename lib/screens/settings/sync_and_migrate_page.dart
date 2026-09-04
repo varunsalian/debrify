@@ -3,20 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../models/profiles/profile_policy.dart';
 import '../../models/webdav_item.dart';
 import '../../services/analytics_service.dart';
-import '../../services/webdav_sync/webdav_sync_activation.dart';
 import '../../services/webdav_sync/webdav_sync_clock.dart';
 import '../../services/webdav_sync/webdav_sync_engine.dart';
 import '../../services/webdav_sync/webdav_sync_feature.dart';
+import '../../services/webdav_sync/webdav_sync_connect_controller.dart';
 import '../../services/webdav_sync/webdav_sync_models.dart';
 import '../../services/webdav_sync/webdav_sync_runtime.dart';
 import '../../services/webdav_sync/webdav_sync_scheduler.dart';
 import '../../services/webdav_sync/webdav_sync_setup_authorization.dart';
 import '../../services/webdav_sync/webdav_sync_setup_service.dart';
 import '../../widgets/tv_text_field.dart';
-import '../webdav/webdav_files_screen.dart';
+import '../webdav_sync/webdav_sync_login_screen.dart';
 import 'profile_backup_flows.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -28,7 +27,7 @@ class SyncAndMigratePage extends StatefulWidget {
     this.syncAuthorization,
     this.syncActivation,
     this.syncFeatureEnabled,
-    this.pickSyncFolder,
+    this.launchSyncLogin,
   });
 
   final Future<void> Function()? onRestored;
@@ -36,8 +35,11 @@ class SyncAndMigratePage extends StatefulWidget {
   final WebDavSyncSetupAuthorization? syncAuthorization;
   final WebDavSyncActivationController? syncActivation;
   final bool? syncFeatureEnabled;
-  final Future<WebDavPickerResult?> Function(BuildContext context)?
-  pickSyncFolder;
+  final Future<WebDavSyncLoginCredentials?> Function(
+    BuildContext context,
+    WebDavSyncConnectController controller,
+  )?
+  launchSyncLogin;
 
   @override
   State<SyncAndMigratePage> createState() => _SyncAndMigratePageState();
@@ -47,6 +49,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     with WidgetsBindingObserver {
   late final WebDavSyncSetupService _syncService;
   late final WebDavSyncSetupAuthorization _syncAuthorization;
+  late final WebDavSyncConnectController _syncConnectController;
   WebDavSyncActivationController? _syncActivation;
   WebDavSyncBinding? _syncBinding;
   WebDavSyncRuntimeStatus? _runtimeStatus;
@@ -72,6 +75,11 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     _syncActivation =
         widget.syncActivation ??
         (widget.syncService == null ? WebDavSyncRuntime.instance : null);
+    _syncConnectController = WebDavSyncConnectController(
+      setupService: _syncService,
+      authorization: _syncAuthorization,
+      activation: _syncActivation,
+    );
     AnalyticsService.screenView('sync_and_migrate');
     if (_syncFeatureEnabled) _loadSyncState();
   }
@@ -137,7 +145,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           _runtimeStatus = status;
           _tvManualAvailability = tvAvailability;
           _syncStateMessage =
-              'Local sync state was cleared. Verify this folder again to reconnect safely.';
+              'Local sync state was cleared. Re-enter your WebDAV password '
+              'to reconnect safely.';
         });
         return;
       }
@@ -168,116 +177,30 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       await _syncAuthorization.requireAdmin();
       reconfiguration?.pauseForReconfiguration();
       if (!mounted) return;
-      final selection = widget.pickSyncFolder != null
-          ? await widget.pickSyncFolder!(context)
-          : await Navigator.of(context).push<WebDavPickerResult>(
+      final credentials = widget.launchSyncLogin != null
+          ? await widget.launchSyncLogin!(context, _syncConnectController)
+          : await Navigator.of(context).push<WebDavSyncLoginCredentials>(
               MaterialPageRoute(
-                builder: (_) => const WebDavFilesScreen(
-                  isPushedRoute: true,
-                  pickerMode: WebDavPickerMode.selectFolder,
-                  dataSource: WebDavFilesDataSource(
-                    feature: ProfileFeature.backupRestore,
-                  ),
+                builder: (_) => WebDavSyncLoginScreen(
+                  connectController: _syncConnectController,
                 ),
               ),
             );
-      if (selection == null || !mounted) return;
-      final inspection = await _syncAuthorization.runForConfig(
-        selection.config,
-        (beforeSend) => _syncService.inspectFolder(
-          config: selection.config,
-          folderPath: selection.path,
-          beforeSend: beforeSend,
-        ),
+      if (!mounted) return;
+      final outcome = await _syncConnectController.connect(
+        credentials: credentials,
+        reconnectActive: _syncBinding?.requiresStateReconnect == true,
+        confirmExistingReplacement: _confirmExistingReplacement,
       );
       if (!mounted) return;
-
-      WebDavSyncBinding binding;
-      if (inspection is WebDavSyncFolderMissing) {
-        if (!await _confirmNewFolder(inspection) || !mounted) return;
-        final passphrase = await _askForPassphrase(create: true);
-        if (passphrase == null || !mounted) return;
-        binding = await _syncAuthorization.runForConfig(
-          inspection.config,
-          (beforeCommit) => _syncService.configureNewRoot(
-            inspection: inspection,
-            syncPassphrase: passphrase,
-            beforeCommit: beforeCommit,
-          ),
-        );
-        final activation = _syncActivation;
-        if (activation != null) {
-          final outcome = await activation.initializeNew(binding.id);
-          if (outcome is WebDavSyncInitialized) {
-            binding = outcome.binding;
-          } else if (outcome is WebDavSyncConcurrentRoot) {
-            binding = outcome.binding;
-            await activation.inspectExisting(binding.id);
-            if (!mounted) return;
-            final confirmed = await _confirmExistingReplacement();
-            if (!mounted || !confirmed) {
-              if (!confirmed) await _syncService.store.discardStaged();
-              await _loadSyncState();
-              return;
-            }
-            binding = await activation.connectExisting(
-              binding.id,
-              replacementConfirmed: true,
-            );
-          }
-        }
-      } else if (inspection is WebDavSyncFolderExisting) {
-        final passphrase = await _askForPassphrase(create: false);
-        if (passphrase == null || !mounted) return;
-        binding = await _syncAuthorization.runForConfig(
-          inspection.config,
-          (beforeCommit) => _syncService.configureExistingRoot(
-            inspection: inspection,
-            syncPassphrase: passphrase,
-            reconnectActive: _syncBinding?.requiresStateReconnect == true,
-            beforeCommit: beforeCommit,
-          ),
-        );
-        final activation = _syncActivation;
-        if (activation != null &&
-            binding.lifecycle != WebDavSyncLifecycle.active) {
-          if (binding.lifecycle == WebDavSyncLifecycle.awaitingSeedCommit) {
-            final outcome = await activation.initializeNew(binding.id);
-            if (outcome is WebDavSyncInitialized) {
-              binding = outcome.binding;
-            } else if (outcome is WebDavSyncConcurrentRoot) {
-              binding = outcome.binding;
-              await activation.inspectExisting(binding.id);
-              if (!mounted) return;
-              final confirmed = await _confirmExistingReplacement();
-              if (!mounted || !confirmed) {
-                if (!confirmed) await _syncService.store.discardStaged();
-                await _loadSyncState();
-                return;
-              }
-              binding = await activation.connectExisting(
-                binding.id,
-                replacementConfirmed: true,
-              );
-            }
-          } else {
-            await activation.inspectExisting(binding.id);
-            if (!mounted) return;
-            final confirmed = await _confirmExistingReplacement();
-            if (!mounted || !confirmed) {
-              if (!confirmed) await _syncService.store.discardStaged();
-              await _loadSyncState();
-              return;
-            }
-            binding = await activation.connectExisting(
-              binding.id,
-              replacementConfirmed: true,
-            );
-          }
-        }
-      } else {
-        throw StateError('Unexpected WebDAV sync folder result');
-      }
+      final binding = switch (outcome) {
+        WebDavSyncConnectCancelled() => null,
+        WebDavSyncConnectActive active => active.binding,
+        WebDavSyncConnectAdoptedFinishing finishing => finishing.binding,
+        WebDavSyncConnectPreHandoffFailure failure => throw failure.error,
+        WebDavSyncConnectPostHandoffFailure failure => throw failure.error,
+      };
+      if (binding == null) return;
       if (!mounted) return;
       setState(() => _syncBinding = binding);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -302,7 +225,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
-            title: const Text('Use sync data from this folder?'),
+            title: const Text('Use sync data from this account?'),
             content: const Text(
               'Existing profiles and connections on this device will be '
               'replaced. Debrify creates and verifies an encrypted local '
@@ -457,7 +380,6 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         }
         return _syncService.configureExistingRoot(
           inspection: inspection,
-          syncPassphrase: input.passphrase,
           beforeCommit: beforeSend,
         );
       });
@@ -537,8 +459,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           content: const Text(
             'This removes its server bookkeeping after preserving deletions '
             'and recovery data. It does not revoke an installed device that '
-            'still has the WebDAV password and sync passphrase. Change the '
-            'WebDAV password on the server to revoke access.',
+            'still has the WebDAV password. Change it on the server to '
+            'revoke access.',
           ),
           actions: [
             TextButton(
@@ -566,51 +488,6 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     }
   }
 
-  Future<bool> _confirmNewFolder(WebDavSyncFolderMissing inspection) async {
-    return await showSettingsDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Create WebDAV sync here?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'No existing Debrify sync was found in this folder. '
-                  'Continuing will create a new sync here.',
-                ),
-                const SizedBox(height: 12),
-                SelectableText(
-                  'Server: ${inspection.location.endpoint}\n'
-                  'Folder: ${inspection.location.resolvedFolderUri}',
-                  style: const TextStyle(fontSize: 12.5),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Back'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('Continue'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-  Future<String?> _askForPassphrase({required bool create}) async {
-    return showSettingsDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _SyncPassphraseDialog(create: create),
-    );
-  }
-
   void _showError(Object error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -634,7 +511,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     // generic snackbar or a persisted binding error.
     if (message.isEmpty || _internalSyncVocabulary.hasMatch(message)) {
       return 'WebDAV Sync could not complete this operation. '
-          'Try again or verify the selected folder.';
+          'Try again or verify the WebDAV account.';
     }
     return message;
   }
@@ -643,11 +520,12 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     final binding = _syncBinding;
     if (binding == null) return SettingsRows.enableWebDavSync.subtitle;
     return switch (binding.lifecycle) {
-      WebDavSyncLifecycle.unconfigured => 'Choose the exact folder to use',
-      WebDavSyncLifecycle.configured => 'Folder selected; verification pending',
+      WebDavSyncLifecycle.unconfigured => 'Sign in to a WebDAV account',
+      WebDavSyncLifecycle.configured =>
+        'Account selected; verification pending',
       WebDavSyncLifecycle.awaitingSeedCommit =>
-        'Ready to initialize this folder',
-      WebDavSyncLifecycle.rootVerified => 'Folder verified',
+        'Ready to initialize WebDAV Sync',
+      WebDavSyncLifecycle.rootVerified => 'WebDAV account verified',
       WebDavSyncLifecycle.awaitingAdoption =>
         binding.errorMessage == null
             ? 'Finishing first sync…'
@@ -663,8 +541,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   static String _completionMessage(WebDavSyncLifecycle lifecycle) =>
       switch (lifecycle) {
         WebDavSyncLifecycle.awaitingSeedCommit =>
-          'Folder selected. WebDAV Sync is ready to initialize.',
-        WebDavSyncLifecycle.rootVerified => 'WebDAV sync folder verified.',
+          'WebDAV Sync is ready to initialize.',
+        WebDavSyncLifecycle.rootVerified => 'WebDAV account verified.',
         WebDavSyncLifecycle.awaitingAdoption => 'Finishing first sync…',
         _ => 'WebDAV Sync configuration updated.',
       };
@@ -711,7 +589,9 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           children: [
             SettingsTile(
               icon: SettingsRows.enableWebDavSync.icon,
-              title: active ? 'Change sync folder' : 'Enable WebDAV Sync',
+              title: active
+                  ? 'Change WebDAV sync account'
+                  : 'Enable WebDAV Sync',
               subtitle: _syncStatus(),
               enabled: !_syncBusy,
               trailing: _syncBusy || finishingFirstSync
@@ -725,8 +605,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
             if (credentialRepairAvailable)
               SettingsTile(
                 icon: Icons.key_rounded,
-                title: 'Re-enter password / passphrase',
-                subtitle: 'Verify this same folder without choosing it again',
+                title: 'Re-enter WebDAV password',
+                subtitle: 'Verify this WebDAV account again',
                 enabled: !_syncBusy,
                 onTap: _repairCredentials,
               ),
@@ -734,7 +614,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
               SettingsTile(
                 icon: Icons.sync,
                 title: 'Sync now',
-                subtitle: 'Check this folder for changes',
+                subtitle: 'Check WebDAV for changes',
                 enabled: !_syncBusy && _syncActivation != null,
                 onTap: _syncNow,
               ),
@@ -777,7 +657,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           const SizedBox(height: 8),
           Text(
             '${active ? 'Connected to' : 'Selected'}: '
-            '${_syncBinding!.location.resolvedFolderUri}',
+            '${_syncBinding!.location.serverName}',
             style: const TextStyle(fontSize: 12.5),
           ),
         ],
@@ -1017,74 +897,15 @@ final class _DebrifyTvSyncOperation {
 }
 
 final RegExp _internalSyncVocabulary = RegExp(
-  r'circle|seed|join|enroll',
+  r'circle|seed|join|enroll|passphrase',
   caseSensitive: false,
 );
 
-final class _SyncPassphraseDialog extends StatefulWidget {
-  const _SyncPassphraseDialog({required this.create});
-
-  final bool create;
-
-  @override
-  State<_SyncPassphraseDialog> createState() => _SyncPassphraseDialogState();
-}
-
-final class _SyncPassphraseDialogState extends State<_SyncPassphraseDialog> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller
-      ..clear()
-      ..dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (_controller.text.length >= 8) {
-      Navigator.of(context).pop(_controller.text);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.create ? 'Create sync passphrase' : 'Sync passphrase'),
-      content: TvTextField(
-        controller: _controller,
-        obscureText: true,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        keyboardSubmitLabel: 'Continue',
-        decoration: const InputDecoration(labelText: 'Minimum 8 characters'),
-        onChanged: (_) => setState(() {}),
-        onSubmitted: (_) => _submit(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _controller.text.length >= 8 ? _submit : null,
-          child: const Text('Continue'),
-        ),
-      ],
-    );
-  }
-}
-
 final class _SyncCredentialInput {
-  const _SyncCredentialInput({
-    required this.username,
-    required this.password,
-    required this.passphrase,
-  });
+  const _SyncCredentialInput({required this.username, required this.password});
 
   final String username;
   final String password;
-  final String passphrase;
 }
 
 final class _SyncCredentialDialog extends StatefulWidget {
@@ -1101,20 +922,14 @@ final class _SyncCredentialDialogState extends State<_SyncCredentialDialog> {
     text: widget.initialUsername,
   );
   final TextEditingController _password = TextEditingController();
-  final TextEditingController _passphrase = TextEditingController();
 
   bool get _valid =>
-      _username.text.trim().isNotEmpty &&
-      _password.text.isNotEmpty &&
-      _passphrase.text.length >= 8;
+      _username.text.trim().isNotEmpty && _password.text.isNotEmpty;
 
   @override
   void dispose() {
     _username.dispose();
     _password
-      ..clear()
-      ..dispose();
-    _passphrase
       ..clear()
       ..dispose();
     super.dispose();
@@ -1126,7 +941,6 @@ final class _SyncCredentialDialogState extends State<_SyncCredentialDialog> {
       _SyncCredentialInput(
         username: _username.text.trim(),
         password: _password.text,
-        passphrase: _passphrase.text,
       ),
     );
   }
@@ -1150,16 +964,9 @@ final class _SyncCredentialDialogState extends State<_SyncCredentialDialog> {
             TvTextField(
               controller: _password,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'WebDAV password'),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 12),
-            TvTextField(
-              controller: _passphrase,
-              obscureText: true,
               textInputAction: TextInputAction.done,
               keyboardSubmitLabel: 'Verify',
-              decoration: const InputDecoration(labelText: 'Sync passphrase'),
+              decoration: const InputDecoration(labelText: 'WebDAV password'),
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _submit(),
             ),

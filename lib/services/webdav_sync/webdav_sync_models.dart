@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart' as crypto;
 
 import '../../models/webdav_item.dart';
 import '../webdav_protocol_client.dart';
+import 'webdav_sync_codec.dart';
 
 enum WebDavSyncLifecycle {
   unconfigured,
@@ -60,6 +61,10 @@ final class WebDavSyncFolderLocation {
   String get rootMarkerPath => folderPath.isEmpty
       ? 'debrify-sync/circle.json.enc'
       : '$folderPath/debrify-sync/circle.json.enc';
+
+  String get rootKeyPath => folderPath.isEmpty
+      ? 'debrify-sync/circle.key'
+      : '$folderPath/debrify-sync/circle.key';
 
   Uri get resolvedFolderUri => WebDavProtocolClient.resolvePath(
     endpoint: endpoint,
@@ -127,6 +132,99 @@ final class WebDavSyncFolderLocation {
         )
         .removeFragment();
   }
+}
+
+sealed class WebDavSyncRootKeyFileException extends FormatException {
+  const WebDavSyncRootKeyFileException(super.message);
+}
+
+final class WebDavSyncRootKeyFileSizeException
+    extends WebDavSyncRootKeyFileException {
+  const WebDavSyncRootKeyFileSizeException()
+    : super('Invalid WebDAV sync keyfile size');
+}
+
+final class WebDavSyncRootKeyFileFormatException
+    extends WebDavSyncRootKeyFileException {
+  const WebDavSyncRootKeyFileFormatException()
+    : super('Invalid WebDAV sync keyfile');
+}
+
+final class WebDavSyncRootKeyFileVersionException
+    extends WebDavSyncRootKeyFileException {
+  const WebDavSyncRootKeyFileVersionException()
+    : super('Unsupported WebDAV sync keyfile version');
+}
+
+/// The small, server-side secret which replaces setup-time passphrase entry.
+///
+/// Parsing is deliberately strict because activation uses this file as the
+/// create-only ownership claim for a new sync root. No parse error includes
+/// the supplied bytes or the secret they may contain.
+final class WebDavSyncRootKeyFile {
+  const WebDavSyncRootKeyFile({required this.syncPassphrase});
+
+  static const int version = 1;
+  static const int maxBytes = 4096;
+
+  final String syncPassphrase;
+
+  Uint8List encode() {
+    WebDavSyncCodec.validatePassphrase(syncPassphrase);
+    return Uint8List.fromList(
+      utf8.encode(
+        jsonEncode(<String, Object?>{
+          'version': version,
+          'syncPassphrase': syncPassphrase,
+        }),
+      ),
+    );
+  }
+
+  factory WebDavSyncRootKeyFile.parse(List<int> rawBytes) {
+    if (rawBytes.isEmpty || rawBytes.length > maxBytes) {
+      throw const WebDavSyncRootKeyFileSizeException();
+    }
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(rawBytes));
+    } catch (_) {
+      throw const WebDavSyncRootKeyFileFormatException();
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded.length != 2 ||
+        decoded.keys.any(
+          (key) => key != 'version' && key != 'syncPassphrase',
+        )) {
+      throw const WebDavSyncRootKeyFileFormatException();
+    }
+    final encodedVersion = decoded['version'];
+    if (encodedVersion is! int || encodedVersion != version) {
+      throw const WebDavSyncRootKeyFileVersionException();
+    }
+    final syncPassphrase = decoded['syncPassphrase'];
+    if (syncPassphrase is! String) {
+      throw const WebDavSyncRootKeyFileFormatException();
+    }
+    try {
+      WebDavSyncCodec.validatePassphrase(syncPassphrase);
+    } on ArgumentError {
+      throw const WebDavSyncRootKeyFileFormatException();
+    }
+    return WebDavSyncRootKeyFile(syncPassphrase: syncPassphrase);
+  }
+}
+
+/// Activation could not prove which keyfile bytes own the folder.
+///
+/// This intentionally collapses provider quirks and damaged-folder states
+/// into one non-secret-bearing failure instead of guessing or overwriting.
+final class WebDavSyncRootKeyClaimException implements Exception {
+  const WebDavSyncRootKeyClaimException();
+
+  @override
+  String toString() =>
+      'This WebDAV provider is unsupported, or the sync folder is damaged.';
 }
 
 final class WebDavSyncRootDocument {

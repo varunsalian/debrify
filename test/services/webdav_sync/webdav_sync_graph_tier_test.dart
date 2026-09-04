@@ -560,6 +560,9 @@ final class _ForgetTransport implements WebDavSyncActivationTransport {
       WebDavBytesResult(bytes: marker, metadata: _metadata);
 
   @override
+  Future<WebDavBytesResult> readRootKey() => throw UnimplementedError();
+
+  @override
   Future<WebDavBytesResult> readManifest(String deviceId) async =>
       WebDavBytesResult(bytes: targetManifest, metadata: _metadata);
 
@@ -571,6 +574,13 @@ final class _ForgetTransport implements WebDavSyncActivationTransport {
   @override
   Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes) =>
       throw UnimplementedError();
+
+  @override
+  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> ensureActivationLayout() => throw UnimplementedError();
 
   @override
   Future<void> ensureOwnLayout(String deviceId) => throw UnimplementedError();

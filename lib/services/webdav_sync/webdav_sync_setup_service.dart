@@ -18,18 +18,28 @@ sealed class WebDavSyncSetupException implements Exception {
 
 final class WebDavSyncRootMissingException extends WebDavSyncSetupException {
   const WebDavSyncRootMissingException()
-    : super('Previously verified sync data is missing from this folder');
+    : super(
+        'Previously verified sync data is missing from this WebDAV account',
+      );
 }
 
 final class WebDavSyncRootChangedException extends WebDavSyncSetupException {
   const WebDavSyncRootChangedException()
-    : super('The sync data in this folder no longer matches this device');
+    : super('The WebDAV sync data no longer matches this device');
 }
 
 final class WebDavSyncCredentialsUnavailableException
     extends WebDavSyncSetupException {
   const WebDavSyncCredentialsUnavailableException()
     : super('The selected WebDAV credentials are unavailable');
+}
+
+final class WebDavSyncLegacyRootException extends WebDavSyncSetupException {
+  const WebDavSyncLegacyRootException()
+    : super(
+        'This folder was set up by an older version of Debrify. Set up sync '
+        'again from your main device.',
+      );
 }
 
 sealed class WebDavSyncFolderInspection {
@@ -46,7 +56,11 @@ final class WebDavSyncFolderMissing extends WebDavSyncFolderInspection {
   const WebDavSyncFolderMissing({
     required super.location,
     required super.config,
+    this.rootKey,
   });
+
+  /// An orphan create-only claim. Activation adopts it before minting a root.
+  final WebDavSyncRootKeyFile? rootKey;
 }
 
 final class WebDavSyncFolderExisting extends WebDavSyncFolderInspection {
@@ -55,14 +69,21 @@ final class WebDavSyncFolderExisting extends WebDavSyncFolderInspection {
     required super.config,
     required this.markerBytes,
     required this.metadata,
+    required this.rootKey,
   });
 
   final Uint8List markerBytes;
   final WebDavResponseMetadata metadata;
+  final WebDavSyncRootKeyFile rootKey;
 }
 
 abstract interface class WebDavSyncProbeTransport {
   Future<WebDavBytesResult> readRootMarker({
+    required String path,
+    Future<void> Function()? beforeSend,
+  });
+
+  Future<WebDavBytesResult> readRootKey({
     required String path,
     Future<void> Function()? beforeSend,
   });
@@ -95,6 +116,16 @@ final class ProtocolWebDavSyncProbeTransport
   }) => _client.getBytes(
     path: path,
     maxBytes: WebDavSyncCodec.rootMarkerMaxBytes,
+    beforeSend: beforeSend,
+  );
+
+  @override
+  Future<WebDavBytesResult> readRootKey({
+    required String path,
+    Future<void> Function()? beforeSend,
+  }) => _client.getBytes(
+    path: path,
+    maxBytes: WebDavSyncRootKeyFile.maxBytes,
     beforeSend: beforeSend,
   );
 
@@ -148,33 +179,51 @@ final class WebDavSyncSetupService {
       ),
     );
     try {
-      final result = await transport.readRootMarker(
-        path: location.rootMarkerPath,
-        beforeSend: beforeSend,
+      final marker = await _readIfPresent(
+        () => transport.readRootMarker(
+          path: location.rootMarkerPath,
+          beforeSend: beforeSend,
+        ),
       );
-      if (priorMarker != null && !_bytesEqual(priorMarker, result.bytes)) {
+      final keyResult = await _readIfPresent(
+        () => transport.readRootKey(
+          path: location.rootKeyPath,
+          beforeSend: beforeSend,
+        ),
+      );
+      if (marker == null) {
+        if (priorMarker != null) {
+          await store.markError(
+            priorBinding!.id,
+            const WebDavSyncRootMissingException(),
+          );
+          throw const WebDavSyncRootMissingException();
+        }
+        final rootKey = keyResult == null
+            ? null
+            : WebDavSyncRootKeyFile.parse(keyResult.bytes);
+        return WebDavSyncFolderMissing(
+          location: location,
+          config: config,
+          rootKey: rootKey,
+        );
+      }
+      if (priorMarker != null && !_bytesEqual(priorMarker, marker.bytes)) {
         await store.markError(
           priorBinding!.id,
           const WebDavSyncRootChangedException(),
         );
         throw const WebDavSyncRootChangedException();
       }
+      if (keyResult == null) throw const WebDavSyncLegacyRootException();
+      final rootKey = WebDavSyncRootKeyFile.parse(keyResult.bytes);
       return WebDavSyncFolderExisting(
         location: location,
         config: config,
-        markerBytes: Uint8List.fromList(result.bytes),
-        metadata: result.metadata,
+        markerBytes: Uint8List.fromList(marker.bytes),
+        metadata: marker.metadata,
+        rootKey: rootKey,
       );
-    } on WebDavException catch (error) {
-      if (error.kind != WebDavErrorKind.notFound) rethrow;
-      if (priorMarker != null) {
-        await store.markError(
-          priorBinding!.id,
-          const WebDavSyncRootMissingException(),
-        );
-        throw const WebDavSyncRootMissingException();
-      }
-      return WebDavSyncFolderMissing(location: location, config: config);
     } finally {
       transport.close();
     }
@@ -197,7 +246,6 @@ final class WebDavSyncSetupService {
 
   Future<WebDavSyncBinding> configureExistingRoot({
     required WebDavSyncFolderExisting inspection,
-    required String syncPassphrase,
     bool reconnectActive = false,
     Future<void> Function()? beforeCommit,
   }) async {
@@ -205,7 +253,7 @@ final class WebDavSyncSetupService {
     // pin. A typo leaves the prior binding untouched and retryable.
     final opened = await codec.openRoot(
       inspection.markerBytes,
-      syncPassphrase,
+      inspection.rootKey.syncPassphrase,
       runInBackground: runCryptoInBackground,
     );
     final snapshot = await store.load();
@@ -229,7 +277,7 @@ final class WebDavSyncSetupService {
     final binding = await store.stageBinding(
       location: inspection.location,
       config: inspection.config,
-      syncPassphrase: syncPassphrase,
+      syncPassphrase: inspection.rootKey.syncPassphrase,
       preserveActive: preserveActive,
       reconnectActive: reconnectPinnedActive,
       beforeSave: beforeCommit,
@@ -354,5 +402,16 @@ final class WebDavSyncSetupService {
           (index < right.length ? right[index] : 0);
     }
     return difference == 0;
+  }
+
+  static Future<WebDavBytesResult?> _readIfPresent(
+    Future<WebDavBytesResult> Function() read,
+  ) async {
+    try {
+      return await read();
+    } on WebDavException catch (error) {
+      if (error.kind == WebDavErrorKind.notFound) return null;
+      rethrow;
+    }
   }
 }

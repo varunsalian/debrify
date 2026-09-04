@@ -103,6 +103,47 @@ void main() {
     },
   );
 
+  test('atomic key adoption preserves login and lifecycle', () async {
+    var binding = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
+      config: _config,
+      syncPassphrase: 'losing-machine-secret',
+    );
+    binding = await store.markAwaitingSeedCommit(binding.id);
+    final before = (await store.load()).namespaceFor(binding)!;
+    await store.updateNamespaceValues(
+      binding.namespaceId,
+      (_) => <String, Object?>{
+        WebDavSyncBindingStore.seedCandidateMarkerValueKey: 'candidate',
+        'unrelated': true,
+      },
+    );
+
+    final adopted = await store.adoptSyncSecret(
+      binding.id,
+      'winning-machine-secret',
+    );
+    final snapshot = await store.load();
+    final namespace = snapshot.namespaceFor(adopted)!;
+    final secrets = await store.readSecrets(adopted);
+
+    expect(adopted.lifecycle, WebDavSyncLifecycle.awaitingSeedCommit);
+    expect(secrets.username, _config.username);
+    expect(secrets.password, _config.password);
+    expect(secrets.syncPassphrase, 'winning-machine-secret');
+    expect(namespace.deviceId, isNot(before.deviceId));
+    expect(
+      namespace.values,
+      isNot(contains(WebDavSyncBindingStore.seedCandidateMarkerValueKey)),
+    );
+    expect(
+      namespace.values[WebDavSyncBindingStore
+          .seedCandidateResetRequiredValueKey],
+      isTrue,
+    );
+    expect(namespace.values['unrelated'], isTrue);
+  });
+
   test(
     'verified root migrates candidate state into a circle namespace',
     () async {

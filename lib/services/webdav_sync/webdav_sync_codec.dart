@@ -13,7 +13,7 @@ typedef WebDavSyncPayloadTransformer = Object? Function(Object? payload);
 
 final class WebDavSyncWrongPassphraseException extends FormatException {
   const WebDavSyncWrongPassphraseException()
-    : super('Wrong sync passphrase or tampered sync data');
+    : super('Invalid WebDAV sync key or tampered sync data');
 }
 
 final class WebDavSyncCircleKey {
@@ -75,6 +75,9 @@ final class WebDavSyncCodec {
   ];
 
   final WebDavSyncRandomBytes _randomBytes;
+
+  static String generateSyncSecret() =>
+      base64UrlEncode(_secureRandomBytes(32)).replaceAll('=', '');
 
   Future<Uint8List> sealRoot({
     required String passphrase,

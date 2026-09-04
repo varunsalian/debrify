@@ -184,6 +184,274 @@ void main() {
     },
   );
 
+  test('claims a missing keyfile and verifies its exact read-back', () async {
+    transport.rootKey = null;
+
+    final outcome = await initializer().initialize(
+      bindingId: binding.id,
+      authorization: authorization,
+    );
+
+    expect(outcome, isA<WebDavSyncInitialized>());
+    expect(transport.events, contains('create:key'));
+    expect(
+      transport.events.indexOf('create:key'),
+      lessThan(transport.events.indexOf('create:root')),
+    );
+    expect(transport.keyReadCount, greaterThanOrEqualTo(2));
+    expect(
+      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
+      'circle-secret',
+    );
+  });
+
+  test(
+    'a malformed existing keyfile fails closed before candidate use',
+    () async {
+      transport.rootKey = Uint8List.fromList(utf8.encode('{"version":1}'));
+
+      await expectLater(
+        initializer().initialize(
+          bindingId: binding.id,
+          authorization: authorization,
+        ),
+        throwsA(isA<WebDavSyncRootKeyClaimException>()),
+      );
+
+      expect(transport.events, isNot(contains('create:key')));
+      expect(transport.events, isNot(contains('create:root')));
+    },
+  );
+
+  test('a keyfile disappearing after a 412 claim fails closed', () async {
+    transport
+      ..rootKey = null
+      ..createKeyError = const WebDavException(
+        kind: WebDavErrorKind.preconditionFailed,
+        message: 'lost key claim',
+      );
+
+    await expectLater(
+      initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      ),
+      throwsA(isA<WebDavSyncRootKeyClaimException>()),
+    );
+
+    expect(transport.keyReadCount, 2);
+    expect(transport.events, isNot(contains('create:root')));
+  });
+
+  test('a mismatched keyfile read-back fails closed', () async {
+    transport
+      ..rootKey = null
+      ..replaceKeyAfterCreate = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'different-machine-secret',
+      ).encode();
+
+    await expectLater(
+      initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      ),
+      throwsA(isA<WebDavSyncRootKeyClaimException>()),
+    );
+
+    expect(transport.events, isNot(contains('create:root')));
+  });
+
+  test('an ambiguous keyfile create response fails closed', () async {
+    transport
+      ..rootKey = null
+      ..createKeyError = const WebDavException(
+        kind: WebDavErrorKind.unexpectedStatus,
+        message: 'ambiguous create',
+        statusCode: 204,
+      );
+
+    await expectLater(
+      initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      ),
+      throwsA(isA<WebDavSyncRootKeyClaimException>()),
+    );
+
+    expect(transport.events, isNot(contains('create:root')));
+  });
+
+  test(
+    'a 412 key claimant adopts the winner before candidate creation',
+    () async {
+      final winnerKey = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'winning-machine-secret',
+      ).encode();
+      transport
+        ..rootKey = null
+        ..createKeyError = const WebDavException(
+          kind: WebDavErrorKind.preconditionFailed,
+          message: 'lost key claim',
+        )
+        ..keyOnCreateError = winnerKey;
+
+      final outcome = await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+      final active = (outcome as WebDavSyncInitialized).binding;
+      final secrets = await bindingStore.readSecrets(active);
+
+      expect(secrets.username, 'alice');
+      expect(secrets.password, 'secret');
+      expect(secrets.syncPassphrase, 'winning-machine-secret');
+      expect(
+        await WebDavSyncCodec().openRoot(
+          transport.marker!,
+          'winning-machine-secret',
+          runInBackground: true,
+        ),
+        isA<OpenedWebDavSyncRoot>(),
+      );
+    },
+  );
+
+  test(
+    'key adoption discards a stale candidate and its engine state',
+    () async {
+      final staleMarker = await WebDavSyncCodec().sealRoot(
+        passphrase: 'circle-secret',
+        circleId: 'stale-circle',
+        createdAt: DateTime.utc(2026, 8, 31),
+        runInBackground: true,
+      );
+      await bindingStore.updateNamespaceValues(
+        binding.namespaceId,
+        (values) => <String, Object?>{
+          ...values,
+          WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
+            staleMarker,
+          ),
+        },
+      );
+      states.state = const WebDavSyncEngineState(
+        currentDeviceIds: <String>{'stale-device'},
+      );
+      transport.rootKey = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'winning-machine-secret',
+      ).encode();
+
+      await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+
+      expect(transport.marker, isNot(orderedEquals(staleMarker)));
+      expect(states.state.currentDeviceIds, isNot(contains('stale-device')));
+      expect(
+        (await bindingStore.load()).activeBinding!.lifecycle,
+        WebDavSyncLifecycle.active,
+      );
+    },
+  );
+
+  test('resume clears stale state after a crash during key adoption', () async {
+    final staleMarker = await WebDavSyncCodec().sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'stale-circle',
+      createdAt: DateTime.utc(2026, 8, 31),
+      runInBackground: true,
+    );
+    await bindingStore.updateNamespaceValues(
+      binding.namespaceId,
+      (values) => <String, Object?>{
+        ...values,
+        WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
+          staleMarker,
+        ),
+      },
+    );
+    states.state = const WebDavSyncEngineState(
+      currentDeviceIds: <String>{'stale-device'},
+    );
+    binding = await bindingStore.adoptSyncSecret(
+      binding.id,
+      'winning-machine-secret',
+    );
+    transport.rootKey = const WebDavSyncRootKeyFile(
+      syncPassphrase: 'winning-machine-secret',
+    ).encode();
+
+    await initializer().initialize(
+      bindingId: binding.id,
+      authorization: authorization,
+    );
+
+    final snapshot = await bindingStore.load();
+    final namespace = snapshot.namespaceFor(snapshot.activeBinding!)!;
+    expect(states.state.currentDeviceIds, isNot(contains('stale-device')));
+    expect(
+      namespace.values,
+      isNot(
+        contains(WebDavSyncBindingStore.seedCandidateResetRequiredValueKey),
+      ),
+    );
+  });
+
+  test(
+    'concurrent-root follow re-reads and persists the winning key',
+    () async {
+      final losingDeviceId = (await bindingStore.load())
+          .namespaceFor(binding)!
+          .deviceId;
+      final winnerSecret = 'winning-machine-secret';
+      final winnerMarker = await WebDavSyncCodec().sealRoot(
+        passphrase: winnerSecret,
+        circleId: 'winner-circle',
+        createdAt: DateTime.utc(2026, 9, 1),
+        runInBackground: true,
+      );
+      transport
+        ..marker = winnerMarker
+        ..rootKeyAfterFirstRead = WebDavSyncRootKeyFile(
+          syncPassphrase: winnerSecret,
+        ).encode();
+
+      final outcome = await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+      final concurrent = outcome as WebDavSyncConcurrentRoot;
+
+      expect(concurrent.root.document.circleId, 'winner-circle');
+      expect(
+        (await bindingStore.readSecrets(concurrent.binding)).syncPassphrase,
+        winnerSecret,
+      );
+      expect(transport.keyReadCount, greaterThanOrEqualTo(2));
+      expect(transport.events, contains('delete:$losingDeviceId'));
+    },
+  );
+
+  test(
+    'ambiguous MKCOL 405 with a missing root collection fails closed',
+    () async {
+      transport.activationLayoutExists = false;
+
+      await expectLater(
+        initializer().initialize(
+          bindingId: binding.id,
+          authorization: authorization,
+        ),
+        throwsA(isA<WebDavSyncRootKeyClaimException>()),
+      );
+
+      expect(transport.events, isNot(contains('read:key')));
+      expect(transport.marker, isNull);
+      expect((await bindingStore.load()).activeBinding, isNull);
+    },
+  );
+
   test('activation refuses a seed missing a required circle section', () async {
     seeds.omittedSection = 'resources';
 
@@ -929,6 +1197,15 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
   final Map<String, Uint8List> sections = <String, Uint8List>{};
   Uint8List? manifest;
   Uint8List? marker;
+  Uint8List? rootKey = const WebDavSyncRootKeyFile(
+    syncPassphrase: 'circle-secret',
+  ).encode();
+  Uint8List? rootKeyAfterFirstRead;
+  int keyReadCount = 0;
+  WebDavException? createKeyError;
+  Uint8List? keyOnCreateError;
+  Uint8List? replaceKeyAfterCreate;
+  bool activationLayoutExists = true;
   WebDavException? createError;
   WebDavException? manifestWriteError;
   Uint8List? replaceMarkerAfterCreate;
@@ -947,6 +1224,14 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
   @override
   Future<void> ensureOwnLayout(String deviceId) async {
     events.add('ensure:$deviceId');
+  }
+
+  @override
+  Future<void> ensureActivationLayout() async {
+    events.add('ensure:activation');
+    if (!activationLayoutExists) {
+      throw const WebDavSyncRootKeyClaimException();
+    }
   }
 
   @override
@@ -1018,6 +1303,40 @@ final class _FakeActivationTransport implements WebDavSyncActivationTransport {
       );
     }
     return WebDavBytesResult(bytes: value, metadata: metadata);
+  }
+
+  @override
+  Future<WebDavBytesResult> readRootKey() async {
+    events.add('read:key');
+    keyReadCount++;
+    final value = keyReadCount > 1 && rootKeyAfterFirstRead != null
+        ? rootKeyAfterFirstRead
+        : rootKey;
+    if (value == null) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'missing',
+      );
+    }
+    return WebDavBytesResult(bytes: value, metadata: metadata);
+  }
+
+  @override
+  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
+    events.add('create:key');
+    final error = createKeyError;
+    if (error != null) {
+      final winner = keyOnCreateError;
+      if (winner != null) rootKey = Uint8List.fromList(winner);
+      throw error;
+    }
+    rootKey = Uint8List.fromList(replaceKeyAfterCreate ?? bytes);
+    return WebDavResponseMetadata(
+      statusCode: 201,
+      uri: metadata.uri,
+      headers: const <String, String>{},
+      serverDate: metadata.serverDate,
+    );
   }
 
   @override

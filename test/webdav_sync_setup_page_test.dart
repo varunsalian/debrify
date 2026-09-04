@@ -5,13 +5,13 @@ import 'dart:typed_data';
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/screens/settings/sync_and_migrate_page.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
-import 'package:debrify/screens/webdav/webdav_files_screen.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_connect_controller.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_graph_tier.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
@@ -31,8 +31,6 @@ const _config = WebDavConfig(
   baseUrl: 'https://example.test/dav',
   username: 'alice',
   password: 'secret',
-  connectionResourceId: 'resource',
-  connectionResourceRevision: 4,
 );
 
 void main() {
@@ -74,7 +72,6 @@ void main() {
     WidgetTester tester, {
     required bool enabled,
     WebDavSyncActivationController? activation,
-    String folderPath = 'Family/Sync/',
     bool settle = true,
   }) async {
     final theme = AppThemes.byId('spotlight');
@@ -89,8 +86,16 @@ void main() {
           syncService: service,
           syncAuthorization: authorization,
           syncActivation: activation,
-          pickSyncFolder: (_) async =>
-              WebDavPickerResult(config: _config, path: folderPath),
+          launchSyncLogin: (_, controller) async {
+            final credentials = WebDavSyncLoginCredentials(
+              endpoint: Uri.parse(_config.baseUrl),
+              username: _config.username,
+              password: _config.password,
+              serverName: _config.name,
+            );
+            await controller.inspect(credentials);
+            return credentials;
+          },
         ),
       ),
     );
@@ -116,7 +121,7 @@ void main() {
       runInBackground: false,
     );
     var active = await store.stageBinding(
-      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
       config: _config,
       syncPassphrase: 'circle-secret',
     );
@@ -136,38 +141,7 @@ void main() {
     expect(find.text('Save backup to WebDAV'), findsOneWidget);
   });
 
-  testWidgets(
-    '404 warning shows exact resolved folder and Back writes nothing',
-    (tester) async {
-      transport.error = const WebDavException(
-        kind: WebDavErrorKind.notFound,
-        message: 'missing',
-      );
-      await pumpPage(tester, enabled: true);
-
-      await tester.tap(find.text('Enable WebDAV Sync'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(
-        find.text(
-          'No existing Debrify sync was found in this folder. '
-          'Continuing will create a new sync here.',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('https://example.test/dav/Family/Sync/'),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.text('Back'));
-      await tester.pumpAndSettle();
-      expect((await store.load()).bindings, isEmpty);
-      expect(transport.reads, 1);
-    },
-  );
-
-  testWidgets('404 continuation creates only local awaiting state', (
+  testWidgets('login launcher creates fixed-folder pending state', (
     tester,
   ) async {
     transport.error = const WebDavException(
@@ -177,25 +151,19 @@ void main() {
     await pumpPage(tester, enabled: true);
 
     await tester.tap(find.text('Enable WebDAV Sync'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Create sync passphrase'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'circle-secret');
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ready to initialize this folder'), findsOneWidget);
+    expect(find.text('Ready to initialize WebDAV Sync'), findsOneWidget);
+    expect(find.text('Create sync passphrase'), findsNothing);
+    expect(find.text('Sync passphrase'), findsNothing);
     final binding = (await store.load()).stagedBinding!;
     expect(binding.lifecycle, WebDavSyncLifecycle.awaitingSeedCommit);
-    expect(transport.reads, 1);
-    expect(authorization.barriers, 3);
+    expect(binding.location.folderPath, 'Debrify');
+    expect(transport.reads, 2);
+    expect(authorization.barriers, 4);
   });
 
-  testWidgets('existing marker asks only for the sync passphrase', (
+  testWidgets('existing marker uses its keyfile without a passphrase dialog', (
     tester,
   ) async {
     transport.bytes = await codec.sealRoot(
@@ -205,23 +173,20 @@ void main() {
       memoryKiB: 8,
       iterations: 1,
     );
+    transport.keyBytes = const WebDavSyncRootKeyFile(
+      syncPassphrase: 'circle-secret',
+    ).encode();
     await pumpPage(tester, enabled: true);
 
     await tester.tap(find.text('Enable WebDAV Sync'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Sync passphrase'), findsOneWidget);
-    expect(find.textContaining('No existing Debrify sync'), findsNothing);
-    await tester.enterText(find.byType(TextField), 'circle-secret');
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Folder verified'), findsOneWidget);
+    expect(find.text('WebDAV account verified'), findsOneWidget);
+    expect(find.text('Sync passphrase'), findsNothing);
     final binding = (await store.load()).stagedBinding!;
     expect(binding.lifecycle, WebDavSyncLifecycle.rootVerified);
     expect(binding.circleId, 'circle-1');
-    expect(authorization.barriers, 3);
+    expect(authorization.barriers, 4);
   });
 
   testWidgets('rendered setup copy contains no protocol vocabulary', (
@@ -240,6 +205,38 @@ void main() {
     expect(copy, isNot(contains('join')));
   });
 
+  testWidgets('credential repair asks only for the WebDAV password', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final active = (await store.load()).activeBinding!;
+    final namespace = (await store.load()).namespaceFor(active)!;
+    transport
+      ..bytes = Uint8List.fromList(namespace.markerBytes!)
+      ..keyBytes = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'circle-secret',
+      ).encode();
+    await store.markError(active.id, StateError('credentials expired'));
+    await pumpPage(tester, enabled: true);
+
+    await tester.tap(find.text('Re-enter WebDAV password'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Sync passphrase'), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(2));
+    await tester.enterText(find.byType(TextField).last, 'rotated-password');
+    await tester.pump();
+    await tester.tap(find.text('Verify'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('WebDAV Sync credentials verified.'), findsOneWidget);
+    expect(
+      (await store.readSecrets((await store.load()).activeBinding!)).password,
+      'rotated-password',
+    );
+  });
+
   testWidgets('awaiting first sync is progress, not an error', (tester) async {
     final marker = await codec.sealRoot(
       passphrase: 'circle-secret',
@@ -254,7 +251,7 @@ void main() {
       runInBackground: false,
     );
     var waiting = await store.stageBinding(
-      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
       config: _config,
       syncPassphrase: 'circle-secret',
     );
@@ -288,7 +285,7 @@ void main() {
       runInBackground: false,
     );
     var waiting = await store.stageBinding(
-      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
       config: _config,
       syncPassphrase: 'circle-secret',
     );
@@ -322,7 +319,7 @@ void main() {
     expect(activation.statusReads, greaterThanOrEqualTo(2));
     expect(find.text('Finishing first sync…'), findsNothing);
     expect(find.text('Sync is active'), findsOneWidget);
-    expect(find.text('Change sync folder'), findsOneWidget);
+    expect(find.text('Change WebDAV sync account'), findsOneWidget);
   });
 
   testWidgets('terminal first-sync failure replaces progress with error', (
@@ -341,7 +338,7 @@ void main() {
       runInBackground: false,
     );
     var waiting = await store.stageBinding(
-      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
       config: _config,
       syncPassphrase: 'circle-secret',
     );
@@ -393,7 +390,7 @@ void main() {
       runInBackground: false,
     );
     var active = await store.stageBinding(
-      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
       config: _config,
       syncPassphrase: 'circle-secret',
     );
@@ -544,7 +541,7 @@ void main() {
       runInBackground: false,
     );
     var active = await store.stageBinding(
-      location: WebDavSyncFolderLocation.fromConfig(_config, 'Family/Sync/'),
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
       config: _config,
       syncPassphrase: 'circle-secret',
     );
@@ -567,7 +564,7 @@ void main() {
     expect(
       find.text(
         'WebDAV Sync could not complete this operation. '
-        'Try again or verify the selected folder.',
+        'Try again or verify the WebDAV account.',
       ),
       findsOneWidget,
     );
@@ -596,15 +593,11 @@ void main() {
       await pumpPage(tester, enabled: true, activation: activation);
 
       await tester.tap(find.text('Enable WebDAV Sync'));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.enterText(find.byType(TextField), 'circle-secret');
-      await tester.pump();
-      await tester.tap(find.text('Continue'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(activation.inspections, 1);
-      expect(find.text('Use sync data from this folder?'), findsOneWidget);
+      expect(find.text('Use sync data from this account?'), findsOneWidget);
       expect(
         find.textContaining('Existing profiles and connections'),
         findsOneWidget,
@@ -626,7 +619,7 @@ void main() {
     },
   );
 
-  testWidgets('revalidating the active folder does not prompt replacement', (
+  testWidgets('revalidating the active account does not prompt replacement', (
     tester,
   ) async {
     final marker = await codec.sealRoot(
@@ -639,31 +632,26 @@ void main() {
     transport.bytes = marker;
     final inspection = await service.inspectFolder(
       config: _config,
-      folderPath: 'Family/Sync/',
+      folderPath: 'Debrify',
     );
     var active = await service.configureExistingRoot(
       inspection: inspection as WebDavSyncFolderExisting,
-      syncPassphrase: 'circle-secret',
     );
     active = await store.setLifecycle(active.id, WebDavSyncLifecycle.active);
     await store.promoteStaged(active.id);
     final activation = _FakeActivation(store);
     await pumpPage(tester, enabled: true, activation: activation);
 
-    await tester.tap(find.text('Change sync folder'));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.enterText(find.byType(TextField), 'circle-secret');
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.text('Change WebDAV sync account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Use sync data from this folder?'), findsNothing);
+    expect(find.text('Use sync data from this account?'), findsNothing);
     expect(activation.inspections, 0);
     expect(activation.connections, 0);
     final refreshed = await store.load();
     expect(refreshed.activeBindingId, active.id);
     expect(refreshed.activeBinding?.lifecycle, WebDavSyncLifecycle.active);
-    expect(find.text('Change sync folder'), findsOneWidget);
+    expect(find.text('Change WebDAV sync account'), findsOneWidget);
   });
 
   testWidgets(
@@ -675,7 +663,7 @@ void main() {
       );
       final missing = await service.inspectFolder(
         config: _config,
-        folderPath: 'Family/Sync/',
+        folderPath: 'Debrify',
       );
       final candidate = await service.configureNewRoot(
         inspection: missing as WebDavSyncFolderMissing,
@@ -725,22 +713,18 @@ void main() {
       await pumpPage(tester, enabled: true, activation: activation);
 
       await tester.tap(find.text('Enable WebDAV Sync'));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.enterText(find.byType(TextField), 'circle-secret');
-      await tester.pump();
-      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       expect(activation.initializations, 1);
       expect(activation.inspections, 0);
       expect(activation.connections, 0);
-      expect(find.text('Use sync data from this folder?'), findsNothing);
+      expect(find.text('Use sync data from this account?'), findsNothing);
       expect(find.text('Sync is active'), findsOneWidget);
     },
   );
 
   testWidgets(
-    'cancelling a folder replacement restores the previous active binding',
+    'cancelling an account replacement restores the previous active binding',
     (tester) async {
       final oldMarker = await codec.sealRoot(
         passphrase: 'circle-secret',
@@ -754,9 +738,16 @@ void main() {
         'circle-secret',
         runInBackground: false,
       );
+      const oldConfig = WebDavConfig(
+        id: 'old-server',
+        name: 'Old server',
+        baseUrl: 'https://old.example.test/dav',
+        username: 'alice',
+        password: 'secret',
+      );
       var oldBinding = await store.stageBinding(
-        location: WebDavSyncFolderLocation.fromConfig(_config, 'Old'),
-        config: _config,
+        location: WebDavSyncFolderLocation.fromConfig(oldConfig, 'Debrify'),
+        config: oldConfig,
         syncPassphrase: 'circle-secret',
       );
       oldBinding = await store.markRootVerified(
@@ -777,18 +768,9 @@ void main() {
         iterations: 1,
       );
       final activation = _FakeActivation(store);
-      await pumpPage(
-        tester,
-        enabled: true,
-        activation: activation,
-        folderPath: 'New',
-      );
+      await pumpPage(tester, enabled: true, activation: activation);
 
-      await tester.tap(find.text('Change sync folder'));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.enterText(find.byType(TextField), 'circle-secret');
-      await tester.pump();
-      await tester.tap(find.text('Continue'));
+      await tester.tap(find.text('Change WebDAV sync account'));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -813,8 +795,7 @@ final class _AllowAuthorization implements WebDavSyncSetupAuthorization {
   Future<void> requireAdmin() async => adminChecks++;
 
   @override
-  Future<T> runForConfig<T>(
-    WebDavConfig config,
+  Future<T> runForAdminSession<T>(
     Future<T> Function(Future<void> Function()? beforeSend) body,
   ) => body(() async => barriers++);
 
@@ -826,8 +807,20 @@ final class _AllowAuthorization implements WebDavSyncSetupAuthorization {
 
 final class _FakeTransport implements WebDavSyncProbeTransport {
   int reads = 0;
-  Uint8List? bytes;
+  Uint8List? _bytes;
+  Uint8List? keyBytes;
   Object? error;
+
+  Uint8List? get bytes => _bytes;
+
+  set bytes(Uint8List? value) {
+    _bytes = value;
+    if (value != null) {
+      keyBytes = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'circle-secret',
+      ).encode();
+    }
+  }
 
   @override
   Future<WebDavBytesResult> readRootMarker({
@@ -838,7 +831,32 @@ final class _FakeTransport implements WebDavSyncProbeTransport {
     await beforeSend?.call();
     if (error case final failure?) throw failure;
     return WebDavBytesResult(
-      bytes: bytes ?? Uint8List(0),
+      bytes: _bytes ?? Uint8List(0),
+      metadata: WebDavResponseMetadata(
+        statusCode: 200,
+        uri: Uri.parse('https://example.test/dav/$path'),
+        headers: const <String, String>{},
+      ),
+    );
+  }
+
+  @override
+  Future<WebDavBytesResult> readRootKey({
+    required String path,
+    Future<void> Function()? beforeSend,
+  }) async {
+    reads++;
+    await beforeSend?.call();
+    if (error case final failure?) throw failure;
+    final body = keyBytes;
+    if (body == null) {
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'missing',
+      );
+    }
+    return WebDavBytesResult(
+      bytes: body,
       metadata: WebDavResponseMetadata(
         statusCode: 200,
         uri: Uri.parse('https://example.test/dav/$path'),

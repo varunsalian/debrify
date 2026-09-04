@@ -289,6 +289,128 @@ void main() {
     transport.close();
   });
 
+  test('root key claim is create-only and accepts exactly 201', () async {
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((request) async {
+        expect(request.method, 'PUT');
+        expect(request.url.path, '/dav/Family/debrify-sync/circle.key');
+        expect(request.headers['if-none-match'], '*');
+        return http.Response('', 201);
+      }),
+    );
+
+    final metadata = await transport.createRootKey(
+      const WebDavSyncRootKeyFile(syncPassphrase: 'machine-secret').encode(),
+    );
+
+    expect(metadata.statusCode, 201);
+    transport.close();
+  });
+
+  test('root key claim rejects ambiguous 204 success', () async {
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient((_) async => http.Response('', 204)),
+    );
+
+    await expectLater(
+      transport.createRootKey(
+        const WebDavSyncRootKeyFile(syncPassphrase: 'machine-secret').encode(),
+      ),
+      throwsA(
+        isA<WebDavException>()
+            .having(
+              (error) => error.kind,
+              'kind',
+              WebDavErrorKind.unexpectedStatus,
+            )
+            .having((error) => error.statusCode, 'status', 204),
+      ),
+    );
+    transport.close();
+  });
+
+  test('root key reads enforce the 4 KiB cap', () async {
+    final transport = ProtocolWebDavSyncTransport(
+      location: location(),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: MockClient(
+        (request) async => http.Response.bytes(
+          Uint8List(WebDavSyncRootKeyFile.maxBytes + 1),
+          200,
+        ),
+      ),
+    );
+
+    await expectLater(
+      transport.readRootKey(),
+      throwsA(
+        isA<WebDavException>().having(
+          (error) => error.kind,
+          'kind',
+          WebDavErrorKind.invalidRequest,
+        ),
+      ),
+    );
+    transport.close();
+  });
+
+  test(
+    'activation verifies the root collection after ambiguous MKCOL 405',
+    () async {
+      final requests = <String>[];
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((request) async {
+          requests.add('${request.method} ${request.url.path}');
+          if (request.method == 'MKCOL') return http.Response('', 405);
+          if (request.method == 'PROPFIND') return http.Response('', 404);
+          return http.Response('', 500);
+        }),
+      );
+
+      await expectLater(
+        transport.ensureActivationLayout(),
+        throwsA(isA<WebDavSyncRootKeyClaimException>()),
+      );
+
+      expect(requests.first, startsWith('MKCOL '));
+      expect(requests, contains('PROPFIND /dav/Family/debrify-sync/'));
+      transport.close();
+    },
+  );
+
+  test('live-shape runtime binding reads no keyfile', () async {
+    final requests = <String>[];
+    final WebDavSyncTransport transport = ProtocolWebDavSyncTransport(
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://app.koofr.net/dav/',
+        folderPath: 'Koofr/Koofr sync',
+        serverName: 'Koofr',
+      ),
+      credentials: const WebDavCredentials(
+        username: 'live-user',
+        password: 'live-password',
+      ),
+      client: MockClient((request) async {
+        requests.add('${request.method} ${request.url.path}');
+        return http.Response.bytes(Uint8List.fromList(<int>[1, 2, 3]), 200);
+      }),
+    );
+
+    await transport.readRootMarker();
+
+    expect(requests, <String>[
+      'GET /dav/Koofr/Koofr%20sync/debrify-sync/circle.json.enc',
+    ]);
+    expect(requests.single, isNot(contains('circle.key')));
+    transport.close();
+  });
+
   test('root commit rejects ambiguous 204 success', () async {
     final transport = ProtocolWebDavSyncTransport(
       location: location(),

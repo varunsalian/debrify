@@ -359,7 +359,7 @@ abstract final class SettingsRows {
   static const enableWebDavSync = SettingsRowContent(
     icon: Icons.sync_rounded,
     title: 'Enable WebDAV Sync',
-    subtitle: 'Keep supported profile state in one WebDAV folder',
+    subtitle: 'Keep supported profile state in one WebDAV account',
   );
   static const createWebDavBackup = SettingsRowContent(
     icon: Icons.cloud_upload_outlined,

@@ -43,6 +43,8 @@ final class WebDavSyncBindingStore {
 
   static const String storageKey = 'webdav_sync_state_v1';
   static const String seedCandidateMarkerValueKey = 'm5SeedCandidateMarker';
+  static const String seedCandidateResetRequiredValueKey =
+      'm5SeedCandidateResetRequired';
   // This value lives in UserDefaults on tvOS. Keep one sync store comfortably
   // below the platform's warning threshold and also run it through the shared
   // database-wide preference budget before every write.
@@ -404,6 +406,63 @@ final class WebDavSyncBindingStore {
       syncPassphrase: decoded['syncPassphrase'] as String,
     );
   }
+
+  /// Atomically adopts the create-only keyfile winner without changing the
+  /// WebDAV login or the binding lifecycle.
+  ///
+  /// Candidate marker bytes and the candidate device identity are derived
+  /// from the losing secret. They are invalidated in the same snapshot as the
+  /// reseal. The reset journal lets activation clear the separate engine-state
+  /// store before rebuilding, including after a crash between those writes.
+  Future<WebDavSyncBinding> adoptSyncSecret(
+    String bindingId,
+    String syncPassphrase,
+  ) => _writeLock.synchronized(() async {
+    _requireVault();
+    WebDavSyncCodec.validatePassphrase(syncPassphrase);
+    final snapshot = await load();
+    final binding = _requireBinding(snapshot, bindingId);
+    final secrets = await readSecrets(binding);
+    if (secrets.syncPassphrase == syncPassphrase) return binding;
+
+    final namespace = _requireNamespace(snapshot, binding);
+    var updatedNamespace = namespace;
+    if (binding.circleId == null) {
+      final values = Map<String, Object?>.from(namespace.values)
+        ..remove(seedCandidateMarkerValueKey)
+        ..[seedCandidateResetRequiredValueKey] = true;
+      updatedNamespace = WebDavSyncNamespace(
+        id: namespace.id,
+        deviceId: _uuidV4(),
+        values: Map<String, Object?>.unmodifiable(values),
+      );
+    }
+    final updated = binding.copyWith(
+      sealedSecrets: await _sealSecrets(
+        binding.id,
+        WebDavSyncSecrets(
+          username: secrets.username,
+          password: secrets.password,
+          syncPassphrase: syncPassphrase,
+        ),
+      ),
+      updatedAt: _clock().toUtc(),
+    );
+    final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings)
+      ..[binding.id] = updated;
+    final namespaces = Map<String, WebDavSyncNamespace>.from(
+      snapshot.namespaces,
+    )..[namespace.id] = updatedNamespace;
+    await _save(
+      WebDavSyncStoreSnapshot(
+        activeBindingId: snapshot.activeBindingId,
+        stagedBindingId: snapshot.stagedBindingId,
+        bindings: bindings,
+        namespaces: namespaces,
+      ),
+    );
+    return updated;
+  });
 
   Future<WebDavSyncNamespace> updateNamespaceValues(
     String namespaceId,

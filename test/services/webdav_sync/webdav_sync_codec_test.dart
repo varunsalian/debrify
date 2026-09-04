@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _legacyDocumentFixture =
@@ -89,6 +90,58 @@ void main() {
           isNot(contains(secret)),
         ),
       ),
+    );
+  });
+
+  test('generated sync secrets are 32-byte unpadded base64url values', () {
+    final values = List<String>.generate(
+      16,
+      (_) => WebDavSyncCodec.generateSyncSecret(),
+    );
+
+    expect(values.toSet(), hasLength(values.length));
+    for (final value in values) {
+      expect(value, hasLength(43));
+      expect(value, matches(RegExp(r'^[A-Za-z0-9_-]{43}$')));
+      expect(base64Url.decode('$value='), hasLength(32));
+    }
+  });
+
+  test('circle keyfile parser accepts only the strict version-one shape', () {
+    final valid = const WebDavSyncRootKeyFile(
+      syncPassphrase: 'machine-secret',
+    ).encode();
+    expect(WebDavSyncRootKeyFile.parse(valid).syncPassphrase, 'machine-secret');
+
+    expect(
+      () => WebDavSyncRootKeyFile.parse(
+        utf8.encode('{"version":2,"syncPassphrase":"machine-secret"}'),
+      ),
+      throwsA(isA<WebDavSyncRootKeyFileVersionException>()),
+    );
+    expect(
+      () => WebDavSyncRootKeyFile.parse(
+        utf8.encode('{"version":1.0,"syncPassphrase":"machine-secret"}'),
+      ),
+      throwsA(isA<WebDavSyncRootKeyFileVersionException>()),
+    );
+    expect(
+      () => WebDavSyncRootKeyFile.parse(
+        utf8.encode(
+          '{"version":1,"syncPassphrase":"machine-secret","extra":true}',
+        ),
+      ),
+      throwsA(isA<WebDavSyncRootKeyFileFormatException>()),
+    );
+    expect(
+      () => WebDavSyncRootKeyFile.parse(
+        List<int>.filled(WebDavSyncRootKeyFile.maxBytes + 1, 0),
+      ),
+      throwsA(isA<WebDavSyncRootKeyFileSizeException>()),
+    );
+    expect(
+      () => WebDavSyncRootKeyFile.parse(utf8.encode('not-json')),
+      throwsA(isA<WebDavSyncRootKeyFileFormatException>()),
     );
   });
 
