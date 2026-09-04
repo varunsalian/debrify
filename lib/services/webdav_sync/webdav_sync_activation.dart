@@ -587,6 +587,9 @@ final class WebDavSyncNewRootInitializer {
         // A non-conforming server replaced the create-only key claim while
         // this device seeded. Adoption invalidated the losing candidate; run
         // the complete candidate transaction again under the observed key.
+        // An observed replacement is exactly when the conditional-create
+        // assumption deserves revalidation, so the retry re-probes.
+        conditionalCreateVerified = false;
       }
     }
   }

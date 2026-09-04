@@ -360,7 +360,10 @@ void main() {
       final active = (outcome as WebDavSyncInitialized).binding;
 
       expect(seeds.prepareCalls, 2);
-      expect(transport.conditionalCreateProbeCalls, 1);
+      // The observed key replacement restarts the candidate AND resets the
+      // probe cache: watching create-only fail is exactly when the
+      // conditional-create assumption deserves revalidation.
+      expect(transport.conditionalCreateProbeCalls, 2);
       expect(
         transport.events.where((event) => event == 'create:root'),
         hasLength(1),

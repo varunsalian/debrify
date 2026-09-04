@@ -739,6 +739,9 @@ final class WebDavSyncConditionalCreateProbe {
     );
     var mayExist = false;
     try {
+      // Set before the request goes out: a lost response can still have
+      // created the sentinel server-side, and cleanup must cover that.
+      mayExist = true;
       final created = await _client.putBytes(
         path: path,
         bytes: first,
@@ -747,7 +750,6 @@ final class WebDavSyncConditionalCreateProbe {
         createParents: false,
         beforeSend: beforeSend,
       );
-      mayExist = true;
       if (created.statusCode != HttpStatus.created) {
         throw const WebDavSyncProviderUnsupportedException();
       }

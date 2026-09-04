@@ -2455,7 +2455,23 @@ before any key claim, marker mutation, or legacy keyfile provision. On a
 conforming server, immutable key/marker creation plus the verify/repair ladder
 guarantees that a standing marker always matches `circle.key`. A
 non-conforming server is refused before those authority files are mutated,
-instead of risking key/marker divergence.
+instead of risking key/marker divergence. A candidate restart triggered by an
+observed key replacement resets the probe cache, so the retry revalidates the
+assumption it just watched fail.
+
+Scope of the probe, stated honestly: it validates one sequential request
+stream against one sentinel, which detects servers that ignore
+`If-None-Match` outright but cannot prove global linearizability. A
+multi-replica, eventually consistent WebDAV backend could pass the probe on
+each replica and still let two devices both "create" the authority files.
+This is not a new exposure introduced by the keyfile: the root-marker race
+itself has always required linearizable create-only PUT — on such a backend
+two devices could silently fork the circle with or without a keyfile.
+Single-endpoint providers in this feature's support envelope (Koofr,
+Nextcloud, and typical personal WebDAV services) provide per-object
+linearizable preconditions; replicated eventually-consistent DAV bridges are
+outside the support envelope, and the probe narrows — not closes — that
+residual by design.
 
 The accepted trust change is deliberate: because the at-rest secret sits next
 to the encrypted data, encryption no longer protects the user from the storage
