@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:cryptography/cryptography.dart';
 import 'webdav_sync_models.dart';
 
 typedef WebDavSyncRandomBytes = Uint8List Function(int length);
+typedef WebDavSyncPayloadTransformer = Object? Function(Object? payload);
 
 final class WebDavSyncWrongPassphraseException extends FormatException {
   const WebDavSyncWrongPassphraseException()
@@ -53,6 +55,24 @@ final class WebDavSyncCodec {
   static const String _aeadAlgorithm = 'aes-256-gcm';
   static const String _kdfAlgorithm = 'argon2id';
   static const String _keyCheckContext = 'debrify-webdav-sync-key-check-v1';
+  // A canonical legacy JSON payload can only begin with `null`, `true`,
+  // `false`, a quote, a number, `[` or `{`. The leading NUL therefore makes
+  // this in-plaintext marker impossible to confuse with any document emitted
+  // by the legacy codec, without changing the authenticated envelope header.
+  static const List<int> _compressedDocumentPrefix = <int>[
+    0x00,
+    0x44,
+    0x42,
+    0x52,
+    0x46,
+    0x59,
+    0x2d,
+    0x5a,
+    0x4c,
+    0x49,
+    0x42,
+    0x01,
+  ];
 
   final WebDavSyncRandomBytes _randomBytes;
 
@@ -312,6 +332,7 @@ final class WebDavSyncCodec {
     required String logicalName,
     required int schemaVersion,
     required Object? payload,
+    WebDavSyncPayloadTransformer? payloadEncoder,
     int maxBytes = defaultDocumentMaxBytes,
     bool runInBackground = false,
   }) async {
@@ -336,6 +357,7 @@ final class WebDavSyncCodec {
           logicalName: logicalName,
           schemaVersion: schemaVersion,
           payload: payload,
+          payloadEncoder: payloadEncoder,
           maxBytes: maxBytes,
           nonce: nonce,
         ),
@@ -348,6 +370,7 @@ final class WebDavSyncCodec {
       logicalName: logicalName,
       schemaVersion: schemaVersion,
       payload: payload,
+      payloadEncoder: payloadEncoder,
       maxBytes: maxBytes,
       nonce: nonce,
     );
@@ -360,13 +383,20 @@ final class WebDavSyncCodec {
     required String logicalName,
     required int schemaVersion,
     required Object? payload,
+    required WebDavSyncPayloadTransformer? payloadEncoder,
     required int maxBytes,
     required List<int> nonce,
   }) async {
-    final clear = canonicalJsonBytes(payload);
-    if (clear.length > maxBytes) {
+    final encodedPayload = canonicalJsonBytes(
+      payloadEncoder == null ? payload : payloadEncoder(payload),
+    );
+    if (encodedPayload.length > maxBytes) {
       throw const FormatException('WebDAV sync document exceeds its limit');
     }
+    final clear = Uint8List.fromList(<int>[
+      ..._compressedDocumentPrefix,
+      ...zlib.encode(encodedPayload),
+    ]);
     final header = _documentHeader(
       circleId: circleId,
       deviceId: deviceId,
@@ -404,6 +434,7 @@ final class WebDavSyncCodec {
     required String deviceId,
     required String logicalName,
     required int schemaVersion,
+    WebDavSyncPayloadTransformer? payloadDecoder,
     int maxBytes = defaultDocumentMaxBytes,
     bool runInBackground = false,
   }) async {
@@ -433,6 +464,7 @@ final class WebDavSyncCodec {
           deviceId: deviceId,
           logicalName: logicalName,
           schemaVersion: schemaVersion,
+          payloadDecoder: payloadDecoder,
           maxBytes: maxBytes,
         ),
       );
@@ -444,6 +476,7 @@ final class WebDavSyncCodec {
       deviceId: deviceId,
       logicalName: logicalName,
       schemaVersion: schemaVersion,
+      payloadDecoder: payloadDecoder,
       maxBytes: maxBytes,
     );
   }
@@ -455,6 +488,7 @@ final class WebDavSyncCodec {
     required String deviceId,
     required String logicalName,
     required int schemaVersion,
+    required WebDavSyncPayloadTransformer? payloadDecoder,
     required int maxBytes,
   }) async {
     final envelope = _decodeObject(encoded, 'WebDAV sync document');
@@ -498,13 +532,47 @@ final class WebDavSyncCodec {
         secretKey: key.secretKey,
         aad: canonicalJsonBytes(header),
       );
-      if (clear.length > maxBytes) {
-        throw const FormatException('WebDAV sync document exceeds its limit');
-      }
-      return jsonDecode(utf8.decode(clear));
+      final payloadBytes = _openDocumentPayload(clear, maxBytes);
+      final payload = jsonDecode(utf8.decode(payloadBytes));
+      return payloadDecoder == null ? payload : payloadDecoder(payload);
     } on SecretBoxAuthenticationError {
       throw const FormatException('WebDAV sync document authentication failed');
     }
+  }
+
+  static Uint8List _openDocumentPayload(List<int> clear, int maxBytes) {
+    if (clear.length > maxBytes) {
+      throw const FormatException('WebDAV sync document exceeds its limit');
+    }
+    if (!_startsWith(clear, _compressedDocumentPrefix)) {
+      return clear is Uint8List ? clear : Uint8List.fromList(clear);
+    }
+    try {
+      return _inflateBounded(
+        clear.sublist(_compressedDocumentPrefix.length),
+        maxBytes,
+      );
+    } on FormatException {
+      rethrow;
+    } catch (error) {
+      throw FormatException('Invalid compressed WebDAV sync document', error);
+    }
+  }
+
+  static Uint8List _inflateBounded(List<int> compressed, int maxBytes) {
+    final output = _BoundedByteSink(maxBytes);
+    final input = zlib.decoder.startChunkedConversion(output);
+    input.add(compressed);
+    input.close();
+    return output.takeBytes();
+  }
+
+  static bool _startsWith(List<int> bytes, List<int> prefix) {
+    if (bytes.length < prefix.length) return false;
+    for (var index = 0; index < prefix.length; index++) {
+      if (bytes[index] != prefix[index]) return false;
+    }
+    return true;
   }
 
   static Map<String, Object?> _documentHeader({
@@ -710,4 +778,26 @@ final class WebDavSyncCodec {
     }
     throw const FormatException('Unsupported WebDAV sync JSON value');
   }
+}
+
+final class _BoundedByteSink implements Sink<List<int>> {
+  _BoundedByteSink(this.maxBytes);
+
+  final int maxBytes;
+  final BytesBuilder _bytes = BytesBuilder(copy: false);
+  var _length = 0;
+
+  @override
+  void add(List<int> data) {
+    _length += data.length;
+    if (_length > maxBytes) {
+      throw const FormatException('WebDAV sync document exceeds its limit');
+    }
+    _bytes.add(data);
+  }
+
+  @override
+  void close() {}
+
+  Uint8List takeBytes() => _bytes.takeBytes();
 }

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_hot_models.dart';
@@ -345,7 +347,13 @@ final class WebDavSyncLibraryDocument {
   const WebDavSyncLibraryDocument({
     required this.circleProfileId,
     required this.records,
-  });
+  }) : _semanticDigest = null;
+
+  const WebDavSyncLibraryDocument._withSemanticDigest({
+    required this.circleProfileId,
+    required this.records,
+    required String semanticDigest,
+  }) : _semanticDigest = semanticDigest;
 
   static const int schemaVersion = 1;
   static const int maxEncodedBytes = 64 * 1024 * 1024;
@@ -353,6 +361,7 @@ final class WebDavSyncLibraryDocument {
 
   final String circleProfileId;
   final Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>> records;
+  final String? _semanticDigest;
 
   Map<String, Object?> toJson() {
     if (records.length > maxLeaves) {
@@ -368,11 +377,20 @@ final class WebDavSyncLibraryDocument {
     };
   }
 
-  String get semanticDigest => semanticDigestOf(toJson());
+  String get semanticDigest => _semanticDigest ?? semanticDigestOf(toJson());
+
+  WebDavSyncLibraryDocument withComputedSemanticDigest() {
+    if (_semanticDigest != null) return this;
+    return WebDavSyncLibraryDocument._withSemanticDigest(
+      circleProfileId: circleProfileId,
+      records: records,
+      semanticDigest: semanticDigestOf(toJson()),
+    );
+  }
 
   factory WebDavSyncLibraryDocument.fromJson(Object? source) {
-    if (utf8.encode(WebDavSyncCodec.canonicalJson(source)).length >
-        maxEncodedBytes) {
+    final canonicalBytes = WebDavSyncCodec.canonicalJsonBytes(source);
+    if (canonicalBytes.length > maxEncodedBytes) {
       throw const FormatException('WebDAV sync library document too large');
     }
     final json = _object(source, 'library document');
@@ -409,15 +427,26 @@ final class WebDavSyncLibraryDocument {
               ),
       );
     }
-    return WebDavSyncLibraryDocument(
+    return WebDavSyncLibraryDocument._withSemanticDigest(
       circleProfileId: circleProfileId,
       records:
           Map<String, WebDavSyncCircleLeaf<Map<String, Object?>>>.unmodifiable(
             records,
           ),
+      semanticDigest: crypto.sha256.convert(canonicalBytes).toString(),
     );
   }
 }
+
+Object? encodeWebDavSyncLibraryDocument(Object? source) {
+  if (source is! WebDavSyncLibraryDocument) {
+    throw const FormatException('Invalid WebDAV sync library document');
+  }
+  return source.toJson();
+}
+
+Object? decodeWebDavSyncLibraryDocument(Object? source) =>
+    WebDavSyncLibraryDocument.fromJson(source);
 
 /// Pure per-record LWW. Equal stamps use the canonical value digest so every
 /// device chooses the same winner, including live-vs-null ties.

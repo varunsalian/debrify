@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
@@ -1203,7 +1204,7 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 serverNowMs: serverNowMs,
               ),
             );
-            final libraryTarget = WebDavSyncLibraryMerge.merge(
+            final mergedLibraryTarget = WebDavSyncLibraryMerge.merge(
               circleProfileId: circleProfileId,
               documents: <WebDavSyncLibraryDocument>[
                 if (profileState.libraryBaseline != null)
@@ -1212,7 +1213,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
                 ...peerData.libraryDocuments,
               ],
             );
-            identityMaps.assertContainsNoLocalIds(libraryTarget.toJson());
+            // The merge itself is sub-100 ms at the 60k-leaf field scale. Its
+            // canonical digest and full identity scan are larger traversals,
+            // so keep those off the UI isolate and retain the digest on the
+            // returned immutable document for cache/publish comparisons.
+            final libraryTarget = await _finalizeLibraryTargetOffMain(
+              identityMaps,
+              mergedLibraryTarget,
+            );
             final pendingLibrary = WebDavSyncPendingLibraryApply(
               localProfileId: localProfileId,
               target: libraryTarget,
@@ -1951,10 +1959,14 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
       deviceId: deviceId,
       logicalName: reference.name,
       schemaVersion: reference.schemaVersion,
+      payloadDecoder: decodeWebDavSyncLibraryDocument,
       maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
       runInBackground: true,
     );
-    final document = WebDavSyncLibraryDocument.fromJson(payload);
+    if (payload is! WebDavSyncLibraryDocument) {
+      throw const FormatException('Invalid WebDAV sync library document');
+    }
+    final document = payload;
     if (document.circleProfileId != circleProfileId ||
         document.semanticDigest != reference.semanticDigest) {
       throw const FormatException('WebDAV sync library section mismatch');
@@ -2315,7 +2327,8 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
               deviceId: deviceId,
               logicalName: 'library/${entry.key}',
               schemaVersion: WebDavSyncLibraryDocument.schemaVersion,
-              payload: document.toJson(),
+              payload: document,
+              payloadEncoder: encodeWebDavSyncLibraryDocument,
               semanticDigest: document.semanticDigest,
               updatedAtMs: serverNowMs,
               maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
@@ -2813,6 +2826,21 @@ final class WebDavSyncEngine implements WebDavSyncCycleRunner {
     appliedKeysByLocalProfile
         .putIfAbsent(localProfileId, () => <String>{})
         .addAll(appliedKeys);
+  }
+
+  /// Runs the merged target's identity assertion and canonical digest in a
+  /// worker isolate. This lives in its own method so the [Isolate.run]
+  /// closure's enclosing context holds ONLY the two sendable parameters —
+  /// written inline in the cycle, the captured context chain reaches the
+  /// engine and its cycle lock, whose in-flight Future is unsendable.
+  static Future<WebDavSyncLibraryDocument> _finalizeLibraryTargetOffMain(
+    WebDavSyncIdentityMaps identityMaps,
+    WebDavSyncLibraryDocument merged,
+  ) {
+    return Isolate.run(() {
+      identityMaps.assertContainsNoLocalIds(merged.toJson());
+      return merged.withComputedSemanticDigest();
+    });
   }
 
   void _publishAppliedKeys(Map<String, Set<String>> appliedKeysByLocalProfile) {

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:debrify/services/webdav_protocol_client.dart';
@@ -7,6 +8,14 @@ import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_large_section_io.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+Object? _encodeWithIsolateProbe(Object? payload) {
+  final source = payload! as Map<String, Object?>;
+  return <String, Object?>{
+    'encoderIsolate': Isolate.current.hashCode,
+    'mainIsolate': source['mainIsolate'],
+  };
+}
 
 void main() {
   late Directory stagingBase;
@@ -225,46 +234,63 @@ void main() {
     expect(await stagingBase.list().toList(), isEmpty);
   });
 
-  test('per-profile library uses the verified file path and fails closed', () async {
-    final reference = await io.sealWriteVerify(
-      transport: transport,
-      key: key,
-      circleId: 'circle-test-1',
-      deviceId: 'device-test-1',
-      logicalName: 'library/profile-circle',
-      schemaVersion: 1,
-      payload: const <String, Object?>{
-        'version': 1,
-        'circleProfileId': 'profile-circle',
-        'records': <String, Object?>{},
-      },
-      semanticDigest: List<String>.filled(64, 'f').join(),
-      updatedAtMs: 9014,
-      maxBytes: 1024 * 1024,
-    );
-
-    expect(reference.name, 'library/profile-circle');
-    expect(transport.fileWrites, 1);
-    expect(transport.fileReads, 1);
-    expect(transport.byteWrites, 0);
-
-    await expectLater(
-      io.sealWriteVerify(
+  test(
+    'per-profile library uses the verified file path and fails closed',
+    () async {
+      final mainIsolate = Isolate.current.hashCode;
+      final reference = await io.sealWriteVerify(
         transport: transport,
         key: key,
         circleId: 'circle-test-1',
         deviceId: 'device-test-1',
         logicalName: 'library/profile-circle',
         schemaVersion: 1,
-        payload: <String, Object?>{'payload': 'x' * 4096},
+        payload: <String, Object?>{'mainIsolate': mainIsolate},
+        payloadEncoder: _encodeWithIsolateProbe,
         semanticDigest: List<String>.filled(64, 'f').join(),
-        updatedAtMs: 9015,
-        maxBytes: 256,
-      ),
-      throwsFormatException,
-    );
-    expect(transport.fileWrites, 1, reason: 'overflow must fail before upload');
-  });
+        updatedAtMs: 9014,
+        maxBytes: 1024 * 1024,
+      );
+
+      expect(reference.name, 'library/profile-circle');
+      expect(transport.fileWrites, 1);
+      expect(transport.fileReads, 1);
+      expect(transport.byteWrites, 0);
+      final opened = await codec.openDocument(
+        key: key,
+        encoded: transport.sections[reference.contentHash]!,
+        circleId: 'circle-test-1',
+        deviceId: 'device-test-1',
+        logicalName: 'library/profile-circle',
+        schemaVersion: 1,
+        maxBytes: 1024 * 1024,
+      );
+      final openedMap = opened! as Map<String, Object?>;
+      expect(openedMap['mainIsolate'], mainIsolate);
+      expect(openedMap['encoderIsolate'], isNot(mainIsolate));
+
+      await expectLater(
+        io.sealWriteVerify(
+          transport: transport,
+          key: key,
+          circleId: 'circle-test-1',
+          deviceId: 'device-test-1',
+          logicalName: 'library/profile-circle',
+          schemaVersion: 1,
+          payload: <String, Object?>{'payload': 'x' * 4096},
+          semanticDigest: List<String>.filled(64, 'f').join(),
+          updatedAtMs: 9015,
+          maxBytes: 256,
+        ),
+        throwsFormatException,
+      );
+      expect(
+        transport.fileWrites,
+        1,
+        reason: 'overflow must fail before upload',
+      );
+    },
+  );
 }
 
 final class _FileTransport

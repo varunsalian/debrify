@@ -36,6 +36,7 @@ final class WebDavSyncLargeSectionIo {
     required String logicalName,
     required int schemaVersion,
     required Object payload,
+    WebDavSyncPayloadTransformer? payloadEncoder,
     required String semanticDigest,
     required int updatedAtMs,
     required int maxBytes,
@@ -56,6 +57,7 @@ final class WebDavSyncLargeSectionIo {
         logicalName: logicalName,
         schemaVersion: schemaVersion,
         payload: payload,
+        payloadEncoder: payloadEncoder,
         maxBytes: maxBytes,
         runInBackground:
             logicalName == 'bootstrap' ||
@@ -106,6 +108,7 @@ final class WebDavSyncLargeSectionIo {
         logicalName: logicalName,
         schemaVersion: schemaVersion,
         payload: payload,
+        payloadEncoder: payloadEncoder,
         semanticDigest: semanticDigest,
         updatedAtMs: updatedAtMs,
         maxBytes: maxBytes,
@@ -221,6 +224,7 @@ final class WebDavSyncLargeSectionIo {
     required String logicalName,
     required int schemaVersion,
     required Object payload,
+    required WebDavSyncPayloadTransformer? payloadEncoder,
     required String semanticDigest,
     required int updatedAtMs,
     required int maxBytes,
@@ -232,6 +236,7 @@ final class WebDavSyncLargeSectionIo {
       logicalName: logicalName,
       schemaVersion: schemaVersion,
       payload: payload,
+      payloadEncoder: payloadEncoder,
       maxBytes: maxBytes,
       runInBackground: true,
     );
