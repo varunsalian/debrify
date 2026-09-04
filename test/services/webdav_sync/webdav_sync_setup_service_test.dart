@@ -299,6 +299,51 @@ void main() {
   });
 
   test(
+    'active same-circle marker replacement leaves pin and secrets untouched',
+    () async {
+      final installed = await installActiveBinding();
+      final replacementMarker = await codec.sealRoot(
+        passphrase: 'circle-secret',
+        circleId: 'circle-1',
+        createdAt: DateTime.utc(2026, 9, 2),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      const rotated = WebDavConfig(
+        id: 'server-1',
+        name: 'Server',
+        baseUrl: 'https://example.test/dav',
+        username: 'alice',
+        password: 'replacement-password',
+      );
+      transport.bytes = replacementMarker;
+      final inspection = await service.inspectFolder(
+        config: rotated,
+        folderPath: 'Family',
+        context: WebDavSyncFolderInspectionContext.setup,
+      );
+
+      await expectLater(
+        service.configureExistingRoot(
+          inspection: inspection as WebDavSyncFolderExisting,
+        ),
+        throwsA(isA<WebDavSyncRootChangedException>()),
+      );
+
+      final snapshot = await store.load();
+      final unchanged = snapshot.bindings[installed.binding.id]!;
+      expect(unchanged.lifecycle, WebDavSyncLifecycle.active);
+      expect(
+        snapshot.namespaceFor(unchanged)!.markerBytes,
+        orderedEquals(installed.marker),
+      );
+      final secrets = await store.readSecrets(unchanged);
+      expect(secrets.password, 'secret');
+      expect(secrets.syncPassphrase, 'circle-secret');
+    },
+  );
+
+  test(
     'missing local state explicitly stages the pinned Active root',
     () async {
       final marker = await codec.sealRoot(

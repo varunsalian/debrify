@@ -105,9 +105,11 @@ class ProfileLifecycleCoordinator {
       await registry.commitActivation(
         targetProfileId: target.id,
         completeOnboarding: completeOnboarding,
+        onAuthorityCommitted: () {
+          committed = true;
+          afterAuthorityCommitted?.call();
+        },
       );
-      committed = true;
-      afterAuthorityCommitted?.call();
       ProfileRuntime.publish(candidate);
       await afterCommitBeforeInitialize?.call();
       // Candidate warming touches process-global caches and controllers. Do it

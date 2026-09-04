@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -379,6 +380,106 @@ void main() {
       );
     },
   );
+
+  test(
+    'a resumed candidate repairs a diverged key to its committed marker',
+    () async {
+      final resumedMarker = await WebDavSyncCodec().sealRoot(
+        passphrase: 'circle-secret',
+        circleId: 'resumed-circle',
+        createdAt: DateTime.utc(2026, 9, 1),
+        runInBackground: true,
+      );
+      await bindingStore.updateNamespaceValues(
+        binding.namespaceId,
+        (values) => <String, Object?>{
+          ...values,
+          WebDavSyncBindingStore.seedCandidateMarkerValueKey: base64Encode(
+            resumedMarker,
+          ),
+        },
+      );
+      transport
+        ..marker = resumedMarker
+        ..rootKeyOnRead[2] = const WebDavSyncRootKeyFile(
+          syncPassphrase: 'delayed-claimant-secret',
+        ).encode();
+
+      final outcome = await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+
+      expect(outcome, isA<WebDavSyncInitialized>());
+      expect(transport.overwriteKeyCalls, 1);
+      expect(
+        WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
+        'circle-secret',
+      );
+      expect(transport.events, isNot(contains('create:root')));
+    },
+  );
+
+  test('same-marker 412 repairs a key overwritten with the response', () async {
+    transport
+      ..createError = const WebDavException(
+        kind: WebDavErrorKind.preconditionFailed,
+        message: 'response says another initializer won',
+        statusCode: 412,
+      )
+      ..rootKeyOnCreateError = const WebDavSyncRootKeyFile(
+        syncPassphrase: 'delayed-claimant-secret',
+      ).encode()
+      ..afterSectionWrite = () async {
+        final snapshot = await bindingStore.load();
+        final encoded = snapshot
+            .namespaceFor(snapshot.bindings[binding.id]!)!
+            .values[WebDavSyncBindingStore.seedCandidateMarkerValueKey]!;
+        transport.markerOnCreateError = Uint8List.fromList(
+          base64Decode(encoded as String),
+        );
+      };
+
+    final outcome = await initializer().initialize(
+      bindingId: binding.id,
+      authorization: authorization,
+    );
+
+    expect(outcome, isA<WebDavSyncInitialized>());
+    expect(transport.overwriteKeyCalls, 1);
+    expect(
+      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
+      'circle-secret',
+    );
+  });
+
+  test('key repair does not overwrite after the marker changes', () async {
+    const winnerSecret = 'replacement-winner-secret';
+    final winnerMarker = await WebDavSyncCodec().sealRoot(
+      passphrase: winnerSecret,
+      circleId: 'replacement-winner-circle',
+      createdAt: DateTime.utc(2026, 9, 1),
+      runInBackground: true,
+    );
+    transport
+      ..markerOnRead[5] = winnerMarker
+      ..rootKeyOnMarkerRead[5] = const WebDavSyncRootKeyFile(
+        syncPassphrase: winnerSecret,
+      ).encode();
+
+    final outcome = await initializer().initialize(
+      bindingId: binding.id,
+      authorization: authorization,
+    );
+
+    expect(outcome, isA<WebDavSyncConcurrentRoot>());
+    expect(transport.overwriteKeyCalls, 0);
+    expect(transport.marker, orderedEquals(winnerMarker));
+    expect(
+      WebDavSyncRootKeyFile.parse(transport.rootKey!).syncPassphrase,
+      winnerSecret,
+    );
+  });
 
   test('post-commit key repair failure leaves a typed error binding', () async {
     transport
@@ -1086,6 +1187,75 @@ void main() {
     },
   );
 
+  test(
+    'two initializers cannot silently diverge on an ignore-all server',
+    () async {
+      final server = _IgnoringPreconditionsServer();
+      final first = WebDavSyncNewRootInitializer(
+        bindingStore: bindingStore,
+        stateRepository: _MemoryStateRepository(),
+        seedSource: _FakeSeedSource(),
+        transportFactory: ({required binding, required secrets}) =>
+            server.connect(),
+        clock: () => DateTime.utc(2026, 9, 1),
+      );
+      final second = WebDavSyncNewRootInitializer(
+        bindingStore: bindingStore,
+        stateRepository: _MemoryStateRepository(),
+        seedSource: _FakeSeedSource(),
+        transportFactory: ({required binding, required secrets}) =>
+            server.connect(),
+        clock: () => DateTime.utc(2026, 9, 1),
+      );
+
+      Future<Object> settle(
+        Future<WebDavSyncInitializationOutcome> operation,
+      ) async {
+        try {
+          return await operation;
+        } catch (error) {
+          return error;
+        }
+      }
+
+      final results = await Future.wait(<Future<Object>>[
+        settle(
+          first.initialize(bindingId: binding.id, authorization: authorization),
+        ),
+        settle(
+          second.initialize(
+            bindingId: binding.id,
+            authorization: authorization,
+          ),
+        ),
+      ]);
+
+      expect(server.keyCreateCalls, 2);
+      expect(server.markerCreateCalls, 2);
+      final finalKey = WebDavSyncRootKeyFile.parse(server.rootKey!);
+      await expectLater(
+        WebDavSyncCodec().openRoot(
+          server.marker!,
+          finalKey.syncPassphrase,
+          runInBackground: true,
+        ),
+        completion(isA<OpenedWebDavSyncRoot>()),
+      );
+      expect(
+        results,
+        everyElement(
+          anyOf(
+            isA<WebDavSyncInitializationOutcome>(),
+            isA<WebDavSyncRootKeyClaimException>(),
+          ),
+        ),
+        reason:
+            'a non-conforming server may fail both claimants, but one device '
+            'must not silently accept a divergent root',
+      );
+    },
+  );
+
   test('local mutation prevents a stale full-manifest republish', () async {
     final marker = await WebDavSyncCodec().sealRoot(
       passphrase: 'circle-secret',
@@ -1360,7 +1530,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
   }
 }
 
-final class _FakeActivationTransport
+class _FakeActivationTransport
     implements
         WebDavSyncActivationTransport,
         WebDavSyncCommittedRootKeyRepairTransport {
@@ -1375,6 +1545,9 @@ final class _FakeActivationTransport
   final Map<int, Uint8List> rootKeyOnRead = <int, Uint8List>{};
   Uint8List? rootKeyAfterMarkerCreate;
   int keyReadCount = 0;
+  int markerReadCount = 0;
+  final Map<int, Uint8List> markerOnRead = <int, Uint8List>{};
+  final Map<int, Uint8List> rootKeyOnMarkerRead = <int, Uint8List>{};
   WebDavException? createKeyError;
   Uint8List? keyOnCreateError;
   Uint8List? replaceKeyAfterCreate;
@@ -1386,6 +1559,7 @@ final class _FakeActivationTransport
   WebDavException? manifestWriteError;
   Uint8List? replaceMarkerAfterCreate;
   Uint8List? markerOnCreateError;
+  Uint8List? rootKeyOnCreateError;
   bool createStoresThenThrows = false;
   List<String> deviceIds = const <String>[];
   Future<void> Function()? afterSectionWrite;
@@ -1471,6 +1645,13 @@ final class _FakeActivationTransport
   @override
   Future<WebDavBytesResult> readRootMarker() async {
     events.add('read:root');
+    markerReadCount++;
+    if (markerOnRead.remove(markerReadCount) case final replacement?) {
+      marker = Uint8List.fromList(replacement);
+    }
+    if (rootKeyOnMarkerRead.remove(markerReadCount) case final replacement?) {
+      rootKey = Uint8List.fromList(replacement);
+    }
     final value = marker;
     if (value == null) {
       throw const WebDavException(
@@ -1525,6 +1706,8 @@ final class _FakeActivationTransport
     if (error != null) {
       final winningMarker = markerOnCreateError;
       if (winningMarker != null) marker = Uint8List.fromList(winningMarker);
+      final winningKey = rootKeyOnCreateError;
+      if (winningKey != null) rootKey = Uint8List.fromList(winningKey);
       throw error;
     }
     marker = Uint8List.fromList(replaceMarkerAfterCreate ?? bytes);
@@ -1565,5 +1748,122 @@ final class _FakeActivationTransport
   @override
   void close() {
     events.add('close');
+  }
+}
+
+final class _IgnoringPreconditionsServer {
+  Uint8List? rootKey;
+  Uint8List? marker;
+  int keyCreateCalls = 0;
+  int markerCreateCalls = 0;
+  int _initialKeyReads = 0;
+  int _initialMarkerReads = 0;
+  final Completer<void> _bothKeyReads = Completer<void>();
+  final Completer<void> _bothMarkerReads = Completer<void>();
+  final Completer<void> _bothKeyCreates = Completer<void>();
+  final Completer<void> _bothMarkerCreates = Completer<void>();
+
+  _IgnoringPreconditionsTransport connect() =>
+      _IgnoringPreconditionsTransport(this);
+
+  Future<WebDavBytesResult> readKey(WebDavResponseMetadata metadata) async {
+    final existing = rootKey;
+    if (existing != null) {
+      return WebDavBytesResult(bytes: existing, metadata: metadata);
+    }
+    _initialKeyReads++;
+    if (_initialKeyReads == 2) _bothKeyReads.complete();
+    await _bothKeyReads.future;
+    throw const WebDavException(
+      kind: WebDavErrorKind.notFound,
+      message: 'missing',
+    );
+  }
+
+  Future<WebDavBytesResult> readMarker(
+    WebDavResponseMetadata metadata, {
+    required bool initialRead,
+  }) async {
+    final existing = marker;
+    if (existing != null) {
+      return WebDavBytesResult(bytes: existing, metadata: metadata);
+    }
+    if (initialRead) {
+      _initialMarkerReads++;
+      if (_initialMarkerReads == 2) _bothMarkerReads.complete();
+      await _bothMarkerReads.future;
+    }
+    throw const WebDavException(
+      kind: WebDavErrorKind.notFound,
+      message: 'missing',
+    );
+  }
+
+  Future<void> createKey(Uint8List bytes) async {
+    keyCreateCalls++;
+    if (keyCreateCalls == 2) _bothKeyCreates.complete();
+    await _bothKeyCreates.future;
+    // Deliberately ignore If-None-Match and overwrite the shared resource.
+    rootKey = Uint8List.fromList(bytes);
+  }
+
+  Future<void> createMarker(Uint8List bytes) async {
+    markerCreateCalls++;
+    if (markerCreateCalls == 2) _bothMarkerCreates.complete();
+    await _bothMarkerCreates.future;
+    // Deliberately ignore If-None-Match and overwrite the shared resource.
+    marker = Uint8List.fromList(bytes);
+  }
+}
+
+final class _IgnoringPreconditionsTransport extends _FakeActivationTransport {
+  _IgnoringPreconditionsTransport(this.server) : super();
+
+  final _IgnoringPreconditionsServer server;
+  bool _initialMarkerRead = true;
+
+  @override
+  Future<WebDavBytesResult> readRootKey() {
+    events.add('read:key');
+    return server.readKey(metadata);
+  }
+
+  @override
+  Future<WebDavResponseMetadata> createRootKey(Uint8List bytes) async {
+    events.add('create:key');
+    await server.createKey(bytes);
+    return WebDavResponseMetadata(
+      statusCode: 201,
+      uri: metadata.uri,
+      headers: const <String, String>{},
+      serverDate: metadata.serverDate,
+    );
+  }
+
+  @override
+  Future<WebDavBytesResult> readRootMarker() async {
+    events.add('read:root');
+    final initialRead = _initialMarkerRead;
+    _initialMarkerRead = false;
+    return server.readMarker(metadata, initialRead: initialRead);
+  }
+
+  @override
+  Future<WebDavResponseMetadata> createRootMarker(Uint8List bytes) async {
+    events.add('create:root');
+    await server.createMarker(bytes);
+    return WebDavResponseMetadata(
+      statusCode: 201,
+      uri: metadata.uri,
+      headers: const <String, String>{},
+      serverDate: metadata.serverDate,
+    );
+  }
+
+  @override
+  Future<WebDavResponseMetadata> overwriteRootKey(Uint8List bytes) async {
+    events.add('overwrite:key');
+    server.rootKey = Uint8List.fromList(bytes);
+    return metadata;
   }
 }

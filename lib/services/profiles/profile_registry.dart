@@ -1289,6 +1289,7 @@ class ProfileRegistry {
   Future<void> commitActivation({
     required String targetProfileId,
     bool completeOnboarding = false,
+    void Function()? onAuthorityCommitted,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
@@ -1330,6 +1331,10 @@ class ProfileRegistry {
         throw StateError('Device state is not initialized');
       }
     });
+    // SQLite authority is durable at transaction return. Keep this callback
+    // synchronous and fast (callers only set handoff state) so failures from
+    // the recovery checkpoint below are classified as post-commit.
+    onAuthorityCommitted?.call();
     await checkpointTvOsRecovery();
   }
 

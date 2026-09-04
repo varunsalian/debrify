@@ -400,6 +400,54 @@ void main() {
     expect((await registry.activeProfile())?.id, newId);
     expect((await registry.getProfile(newId))?.setupComplete, isTrue);
   });
+
+  test('checkpoint failure after activation commit is post-handoff', () async {
+    registry.authorityChangedCallback = () async {
+      if ((await registry.activeProfile())?.id == newId) {
+        throw StateError('checkpoint failed after authority commit');
+      }
+    };
+
+    await expectLater(
+      operations.handoff(
+        targetProfileId: newId,
+        completeOnboarding: false,
+        beforeCommit: () async {},
+        beforeTargetInitialize: () async {},
+      ),
+      throwsA(
+        isA<WebDavSyncPostHandoffException>().having(
+          (error) => error.error,
+          'original error',
+          isA<StateError>(),
+        ),
+      ),
+    );
+
+    expect((await registry.activeProfile())?.id, newId);
+    expect(ProfileRuntime.capture().profileId, newId);
+  });
+
+  test('activation transaction failure remains pre-handoff', () async {
+    await expectLater(
+      operations.handoff(
+        targetProfileId: newId,
+        completeOnboarding: false,
+        beforeCommit: () => registry.abortActivation(),
+        beforeTargetInitialize: () async {},
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'No activation is being prepared',
+        ),
+      ),
+    );
+
+    expect((await registry.activeProfile())?.id, oldId);
+    expect(ProfileRuntime.capture().profileId, oldId);
+  });
 }
 
 final class _BlockingActivationParticipant

@@ -1112,10 +1112,13 @@ ship-ready until §13's per-setting convergence gates pass.
   adoption. Correctness requires the provider to honor conditional PUT for the
   immutable marker (and therefore for the initial key claim). Activation also
   re-verifies the key immediately before marker creation and restarts under an
-  observed replacement, then re-verifies it after a successful 201 marker
-  commit and unconditionally repairs divergence to the marker's secret. These
-  checks narrow and converge keyfile races on quirky providers, but do not
-  make a server that ignores marker preconditions supported.
+  observed replacement, and every own-marker resume/412/read-back path repairs
+  divergence to the current marker's secret only after confirming that marker
+  still wins. These checks converge keyfile races on quirky providers; a
+  server that ignores marker preconditions remains unsupported and can fail
+  with a typed error. At each guarded commit edge they either converge the
+  observed keyfile/marker pair or reject activation instead of knowingly
+  accepting divergence.
 - M5 refuses Active when a marker has no authentic recoverable
   bootstrap-bearing manifest, when adoption's required backup fails its
   decrypt probe, carries an unknown/malformed omission, or whenever any
@@ -2409,10 +2412,12 @@ passphrase, this section supersedes them.
   back byte-identically; a 412 adopts the winner; malformed,
   missing-after-conflict, 204, or ambiguous behavior fails closed. Immediately
   before the immutable marker commit it re-reads the key and restarts candidate
-  construction under any newly observed secret. Immediately after a successful
-  201 plus marker read-back it checks again; divergence triggers the one
-  permitted unconditional keyfile overwrite and read-back, converging every
-  repairer on the immutable marker's secret. Repair failure records the typed
+  construction under any newly observed secret. Every path that observes its
+  own candidate marker already committed (resume, same-marker 412, or 201
+  read-back) rechecks the key and convergently repairs it to that marker's
+  secret. A repairer re-reads the marker before any overwrite and follows a
+  replacement winner instead of writing for a losing marker; it confirms the
+  marker again before activating. Repair/follow failure records the typed
   damaged-folder/unsupported-provider state.
   Secret adoption atomically preserves username/password/lifecycle while
   resealing the winning secret and invalidating candidate marker, device
@@ -2434,9 +2439,12 @@ passphrase, this section supersedes them.
 
 Conditional PUT support remains a server requirement: in particular, a
 provider that ignores the immutable marker's `If-None-Match: *` is unsupported.
-The pre-commit re-verification and post-commit convergent repair cover keyfile
-replacement windows around a valid marker commit; they are not a substitute
-for marker precondition enforcement.
+The pre-commit re-verification and marker-authoritative convergent repair cover
+keyfile replacement windows around every observed candidate-marker commit.
+They are not a substitute for marker precondition enforcement: a server that
+ignores both create-only preconditions may still force typed activation errors,
+but each observed race converges or refuses activation instead of knowingly
+accepting a keyfile/marker-divergent local binding.
 
 The accepted trust change is deliberate: because the at-rest secret sits next
 to the encrypted data, encryption no longer protects the user from the storage

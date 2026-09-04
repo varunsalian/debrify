@@ -734,6 +734,13 @@ final class WebDavSyncNewRootInitializer {
         final existing = await _readMarkerIfPresent(transport);
         if (existing != null) {
           if (_bytesEqual(existing.bytes, markerBytes)) {
+            final concurrent = await _repairRootKeyAfterMarkerCommitIfRequired(
+              binding: binding,
+              secrets: secrets,
+              transport: transport,
+              markerBytes: markerBytes,
+            );
+            if (concurrent != null) return concurrent;
             return _finishCandidate(
               binding: binding,
               namespace: namespace,
@@ -768,6 +775,13 @@ final class WebDavSyncNewRootInitializer {
           if (error.kind != WebDavErrorKind.preconditionFailed) rethrow;
           final winner = await transport.readRootMarker();
           if (_bytesEqual(winner.bytes, markerBytes)) {
+            final concurrent = await _repairRootKeyAfterMarkerCommitIfRequired(
+              binding: binding,
+              secrets: secrets,
+              transport: transport,
+              markerBytes: markerBytes,
+            );
+            if (concurrent != null) return concurrent;
             return _finishCandidate(
               binding: binding,
               namespace: namespace,
@@ -795,11 +809,13 @@ final class WebDavSyncNewRootInitializer {
             markerBytes: committed.bytes,
           );
         }
-        await _repairRootKeyAfterMarkerCommitIfRequired(
+        final concurrent = await _repairRootKeyAfterMarkerCommitIfRequired(
           binding: binding,
           secrets: secrets,
           transport: transport,
+          markerBytes: markerBytes,
         );
+        if (concurrent != null) return concurrent;
         return _finishCandidate(
           binding: binding,
           namespace: namespace,
@@ -1068,30 +1084,65 @@ final class WebDavSyncNewRootInitializer {
     }
   }
 
-  Future<void> _repairRootKeyAfterMarkerCommitIfRequired({
+  Future<WebDavSyncInitializationOutcome?>
+  _repairRootKeyAfterMarkerCommitIfRequired({
     required WebDavSyncBinding binding,
     required WebDavSyncSecrets secrets,
     required WebDavSyncActivationTransport transport,
+    required Uint8List markerBytes,
   }) async {
     try {
+      final markerBeforeRepair = await transport.readRootMarker();
+      if (!_bytesEqual(markerBeforeRepair.bytes, markerBytes)) {
+        // The marker is the committed authority. A server that replaced it
+        // despite create-only semantics made this candidate a loser, so
+        // follow the winner and never overwrite circle.key on its behalf.
+        return await _followConcurrentRoot(
+          binding: binding,
+          secrets: secrets,
+          transport: transport,
+          markerBytes: markerBeforeRepair.bytes,
+        );
+      }
       final current = _parseClaimedRootKey(
         (await _readClaimedRootKey(transport)).bytes,
       );
-      if (current.syncPassphrase == secrets.syncPassphrase) return;
-      final repair = transport;
-      if (repair is! WebDavSyncCommittedRootKeyRepairTransport) {
-        throw const WebDavSyncRootKeyClaimException();
+      if (current.syncPassphrase != secrets.syncPassphrase) {
+        final markerBeforeOverwrite = await transport.readRootMarker();
+        if (!_bytesEqual(markerBeforeOverwrite.bytes, markerBytes)) {
+          return await _followConcurrentRoot(
+            binding: binding,
+            secrets: secrets,
+            transport: transport,
+            markerBytes: markerBeforeOverwrite.bytes,
+          );
+        }
+        final repair = transport;
+        if (repair is! WebDavSyncCommittedRootKeyRepairTransport) {
+          throw const WebDavSyncRootKeyClaimException();
+        }
+        final expected = WebDavSyncRootKeyFile(
+          syncPassphrase: secrets.syncPassphrase,
+        ).encode();
+        await (repair as WebDavSyncCommittedRootKeyRepairTransport)
+            .overwriteRootKey(expected);
+        final verified = await _readClaimedRootKey(transport);
+        if (!_bytesEqual(verified.bytes, expected)) {
+          throw const WebDavSyncRootKeyClaimException();
+        }
+        _parseClaimedRootKey(verified.bytes);
       }
-      final expected = WebDavSyncRootKeyFile(
-        syncPassphrase: secrets.syncPassphrase,
-      ).encode();
-      await (repair as WebDavSyncCommittedRootKeyRepairTransport)
-          .overwriteRootKey(expected);
-      final verified = await _readClaimedRootKey(transport);
-      if (!_bytesEqual(verified.bytes, expected)) {
-        throw const WebDavSyncRootKeyClaimException();
+
+      final markerAfterRepair = await transport.readRootMarker();
+      if (!_bytesEqual(markerAfterRepair.bytes, markerBytes)) {
+        return await _followConcurrentRoot(
+          binding: binding,
+          secrets: secrets,
+          transport: transport,
+          markerBytes: markerAfterRepair.bytes,
+        );
       }
-      _parseClaimedRootKey(verified.bytes);
+      return null;
     } on Object {
       const failure = WebDavSyncRootKeyClaimException();
       try {

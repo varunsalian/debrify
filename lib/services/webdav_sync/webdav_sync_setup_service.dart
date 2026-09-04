@@ -413,6 +413,18 @@ final class WebDavSyncSetupService {
     if (sameAsActive && opened.document.circleId != prior?.circleId) {
       throw const WebDavSyncRootChangedException();
     }
+    if (preserveActive) {
+      final markerPin = prior == null
+          ? null
+          : snapshot.namespaceFor(prior)?.markerBytes;
+      if (markerPin == null ||
+          !_bytesEqual(markerPin, inspection.markerBytes)) {
+        // Never reseal replacement credentials beneath an old marker pin.
+        // A legitimate marker change must use reconnect verification, which
+        // republishes the pin and secrets together.
+        throw const WebDavSyncRootChangedException();
+      }
+    }
     final binding = await store.stageBinding(
       location: inspection.location,
       config: inspection.config,
