@@ -708,6 +708,15 @@ Future<void> _continueApplicationStartup() async {
   try {
     await TvosDevice.warm();
   } catch (_) {}
+  // Recovery, preference migrations, and platform gates are now ready.
+  // Overlap launch sync with the remaining UI preparation without awaiting
+  // network work or extending the splash's readiness condition.
+  final applicationReady = Completer<void>();
+  unawaited(
+    WebDavSyncRuntime.instance.signalLaunch(
+      applicationReady: applicationReady.future,
+    ),
+  );
   // Resolve TV hero decode bounds before first paint. Otherwise a stored Full
   // HD choice would first decode the default smaller image, then immediately
   // throw it away and upload a second texture when the async preference lands.
@@ -730,7 +739,7 @@ Future<void> _continueApplicationStartup() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
-  unawaited(WebDavSyncRuntime.instance.signalLaunch());
+  applicationReady.complete();
   // Desktop scheduled recordings (Tier 1: fire while the app is running).
   // Arms stored timers + late-joins anything already in its window; no-op on
   // non-desktop platforms.

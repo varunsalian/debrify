@@ -1006,6 +1006,119 @@ void main() {
     },
   );
 
+  test(
+    'active profile applies before earlier mapped background profiles',
+    () async {
+      local.activeProfileId = 'local-profile';
+      await runFixture(
+        context(
+          profiles: const {
+            'background-circle': 'background-local',
+            'profile-circle': 'local-profile',
+            'last-circle': 'last-local',
+          },
+        ),
+      );
+      expect(
+        local.events.where((event) => event.startsWith('apply:')).toList(),
+        ['apply:local-profile', 'apply:background-local', 'apply:last-local'],
+      );
+    },
+  );
+
+  for (final uploadFails in [false, true]) {
+    test(
+      'library refresh precedes uploads and is not repeated (failure=$uploadFails)',
+      () async {
+        final adapter = _FakeLibraryLocalAdapter(
+          <String, Object?>{'theme': 'dark'},
+          document: WebDavSyncLibraryDocument(
+            circleProfileId: 'profile-circle',
+            records: const {},
+          ),
+        )..activeProfileId = 'local-profile';
+        final notifications = <Set<String>>[];
+        final writesAtRefresh = <int>[];
+        final pendingAtRefresh = <bool>[];
+        engine = WebDavSyncEngine(
+          stateRepository: states,
+          localAdapter: adapter,
+          transportFactory: (_) => transport,
+          codec: codec,
+          clock: () => now,
+          appliedKeysCallback: (profileId, keys) {
+            notifications.add(keys);
+            writesAtRefresh.add(transport.writeCount);
+            pendingAtRefresh.add(
+              states.state.profiles['profile-circle']!.pendingLibraryApply !=
+                  null,
+            );
+          },
+        );
+        if (uploadFails) {
+          transport.sectionWriteFailure = const WebDavException(
+            kind: WebDavErrorKind.authentication,
+            message: 'simulated upload rejection',
+            statusCode: 401,
+          );
+          transport.corruptSectionOnWriteFailure = true;
+          await expectLater(
+            runFixture(context()),
+            throwsA(isA<WebDavException>()),
+          );
+        } else {
+          await runFixture(context());
+        }
+        expect(notifications, hasLength(1));
+        expect(notifications.single, contains('catalog/hidden'));
+        expect(writesAtRefresh, [0]);
+        expect(pendingAtRefresh, [false]);
+        expect(adapter.appliedLibraries, hasLength(1));
+      },
+    );
+  }
+
+  test(
+    'active profile refresh arrives while another profile is still loading',
+    () async {
+      local.activeProfileId = 'local-profile';
+      final backgroundRead = Completer<void>();
+      final releaseBackground = Completer<void>();
+      local.beforeProfileRead = () async {
+        if (local.events.last == 'read:background-local') {
+          backgroundRead.complete();
+          await releaseBackground.future;
+        }
+      };
+      final refreshedProfiles = <String>[];
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+        appliedKeysCallback: (profileId, _) => refreshedProfiles.add(profileId),
+      );
+      final cycle = runFixture(
+        context(
+          profiles: const {
+            'background-circle': 'background-local',
+            'profile-circle': 'local-profile',
+          },
+        ),
+      );
+      try {
+        await backgroundRead.future.timeout(const Duration(seconds: 5));
+        expect(refreshedProfiles, ['local-profile']);
+        expect(transport.writeCount, 0);
+      } finally {
+        releaseBackground.complete();
+        await cycle;
+      }
+      expect(refreshedProfiles, ['local-profile', 'background-local']);
+    },
+  );
+
   test('active-profile apply dispatches mapped UI callbacks once', () async {
     ProfileRuntime.initializeCommitted(
       ProfileScope(

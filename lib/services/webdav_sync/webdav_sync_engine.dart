@@ -1434,7 +1434,15 @@ final class WebDavSyncEngine
       }
       final profileResults = <String, _ProfileCycleResult>{};
       var profilesApplied = 0;
-      for (final mapping in identityMaps.circleToLocalProfiles.entries) {
+      // Refresh the visible profile before spending time on other profiles.
+      // Preserve the existing order among all remaining mappings.
+      final activeProfileId = session.scope.profileId;
+      final profileMappings = identityMaps.circleToLocalProfiles.entries;
+      final orderedProfiles = [
+        ...profileMappings.where((entry) => entry.value == activeProfileId),
+        ...profileMappings.where((entry) => entry.value != activeProfileId),
+      ];
+      for (final mapping in orderedProfiles) {
         final circleProfileId = mapping.key;
         final localProfileId = mapping.value;
         // Circle mappings and nullable leaves are retained indefinitely, but
@@ -1713,6 +1721,12 @@ final class WebDavSyncEngine
           );
         } finally {
           instrumentation.finishPhase(_CyclePhase.mergeApply, phaseStarted);
+          // The incoming profile batch is durable. Let Home observe it before
+          // other profiles, outbound uploads, or remote cleanup finish.
+          _publishAppliedKeys(
+            appliedKeysByLocalProfile,
+            localProfileId: localProfileId,
+          );
         }
       }
 
@@ -3716,8 +3730,20 @@ final class WebDavSyncEngine
     );
   }
 
-  void _publishAppliedKeys(Map<String, Set<String>> appliedKeysByLocalProfile) {
-    for (final entry in appliedKeysByLocalProfile.entries) {
+  void _publishAppliedKeys(
+    Map<String, Set<String>> appliedKeysByLocalProfile, {
+    String? localProfileId,
+  }) {
+    // Drain before dispatch so the cycle's final fallback cannot notify twice.
+    final ready = <String, Set<String>>{};
+    if (localProfileId == null) {
+      ready.addAll(appliedKeysByLocalProfile);
+      appliedKeysByLocalProfile.clear();
+    } else {
+      final keys = appliedKeysByLocalProfile.remove(localProfileId);
+      if (keys != null) ready[localProfileId] = keys;
+    }
+    for (final entry in ready.entries) {
       try {
         _appliedKeysCallback(entry.key, Set<String>.unmodifiable(entry.value));
       } catch (error) {

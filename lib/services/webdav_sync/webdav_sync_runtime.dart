@@ -307,7 +307,8 @@ final class WebDavSyncRuntimeStatus {
 /// Production owner of WebDAV sync composition and trigger arming.
 /// Construction alone does no network work; [initialize] recovers durable
 /// adoption state and arms Active bindings. Remote join completion starts only
-/// after rendering, via [signalLaunch] or a foreground/reconfiguration event.
+/// via [signalLaunch] or a foreground/reconfiguration event. Pending first
+/// joins wait for the app to mount; existing bindings can start earlier.
 final class WebDavSyncRuntime
     with WidgetsBindingObserver
     implements
@@ -508,8 +509,19 @@ final class WebDavSyncRuntime
     }
   }
 
-  Future<void> signalLaunch() async {
+  /// Existing bindings can sync during final boot preparation. A pending
+  /// first join may adopt databases, so it still waits until the app is mounted.
+  Future<void> signalLaunch({Future<void>? applicationReady}) async {
     await initialize();
+    if (applicationReady != null) {
+      final stored = await bindingStore.load();
+      if (stored.stagedBinding == null &&
+          stored.activeBinding?.lifecycle == WebDavSyncLifecycle.active) {
+        await _signalAutomatically(WebDavSyncTrigger.launch);
+        return;
+      }
+      await applicationReady;
+    }
     await _resumeFirstJoin();
     await _signalAutomatically(WebDavSyncTrigger.launch);
   }

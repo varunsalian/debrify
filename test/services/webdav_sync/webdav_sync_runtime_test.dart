@@ -393,7 +393,13 @@ void main() {
         0,
         reason: 'local startup must not await network completion',
       );
-      final launch = runtime.signalLaunch();
+      final applicationReady = Completer<void>();
+      final launch = runtime.signalLaunch(
+        applicationReady: applicationReady.future,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(attempts, 0, reason: 'first join must wait for the application');
+      applicationReady.complete();
       await entered.future.timeout(const Duration(seconds: 3));
       runtime.didChangeAppLifecycleState(AppLifecycleState.resumed);
       expect(attempts, 1);
