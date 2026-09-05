@@ -626,6 +626,65 @@ void main() {
     expect(states.state.lastRemoteChangeMs, now.millisecondsSinceEpoch);
   });
 
+  test('cycle failure descriptions keep shape, never data', () {
+    expect(
+      describeWebDavSyncCycleFailure(
+        const WebDavException(
+          kind: WebDavErrorKind.transient,
+          message: 'unavailable at https://example.test/secret',
+          statusCode: 503,
+        ),
+      ),
+      'WebDavException:transient:503',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(
+        const WebDavException(
+          kind: WebDavErrorKind.network,
+          message: 'socket closed',
+        ),
+      ),
+      'WebDavException:network',
+    );
+    // Our fixed-literal assertions are worth keeping verbatim.
+    expect(
+      describeWebDavSyncCycleFailure(
+        StateError('Active WebDAV sync requires a verified local manifest'),
+      ),
+      'StateError:Active WebDAV sync requires a verified local manifest',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(
+        StateError('WebDAV sync hot/profiles identity map is inconsistent'),
+      ),
+      'StateError:WebDAV sync hot/profiles identity map is inconsistent',
+    );
+    // Anything carrying an id, path, digit, or a foreign prefix drops to the
+    // bare type.
+    expect(
+      describeWebDavSyncCycleFailure(
+        StateError('WebDAV sync circle-7f3a export omitted an identity'),
+      ),
+      'StateError',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(
+        StateError('profiles failed adoption integrity check'),
+      ),
+      'StateError',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(
+        StateError('WebDAV sync saw https://example.test/private'),
+      ),
+      'StateError',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(ArgumentError('user@example.test')),
+      'ArgumentError',
+    );
+  });
+
   test('a failed cycle records only the failure shape', () async {
     final directory = await Directory.systemTemp.createTemp(
       'debrify-webdav-cycle-failure-diagnostics-',

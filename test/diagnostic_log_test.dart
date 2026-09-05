@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:debrify/services/diagnostic_log.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -183,4 +184,47 @@ void main() {
       expect(await directory.exists(), isFalse);
     },
   );
+
+  test('a missing plugin error names its channel and method', () async {
+    // The message is Flutter's fixed format naming code constants; keeping
+    // the channel is what lets a platform gap be located from the log.
+    log.recordFlutterError(
+      FlutterErrorDetails(
+        exception: MissingPluginException(
+          'No implementation found for method listen on channel '
+          'com.example.app/some_events',
+        ),
+        stack: StackTrace.current,
+      ),
+    );
+    final exported = await log.exportLastWindow();
+    final events = const LineSplitter()
+        .convert(utf8.decode(exported.bytes))
+        .map((line) => jsonDecode(line) as Map<String, dynamic>)
+        .where((entry) => entry['event'] == 'framework_error')
+        .toList(growable: false);
+    expect(events, hasLength(1));
+    final fields = events.single['fields'] as Map<String, dynamic>;
+    expect(fields['errorType'], 'MissingPluginException');
+    // Labels pass through the log's sanitizer, which maps '/' to '_'; the
+    // result still names the channel unambiguously.
+    expect(fields['channel'], 'com.example.app_some_events');
+    expect(fields['method'], 'listen');
+
+    // Any other framework error stays exactly as before: no channel field.
+    log.recordFlutterError(
+      FlutterErrorDetails(
+        exception: StateError('unrelated'),
+        stack: StackTrace.current,
+      ),
+    );
+    final again = await log.exportLastWindow();
+    final second = const LineSplitter()
+        .convert(utf8.decode(again.bytes))
+        .map((line) => jsonDecode(line) as Map<String, dynamic>)
+        .where((entry) => entry['event'] == 'framework_error')
+        .last['fields'] as Map<String, dynamic>;
+    expect(second.containsKey('channel'), isFalse);
+    expect(second.containsKey('method'), isFalse);
+  });
 }

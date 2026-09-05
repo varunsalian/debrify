@@ -3992,6 +3992,31 @@ enum _CyclePhase {
   readBack,
 }
 
+/// The shape of a failed cycle, and nothing more.
+///
+/// A WebDAV error contributes its kind and HTTP status. Our own assertions
+/// are fixed literals ("WebDAV sync … is invalid"), so a StateError whose
+/// message is made of plain words keeps it; anything carrying an id, path,
+/// or digit falls back to the bare type. Messages, URIs, and bodies of any
+/// other error never reach the diagnostic store. Two consecutive launch
+/// failures in the field were unexplainable with the type alone.
+@visibleForTesting
+String describeWebDavSyncCycleFailure(Object error) {
+  if (error is WebDavException) {
+    final status = error.statusCode;
+    return 'WebDavException:${error.kind.name}'
+        '${status == null ? '' : ':$status'}';
+  }
+  if (error is StateError && _literalStateErrorMessage.hasMatch(error.message)) {
+    return 'StateError:${error.message}';
+  }
+  return error.runtimeType.toString();
+}
+
+final RegExp _literalStateErrorMessage = RegExp(
+  r'^(Active )?WebDAV sync [A-Za-z ,/-]+$',
+);
+
 final class _CycleInstrumentation {
   _CycleInstrumentation(this.trigger) : _stopwatch = Stopwatch()..start();
 
@@ -4019,14 +4044,8 @@ final class _CycleInstrumentation {
   /// The failure's shape only. A WebDAV error contributes its kind and HTTP
   /// status; everything else contributes just its type. Messages, URIs, and
   /// bodies never reach the diagnostic store.
-  static String describeFailure(Object error) {
-    if (error is WebDavException) {
-      final status = error.statusCode;
-      return 'WebDavException:${error.kind.name}'
-          '${status == null ? '' : ':$status'}';
-    }
-    return error.runtimeType.toString();
-  }
+  static String describeFailure(Object error) =>
+      describeWebDavSyncCycleFailure(error);
 
   void finishPhase(_CyclePhase phase, int startedAtUs) {
     final elapsedUs = _stopwatch.elapsedMicroseconds - startedAtUs;

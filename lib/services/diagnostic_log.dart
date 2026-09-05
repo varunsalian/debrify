@@ -169,11 +169,28 @@ class DiagnosticLog {
         event: _safeLabel(event),
         fields: <String, Object?>{
           'errorType': _safeLabel(error.runtimeType.toString()),
+          ..._pluginChannelFields(error),
           'stack': _safeStack(stackTrace),
         },
       ),
       flushImmediately: flushImmediately,
     );
+  }
+
+  /// A MissingPluginException names a code constant, never data: its message
+  /// is the fixed "No implementation found for method X on channel Y". Keep
+  /// the channel and method so a platform gap can be located from the log
+  /// instead of guessed at from a stack that only shows framework frames.
+  static Map<String, Object?> _pluginChannelFields(Object error) {
+    if (error is! MissingPluginException) return const <String, Object?>{};
+    final match = RegExp(
+      r'method ([A-Za-z0-9_.]+) on channel ([A-Za-z0-9_./:-]+)$',
+    ).firstMatch(error.message ?? '');
+    if (match == null) return const <String, Object?>{};
+    return <String, Object?>{
+      'method': _safeLabel(match.group(1)!),
+      'channel': _safeLabel(match.group(2)!),
+    };
   }
 
   void recordFlutterError(FlutterErrorDetails details) {
@@ -185,6 +202,7 @@ class DiagnosticLog {
         event: 'framework_error',
         fields: <String, Object?>{
           'errorType': _safeLabel(details.exception.runtimeType.toString()),
+          ..._pluginChannelFields(details.exception),
           'stack': _safeStack(details.stack ?? StackTrace.current),
         },
       ),
