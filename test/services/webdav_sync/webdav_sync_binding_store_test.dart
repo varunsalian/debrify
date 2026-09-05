@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:debrify/models/webdav_item.dart';
@@ -37,6 +38,89 @@ void main() {
     DeviceKeyProvider.debugReset();
     ProfilePreferenceBudget.debugReset();
   });
+
+  test(
+    'load rewrites legacy assembled pins without retaining the secret',
+    () async {
+      final marker = Uint8List.fromList([1, 2, 3]);
+      final authority = WebDavSyncAuthorityFile(
+        markerBytes: marker,
+        syncPassphrase: 'legacy-circle-secret',
+      ).encode();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        WebDavSyncBindingStore.storageKey,
+        jsonEncode({
+          'version': 1,
+          'bindings': {},
+          'namespaces': {
+            'circle:legacy': {
+              'id': 'circle:legacy',
+              'deviceId': 'device-legacy',
+              'markerBytes': base64Encode(authority),
+            },
+          },
+        }),
+      );
+      final loaded = await store.load();
+      final namespace = loaded.namespaces['circle:legacy']!;
+      expect(namespace.markerBytes, orderedEquals(marker));
+      expect(namespace.matchesAuthority(authority), isTrue);
+      final rewritten = prefs.getString(WebDavSyncBindingStore.storageKey)!;
+      final rawPin =
+          (jsonDecode(rewritten)['namespaces']['circle:legacy']['markerBytes'])
+              as String;
+      expect(base64Decode(rawPin), orderedEquals(marker));
+      expect(
+        utf8.decode(base64Decode(rawPin), allowMalformed: true),
+        isNot(contains('legacy-circle-secret')),
+      );
+      expect(rewritten, isNot(contains(base64Encode(authority))));
+      await store.load();
+      expect(prefs.getString(WebDavSyncBindingStore.storageKey), rewritten);
+    },
+  );
+
+  test(
+    'cycle pin checks accept both shapes but reject different authority content',
+    () {
+      final marker = Uint8List.fromList([1, 2, 3]);
+      final authority = WebDavSyncAuthorityFile(
+        markerBytes: marker,
+        syncPassphrase: 'circle-secret',
+      ).encode();
+      final other = WebDavSyncAuthorityFile(
+        markerBytes: marker,
+        syncPassphrase: 'different-secret',
+      ).encode();
+      final namespace = WebDavSyncNamespace(
+        id: 'circle:test',
+        deviceId: 'device-test',
+        markerBytes: marker,
+        authorityContentHash: webDavSyncAuthorityHash(authority),
+      );
+      expect(
+        namespace.matchesAuthorityPin(authority, namespace.pinnedAuthorityHash),
+        isTrue,
+      );
+      expect(
+        namespace.matchesAuthorityPin(marker, namespace.pinnedAuthorityHash),
+        isTrue,
+      );
+      expect(
+        namespace.matchesAuthorityPin(other, namespace.pinnedAuthorityHash),
+        isFalse,
+      );
+      expect(
+        namespace.matchesAuthorityPin(marker, webDavSyncAuthorityHash(other)),
+        isFalse,
+      );
+      expect(
+        namespace.matchesAuthorityPin(null, namespace.pinnedAuthorityHash),
+        isFalse,
+      );
+    },
+  );
 
   test(
     'credentials are device-sealed and candidate identity is stable',

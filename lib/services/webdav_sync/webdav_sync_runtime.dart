@@ -1728,8 +1728,10 @@ final class _ProductionCycleRunner
         namespace == null ||
         binding.circleId != context.root?.document.circleId ||
         namespace.deviceId != context.deviceId ||
-        (!_sameBytes(namespace.markerBytes, context.markerPin) ||
-            namespace.pinnedAuthorityHash != context.authorityContentHash)) {
+        !namespace.matchesAuthorityPin(
+          context.markerPin,
+          context.authorityContentHash,
+        )) {
       return const WebDavSyncTvManualReport(
         disposition: WebDavSyncTvManualDisposition.inactive,
       );
@@ -1812,8 +1814,10 @@ final class _ProductionCycleRunner
         namespace == null ||
         binding.circleId != context.root?.document.circleId ||
         namespace.deviceId != context.deviceId ||
-        (!_sameBytes(namespace.markerBytes, context.markerPin) ||
-            namespace.pinnedAuthorityHash != context.authorityContentHash)) {
+        !namespace.matchesAuthorityPin(
+          context.markerPin,
+          context.authorityContentHash,
+        )) {
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
@@ -1867,17 +1871,6 @@ final class _ProductionCycleRunner
       _authenticationFailures.recordSuccess(binding.id);
       rethrow;
     }
-  }
-
-  static bool _sameBytes(List<int>? left, List<int>? right) {
-    if (left == null || right == null || left.length != right.length) {
-      return false;
-    }
-    var difference = 0;
-    for (var index = 0; index < left.length; index++) {
-      difference |= left[index] ^ right[index];
-    }
-    return difference == 0;
   }
 }
 

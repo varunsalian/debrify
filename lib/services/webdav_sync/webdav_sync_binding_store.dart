@@ -63,7 +63,9 @@ final class WebDavSyncBindingStore {
   final Uint8List Function(int length) _randomBytes;
   final String _storageKey;
 
-  Future<WebDavSyncStoreSnapshot> load() async {
+  Future<WebDavSyncStoreSnapshot> load() => _load();
+
+  Future<WebDavSyncStoreSnapshot> _load({bool writeLocked = false}) async {
     final device = await DevicePreferences.instance();
     final encoded = device.getString(_storageKey);
     if (encoded == null || encoded.isEmpty) {
@@ -76,7 +78,22 @@ final class WebDavSyncBindingStore {
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('WebDAV sync state must be an object');
     }
-    return WebDavSyncStoreSnapshot.fromJson(decoded);
+    final snapshot = WebDavSyncStoreSnapshot.fromJson(decoded);
+    final rawNamespaces = decoded['namespaces'] as Map;
+    final hasLegacyPin = snapshot.namespaces.entries.any((entry) {
+      final raw = rawNamespaces[entry.key] as Map;
+      final marker = entry.value.markerBytes;
+      return marker != null && raw['markerBytes'] != base64Encode(marker);
+    });
+    if (hasLegacyPin) {
+      if (!writeLocked) {
+        return _writeLock.synchronized(() => _load(writeLocked: true));
+      }
+      // Serialize with all other store writes so migration cannot restore stale
+      // bindings. fromJson has already removed the assembled authority secret.
+      await _save(snapshot);
+    }
+    return snapshot;
   }
 
   Future<WebDavSyncBinding> stageBinding({
@@ -90,7 +107,7 @@ final class WebDavSyncBindingStore {
   }) => _writeLock.synchronized(() async {
     _requireVault();
     WebDavSyncCodec.validatePassphrase(syncPassphrase);
-    final snapshot = await load();
+    final snapshot = await _load(writeLocked: true);
     final id = location.fingerprint;
     final existing = snapshot.bindings[id];
     final namespaceId = existing?.namespaceId ?? 'candidate:$id';
@@ -207,7 +224,7 @@ final class WebDavSyncBindingStore {
         markerBytes.length > WebDavSyncAuthorityFile.maxBytes) {
       throw ArgumentError('Invalid WebDAV sync marker size');
     }
-    final snapshot = await load();
+    final snapshot = await _load(writeLocked: true);
     final binding = _requireBinding(snapshot, bindingId);
     final previousNamespace = _requireNamespace(snapshot, binding);
     final namespaceId = 'circle:${root.circleId}';
@@ -285,7 +302,7 @@ final class WebDavSyncBindingStore {
         authorityBytes.length > WebDavSyncAuthorityFile.maxBytes) {
       throw ArgumentError('Invalid WebDAV sync authority size');
     }
-    final snapshot = await load();
+    final snapshot = await _load(writeLocked: true);
     final binding = _requireBinding(snapshot, bindingId);
     final namespace = _requireNamespace(snapshot, binding);
     if (snapshot.activeBindingId != bindingId ||
@@ -380,7 +397,7 @@ final class WebDavSyncBindingStore {
   /// device still points at the previous folder (or at no folder at all).
   Future<WebDavSyncBinding> activateAndPromoteStaged(String bindingId) =>
       _writeLock.synchronized(() async {
-        final snapshot = await load();
+        final snapshot = await _load(writeLocked: true);
         final binding = _requireBinding(snapshot, bindingId);
         if (snapshot.stagedBindingId != bindingId || binding.circleId == null) {
           throw StateError('Only a verified staged binding can be activated');
@@ -416,7 +433,7 @@ final class WebDavSyncBindingStore {
   /// and pointer promotion across two saves.
   Future<void> promoteStaged(String bindingId) =>
       _writeLock.synchronized(() async {
-        final snapshot = await load();
+        final snapshot = await _load(writeLocked: true);
         final binding = _requireBinding(snapshot, bindingId);
         if (snapshot.stagedBindingId != bindingId ||
             binding.lifecycle != WebDavSyncLifecycle.active) {
@@ -447,7 +464,7 @@ final class WebDavSyncBindingStore {
   /// is durable. A retained intent is deliberately restart-recoverable.
   Future<void> acknowledgeOnboardingIntent(String bindingId) =>
       _writeLock.synchronized(() async {
-        final snapshot = await load();
+        final snapshot = await _load(writeLocked: true);
         final binding = _requireBinding(snapshot, bindingId);
         if (snapshot.activeBindingId != bindingId ||
             binding.lifecycle != WebDavSyncLifecycle.active) {
@@ -475,7 +492,7 @@ final class WebDavSyncBindingStore {
 
   Future<void> _discardStaged({String? expectedBindingId}) =>
       _writeLock.synchronized(() async {
-        final snapshot = await load();
+        final snapshot = await _load(writeLocked: true);
         final stagedId = snapshot.stagedBindingId;
         if (stagedId == null ||
             expectedBindingId != null && stagedId != expectedBindingId) {
@@ -543,7 +560,7 @@ final class WebDavSyncBindingStore {
   }) => _writeLock.synchronized(() async {
     _requireVault();
     WebDavSyncCodec.validatePassphrase(syncPassphrase);
-    final snapshot = await load();
+    final snapshot = await _load(writeLocked: true);
     final binding = _requireBinding(snapshot, bindingId);
     final secrets = await readSecrets(binding);
     if (secrets.syncPassphrase == syncPassphrase && !resetCandidate) {
@@ -601,7 +618,7 @@ final class WebDavSyncBindingStore {
     String namespaceId,
     Map<String, Object?> Function(Map<String, Object?> current) update,
   ) => _writeLock.synchronized(() async {
-    final snapshot = await load();
+    final snapshot = await _load(writeLocked: true);
     final namespace =
         snapshot.namespaces[namespaceId] ??
         (throw StateError('WebDAV sync namespace is unavailable'));
@@ -633,7 +650,7 @@ final class WebDavSyncBindingStore {
     update, {
     Future<void> Function()? beforeSave,
   }) => _writeLock.synchronized(() async {
-    final snapshot = await load();
+    final snapshot = await _load(writeLocked: true);
     final binding = _requireBinding(snapshot, bindingId);
     final namespace = _requireNamespace(snapshot, binding);
     final result = update(snapshot, binding, namespace);

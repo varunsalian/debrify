@@ -1,3 +1,4 @@
+import 'connector_test_fakes.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,23 +7,17 @@ import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
-import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_discovery.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_existing_root_connector.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_manifest_publisher.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,7 +37,7 @@ void main() {
   late WebDavSyncBindingStore bindingStore;
   late WebDavSyncBinding binding;
   late WebDavSyncExistingRootSnapshot snapshot;
-  late _MemoryStateRepository states;
+  late ConnectorMemoryStateRepository states;
   late List<String> events;
 
   setUpAll(() {
@@ -108,15 +103,19 @@ void main() {
       randomBytes: (length) =>
           Uint8List.fromList(List<int>.generate(length, (index) => index)),
     );
-    final marker = await codec.sealRoot(
+    final innerMarker = await codec.sealRoot(
       passphrase: 'circle-secret',
       circleId: 'circle-existing',
       createdAt: DateTime.utc(2026, 9, 1),
       memoryKiB: 8,
       iterations: 1,
     );
+    final marker = WebDavSyncAuthorityFile(
+      markerBytes: innerMarker,
+      syncPassphrase: 'circle-secret',
+    ).encode();
     final root = await codec.openRoot(
-      marker,
+      innerMarker,
       'circle-secret',
       runInBackground: false,
     );
@@ -184,7 +183,7 @@ void main() {
       ),
       schemaRatchet: 1,
     );
-    states = _MemoryStateRepository();
+    states = ConnectorMemoryStateRepository();
     events = <String>[];
   });
 
@@ -197,17 +196,17 @@ void main() {
   });
 
   WebDavSyncExistingRootConnector connector({
-    _FakeAdoption? adoption,
-    _FakePublisher? publisher,
-    _FakeEngine? engine,
+    ConnectorFakeAdoption? adoption,
+    ConnectorFakePublisher? publisher,
+    ConnectorPinCheckingEngine? engine,
   }) {
     return WebDavSyncExistingRootConnector(
       bindingStore: bindingStore,
       stateRepository: states,
-      discovery: _FakeDiscovery(snapshot, events),
-      adoption: adoption ?? _FakeAdoption(states, events),
-      publisher: publisher ?? _FakePublisher(states, snapshot, events),
-      engine: engine ?? _FakeEngine(events),
+      discovery: ConnectorFakeDiscovery(snapshot, events),
+      adoption: adoption ?? ConnectorFakeAdoption(states, events),
+      publisher: publisher ?? ConnectorFakePublisher(states, snapshot, events),
+      engine: engine ?? ConnectorPinCheckingEngine(bindingStore, events),
       preferenceFenceRetrySpacing: Duration.zero,
     );
   }
@@ -227,30 +226,82 @@ void main() {
     expect((await bindingStore.load()).activeBindingId, isNull);
   });
 
-  test('legacy graph reference is ignored after bootstrap adoption', () async {
-    var recaptures = 0;
+  test(
+    'merged-authority JOIN completes first merge and promotes staged binding',
+    () async {
+      expect(
+        snapshot.markerBytes,
+        isNot(orderedEquals(snapshot.namespace.markerBytes!)),
+      );
+      expect(
+        webDavSyncAuthorityHash(snapshot.markerBytes),
+        snapshot.namespace.pinnedAuthorityHash,
+      );
+      var recaptures = 0;
 
-    final active = await connector().connect(
-      bindingId: binding.id,
-      authorization: authorization,
-      recaptureAuthorization: () async {
-        recaptures++;
-        return authorization;
-      },
-      replacementConfirmed: true,
-    );
+      final active = await connector().connect(
+        bindingId: binding.id,
+        authorization: authorization,
+        recaptureAuthorization: () async {
+          recaptures++;
+          return authorization;
+        },
+        replacementConfirmed: true,
+      );
 
-    expect(active.lifecycle, WebDavSyncLifecycle.active);
-    expect(events, <String>['discover', 'adopt:firstJoin', 'publish', 'merge']);
-    expect(recaptures, 1);
-    expect(snapshot.bootstrap.manifest.section('graph'), isNotNull);
-    expect((await bindingStore.load()).activeBindingId, binding.id);
-  });
+      expect(active.lifecycle, WebDavSyncLifecycle.active);
+      expect(events, <String>[
+        'discover',
+        'adopt:firstJoin',
+        'publish',
+        'merge',
+      ]);
+      expect(recaptures, 1);
+      expect(snapshot.bootstrap.manifest.section('graph'), isNotNull);
+      expect((await bindingStore.load()).activeBindingId, binding.id);
+    },
+  );
+
+  test(
+    'different authority at first merge remains inactive and cannot promote',
+    () async {
+      final other = WebDavSyncAuthorityFile(
+        markerBytes: snapshot.namespace.markerBytes!,
+        syncPassphrase: 'different-circle-secret',
+      ).encode();
+      await bindingStore.markRootVerified(
+        bindingId: binding.id,
+        root: snapshot.root.document,
+        markerBytes: other,
+        allowPinReplacement: true,
+      );
+      // The mismatch surfaces after adoption committed profile authority, so
+      // the connector wraps the first-merge failure as post-handoff — the
+      // classification that keeps onboarding from closing as a false success.
+      await expectLater(
+        connector().connect(
+          bindingId: binding.id,
+          authorization: authorization,
+          recaptureAuthorization: () async => authorization,
+          replacementConfirmed: true,
+        ),
+        throwsA(
+          isA<WebDavSyncPostHandoffException>().having(
+            (error) => error.error,
+            'wrapped error',
+            isA<StateError>(),
+          ),
+        ),
+      );
+      expect(events, contains('merge'));
+      expect((await bindingStore.load()).activeBindingId, isNull);
+    },
+  );
 
   test(
     'first join forwards the persisted onboarding intent to adoption',
     () async {
-      final adoption = _FakeAdoption(states, events);
+      final adoption = ConnectorFakeAdoption(states, events);
 
       await connector(adoption: adoption).connect(
         bindingId: binding.id,
@@ -285,8 +336,8 @@ void main() {
   test(
     'preference fence misses twice then completes without repeating adoption',
     () async {
-      final adoption = _FakeAdoption(states, events);
-      final publisher = _FakePublisher(
+      final adoption = ConnectorFakeAdoption(states, events);
+      final publisher = ConnectorFakePublisher(
         states,
         snapshot,
         events,
@@ -313,14 +364,14 @@ void main() {
   test(
     'five preference fence misses leave adoption resumable without throwing',
     () async {
-      final adoption = _FakeAdoption(states, events);
-      final publisher = _FakePublisher(
+      final adoption = ConnectorFakeAdoption(states, events);
+      final publisher = ConnectorFakePublisher(
         states,
         snapshot,
         events,
         conflictsRemaining: 99,
       );
-      final engine = _FakeEngine(events);
+      final engine = ConnectorPinCheckingEngine(bindingStore, events);
 
       final result =
           await connector(
@@ -347,8 +398,12 @@ void main() {
   );
 
   test('pre-activation merge retries only its fenced cycle', () async {
-    final adoption = _FakeAdoption(states, events);
-    final engine = _FakeEngine(events, conflictsRemaining: 2);
+    final adoption = ConnectorFakeAdoption(states, events);
+    final engine = ConnectorPinCheckingEngine(
+      bindingStore,
+      events,
+      conflictsRemaining: 2,
+    );
 
     final active = await connector(adoption: adoption, engine: engine).connect(
       bindingId: binding.id,
@@ -423,178 +478,3 @@ WebDavSyncAdoptionRecord _adoptionRecord() => WebDavSyncAdoptionRecord(
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   backupVerified: true,
 );
-
-final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
-  WebDavSyncEngineState state = const WebDavSyncEngineState();
-
-  @override
-  Future<WebDavSyncEngineState> load(String namespaceId) async => state;
-
-  @override
-  Future<WebDavSyncEngineState> update(
-    String namespaceId,
-    WebDavSyncEngineState Function(WebDavSyncEngineState current) update,
-  ) async => state = update(state);
-}
-
-final class _FakeDiscovery implements WebDavSyncExistingRootDiscoverer {
-  const _FakeDiscovery(this.snapshot, this.events);
-
-  final WebDavSyncExistingRootSnapshot snapshot;
-  final List<String> events;
-
-  @override
-  Future<WebDavSyncExistingRootSnapshot> discover({
-    required String bindingId,
-  }) async {
-    events.add('discover');
-    return snapshot;
-  }
-}
-
-final class _FakeAdoption implements WebDavSyncAdoptionRunner {
-  _FakeAdoption(this.states, this.events);
-
-  final _MemoryStateRepository states;
-  final List<String> events;
-  int restoreCalls = 0;
-  int copyForwardCalls = 0;
-  int mapMintCalls = 0;
-  bool? completeOnboarding;
-
-  @override
-  Future<WebDavSyncAdoptionRecord> adopt(
-    WebDavSyncAdoptionRequest request,
-  ) async {
-    events.add('adopt:${request.mode.name}');
-    completeOnboarding = request.completeOnboarding;
-    restoreCalls++;
-    copyForwardCalls++;
-    mapMintCalls++;
-    await states.update(
-      request.namespaceId,
-      (current) => current.copyWith(
-        circleToLocalProfiles: const <String, String>{
-          'profile-circle': 'local-profile',
-        },
-        circleToLocalResources: const <String, String>{},
-      ),
-    );
-    return WebDavSyncAdoptionRecord(
-      adoptionId: 'adoption-test',
-      mode: request.mode,
-      phase: WebDavSyncAdoptionPhase.complete,
-      graphSemanticDigest: request.graphSemanticDigest,
-      preRestoreProfileIds: const <String>{'local-before'},
-      backupPath: '/backup',
-      backupSha256:
-          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      backupVerified: true,
-    );
-  }
-
-  @override
-  Future<WebDavSyncAdoptionRecord?> recover(String namespaceId) async {
-    final record = states.state.adoption;
-    if (record == null) return null;
-    events.add('recover');
-    await states.update(
-      namespaceId,
-      (current) => current.copyWith(clearAdoption: true),
-    );
-    return record;
-  }
-
-  @override
-  Future<Set<String>> retryPendingPrunes(String namespaceId) async =>
-      const <String>{};
-}
-
-final class _FakePublisher implements WebDavSyncSeedPublisher {
-  _FakePublisher(
-    this.states,
-    this.snapshot,
-    this.events, {
-    this.conflictsRemaining = 0,
-  });
-
-  final _MemoryStateRepository states;
-  final WebDavSyncExistingRootSnapshot snapshot;
-  final List<String> events;
-  int conflictsRemaining;
-  int publishCalls = 0;
-
-  @override
-  Future<WebDavSyncPublishedSeed> publish({
-    required String bindingId,
-    required ProfileAuthorizationContext authorization,
-  }) async {
-    events.add('publish');
-    publishCalls++;
-    if (conflictsRemaining > 0) {
-      conflictsRemaining--;
-      throw const ProfilePreferenceMutationConflict();
-    }
-    final manifest = WebDavSyncManifest(
-      circleId: snapshot.root.document.circleId,
-      deviceId: snapshot.namespace.deviceId,
-      updatedAtMs: 2,
-      clockOffsetMs: 0,
-      graphSchemaClaim: 1,
-      profileMap: const <String, String>{'profile-backup': 'profile-circle'},
-      resourceMap: const <String, String>{},
-      sections: const <WebDavSyncSectionReference>[],
-    );
-    final state = await states.load(snapshot.namespace.id);
-    await states.update(
-      snapshot.namespace.id,
-      (current) => current.copyWith(ownManifest: manifest),
-    );
-    return WebDavSyncPublishedSeed(
-      material: WebDavSyncSeedMaterial(
-        identityMaps: WebDavSyncIdentityMaps(
-          circleToLocalProfiles: state.circleToLocalProfiles!,
-          circleToLocalResources: state.circleToLocalResources!,
-        ),
-        profileMap: manifest.profileMap,
-        resourceMap: manifest.resourceMap,
-        sections: const <WebDavSyncSeedSection>[],
-        profileStates: const <String, WebDavSyncProfileEngineState>{},
-        bootstrapDatabaseDigest:
-            '5555555555555555555555555555555555555555555555555555555555555555',
-        beforeRootCommit: _done,
-      ),
-      manifest: manifest,
-      serverNowMs: 2,
-    );
-  }
-
-  static Future<void> _done() async {}
-}
-
-final class _FakeEngine implements WebDavSyncCycleRunner {
-  _FakeEngine(this.events, {this.conflictsRemaining = 0});
-
-  final List<String> events;
-  int conflictsRemaining;
-  int runCalls = 0;
-
-  @override
-  Future<WebDavSyncCycleReport> runCycle(
-    WebDavSyncCycleContext? context, {
-    bool allowPreActivation = false,
-    WebDavSyncTrigger? trigger,
-  }) async {
-    expect(allowPreActivation, isTrue);
-    expect(context?.active, isFalse);
-    events.add('merge');
-    runCalls++;
-    if (conflictsRemaining > 0) {
-      conflictsRemaining--;
-      throw const ProfilePreferenceMutationConflict();
-    }
-    return const WebDavSyncCycleReport(
-      disposition: WebDavSyncCycleDisposition.completed,
-    );
-  }
-}

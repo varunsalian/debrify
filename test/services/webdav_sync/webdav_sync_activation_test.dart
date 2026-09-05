@@ -1,3 +1,8 @@
+import 'connector_test_fakes.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_discovery.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_existing_root_connector.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
+import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -855,6 +860,77 @@ void main() {
       (await secondStore.readSecrets(secondFinal)).syncPassphrase,
       standing.syncPassphrase,
     );
+    // Follow the losing initializer through the same connector pin gate as a
+    // fresh join, using the standing full authority and its persisted inner pin.
+    final loserStore = results.first is WebDavSyncConcurrentRoot
+        ? firstStore
+        : secondStore;
+    final loser = results.first is WebDavSyncConcurrentRoot
+        ? firstFinal
+        : secondFinal;
+    final namespace = (await loserStore.load()).namespaceFor(loser)!;
+    expect(namespace.markerBytes, orderedEquals(standing.markerBytes));
+    expect(namespace.matchesAuthority(server.marker!), isTrue);
+    final root = await WebDavSyncCodec().openRoot(
+      standing.markerBytes,
+      standing.syncPassphrase,
+      runInBackground: false,
+    );
+    final manifest = WebDavSyncManifest(
+      circleId: root.document.circleId,
+      deviceId: 'bootstrap-device',
+      updatedAtMs: 1,
+      clockOffsetMs: 0,
+      graphSchemaClaim: 1,
+      profileMap: const {},
+      resourceMap: const {},
+      sections: const [],
+    );
+    final joinSnapshot = WebDavSyncExistingRootSnapshot(
+      binding: loser,
+      namespace: namespace,
+      root: root,
+      markerBytes: server.marker!,
+      serverNowMs: 1,
+      manifests: const {},
+      schemaRatchet: 1,
+      bootstrap: WebDavSyncDiscoveredGraph(
+        manifest: manifest,
+        document: OpenedWebDavSyncGraph(
+          kind: WebDavSyncGraphKind.bootstrap,
+          semanticDigest:
+              '1111111111111111111111111111111111111111111111111111111111111111',
+          package: PortableProfilePackage(
+            mode: 'deviceGraph',
+            createdAt: DateTime.utc(2026, 9, 1),
+            profiles: const [],
+            resources: const [],
+            sections: const {},
+            omissions: const {},
+          ),
+        ),
+      ),
+    );
+    final joinStates = ConnectorMemoryStateRepository();
+    final joinEvents = <String>[];
+    final runner = ConnectorPinCheckingEngine(loserStore, joinEvents);
+    final connector = WebDavSyncExistingRootConnector(
+      bindingStore: loserStore,
+      stateRepository: joinStates,
+      discovery: ConnectorFakeDiscovery(joinSnapshot, joinEvents),
+      adoption: ConnectorFakeAdoption(joinStates, joinEvents),
+      publisher: ConnectorFakePublisher(joinStates, joinSnapshot, joinEvents),
+      engine: runner,
+    );
+    final active = await connector.connect(
+      bindingId: loser.id,
+      authorization: authorization,
+      recaptureAuthorization: () async => authorization,
+      replacementConfirmed: true,
+    );
+    expect(runner.runCalls, 1);
+    expect(active.lifecycle, WebDavSyncLifecycle.active);
+    expect((await loserStore.load()).activeBindingId, loser.id);
   });
 
   test('local mutation prevents a stale full-manifest republish', () async {

@@ -583,6 +583,19 @@ final class WebDavSyncNamespace {
 
   bool matchesAuthority(List<int> bytes) =>
       pinnedAuthorityHash == webDavSyncAuthorityHash(bytes);
+
+  /// Cycle pins may carry the full authority or its persisted inner marker.
+  /// The separate authority hash must still identify the pinned authority.
+  bool matchesAuthorityPin(List<int>? bytes, String? contentHash) {
+    if (bytes == null ||
+        markerBytes == null ||
+        contentHash != pinnedAuthorityHash) {
+      return false;
+    }
+    return matchesAuthority(bytes) ||
+        webDavSyncAuthorityHash(bytes) == webDavSyncAuthorityHash(markerBytes!);
+  }
+
   final Map<String, Object?> values;
 
   WebDavSyncNamespace copyWith({
