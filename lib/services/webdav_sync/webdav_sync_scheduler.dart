@@ -3,6 +3,7 @@ import 'dart:async';
 import '../profiles/profile_preference_portability.dart';
 import '../webdav_protocol_client.dart' show WebDavException;
 import '../profiles/profile_preferences.dart';
+import '../profiles/profile_runtime.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_transport.dart';
@@ -279,6 +280,7 @@ final class WebDavSyncScheduler {
     required bool completed,
     required bool localChangeFollowUp,
     required bool immediateRetry,
+    bool profileInterrupted = false,
   }) {
     final pending = _pendingLocalChangeSequence;
     if (pending == null) return;
@@ -288,24 +290,39 @@ final class WebDavSyncScheduler {
       return;
     }
     _rearmPendingLocalChange(
-      !completed
+      profileInterrupted
+          ? 'profile changed during cycle'
+          : !completed
           ? 'cycle did not complete'
           : localChangeFollowUp
           ? 'cycle requested a local-change follow-up'
           : 'write landed during the cycle',
       immediate: immediateRetry,
+      profileInterrupted: profileInterrupted,
     );
   }
 
-  void _rearmPendingLocalChange(String reason, {bool immediate = false}) {
+  void _rearmPendingLocalChange(
+    String reason, {
+    bool immediate = false,
+    bool profileInterrupted = false,
+  }) {
     if (_contextProvider == null || _pendingLocalChangeSequence == null) return;
     if (_localChangeTimer != null) {
-      if (!immediate) return;
+      if (!immediate && !profileInterrupted) return;
       _localChangeTimer!.cancel();
       _localChangeTimer = null;
     }
-    _localChangeRetries++;
-    final delay = immediate
+    // A changed local session is not evidence of a continuing outage.
+    // Keep the intent, but give the new profile a bounded debounce to settle.
+    if (profileInterrupted) {
+      _localChangeRetries = 0;
+    } else {
+      _localChangeRetries++;
+    }
+    final delay = profileInterrupted
+        ? _localChangeRetryDelay(1)
+        : immediate
         ? Duration.zero
         : _localChangeRetryDelay(_localChangeRetries);
     _armLocalChangeTimer(delay);
@@ -637,6 +654,8 @@ final class WebDavSyncScheduler {
     }
     _running = true;
     int? intentSequenceAtStart;
+    final scopeAtStart = ProfileRuntime.scope.value;
+    var profileInterrupted = false;
     var intentCycleCompleted = false;
     var intentCycleRequestedFollowUp = false;
     try {
@@ -695,6 +714,14 @@ final class WebDavSyncScheduler {
         _immediateDirtyDuringRun = true;
       }
       return report;
+    } catch (error) {
+      // Require both a local-state failure and an observed scope change.
+      // Network/server failures retain their backoff even across a switch.
+      profileInterrupted =
+          error is StateError &&
+          scopeAtStart != null &&
+          scopeAtStart != ProfileRuntime.scope.value;
+      rethrow;
     } finally {
       _running = false;
       final dirtyDuringRun = _dirtyDuringRun;
@@ -707,12 +734,14 @@ final class WebDavSyncScheduler {
           completed: intentCycleCompleted,
           localChangeFollowUp: intentCycleRequestedFollowUp,
           immediateRetry: immediateDirtyDuringRun,
+          profileInterrupted: profileInterrupted,
         );
       } else if (trigger == WebDavSyncTrigger.localChange) {
         // Includes context-provider exceptions as well as inactive snapshots.
         _rearmPendingLocalChange(
           'cycle did not start',
           immediate: immediateDirtyDuringRun,
+          profileInterrupted: profileInterrupted,
         );
       }
       if (dirtyDuringRun &&

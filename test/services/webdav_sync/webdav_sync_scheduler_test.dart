@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
@@ -1296,6 +1298,64 @@ void main() {
   });
 
   group('durable local-change intent', () {
+    for (final networkFailure in [false, true]) {
+      test(
+        'profile switch preserves intent and handles network=$networkFailure backoff',
+        () {
+          ProfileRuntime.debugReset();
+          ProfileRuntime.initializeCommitted(
+            ProfileScope(profileId: 'a', dataGeneration: 1, sessionEpoch: 1),
+          );
+          try {
+            fakeAsync((async) {
+              final delays = <Duration>[];
+              final runner = _Runner()..failuresRemaining = 3;
+              runner.onRun = (_) {
+                if (runner.runs == 3) {
+                  ProfileRuntime.publish(
+                    ProfileScope(
+                      profileId: 'b',
+                      dataGeneration: 1,
+                      sessionEpoch: 2,
+                    ),
+                  );
+                  if (networkFailure) {
+                    throw const WebDavException(
+                      kind: WebDavErrorKind.network,
+                      message: 'offline',
+                    );
+                  }
+                }
+              };
+              final scheduler = WebDavSyncScheduler(
+                runner: runner,
+                gate: _Gate(),
+                localChangeDeferredObserver: (_, __, delay) =>
+                    delays.add(delay),
+              );
+              scheduler.arm(() async => context());
+              scheduler.notifyLocalChange('home_tick_sources');
+              async.elapse(const Duration(seconds: 8));
+              expect(runner.runs, 3);
+              expect(delays, [
+                const Duration(seconds: 2),
+                const Duration(seconds: 4),
+                Duration(seconds: networkFailure ? 8 : 2),
+              ]);
+              runner.failuresRemaining = 0;
+              async.elapse(Duration(seconds: networkFailure ? 8 : 2));
+              expect(runner.runs, 4);
+              async.elapse(const Duration(minutes: 2));
+              expect(runner.runs, 4);
+              scheduler.dispose();
+            });
+          } finally {
+            ProfileRuntime.debugReset();
+          }
+        },
+      );
+    }
+
     test('a failed cycle re-arms the intent and the retry pushes', () {
       fakeAsync((async) {
         final start = DateTime.utc(2026, 9, 3);

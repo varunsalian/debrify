@@ -592,6 +592,11 @@ final class WebDavSyncEngine
       return report;
     } catch (error) {
       instrumentation.disposition = 'failed';
+      if (error is WebDavException) {
+        instrumentation.connectionFailure = webDavConnectionFailureFields(
+          error,
+        );
+      }
       // Only the shape of the failure, never its message, URI, or body: a
       // failed cycle event carried nothing before, which left a real field
       // failure unexplainable from the log.
@@ -4053,6 +4058,7 @@ final class _CycleInstrumentation {
   int bytesSaved = 0;
   String disposition = 'failed';
   String? failureKind;
+  Map<String, Object> connectionFailure = const {};
   int _rootUs = 0;
   int _listUs = 0;
   int _manifestsUs = 0;
@@ -4118,6 +4124,7 @@ final class _CycleInstrumentation {
       source: 'webdav_sync',
       event: 'cycle',
       fields: <String, Object?>{
+        ...connectionFailure,
         'trigger': DiagnosticLabel(trigger?.name ?? 'internal'),
         'peerCount': peerCount,
         'rootMs': _milliseconds(_rootUs),

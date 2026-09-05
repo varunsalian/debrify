@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../diagnostic_log.dart';
@@ -145,4 +148,39 @@ DiagnosticLevel _webDavSyncDiagnosticLevel(String message) {
     return DiagnosticLevel.warning;
   }
   return DiagnosticLevel.info;
+}
+
+/// Fixed categories only; exception messages, hosts and URLs never escape.
+Map<String, Object> webDavConnectionFailureFields(WebDavException error) {
+  final cause = error.cause;
+  final String category;
+  if (cause is HandshakeException) {
+    category = 'tls';
+  } else if (cause is SocketException) {
+    category = cause.message.toLowerCase().contains('failed host lookup')
+        ? 'dns'
+        : 'socket';
+  } else if (cause is TimeoutException) {
+    category = 'timeout';
+  } else if (cause is http.ClientException) {
+    category = switch (cause.message) {
+      'WebDAV sync HTTP client generation is stale' => 'stale_client',
+      'HTTP request failed. Client is already closed.' => 'closed_client',
+      _ => 'http_client',
+    };
+  } else {
+    category = 'unknown';
+  }
+  return {
+    'connectionFailure': DiagnosticLabel(category),
+    'connectionStage': DiagnosticLabel(switch (error.message) {
+      'WebDAV response was interrupted' ||
+      'WebDAV response timed out' => 'response_body',
+      'Could not reach the WebDAV server' ||
+      'WebDAV request timed out' => 'request',
+      _ => 'unknown',
+    }),
+    if (cause is SocketException && cause.osError != null)
+      'socketErrorCode': cause.osError!.errorCode,
+  };
 }
