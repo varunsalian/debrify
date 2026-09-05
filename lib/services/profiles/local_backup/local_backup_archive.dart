@@ -380,10 +380,20 @@ class LocalBackupExporter {
         var bytes = 0;
         try {
           const chunkChars = 64 * 1024;
-          for (var start = 0; start < content.length; start += chunkChars) {
+          for (var start = 0; start < content.length;) {
             cancellation?.throwIfCancelled();
-            final end = min(content.length, start + chunkChars);
+            var end = min(content.length, start + chunkChars);
+            // Dart indexes UTF-16 code units. Keep a surrogate pair in the
+            // same chunk so independent UTF-8 encodes preserve the character.
+            if (end < content.length &&
+                content.codeUnitAt(end - 1) >= 0xD800 &&
+                content.codeUnitAt(end - 1) <= 0xDBFF &&
+                content.codeUnitAt(end) >= 0xDC00 &&
+                content.codeUnitAt(end) <= 0xDFFF) {
+              end--;
+            }
             final encoded = utf8.encode(content.substring(start, end));
+            start = end;
             hasher.add(encoded);
             await output.writeFrom(encoded);
             bytes += encoded.length;
@@ -826,17 +836,25 @@ class LocalBackupRestorer {
       }
 
       stageLabel('Checking backup…');
+      cancellation?.throwIfCancelled();
       _checkDatabaseReferences(manifest.package, databaseFiles);
       // The integrity digest covers the package as stored, with playlist
       // text still referenced. Decode first (off the UI isolate; the decoder
       // copies what it keeps), then put the text back.
       final package = await _decodeOffMain(manifest.package);
-      await _inlineAttachments(package.resources, attachmentFiles, manifest);
+      cancellation?.throwIfCancelled();
+      await _inlineAttachments(
+        package.resources,
+        attachmentFiles,
+        manifest,
+        cancellation: cancellation,
+      );
       stopwatch.stop();
       stageLabel('Backup verified', <String, Object?>{
         'databases': databaseFiles.length,
         'attachments': attachmentFiles.length,
       });
+      cancellation?.throwIfCancelled();
       return LocalBackupRestoreStage._(
         package: package,
         manifest: manifest,
@@ -908,13 +926,15 @@ class LocalBackupRestorer {
   static Future<void> _inlineAttachments(
     List<Map<String, dynamic>> resources,
     Map<String, File> attachmentFiles,
-    LocalBackupManifest manifest,
-  ) async {
+    LocalBackupManifest manifest, {
+    LocalBackupCancellation? cancellation,
+  }) async {
     final byName = <String, LocalBackupManifestEntry>{
       for (final entry in manifest.entries) entry.name: entry,
     };
     final used = <String>{};
     for (final resource in resources) {
+      cancellation?.throwIfCancelled();
       final secret = resource['secretConfig'];
       if (secret is! Map) continue;
       final reference = secret[ProfilePackageFileSinks.contentAttachmentKey];
@@ -946,6 +966,7 @@ class LocalBackupRestorer {
         );
       }
       final content = await file.readAsString();
+      cancellation?.throwIfCancelled();
       final replaced = Map<String, dynamic>.from(secret)
         ..remove(ProfilePackageFileSinks.contentAttachmentKey)
         ..['content'] = content;

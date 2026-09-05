@@ -370,6 +370,7 @@ class ProfileBackupFlows {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          scrollable: true,
           title: Text(allProfiles ? 'Back up all profiles' : 'Back up profile'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -917,6 +918,8 @@ class ProfileBackupFlows {
           cancellation: cancellation,
         );
         if (!context.mounted) return null;
+        // Cancel remains valid until the staged data enters publication.
+        cancellation.throwIfCancelled();
         return await _performRestore(
           stage.package,
           confirmation,

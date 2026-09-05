@@ -189,6 +189,78 @@ void main() {
     }
   }
 
+  for (final allProfiles in [false, true]) {
+    test(
+      'playlist Unicode chunk boundaries round trip (all=$allProfiles)',
+      () async {
+        final text = StringBuffer('#EXTM3U\n');
+        // Exercise both the first boundary and the shifted next boundary
+        // after preserving the previous surrogate pair.
+        text.write('a' * (65535 - text.length));
+        text.write('😀');
+        text.write('b' * (131070 - text.length));
+        text.write('𠮷');
+        text.write('\nhttps://example.invalid/🎬\n');
+        final playlist = text.toString();
+        await createImportedPlaylist(playlist);
+        final result = await LocalBackupExporter(service: packages).export(
+          context: await ProfileAuthorizationContext.capture(registry),
+          staging: await LocalBackupScratch.create('export'),
+          allProfiles: allProfiles,
+          scope: allProfiles ? null : scope,
+        );
+        final inspection = await LocalBackupRestorer.inspect(result.archive);
+        final stage = await LocalBackupRestorer.stage(
+          archive: result.archive,
+          staging: await LocalBackupScratch.create('restore'),
+          inspection: inspection,
+        );
+        try {
+          final content =
+              (stage.package.resources.single['secretConfig']
+                  as Map)['content'];
+          expect(content, playlist);
+        } finally {
+          await stage.dispose();
+        }
+      },
+    );
+  }
+
+  for (final cancelAt in ['Checking backup…', 'Backup verified']) {
+    test('cancel at $cancelAt prevents a successful restore stage', () async {
+      await createImportedPlaylist(
+        '#EXTM3U\nhttps://example.invalid/channel\n',
+      );
+      final result = await LocalBackupExporter(service: packages).export(
+        context: await ProfileAuthorizationContext.capture(registry),
+        staging: await LocalBackupScratch.create('export'),
+        allProfiles: false,
+        scope: scope,
+      );
+      final inspection = await LocalBackupRestorer.inspect(result.archive);
+      final cancel = LocalBackupCancellation();
+      final staging = await LocalBackupScratch.create('restore');
+      try {
+        await expectLater(
+          LocalBackupRestorer.stage(
+            archive: result.archive,
+            staging: staging,
+            inspection: inspection,
+            cancellation: cancel,
+            onStage: (stage) {
+              if (stage == cancelAt) cancel.cancel();
+            },
+          ),
+          throwsA(isA<LocalBackupCancelledException>()),
+        );
+      } finally {
+        await LocalBackupScratch.delete(staging);
+      }
+      expect(await staging.exists(), isFalse);
+    });
+  }
+
   test(
     'export streams databases and playlists into a verified archive',
     () async {
