@@ -46,7 +46,7 @@ void main() {
   late Directory catalogA;
   late Directory catalogB;
   late ProfileRegistry registry;
-  late MemoryDeviceSecretCipher cipher;
+  late _InterruptibleCipher cipher;
   late ProfileWebDavSyncLocalAdapter adapter;
   late WebDavSyncLocalSession session;
   late WebDavSyncIdentityMaps maps;
@@ -80,7 +80,7 @@ void main() {
       activeProfileId: profileId,
       migratedLegacyInstall: false,
     );
-    cipher = MemoryDeviceSecretCipher(List<int>.generate(32, (i) => i));
+    cipher = _InterruptibleCipher();
     await cipher.initialize();
     DeviceKeyProvider.debugInstallCipher(cipher);
     ProfileBootstrap.debugInstallRegistry(registry);
@@ -162,6 +162,137 @@ void main() {
         clockOffsetMs: 0,
         serverNowMs: 100000,
       );
+
+  test(
+    'locked launch sync preserves IPTV catalog mappings without revealing credentials',
+    () async {
+      final key = IptvCatalogKey.forUrl(playlistUrl);
+      await IptvCatalogDb.setCategoryOrder(key, const ['News', 'Sports']);
+      final unlocked = await adapter.readLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      ProfileLockController.instance.activate(
+        (await registry.getProfile(profileId))!,
+        unlocked: false,
+      );
+      final locked = await adapter.readLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      const wireKey = 'catalog/category-order/resource-circle/m3u';
+      expect(
+        locked.document.records[wireKey]?.value,
+        unlocked.document.records[wireKey]?.value,
+      );
+      expect(locked.document.records.containsKey(wireKey), isTrue);
+      IptvCatalogDb.debugClose();
+      IptvCatalogDb.debugDirectoryOverride = catalogB.path;
+      await IptvCatalogDb.open();
+      final empty = await adapter.readLibrary(
+        session,
+        profileId,
+        buildRequest(maps),
+      );
+      final applied = await adapter.applyLibrary(
+        session,
+        profileId,
+        WebDavSyncLibraryApplyRequest(
+          circleProfileId: circleProfileId,
+          identityMaps: maps,
+          document: locked.document,
+          observedRevisions: empty.revisions,
+          hiddenGroupNamesByWireKey: locked.hiddenGroupNamesByWireKey,
+        ),
+      );
+      expect(applied.result, WebDavSyncLibraryApplyResult.applied);
+      expect(IptvCatalogDb.savedCategoryOrder(key), const ['News', 'Sports']);
+      expect(ProfileLockController.instance.isUnlocked, isFalse);
+      await expectLater(
+        ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ).revealSecret(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: sourceId,
+          feature: ProfileFeature.manageConnections,
+        ),
+        throwsA(isA<ResourceAuthorizationException>()),
+      );
+    },
+  );
+
+  for (final kind in ['xtream', 'local']) {
+    test(
+      'locked sync maps migrated $kind playlists with a missing empty URL',
+      () async {
+        await ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ).updateSecret(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: sourceId,
+          secretConfig: {
+            'name': 'Migrated',
+            'addedAt': '2026-09-03T00:00:00.000Z',
+            if (kind == 'xtream') ...{
+              'serverUrl': 'https://panel.invalid',
+              'username': 'viewer',
+            },
+            if (kind == 'local') 'content': '#EXTM3U',
+          },
+        );
+        final key = kind == 'local'
+            ? IptvCatalogKey.forLocalCategoryOrder(sourceId)
+            : IptvCatalogKey.forXtream(
+                'https://panel.invalid',
+                'viewer',
+                'live',
+              );
+        await IptvCatalogDb.setCategoryOrder(key, const ['News']);
+        ProfileLockController.instance.activate(
+          (await registry.getProfile(profileId))!,
+          unlocked: false,
+        );
+        final built = await adapter.readLibrary(
+          session,
+          profileId,
+          buildRequest(maps),
+        );
+        final variant = kind == 'local' ? 'local' : 'xc-live';
+        expect(
+          built.document.records.containsKey(
+            'catalog/category-order/resource-circle/$variant',
+          ),
+          isTrue,
+        );
+      },
+    );
+  }
+
+  for (final interruption in ['switch', 'revoke']) {
+    test('catalog sync rejects $interruption during secret read', () async {
+      cipher.afterOpen = () async {
+        if (interruption == 'switch') {
+          ProfileRuntime.publish(
+            ProfileScope(
+              profileId: profileId,
+              dataGeneration: 1,
+              sessionEpoch: 2,
+            ),
+          );
+        } else {
+          await registry.revokeGrant(profileId, sourceId);
+        }
+      };
+      await expectLater(
+        adapter.readLibrary(session, profileId, buildRequest(maps)),
+        throwsStateError,
+      );
+    });
+  }
 
   test('ambient build emits no TV records with a 50k saved pool', () async {
     await DebrifyTvRepository.instance.upsertChannel(
@@ -1345,4 +1476,21 @@ void main() {
       expect(diagnostics.join('\n'), isNot(contains(secretHeader)));
     },
   );
+}
+
+class _InterruptibleCipher extends MemoryDeviceSecretCipher {
+  _InterruptibleCipher() : super(List<int>.generate(32, (i) => i));
+  Future<void> Function()? afterOpen;
+
+  @override
+  Future<List<int>> open(
+    String envelope, {
+    required List<int> associatedData,
+  }) async {
+    final value = await super.open(envelope, associatedData: associatedData);
+    final callback = afterOpen;
+    afterOpen = null;
+    await callback?.call();
+    return value;
+  }
 }

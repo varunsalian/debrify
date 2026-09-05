@@ -20,7 +20,7 @@ import 'webdav_sync_diagnostics.dart';
 import '../debrify_tv_database.dart';
 import '../iptv_catalog_db.dart';
 import '../iptv_catalog_key.dart';
-import '../storage_service.dart';
+import '../../models/iptv_playlist.dart';
 import 'webdav_sync_active_profile_refresh.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
@@ -1074,7 +1074,7 @@ final class ProfileWebDavSyncLocalAdapter
     if (localProfileId != session.scope.profileId) {
       return const _CatalogWireMappings();
     }
-    final playlists = await StorageService.getIptvPlaylists(forSettings: true);
+    final playlists = await _catalogPlaylistsForSync(session, localProfileId);
     _validateSession(session);
     final byCatalogKey = <String, _CatalogWireIdentity>{};
     final byWireResourceVariant = <String, String>{};
@@ -1128,6 +1128,89 @@ final class ProfileWebDavSyncLocalAdapter
         grantedLocalResourceIds,
       ),
     );
+  }
+
+  // Background sync is authorized by its captured profile scope and grants,
+  // not by a foreground PIN unlock. Keep decrypted credentials inside this
+  // adapter; only derived catalog identities escape _catalogWireMappings.
+  Future<List<IptvPlaylist>> _catalogPlaylistsForSync(
+    WebDavSyncLocalSession session,
+    String profileId,
+  ) async {
+    try {
+      _validateSession(session);
+      final profile = await registry.getProfile(profileId);
+      if (profile == null || !profile.isEnabled) {
+        throw StateError('WebDAV sync catalog profile is unavailable');
+      }
+      final resources = await registry.listGrantedResources(profileId);
+      final playlists = <IptvPlaylist>[];
+      for (final resource in resources) {
+        if (resource.type != ConnectionResourceType.iptvM3u &&
+            resource.type != ConnectionResourceType.iptvXtream) {
+          continue;
+        }
+        final grant = await registry.getGrant(profileId, resource.id);
+        if (resource.secretPending ||
+            grant == null ||
+            !grant.allows(ResourcePermission.use)) {
+          continue;
+        }
+        final sealed = await registry.getSealedResourceSecret(resource.id);
+        if (sealed == null) {
+          throw StateError('WebDAV sync catalog secret is unavailable');
+        }
+        final opened = await DeviceKeyProvider.cipher.open(
+          sealed.envelope,
+          associatedData: ConnectionResourceService.associatedDataForSecret(
+            resourceId: sealed.resourceId,
+            type: sealed.type,
+            ownerProfileId: sealed.ownerProfileId,
+            publicSchemaVersion: sealed.publicSchemaVersion,
+            payloadVersion: sealed.payloadVersion,
+          ),
+        );
+        final value = Map<String, dynamic>.from(
+          jsonDecode(utf8.decode(opened)) as Map,
+        );
+        final current = await registry.getResource(resource.id);
+        final currentGrant = await registry.getGrant(profileId, resource.id);
+        final currentProfile = await registry.getProfile(profileId);
+        _validateSession(session);
+        if (current == null ||
+            !current.enabled ||
+            current.authorizationRevision != resource.authorizationRevision ||
+            currentGrant == null ||
+            !currentGrant.allows(ResourcePermission.use) ||
+            currentProfile == null ||
+            !currentProfile.isEnabled ||
+            currentProfile.authorizationRevision !=
+                profile.authorizationRevision) {
+          throw StateError('WebDAV sync catalog authorization changed');
+        }
+        // Older migrations removed the legitimate empty URL for Xtream and
+        // file playlists. Preserve the Settings reader's narrow repair.
+        if (value['url'] == null &&
+            [
+              value['serverUrl'],
+              value['content'],
+            ].any((field) => field is String && field.trim().isNotEmpty)) {
+          value['url'] = '';
+        }
+        playlists.add(
+          IptvPlaylist.fromJson({
+            ...value,
+            'id': resource.id,
+            '_connectionResourceId': resource.id,
+          }),
+        );
+      }
+      _validateSession(session);
+      return playlists;
+    } catch (error) {
+      recordWebDavSyncDiagnostic('WebDAV sync catalog mapping failed', null);
+      rethrow;
+    }
   }
 
   @override
@@ -1905,6 +1988,10 @@ final class ProfileWebDavSyncLocalAdapter
       final before = prePins[item.id];
       if (!_samePin(before, item.pin)) {
         ProfileLockController.instance.armLockOnNextResume(item.id);
+        recordWebDavSyncDiagnostic(
+          'WebDAV sync active profile PIN applied',
+          null,
+        );
       }
       final refreshed = await registry.getProfile(item.id);
       if (refreshed != null) {

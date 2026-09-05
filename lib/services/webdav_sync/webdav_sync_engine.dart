@@ -7,6 +7,8 @@ import 'package:synchronized/synchronized.dart';
 import '../../models/profiles/user_profile.dart';
 import '../diagnostic_log.dart';
 import '../profiles/profile_preferences.dart';
+import '../profiles/connection_resource_service.dart';
+import '../profiles/profile_lock_controller.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_merge.dart';
@@ -4016,6 +4018,17 @@ String describeWebDavSyncCycleFailure(Object error) {
     return 'WebDavException:${error.kind.name}'
         '${status == null ? '' : ':$status'}';
   }
+  if (error is ResourceAuthorizationException) {
+    final reason = switch (error.message) {
+      'Profile session is locked' => 'profile_locked',
+      'Profile authorization has changed' => 'profile_authority_changed',
+      'Profile authorization session has ended' => 'profile_session_changed',
+      'Resource is unavailable' => 'resource_unavailable',
+      'Resource permission denied' => 'permission_denied',
+      _ => 'other',
+    };
+    return 'ResourceAuthorizationException:$reason';
+  }
   if (error is StateError &&
       _literalStateErrorMessage.hasMatch(error.message)) {
     return 'StateError:${error.message}';
@@ -4122,7 +4135,11 @@ final class _CycleInstrumentation {
         'sectionsSkipped': sectionsSkipped,
         'bytesSaved': bytesSaved,
         'disposition': DiagnosticLabel(disposition),
-        if (failureKind case final kind?) 'failureKind': DiagnosticLabel(kind),
+        if (failureKind case final kind?) ...{
+          'failureKind': DiagnosticLabel(kind),
+          'profileLocked':
+              ProfileLockController.instance.lockedProfileId.value != null,
+        },
       },
     );
   }

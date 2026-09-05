@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -667,6 +668,21 @@ void main() {
   });
 
   test('cycle failure descriptions keep shape, never data', () {
+    expect(
+      describeWebDavSyncCycleFailure(
+        const ResourceAuthorizationException('Profile session is locked'),
+      ),
+      'ResourceAuthorizationException:profile_locked',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(
+        const ResourceAuthorizationException(
+          'https://user:password@private.invalid/path',
+        ),
+      ),
+      'ResourceAuthorizationException:other',
+    );
+
     expect(
       describeWebDavSyncCycleFailure(
         const WebDavException(
