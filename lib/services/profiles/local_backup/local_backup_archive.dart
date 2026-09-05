@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:path/path.dart' as p;
 
 import '../../../utils/app_storage.dart';
+import '../../../utils/streamed_file_copy.dart';
 import '../../diagnostic_log.dart';
 import '../portable_profile_package.dart';
 import '../profile_authorization.dart';
@@ -438,14 +439,26 @@ class LocalBackupExporter {
       cancellation?.throwIfCancelled();
 
       stage('Writing manifest…');
-      final envelope = await PortableProfilePackage.withIntegrity(package);
+      // Integrity stamping, JSON encoding and hashing of a manifest that can
+      // reach tens of megabytes stay off the UI isolate, like the legacy
+      // envelope pipeline. Only the small entry list is built here.
+      final manifestEntries = List<LocalBackupManifestEntry>.unmodifiable(
+        entries,
+      );
+      final mode = package.mode;
+      final encoded = await _encodeManifestOffMain(
+        package,
+        createdAt: createdAt,
+        mode: mode,
+        entries: manifestEntries,
+      );
       final manifest = LocalBackupManifest(
         createdAt: createdAt,
-        mode: package.mode,
-        package: envelope,
-        entries: entries,
+        mode: mode,
+        package: encoded.envelope,
+        entries: manifestEntries,
       );
-      final manifestBytes = utf8.encode(jsonEncode(manifest.toJson()));
+      final manifestBytes = encoded.bytes;
       if (manifestBytes.length > LocalBackupManifest.maxManifestBytes) {
         throw const LocalBackupLimitException(
           'Backup settings and connections exceed the manifest limit',
@@ -459,8 +472,7 @@ class LocalBackupExporter {
       );
       await _mapStorageErrors(() async {
         await manifestFile.writeAsBytes(manifestBytes, flush: true);
-        final manifestDigest = await StreamedSha256.ofFile(manifestFile);
-        await digestFile.writeAsString(manifestDigest, flush: true);
+        await digestFile.writeAsString(encoded.digest, flush: true);
       });
 
       final stamp = createdAt.toIso8601String().substring(0, 10);
@@ -584,6 +596,31 @@ class LocalBackupExporter {
     }
   }
 
+  /// A closure passed to [Isolate.run] captures its whole enclosing scope,
+  /// so this lives in a method whose only locals are sendable arguments.
+  static Future<
+    ({Map<String, dynamic> envelope, List<int> bytes, String digest})
+  >
+  _encodeManifestOffMain(
+    PortableProfilePackage package, {
+    required DateTime createdAt,
+    required String mode,
+    required List<LocalBackupManifestEntry> entries,
+  }) {
+    return Isolate.run(() async {
+      final envelope = await PortableProfilePackage.withIntegrity(package);
+      final manifest = LocalBackupManifest(
+        createdAt: createdAt,
+        mode: mode,
+        package: envelope,
+        entries: entries,
+      );
+      final bytes = utf8.encode(jsonEncode(manifest.toJson()));
+      final hasher = StreamedSha256()..add(bytes);
+      return (envelope: envelope, bytes: bytes, digest: hasher.finish());
+    });
+  }
+
   static Future<T> _mapStorageErrors<T>(Future<T> Function() body) async {
     try {
       return await body();
@@ -608,19 +645,7 @@ class LocalBackupExporter {
       await source.rename(destination.path);
     } on FileSystemException {
       // Cross-volume: fall back to a streamed copy.
-      final input = await source.open();
-      final output = await destination.open(mode: FileMode.write);
-      try {
-        while (true) {
-          final chunk = await input.read(LocalBackupZip.chunkSize);
-          if (chunk.isEmpty) break;
-          await output.writeFrom(chunk);
-        }
-        await output.flush();
-      } finally {
-        await input.close();
-        await output.close();
-      }
+      await copyFileStreamed(source, destination);
       await source.delete();
     }
   }
@@ -651,15 +676,19 @@ Future<LocalBackupManifest> _readVerifiedManifest(
       'Backup manifest failed its integrity check',
     );
   }
-  final decoded = await Isolate.run(() {
-    final value = jsonDecode(utf8.decode(manifestBytes));
-    if (value is! Map<String, dynamic>) {
-      throw const LocalBackupFormatException('Backup manifest is invalid');
-    }
-    return value;
-  });
-  return LocalBackupManifest.fromJson(decoded);
+  return LocalBackupManifest.fromJson(
+    await _parseManifestOffMain(manifestBytes),
+  );
 }
+
+Future<Map<String, dynamic>> _parseManifestOffMain(List<int> manifestBytes) =>
+    Isolate.run(() {
+      final value = jsonDecode(utf8.decode(manifestBytes));
+      if (value is! Map<String, dynamic>) {
+        throw const LocalBackupFormatException('Backup manifest is invalid');
+      }
+      return value;
+    });
 
 /// A verified, extracted archive ready for the restore coordinator.
 class LocalBackupRestoreStage {
@@ -763,13 +792,11 @@ class LocalBackupRestorer {
       }
 
       stageLabel('Checking backup…');
-      final packageMap = _deepCopy(manifest.package);
-      _checkDatabaseReferences(packageMap, databaseFiles);
+      _checkDatabaseReferences(manifest.package, databaseFiles);
       // The integrity digest covers the package as stored, with playlist
-      // text still referenced. Decode first, then put the text back.
-      final package = await PortableProfilePackage.decodeFileBackedMap(
-        packageMap,
-      );
+      // text still referenced. Decode first (off the UI isolate; the decoder
+      // copies what it keeps), then put the text back.
+      final package = await _decodeOffMain(manifest.package);
       await _inlineAttachments(package.resources, attachmentFiles, manifest);
       stopwatch.stop();
       stageLabel('Backup verified', <String, Object?>{
@@ -794,6 +821,13 @@ class LocalBackupRestorer {
       rethrow;
     }
   }
+
+  /// See [LocalBackupExporter._encodeManifestOffMain] for why this is not
+  /// an inline closure.
+  static Future<PortableProfilePackage> _decodeOffMain(
+    Map<String, dynamic> packageMap,
+  ) =>
+      Isolate.run(() => PortableProfilePackage.decodeFileBackedMap(packageMap));
 
   static void _checkEntriesAgainstManifest(
     LocalBackupZipReader reader,
@@ -909,9 +943,6 @@ class LocalBackupRestorer {
       }
     }
   }
-
-  static Map<String, dynamic> _deepCopy(Map<String, dynamic> source) =>
-      jsonDecode(jsonEncode(source)) as Map<String, dynamic>;
 
   static Future<T> _mapStorageErrors<T>(Future<T> Function() body) async {
     try {

@@ -433,6 +433,17 @@ largest single imported playlist string, as decided above. Tests:
 `test/profiles/local_backup_archive_test.dart`; existing snapshot, package,
 coordinator, encryption and resource-service suites pass unchanged (106).
 
+Review round 1 (2026-09-05) applied: restore inspects the manifest and
+confirms/authorizes before extracting; one streamed copy helper
+(`lib/utils/streamed_file_copy.dart`) replaces three loops; picker cache is
+cleared after mobile restores; manifest encode/hash and package decode run off
+the UI isolate through argument-only helpers (an inline `Isolate.run` closure
+captures the enclosing scope); the dead local JSON creation branch is gone and
+the JSON flow is WebDAV-only; `saveGeneratedFile` stages to a temp file and
+delegates to the one path-based destination ladder; `_compactSnapshot` derives
+its catalog list from the classification; `iptv_catalog_table_classification_
+test.dart` binds the allowlist to the live schema.
+
 Not done / pending:
 
 - No physical Android TV, Fire TV, Shield, phone, iOS, Windows or Linux run.

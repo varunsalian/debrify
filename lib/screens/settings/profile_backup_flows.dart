@@ -55,8 +55,6 @@ class ProfileBackupRestoreResult {
 
 const int _lowMemoryTvosRestoreLimit = 32 * 1024 * 1024;
 
-enum _ProfileBackupDestination { localFile, webDav }
-
 enum _ProfileBackupSource { localFile, webDav }
 
 /// The profile backup/restore user flows, extracted from the settings screen
@@ -77,9 +75,17 @@ class ProfileBackupFlows {
 
   Future<void> createProfileBackup() async {
     try {
-      await _createProfileBackupUnchecked(
-        destination: _ProfileBackupDestination.localFile,
-      );
+      if (PlatformUtil.isTvOS) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Apple TV profile backups use the authenticated Remote transfer flow.',
+            ),
+          ),
+        );
+        return;
+      }
+      await _createLocalArchiveBackup();
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,9 +96,7 @@ class ProfileBackupFlows {
 
   Future<void> createWebDavProfileBackup() async {
     try {
-      await _createProfileBackupUnchecked(
-        destination: _ProfileBackupDestination.webDav,
-      );
+      await _createWebDavProfileBackupUnchecked();
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,27 +105,10 @@ class ProfileBackupFlows {
     }
   }
 
-  Future<void> _createProfileBackupUnchecked({
-    required _ProfileBackupDestination destination,
-  }) async {
-    if (destination == _ProfileBackupDestination.localFile &&
-        PlatformUtil.isTvOS) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Apple TV profile backups use the authenticated Remote transfer flow.',
-          ),
-        ),
-      );
-      return;
-    }
-    if (destination == _ProfileBackupDestination.localFile) {
-      await _createLocalArchiveBackup();
-      return;
-    }
-    if (destination == _ProfileBackupDestination.webDav &&
-        PlatformUtil.isTvOS &&
-        TvosDevice.isLowMemoryCached) {
+  /// WebDAV manual backup: the passphrase-encrypted JSON package on its
+  /// existing format and path. Local files use [_createLocalArchiveBackup].
+  Future<void> _createWebDavProfileBackupUnchecked() async {
+    if (PlatformUtil.isTvOS && TvosDevice.isLowMemoryCached) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -134,28 +121,21 @@ class ProfileBackupFlows {
       return;
     }
 
-    final WebDavPickerResult? webDavTarget;
-    final ProfileAsyncAuthorization? migrateAuthorization;
-    if (destination == _ProfileBackupDestination.webDav) {
-      webDavTarget = await Navigator.of(context).push<WebDavPickerResult>(
-        MaterialPageRoute(
-          builder: (_) => const WebDavFilesScreen(
-            isPushedRoute: true,
-            pickerMode: WebDavPickerMode.selectFolder,
-            dataSource: WebDavFilesDataSource(
-              feature: ProfileFeature.backupRestore,
-            ),
+    final webDavTarget = await Navigator.of(context).push<WebDavPickerResult>(
+      MaterialPageRoute(
+        builder: (_) => const WebDavFilesScreen(
+          isPushedRoute: true,
+          pickerMode: WebDavPickerMode.selectFolder,
+          dataSource: WebDavFilesDataSource(
+            feature: ProfileFeature.backupRestore,
           ),
         ),
-      );
-      if (webDavTarget == null || !context.mounted) return;
-      migrateAuthorization = await _captureWebDavAuthorization(
-        webDavTarget.config,
-      );
-    } else {
-      webDavTarget = null;
-      migrateAuthorization = null;
-    }
+      ),
+    );
+    if (webDavTarget == null || !context.mounted) return;
+    final migrateAuthorization = await _captureWebDavAuthorization(
+      webDavTarget.config,
+    );
     final registry = ProfileBootstrap.registry;
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final actor = await _runIfCurrent(
@@ -319,48 +299,36 @@ class ProfileBackupFlows {
     // database snapshot can be collected on memory-constrained tvOS devices.
     package = null;
     late final String destinationLabel;
-    if (destination == _ProfileBackupDestination.localFile) {
-      final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-      final saved = await saveBackupFile(
-        fileName: allProfiles
-            ? 'debrify-profiles-$stamp.json'
-            : 'debrify-profile-$stamp.json',
-        bytes: encodedBytes!,
+    final target = webDavTarget;
+    final stagingDirectory = await _createPrivateStagingDirectory('upload');
+    try {
+      final stagedFile = File(
+        p.join(stagingDirectory.path, 'profile-backup.json'),
       );
-      if (saved == null) return;
-      destinationLabel = 'saved';
-    } else {
-      final target = webDavTarget!;
-      final stagingDirectory = await _createPrivateStagingDirectory('upload');
-      try {
-        final stagedFile = File(
-          p.join(stagingDirectory.path, 'profile-backup.json'),
-        );
-        await stagedFile.writeAsBytes(encodedBytes!, flush: true);
-        // The transport reads from disk. Drop the encrypted envelope reference
-        // before the network transfer as well.
-        encodedBytes = null;
-        final uploaded = await _profileBackupProgress(
-          'Uploading and verifying backup…',
-          (_) => _runIfCurrentAsOutbound(
-            migrateAuthorization,
-            () => WebDavBackupTransport().uploadVerified(
-              config: target.config,
-              directoryPath: target.path,
-              stagedFile: stagedFile,
-              scratchDirectory: stagingDirectory,
-              fileNamePrefix: allProfiles
-                  ? 'debrify-profiles'
-                  : 'debrify-profile',
-              beforeSend: ProfileAsyncAuthorization.currentOutboundBarrier,
-            ),
+      await stagedFile.writeAsBytes(encodedBytes!, flush: true);
+      // The transport reads from disk. Drop the encrypted envelope reference
+      // before the network transfer as well.
+      encodedBytes = null;
+      final uploaded = await _profileBackupProgress(
+        'Uploading and verifying backup…',
+        (_) => _runIfCurrentAsOutbound(
+          migrateAuthorization,
+          () => WebDavBackupTransport().uploadVerified(
+            config: target.config,
+            directoryPath: target.path,
+            stagedFile: stagedFile,
+            scratchDirectory: stagingDirectory,
+            fileNamePrefix: allProfiles
+                ? 'debrify-profiles'
+                : 'debrify-profile',
+            beforeSend: ProfileAsyncAuthorization.currentOutboundBarrier,
           ),
-        );
-        destinationLabel =
-            'uploaded to ${target.config.name}/${uploaded.remotePath}';
-      } finally {
-        await _deletePrivateStagingDirectory(stagingDirectory);
-      }
+        ),
+      );
+      destinationLabel =
+          'uploaded to ${target.config.name}/${uploaded.remotePath}';
+    } finally {
+      await _deletePrivateStagingDirectory(stagingDirectory);
     }
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -768,15 +736,28 @@ class ProfileBackupFlows {
       if (path == null) {
         throw const FormatException('Selected backup is not locally readable');
       }
-      // Route by header, not extension: a `.debrify` archive starts with the
-      // ZIP magic, legacy backups are JSON objects.
-      if (await LocalBackupZip.looksLikeArchive(File(path))) {
-        return _restoreLocalArchive(path);
+      try {
+        // Route by header, not extension: a `.debrify` archive starts with
+        // the ZIP magic, legacy backups are JSON objects.
+        if (await LocalBackupZip.looksLikeArchive(File(path))) {
+          return await _restoreLocalArchive(path);
+        }
+        if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
+          throw const FormatException(
+            'Backup exceeds the supported size limit',
+          );
+        }
+        return await _restoreProfileBackupFromPath(path);
+      } finally {
+        // On Android/iOS the picker copies a content:// pick into the app
+        // cache; a multi-GB archive would otherwise sit there until the user
+        // clears app data.
+        if (Platform.isAndroid || Platform.isIOS) {
+          try {
+            await FilePicker.platform.clearTemporaryFiles();
+          } catch (_) {}
+        }
       }
-      if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
-        throw const FormatException('Backup exceeds the supported size limit');
-      }
-      return _restoreProfileBackupFromPath(path);
     }
 
     final target = await Navigator.of(context).push<WebDavPickerResult>(
@@ -866,17 +847,30 @@ class ProfileBackupFlows {
     );
   }
 
-  /// Extracts a `.debrify` archive into private staging, verifies it, and
-  /// runs the ordinary confirm/restore path with a file resolver so the
-  /// coordinator copies databases from staging instead of decoding base64.
+  /// Reads only the archive directory and manifest, obtains confirmation and
+  /// authorization, and only then extracts into private staging. A cancelled
+  /// or unauthorized restore never pays for a multi-gigabyte extraction.
   Future<ProfileBackupRestoreResult?> _restoreLocalArchive(String path) {
     return LocalBackupOperationGuard.run(() async {
+      final manifest = await _profileBackupProgress<LocalBackupManifest>(
+        'Reading backup…',
+        (_) => LocalBackupRestorer.inspect(File(path)),
+      );
+      if (!context.mounted) return null;
+      final summary = _archiveSummary(manifest);
+      final confirmation = await _confirmRestore(
+        mode: summary.mode,
+        profileCount: summary.profileCount,
+        omissions: summary.omissions,
+      );
+      if (confirmation == null) return null;
+
       final staging = await LocalBackupScratch.create('restore');
       final cancellation = LocalBackupCancellation();
       LocalBackupRestoreStage? stage;
       try {
         stage = await _profileBackupProgress<LocalBackupRestoreStage>(
-          'Reading backup…',
+          'Unpacking backup…',
           (setStage) => LocalBackupRestorer.stage(
             archive: File(path),
             staging: staging,
@@ -887,8 +881,18 @@ class ProfileBackupFlows {
           cancellation: cancellation,
         );
         if (!context.mounted) return null;
-        return await _confirmAndRestorePackage(
+        // The manifest summary was unverified; the decoded package is the
+        // authority. Refuse if the shape changed between the two reads.
+        if ((stage.package.mode == 'deviceGraph') !=
+                confirmation.graphRestore ||
+            stage.package.profiles.length != summary.profileCount) {
+          throw const FormatException(
+            'Backup contents changed while it was being read',
+          );
+        }
+        return await _performRestore(
           stage.package,
+          confirmation,
           databaseFileResolver: stage.resolveDatabase,
         );
       } on LocalBackupCancelledException {
@@ -903,23 +907,66 @@ class ProfileBackupFlows {
     });
   }
 
+  /// Minimal, type-checked view of an archive's embedded package before the
+  /// full decoder runs. Enough for the confirmation dialog, nothing more.
+  static ({String mode, int profileCount, Map<String, dynamic> omissions})
+  _archiveSummary(LocalBackupManifest manifest) {
+    final package = manifest.package;
+    final mode = package['mode'];
+    final profiles = package['profiles'];
+    final omissions = package['omissions'];
+    if (mode is! String ||
+        profiles is! List ||
+        profiles.isEmpty ||
+        profiles.length > PortableProfilePackage.maxProfiles ||
+        (omissions != null && omissions is! Map)) {
+      throw const FormatException('Backup manifest is invalid');
+    }
+    return (
+      mode: mode,
+      profileCount: profiles.length,
+      omissions: omissions == null
+          ? const <String, dynamic>{}
+          : Map<String, dynamic>.from(omissions as Map),
+    );
+  }
+
   Future<ProfileBackupRestoreResult?> _confirmAndRestorePackage(
     PortableProfilePackage package, {
     ProfileAsyncAuthorization? migrateAuthorization,
     ProfileDatabaseFileResolver? databaseFileResolver,
+  }) async {
+    final confirmation = await _confirmRestore(
+      mode: package.mode,
+      profileCount: package.profiles.length,
+      omissions: package.omissions,
+    );
+    if (confirmation == null) return null;
+    return _performRestore(
+      package,
+      confirmation,
+      migrateAuthorization: migrateAuthorization,
+      databaseFileResolver: databaseFileResolver,
+    );
+  }
+
+  /// Authorization check, notices, confirm dialog and sensitive re-auth.
+  /// Returns null when the user backs out.
+  Future<_RestoreConfirmation?> _confirmRestore({
+    required String mode,
+    required int profileCount,
+    required Map<String, dynamic> omissions,
   }) async {
     final registry = ProfileBootstrap.registry;
     final profile = await registry.getProfile(
       ProfileRuntime.capture().profileId,
     );
     if (profile == null || !context.mounted) return null;
-    final graphRestore = package.mode == 'deviceGraph';
+    final graphRestore = mode == 'deviceGraph';
     final legacyDatabasesMissing =
-        package.omissions['libraryDatabasesOmitted'] == true ||
-        package.omissions['libraryDatabasesTooLarge'] != null;
-    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
-      package.omissions,
-    );
+        omissions['libraryDatabasesOmitted'] == true ||
+        omissions['libraryDatabasesTooLarge'] != null;
+    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(omissions);
     final databaseNotices = <String>[
       if (legacyDatabasesMissing)
         'Warning: this older backup omitted one or more library databases; '
@@ -930,7 +977,7 @@ class ProfileBackupFlows {
             'channels will be created. Import a previously exported channel '
             'ZIP from Debrify TV → Import → From storage, or transfer them '
             'from the source using Remote → Debrify TV Channels.',
-      if (package.omissions.containsKey('rebuildableDatabaseCachesOmitted'))
+      if (omissions.containsKey('rebuildableDatabaseCachesOmitted'))
         'Rebuildable IPTV catalog and EPG caches were compacted; playlists, '
             'favorites, history, numbering, and settings are included.',
     ];
@@ -954,7 +1001,7 @@ class ProfileBackupFlows {
       builder: (dialogContext) => AlertDialog(
         title: Text(
           graphRestore
-              ? 'Import ${package.profiles.length} profiles?'
+              ? 'Import $profileCount profiles?'
               : 'Restore profile backup?',
         ),
         content: Text(
@@ -980,7 +1027,27 @@ class ProfileBackupFlows {
     if (graphRestore && !await reauthenticateSensitiveProfile(actor)) {
       return null;
     }
+    return _RestoreConfirmation(
+      actor: actor,
+      profile: profile,
+      authorization: authorization,
+      graphRestore: graphRestore,
+      databaseNotice: databaseNotice,
+    );
+  }
 
+  Future<ProfileBackupRestoreResult?> _performRestore(
+    PortableProfilePackage package,
+    _RestoreConfirmation confirmation, {
+    ProfileAsyncAuthorization? migrateAuthorization,
+    ProfileDatabaseFileResolver? databaseFileResolver,
+  }) async {
+    final registry = ProfileBootstrap.registry;
+    final actor = confirmation.actor;
+    final profile = confirmation.profile;
+    final authorization = confirmation.authorization;
+    final graphRestore = confirmation.graphRestore;
+    final databaseNotice = confirmation.databaseNotice;
     final coordinator = ProfileRestoreCoordinator(
       registry: registry,
       cipher: DeviceKeyProvider.cipher,
@@ -1279,6 +1346,22 @@ class ProfileBackupFlows {
 /// and closed through its OWN context when `done` fires — the caller's State
 /// may unmount mid-run, and an orphaned `canPop: false` modal on the root
 /// navigator would wedge the whole app.
+class _RestoreConfirmation {
+  const _RestoreConfirmation({
+    required this.actor,
+    required this.profile,
+    required this.authorization,
+    required this.graphRestore,
+    required this.databaseNotice,
+  });
+
+  final UserProfile actor;
+  final UserProfile profile;
+  final ProfileAuthorizationContext authorization;
+  final bool graphRestore;
+  final String databaseNotice;
+}
+
 class _BackupProgressDialog extends StatefulWidget {
   const _BackupProgressDialog({
     required this.stage,

@@ -10,15 +10,24 @@ void main() {
   test(
     'local backup and restore retain their original transport entry points',
     () {
-      expect(
-        source,
-        contains('destination: _ProfileBackupDestination.localFile'),
-      );
+      // Local files use the streamed .debrify archive; WebDAV keeps the
+      // encrypted JSON package. Neither transport borrows the other's path.
+      expect(source, contains('await _createLocalArchiveBackup();'));
+      expect(source, contains('_createWebDavProfileBackupUnchecked()'));
       expect(source, contains('saveBackupFile('));
       expect(source, contains('DownloadService.instance.saveGeneratedFile('));
+      expect(
+        source,
+        contains('DownloadService.instance.saveGeneratedFileFromPath('),
+      );
       expect(source, contains('source: _ProfileBackupSource.localFile'));
       expect(source, contains('FilePicker.platform.pickFiles('));
-      expect(source, contains('return _restoreProfileBackupFromPath(path);'));
+      expect(source, contains('LocalBackupZip.looksLikeArchive(File(path))'));
+      expect(source, contains('return await _restoreLocalArchive(path);'));
+      expect(
+        source,
+        contains('return await _restoreProfileBackupFromPath(path);'),
+      );
     },
   );
 

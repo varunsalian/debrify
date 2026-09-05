@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../utils/app_storage.dart';
+import '../../utils/streamed_file_copy.dart';
 import '../iptv_catalog_key.dart';
 import 'profile_scope.dart';
 
@@ -437,13 +438,8 @@ class ProfileDatabaseSnapshot {
         'tv_channel_keywords',
         'tv_channels',
       ],
-      'iptv_catalog.db' => const <String>[
-        'meta',
-        'catalogs',
-        'channels',
-        'epg_programmes',
-        'epg_guides',
-      ],
+      // Same classification as the local archive's cache-only prune.
+      'iptv_catalog.db' => rebuildableCatalogTables.toList(growable: false),
       _ => const <String>[],
     };
     final db = await openDatabase(snapshot.path, singleInstance: false);
@@ -827,21 +823,8 @@ class ProfileDatabaseSnapshot {
     return base64UrlEncode((await sink.hash()).bytes).replaceAll('=', '');
   }
 
-  static Future<void> _copyFile(File source, File destination) async {
-    final input = await source.open();
-    final output = await destination.open(mode: FileMode.write);
-    try {
-      while (true) {
-        final chunk = await input.read(_fileChunkBytes);
-        if (chunk.isEmpty) break;
-        await output.writeFrom(chunk);
-      }
-      await output.flush();
-    } finally {
-      await input.close();
-      await output.close();
-    }
-  }
+  static Future<void> _copyFile(File source, File destination) =>
+      copyFileStreamed(source, destination, chunkSize: _fileChunkBytes);
 
   static const int _fileChunkBytes = 256 * 1024;
 
