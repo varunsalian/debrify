@@ -1,3 +1,4 @@
+import '../../widgets/webdav_sync/webdav_foreground_sync.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/webdav_protocol_client.dart';
@@ -117,13 +118,19 @@ final class _WebDavSyncLoginScreenState extends State<WebDavSyncLoginScreen> {
       _error = null;
     });
     try {
-      if (widget.inspect case final inspect?) {
-        await inspect(result);
-      } else if (_isRepair) {
-        await widget.connectController!.inspectReconnect(result);
-      } else {
-        await widget.connectController!.inspect(result);
-      }
+      await runWebDavForegroundSync<void>(
+        context,
+        stage: 'Verifying WebDAV account…',
+        operation: (_) async {
+          if (widget.inspect case final inspect?) {
+            await inspect(result);
+          } else if (_isRepair) {
+            await widget.connectController!.inspectReconnect(result);
+          } else {
+            await widget.connectController!.inspect(result);
+          }
+        },
+      );
       if (mounted) Navigator.of(context).pop(result);
     } catch (error) {
       if (!mounted) return;

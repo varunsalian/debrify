@@ -1,3 +1,5 @@
+import '../../services/webdav_sync/webdav_sync_save_feedback.dart';
+import '../../widgets/webdav_sync/webdav_save_status.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -151,6 +153,12 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
   }
 
   Future<void> _saveIdentity() async {
+    final revision = WebDavSyncSaveFeedback.instance.revision;
+    await _saveIdentityLocally();
+    if (mounted) await showWebDavSaveProgress(context, revision);
+  }
+
+  Future<void> _saveIdentityLocally() async {
     final name = _name.text.trim();
     if (_busy || name.isEmpty) {
       if (name.isEmpty) _message('Enter a profile name');
@@ -208,6 +216,12 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
   }
 
   Future<void> _changePin() async {
+    final revision = WebDavSyncSaveFeedback.instance.revision;
+    await _changePinLocally();
+    if (mounted) await showWebDavSaveProgress(context, revision);
+  }
+
+  Future<void> _changePinLocally() async {
     final next = _newPin.text;
     if (_busy) return;
     if (!RegExp(r'^\d{4,8}$').hasMatch(next)) {
@@ -251,6 +265,12 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
   }
 
   Future<void> _removePin() async {
+    final revision = WebDavSyncSaveFeedback.instance.revision;
+    await _removePinLocally();
+    if (mounted) await showWebDavSaveProgress(context, revision);
+  }
+
+  Future<void> _removePinLocally() async {
     if (_busy || !_profile.hasPin) return;
     if (_currentPin.text.isEmpty) {
       _message('Enter your current PIN');
@@ -554,7 +574,9 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _pickAvatarImage,
                         icon: const Icon(Icons.image_outlined, size: 18),
-                        label: const Text('Choose image or GIF'),
+                        label: const Text(
+                          'Choose image or GIF (this device only)',
+                        ),
                       ),
                     if (pending != null)
                       TextButton.icon(

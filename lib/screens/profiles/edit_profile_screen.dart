@@ -1,3 +1,5 @@
+import '../../services/webdav_sync/webdav_sync_save_feedback.dart';
+import '../../widgets/webdav_sync/webdav_save_status.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -741,6 +743,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _save() async {
+    final syncRevision = WebDavSyncSaveFeedback.instance.revision;
     if (_saving || _name.text.trim().isEmpty) return;
     if (_resources == null || _engines == null || _setupLoadError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -766,7 +769,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     final downloadsOn = _features.contains(ProfileFeature.downloads);
     final remoteOn = _features.contains(ProfileFeature.remoteControl);
-    follow(downloadsOn != _seedDownloads, downloadsOn, ProfileFeature.recordings);
+    follow(
+      downloadsOn != _seedDownloads,
+      downloadsOn,
+      ProfileFeature.recordings,
+    );
     follow(remoteOn != _seedRemote, remoteOn, ProfileFeature.remoteTransfer);
     // Clamp through the role ceiling BEFORE encoding: decode strips
     // ceiling-denied bits, so a raw set carrying one (e.g. remoteTransfer
@@ -986,6 +993,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         await _showRecoveryCode(snapshot.name, recoveryCode);
         if (!mounted) return;
       }
+      await showWebDavSaveProgress(context, syncRevision);
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ProfileAvatarRejected catch (rejected) {
       if (!mounted) return;
@@ -1276,37 +1285,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: _saving
-                          ? null
-                          : () async {
-                              try {
-                                final operationActor = _authorization;
-                                await _validateManagingAdmin(operationActor);
-                                await widget.pins.removePinAsAdmin(
-                                  actor: operationActor,
-                                  targetProfileId: widget.profile!.id,
-                                );
-                                _authorization =
-                                    await _refreshSameManagingAdmin(
-                                      operationActor.profileId,
-                                    );
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('PIN protection removed'),
-                                  ),
-                                );
-                              } catch (_) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'PIN protection was not changed',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
+                      onPressed: _saving ? null : _removePinAsAdmin,
                       icon: const Icon(Icons.lock_open_rounded),
                       label: const Text('Admin reset: remove PIN'),
                     ),
@@ -1407,8 +1386,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             child: switch (_tvSection) {
                               _TvProfileSection.profile =>
                                 _buildTvProfileSection(),
-                              _TvProfileSection.pages =>
-                                _buildTvPagesSection(),
+                              _TvProfileSection.pages => _buildTvPagesSection(),
                               _TvProfileSection.lock => _buildTvLockSection(),
                               _TvProfileSection.access =>
                                 _buildTvAccessSection(),
@@ -1544,11 +1522,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   /// whichever tab is vertically nearest — so it is redirected to the
   /// current section's tab instead of silently swapping the pane the user
   /// was editing.
-  void _onRailItemFocused(
-    int index,
-    bool focused,
-    _TvProfileSection? section,
-  ) {
+  void _onRailItemFocused(int index, bool focused, _TvProfileSection? section) {
     if (!focused) return;
     final cameFromRail = _railMoveInProgress;
     _railMoveInProgress = false;
@@ -1671,11 +1645,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   'Stremio TV',
                   'Addon live channels.',
                 ),
-                tile(
-                  ProfileFeature.iptv,
-                  'Live TV',
-                  'IPTV playlists & guide.',
-                ),
+                tile(ProfileFeature.iptv, 'Live TV', 'IPTV playlists & guide.'),
                 tile(ProfileFeature.youtube, 'YouTube', 'The YouTube tab.'),
                 group('ABILITIES'),
                 tile(
@@ -1738,7 +1708,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           child: OutlinedButton.icon(
                             onPressed: _saving ? null : _pickAvatarImage,
                             icon: const Icon(Icons.image_outlined),
-                            label: const Text('Choose image or GIF'),
+                            label: const Text(
+                              'Choose image or GIF (this device only)',
+                            ),
                           ),
                         ),
                     ],
@@ -2173,6 +2145,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   );
 
   Future<void> _removePinAsAdmin() async {
+    final revision = WebDavSyncSaveFeedback.instance.revision;
+    await _removePinAsAdminLocally();
+    if (mounted) await showWebDavSaveProgress(context, revision);
+  }
+
+  Future<void> _removePinAsAdminLocally() async {
     try {
       final operationActor = _authorization;
       await _validateManagingAdmin(operationActor);
@@ -2241,7 +2219,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     OutlinedButton.icon(
                       onPressed: _saving ? null : _pickAvatarImage,
                       icon: const Icon(Icons.image_outlined, size: 18),
-                      label: const Text('Choose image or GIF'),
+                      label: const Text(
+                        'Choose image or GIF (this device only)',
+                      ),
                     ),
                   if (pending != null)
                     TextButton.icon(

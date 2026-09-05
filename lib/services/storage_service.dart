@@ -1663,6 +1663,7 @@ class StorageService {
   static Future<void> setDiscoverLastSource(String value) async {
     if (!_isDiscoverSourceValue(value)) return;
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_discoverLastSourceKey) == value) return;
     await prefs.setString(_discoverLastSourceKey, value);
   }
 
@@ -4102,9 +4103,10 @@ class StorageService {
 
   static Future<void> removeVideoResume(
     String key, {
+    bool playbackCheckpoint = false,
     WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) {
-    return IptvMediaStore.removeVideoResume(key, origin: origin);
+    return IptvMediaStore.removeVideoResume(key, origin: origin, playbackCheckpoint: playbackCheckpoint);
   }
 
   /// Save audio and subtitle preferences for series content
@@ -6385,6 +6387,7 @@ class StorageService {
 
   static Future<void> setRedditLastSubreddit(String subreddit) async {
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_redditLastSubredditKey) == subreddit) return;
     await prefs.setString(_redditLastSubredditKey, subreddit);
   }
 

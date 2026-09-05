@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:collection/collection.dart';
+
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
@@ -358,8 +360,32 @@ class ConnectionResourceService {
         resource.authorizationRevision != authorized.authorizationRevision) {
       throw StateError('Resource is unavailable');
     }
+    // Compare JSON values, not randomized ciphertext. Account refreshes often
+    // save the existing credential; that must not invalidate jobs or wake sync.
+    final encoded = jsonEncode(secretConfig);
+    if (!resource.secretPending) {
+      Map<String, dynamic>? current;
+      try {
+        current = await _openSecret(resourceId);
+      } on StateError {
+        // A missing prior secret must not prevent an authorized replacement.
+      } on Exception {
+        // A replacement credential must still be able to repair an unreadable
+        // old envelope. The write below revalidates authority before committing.
+      }
+      if (current != null &&
+          const DeepCollectionEquality().equals(current, jsonDecode(encoded))) {
+        await _revalidateResource(
+          context: context,
+          expected: authorized,
+          permission: ResourcePermission.manage,
+          feature: ProfileFeature.manageConnections,
+        );
+        return;
+      }
+    }
     final sealed = await cipher.seal(
-      utf8.encode(jsonEncode(secretConfig)),
+      utf8.encode(encoded),
       associatedData: associatedDataForSecret(
         resourceId: resource.id,
         type: resource.type,

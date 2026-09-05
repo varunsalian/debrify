@@ -403,8 +403,11 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
 
   Future<ProfilePinVerification> _verifyPin(String pin) async {
     final target = _pinTarget!;
+    final locks = ProfileLockController.instance;
+    final pendingLock = locks.pendingPinLock(target.id);
     final verification = await _pins!.verify(target.id, pin);
     if (verification.result == ProfilePinResult.verified && mounted) {
+      locks.acknowledgeVerifiedPin(target.id, pendingLock);
       if (_pinForManagement) {
         setState(() {
           _pinTarget = null;

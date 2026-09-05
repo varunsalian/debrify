@@ -1635,7 +1635,7 @@ class IptvMediaStore {
       });
     });
     if (origin == WebDavSyncMutationOrigin.user) {
-      WebDavSyncLibraryMutation.notifyUserMutation();
+      WebDavSyncLibraryMutation.notifyUserMutation(playbackCheckpoint: true);
     }
   }
 
@@ -1957,7 +1957,7 @@ class IptvMediaStore {
       });
     });
     if (origin == WebDavSyncMutationOrigin.user) {
-      WebDavSyncLibraryMutation.notifyUserMutation();
+      WebDavSyncLibraryMutation.notifyUserMutation(playbackCheckpoint: true);
     }
   }
 
@@ -1965,6 +1965,7 @@ class IptvMediaStore {
   /// the user's IPTV/on-demand playback history.
   static Future<void> removeVideoResume(
     String key, {
+    bool playbackCheckpoint = false,
     WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) async {
     if (key.isEmpty) return Future<void>.value();
@@ -2016,7 +2017,7 @@ class IptvMediaStore {
         }
       });
     });
-    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation(playbackCheckpoint: playbackCheckpoint);
   }
 
   /// Stored resume entries for whichever of [keys] exist. Batched `IN`

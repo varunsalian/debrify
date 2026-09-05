@@ -7,11 +7,14 @@ import 'package:synchronized/synchronized.dart';
 import '../../models/profiles/user_profile.dart';
 import '../diagnostic_log.dart';
 import '../profiles/profile_preferences.dart';
+import '../profiles/connection_resource_service.dart';
+import '../profiles/profile_lock_controller.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
@@ -93,6 +96,8 @@ final class WebDavSyncCycleReport {
     this.clockPauseReason,
     this.statusHint,
     this.localChangeFollowUp = false,
+    this.localPublicationConfirmed = false,
+    this.localProfilesSuppressed = false,
   });
 
   final WebDavSyncCycleDisposition disposition;
@@ -103,6 +108,15 @@ final class WebDavSyncCycleReport {
   final WebDavSyncClockPauseReason? clockPauseReason;
   final String? statusHint;
   final bool localChangeFollowUp;
+
+  /// Publication proof, independent of informational remote-merge warnings.
+  /// Profile receipts must additionally check [localProfilesSuppressed].
+  /// False when publication was blocked or needs a fresh snapshot.
+  final bool localPublicationConfirmed;
+
+  /// Profile records were withheld from the snapshot by a local safety hold.
+  /// Other families may still have been published successfully.
+  final bool localProfilesSuppressed;
 }
 
 /// Bounded cache shared by successive production engine instances. Transport
@@ -589,6 +603,11 @@ final class WebDavSyncEngine
       return report;
     } catch (error) {
       instrumentation.disposition = 'failed';
+      if (error is WebDavException) {
+        instrumentation.connectionFailure = webDavConnectionFailureFields(
+          error,
+        );
+      }
       // Only the shape of the failure, never its message, URI, or body: a
       // failed cycle event carried nothing before, which left a real field
       // failure unexplainable from the log.
@@ -1176,6 +1195,7 @@ final class WebDavSyncEngine
 
       session ??= await _localAdapter.beginCycle();
       _CircleCycleResult? circleResult;
+      var localProfilesSuppressed = false;
       circlePublication:
       if (circleAdapter != null &&
           circlePublicationAllowed &&
@@ -1230,6 +1250,13 @@ final class WebDavSyncEngine
         }
         final phaseStarted = instrumentation.startPhase();
         try {
+          final suppressedLocalProfileIds = <String>{
+            if (state.pendingActiveProfile != null)
+              state.pendingActiveProfile!.localProfileId,
+            if (state.pendingAdminSafetyProfile != null)
+              state.pendingAdminSafetyProfile!,
+          };
+          localProfilesSuppressed = suppressedLocalProfileIds.isNotEmpty;
           final built = await circleAdapter.buildCircleState(
             session,
             WebDavSyncCircleBuildRequest(
@@ -1242,12 +1269,7 @@ final class WebDavSyncEngine
               serverNowMs: serverNowMs,
               previousProfiles: state.circleProfilesBaseline,
               previousResources: state.circleResourcesBaseline,
-              suppressedLocalProfileIds: <String>{
-                if (state.pendingActiveProfile != null)
-                  state.pendingActiveProfile!.localProfileId,
-                if (state.pendingAdminSafetyProfile != null)
-                  state.pendingAdminSafetyProfile!,
-              },
+              suppressedLocalProfileIds: suppressedLocalProfileIds,
             ),
           );
           if (built.registryOutboxRowCount != 0) {
@@ -1798,6 +1820,11 @@ final class WebDavSyncEngine
         deviceClockWarning: clockDecision.deviceClockWarning,
         statusHint: state.statusHint,
         localChangeFollowUp: localChangeFollowUp,
+        localProfilesSuppressed: localProfilesSuppressed,
+        localPublicationConfirmed:
+            circlePublicationAllowed &&
+            !cycleConflicted &&
+            !localChangeFollowUp,
       );
     } finally {
       transport.close();
@@ -1888,10 +1915,12 @@ final class WebDavSyncEngine
         sortedDeviceIds,
         limit: readConcurrency,
         operation: (deviceId) async {
+          var stage = WebDavSyncManifestReadStage.read;
           try {
             instrumentation.requestStarted();
             final read = await transport.readManifest(deviceId);
             instrumentation.received(read.bytes.length);
+            stage = WebDavSyncManifestReadStage.decode;
             final payload = await _codec.openDocument(
               key: context.root!.key,
               encoded: read.bytes,
@@ -1901,7 +1930,9 @@ final class WebDavSyncEngine
               schemaVersion: WebDavSyncManifest.schemaVersion,
               maxBytes: WebDavSyncLimits.maxManifestBytes,
             );
+            stage = WebDavSyncManifestReadStage.parse;
             final manifest = WebDavSyncManifest.fromJson(payload);
+            stage = WebDavSyncManifestReadStage.identity;
             if (manifest.deviceId != deviceId ||
                 manifest.circleId != context.root!.document.circleId) {
               throw const FormatException(
@@ -1920,6 +1951,7 @@ final class WebDavSyncEngine
               _diagnostic('Ignored a regressed WebDAV sync manifest', null);
               return null;
             }
+            stage = WebDavSyncManifestReadStage.metadata;
             return _ManifestRead(
               manifest: manifest,
               validator: WebDavSyncManifestValidator.fromMetadata(
@@ -1931,7 +1963,10 @@ final class WebDavSyncEngine
             _diagnostic('Ignored a removed WebDAV sync peer', error);
             return null;
           } on Exception catch (error) {
-            _diagnostic('Ignored an invalid WebDAV sync peer manifest', error);
+            _diagnostic(
+              'Ignored an invalid WebDAV sync peer manifest',
+              WebDavSyncManifestFailure(stage, error),
+            );
             return null;
           }
         },
@@ -4007,7 +4042,19 @@ String describeWebDavSyncCycleFailure(Object error) {
     return 'WebDavException:${error.kind.name}'
         '${status == null ? '' : ':$status'}';
   }
-  if (error is StateError && _literalStateErrorMessage.hasMatch(error.message)) {
+  if (error is ResourceAuthorizationException) {
+    final reason = switch (error.message) {
+      'Profile session is locked' => 'profile_locked',
+      'Profile authorization has changed' => 'profile_authority_changed',
+      'Profile authorization session has ended' => 'profile_session_changed',
+      'Resource is unavailable' => 'resource_unavailable',
+      'Resource permission denied' => 'permission_denied',
+      _ => 'other',
+    };
+    return 'ResourceAuthorizationException:$reason';
+  }
+  if (error is StateError &&
+      _literalStateErrorMessage.hasMatch(error.message)) {
     return 'StateError:${error.message}';
   }
   return error.runtimeType.toString();
@@ -4030,6 +4077,7 @@ final class _CycleInstrumentation {
   int bytesSaved = 0;
   String disposition = 'failed';
   String? failureKind;
+  Map<String, Object> connectionFailure = const {};
   int _rootUs = 0;
   int _listUs = 0;
   int _manifestsUs = 0;
@@ -4095,6 +4143,7 @@ final class _CycleInstrumentation {
       source: 'webdav_sync',
       event: 'cycle',
       fields: <String, Object?>{
+        ...connectionFailure,
         'trigger': DiagnosticLabel(trigger?.name ?? 'internal'),
         'peerCount': peerCount,
         'rootMs': _milliseconds(_rootUs),
@@ -4112,7 +4161,11 @@ final class _CycleInstrumentation {
         'sectionsSkipped': sectionsSkipped,
         'bytesSaved': bytesSaved,
         'disposition': DiagnosticLabel(disposition),
-        if (failureKind case final kind?) 'failureKind': DiagnosticLabel(kind),
+        if (failureKind case final kind?) ...{
+          'failureKind': DiagnosticLabel(kind),
+          'profileLocked':
+              ProfileLockController.instance.lockedProfileId.value != null,
+        },
       },
     );
   }

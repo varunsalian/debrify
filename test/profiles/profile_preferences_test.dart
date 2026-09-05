@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:debrify/services/webdav_sync/webdav_sync_save_feedback.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
+
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -116,6 +119,74 @@ void main() {
 
     expect(notifications, <(String, String)>[('one', 'language')]);
   });
+
+  test(
+    'unchanged scalar and list saves emit no new sync notification',
+    () async {
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+      );
+      var signals = 0;
+      ProfilePreferences.webDavSyncLocalChangeSink = (_, _) => signals++;
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('discover_last_source', 'cw');
+      await prefs.setString('discover_last_source', 'cw');
+      await prefs.setStringList('tracking_scrobble_targets', ['local']);
+      await prefs.setStringList('tracking_scrobble_targets', ['local']);
+      expect(signals, 2);
+      await prefs.setStringList('tracking_scrobble_targets', [
+        'local',
+        'simkl',
+      ]);
+      expect(signals, 3);
+    },
+  );
+
+  for (final selection in <(String, String, String)>[
+    ('subtitle_selected_font_id', 'custom_test_font', 'default'),
+    ('external_player_preferred', 'custom', 'vlc'),
+    ('external_player_preferred', 'custom_app', 'vlc'),
+    ('external_player_preferred', 'custom_command', 'vlc'),
+    ('ios_external_player_preferred', 'custom_scheme', 'vlc'),
+    ('linux_external_player_preferred', 'custom_command', 'vlc'),
+    ('windows_external_player_preferred', 'custom_command', 'vlc'),
+  ]) {
+    test(
+      'local-only ${selection.$1}=${selection.$2} emits no save receipt',
+      () async {
+        ProfileRuntime.initializeCommitted(
+          ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+        );
+        final feedback = WebDavSyncSaveFeedback()..setEnabled(true);
+        addTearDown(feedback.dispose);
+        var sequence = 0;
+        ProfilePreferences.webDavSyncLocalChangeSink = (_, key) {
+          if (WebDavSyncScheduler.admitsLocalChangeKey(key)) {
+            feedback.saved(++sequence);
+          }
+        };
+        final prefs = await ProfilePreferences.instance();
+        final (key, custom, builtin) = selection;
+
+        expect(await prefs.setString(key, custom), isTrue);
+        expect(prefs.getString(key), custom);
+        expect(feedback.revision, 0);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+
+        expect(await prefs.setString(key, builtin), isTrue);
+        expect(feedback.revision, 1);
+        feedback.finished(1, published: true);
+        expect(feedback.phase, WebDavSavePhase.synced);
+
+        expect(await prefs.setString(key, custom), isTrue);
+        expect(feedback.revision, 1);
+        expect(feedback.hasPending, isFalse);
+        expect(await prefs.remove(key), isTrue);
+        expect(feedback.revision, 2);
+        expect(feedback.hasPending, isTrue);
+      },
+    );
+  }
 
   test('a throwing local-change sink cannot fail its write', () async {
     final scope = ProfileScope(

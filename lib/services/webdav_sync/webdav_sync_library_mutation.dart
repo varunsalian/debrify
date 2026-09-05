@@ -42,7 +42,7 @@ abstract final class WebDavSyncLibraryMutation {
     return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
-  static void notifyUserMutation() {
+  static void notifyUserMutation({bool playbackCheckpoint = false}) {
     try {
       debugUserMutationObserver?.call();
     } catch (_) {
@@ -54,7 +54,9 @@ abstract final class WebDavSyncLibraryMutation {
     try {
       ProfilePreferences.notifyWebDavSyncLocalChange(
         ProfileRuntime.capture().profileId,
-        ProfilePreferences.webDavSyncLibraryLogicalKey,
+        playbackCheckpoint
+            ? ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey
+            : ProfilePreferences.webDavSyncLibraryLogicalKey,
       );
     } catch (_) {
       // A committed database mutation is never failed by sync scheduling.

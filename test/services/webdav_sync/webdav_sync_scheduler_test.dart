@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
@@ -10,6 +12,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_save_feedback.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 // Flutter's test SDK supplies fake_async transitively for deterministic timers.
 // ignore: depend_on_referenced_packages
@@ -47,6 +50,184 @@ void main() {
     circleToLocalResources: const <String, String>{},
     active: true,
   );
+
+  test('manual sync waits for a snapshot covering saves at request time', () {
+    fakeAsync((async) {
+      final older = Completer<void>();
+      final newer = Completer<void>();
+      final runner = _Runner()..blocker = older;
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      scheduler.notifyLocalChange('theme');
+      WebDavSyncCycleReport? manual;
+      WebDavSyncCycleReport? otherManual;
+      scheduler.signal(WebDavSyncTrigger.manual).then((r) => manual = r);
+      scheduler.signal(WebDavSyncTrigger.manual).then((r) => otherManual = r);
+      async.flushMicrotasks();
+      expect(manual, isNull);
+      runner.blocker = newer;
+      older.complete();
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      expect(runner.triggers.last, WebDavSyncTrigger.manual);
+      expect(manual, isNull);
+      expect(otherManual, isNull);
+      // New writes after the manual request remain ordinary pending work.
+      scheduler.notifyLocalChange('language');
+      newer.complete();
+      async.flushMicrotasks();
+      expect(manual?.disposition, WebDavSyncCycleDisposition.completed);
+      expect(otherManual, same(manual));
+      expect(runner.runs, 2);
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.runs, 3);
+      scheduler.dispose();
+    });
+  });
+
+  test('queued manual follow-up cannot cross a reconfiguration', () {
+    fakeAsync((async) {
+      final older = Completer<void>();
+      final runner = _Runner()..blocker = older;
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      scheduler.notifyLocalChange('theme');
+      WebDavSyncCycleReport? manual;
+      scheduler.signal(WebDavSyncTrigger.manual).then((r) => manual = r);
+      scheduler.disarm();
+      scheduler.arm(() async => context());
+      older.complete();
+      async.flushMicrotasks();
+      expect(manual?.disposition, WebDavSyncCycleDisposition.inactive);
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  for (final key in ['app_last_version', 'app_last_build_number']) {
+    test('startup bookkeeping $key syncs without creating save feedback', () {
+      fakeAsync((async) {
+        final feedback = WebDavSyncSaveFeedback();
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          saveFeedback: feedback,
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange(key);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+        expect(feedback.revision, 0);
+        async.elapse(const Duration(seconds: 2));
+        expect(runner.runs, 1);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+        expect(feedback.hasPending, isFalse);
+        scheduler.notifyLocalChange('tracking_scrobble_targets');
+        expect(feedback.phase, WebDavSavePhase.syncing);
+        expect(feedback.hasPending, isTrue);
+        scheduler.dispose();
+        feedback.dispose();
+      });
+    });
+  }
+
+  test('remembered navigation syncs silently while defaults show feedback', () {
+    fakeAsync((async) {
+      final feedback = WebDavSyncSaveFeedback();
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        saveFeedback: feedback,
+      );
+      scheduler.arm(() async => context());
+      for (final key in [
+        'discover_last_source',
+        'reddit_last_subreddit',
+        'iptv_last_live_channel',
+        'defaults_generation',
+      ]) {
+        scheduler.notifyLocalChange(key);
+      }
+      expect(feedback.revision, 0);
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.runs, 1);
+      scheduler.notifyLocalChange('discover_default_source');
+      expect(feedback.hasPending, isTrue);
+      scheduler.dispose();
+      feedback.dispose();
+    });
+  });
+
+  for (final fails in <bool>[false, true]) {
+    test(
+      'manual sync waits for the active cycle and shares its outcome ($fails)',
+      () {
+        fakeAsync((async) {
+          final blocker = Completer<void>();
+          final runner = _Runner()
+            ..blocker = blocker
+            ..failuresRemaining = fails ? 1 : 0;
+          final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+          scheduler.arm(() async => context());
+          Object? automatic;
+          Object? first;
+          Object? second;
+          scheduler
+              .signal(WebDavSyncTrigger.foreground)
+              .then<void>(
+                (report) => automatic = report,
+                onError: (Object e) {
+                  automatic = e;
+                },
+              );
+          async.flushMicrotasks();
+          scheduler
+              .signal(WebDavSyncTrigger.manual)
+              .then<void>(
+                (report) => first = report,
+                onError: (Object e) {
+                  first = e;
+                },
+              );
+          scheduler
+              .signal(WebDavSyncTrigger.manual)
+              .then<void>(
+                (report) => second = report,
+                onError: (Object e) {
+                  second = e;
+                },
+              );
+          async.flushMicrotasks();
+          expect(runner.runs, 1);
+          expect(first, isNull);
+          expect(second, isNull);
+          blocker.complete();
+          async.flushMicrotasks();
+          expect(first, same(automatic));
+          expect(second, same(automatic));
+          if (fails) {
+            expect(first, isA<StateError>());
+          } else {
+            expect(
+              (first as WebDavSyncCycleReport).disposition,
+              WebDavSyncCycleDisposition.completed,
+            );
+          }
+          expect(runner.runs, 1);
+          // Subsequent manual attempts still run normally after cleanup.
+          scheduler.signal(WebDavSyncTrigger.manual);
+          async.flushMicrotasks();
+          expect(runner.runs, 2);
+          scheduler.dispose();
+        });
+      },
+    );
+  }
 
   test('scheduler starts unarmed and performs no cycle', () async {
     final runner = _Runner();
@@ -250,11 +431,11 @@ void main() {
     scheduler.arm(() => gate.future);
 
     final first = scheduler.signal(WebDavSyncTrigger.manual);
-    final second = await scheduler.signal(WebDavSyncTrigger.manual);
+    final second = scheduler.signal(WebDavSyncTrigger.manual);
     gate.complete(context());
     final firstReport = await first;
 
-    expect(second.disposition, WebDavSyncCycleDisposition.inactive);
+    expect(await second, same(firstReport));
     expect(firstReport.disposition, WebDavSyncCycleDisposition.completed);
     expect(runner.runs, 1);
   });
@@ -443,70 +624,74 @@ void main() {
     });
   });
 
-  test('a foreground cycle never probes ahead of a server-answered backoff', () {
-    fakeAsync((async) {
-      final start = DateTime.utc(2026, 9, 1);
-      final transport = _PollTransport(
-        clock: () => start.add(async.elapsed),
-        probes: const <String, WebDavSyncManifestProbe>{
-          'device-b': WebDavSyncManifestProbe(
-            exists: true,
-            validator: WebDavSyncManifestValidator.etag('"v1"'),
-          ),
-        },
-      )..failuresRemaining = 1;
-      final runner = _Runner();
-      final scheduler = WebDavSyncScheduler(
-        runner: runner,
-        gate: _Gate(),
-        clock: () => start.add(async.elapsed),
-      );
-      scheduler.arm(
-        () async => context(),
-        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
-          transport: transport,
-          peerDeviceIds: const <String>['device-b'],
-          validators: const <String, WebDavSyncManifestValidator>{
-            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+  test(
+    'a foreground cycle never probes ahead of a server-answered backoff',
+    () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 1);
+        final transport = _PollTransport(
+          clock: () => start.add(async.elapsed),
+          probes: const <String, WebDavSyncManifestProbe>{
+            'device-b': WebDavSyncManifestProbe(
+              exists: true,
+              validator: WebDavSyncManifestValidator.etag('"v1"'),
+            ),
           },
-        ),
-      );
+        )..failuresRemaining = 1;
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+            transport: transport,
+            peerDeviceIds: const <String>['device-b'],
+            validators: const <String, WebDavSyncManifestValidator>{
+              'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+            },
+          ),
+        );
 
-      // The first idle probe is answered with 429: a server-requested backoff
-      // of one idle period that deliberately survives completed cycles.
-      async.elapse(idlePollPeriod);
-      async.flushMicrotasks();
-      expect(transport.probedDeviceIds, hasLength(1));
+        // The first idle probe is answered with 429: a server-requested backoff
+        // of one idle period that deliberately survives completed cycles.
+        async.elapse(idlePollPeriod);
+        async.flushMicrotasks();
+        expect(transport.probedDeviceIds, hasLength(1));
 
-      // Foreground re-warms, but the backoff deadline still owns the timer:
-      // no probe within a warm period...
-      scheduler.signal(WebDavSyncTrigger.foreground);
-      async.flushMicrotasks();
-      async.elapse(warmPollPeriod);
-      async.flushMicrotasks();
-      expect(transport.probedDeviceIds, hasLength(1));
+        // Foreground re-warms, but the backoff deadline still owns the timer:
+        // no probe within a warm period...
+        scheduler.signal(WebDavSyncTrigger.foreground);
+        async.flushMicrotasks();
+        async.elapse(warmPollPeriod);
+        async.flushMicrotasks();
+        expect(transport.probedDeviceIds, hasLength(1));
 
-      // ...and exactly one at the deadline the server asked for.
-      async.elapse(idlePollPeriod - warmPollPeriod);
-      async.flushMicrotasks();
-      expect(transport.probedDeviceIds, hasLength(2));
-    });
-  });
+        // ...and exactly one at the deadline the server asked for.
+        async.elapse(idlePollPeriod - warmPollPeriod);
+        async.flushMicrotasks();
+        expect(transport.probedDeviceIds, hasLength(2));
+      });
+    },
+  );
 
   test('a completed cycle releases remote-poll backoff jail', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);
-      final transport = _PollTransport(
-        clock: () => start.add(async.elapsed),
-        probes: const <String, WebDavSyncManifestProbe>{
-          'device-b': WebDavSyncManifestProbe(
-            exists: true,
-            validator: WebDavSyncManifestValidator.etag('"v1"'),
-          ),
-        },
-      )
-        ..failuresRemaining = 3
-        ..failWithoutStatus = true;
+      final transport =
+          _PollTransport(
+              clock: () => start.add(async.elapsed),
+              probes: const <String, WebDavSyncManifestProbe>{
+                'device-b': WebDavSyncManifestProbe(
+                  exists: true,
+                  validator: WebDavSyncManifestValidator.etag('"v1"'),
+                ),
+              },
+            )
+            ..failuresRemaining = 3
+            ..failWithoutStatus = true;
       final runner = _Runner();
       final scheduler = WebDavSyncScheduler(
         runner: runner,
@@ -1296,6 +1481,283 @@ void main() {
   });
 
   group('durable local-change intent', () {
+    for (final television in [true, false]) {
+      for (final heldAtSave in [true, false]) {
+        test(
+          'feedback waits for platform gate TV=$television heldAtSave=$heldAtSave',
+          () {
+            fakeAsync((async) {
+              final feedback = WebDavSyncSaveFeedback();
+              final runner = _Runner();
+              final gate = _Gate();
+              void hold(bool value) {
+                if (television) {
+                  gate.televisionPlayback = value;
+                } else {
+                  gate.lowMemory = value;
+                }
+              }
+
+              hold(heldAtSave);
+              final scheduler = WebDavSyncScheduler(
+                runner: runner,
+                gate: gate,
+                saveFeedback: feedback,
+              );
+              scheduler.arm(() async => context());
+              scheduler.notifyLocalChange('theme');
+              expect(
+                feedback.phase,
+                heldAtSave ? WebDavSavePhase.pending : WebDavSavePhase.syncing,
+              );
+              hold(true);
+              async.elapse(const Duration(minutes: 2));
+              expect(runner.runs, 0);
+              expect(feedback.phase, WebDavSavePhase.pending);
+              expect(feedback.hasPending, isTrue);
+              feedback.retryAction = () async {
+                await scheduler.signal(WebDavSyncTrigger.manual);
+              };
+              unawaited(feedback.retry());
+              async.flushMicrotasks();
+              expect(runner.runs, 0);
+              expect(feedback.phase, WebDavSavePhase.pending);
+              hold(false);
+              unawaited(feedback.retry());
+              async.flushMicrotasks();
+              expect(runner.runs, 1);
+              expect(feedback.phase, WebDavSavePhase.synced);
+              expect(feedback.hasPending, isFalse);
+              async.elapse(const Duration(minutes: 3));
+              expect(runner.runs, 1);
+              scheduler.dispose();
+              feedback.dispose();
+            });
+          },
+        );
+      }
+    }
+
+    test(
+      'TV playback library checkpoints sync later without creating save receipts',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner();
+          final gate = _Gate()..televisionPlayback = true;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: gate,
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          for (var i = 0; i < 5; i++) {
+            scheduler.notifyLocalChange(
+              ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey,
+            );
+            async.elapse(const Duration(seconds: 30));
+            expect(feedback.phase, WebDavSavePhase.inactive);
+            expect(feedback.hasPending, isFalse);
+          }
+          expect(runner.runs, 0);
+          gate.televisionPlayback = false;
+          async.elapse(const Duration(minutes: 2));
+          expect(runner.runs, 1);
+          expect(feedback.phase, WebDavSavePhase.inactive);
+          scheduler.notifyLocalChange(
+            ProfilePreferences.webDavSyncLibraryLogicalKey,
+          );
+          expect(feedback.phase, WebDavSavePhase.syncing);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    for (final published in [true, false]) {
+      test(
+        'informational hints do not replace publication proof ($published)',
+        () {
+          fakeAsync((async) {
+            final feedback = WebDavSyncSaveFeedback();
+            final runner = _Runner()
+              ..statusHint = 'sync kept Local as Admin on this device'
+              ..publicationConfirmed = published;
+            final scheduler = WebDavSyncScheduler(
+              runner: runner,
+              gate: _Gate(),
+              saveFeedback: feedback,
+            );
+            scheduler.arm(() async => context());
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(feedback.hasPending, !published);
+            expect(
+              feedback.phase,
+              published ? WebDavSavePhase.synced : WebDavSavePhase.pending,
+            );
+            scheduler.dispose();
+            feedback.dispose();
+          });
+        },
+      );
+    }
+
+    for (final saveKind in <String>['settings', 'profile', 'restored']) {
+      test('suppressed profiles only block profile receipts ($saveKind)', () {
+        fakeAsync((async) {
+          final profileSave = saveKind != 'settings';
+          final feedback = WebDavSyncSaveFeedback();
+          if (saveKind == 'restored') feedback.saved(1);
+          final runner = _Runner()..profilesSuppressed = true;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange(
+            saveKind == 'profile'
+                ? ProfilePreferences.webDavSyncRegistryLogicalKey
+                : 'theme',
+          );
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.hasPending, profileSave);
+          expect(
+            feedback.phase,
+            profileSave ? WebDavSavePhase.pending : WebDavSavePhase.synced,
+          );
+          if (profileSave) {
+            // A later settings save must not acknowledge the withheld profile.
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(feedback.hasPending, isTrue);
+            runner.profilesSuppressed = false;
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(feedback.hasPending, isFalse);
+            expect(feedback.phase, WebDavSavePhase.synced);
+          }
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      });
+    }
+
+    test(
+      'feedback does not confirm a save that arrived during an older cycle',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner();
+          late WebDavSyncScheduler scheduler;
+          runner.onRun = (_) {
+            if (runner.runs == 1) scheduler.notifyLocalChange('theme');
+          };
+          scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          expect(feedback.phase, WebDavSavePhase.inactive);
+          scheduler.notifyLocalChange('home_tick_sources');
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.revision, 2);
+          expect(feedback.confirmedRevision, 1);
+          expect(feedback.hasPending, isTrue);
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.phase, WebDavSavePhase.synced);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    test(
+      'sender feedback ignores local-only writes and does not confirm capacity blocks',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.capacityBlocked;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('remote_device_settings');
+          expect(feedback.revision, 0);
+          scheduler.notifyLocalChange('home_tick_sources');
+          expect(feedback.phase, WebDavSavePhase.syncing);
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.phase, WebDavSavePhase.pending);
+          expect(feedback.confirmedRevision, 0);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    for (final networkFailure in [false, true]) {
+      test(
+        'profile switch preserves intent and handles network=$networkFailure backoff',
+        () {
+          ProfileRuntime.debugReset();
+          ProfileRuntime.initializeCommitted(
+            ProfileScope(profileId: 'a', dataGeneration: 1, sessionEpoch: 1),
+          );
+          try {
+            fakeAsync((async) {
+              final delays = <Duration>[];
+              final runner = _Runner()..failuresRemaining = 3;
+              runner.onRun = (_) {
+                if (runner.runs == 3) {
+                  ProfileRuntime.publish(
+                    ProfileScope(
+                      profileId: 'b',
+                      dataGeneration: 1,
+                      sessionEpoch: 2,
+                    ),
+                  );
+                  if (networkFailure) {
+                    throw const WebDavException(
+                      kind: WebDavErrorKind.network,
+                      message: 'offline',
+                    );
+                  }
+                }
+              };
+              final scheduler = WebDavSyncScheduler(
+                runner: runner,
+                gate: _Gate(),
+                localChangeDeferredObserver: (_, __, delay) =>
+                    delays.add(delay),
+              );
+              scheduler.arm(() async => context());
+              scheduler.notifyLocalChange('home_tick_sources');
+              async.elapse(const Duration(seconds: 8));
+              expect(runner.runs, 3);
+              expect(delays, [
+                const Duration(seconds: 2),
+                const Duration(seconds: 4),
+                Duration(seconds: networkFailure ? 8 : 2),
+              ]);
+              runner.failuresRemaining = 0;
+              async.elapse(Duration(seconds: networkFailure ? 8 : 2));
+              expect(runner.runs, 4);
+              async.elapse(const Duration(minutes: 2));
+              expect(runner.runs, 4);
+              scheduler.dispose();
+            });
+          } finally {
+            ProfileRuntime.debugReset();
+          }
+        },
+      );
+    }
+
     test('a failed cycle re-arms the intent and the retry pushes', () {
       fakeAsync((async) {
         final start = DateTime.utc(2026, 9, 3);
@@ -1893,10 +2355,16 @@ final class _Runner
     requestFollowUpOnNextRun = false;
     return WebDavSyncCycleReport(
       disposition: nextDisposition,
+      localPublicationConfirmed: publicationConfirmed,
+      localProfilesSuppressed: profilesSuppressed,
+      statusHint: statusHint,
       localChangeFollowUp: followUp,
     );
   }
 
+  bool publicationConfirmed = true;
+  bool profilesSuppressed = false;
+  String? statusHint;
   int failuresRemaining = 0;
   WebDavSyncCycleDisposition nextDisposition =
       WebDavSyncCycleDisposition.completed;

@@ -97,6 +97,87 @@ void main() {
     ProfileLockController.instance.onResume();
     expect(ProfileLockController.instance.isUnlocked, isTrue);
   });
+
+  test('verified PIN before resume satisfies the pending sync lock', () async {
+    final controller = ProfileLockController.instance;
+    final profile = _profile(lockOnResume: false, hasPin: true);
+    controller.activate(profile, unlocked: true);
+    controller.armLockOnNextResume(profile.id);
+    controller.lock(); // Explicit switch-profile/PIN screen.
+    final pending = controller.pendingPinLock(profile.id);
+
+    controller.acknowledgeVerifiedPin(profile.id, pending);
+    expect(controller.isUnlocked, isFalse); // Acknowledgment is not an unlock.
+    controller.unlock(profile);
+    controller.onResume();
+    expect(controller.isUnlocked, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect((calls.last.arguments as Map)['protectOnBackground'], isFalse);
+  });
+
+  test('generic unlock does not satisfy a pending PIN sync lock', () {
+    final controller = ProfileLockController.instance;
+    final profile = _profile(lockOnResume: false, hasPin: true);
+    controller.activate(profile, unlocked: true);
+    controller.armLockOnNextResume(profile.id);
+    controller.unlock(profile);
+    controller.onResume();
+    expect(controller.isUnlocked, isFalse);
+  });
+
+  for (final alreadyPending in <bool>[false, true]) {
+    test('PIN sync during verification retains its lock ($alreadyPending)', () {
+      final controller = ProfileLockController.instance;
+      final profile = _profile(lockOnResume: false, hasPin: true);
+      controller.activate(profile, unlocked: false);
+      if (alreadyPending) controller.armLockOnNextResume(profile.id);
+      final pending = controller.pendingPinLock(profile.id);
+
+      // Another sync arrives while the asynchronous PIN verifier is running.
+      controller.armLockOnNextResume(profile.id);
+      controller.acknowledgeVerifiedPin(profile.id, pending);
+      controller.unlock(profile);
+      controller.onResume();
+      expect(controller.isUnlocked, isFalse);
+    });
+  }
+
+  test('verification cannot clear another profile or a later session lock', () {
+    final controller = ProfileLockController.instance;
+    final profile = _profile(lockOnResume: false, hasPin: true);
+    controller.activate(profile, unlocked: false);
+    controller.armLockOnNextResume(profile.id);
+    final pending = controller.pendingPinLock(profile.id);
+    controller.acknowledgeVerifiedPin('profile-b', pending);
+    expect(controller.pendingPinLock(profile.id), same(pending));
+
+    controller.dispose();
+    controller.activate(profile, unlocked: false);
+    controller.armLockOnNextResume(profile.id);
+    controller.acknowledgeVerifiedPin(profile.id, pending);
+    controller.unlock(profile);
+    controller.onResume();
+    expect(controller.isUnlocked, isFalse);
+  });
+
+  test(
+    'verified sync PIN preserves the normal lock-on-resume policy',
+    () async {
+      final controller = ProfileLockController.instance;
+      final profile = _profile(lockOnResume: true, hasPin: true);
+      controller.activate(profile, unlocked: false);
+      controller.armLockOnNextResume(profile.id);
+      controller.acknowledgeVerifiedPin(
+        profile.id,
+        controller.pendingPinLock(profile.id),
+      );
+      controller.unlock(profile);
+      await Future<void>.delayed(Duration.zero);
+      expect((calls.last.arguments as Map)['protectOnBackground'], isTrue);
+      controller.onResume();
+      expect(controller.isUnlocked, isFalse);
+    },
+  );
 }
 
 UserProfile _profile({required bool lockOnResume, required bool hasPin}) {

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'profile_preference_budget.dart';
+import 'profile_preference_portability.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'profile_credential_facade.dart';
@@ -52,6 +53,11 @@ final class ProfilePreferenceMutationConflict implements Exception {
 class ProfilePreferences implements SharedPreferences {
   static const String webDavSyncRegistryLogicalKey =
       'remote_webdav_sync_registry_records_v1';
+
+  /// Notification-only key: playback writes still sync without save UI.
+  static const String webDavSyncPlaybackLibraryLogicalKey =
+      'remote_webdav_sync_playback_library_v1';
+
   static const String webDavSyncLibraryLogicalKey =
       'remote_webdav_sync_library_records_v1';
   static final Lock _atomicStringListMutationLock = Lock();
@@ -666,8 +672,17 @@ class ProfilePreferences implements SharedPreferences {
     Object? budgetValue,
   }) async {
     _assertWritable();
+    var unchanged = false;
     final success = await _runOrdinaryMutation((markMutated) async {
       _assertWritable();
+      if (_capturedAccess == null && budgetKey != null) {
+        final previous = _delegate.get(budgetKey);
+        unchanged =
+            previous == budgetValue ||
+            (previous is List<String> &&
+                budgetValue is List<String> &&
+                listEquals(previous, budgetValue));
+      }
       // Only ordinary runtime writes are gated. Every captured-scope caller
       // (migration, restore, profile creation) treats a `false` result as fatal
       // and throws, and during bootstrap an uncaught throw prevents the app from
@@ -682,7 +697,7 @@ class ProfilePreferences implements SharedPreferences {
         return false;
       }
       final success = await operation();
-      if (success) markMutated();
+      if (success && !unchanged) markMutated();
       return success;
     });
     final scope = _scope;
@@ -705,8 +720,21 @@ class ProfilePreferences implements SharedPreferences {
     if (success &&
         _capturedAccess == null &&
         scope != null &&
-        logicalKey != null) {
-      notifyWebDavSyncLocalChange(scope.profileId, logicalKey);
+        logicalKey != null &&
+        !unchanged) {
+      // Keep key admission (including special library keys) in the scheduler,
+      // but omit values that the portable payload deliberately excludes. Use
+      // this mutation's value, not a later read that could race another save.
+      // A remove has a null value and remains eligible for synchronization.
+      final excludedValue =
+          ProfilePreferencePortability.allowsKey(logicalKey) &&
+          !ProfilePreferencePortability.prepareValue(
+            logicalKey,
+            budgetValue,
+          ).include;
+      if (!excludedValue) {
+        notifyWebDavSyncLocalChange(scope.profileId, logicalKey);
+      }
     }
     return success;
   }

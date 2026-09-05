@@ -15,6 +15,7 @@ import '../../services/webdav_sync/webdav_sync_scheduler.dart';
 import '../../services/webdav_sync/webdav_sync_setup_authorization.dart';
 import '../../services/webdav_sync/webdav_sync_setup_service.dart';
 import '../../widgets/tv_text_field.dart';
+import '../../widgets/webdav_sync/webdav_foreground_sync.dart';
 import '../webdav_sync/webdav_sync_login_screen.dart';
 import 'profile_backup_flows.dart';
 import 'widgets/settings_widgets.dart';
@@ -222,10 +223,16 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
               ),
             );
       if (!mounted) return;
-      final outcome = await _syncConnectController.connect(
-        credentials: credentials,
-        reconnectActive: reconnectBinding != null,
-        confirmExistingReplacement: _confirmExistingReplacement,
+      if (credentials == null) return;
+      final outcome = await runWebDavForegroundSync(
+        context,
+        stage: 'Preparing WebDAV sync…',
+        operation: (updateStage) => _syncConnectController.connect(
+          credentials: credentials,
+          reconnectActive: reconnectBinding != null,
+          confirmExistingReplacement: _confirmExistingReplacement,
+          onProgress: updateStage,
+        ),
       );
       if (!mounted) return;
       final binding = switch (outcome) {
@@ -287,10 +294,19 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     if (_syncBusy || activation == null) return;
     setState(() => _syncBusy = true);
     try {
-      final report = await activation.syncNow();
+      final report = await runWebDavForegroundSync(
+        context,
+        stage: 'Checking and exchanging sync data…',
+        operation: (_) => activation.syncNow(),
+      );
       if (!mounted) return;
       final message = switch (report.disposition) {
-        WebDavSyncCycleDisposition.completed => 'WebDAV Sync is up to date.',
+        WebDavSyncCycleDisposition.completed =>
+          report.localChangeFollowUp ||
+                  !report.localPublicationConfirmed ||
+                  report.localProfilesSuppressed
+              ? 'Sync still has pending changes. Keep Debrify open and retry.'
+              : report.statusHint ?? 'WebDAV Sync is up to date.',
         WebDavSyncCycleDisposition.clockPaused =>
           'Sync is paused because the device or server clock needs attention.',
         WebDavSyncCycleDisposition.adoptionBlocked =>
@@ -302,12 +318,21 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           'Sync data for this device is being rebuilt.',
         WebDavSyncCycleDisposition.inactive => 'Sync is currently paused.',
       };
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action:
+              report.disposition != WebDavSyncCycleDisposition.completed ||
+                  !report.localPublicationConfirmed ||
+                  report.localChangeFollowUp ||
+                  report.localProfilesSuppressed
+              ? SnackBarAction(label: 'Retry', onPressed: _syncNow)
+              : null,
+        ),
+      );
       await _loadSyncState();
     } catch (error) {
-      if (mounted) _showError(error);
+      if (mounted) _showError(error, onRetry: _syncNow);
     } finally {
       if (mounted) setState(() => _syncBusy = false);
     }
@@ -529,10 +554,13 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     }
   }
 
-  void _showError(Object error) {
+  void _showError(Object error, {VoidCallback? onRetry}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(_userFacingSyncError(error)),
+        action: onRetry == null
+            ? null
+            : SnackBarAction(label: 'Retry', onPressed: onRetry),
         backgroundColor: Colors.red,
       ),
     );

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../webdav_sync/webdav_foreground_sync.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -311,10 +313,16 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       if (credentials != null) {
         setState(() => _connectingWebDav = true);
       }
-      final outcome = await _webDavSyncConnectController.connect(
-        credentials: credentials,
-        completeOnboarding: true,
-        confirmExistingReplacement: _confirmWebDavReplacement,
+      if (credentials == null) return;
+      final outcome = await runWebDavForegroundSync(
+        context,
+        stage: 'Preparing WebDAV sync…',
+        operation: (updateStage) => _webDavSyncConnectController.connect(
+          credentials: credentials,
+          completeOnboarding: true,
+          confirmExistingReplacement: _confirmWebDavReplacement,
+          onProgress: updateStage,
+        ),
       );
       if (!mounted) return;
       switch (outcome) {

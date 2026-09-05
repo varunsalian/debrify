@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -102,6 +103,46 @@ void main() {
       maxBytes: WebDavSyncLimits.maxManifestBytes,
     );
     return WebDavSyncManifest.fromJson(payload);
+  }
+
+  for (final malformedEnvelope in [true, false]) {
+    test(
+      'invalid peer reports ${malformedEnvelope ? 'decode' : 'parse'} stage',
+      () async {
+        final failures = <WebDavSyncManifestFailure>[];
+        engine = WebDavSyncEngine(
+          stateRepository: states,
+          localAdapter: local,
+          transportFactory: (_) => transport,
+          codec: codec,
+          clock: () => now,
+          diagnostic: (_, error) {
+            if (error is WebDavSyncManifestFailure) failures.add(error);
+          },
+        );
+        transport.manifests['device-b'] = malformedEnvelope
+            ? Uint8List.fromList(utf8.encode('invalid envelope'))
+            : await codec.sealDocument(
+                key: root.key,
+                circleId: root.document.circleId,
+                deviceId: 'device-b',
+                logicalName: 'manifest',
+                schemaVersion: WebDavSyncManifest.schemaVersion,
+                payload: const {'not': 'a manifest'},
+                maxBytes: WebDavSyncLimits.maxManifestBytes,
+              );
+        final report = await runFixture(context());
+        expect(report.disposition, WebDavSyncCycleDisposition.completed);
+        expect(failures, hasLength(1));
+        expect(
+          failures.single.stage,
+          malformedEnvelope
+              ? WebDavSyncManifestReadStage.decode
+              : WebDavSyncManifestReadStage.parse,
+        );
+        expect(failures.single.category, 'format');
+      },
+    );
   }
 
   test('missing root or either identity map is a total no-op', () async {
@@ -627,6 +668,21 @@ void main() {
   });
 
   test('cycle failure descriptions keep shape, never data', () {
+    expect(
+      describeWebDavSyncCycleFailure(
+        const ResourceAuthorizationException('Profile session is locked'),
+      ),
+      'ResourceAuthorizationException:profile_locked',
+    );
+    expect(
+      describeWebDavSyncCycleFailure(
+        const ResourceAuthorizationException(
+          'https://user:password@private.invalid/path',
+        ),
+      ),
+      'ResourceAuthorizationException:other',
+    );
+
     expect(
       describeWebDavSyncCycleFailure(
         const WebDavException(
@@ -1403,6 +1459,7 @@ void main() {
       final stillFailed = await runFixture(context());
 
       expect(failed.disposition, WebDavSyncCycleDisposition.completed);
+      expect(failed.localPublicationConfirmed, isFalse);
       expect(failed.statusHint, contains('deletion history'));
       expect(stillFailed.statusHint, contains('deletion history'));
       expect(circleLocal.buildRequests, isEmpty);
@@ -1783,7 +1840,9 @@ void main() {
       diagnostic: (message, _) => diagnostics.add(message),
     );
 
-    await runFixture(context());
+    final safetyReport = await runFixture(context());
+    expect(safetyReport.localPublicationConfirmed, isTrue);
+    expect(safetyReport.localProfilesSuppressed, isTrue);
 
     expect(
       diagnostics,
@@ -2271,6 +2330,7 @@ void main() {
         contains('local-x'),
       );
       expect(converged.sectionsPushed, 0);
+      expect(converged.localProfilesSuppressed, isTrue);
 
       final later = now.add(const Duration(minutes: 1));
       circleLocal.activeProfileId = 'local-y';
@@ -2327,6 +2387,7 @@ void main() {
       );
       expect(states.state.pendingActiveProfile, isNull);
       expect(convergedAfterSwitch.sectionsPushed, 0);
+      expect(convergedAfterSwitch.localProfilesSuppressed, isFalse);
     },
   );
 
