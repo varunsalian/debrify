@@ -680,8 +680,14 @@ final class WebDavSyncScheduler {
         _resetPollBackoff();
         _armRemotePollTimer();
       }
+      // Foreground counts as attention too: on desktop, polling never pauses
+      // while the window is hidden, so the resume path never re-warms and a
+      // user who just focused the app could wait a full idle period for a
+      // change a peer already uploaded. The backoff deadline still wins in
+      // _armRemotePollTimer, so this never probes faster than the server asked.
       if (trigger == WebDavSyncTrigger.localChange ||
-          trigger == WebDavSyncTrigger.manual) {
+          trigger == WebDavSyncTrigger.manual ||
+          trigger == WebDavSyncTrigger.foreground) {
         _rearmWarmPolling();
       }
       if (report.localChangeFollowUp) {

@@ -395,6 +395,104 @@ void main() {
     });
   });
 
+  test('a foreground cycle re-warms remote polling', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: const <String, WebDavSyncManifestProbe>{
+          'device-b': WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // Freshly armed, the scheduler is idle: nothing probes within one warm
+      // period.
+      async.elapse(warmPollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+
+      // Focusing the app runs a foreground cycle. On desktop that is the only
+      // attention signal (polling never paused, so resume never re-warms), so
+      // it must re-warm on its own: the next probe lands one warm period
+      // later instead of waiting out the idle period.
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      expect(runner.triggers, contains(WebDavSyncTrigger.foreground));
+      async.elapse(warmPollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(1));
+    });
+  });
+
+  test('a foreground cycle never probes ahead of a server-answered backoff', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: const <String, WebDavSyncManifestProbe>{
+          'device-b': WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..failuresRemaining = 1;
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // The first idle probe is answered with 429: a server-requested backoff
+      // of one idle period that deliberately survives completed cycles.
+      async.elapse(idlePollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(1));
+
+      // Foreground re-warms, but the backoff deadline still owns the timer:
+      // no probe within a warm period...
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      async.elapse(warmPollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(1));
+
+      // ...and exactly one at the deadline the server asked for.
+      async.elapse(idlePollPeriod - warmPollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(2));
+    });
+  });
+
   test('a completed cycle releases remote-poll backoff jail', () {
     fakeAsync((async) {
       final start = DateTime.utc(2026, 9, 1);
