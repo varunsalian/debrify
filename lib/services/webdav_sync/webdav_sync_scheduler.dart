@@ -215,7 +215,11 @@ final class WebDavSyncScheduler {
         logicalKey != WebDavSyncHotMerge.finishedMoviesPreference &&
         logicalKey != WebDavSyncHotMerge.explicitlyWatchedSeriesPreference &&
         logicalKey != ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey &&
-        logicalKey != 'app_last_build_number') {
+        logicalKey != 'app_last_build_number' &&
+        logicalKey != 'discover_last_source' &&
+        logicalKey != 'reddit_last_subreddit' &&
+        logicalKey != 'iptv_last_live_channel' &&
+        logicalKey != 'defaults_generation') {
       if (logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey) {
         _pendingProfileReceiptSequence = _localChangeSequence;
       }

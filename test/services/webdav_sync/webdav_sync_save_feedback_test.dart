@@ -5,6 +5,54 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'phone status clears navigation and collapses with accessible Retry',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final feedback = WebDavSyncSaveFeedback()..setEnabled(true);
+      addTearDown(feedback.dispose);
+      var taps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (_, child) =>
+              WebDavSaveStatus(feedback: feedback, child: child!),
+          home: Scaffold(
+            bottomNavigationBar: SizedBox(
+              height: 80,
+              child: TextButton(
+                onPressed: () => taps++,
+                child: const Text('Discover'),
+              ),
+            ),
+          ),
+        ),
+      );
+      feedback.saved(1);
+      await tester.pump();
+      final banner = find.text('Saved locally · Syncing to WebDAV…');
+      expect(
+        tester.getRect(banner).bottom,
+        lessThan(tester.getRect(find.text('Discover')).top),
+      );
+      await tester.tap(find.text('Discover'));
+      expect(taps, 1);
+      await tester.pump(const Duration(seconds: 3));
+      expect(banner, findsNothing);
+      feedback.waiting();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('Retry'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byType(IconButton));
+      await tester.pump();
+      expect(find.text('Retry'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   test(
     'pending publication is restored after restart and cleared only on success',
     () async {

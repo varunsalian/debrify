@@ -672,8 +672,17 @@ class ProfilePreferences implements SharedPreferences {
     Object? budgetValue,
   }) async {
     _assertWritable();
+    var unchanged = false;
     final success = await _runOrdinaryMutation((markMutated) async {
       _assertWritable();
+      if (_capturedAccess == null && budgetKey != null) {
+        final previous = _delegate.get(budgetKey);
+        unchanged =
+            previous == budgetValue ||
+            (previous is List<String> &&
+                budgetValue is List<String> &&
+                listEquals(previous, budgetValue));
+      }
       // Only ordinary runtime writes are gated. Every captured-scope caller
       // (migration, restore, profile creation) treats a `false` result as fatal
       // and throws, and during bootstrap an uncaught throw prevents the app from
@@ -688,7 +697,7 @@ class ProfilePreferences implements SharedPreferences {
         return false;
       }
       final success = await operation();
-      if (success) markMutated();
+      if (success && !unchanged) markMutated();
       return success;
     });
     final scope = _scope;
@@ -711,7 +720,8 @@ class ProfilePreferences implements SharedPreferences {
     if (success &&
         _capturedAccess == null &&
         scope != null &&
-        logicalKey != null) {
+        logicalKey != null &&
+        !unchanged) {
       // Keep key admission (including special library keys) in the scheduler,
       // but omit values that the portable payload deliberately excludes. Use
       // this mutation's value, not a later read that could race another save.

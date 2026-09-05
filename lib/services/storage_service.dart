@@ -1663,6 +1663,7 @@ class StorageService {
   static Future<void> setDiscoverLastSource(String value) async {
     if (!_isDiscoverSourceValue(value)) return;
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_discoverLastSourceKey) == value) return;
     await prefs.setString(_discoverLastSourceKey, value);
   }
 
@@ -6386,6 +6387,7 @@ class StorageService {
 
   static Future<void> setRedditLastSubreddit(String subreddit) async {
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_redditLastSubredditKey) == subreddit) return;
     await prefs.setString(_redditLastSubredditKey, subreddit);
   }
 

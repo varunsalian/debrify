@@ -108,6 +108,34 @@ void main() {
     });
   });
 
+  test('remembered navigation syncs silently while defaults show feedback', () {
+    fakeAsync((async) {
+      final feedback = WebDavSyncSaveFeedback();
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        saveFeedback: feedback,
+      );
+      scheduler.arm(() async => context());
+      for (final key in [
+        'discover_last_source',
+        'reddit_last_subreddit',
+        'iptv_last_live_channel',
+        'defaults_generation',
+      ]) {
+        scheduler.notifyLocalChange(key);
+      }
+      expect(feedback.revision, 0);
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.runs, 1);
+      scheduler.notifyLocalChange('discover_default_source');
+      expect(feedback.hasPending, isTrue);
+      scheduler.dispose();
+      feedback.dispose();
+    });
+  });
+
   for (final fails in <bool>[false, true]) {
     test(
       'manual sync waits for the active cycle and shares its outcome ($fails)',

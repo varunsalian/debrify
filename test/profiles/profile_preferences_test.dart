@@ -120,6 +120,28 @@ void main() {
     expect(notifications, <(String, String)>[('one', 'language')]);
   });
 
+  test(
+    'unchanged scalar and list saves emit no new sync notification',
+    () async {
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+      );
+      var signals = 0;
+      ProfilePreferences.webDavSyncLocalChangeSink = (_, _) => signals++;
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('discover_last_source', 'cw');
+      await prefs.setString('discover_last_source', 'cw');
+      await prefs.setStringList('tracking_scrobble_targets', ['local']);
+      await prefs.setStringList('tracking_scrobble_targets', ['local']);
+      expect(signals, 2);
+      await prefs.setStringList('tracking_scrobble_targets', [
+        'local',
+        'simkl',
+      ]);
+      expect(signals, 3);
+    },
+  );
+
   for (final selection in <(String, String, String)>[
     ('subtitle_selected_font_id', 'custom_test_font', 'default'),
     ('external_player_preferred', 'custom', 'vlc'),

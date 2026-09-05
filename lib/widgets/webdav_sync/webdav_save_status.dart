@@ -16,13 +16,36 @@ class _WebDavSaveStatusState extends State<WebDavSaveStatus> {
       widget.feedback ?? WebDavSyncSaveFeedback.instance;
   Timer? _successTimer;
   bool _hideSuccess = false;
+  bool _compact = false;
+  int _lastRevision = -1;
+  WebDavSavePhase? _lastPhase;
+  bool _lastTakingLonger = false;
+  Timer? _compactTimer;
+
+  void _expandBriefly() {
+    _compactTimer?.cancel();
+    _compact = false;
+    _compactTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _compact = true);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     feedback.addListener(_changed);
+    _changed();
   }
 
   void _changed() {
+    if (feedback.revision != _lastRevision ||
+        feedback.phase != _lastPhase ||
+        feedback.takingLonger != _lastTakingLonger) {
+      _lastTakingLonger = feedback.takingLonger;
+      _lastRevision = feedback.revision;
+      _lastPhase = feedback.phase;
+      _expandBriefly();
+    }
     _successTimer?.cancel();
     _hideSuccess = false;
     if (feedback.phase == WebDavSavePhase.synced) {
@@ -37,6 +60,7 @@ class _WebDavSaveStatusState extends State<WebDavSaveStatus> {
   void dispose() {
     feedback.removeListener(_changed);
     _successTimer?.cancel();
+    _compactTimer?.cancel();
     super.dispose();
   }
 
@@ -45,6 +69,7 @@ class _WebDavSaveStatusState extends State<WebDavSaveStatus> {
     final phase = feedback.phase;
     final visible =
         feedback.enabled && phase != WebDavSavePhase.inactive && !_hideSuccess;
+    final phone = MediaQuery.sizeOf(context).shortestSide < 600;
     return Stack(
       children: [
         widget.child,
@@ -52,60 +77,84 @@ class _WebDavSaveStatusState extends State<WebDavSaveStatus> {
           Positioned(
             left: 12,
             right: 12,
-            bottom: 12,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + (phone ? 96 : 12),
             child: SafeArea(
               child: Align(
                 alignment: Alignment.bottomRight,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 430),
-                  child: Material(
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(12),
-                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          if (phase == WebDavSavePhase.syncing)
-                            const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else
-                            Icon(
-                              phase == WebDavSavePhase.synced
-                                  ? Icons.cloud_done_outlined
-                                  : Icons.cloud_upload_outlined,
-                              size: 20,
-                            ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                phase == WebDavSavePhase.synced
-                                    ? 'Synced to WebDAV'
-                                    : feedback.takingLonger
-                                    ? 'Sync is taking longer. Your change is saved locally.'
-                                    : phase == WebDavSavePhase.syncing
-                                    ? 'Saved locally · Syncing to WebDAV…'
-                                    : 'Saved locally · Sync pending',
+                  child: _compact && phase != WebDavSavePhase.synced
+                      ? Material(
+                          elevation: 6,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Semantics(
+                            label: phase == WebDavSavePhase.pending
+                                ? 'Sync pending — tap for Retry'
+                                : 'Syncing to WebDAV — tap for details',
+                            button: true,
+                            child: IconButton(
+                              onPressed: () => setState(_expandBriefly),
+                              icon: Icon(
+                                phase == WebDavSavePhase.pending
+                                    ? Icons.cloud_upload_outlined
+                                    : Icons.sync,
                               ),
                             ),
                           ),
-                          if (phase == WebDavSavePhase.pending)
-                            TextButton(
-                              onPressed: () => unawaited(feedback.retry()),
-                              child: const Text('Retry'),
+                        )
+                      : Material(
+                          elevation: 6,
+                          borderRadius: BorderRadius.circular(12),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHigh,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
                             ),
-                        ],
-                      ),
-                    ),
-                  ),
+                            child: Row(
+                              children: [
+                                if (phase == WebDavSavePhase.syncing)
+                                  const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                else
+                                  Icon(
+                                    phase == WebDavSavePhase.synced
+                                        ? Icons.cloud_done_outlined
+                                        : Icons.cloud_upload_outlined,
+                                    size: 20,
+                                  ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      phase == WebDavSavePhase.synced
+                                          ? 'Synced to WebDAV'
+                                          : feedback.takingLonger
+                                          ? 'Sync is taking longer. Your change is saved locally.'
+                                          : phase == WebDavSavePhase.syncing
+                                          ? 'Saved locally · Syncing to WebDAV…'
+                                          : 'Saved locally · Sync pending',
+                                    ),
+                                  ),
+                                ),
+                                if (phase == WebDavSavePhase.pending)
+                                  TextButton(
+                                    onPressed: () =>
+                                        unawaited(feedback.retry()),
+                                    child: const Text('Retry'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ),
