@@ -48,6 +48,7 @@ import 'webdav_sync_models.dart';
 import 'webdav_sync_operation_coordinator.dart';
 import 'webdav_sync_safety_backup.dart';
 import 'webdav_sync_scheduler.dart';
+import 'webdav_sync_save_feedback.dart';
 import 'webdav_sync_setup_service.dart';
 import 'webdav_sync_tombstones.dart';
 import 'webdav_sync_transport.dart';
@@ -417,7 +418,12 @@ final class WebDavSyncRuntime
         operations: _operations,
         gate: this,
       );
+      await WebDavSyncSaveFeedback.instance.initialize();
+      WebDavSyncSaveFeedback.instance.retryAction = () async {
+        await syncNow();
+      };
       _scheduler = WebDavSyncScheduler(
+        saveFeedback: WebDavSyncSaveFeedback.instance,
         runner: _cycleRunner!,
         gate: this,
         localChangeObserver: recordWebDavSyncLocalChangeTrigger,

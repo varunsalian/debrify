@@ -153,11 +153,13 @@ final class WebDavSyncConnectController {
     required WebDavSyncReplacementConfirmation confirmExistingReplacement,
     bool reconnectActive = false,
     bool completeOnboarding = false,
+    void Function(String)? onProgress,
   }) async {
     if (credentials == null) {
       _lastInspection = null;
       return const WebDavSyncConnectCancelled();
     }
+    onProgress?.call('Verifying WebDAV account…');
     String? stagedByThisAttempt;
     try {
       final reconnectBindingId = reconnectActive
@@ -175,6 +177,7 @@ final class WebDavSyncConnectController {
           : reconnectActive
           ? await inspectReconnect(credentials)
           : await inspect(credentials);
+      onProgress?.call('Preparing sync setup…');
       final binding = await authorization.runForAdminSession((beforeCommit) {
         if (inspection is WebDavSyncFolderMissing) {
           if (reconnectActive) {
@@ -203,6 +206,7 @@ final class WebDavSyncConnectController {
       return await _activate(
         binding,
         confirmExistingReplacement: confirmExistingReplacement,
+        onProgress: onProgress,
       );
     } catch (error) {
       if (error is! WebDavSyncPostHandoffException &&
@@ -226,6 +230,7 @@ final class WebDavSyncConnectController {
   Future<WebDavSyncConnectOutcome> _activate(
     WebDavSyncBinding staged, {
     required WebDavSyncReplacementConfirmation confirmExistingReplacement,
+    void Function(String)? onProgress,
   }) async {
     var binding = staged;
     final controller = activation;
@@ -236,6 +241,7 @@ final class WebDavSyncConnectController {
       return WebDavSyncConnectAdoptedFinishing(binding);
     }
     if (binding.lifecycle == WebDavSyncLifecycle.awaitingSeedCommit) {
+      onProgress?.call('Uploading initial sync data…');
       final initialized = await controller.initializeNew(binding.id);
       if (initialized is WebDavSyncInitialized) {
         return WebDavSyncConnectActive(
@@ -250,11 +256,14 @@ final class WebDavSyncConnectController {
       }
     }
 
+    onProgress?.call('Checking existing sync data…');
     await controller.inspectExisting(binding.id);
+    onProgress?.call('Waiting for your confirmation…');
     if (!await confirmExistingReplacement()) {
       await setupService.store.discardStagedMatching(binding.id);
       return const WebDavSyncConnectCancelled();
     }
+    onProgress?.call('Restoring and finishing sync setup…');
     binding = await controller.connectExisting(
       binding.id,
       replacementConfirmed: true,

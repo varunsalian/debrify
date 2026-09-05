@@ -11,6 +11,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
 import '../webdav_sync/webdav_sync_tombstones.dart';
@@ -1422,6 +1423,7 @@ class ProfileRegistry {
       throw ArgumentError.value(name, 'name');
     }
     _validateInactivityTimeout(inactivityTimeoutMinutes);
+    var syncFieldsChanged = false;
     await authorityWillChangeCallback?.call();
     await _db.transaction((txn) async {
       await _assertManagingActor(
@@ -1440,6 +1442,22 @@ class ProfileRegistry {
       final current = _decodeProfile(rows.single);
       final nextRole = role ?? current.role;
       final nextPolicy = policy ?? current.policy;
+      final parsedAvatar = ProfileAvatar.tryParse(avatarKey);
+      syncFieldsChanged =
+          (name != null && name.trim() != current.name) ||
+          (avatarKey != null &&
+              avatarKey != current.avatarKey &&
+              parsedAvatar != null &&
+              parsedAvatar.kind != ProfileAvatarKind.image) ||
+          nextRole != current.role ||
+          nextPolicy.encode() != current.policy.encode() ||
+          (lockOnResume != null && lockOnResume != current.lockOnResume) ||
+          (clearInactivityTimeout &&
+              current.inactivityTimeoutMinutes != null) ||
+          (!clearInactivityTimeout &&
+              inactivityTimeoutMinutes != null &&
+              inactivityTimeoutMinutes != current.inactivityTimeoutMinutes);
+
       await txn.update(
         'user_profiles',
         <String, Object?>{
@@ -1460,7 +1478,7 @@ class ProfileRegistry {
       );
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: syncFieldsChanged);
     return (await getProfile(id))!;
   }
 
@@ -1564,6 +1582,7 @@ class ProfileRegistry {
       );
     }
     var changed = 0;
+    var syncFieldsChanged = false;
     await _db.transaction((txn) async {
       await _assertActiveSessionActor(
         txn,
@@ -1571,6 +1590,19 @@ class ProfileRegistry {
         authorizationRevision: actingAuthorizationRevision,
         sessionEpoch: actingSessionEpoch,
       );
+      final rows = await txn.query(
+        'user_profiles',
+        where: 'id = ?',
+        whereArgs: [profileId],
+      );
+      final current = _decodeProfile(rows.single);
+      final parsedAvatar = ProfileAvatar.tryParse(avatarKey);
+      syncFieldsChanged =
+          trimmedName != current.name ||
+          (avatarKey != current.avatarKey &&
+              (avatarKey == null ||
+                  parsedAvatar != null &&
+                      parsedAvatar.kind != ProfileAvatarKind.image));
       changed = await txn.update(
         'user_profiles',
         <String, Object?>{
@@ -1584,7 +1616,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Active profile is unavailable');
-    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: syncFieldsChanged);
     return (await getProfile(profileId))!;
   }
 

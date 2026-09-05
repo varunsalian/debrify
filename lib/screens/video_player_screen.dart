@@ -9459,7 +9459,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       await Future.wait([
         StorageService.markMovieAsFinished(imdbId),
-        StorageService.removeVideoResume(_resumeKey),
+        StorageService.removeVideoResume(_resumeKey, playbackCheckpoint: true),
       ]);
     } catch (_) {
       // Playback remains usable if local storage is temporarily unavailable.

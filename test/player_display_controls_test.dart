@@ -4,6 +4,32 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'foreground wake owners cannot release playback or each other',
+    () async {
+      final calls = <bool>[];
+      final controls = PlayerDisplayControls(
+        toggleWakelock: (value) async {
+          calls.add(value);
+        },
+      );
+      final first = Object();
+      final second = Object();
+      await controls.setWakelock(true);
+      await controls.setWakelockOwner(first, true);
+      await controls.setWakelockOwner(second, true);
+      await controls.setWakelock(false);
+      expect(calls.last, isTrue);
+      await controls.setWakelockOwner(first, false);
+      expect(calls.last, isTrue);
+      await controls.setWakelock(true);
+      await controls.setWakelockOwner(second, false);
+      expect(calls.last, isTrue);
+      await controls.setWakelock(false);
+      expect(calls.last, isFalse);
+    },
+  );
+
   tearDown(() => debugDefaultTargetPlatformOverride = null);
   for (final platform in [TargetPlatform.linux, TargetPlatform.fuchsia]) {
     test('$platform skips unsupported brightness calls', () async {

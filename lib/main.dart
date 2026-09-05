@@ -1,3 +1,4 @@
+import 'widgets/webdav_sync/webdav_save_status.dart';
 import 'dart:async';
 import 'dart:io' show Platform, exit;
 import 'dart:ui' show AppExitResponse, PointerDeviceKind;
@@ -1059,7 +1060,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
           // launch ident (see app_texture.dart). It short-circuits to `child`
           // for legacy and for the seventeen themes that declare neither, so
           // the common path costs one build and no layer.
-          child: AppTexture(child: child!),
+          child: WebDavSaveStatus(child: AppTexture(child: child!)),
         );
         // Pointer input counts as presence too — an Apple TV remote's
         // trackpad and an attached mouse both arrive here rather than through

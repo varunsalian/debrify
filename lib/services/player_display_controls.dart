@@ -67,11 +67,33 @@ class PlayerDisplayControls {
     }
   }
 
-  Future<void> setWakelock(bool enabled) async {
-    try {
-      await _toggleWakelock(enabled);
-    } catch (_) {
-      // Keep playback usable when the OS cannot provide a wake lock.
+  final Set<Object> _wakeOwners = <Object>{};
+  bool _playbackWantsWake = false;
+  Future<void> _wakeWrites = Future<void>.value();
+
+  Future<void> setWakelock(bool enabled) {
+    _playbackWantsWake = enabled;
+    return _updateWakelock();
+  }
+
+  /// Independent foreground operations must not release playback's wake lock.
+  Future<void> setWakelockOwner(Object owner, bool enabled) {
+    if (enabled) {
+      _wakeOwners.add(owner);
+    } else {
+      _wakeOwners.remove(owner);
     }
+    return _updateWakelock();
+  }
+
+  Future<void> _updateWakelock() {
+    _wakeWrites = _wakeWrites.then((_) async {
+      try {
+        await _toggleWakelock(_playbackWantsWake || _wakeOwners.isNotEmpty);
+      } catch (_) {
+        // Native display controls are optional; never fail the operation.
+      }
+    });
+    return _wakeWrites;
   }
 }

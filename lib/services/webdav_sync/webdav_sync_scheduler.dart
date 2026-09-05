@@ -5,6 +5,7 @@ import '../webdav_protocol_client.dart' show WebDavException;
 import '../profiles/profile_preferences.dart';
 import '../profiles/profile_runtime.dart';
 import 'webdav_sync_engine.dart';
+import 'webdav_sync_save_feedback.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_transport.dart';
 
@@ -69,11 +70,20 @@ final class WebDavSyncScheduler {
     this.playbackDebounce = const Duration(seconds: 60),
     this.remotePollingEnabled = webDavSyncRemotePollEnabled,
     this.localChangeObserver,
+    this.saveFeedback,
     this.localChangeDeferredObserver,
     DateTime Function()? clock,
   }) : _runner = runner,
        _gate = gate,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now {
+    _localChangeSequence = saveFeedback?.revision ?? 0;
+    if (saveFeedback?.hasPending == true) {
+      _pendingLocalChangeSequence = _localChangeSequence;
+      // A restored receipt has no persisted family; conservatively require
+      // profile publication as well before acknowledging it.
+      _pendingProfileReceiptSequence = _localChangeSequence;
+    }
+  }
 
   final WebDavSyncCycleRunner _runner;
   final WebDavSyncRuntimeGate _gate;
@@ -84,6 +94,7 @@ final class WebDavSyncScheduler {
   final Duration playbackDebounce;
   final bool remotePollingEnabled;
   final WebDavSyncLocalChangeObserver? localChangeObserver;
+  final WebDavSyncSaveFeedback? saveFeedback;
   final WebDavSyncLocalChangeDeferredObserver? localChangeDeferredObserver;
 
   WebDavSyncContextProvider? _contextProvider;
@@ -96,6 +107,9 @@ final class WebDavSyncScheduler {
   DateTime? _nextRemotePollAt;
   DateTime? _warmUntil;
   bool _running = false;
+  Completer<({WebDavSyncCycleReport report, int? sequence})>?
+  _activeCycleResult;
+  int _armEpoch = 0;
   bool _polling = false;
   bool _remotePollingForeground = true;
   bool _pollDisabledNoValidators = false;
@@ -109,6 +123,7 @@ final class WebDavSyncScheduler {
   /// ordering is deliberate: wall clocks can return the same value for a cycle
   /// start and a later write. Survives disarm.
   int _localChangeSequence = 0;
+  int? _pendingProfileReceiptSequence;
   int? _pendingLocalChangeSequence;
   int _localChangeRetries = 0;
   static const Duration localChangeRetryFloor = Duration(seconds: 1);
@@ -149,7 +164,9 @@ final class WebDavSyncScheduler {
     WebDavSyncContextProvider contextProvider, {
     WebDavSyncRemotePollContextProvider? remotePollContextProvider,
   }) {
+    _armEpoch++;
     _contextProvider = contextProvider;
+    saveFeedback?.setEnabled(true);
     _remotePollContextProvider = remotePollContextProvider;
     _periodic?.cancel();
     _remotePollTimer?.cancel();
@@ -191,6 +208,20 @@ final class WebDavSyncScheduler {
     _pendingLocalChangeKey = logicalKey;
     _localChangeSequence++;
     _pendingLocalChangeSequence = _localChangeSequence;
+    // Playback checkpoints and automatic build bookkeeping are not Settings
+    // saves. They still sync, but must not put a status overlay over playback.
+    if (logicalKey != WebDavSyncHotMerge.playbackPreference &&
+        logicalKey != WebDavSyncHotMerge.continueWatchingPreference &&
+        logicalKey != WebDavSyncHotMerge.finishedMoviesPreference &&
+        logicalKey != WebDavSyncHotMerge.explicitlyWatchedSeriesPreference &&
+        logicalKey != ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey &&
+        logicalKey != 'app_last_build_number') {
+      if (logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey) {
+        _pendingProfileReceiptSequence = _localChangeSequence;
+      }
+      saveFeedback?.saved(_localChangeSequence);
+      if (_gateHolds && !_running) saveFeedback?.waiting();
+    }
     if (_running) {
       _dirtyDuringRun = true;
       return;
@@ -270,6 +301,7 @@ final class WebDavSyncScheduler {
         logicalKey == WebDavSyncHotMerge.playlistFavoritesPreference ||
         logicalKey == ProfilePreferences.webDavSyncRegistryLogicalKey ||
         logicalKey == ProfilePreferences.webDavSyncLibraryLogicalKey ||
+        logicalKey == ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey ||
         logicalKey.startsWith(WebDavSyncHotMerge.seriesSourcePrefix);
   }
 
@@ -287,6 +319,8 @@ final class WebDavSyncScheduler {
     if (completed && !localChangeFollowUp && pending <= sequenceAtStart) {
       _pendingLocalChangeSequence = null;
       _localChangeRetries = 0;
+      _localChangeTimer?.cancel();
+      _localChangeTimer = null;
       return;
     }
     _rearmPendingLocalChange(
@@ -579,6 +613,8 @@ final class WebDavSyncScheduler {
   }
 
   void disarm() {
+    _armEpoch++;
+    saveFeedback?.setEnabled(false);
     _contextProvider = null;
     _remotePollContextProvider = null;
     _periodic?.cancel();
@@ -603,7 +639,14 @@ final class WebDavSyncScheduler {
     }
   }
 
-  Future<WebDavSyncCycleReport> signal(WebDavSyncTrigger trigger) async {
+  Future<WebDavSyncCycleReport> signal(WebDavSyncTrigger trigger) =>
+      _signal(trigger, _localChangeSequence, _armEpoch);
+
+  Future<WebDavSyncCycleReport> _signal(
+    WebDavSyncTrigger trigger,
+    int requestedSequence,
+    int requestedEpoch,
+  ) async {
     // A local change never queues behind an in-flight poll probe: the probe
     // can hold its completer for a full request deadline, which is exactly
     // the window an OS process freeze eats after a lifecycle handoff. The
@@ -616,7 +659,8 @@ final class WebDavSyncScheduler {
         : _pollCompletion;
     if (pollCompletion != null) await pollCompletion.future;
     final provider = _contextProvider;
-    if (provider == null) {
+    if (provider == null ||
+        (trigger == WebDavSyncTrigger.manual && requestedEpoch != _armEpoch)) {
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
@@ -627,12 +671,32 @@ final class WebDavSyncScheduler {
       );
     }
     if (_running) {
+      // Explicit sync observes the current attempt instead of reporting paused
+      // and dismissing its foreground UI while that attempt is still running.
+      if (trigger == WebDavSyncTrigger.manual) {
+        final joined = await _activeCycleResult!.future;
+        if (requestedEpoch != _armEpoch) {
+          return const WebDavSyncCycleReport(
+            disposition: WebDavSyncCycleDisposition.inactive,
+          );
+        }
+        if (joined.report.disposition == WebDavSyncCycleDisposition.completed &&
+            joined.sequence != null &&
+            joined.sequence! < requestedSequence) {
+          // The joined snapshot predates this explicit request. Keep its UI
+          // alive through one that covers that revision, without chasing saves
+          // made after the request or crossing an account reconfiguration.
+          return _signal(trigger, requestedSequence, requestedEpoch);
+        }
+        return joined.report;
+      }
       if (trigger == WebDavSyncTrigger.localChange) _dirtyDuringRun = true;
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
     }
     if (_gateHolds) {
+      saveFeedback?.waiting();
       if (trigger == WebDavSyncTrigger.localChange) {
         _rearmPendingLocalChange('a platform gate holds');
       }
@@ -653,20 +717,30 @@ final class WebDavSyncScheduler {
       );
     }
     _running = true;
+    final cycleResult =
+        Completer<({WebDavSyncCycleReport report, int? sequence})>();
+    _activeCycleResult = cycleResult;
+    // Automatic cycles may have no manual waiter. Their original caller still
+    // receives failures; the shared result must not add an unhandled error.
+    cycleResult.future.ignore();
     int? intentSequenceAtStart;
     final scopeAtStart = ProfileRuntime.scope.value;
     var profileInterrupted = false;
+    var publicationCompleted = false;
     var intentCycleCompleted = false;
     var intentCycleRequestedFollowUp = false;
     try {
       final context = await provider();
       if (context == null || !context.active || !context.isComplete) {
-        return const WebDavSyncCycleReport(
+        const report = WebDavSyncCycleReport(
           disposition: WebDavSyncCycleDisposition.inactive,
         );
+        cycleResult.complete((report: report, sequence: null));
+        return report;
       }
       _lastStartedAt = _clock();
       intentSequenceAtStart = _localChangeSequence;
+      saveFeedback?.started();
       if (trigger == WebDavSyncTrigger.localChange) {
         final logicalKey = _pendingLocalChangeKey;
         _pendingLocalChangeKey = null;
@@ -683,6 +757,17 @@ final class WebDavSyncScheduler {
           report.disposition == WebDavSyncCycleDisposition.completed ||
           report.disposition == WebDavSyncCycleDisposition.capacityBlocked;
       intentCycleRequestedFollowUp = report.localChangeFollowUp;
+      publicationCompleted =
+          report.disposition == WebDavSyncCycleDisposition.completed &&
+          !report.localChangeFollowUp &&
+          report.localPublicationConfirmed &&
+          !(_pendingProfileReceiptSequence != null &&
+              report.localProfilesSuppressed) &&
+          report.clockPauseReason == null;
+      if (publicationCompleted &&
+          (_pendingProfileReceiptSequence ?? 0) <= intentSequenceAtStart) {
+        _pendingProfileReceiptSequence = null;
+      }
       if (report.disposition == WebDavSyncCycleDisposition.capacityBlocked) {
         _capacityBlocked = _localChangeSequence <= intentSequenceAtStart;
       } else if (report.disposition == WebDavSyncCycleDisposition.completed) {
@@ -713,8 +798,10 @@ final class WebDavSyncScheduler {
         _dirtyDuringRun = true;
         _immediateDirtyDuringRun = true;
       }
+      cycleResult.complete((report: report, sequence: intentSequenceAtStart));
       return report;
-    } catch (error) {
+    } catch (error, stack) {
+      cycleResult.completeError(error, stack);
       // Require both a local-state failure and an observed scope change.
       // Network/server failures retain their backoff even across a switch.
       profileInterrupted =
@@ -724,11 +811,18 @@ final class WebDavSyncScheduler {
       rethrow;
     } finally {
       _running = false;
+      _activeCycleResult = null;
       final dirtyDuringRun = _dirtyDuringRun;
       final immediateDirtyDuringRun = _immediateDirtyDuringRun;
       _dirtyDuringRun = false;
       _immediateDirtyDuringRun = false;
       if (intentSequenceAtStart != null) {
+        if (saveFeedback?.hasPending == true) {
+          saveFeedback?.finished(
+            intentSequenceAtStart,
+            published: publicationCompleted,
+          );
+        }
         _handleLocalChangeOutcome(
           sequenceAtStart: intentSequenceAtStart,
           completed: intentCycleCompleted,
@@ -737,6 +831,7 @@ final class WebDavSyncScheduler {
           profileInterrupted: profileInterrupted,
         );
       } else if (trigger == WebDavSyncTrigger.localChange) {
+        saveFeedback?.waiting();
         // Includes context-provider exceptions as well as inactive snapshots.
         _rearmPendingLocalChange(
           'cycle did not start',

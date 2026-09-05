@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -293,6 +294,40 @@ void main() {
       );
     });
   }
+
+  test(
+    'database playback checkpoints carry a distinct notification origin',
+    () async {
+      final keys = <String>[];
+      ProfilePreferences.webDavSyncLocalChangeSink = (_, key) => keys.add(key);
+      try {
+        await IptvMediaStore.recordWatch(
+          'https://panel.invalid/movie/test',
+          channelName: 'Test',
+          playlistId: sourceId,
+        );
+        await IptvMediaStore.upsertVideoResume(
+          'https://panel.invalid/movie/test',
+          const {'positionMs': 1000, 'durationMs': 10000, 'updatedAt': 1000},
+          sourceId: sourceId,
+        );
+        await IptvMediaStore.removeVideoResume(
+          'https://panel.invalid/movie/test',
+          playbackCheckpoint: true,
+        );
+        expect(keys, hasLength(3));
+        expect(
+          keys,
+          everyElement(ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey),
+        );
+        keys.clear();
+        await IptvMediaStore.createList('Explicit edit');
+        expect(keys, contains(ProfilePreferences.webDavSyncLibraryLogicalKey));
+      } finally {
+        ProfilePreferences.webDavSyncLocalChangeSink = null;
+      }
+    },
+  );
 
   test('ambient build emits no TV records with a 50k saved pool', () async {
     await DebrifyTvRepository.instance.upsertChannel(

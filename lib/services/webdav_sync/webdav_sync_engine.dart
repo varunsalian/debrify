@@ -96,6 +96,8 @@ final class WebDavSyncCycleReport {
     this.clockPauseReason,
     this.statusHint,
     this.localChangeFollowUp = false,
+    this.localPublicationConfirmed = false,
+    this.localProfilesSuppressed = false,
   });
 
   final WebDavSyncCycleDisposition disposition;
@@ -106,6 +108,15 @@ final class WebDavSyncCycleReport {
   final WebDavSyncClockPauseReason? clockPauseReason;
   final String? statusHint;
   final bool localChangeFollowUp;
+
+  /// Publication proof, independent of informational remote-merge warnings.
+  /// Profile receipts must additionally check [localProfilesSuppressed].
+  /// False when publication was blocked or needs a fresh snapshot.
+  final bool localPublicationConfirmed;
+
+  /// Profile records were withheld from the snapshot by a local safety hold.
+  /// Other families may still have been published successfully.
+  final bool localProfilesSuppressed;
 }
 
 /// Bounded cache shared by successive production engine instances. Transport
@@ -1184,6 +1195,7 @@ final class WebDavSyncEngine
 
       session ??= await _localAdapter.beginCycle();
       _CircleCycleResult? circleResult;
+      var localProfilesSuppressed = false;
       circlePublication:
       if (circleAdapter != null &&
           circlePublicationAllowed &&
@@ -1238,6 +1250,13 @@ final class WebDavSyncEngine
         }
         final phaseStarted = instrumentation.startPhase();
         try {
+          final suppressedLocalProfileIds = <String>{
+            if (state.pendingActiveProfile != null)
+              state.pendingActiveProfile!.localProfileId,
+            if (state.pendingAdminSafetyProfile != null)
+              state.pendingAdminSafetyProfile!,
+          };
+          localProfilesSuppressed = suppressedLocalProfileIds.isNotEmpty;
           final built = await circleAdapter.buildCircleState(
             session,
             WebDavSyncCircleBuildRequest(
@@ -1250,12 +1269,7 @@ final class WebDavSyncEngine
               serverNowMs: serverNowMs,
               previousProfiles: state.circleProfilesBaseline,
               previousResources: state.circleResourcesBaseline,
-              suppressedLocalProfileIds: <String>{
-                if (state.pendingActiveProfile != null)
-                  state.pendingActiveProfile!.localProfileId,
-                if (state.pendingAdminSafetyProfile != null)
-                  state.pendingAdminSafetyProfile!,
-              },
+              suppressedLocalProfileIds: suppressedLocalProfileIds,
             ),
           );
           if (built.registryOutboxRowCount != 0) {
@@ -1806,6 +1820,11 @@ final class WebDavSyncEngine
         deviceClockWarning: clockDecision.deviceClockWarning,
         statusHint: state.statusHint,
         localChangeFollowUp: localChangeFollowUp,
+        localProfilesSuppressed: localProfilesSuppressed,
+        localPublicationConfirmed:
+            circlePublicationAllowed &&
+            !cycleConflicted &&
+            !localChangeFollowUp,
       );
     } finally {
       transport.close();

@@ -1459,6 +1459,7 @@ void main() {
       final stillFailed = await runFixture(context());
 
       expect(failed.disposition, WebDavSyncCycleDisposition.completed);
+      expect(failed.localPublicationConfirmed, isFalse);
       expect(failed.statusHint, contains('deletion history'));
       expect(stillFailed.statusHint, contains('deletion history'));
       expect(circleLocal.buildRequests, isEmpty);
@@ -1839,7 +1840,9 @@ void main() {
       diagnostic: (message, _) => diagnostics.add(message),
     );
 
-    await runFixture(context());
+    final safetyReport = await runFixture(context());
+    expect(safetyReport.localPublicationConfirmed, isTrue);
+    expect(safetyReport.localProfilesSuppressed, isTrue);
 
     expect(
       diagnostics,
@@ -2327,6 +2330,7 @@ void main() {
         contains('local-x'),
       );
       expect(converged.sectionsPushed, 0);
+      expect(converged.localProfilesSuppressed, isTrue);
 
       final later = now.add(const Duration(minutes: 1));
       circleLocal.activeProfileId = 'local-y';
@@ -2383,6 +2387,7 @@ void main() {
       );
       expect(states.state.pendingActiveProfile, isNull);
       expect(convergedAfterSwitch.sectionsPushed, 0);
+      expect(convergedAfterSwitch.localProfilesSuppressed, isFalse);
     },
   );
 

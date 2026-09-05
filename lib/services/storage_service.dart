@@ -4102,9 +4102,10 @@ class StorageService {
 
   static Future<void> removeVideoResume(
     String key, {
+    bool playbackCheckpoint = false,
     WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) {
-    return IptvMediaStore.removeVideoResume(key, origin: origin);
+    return IptvMediaStore.removeVideoResume(key, origin: origin, playbackCheckpoint: playbackCheckpoint);
   }
 
   /// Save audio and subtitle preferences for series content
