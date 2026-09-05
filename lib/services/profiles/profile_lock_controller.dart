@@ -20,7 +20,7 @@ class ProfileLockController {
   Timer? _timer;
   UserProfile? _profile;
   bool _playbackActive = false;
-  final Set<String> _lockOnNextResume = <String>{};
+  final Map<String, Object> _lockOnNextResume = <String, Object>{};
 
   bool get hasActivatedProfile => _profile != null;
   bool get isUnlocked => _profile != null && lockedProfileId.value == null;
@@ -49,7 +49,7 @@ class ProfileLockController {
   void onResume() {
     final profile = _profile;
     if (profile == null) return;
-    final oneShot = _lockOnNextResume.remove(profile.id);
+    final oneShot = _lockOnNextResume.remove(profile.id) != null;
     if (!profile.hasPin) return;
     if (oneShot || profile.lockOnResume) lock();
   }
@@ -57,7 +57,22 @@ class ProfileLockController {
   /// A synchronized PIN replacement must not interrupt the current unlocked
   /// session. The new verifier takes effect at the next foreground boundary.
   void armLockOnNextResume(String profileId) {
-    if (profileId.isNotEmpty && _lockOnNextResume.add(profileId)) {
+    if (profileId.isNotEmpty) {
+      _lockOnNextResume[profileId] = Object();
+      _publishPrivacy();
+    }
+  }
+
+  /// Capture before starting PIN verification, never after its async work.
+  Object? pendingPinLock(String profileId) => _lockOnNextResume[profileId];
+
+  /// A successful verification satisfies a previously pending sync lock.
+  /// A replacement received during verification must retain its own lock.
+  /// Generic unlocks and metadata refreshes deliberately do not acknowledge it.
+  void acknowledgeVerifiedPin(String profileId, Object? pendingLock) {
+    if (pendingLock != null &&
+        identical(_lockOnNextResume[profileId], pendingLock)) {
+      _lockOnNextResume.remove(profileId);
       _publishPrivacy();
     }
   }
@@ -119,7 +134,7 @@ class ProfileLockController {
             'protectOnBackground':
                 profile?.hasPin == true &&
                 (profile?.lockOnResume == true ||
-                    _lockOnNextResume.contains(profile?.id)),
+                    _lockOnNextResume.containsKey(profile?.id)),
           })
           .catchError((_) {}),
     );
