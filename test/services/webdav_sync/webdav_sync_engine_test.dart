@@ -104,6 +104,46 @@ void main() {
     return WebDavSyncManifest.fromJson(payload);
   }
 
+  for (final malformedEnvelope in [true, false]) {
+    test(
+      'invalid peer reports ${malformedEnvelope ? 'decode' : 'parse'} stage',
+      () async {
+        final failures = <WebDavSyncManifestFailure>[];
+        engine = WebDavSyncEngine(
+          stateRepository: states,
+          localAdapter: local,
+          transportFactory: (_) => transport,
+          codec: codec,
+          clock: () => now,
+          diagnostic: (_, error) {
+            if (error is WebDavSyncManifestFailure) failures.add(error);
+          },
+        );
+        transport.manifests['device-b'] = malformedEnvelope
+            ? Uint8List.fromList(utf8.encode('invalid envelope'))
+            : await codec.sealDocument(
+                key: root.key,
+                circleId: root.document.circleId,
+                deviceId: 'device-b',
+                logicalName: 'manifest',
+                schemaVersion: WebDavSyncManifest.schemaVersion,
+                payload: const {'not': 'a manifest'},
+                maxBytes: WebDavSyncLimits.maxManifestBytes,
+              );
+        final report = await runFixture(context());
+        expect(report.disposition, WebDavSyncCycleDisposition.completed);
+        expect(failures, hasLength(1));
+        expect(
+          failures.single.stage,
+          malformedEnvelope
+              ? WebDavSyncManifestReadStage.decode
+              : WebDavSyncManifestReadStage.parse,
+        );
+        expect(failures.single.category, 'format');
+      },
+    );
+  }
+
   test('missing root or either identity map is a total no-op', () async {
     final reports = <WebDavSyncCycleReport>[
       await engine.runCycle(null, allowPreActivation: true),

@@ -6,12 +6,30 @@ import '../webdav_protocol_client.dart';
 typedef WebDavSyncAuthorityDiagnostic =
     void Function(String message, Object? error);
 
+enum WebDavSyncManifestReadStage { read, decode, parse, identity, metadata }
+
+/// Only fixed labels cross the logging boundary; never retain exception text
+/// or payloads, which can contain private paths and credentials.
+final class WebDavSyncManifestFailure {
+  WebDavSyncManifestFailure(this.stage, Object error)
+    : category = error is FormatException
+          ? switch (error.message) {
+              'WebDAV sync document authentication failed' => 'authentication',
+              'WebDAV sync document identity mismatch' => 'identity',
+              _ => 'format',
+            }
+          : 'exception';
+
+  final WebDavSyncManifestReadStage stage;
+  final String category;
+}
+
 /// Production sink for audited WebDAV sync notes.
 ///
-/// Error objects are deliberately ignored: transport errors can contain
+/// Raw error objects are deliberately ignored: transport errors can contain
 /// endpoints or paths, while each message passed here is a fixed, audited
-/// description of the condition.
-void recordWebDavSyncDiagnostic(String message, Object? _) {
+/// description of the condition. Manifest failures carry only fixed labels.
+void recordWebDavSyncDiagnostic(String message, Object? error) {
   try {
     debugPrint(message);
   } catch (_) {
@@ -24,6 +42,10 @@ void recordWebDavSyncDiagnostic(String message, Object? _) {
       level: _webDavSyncDiagnosticLevel(message),
       fields: <String, Object?>{
         'message': DiagnosticLabel(_webDavSyncMessageLabel(message)),
+        if (error is WebDavSyncManifestFailure) ...{
+          'stage': DiagnosticLabel(error.stage.name),
+          'category': DiagnosticLabel(error.category),
+        },
       },
     );
   } catch (_) {

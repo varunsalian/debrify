@@ -12,6 +12,7 @@ import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
@@ -1888,10 +1889,12 @@ final class WebDavSyncEngine
         sortedDeviceIds,
         limit: readConcurrency,
         operation: (deviceId) async {
+          var stage = WebDavSyncManifestReadStage.read;
           try {
             instrumentation.requestStarted();
             final read = await transport.readManifest(deviceId);
             instrumentation.received(read.bytes.length);
+            stage = WebDavSyncManifestReadStage.decode;
             final payload = await _codec.openDocument(
               key: context.root!.key,
               encoded: read.bytes,
@@ -1901,7 +1904,9 @@ final class WebDavSyncEngine
               schemaVersion: WebDavSyncManifest.schemaVersion,
               maxBytes: WebDavSyncLimits.maxManifestBytes,
             );
+            stage = WebDavSyncManifestReadStage.parse;
             final manifest = WebDavSyncManifest.fromJson(payload);
+            stage = WebDavSyncManifestReadStage.identity;
             if (manifest.deviceId != deviceId ||
                 manifest.circleId != context.root!.document.circleId) {
               throw const FormatException(
@@ -1920,6 +1925,7 @@ final class WebDavSyncEngine
               _diagnostic('Ignored a regressed WebDAV sync manifest', null);
               return null;
             }
+            stage = WebDavSyncManifestReadStage.metadata;
             return _ManifestRead(
               manifest: manifest,
               validator: WebDavSyncManifestValidator.fromMetadata(
@@ -1931,7 +1937,10 @@ final class WebDavSyncEngine
             _diagnostic('Ignored a removed WebDAV sync peer', error);
             return null;
           } on Exception catch (error) {
-            _diagnostic('Ignored an invalid WebDAV sync peer manifest', error);
+            _diagnostic(
+              'Ignored an invalid WebDAV sync peer manifest',
+              WebDavSyncManifestFailure(stage, error),
+            );
             return null;
           }
         },
@@ -4007,7 +4016,8 @@ String describeWebDavSyncCycleFailure(Object error) {
     return 'WebDavException:${error.kind.name}'
         '${status == null ? '' : ':$status'}';
   }
-  if (error is StateError && _literalStateErrorMessage.hasMatch(error.message)) {
+  if (error is StateError &&
+      _literalStateErrorMessage.hasMatch(error.message)) {
     return 'StateError:${error.message}';
   }
   return error.runtimeType.toString();
