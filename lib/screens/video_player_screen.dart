@@ -9,11 +9,10 @@ import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
-import 'package:screen_brightness/screen_brightness.dart';
+import '../services/player_display_controls.dart';
 import 'package:synchronized/synchronized.dart';
 
 // Removed volume_controller; using media_kit player volume instead
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
@@ -1523,11 +1522,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Held for the LOADING phase only — a slow debrid resolve must not let
     // the screen sleep before the first frame. From the first playing event
     // onward the lock follows play/pause (see _syncWakelock).
-    try {
-      WakelockPlus.enable();
-    } catch (_) {
-      // Wakelock not supported on this platform (e.g., Linux)
-    }
+    unawaited(PlayerDisplayControls.instance.setWakelock(true));
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(true);
     }
@@ -10685,15 +10680,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// takes the lock up front so the screen can't sleep through a slow
   /// resolve/open before the first playing event arrives.
   void _syncWakelock(bool playing) {
-    try {
-      if (playing) {
-        WakelockPlus.enable();
-      } else {
-        WakelockPlus.disable();
-      }
-    } catch (_) {
-      // Wakelock not supported on this platform (e.g., Linux).
-    }
+    unawaited(PlayerDisplayControls.instance.setWakelock(playing));
   }
 
   @override
@@ -10856,17 +10843,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
-    // Restore system brightness when exiting the player
-    try {
-      ScreenBrightness().resetScreenBrightness();
-    } catch (_) {
-      // Screen brightness not supported on this platform (e.g., Linux)
-    }
-    try {
-      WakelockPlus.disable();
-    } catch (_) {
-      // Wakelock not supported on this platform (e.g., Linux)
-    }
+    // Each helper awaits native failures before completing, including disposal.
+    unawaited(PlayerDisplayControls.instance.resetBrightness());
+    unawaited(PlayerDisplayControls.instance.setWakelock(false));
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(false);
     }
@@ -12363,11 +12342,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _gestureStartPosition = details.localPosition;
     _gestureStartVideoPosition = _position;
     _gestureStartVolume = (_player.state.volume / 100.0).clamp(0.0, 1.0);
-    try {
-      _gestureStartBrightness = await ScreenBrightness().current;
-    } catch (_) {
-      _gestureStartBrightness = 0.5;
-    }
+    _gestureStartBrightness = await PlayerDisplayControls.instance.brightness();
+    if (!mounted) return;
     _mode = GestureMode.none;
     _verticalHud.value = null;
     _seekHud.value = null;
@@ -12387,6 +12363,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _mode = GestureMode.seek;
       } else if (absDy > 12) {
         final isLeftHalf = _gestureStartPosition.dx < size.width / 2;
+        if (isLeftHalf && !PlayerDisplayControls.supportsBrightness) return;
         _mode = isLeftHalf ? GestureMode.brightness : GestureMode.volume;
       }
     }
@@ -12418,11 +12395,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         0.0,
         1.0,
       );
-      try {
-        ScreenBrightness().setScreenBrightness(newBright);
-      } catch (_) {
-        // Screen brightness not supported on this platform (e.g., Linux)
-      }
+      unawaited(PlayerDisplayControls.instance.setBrightness(newBright));
       _verticalHud.value = VerticalHudState(
         kind: VerticalKind.brightness,
         value: newBright,

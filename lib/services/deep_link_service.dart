@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import '../utils/platform_util.dart';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_sharing_intent/flutter_sharing_intent.dart';
 import 'package:flutter_sharing_intent/model/sharing_file.dart';
 import 'storage_service.dart';
@@ -15,6 +16,15 @@ class DeepLinkService {
   DeepLinkService._internal();
 
   final _appLinks = AppLinks();
+
+  // These plugins have no tvOS implementation. Sharing intents are mobile
+  // only; app_links also supports desktop deep links.
+  static bool get _supportsAppLinks => !PlatformUtil.isTvOS;
+  static bool get _supportsSharingIntents =>
+      !kIsWeb &&
+      !PlatformUtil.isTvOS &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
   StreamSubscription<Uri>? _linkSubscription;
   StreamSubscription<List<SharedFile>>? _sharedMediaSubscription;
 
@@ -68,13 +78,17 @@ class DeepLinkService {
     if (_preflightRan) return;
     _preflightRan = true;
     try {
-      _preflightUri = await DeepLinkService()._appLinks.getInitialLink();
+      if (_supportsAppLinks) {
+        _preflightUri = await DeepLinkService()._appLinks.getInitialLink();
+      }
     } catch (_) {
       debugPrint('Deep link preflight (link) failed');
     }
     try {
-      _preflightShared = await FlutterSharingIntent.instance
-          .getInitialSharing();
+      if (_supportsSharingIntents) {
+        _preflightShared = await FlutterSharingIntent.instance
+            .getInitialSharing();
+      }
     } catch (_) {
       debugPrint('Deep link preflight (share) failed');
     }
@@ -133,7 +147,9 @@ class DeepLinkService {
         initialUri = _preflightUri;
         _preflightUri = null;
       } else {
-        initialUri = await _appLinks.getInitialLink();
+        initialUri = _supportsAppLinks
+            ? await _appLinks.getInitialLink()
+            : null;
       }
       if (initialUri != null) {
         _handleUri(initialUri);
@@ -143,14 +159,16 @@ class DeepLinkService {
     }
 
     // Listen for incoming links while app is running
-    _linkSubscription = _appLinks.uriLinkStream.listen(
-      (uri) {
-        _handleUri(uri);
-      },
-      onError: (_) {
-        debugPrint('Deep link stream error');
-      },
-    );
+    if (_supportsAppLinks && _linkSubscription == null) {
+      _linkSubscription = _appLinks.uriLinkStream.listen(
+        (uri) {
+          _handleUri(uri);
+        },
+        onError: (_) {
+          debugPrint('Deep link stream error');
+        },
+      );
+    }
 
     // Handle initial shared content if app was opened via share
     try {
@@ -159,7 +177,9 @@ class DeepLinkService {
         initialShared = _preflightShared ?? const [];
         _preflightShared = null;
       } else {
-        initialShared = await FlutterSharingIntent.instance.getInitialSharing();
+        initialShared = _supportsSharingIntents
+            ? await FlutterSharingIntent.instance.getInitialSharing()
+            : const [];
       }
       if (initialShared.isNotEmpty) {
         _processSharedFiles(initialShared);
@@ -169,16 +189,18 @@ class DeepLinkService {
     }
 
     // Listen for incoming shared content while app is running
-    _sharedMediaSubscription = FlutterSharingIntent.instance
-        .getMediaStream()
-        .listen(
-          (List<SharedFile> files) {
-            _processSharedFiles(files);
-          },
-          onError: (_) {
-            debugPrint('Share intent stream error');
-          },
-        );
+    if (_supportsSharingIntents && _sharedMediaSubscription == null) {
+      _sharedMediaSubscription = FlutterSharingIntent.instance
+          .getMediaStream()
+          .listen(
+            (List<SharedFile> files) {
+              _processSharedFiles(files);
+            },
+            onError: (_) {
+              debugPrint('Share intent stream error');
+            },
+          );
+    }
     await _drainPendingProfileActions();
   }
 
