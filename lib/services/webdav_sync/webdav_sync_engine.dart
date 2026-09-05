@@ -587,8 +587,14 @@ final class WebDavSyncEngine
       );
       instrumentation.disposition = report.disposition.name;
       return report;
-    } catch (_) {
+    } catch (error) {
       instrumentation.disposition = 'failed';
+      // Only the shape of the failure, never its message, URI, or body: a
+      // failed cycle event carried nothing before, which left a real field
+      // failure unexplainable from the log.
+      instrumentation.failureKind = _CycleInstrumentation.describeFailure(
+        error,
+      );
       rethrow;
     } finally {
       _publishAppliedKeys(appliedKeysByLocalProfile);
@@ -3998,6 +4004,7 @@ final class _CycleInstrumentation {
   int sectionsSkipped = 0;
   int bytesSaved = 0;
   String disposition = 'failed';
+  String? failureKind;
   int _rootUs = 0;
   int _listUs = 0;
   int _manifestsUs = 0;
@@ -4008,6 +4015,18 @@ final class _CycleInstrumentation {
   int _readBackUs = 0;
 
   int startPhase() => _stopwatch.elapsedMicroseconds;
+
+  /// The failure's shape only. A WebDAV error contributes its kind and HTTP
+  /// status; everything else contributes just its type. Messages, URIs, and
+  /// bodies never reach the diagnostic store.
+  static String describeFailure(Object error) {
+    if (error is WebDavException) {
+      final status = error.statusCode;
+      return 'WebDavException:${error.kind.name}'
+          '${status == null ? '' : ':$status'}';
+    }
+    return error.runtimeType.toString();
+  }
 
   void finishPhase(_CyclePhase phase, int startedAtUs) {
     final elapsedUs = _stopwatch.elapsedMicroseconds - startedAtUs;
@@ -4074,6 +4093,7 @@ final class _CycleInstrumentation {
         'sectionsSkipped': sectionsSkipped,
         'bytesSaved': bytesSaved,
         'disposition': DiagnosticLabel(disposition),
+        if (failureKind case final kind?) 'failureKind': DiagnosticLabel(kind),
       },
     );
   }

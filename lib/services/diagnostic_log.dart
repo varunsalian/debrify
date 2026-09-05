@@ -354,6 +354,24 @@ class DiagnosticLog {
     _accepting = false;
   }
 
+  /// Test-only: returns the singleton to its never-initialized state so a
+  /// later [initialize] runs again. [dispose] deliberately keeps the cached
+  /// initialization (production never re-initializes in one process), which
+  /// makes two diagnostics tests in one file step on each other.
+  @visibleForTesting
+  Future<void> debugReset() async {
+    await dispose();
+    _writeGeneration++;
+    _pending.clear();
+    _memoryFallback.clear();
+    _initializing = null;
+    _directory = null;
+    _memoryOnly = false;
+    _disabledForDeviceReset = false;
+    _droppedEntries = 0;
+    _accepting = false;
+  }
+
   /// Permanently stops this process' diagnostic writers and erases both Dart
   /// and native Android state. Device reset terminates immediately afterwards;
   /// refusing reinitialization closes the gap before that termination lands.

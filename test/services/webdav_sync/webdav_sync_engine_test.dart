@@ -626,6 +626,53 @@ void main() {
     expect(states.state.lastRemoteChangeMs, now.millisecondsSinceEpoch);
   });
 
+  test('a failed cycle records only the failure shape', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'debrify-webdav-cycle-failure-diagnostics-',
+    );
+    await DiagnosticLog.instance.initialize(directoryOverride: directory);
+    try {
+      // The message deliberately carries a URI-shaped secret: none of it may
+      // reach the diagnostic store, only the error's kind and status.
+      // A failed write is normally read back and accepted when the content
+      // hash matches; corrupting the read-back makes the cycle genuinely fail.
+      transport
+        ..sectionWriteFailure = const WebDavException(
+          kind: WebDavErrorKind.transient,
+          message: 'upstream unavailable at https://example.test/secret-path',
+          statusCode: 503,
+        )
+        ..corruptSectionOnWriteFailure = true;
+      await expectLater(
+        engine.runCycle(
+          context(),
+          allowPreActivation: true,
+          trigger: WebDavSyncTrigger.localChange,
+        ),
+        throwsA(isA<WebDavException>()),
+      );
+
+      final exported = await DiagnosticLog.instance.exportLastWindow();
+      final events = const LineSplitter()
+          .convert(utf8.decode(exported.bytes))
+          .map((line) => jsonDecode(line) as Map<String, dynamic>)
+          .where((entry) => entry['event'] == 'cycle')
+          .toList(growable: false);
+      expect(events, hasLength(1));
+      final fields = events.single['fields'] as Map<String, dynamic>;
+      expect(fields['disposition'], 'failed');
+      expect(fields['failureKind'], 'WebDavException:transient:503');
+
+      final payload = jsonEncode(events.single);
+      expect(payload, isNot(contains('secret-path')));
+      expect(payload, isNot(contains('upstream unavailable')));
+      expect(payload, isNot(contains('example.test')));
+    } finally {
+      await DiagnosticLog.instance.debugReset();
+      if (await directory.exists()) await directory.delete(recursive: true);
+    }
+  });
+
   test('cycle emits one complete redacted instrumentation event', () async {
     final directory = await Directory.systemTemp.createTemp(
       'debrify-webdav-cycle-diagnostics-',
@@ -734,7 +781,7 @@ void main() {
         'preferenceKey': 'subtitle_language',
       });
     } finally {
-      await DiagnosticLog.instance.dispose();
+      await DiagnosticLog.instance.debugReset();
       if (await directory.exists()) await directory.delete(recursive: true);
     }
   });
