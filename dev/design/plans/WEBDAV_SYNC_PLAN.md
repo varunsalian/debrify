@@ -2414,7 +2414,7 @@ passphrase, this section supersedes them.
   linearizability smoke check: unconditional PUT of a random sentinel followed
   by an exact GET and best-effort DELETE. A definite missing/mismatching GET is
   a typed non-linearizable-store failure. Transport/no-response failures,
-  408/429/5xx responses, and response-drain failures are bounded-retry
+  401/403 credential failures, 408/429/5xx responses, and response-drain failures are bounded-retry
   inconclusive outcomes. A failure after response headers retains that HTTP
   status in redacted diagnostics. No path, body, error object, or secret is
   logged. Koofr passes because overwriting and ignored `If-None-Match` are not
@@ -2433,8 +2433,11 @@ passphrase, this section supersedes them.
 - Concurrent-root follow extracts the secret and sealed marker from the same
   winning object, persists the secret, resets the losing candidate, and only
   then enters existing-root adoption. Discovery and ordinary cycles pin and
-  compare exact `circle.authority` bytes; sealed binding secrets remain their
-  runtime copy.
+  compare SHA-256 hashes of the exact `circle.authority` bytes. Local pins
+  persist only the encrypted inner marker plus `authorityContentHash`; the
+  runtime opens that marker using the device-sealed binding secret. Legacy
+  marker-only pins hash the legacy marker itself. Assembled authority bytes
+  are never persisted in preferences.
   Existing bindings are not relocated, including the deployed Koofr `/dav/` +
   `Koofr/Koofr sync` shape with no keyfile.
 - Credential repair asks only for username/password, then reads
@@ -2443,8 +2446,10 @@ passphrase, this section supersedes them.
   read-only compatibility path probes legacy `circle.json.enc` and
   `circle.key`. A marker-only repair uses the locally sealed secret; a keyfile
   supplies it where present. Only after authenticating the legacy marker does
-  repair opportunistically provision one merged authority with write +
-  mandatory read-back. A different valid object is adopted; malformed bytes
+  repair GETs the authority again and adopts an existing valid authority.
+  Only a confirmed-absent GET permits provisioning with PUT + mandatory
+  read-back. A simultaneous write is the accepted detected-replacement
+  residual; this pre-PUT check does not prevent every overwrite. A different valid object is adopted; malformed bytes
   fail closed. Conditional create is never required. A crash after remote
   upgrade but before local repinning is recoverable because the embedded
   marker can exactly match the prior legacy pin.
@@ -2461,11 +2466,11 @@ and nulls the error object.
 
 Residual, stated honestly: a device can finish and become Active just before a
 long-paused concurrent first creator overwrites the authority. Its next cycle
-compares the exact pinned bytes and raises `RootChanged`; the existing explicit
-reconnect path authenticates the complete replacement, rotates its root-scoped
+compares the hash of the exact pinned authority bytes and raises `RootChanged`; the existing explicit
+user-confirmed reconnect path authenticates the complete replacement, rotates its root-scoped
 namespace, and re-enters adoption. The observed replacement is a complete
-openable marker+secret, never a silent or unopenable split. This negligible
-detected-and-repaired window does not occur in sequential personal setup. An
+openable marker+secret, never a silent or unopenable split. Automatic adoption is forbidden: a replacement could be malicious. This
+detected replacement window does not occur in sequential personal setup. An
 eventually consistent store that fails read-after-write is rejected by the
 smoke check; no finite client probe proves all possible multi-replica histories.
 

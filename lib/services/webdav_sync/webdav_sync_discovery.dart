@@ -159,11 +159,11 @@ final class WebDavSyncExistingRootDiscovery
     final transport = _transportFactory(binding: binding, secrets: secrets);
     try {
       final rootRead = await _readRequiredRoot(transport);
-      if (!_bytesEqual(markerPin, rootRead.bytes)) {
+      if (!namespace.matchesAuthority(rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
       final root = await _codec.openPinnedAuthority(
-        rootRead.bytes,
+        markerPin,
         secrets.syncPassphrase,
         runInBackground: true,
       );
@@ -262,11 +262,11 @@ final class WebDavSyncExistingRootDiscovery
     final transport = _transportFactory(binding: binding, secrets: secrets);
     try {
       final rootRead = await _readRequiredRoot(transport);
-      if (!_bytesEqual(markerPin, rootRead.bytes)) {
+      if (!namespace.matchesAuthority(rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
       final root = await _codec.openPinnedAuthority(
-        rootRead.bytes,
+        markerPin,
         secrets.syncPassphrase,
         runInBackground: true,
       );
@@ -508,17 +508,6 @@ final class WebDavSyncExistingRootDiscovery
       clearClockPauseReason: decision.pauseReason == null,
     ),
   );
-
-  static bool _bytesEqual(List<int> left, List<int> right) {
-    var difference = left.length ^ right.length;
-    final length = max(left.length, right.length);
-    for (var index = 0; index < length; index++) {
-      difference |=
-          (index < left.length ? left[index] : 0) ^
-          (index < right.length ? right[index] : 0);
-    }
-    return difference == 0;
-  }
 
   static void _ignoreDiagnostic(String message, Object? error) {}
 }

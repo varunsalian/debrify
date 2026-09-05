@@ -263,7 +263,7 @@ void main() {
     );
     expect(
       stored.namespaceFor(adopted)!.markerBytes,
-      orderedEquals(winnerAuthority),
+      orderedEquals(winnerMarker),
     );
   });
   test(
@@ -487,7 +487,10 @@ void main() {
     final completed = await bindingStore.load();
     final completedBinding = completed.bindings[binding.id]!;
     final completedNamespace = completed.namespaceFor(completedBinding)!;
-    expect(completedNamespace.markerBytes, transport.marker);
+    expect(
+      completedNamespace.markerBytes,
+      webDavSyncInnerMarker(transport.marker!),
+    );
     expect(
       completedNamespace.values,
       isNot(contains(WebDavSyncBindingStore.seedCandidateMarkerValueKey)),

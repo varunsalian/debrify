@@ -105,7 +105,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
     final transport = _transportFactory(binding: binding, secrets: secrets);
     try {
       final rootRead = await transport.readRootMarker();
-      _requireMarker(markerPin, rootRead.bytes);
+      _requireMarker(namespace.pinnedAuthorityHash!, rootRead.bytes);
       final listing = await transport.listDeviceIds();
       if (listing.deviceIds.length > WebDavSyncLimits.maxPeers) {
         throw StateError('WebDAV sync peer limit exceeded');
@@ -196,7 +196,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
         // mutation token and registry barrier close the corresponding local
         // TOCTOU window through the verified manifest and state commit.
         final commitRootRead = await transport.readRootMarker();
-        _requireMarker(markerPin, commitRootRead.bytes);
+        _requireMarker(namespace.pinnedAuthorityHash!, commitRootRead.bytes);
         await material.beforeRootCommit();
         await transport.writeManifest(namespace.deviceId, manifestBytes);
         final manifestReadBack = await transport.readManifest(
@@ -217,7 +217,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
           ),
         );
         final finalRootRead = await transport.readRootMarker();
-        _requireMarker(markerPin, finalRootRead.bytes);
+        _requireMarker(namespace.pinnedAuthorityHash!, finalRootRead.bytes);
         await _stateRepository.update(
           namespace.id,
           (current) => current.copyWith(
@@ -271,8 +271,8 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
     }
   }
 
-  static void _requireMarker(List<int> expected, List<int> actual) {
-    if (!_bytesEqual(expected, actual)) {
+  static void _requireMarker(String expected, List<int> actual) {
+    if (expected != webDavSyncAuthorityHash(actual)) {
       throw const WebDavSyncRootChangedException();
     }
   }

@@ -35,6 +35,52 @@ void main() {
   late int randomCursor;
   late WebDavSyncCodec codec;
 
+  test(
+    'authority opening sanitizes malformed inner marker including source',
+    () async {
+      const secret = 'inner-source-secret';
+      final bytes = WebDavSyncAuthorityFile(
+        markerBytes: Uint8List.fromList(
+          utf8.encode('{"secret":"$secret",broken'),
+        ),
+        syncPassphrase: secret,
+      ).encode();
+      for (final background in [false, true]) {
+        try {
+          await codec.openAuthority(bytes, runInBackground: background);
+          fail('Malformed marker opened');
+        } catch (error) {
+          // The sanitized type deliberately extends FormatException (so
+          // existing `on FormatException` catches still work); the security
+          // property is that its message carries neither the secret nor the
+          // malformed source, not that it is a different Dart type.
+          expect(error, isA<WebDavSyncAuthorityFileFormatException>());
+          expect(error.toString(), isNot(contains(secret)));
+          expect(error.toString(), isNot(contains('broken')));
+        }
+      }
+    },
+  );
+
+  test(
+    'old assembled pin uses device-sealed passphrase, never embedded secret',
+    () async {
+      final marker = await codec.sealRoot(
+        passphrase: 'sealed-secret',
+        circleId: 'circle-old-pin',
+        createdAt: DateTime.utc(2026, 9, 5),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final oldPin = WebDavSyncAuthorityFile(
+        markerBytes: marker,
+        syncPassphrase: 'untrusted-embedded-secret',
+      ).encode();
+      final opened = await codec.openPinnedAuthority(oldPin, 'sealed-secret');
+      expect(opened.document.circleId, 'circle-old-pin');
+    },
+  );
+
   setUp(() {
     randomCursor = 0;
     codec = WebDavSyncCodec(

@@ -346,6 +346,27 @@ void main() {
     },
   );
 
+  for (final status in [401, 403, 408, 429, 503]) {
+    test('smoke-check GET $status remains retryable', () async {
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((request) async {
+          if (request.method == 'PUT') return http.Response('', 201);
+          if (request.method == 'GET') {
+            return http.Response('private body', status);
+          }
+          return http.Response('', 204);
+        }),
+      );
+      await expectLater(
+        transport.verifyLinearizability(syncRootPath: 'Family/debrify-sync'),
+        throwsA(isA<WebDavSyncSetupInconclusiveException>()),
+      );
+      transport.close();
+    });
+  }
+
   test('transient smoke-check failures remain retryable', () async {
     var writes = 0;
     final transport = ProtocolWebDavSyncTransport(

@@ -203,37 +203,36 @@ final class WebDavSyncCodec {
 
   Future<({WebDavSyncAuthorityFile authority, OpenedWebDavSyncRoot root})>
   openAuthority(List<int> encoded, {bool runInBackground = false}) async {
-    final authority = WebDavSyncAuthorityFile.parse(encoded);
-    final root = await openRoot(
-      authority.markerBytes,
-      authority.syncPassphrase,
-      runInBackground: runInBackground,
-    );
-    return (authority: authority, root: root);
+    try {
+      final authority = WebDavSyncAuthorityFile.parse(encoded);
+      final root = await openRoot(
+        authority.markerBytes,
+        authority.syncPassphrase,
+        runInBackground: runInBackground,
+      );
+      return (authority: authority, root: root);
+    } on WebDavSyncAuthorityFileException {
+      rethrow;
+    } catch (_) {
+      throw const WebDavSyncAuthorityFileFormatException();
+    }
   }
 
-  /// Opens a locally pinned authority. Legacy marker-only pins remain readable
-  /// until the authenticated repair path upgrades them.
+  /// The passphrase comes exclusively from the device-sealed secrets. Old
+  /// assembled pins are tolerated only to extract their encrypted marker.
   Future<OpenedWebDavSyncRoot> openPinnedAuthority(
     List<int> encoded,
-    String legacyPassphrase, {
+    String sealedPassphrase, {
     bool runInBackground = false,
   }) async {
     try {
-      final opened = await openAuthority(
-        encoded,
+      return await openRoot(
+        webDavSyncInnerMarker(encoded),
+        sealedPassphrase,
         runInBackground: runInBackground,
       );
-      if (opened.authority.syncPassphrase != legacyPassphrase) {
-        throw const WebDavSyncWrongPassphraseException();
-      }
-      return opened.root;
-    } on WebDavSyncAuthorityFileException {
-      return openRoot(
-        encoded,
-        legacyPassphrase,
-        runInBackground: runInBackground,
-      );
+    } catch (_) {
+      throw const WebDavSyncAuthorityFileFormatException();
     }
   }
 

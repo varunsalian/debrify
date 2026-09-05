@@ -16,6 +16,7 @@ import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_large_section_io.dart';
 import 'webdav_sync_library_models.dart';
@@ -151,6 +152,7 @@ final class WebDavSyncCycleContext {
     required this.namespaceId,
     required this.deviceId,
     required this.markerPin,
+    this.authorityContentHash,
     required this.root,
     required this.circleToLocalProfiles,
     required this.circleToLocalResources,
@@ -162,6 +164,10 @@ final class WebDavSyncCycleContext {
   final String? namespaceId;
   final String? deviceId;
   final Uint8List? markerPin;
+  final String? authorityContentHash;
+  bool matchesAuthority(List<int> bytes) =>
+      (authorityContentHash ?? webDavSyncAuthorityHash(markerPin!)) ==
+      webDavSyncAuthorityHash(bytes);
   final OpenedWebDavSyncRoot? root;
   final Map<String, String>? circleToLocalProfiles;
   final Map<String, String>? circleToLocalResources;
@@ -347,7 +353,7 @@ final class WebDavSyncEngine
     try {
       _reportTvStage(onStage, WebDavSyncTvManualStage.reading);
       final rootRead = await _readRequiredRoot(transport, instrumentation);
-      if (!_bytesEqual(context.markerPin!, rootRead.bytes)) {
+      if (!context.matchesAuthority(rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
       instrumentation.requestStarted();
@@ -630,7 +636,6 @@ final class WebDavSyncEngine
     final namespaceId = context.namespaceId!;
     final deviceId = context.deviceId!;
     final root = context.root!;
-    final markerPin = context.markerPin!;
     var identityMaps = WebDavSyncIdentityMaps(
       circleToLocalProfiles: context.circleToLocalProfiles!,
       circleToLocalResources: context.circleToLocalResources!,
@@ -851,7 +856,7 @@ final class WebDavSyncEngine
         await listingFuture;
         Error.throwWithStackTrace(error, stackTrace);
       }
-      if (!_bytesEqual(markerPin, rootRead.bytes)) {
+      if (!context.matchesAuthority(rootRead.bytes)) {
         await listingFuture;
         throw const WebDavSyncRootChangedException();
       }
@@ -3095,7 +3100,7 @@ final class WebDavSyncEngine
     } finally {
       instrumentation.finishPhase(_CyclePhase.root, phaseStarted);
     }
-    if (!_bytesEqual(context.markerPin!, commitRoot.bytes)) {
+    if (!context.matchesAuthority(commitRoot.bytes)) {
       throw const WebDavSyncRootChangedException();
     }
     session.validate();
@@ -3210,7 +3215,7 @@ final class WebDavSyncEngine
       maxBytes: WebDavSyncLimits.maxManifestBytes,
     );
     final commitRoot = await _readRequiredRoot(transport, instrumentation);
-    if (!_bytesEqual(context.markerPin!, commitRoot.bytes)) {
+    if (!context.matchesAuthority(commitRoot.bytes)) {
       throw const WebDavSyncRootChangedException();
     }
     session.validate();

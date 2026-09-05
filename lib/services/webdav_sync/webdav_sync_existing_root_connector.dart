@@ -135,6 +135,7 @@ final class WebDavSyncExistingRootConnector {
             namespaceId: snapshot.namespace.id,
             deviceId: snapshot.namespace.deviceId,
             markerPin: snapshot.markerBytes,
+            authorityContentHash: snapshot.namespace.pinnedAuthorityHash,
             root: snapshot.root,
             circleToLocalProfiles: state.circleToLocalProfiles,
             circleToLocalResources: state.circleToLocalResources,

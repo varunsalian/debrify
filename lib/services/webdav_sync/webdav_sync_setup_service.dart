@@ -262,16 +262,16 @@ final class WebDavSyncSetupService {
           runInBackground: runCryptoInBackground,
         );
         if (context == WebDavSyncFolderInspectionContext.repair) {
-          final matchesPinnedAuthority = _bytesEqual(
-            priorMarker!,
-            authorityResult.bytes,
-          );
-          final upgradesPinnedLegacyMarker = _bytesEqual(
-            priorMarker,
-            opened.authority.markerBytes,
-          );
+          final matchesPinnedAuthority = snapshot
+              .namespaceFor(priorBinding!)!
+              .matchesAuthority(authorityResult.bytes);
+          final upgradesPinnedLegacyMarker =
+              snapshot
+                  .namespaceFor(priorBinding)!
+                  .matchesAuthority(priorMarker!) &&
+              _bytesEqual(priorMarker, opened.authority.markerBytes);
           final resumesDetectedAuthorityReplacement =
-              priorBinding!.lifecycle == WebDavSyncLifecycle.error &&
+              priorBinding.lifecycle == WebDavSyncLifecycle.error &&
               priorBinding.errorMessage ==
                   const WebDavSyncRootChangedException().message;
           if ((!matchesPinnedAuthority &&
@@ -321,9 +321,11 @@ final class WebDavSyncSetupService {
         return WebDavSyncFolderMissing(location: location, config: config);
       }
       if (context == WebDavSyncFolderInspectionContext.repair &&
-          !_bytesEqual(priorMarker!, marker.bytes)) {
+          !snapshot
+              .namespaceFor(priorBinding!)!
+              .matchesAuthority(marker.bytes)) {
         await store.markError(
-          priorBinding!.id,
+          priorBinding.id,
           const WebDavSyncRootChangedException(),
         );
         throw const WebDavSyncRootChangedException();
@@ -419,6 +421,24 @@ final class WebDavSyncSetupService {
     if (provision is! WebDavSyncAuthorityProvisionTransport ||
         transport is! WebDavSyncAuthorityProbeTransport) {
       _throwProvisionFailure();
+    }
+    final existing = await _readIfPresent(
+      () => (transport as WebDavSyncAuthorityProbeTransport).readRootAuthority(
+        path: location.rootAuthorityPath,
+        beforeSend: beforeSend,
+      ),
+    );
+    if (existing != null) {
+      final opened = await codec.openAuthority(
+        existing.bytes,
+        runInBackground: runCryptoInBackground,
+      );
+      return (
+        bytes: Uint8List.fromList(existing.bytes),
+        metadata: existing.metadata,
+        authority: opened.authority,
+        root: opened.root,
+      );
     }
     final expected = WebDavSyncAuthorityFile(
       markerBytes: Uint8List.fromList(markerBytes),
@@ -529,6 +549,7 @@ final class WebDavSyncSetupService {
         sameAsActive &&
         inspection.authorityBytes != null &&
         priorPin != null &&
+        snapshot.namespaceFor(prior!)!.matchesAuthority(priorPin) &&
         _bytesEqual(priorPin, inspection.markerBytes);
     final reconnectPinnedActive =
         sameAsActive &&
@@ -544,7 +565,7 @@ final class WebDavSyncSetupService {
     }
     if (upgradesPinnedLegacyMarker) {
       return store.upgradeLegacyActiveAuthority(
-        bindingId: prior!.id,
+        bindingId: prior.id,
         config: inspection.config,
         syncPassphrase: inspection.syncPassphrase,
         root: opened.document,
@@ -554,7 +575,10 @@ final class WebDavSyncSetupService {
       );
     }
     if (preserveActive) {
-      if (priorPin == null || !_bytesEqual(priorPin, inspection.pinBytes)) {
+      if (priorPin == null ||
+          !snapshot
+              .namespaceFor(prior!)!
+              .matchesAuthority(inspection.pinBytes)) {
         // Never reseal replacement credentials beneath an old marker pin.
         // A legitimate marker change must use reconnect verification, which
         // republishes the pin and secrets together.
@@ -623,11 +647,11 @@ final class WebDavSyncSetupService {
                 path: binding.location.rootMarkerPath,
                 beforeSend: beforeSend,
               );
-        if (!_bytesEqual(markerPin, result.bytes)) {
+        if (!namespace.matchesAuthority(result.bytes)) {
           throw const WebDavSyncRootChangedException();
         }
         final opened = await codec.openPinnedAuthority(
-          result.bytes,
+          markerPin,
           secrets.syncPassphrase,
           runInBackground: runCryptoInBackground,
         );
@@ -691,7 +715,7 @@ final class WebDavSyncSetupService {
         syncPassphrase: syncPassphrase,
       ).encode();
       // The raw comparison is only for an interrupted pre-upgrade legacy
-      // candidate. New candidates pin the complete authority bytes.
+      // candidate. New candidates compare the complete authority in memory.
       return _bytesEqual(authority, remoteMarker) ||
           _bytesEqual(candidate, remoteMarker);
     } on FormatException {

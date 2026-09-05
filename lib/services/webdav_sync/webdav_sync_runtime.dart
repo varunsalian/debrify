@@ -1316,6 +1316,7 @@ final class WebDavSyncRuntime
       namespaceId: namespace.id,
       deviceId: namespace.deviceId,
       markerPin: marker,
+      authorityContentHash: namespace.pinnedAuthorityHash,
       root: root,
       circleToLocalProfiles: state.circleToLocalProfiles,
       circleToLocalResources: state.circleToLocalResources,
@@ -1727,7 +1728,8 @@ final class _ProductionCycleRunner
         namespace == null ||
         binding.circleId != context.root?.document.circleId ||
         namespace.deviceId != context.deviceId ||
-        !_sameBytes(namespace.markerBytes, context.markerPin)) {
+        (!_sameBytes(namespace.markerBytes, context.markerPin) ||
+            namespace.pinnedAuthorityHash != context.authorityContentHash)) {
       return const WebDavSyncTvManualReport(
         disposition: WebDavSyncTvManualDisposition.inactive,
       );
@@ -1810,7 +1812,8 @@ final class _ProductionCycleRunner
         namespace == null ||
         binding.circleId != context.root?.document.circleId ||
         namespace.deviceId != context.deviceId ||
-        !_sameBytes(namespace.markerBytes, context.markerPin)) {
+        (!_sameBytes(namespace.markerBytes, context.markerPin) ||
+            namespace.pinnedAuthorityHash != context.authorityContentHash)) {
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );

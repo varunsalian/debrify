@@ -514,59 +514,120 @@ void main() {
     );
   });
 
-  test('merged authority is opened and its exact bytes are pinned', () async {
-    final marker = await codec.sealRoot(
-      passphrase: 'authority-secret',
-      circleId: 'authority-circle',
-      createdAt: DateTime.utc(2026, 9, 1),
-      memoryKiB: 8,
-      iterations: 1,
-    );
-    final authorityBytes = WebDavSyncAuthorityFile(
-      markerBytes: marker,
-      syncPassphrase: 'authority-secret',
-    ).encode();
-    final authorityTransport = _AuthorityProbeTransport()
-      ..authorityBytes = authorityBytes;
-    final authorityService = WebDavSyncSetupService(
-      store: store,
-      codec: codec,
-      transportFactory: ({required endpoint, required credentials}) {
-        authorityTransport
-          ..endpoint = endpoint
-          ..credentials = credentials;
-        return authorityTransport;
-      },
-    );
+  test(
+    'merged authority pins only ciphertext and hash; runtime uses sealed secret',
+    () async {
+      final marker = await codec.sealRoot(
+        passphrase: 'authority-secret',
+        circleId: 'authority-circle',
+        createdAt: DateTime.utc(2026, 9, 1),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final authorityBytes = WebDavSyncAuthorityFile(
+        markerBytes: marker,
+        syncPassphrase: 'authority-secret',
+      ).encode();
+      final authorityTransport = _AuthorityProbeTransport()
+        ..authorityBytes = authorityBytes;
+      final authorityService = WebDavSyncSetupService(
+        store: store,
+        codec: codec,
+        transportFactory: ({required endpoint, required credentials}) {
+          authorityTransport
+            ..endpoint = endpoint
+            ..credentials = credentials;
+          return authorityTransport;
+        },
+      );
 
-    final inspection =
-        await authorityService.inspectFolder(
-              config: _config,
-              folderPath: 'Family',
-              context: WebDavSyncFolderInspectionContext.setup,
-            )
-            as WebDavSyncFolderExisting;
-    expect(inspection.markerBytes, orderedEquals(marker));
-    expect(inspection.authorityBytes, orderedEquals(authorityBytes));
-    expect(inspection.syncPassphrase, 'authority-secret');
+      final inspection =
+          await authorityService.inspectFolder(
+                config: _config,
+                folderPath: 'Family',
+                context: WebDavSyncFolderInspectionContext.setup,
+              )
+              as WebDavSyncFolderExisting;
+      expect(inspection.markerBytes, orderedEquals(marker));
+      expect(inspection.authorityBytes, orderedEquals(authorityBytes));
+      expect(inspection.syncPassphrase, 'authority-secret');
 
-    final binding = await authorityService.configureExistingRoot(
-      inspection: inspection,
-    );
-    final snapshot = await store.load();
-    expect(binding.circleId, 'authority-circle');
-    expect(
-      snapshot.namespaceFor(binding)!.markerBytes,
-      orderedEquals(authorityBytes),
-    );
-    expect(authorityTransport.writeAuthorityCalls, 0);
-  });
+      final binding = await authorityService.configureExistingRoot(
+        inspection: inspection,
+      );
+      final snapshot = await store.load();
+      expect(binding.circleId, 'authority-circle');
+      expect(
+        snapshot.namespaceFor(binding)!.markerBytes,
+        orderedEquals(marker),
+      );
+      final namespace = snapshot.namespaceFor(binding)!;
+      expect(
+        namespace.authorityContentHash,
+        webDavSyncAuthorityHash(authorityBytes),
+      );
+      final serialized = jsonEncode(namespace.toJson());
+      final prefs = await SharedPreferences.getInstance();
+      final preferenceContents = prefs.getKeys().map(prefs.get).join();
+      for (final value in [serialized, preferenceContents]) {
+        expect(value, isNot(contains('authority-secret')));
+        expect(value, isNot(contains(base64Encode(authorityBytes))));
+        expect(value, isNot(contains(utf8.decode(authorityBytes))));
+      }
+      final secrets = await store.readSecrets(binding);
+      final runtimeRoot = await codec.openPinnedAuthority(
+        namespace.markerBytes!,
+        secrets.syncPassphrase,
+      );
+      expect(runtimeRoot.document.circleId, 'authority-circle');
+      final oldPin = WebDavSyncNamespace.fromJson({
+        ...namespace.toJson(),
+        'markerBytes': base64Encode(authorityBytes),
+        'authorityContentHash': null,
+      });
+      expect(oldPin.markerBytes, orderedEquals(marker));
+      expect(oldPin.matchesAuthority(authorityBytes), isTrue);
+      expect(
+        jsonEncode(oldPin.toJson()),
+        isNot(contains(base64Encode(authorityBytes))),
+      );
+      expect(authorityTransport.writeAuthorityCalls, 0);
+      await store.setLifecycle(binding.id, WebDavSyncLifecycle.active);
+      await store.promoteStaged(binding.id);
+      final changedBytes = Uint8List.fromList([...authorityBytes, 32]);
+      final changedInspection = WebDavSyncFolderExisting(
+        location: inspection.location,
+        config: inspection.config,
+        markerBytes: marker,
+        authorityBytes: changedBytes,
+        metadata: inspection.metadata,
+        syncPassphrase: inspection.syncPassphrase,
+      );
+      // Even a whitespace-only outer change with identical inner ciphertext
+      // must not bypass the resealing guard as a legacy upgrade.
+      await expectLater(
+        authorityService.configureExistingRoot(inspection: changedInspection),
+        throwsA(isA<WebDavSyncRootChangedException>()),
+      );
+      authorityTransport.authorityBytes = changedBytes;
+      await expectLater(
+        authorityService.revalidate(binding.id),
+        throwsA(isA<WebDavSyncRootChangedException>()),
+      );
+    },
+  );
 
   test(
     'malformed merged authority fails closed without a legacy overwrite',
     () async {
       final malformed = <Uint8List>[
         Uint8List.fromList(utf8.encode('not-json')),
+        WebDavSyncAuthorityFile(
+          markerBytes: Uint8List.fromList(
+            utf8.encode('{malformed-inner-secret'),
+          ),
+          syncPassphrase: 'malformed-inner-secret',
+        ).encode(),
         Uint8List.fromList(
           utf8.encode('{"version":2,"marker":"AA==","syncPassphrase":"x"}'),
         ),
@@ -593,7 +654,13 @@ void main() {
             folderPath: 'Family',
             context: WebDavSyncFolderInspectionContext.setup,
           ),
-          throwsA(isA<WebDavSyncAuthorityFileException>()),
+          throwsA(
+            isA<WebDavSyncAuthorityFileException>().having(
+              (error) => error.toString(),
+              'sanitized message',
+              isNot(contains('malformed-inner-secret')),
+            ),
+          ),
         );
         expect(authorityTransport.writeAuthorityCalls, 0);
         expect(authorityTransport.legacyMarkerReads, 0);
@@ -639,7 +706,7 @@ void main() {
     expect(repaired.lifecycle, WebDavSyncLifecycle.active);
     expect(
       (await store.load()).namespaceFor(repaired)!.markerBytes,
-      orderedEquals(authorityTransport.authorityBytes!),
+      orderedEquals(installed.marker),
     );
   });
 
@@ -692,6 +759,59 @@ void main() {
     expect(inspection.markerBytes, orderedEquals(winnerMarker));
     expect(inspection.syncPassphrase, 'winner-secret');
   });
+
+  test(
+    'legacy upgrade adopts authority appearing before PUT without writing',
+    () async {
+      final legacyMarker = await codec.sealRoot(
+        passphrase: 'legacy-secret',
+        circleId: 'legacy-circle',
+        createdAt: DateTime.utc(2026, 9, 1),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final winnerMarker = await codec.sealRoot(
+        passphrase: 'winner-secret',
+        circleId: 'winner-circle',
+        createdAt: DateTime.utc(2026, 9, 2),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final winnerAuthority = WebDavSyncAuthorityFile(
+        markerBytes: winnerMarker,
+        syncPassphrase: 'winner-secret',
+      ).encode();
+      final authorityTransport = _AuthorityProbeTransport()
+        ..bytes = legacyMarker
+        ..keyBytes = const WebDavSyncRootKeyFile(
+          syncPassphrase: 'legacy-secret',
+        ).encode()
+        ..authorityOnSecondRead = winnerAuthority;
+      final authorityService = WebDavSyncSetupService(
+        store: store,
+        codec: codec,
+        transportFactory: ({required endpoint, required credentials}) {
+          authorityTransport
+            ..endpoint = endpoint
+            ..credentials = credentials;
+          return authorityTransport;
+        },
+      );
+
+      final inspection =
+          await authorityService.inspectFolder(
+                config: _config,
+                folderPath: 'Family',
+                context: WebDavSyncFolderInspectionContext.setup,
+              )
+              as WebDavSyncFolderExisting;
+
+      expect(authorityTransport.writeAuthorityCalls, 0);
+      expect(inspection.authorityBytes, orderedEquals(winnerAuthority));
+      expect(inspection.markerBytes, orderedEquals(winnerMarker));
+      expect(inspection.syncPassphrase, 'winner-secret');
+    },
+  );
 
   test(
     'a detected authority replacement re-enters authenticated adoption',
@@ -769,7 +889,7 @@ void main() {
       expect(reconnecting.circleId, 'circle-replacement');
       expect(
         replacementNamespace.markerBytes,
-        orderedEquals(replacementAuthority),
+        orderedEquals(replacementMarker),
       );
       expect(replacementNamespace.deviceId, isNot(firstNamespace.deviceId));
       expect(
@@ -856,6 +976,8 @@ final class _AuthorityProbeTransport extends _FakeProbeTransport
   Uint8List? authorityBytes;
   Object? authorityError;
   Uint8List? authorityAfterWrite;
+  Uint8List? authorityOnSecondRead;
+  int authorityReads = 0;
   int writeAuthorityCalls = 0;
   int legacyMarkerReads = 0;
 
@@ -876,6 +998,10 @@ final class _AuthorityProbeTransport extends _FakeProbeTransport
     paths.add(path);
     await beforeSend?.call();
     if (authorityError case final failure?) throw failure;
+    authorityReads++;
+    if (authorityReads == 2 && authorityOnSecondRead != null) {
+      authorityBytes = authorityOnSecondRead;
+    }
     final body = authorityBytes;
     if (body == null) {
       throw const WebDavException(

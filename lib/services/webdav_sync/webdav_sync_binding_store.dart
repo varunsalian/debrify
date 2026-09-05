@@ -218,9 +218,9 @@ final class WebDavSyncBindingStore {
     final replacesPinnedAuthority =
         allowPinReplacement &&
         existing?.markerBytes != null &&
-        !_bytesEqual(existing!.markerBytes!, markerBytes);
-    if (existing?.markerBytes case final existingMarker?) {
-      if (!allowPinReplacement && !_bytesEqual(existingMarker, markerBytes)) {
+        !existing!.matchesAuthority(markerBytes);
+    if (existing?.markerBytes != null) {
+      if (!allowPinReplacement && !existing!.matchesAuthority(markerBytes)) {
         throw StateError('Authenticated sync root conflicts with its pin');
       }
     }
@@ -232,7 +232,8 @@ final class WebDavSyncBindingStore {
                 : existing ?? previousNamespace)
             .copyWith(
               id: namespaceId,
-              markerBytes: Uint8List.fromList(markerBytes),
+              markerBytes: webDavSyncInnerMarker(markerBytes),
+              authorityContentHash: webDavSyncAuthorityHash(markerBytes),
             );
     namespaces[namespaceId] = namespace;
     if (previousNamespace.id != namespaceId &&
@@ -267,8 +268,8 @@ final class WebDavSyncBindingStore {
   });
 
   /// Atomically upgrades an authenticated legacy marker pin to the merged
-  /// authority bytes without routing an otherwise healthy Active circle
-  /// through first-join adoption.
+  /// authority hash and encrypted inner marker without routing an otherwise
+  /// healthy Active circle through first-join adoption.
   Future<WebDavSyncBinding> upgradeLegacyActiveAuthority({
     required String bindingId,
     required WebDavConfig config,
@@ -290,7 +291,7 @@ final class WebDavSyncBindingStore {
     if (snapshot.activeBindingId != bindingId ||
         binding.circleId != root.circleId ||
         namespace.markerBytes == null ||
-        !_bytesEqual(namespace.markerBytes!, legacyMarkerBytes)) {
+        !namespace.matchesAuthority(legacyMarkerBytes)) {
       throw StateError('Legacy WebDAV sync authority changed during upgrade');
     }
     final updated = binding.copyWith(
@@ -311,7 +312,8 @@ final class WebDavSyncBindingStore {
     final namespaces =
         Map<String, WebDavSyncNamespace>.from(snapshot.namespaces)
           ..[namespace.id] = namespace.copyWith(
-            markerBytes: Uint8List.fromList(authorityBytes),
+            markerBytes: Uint8List.fromList(legacyMarkerBytes),
+            authorityContentHash: webDavSyncAuthorityHash(authorityBytes),
           );
     await beforeSave?.call();
     await _save(
@@ -729,17 +731,6 @@ final class WebDavSyncBindingStore {
     return '${value.substring(0, 8)}-${value.substring(8, 12)}-'
         '${value.substring(12, 16)}-${value.substring(16, 20)}-'
         '${value.substring(20)}';
-  }
-
-  static bool _bytesEqual(List<int> left, List<int> right) {
-    var difference = left.length ^ right.length;
-    final length = max(left.length, right.length);
-    for (var index = 0; index < length; index++) {
-      difference |=
-          (index < left.length ? left[index] : 0) ^
-          (index < right.length ? right[index] : 0);
-    }
-    return difference == 0;
   }
 
   static Uint8List _secureRandomBytes(int length) {

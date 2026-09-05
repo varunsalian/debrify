@@ -764,7 +764,7 @@ final class WebDavSyncLinearizabilityProbe {
           beforeSend: beforeSend,
         );
       } on WebDavException catch (error) {
-        if (_isTransientOrTransport(error)) {
+        if (_isTransientOrTransport(error) || error.statusCode != 404) {
           _throwInconclusive(
             step: 'probe-readback',
             probeStep: 1,

@@ -245,7 +245,8 @@ final class WebDavSyncAuthorityFileVersionException
 ///
 /// Keeping the sealed marker and its opening secret in one strictly parsed
 /// representation means an LWW WebDAV store can replace only a complete,
-/// internally consistent authority. The encoded bytes themselves are pinned.
+/// internally consistent authority. A hash pins the exact encoded bytes;
+/// only the encrypted inner marker is retained alongside that hash locally.
 final class WebDavSyncAuthorityFile {
   const WebDavSyncAuthorityFile({
     required this.markerBytes,
@@ -551,36 +552,63 @@ final class WebDavSyncBinding {
   }
 }
 
+String webDavSyncAuthorityHash(List<int> bytes) =>
+    crypto.sha256.convert(bytes).toString();
+
+Uint8List webDavSyncInnerMarker(List<int> bytes) {
+  try {
+    return WebDavSyncAuthorityFile.parse(bytes).markerBytes;
+  } on WebDavSyncAuthorityFileException {
+    return Uint8List.fromList(bytes);
+  }
+}
+
 final class WebDavSyncNamespace {
   const WebDavSyncNamespace({
     required this.id,
     required this.deviceId,
     this.markerBytes,
+    this.authorityContentHash,
     this.values = const <String, Object?>{},
   });
 
   final String id;
   final String deviceId;
   final Uint8List? markerBytes;
+  final String? authorityContentHash;
+
+  String? get pinnedAuthorityHash =>
+      authorityContentHash ??
+      (markerBytes == null ? null : webDavSyncAuthorityHash(markerBytes!));
+
+  bool matchesAuthority(List<int> bytes) =>
+      pinnedAuthorityHash == webDavSyncAuthorityHash(bytes);
   final Map<String, Object?> values;
 
   WebDavSyncNamespace copyWith({
     String? id,
     String? deviceId,
     Uint8List? markerBytes,
+    String? authorityContentHash,
     bool clearMarker = false,
     Map<String, Object?>? values,
   }) => WebDavSyncNamespace(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
     markerBytes: clearMarker ? null : (markerBytes ?? this.markerBytes),
+    authorityContentHash: clearMarker
+        ? null
+        : (authorityContentHash ?? this.authorityContentHash),
     values: values ?? this.values,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'deviceId': deviceId,
-    if (markerBytes != null) 'markerBytes': base64Encode(markerBytes!),
+    if (markerBytes != null)
+      'markerBytes': base64Encode(webDavSyncInnerMarker(markerBytes!)),
+    if (pinnedAuthorityHash != null)
+      'authorityContentHash': pinnedAuthorityHash,
     if (values.isNotEmpty) 'values': values,
   };
 
@@ -617,7 +645,10 @@ final class WebDavSyncNamespace {
     return WebDavSyncNamespace(
       id: id,
       deviceId: deviceId,
-      markerBytes: marker,
+      markerBytes: marker == null ? null : webDavSyncInnerMarker(marker),
+      authorityContentHash: json['authorityContentHash'] is String
+          ? json['authorityContentHash'] as String
+          : (marker == null ? null : webDavSyncAuthorityHash(marker)),
       values: rawValues == null
           ? const <String, Object?>{}
           : Map<String, Object?>.from(rawValues as Map),

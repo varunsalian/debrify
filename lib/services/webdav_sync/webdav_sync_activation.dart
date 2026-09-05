@@ -462,7 +462,8 @@ final class WebDavSyncSeedActivationRecovery {
     final encodedCandidate =
         namespace?.values[WebDavSyncBindingStore.seedCandidateMarkerValueKey];
     if (encodedCandidate == null) return false;
-    if (encodedCandidate is! String ||
+    if (namespace == null ||
+        encodedCandidate is! String ||
         encodedCandidate.isEmpty ||
         pinnedMarker == null) {
       throw StateError('WebDAV sync interrupted seed candidate is invalid');
@@ -483,12 +484,15 @@ final class WebDavSyncSeedActivationRecovery {
       markerBytes: candidateMarker,
       syncPassphrase: secrets.syncPassphrase,
     ).encode();
-    if (!_bytesEqual(candidateAuthority, pinnedMarker)) {
+    // The persisted pin stores the inner marker plus the authority content
+    // hash (never the assembled authority, which carries the secret), so
+    // compare by that canonical hash rather than raw bytes.
+    if (!namespace.matchesAuthority(candidateAuthority)) {
       await _bindingStore.setLifecycle(
         staged.id,
         WebDavSyncLifecycle.awaitingAdoption,
       );
-      await _clearCandidate(namespace!.id);
+      await _clearCandidate(namespace.id);
       return true;
     }
 
@@ -498,7 +502,7 @@ final class WebDavSyncSeedActivationRecovery {
         !state.hasAuthenticatedMaps ||
         manifest == null ||
         manifest.circleId != staged.circleId ||
-        manifest.deviceId != namespace!.deviceId) {
+        manifest.deviceId != namespace.deviceId) {
       throw StateError('WebDAV sync interrupted seed activation is incomplete');
     }
     await _bindingStore.activateAndPromoteStaged(staged.id);
