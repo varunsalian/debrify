@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
@@ -1162,6 +1163,7 @@ final class WebDavSyncEngineStateStore
   ) => _fileLock.synchronized(() async {
     final current = await _loadUnlocked(namespaceId);
     final result = update(current);
+    if (identical(result, current)) return current;
     final file = await _stateFile(namespaceId);
     await _writeFile(file, result);
     if (!_knownMarkedNamespaces.contains(namespaceId)) {
@@ -1267,16 +1269,21 @@ final class WebDavSyncEngineStateStore
     if (length <= 0 || length > _maxFileBytes) {
       throw const FormatException('WebDAV sync engine state exceeds its limit');
     }
-    final decoded = jsonDecode(await file.readAsString());
-    return WebDavSyncEngineState.fromJson(decoded);
+    final path = file.path;
+    return Isolate.run(() async {
+      final decoded = jsonDecode(await File(path).readAsString());
+      return WebDavSyncEngineState.fromJson(decoded);
+    });
   }
 
   static Future<void> _writeFile(File file, WebDavSyncEngineState state) async {
     // Reject any caller-created state that the strict restart parser could not
     // read. This keeps a successful update from poisoning the next launch.
-    final json = state.toJson();
-    WebDavSyncEngineState.fromJson(json);
-    final encoded = utf8.encode(jsonEncode(json));
+    final encoded = await Isolate.run(() {
+      final json = state.toJson();
+      WebDavSyncEngineState.fromJson(json);
+      return utf8.encode(jsonEncode(json));
+    });
     if (encoded.isEmpty || encoded.length > _maxFileBytes) {
       throw const FormatException('WebDAV sync engine state exceeds its limit');
     }

@@ -330,6 +330,47 @@ void main() {
     );
   });
 
+  test(
+    'isolated journal writes serialize concurrent updates and reject corrupt candidates',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'circle-journal',
+      );
+      final other = WebDavSyncEngineStateStore(
+        bindingStore: bindingStore,
+        directoryProvider: () async => stateDirectory,
+      );
+      await engineStore.update(
+        binding.namespaceId,
+        (state) => state.copyWith(lastSuccessfulSyncMs: 0),
+      );
+      await Future.wait([
+        for (var i = 0; i < 12; i++)
+          (i.isEven ? engineStore : other).update(
+            binding.namespaceId,
+            (state) => state.copyWith(
+              lastSuccessfulSyncMs: state.lastSuccessfulSyncMs! + 1,
+            ),
+          ),
+      ]);
+      expect((await other.load(binding.namespaceId)).lastSuccessfulSyncMs, 12);
+      await expectLater(
+        engineStore.update(
+          binding.namespaceId,
+          (state) => state.copyWith(lastSuccessfulSyncMs: -1),
+        ),
+        throwsFormatException,
+      );
+      expect(
+        (await other.load(binding.namespaceId)).lastSuccessfulSyncMs,
+        12,
+        reason:
+            'failed worker validation must not replace the last good journal',
+      );
+    },
+  );
+
   test('engine state is file-backed and missing state fails closed', () async {
     const config = WebDavConfig(
       id: 'server',

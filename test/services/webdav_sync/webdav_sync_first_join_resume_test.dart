@@ -166,7 +166,7 @@ void main() {
             message: 'Could not reach the WebDAV server',
           );
           await store.markError(bindingId, error);
-          throw error;
+          throw WebDavSyncPostHandoffException(error);
         }
         await store.activateAndPromoteStaged(bindingId);
         return (await store.load()).activeBinding!;
@@ -193,6 +193,57 @@ void main() {
       WebDavSyncLifecycle.active,
     );
   });
+
+  test('retry delay preserves spacing and stops for terminal state', () async {
+    final policy = resumePolicy(
+      connect: (_) async => throw const WebDavSyncPostHandoffException(
+        WebDavException(
+          kind: WebDavErrorKind.timeout,
+          message: 'Temporary timeout',
+        ),
+      ),
+    );
+    expect(await policy.retryDelay(), Duration.zero);
+    expect(
+      await policy.resumeIfNeeded(reconfigurationPaused: false),
+      WebDavSyncFirstJoinAutoResumeOutcome.waiting,
+    );
+    expect(
+      await policy.retryDelay(),
+      WebDavSyncFirstJoinAutoResume.minimumSpacing,
+    );
+    now = now.add(const Duration(seconds: 10));
+    expect(await policy.retryDelay(), const Duration(seconds: 20));
+    await store.markAwaitingAdoptionError(
+      binding.id,
+      StateError('Needs repair'),
+    );
+    expect(await policy.retryDelay(), isNull);
+  });
+
+  test(
+    'wrapped authentication errors retain the three-attempt threshold',
+    () async {
+      final policy = resumePolicy(
+        connect: (_) async => throw const WebDavSyncPostHandoffException(
+          WebDavException(
+            kind: WebDavErrorKind.authentication,
+            message: 'Unauthorized',
+          ),
+        ),
+      );
+      for (var i = 0; i < 3; i++) {
+        expect(
+          await policy.resumeIfNeeded(reconfigurationPaused: false),
+          i < 2
+              ? WebDavSyncFirstJoinAutoResumeOutcome.waiting
+              : WebDavSyncFirstJoinAutoResumeOutcome.failed,
+        );
+        now = now.add(WebDavSyncFirstJoinAutoResume.minimumSpacing);
+      }
+      expect(await policy.retryDelay(), isNull);
+    },
+  );
 
   test('repeated authentication failure becomes terminal', () async {
     var connects = 0;

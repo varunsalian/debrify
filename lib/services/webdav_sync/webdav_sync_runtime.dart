@@ -305,7 +305,8 @@ final class WebDavSyncRuntimeStatus {
 
 /// Production owner of WebDAV sync composition and trigger arming.
 /// Construction alone does no network work; [initialize] recovers durable
-/// adoption state, resumes an unfinished first sync, and arms Active bindings.
+/// adoption state and arms Active bindings. Remote join completion starts only
+/// after rendering, via [signalLaunch] or a foreground/reconfiguration event.
 final class WebDavSyncRuntime
     with WidgetsBindingObserver
     implements
@@ -318,8 +319,9 @@ final class WebDavSyncRuntime
     _firstJoinAutoResume = WebDavSyncFirstJoinAutoResume(
       bindingStore: bindingStore,
       operations: _operations,
-      connect: _connectExistingRoot,
-      pauseCheck: () => _reconfigurationPaused,
+      connect: (bindingId) =>
+          (debugFirstJoinConnect ?? _connectExistingRoot)(bindingId),
+      pauseCheck: () => _reconfigurationPaused || !_joinForeground,
       diagnostic: recordWebDavSyncDiagnostic,
     );
   }
@@ -336,6 +338,11 @@ final class WebDavSyncRuntime
 
   WebDavSyncScheduler? _scheduler;
   Timer? _maintenanceTimer;
+  Timer? _firstJoinRetryTimer;
+  Future<void>? _firstJoinResuming;
+  @visibleForTesting
+  WebDavSyncFirstJoinConnect? debugFirstJoinConnect;
+  bool _joinForeground = true;
   _ProductionCycleRunner? _cycleRunner;
   bool _initialized = false;
   Future<void>? _initializing;
@@ -424,9 +431,6 @@ final class WebDavSyncRuntime
     try {
       await _recoverAdoptions();
       if (enableRuntime) {
-        await _firstJoinAutoResume.resumeIfNeeded(
-          reconfigurationPaused: _reconfigurationPaused,
-        );
         await recoverWebDavSyncOnboardingIntent(
           bindingStore: bindingStore,
           setInitialSetupComplete: StorageService.setInitialSetupComplete,
@@ -500,12 +504,15 @@ final class WebDavSyncRuntime
 
   Future<void> signalLaunch() async {
     await initialize();
+    await _resumeFirstJoin();
     await _signalAutomatically(WebDavSyncTrigger.launch);
   }
 
   @override
   void pauseForReconfiguration() {
     _reconfigurationPaused = true;
+    _firstJoinRetryTimer?.cancel();
+    _firstJoinRetryTimer = null;
     _clearCachedRoot();
     _disarmScheduler();
     _maintenanceTimer?.cancel();
@@ -516,7 +523,12 @@ final class WebDavSyncRuntime
   Future<void> resumeAfterReconfiguration() async {
     _reconfigurationPaused = false;
     await initialize();
-    if (_scheduler != null) await _armIfActive();
+    if (_scheduler != null) {
+      await _armIfActive();
+      // The setup handler must release its busy UI before optional network
+      // completion. A bounded retry runs after this stack returns.
+      await _scheduleFirstJoinRetry();
+    }
   }
 
   @override
@@ -766,6 +778,7 @@ final class WebDavSyncRuntime
     _requireInteractiveWorkAllowed();
     _requireAvailable();
     return _operations.run(() async {
+      _firstJoinAutoResume.reset();
       try {
         final result = await _connectExistingRoot(
           bindingId,
@@ -785,8 +798,18 @@ final class WebDavSyncRuntime
         try {
           final stored = await bindingStore.load();
           final binding = stored.bindings[bindingId];
-          if (binding?.lifecycle == WebDavSyncLifecycle.awaitingAdoption) {
-            await bindingStore.markAwaitingAdoptionError(bindingId, error);
+          if (binding?.lifecycle == WebDavSyncLifecycle.awaitingAdoption ||
+              (binding?.lifecycle == WebDavSyncLifecycle.error &&
+                  error is WebDavSyncPostHandoffException &&
+                  webDavSyncFirstJoinErrorIsTransient(error))) {
+            if (webDavSyncFirstJoinErrorIsTransient(error)) {
+              await bindingStore.setLifecycle(
+                bindingId,
+                WebDavSyncLifecycle.awaitingAdoption,
+              );
+            } else {
+              await bindingStore.markAwaitingAdoptionError(bindingId, error);
+            }
           }
         } catch (_) {
           // Error-status persistence must not replace the actionable failure
@@ -838,6 +861,7 @@ final class WebDavSyncRuntime
     final scheduler = _scheduler;
     if (scheduler == null) return;
     if (state == AppLifecycleState.resumed) {
+      _joinForeground = true;
       scheduler.resumeRemotePolling();
       unawaited(_handleForeground());
     } else if (state == AppLifecycleState.inactive) {
@@ -852,25 +876,96 @@ final class WebDavSyncRuntime
         state,
         isDesktop: PlatformUtil.isDesktop,
       )) {
+        _joinForeground = false;
+        _firstJoinRetryTimer?.cancel();
+        _firstJoinRetryTimer = null;
         scheduler.pauseRemotePolling();
       }
       unawaited(_signalAutomatically(WebDavSyncTrigger.background));
     }
   }
 
-  Future<void> _handleForeground() async {
+  Future<void> _scheduleFirstJoinRetry() async {
+    _firstJoinRetryTimer?.cancel();
+    _firstJoinRetryTimer = null;
+    if (_scheduler == null || !_joinForeground || _reconfigurationPaused) {
+      return;
+    }
+    final delay = await _firstJoinAutoResume.retryDelay();
+    if (delay == null || !_joinForeground || _reconfigurationPaused) return;
+    // Platform holds get a bounded wakeup rather than a zero-delay busy loop.
+    final effectiveDelay = playbackActiveOnTelevision || tvOsLowMemory
+        ? WebDavSyncFirstJoinAutoResume.minimumSpacing
+        : delay <= Duration.zero
+        ? WebDavSyncFirstJoinAutoResume.minimumSpacing
+        : delay;
+    _firstJoinRetryTimer = Timer(effectiveDelay, () {
+      _firstJoinRetryTimer = null;
+      unawaited(_resumeFirstJoin());
+    });
+  }
+
+  Future<void> _resumeFirstJoin() {
+    final pending = _firstJoinResuming;
+    if (pending != null) return pending;
+    late final Future<void> started;
+    started = _resumeFirstJoinOnce().whenComplete(() {
+      if (identical(_firstJoinResuming, started)) _firstJoinResuming = null;
+    });
+    _firstJoinResuming = started;
+    return started;
+  }
+
+  Future<void> _resumeFirstJoinOnce() async {
     try {
-      final outcome = await _firstJoinAutoResume.resumeIfNeeded(
-        reconfigurationPaused: _reconfigurationPaused,
-      );
+      if (_scheduler == null ||
+          !_joinForeground ||
+          _reconfigurationPaused ||
+          playbackActiveOnTelevision ||
+          tvOsLowMemory) {
+        return;
+      }
+      final outcome = await _operations.run(() async {
+        // A locked or non-managing session is a temporary admission gate,
+        // not a failed network attempt. Keep its retry budget intact.
+        if (!_joinForeground ||
+            _reconfigurationPaused ||
+            playbackActiveOnTelevision ||
+            tvOsLowMemory) {
+          return WebDavSyncFirstJoinAutoResumeOutcome.skipped;
+        }
+        try {
+          await _captureManagingAdmin();
+        } on StateError {
+          return WebDavSyncFirstJoinAutoResumeOutcome.skipped;
+        }
+        return _firstJoinAutoResume.resumeIfNeeded(
+          reconfigurationPaused: _reconfigurationPaused,
+        );
+      });
       if (outcome == WebDavSyncFirstJoinAutoResumeOutcome.activated) {
         _startupRecoveryUnavailable = false;
         await _armIfActive();
       }
-    } catch (_) {
-      // The durable awaiting state remains available to a later foreground or
-      // manual retry; ordinary foreground work must continue.
+    } catch (error) {
+      recordWebDavSyncDiagnostic(
+        'WebDAV first-sync retry remains pending',
+        error,
+      );
+    } finally {
+      try {
+        await _scheduleFirstJoinRetry();
+      } catch (error) {
+        recordWebDavSyncDiagnostic(
+          'Could not schedule WebDAV first-sync retry',
+          error,
+        );
+      }
     }
+  }
+
+  Future<void> _handleForeground() async {
+    await _resumeFirstJoin();
     String? namespaceBefore;
     WebDavSyncPendingActiveProfile? pendingBefore;
     var retirementSuppressedBefore = false;
@@ -1371,6 +1466,11 @@ final class WebDavSyncRuntime
     _startupRecoveryUnavailable = false;
     _missingStateNamespaces.clear();
     _firstJoinAutoResume.reset();
+    _firstJoinRetryTimer?.cancel();
+    _firstJoinRetryTimer = null;
+    _firstJoinResuming = null;
+    debugFirstJoinConnect = null;
+    _joinForeground = true;
     _clearCachedRoot();
   }
 

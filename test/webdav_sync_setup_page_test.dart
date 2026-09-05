@@ -353,6 +353,63 @@ void main() {
     expect(find.text('Change WebDAV sync account'), findsOneWidget);
   });
 
+  testWidgets(
+    'open page observes first-sync promotion without a lifecycle event',
+    (tester) async {
+      final marker = await codec.sealRoot(
+        passphrase: 'circle-secret',
+        circleId: 'circle-1',
+        createdAt: DateTime.utc(2026, 9, 1),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final root = await codec.openRoot(
+        marker,
+        'circle-secret',
+        runInBackground: false,
+      );
+      var waiting = await store.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(_config, 'Debrify'),
+        config: _config,
+        syncPassphrase: 'circle-secret',
+      );
+      waiting = await store.markRootVerified(
+        bindingId: waiting.id,
+        root: root.document,
+        markerBytes: marker,
+      );
+      await store.setLifecycle(
+        waiting.id,
+        WebDavSyncLifecycle.awaitingAdoption,
+      );
+      final activation = _FakeActivation(store)
+        ..tvAvailability = WebDavSyncTvManualAvailability.firstJoinPending;
+      // The finishing spinner animates indefinitely, so a settling pump would
+      // never complete; use the helper's bounded pumps until promotion lands.
+      await pumpPage(
+        tester,
+        enabled: true,
+        activation: activation,
+        settle: false,
+      );
+      expect(find.text('Finishing first sync…'), findsOneWidget);
+      expect(
+        find.text('Finish the first sync before syncing Debrify TV'),
+        findsOneWidget,
+      );
+
+      await store.activateAndPromoteStaged(waiting.id);
+      activation.tvAvailability = WebDavSyncTvManualAvailability.available;
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(activation.statusReads, greaterThanOrEqualTo(2));
+      expect(find.text('Finishing first sync…'), findsNothing);
+      expect(find.text('Sync is active'), findsOneWidget);
+      expect(find.text('Change WebDAV sync account'), findsOneWidget);
+    },
+  );
+
   testWidgets('terminal first-sync failure replaces progress with error', (
     tester,
   ) async {

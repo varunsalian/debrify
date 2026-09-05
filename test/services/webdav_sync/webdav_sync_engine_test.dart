@@ -4077,6 +4077,78 @@ void main() {
     },
   );
 
+  test(
+    'cleared activity recovers capacity without resurrecting offline history',
+    () async {
+      final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{
+        for (var i = 0; i <= WebDavSyncLibraryDocument.maxAmbientLeaves; i++)
+          'resume/resource-circle/item-$i': const WebDavSyncCircleLeaf(
+            stamp: WebDavSyncStamp(
+              normalizedTimeMs: 1,
+              originDeviceId: 'device-a',
+            ),
+            value: <String, Object?>{'positionMs': 1000},
+          ),
+      };
+      final old = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: records,
+      );
+      final adapter = _FakeLibraryLocalAdapter(
+        <String, Object?>{},
+        document: old,
+      );
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: adapter,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      expect(
+        (await runFixture(context())).disposition,
+        WebDavSyncCycleDisposition.capacityBlocked,
+      );
+      final cleared = WebDavSyncLibraryDocument(
+        circleProfileId: 'profile-circle',
+        records: {
+          for (final key in records.keys)
+            key: const WebDavSyncCircleLeaf<Map<String, Object?>>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: 2,
+                originDeviceId: 'device-a',
+              ),
+              value: null,
+            ),
+        },
+      );
+      local = _FakeLibraryLocalAdapter(<String, Object?>{}, document: cleared);
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      expect(
+        (await runFixture(context())).disposition,
+        WebDavSyncCycleDisposition.completed,
+      );
+      final published =
+          states.state.profiles['profile-circle']!.libraryBaseline!;
+      expect(published.records, hasLength(records.length));
+      final reunited = WebDavSyncLibraryMerge.merge(
+        circleProfileId: 'profile-circle',
+        documents: [published, old],
+      );
+      expect(
+        reunited.records.values.every((leaf) => leaf.value == null),
+        isTrue,
+      );
+      expect(states.state.statusHint, isNull);
+    },
+  );
+
   test('ambient library persists an actionable 20k capacity block', () async {
     final diagnostics = <String>[];
     final records = <String, WebDavSyncCircleLeaf<Map<String, Object?>>>{

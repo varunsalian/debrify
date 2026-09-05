@@ -11,6 +11,22 @@ typedef WebDavSyncFirstJoinDiagnostic =
     void Function(String message, Object? error);
 typedef WebDavSyncFirstJoinPauseCheck = bool Function();
 
+Object webDavSyncFirstJoinErrorCause(Object error) {
+  while (error is WebDavSyncPostHandoffException) {
+    error = error.error;
+  }
+  return error;
+}
+
+bool webDavSyncFirstJoinErrorIsTransient(Object error) {
+  final cause = webDavSyncFirstJoinErrorCause(error);
+  return cause is ProfilePreferenceMutationConflict ||
+      (cause is WebDavException &&
+          (cause.kind == WebDavErrorKind.transient ||
+              cause.kind == WebDavErrorKind.timeout ||
+              cause.kind == WebDavErrorKind.network));
+}
+
 final class WebDavSyncFirstJoinAutoResumeExhausted implements Exception {
   const WebDavSyncFirstJoinAutoResumeExhausted();
 
@@ -60,6 +76,7 @@ final class WebDavSyncFirstJoinAutoResume {
   final DateTime Function() _clock;
   final WebDavSyncFirstJoinDiagnostic _diagnostic;
 
+  String? _attemptBindingId;
   int _attempts = 0;
   DateTime? _lastAttemptAt;
   bool _terminalFailure = false;
@@ -72,14 +89,19 @@ final class WebDavSyncFirstJoinAutoResume {
   Future<WebDavSyncFirstJoinAutoResumeOutcome> resumeIfNeeded({
     required bool reconfigurationPaused,
   }) => _operations.run(() async {
-    if (reconfigurationPaused ||
-        (_pauseCheck?.call() ?? false) ||
-        !hasAttemptsRemaining) {
+    if (reconfigurationPaused || (_pauseCheck?.call() ?? false)) {
       return WebDavSyncFirstJoinAutoResumeOutcome.skipped;
     }
     final snapshot = await _bindingStore.load();
     final binding = _awaitingBinding(snapshot);
     if (binding == null) {
+      return WebDavSyncFirstJoinAutoResumeOutcome.skipped;
+    }
+    if (_attemptBindingId != binding.id) {
+      reset();
+      _attemptBindingId = binding.id;
+    }
+    if (!hasAttemptsRemaining) {
       return WebDavSyncFirstJoinAutoResumeOutcome.skipped;
     }
     final now = _clock().toUtc();
@@ -103,26 +125,27 @@ final class WebDavSyncFirstJoinAutoResume {
       }
       _authenticationFailures.remove(binding.id);
       return _waitOrExhaust(binding.id);
-    } on ProfilePreferenceMutationConflict {
-      _authenticationFailures.remove(binding.id);
-      return _waitOrExhaust(binding.id);
-    } on WebDavException catch (error) {
-      if (_isTransient(error)) {
-        _authenticationFailures.remove(binding.id);
-        return _waitAfterRetryableFailure(binding.id);
-      }
-      if (error.kind == WebDavErrorKind.authentication &&
-          !_authenticationFailureIsTerminal(binding.id)) {
-        return _waitAfterRetryableFailure(binding.id);
-      }
-      _authenticationFailures.remove(binding.id);
-      _terminalFailure = true;
-      await _recordTerminalFailure(binding.id, error);
-      return WebDavSyncFirstJoinAutoResumeOutcome.failed;
     } catch (error) {
+      // The connector preserves the committed authority boundary by wrapping
+      // failures after adoption. Retry classification uses the cause, without
+      // ever treating that boundary as permission to repeat replacement.
+      final cause = webDavSyncFirstJoinErrorCause(error);
+      if (cause is ProfilePreferenceMutationConflict) {
+        _authenticationFailures.remove(binding.id);
+        return _waitOrExhaust(binding.id);
+      }
+      if (cause is WebDavException &&
+          (webDavSyncFirstJoinErrorIsTransient(cause) ||
+              (cause.kind == WebDavErrorKind.authentication &&
+                  !_authenticationFailureIsTerminal(binding.id)))) {
+        if (cause.kind != WebDavErrorKind.authentication) {
+          _authenticationFailures.remove(binding.id);
+        }
+        return _waitAfterRetryableFailure(binding.id);
+      }
       _authenticationFailures.remove(binding.id);
       _terminalFailure = true;
-      await _recordTerminalFailure(binding.id, error);
+      await _recordTerminalFailure(binding.id, cause);
       return WebDavSyncFirstJoinAutoResumeOutcome.failed;
     }
   });
@@ -155,11 +178,6 @@ final class WebDavSyncFirstJoinAutoResume {
     return failures >= _authenticationFailureLimit;
   }
 
-  static bool _isTransient(WebDavException error) =>
-      error.kind == WebDavErrorKind.transient ||
-      error.kind == WebDavErrorKind.timeout ||
-      error.kind == WebDavErrorKind.network;
-
   Future<WebDavSyncFirstJoinAutoResumeOutcome> _waitOrExhaust(
     String bindingId,
   ) async {
@@ -187,7 +205,23 @@ final class WebDavSyncFirstJoinAutoResume {
         : null;
   }
 
+  /// A timer is useful only for an eligible durable join. Never continuously
+  /// poll a terminal error, an active binding, or an unconfigured device.
+  Future<Duration?> retryDelay() async {
+    if (_pauseCheck?.call() ?? false) return null;
+    final binding = _awaitingBinding(await _bindingStore.load());
+    if (binding == null ||
+        (_attemptBindingId == binding.id && !hasAttemptsRemaining)) {
+      return null;
+    }
+    final last = _attemptBindingId == binding.id ? _lastAttemptAt : null;
+    if (last == null) return Duration.zero;
+    final elapsed = _clock().toUtc().difference(last);
+    return elapsed >= minimumSpacing ? Duration.zero : minimumSpacing - elapsed;
+  }
+
   void reset() {
+    _attemptBindingId = null;
     _attempts = 0;
     _lastAttemptAt = null;
     _terminalFailure = false;

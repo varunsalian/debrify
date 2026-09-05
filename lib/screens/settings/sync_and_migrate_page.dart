@@ -55,6 +55,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   WebDavSyncRuntimeStatus? _runtimeStatus;
   String? _syncStateMessage;
   bool _syncBusy = false;
+  Timer? _statusTimer;
+  Future<void>? _statusLoading;
   bool _tvSyncLaunching = false;
   _DebrifyTvSyncOperation? _tvSyncOperation;
   WebDavSyncTvManualAvailability _tvManualAvailability =
@@ -81,11 +83,20 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       activation: _syncActivation,
     );
     AnalyticsService.screenView('sync_and_migrate');
-    if (_syncFeatureEnabled) _loadSyncState();
+    if (_syncFeatureEnabled) {
+      _loadSyncState();
+      // Also observe background completion and expiring platform gates while
+      // the page remains open. Coalesce reads so a slow cycle never queues
+      // an unbounded number of status operations.
+      _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (!_syncBusy) unawaited(_loadActiveSyncState());
+      });
+    }
   }
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
     _tvSyncOperation?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -129,7 +140,18 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       ? _syncActivation as WebDavSyncTvManualController
       : null;
 
-  Future<void> _loadActiveSyncState() async {
+  Future<void> _loadActiveSyncState() {
+    final pending = _statusLoading;
+    if (pending != null) return pending;
+    late final Future<void> started;
+    started = _readActiveSyncState().whenComplete(() {
+      if (identical(_statusLoading, started)) _statusLoading = null;
+    });
+    _statusLoading = started;
+    return started;
+  }
+
+  Future<void> _readActiveSyncState() async {
     final management = _management;
     if (management == null) return;
     try {

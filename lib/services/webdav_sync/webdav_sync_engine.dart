@@ -3643,7 +3643,10 @@ final class WebDavSyncEngine
   }
 
   bool _ambientLibraryFits(WebDavSyncLibraryDocument document) {
-    if (document.records.length <= WebDavSyncLibraryDocument.maxAmbientLeaves) {
+    // Deletions remain on the wire so offline peers cannot resurrect data.
+    // Their retained keys must not consume the user's live-activity budget.
+    if (document.records.values.where((leaf) => leaf.value != null).length <=
+        WebDavSyncLibraryDocument.maxAmbientLeaves) {
       return true;
     }
     _diagnostic(

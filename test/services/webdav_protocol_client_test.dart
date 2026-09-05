@@ -678,6 +678,110 @@ void main() {
     expect(items.last.sizeBytes, 14);
   });
 
+  for (final download in [false, true]) {
+    test(
+      'oversized ${download ? "file" : "bytes"} response cancels without draining',
+      () async {
+        client.close();
+        var cancelled = false;
+        final body = StreamController<List<int>>(
+          onCancel: () => cancelled = true,
+        );
+        addTearDown(body.close);
+        client = WebDavProtocolClient(
+          endpoint: await endpointFor(server),
+          credentials: const WebDavCredentials(username: '', password: ''),
+          client: _StreamingClient(
+            (request) async => http.StreamedResponse(
+              body.stream,
+              200,
+              contentLength: 1000000000,
+              request: request,
+            ),
+          ),
+          timeout: const Duration(seconds: 5),
+        );
+        final future = download
+            ? client.downloadToFile(
+                path: 'large',
+                destination: File('${tempDirectory.path}/large'),
+                maxBytes: 16,
+              )
+            : client.getBytes(path: 'large', maxBytes: 16);
+        await expectLater(
+          future.timeout(const Duration(seconds: 1)),
+          throwsA(
+            isA<WebDavException>().having(
+              (e) => e.kind,
+              'kind',
+              WebDavErrorKind.invalidRequest,
+            ),
+          ),
+        );
+        expect(cancelled, isTrue);
+      },
+    );
+  }
+
+  for (final status in [200, 503]) {
+    test(
+      'trickling body has a total deadline and retains status $status',
+      () async {
+        client.close();
+        var cancelled = false;
+        final body = StreamController<List<int>>(
+          onCancel: () => cancelled = true,
+        );
+        final ticker = Timer.periodic(
+          const Duration(milliseconds: 5),
+          (_) => body.add([1]),
+        );
+        addTearDown(() async {
+          ticker.cancel();
+          await body.close();
+        });
+        client = WebDavProtocolClient(
+          endpoint: await endpointFor(server),
+          credentials: const WebDavCredentials(username: '', password: ''),
+          client: _StreamingClient(
+            (request) async =>
+                http.StreamedResponse(body.stream, status, request: request),
+          ),
+          timeout: const Duration(milliseconds: 40),
+        );
+        await expectLater(
+          client
+              .getBytes(path: 'trickle', maxBytes: 1024)
+              .timeout(const Duration(seconds: 2)),
+          throwsA(
+            isA<WebDavException>()
+                .having((e) => e.kind, 'kind', WebDavErrorKind.timeout)
+                .having((e) => e.statusCode, 'status', status),
+          ),
+        );
+        expect(cancelled, isTrue);
+      },
+    );
+  }
+
+  test('metadata response drains at most its bounded allowance', () async {
+    client.close();
+    var cancelled = false;
+    final body = StreamController<List<int>>(onCancel: () => cancelled = true);
+    addTearDown(body.close);
+    body.add(List<int>.filled(65537, 0));
+    client = WebDavProtocolClient(
+      endpoint: await endpointFor(server),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: _StreamingClient(
+        (request) async =>
+            http.StreamedResponse(body.stream, 204, request: request),
+      ),
+    );
+    await client.deletePath(path: 'object').timeout(const Duration(seconds: 1));
+    expect(cancelled, isTrue);
+  });
+
   test('maps a stalled response body to timeout', () async {
     client.close();
     final controller = StreamController<List<int>>();
@@ -829,7 +933,11 @@ void main() {
           isA<WebDavException>()
               .having((error) => error.statusCode, 'status', HttpStatus.ok)
               .having((error) => error.kind, 'kind', WebDavErrorKind.network)
-              .having((error) => error.cause, 'cause', same(statuslessBodyError)),
+              .having(
+                (error) => error.cause,
+                'cause',
+                same(statuslessBodyError),
+              ),
         ),
       );
     },

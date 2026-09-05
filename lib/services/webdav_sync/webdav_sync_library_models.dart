@@ -378,6 +378,7 @@ final class WebDavSyncLibraryDocument {
   static const int schemaVersion = 1;
   static const int maxEncodedBytes = 64 * 1024 * 1024;
   static const int maxLeaves = 100000;
+  // Live activity limit; retained deletions share the larger wire budget.
   static const int maxAmbientLeaves = 20000;
 
   final String circleProfileId;

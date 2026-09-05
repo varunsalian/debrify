@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
@@ -342,6 +343,76 @@ void main() {
     expect(clients.last.closeCalls, 1);
     expect(owner.debugHasClient, isFalse);
   });
+
+  test(
+    'startup leaves a pending remote join until launch and coalesces foreground attempts and retries on a timer',
+    () async {
+      final fixture = await _openRuntimeFixture('deferred-join');
+      addTearDown(fixture.dispose);
+      WebDavSyncFeature.debugOverride = true;
+      final runtime = WebDavSyncRuntime.instance;
+      const config = WebDavConfig(
+        id: 'server',
+        name: 'Server',
+        baseUrl: 'https://example.test/dav',
+        username: 'alice',
+        password: 'secret',
+      );
+      var binding = await runtime.bindingStore.stageBinding(
+        location: WebDavSyncFolderLocation.fromConfig(config, 'Family'),
+        config: config,
+        syncPassphrase: 'circle-secret',
+      );
+      binding = await runtime.bindingStore.markRootVerified(
+        bindingId: binding.id,
+        root: WebDavSyncRootDocument(
+          circleId: 'circle-one',
+          createdAt: DateTime.utc(2026, 9, 1),
+          schemaFloor: 1,
+          kdfSalt: Uint8List(16),
+        ),
+        markerBytes: [1, 2, 3],
+      );
+      await runtime.bindingStore.setLifecycle(
+        binding.id,
+        WebDavSyncLifecycle.awaitingAdoption,
+      );
+      final entered = Completer<void>();
+      final retried = Completer<void>();
+      final release = Completer<WebDavSyncBinding>();
+      var attempts = 0;
+      runtime.debugFirstJoinConnect = (_) {
+        attempts++;
+        if (!entered.isCompleted) entered.complete();
+        if (attempts == 2) retried.complete();
+        return release.future;
+      };
+      await runtime.initialize().timeout(const Duration(seconds: 3));
+      expect(
+        attempts,
+        0,
+        reason: 'local startup must not await network completion',
+      );
+      final launch = runtime.signalLaunch();
+      await entered.future.timeout(const Duration(seconds: 3));
+      runtime.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      expect(attempts, 1);
+      release.complete((await runtime.bindingStore.load()).stagedBinding!);
+      await launch;
+      await runtime.status(); // Drain the foreground operation before teardown.
+      expect(attempts, 1);
+      await retried.future.timeout(const Duration(seconds: 35));
+      // Coalesce with the timer-owned operation and drain before teardown.
+      await runtime.signalLaunch();
+      expect(
+        attempts,
+        2,
+        reason: 'retry must not need another lifecycle event',
+      );
+      runtime.pauseForReconfiguration();
+    },
+    timeout: const Timeout(Duration(seconds: 45)),
+  );
 
   test('corrupt persisted sync state cannot trap startup in a loop', () async {
     final fixture = await _openRuntimeFixture('corrupt-state');

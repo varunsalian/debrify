@@ -354,7 +354,7 @@ final class WebDavProtocolClient {
     if (maxBytes < 0 ||
         (response.contentLength != null &&
             response.contentLength! > maxBytes)) {
-      await _discard(response);
+      await response.stream.listen(null).cancel();
       throw const WebDavException(
         kind: WebDavErrorKind.invalidRequest,
         message: 'WebDAV download exceeds its byte limit',
@@ -366,7 +366,10 @@ final class WebDavProtocolClient {
     var written = 0;
     try {
       sink = destination.openWrite(mode: FileMode.writeOnly);
-      await for (final chunk in _responseChunks(response)) {
+      await for (final chunk in _responseChunks(
+        response,
+        totalTimeout: _bodyDeadline(response.contentLength ?? maxBytes),
+      )) {
         if (written > maxBytes - chunk.length) {
           throw const WebDavException(
             kind: WebDavErrorKind.invalidRequest,
@@ -848,7 +851,7 @@ final class WebDavProtocolClient {
     if (maxBytes < 0 ||
         (response.contentLength != null &&
             response.contentLength! > maxBytes)) {
-      await _discard(response);
+      await response.stream.listen(null).cancel();
       throw const WebDavException(
         kind: WebDavErrorKind.invalidRequest,
         message: 'WebDAV response exceeds its byte limit',
@@ -859,6 +862,10 @@ final class WebDavProtocolClient {
     await for (final chunk in _responseChunks(
       response,
       inactivityTimeout: inactivityTimeout,
+      totalTimeout: _bodyDeadline(
+        response.contentLength ?? maxBytes,
+        allowance: inactivityTimeout,
+      ),
     )) {
       if (length > maxBytes - chunk.length) {
         throw const WebDavException(
@@ -894,13 +901,23 @@ final class WebDavProtocolClient {
   Stream<List<int>> _responseChunks(
     http.StreamedResponse response, {
     Duration? inactivityTimeout,
+    Duration? totalTimeout,
   }) async* {
     final uri = response.request?.url ?? endpoint;
+    final chunks = StreamIterator<List<int>>(response.stream);
+    final elapsed = Stopwatch()..start();
+    final total = totalTimeout ?? timeout;
     try {
-      await for (final chunk in response.stream.timeout(
-        inactivityTimeout ?? timeout,
-      )) {
-        yield chunk;
+      while (true) {
+        final remaining = total - elapsed.elapsed;
+        if (remaining <= Duration.zero) throw TimeoutException('Body deadline');
+        final idle = inactivityTimeout ?? timeout;
+        if (!await chunks.moveNext().timeout(
+          remaining < idle ? remaining : idle,
+        )) {
+          break;
+        }
+        yield chunks.current;
       }
     } on TimeoutException catch (error) {
       throw WebDavException(
@@ -956,11 +973,29 @@ final class WebDavProtocolClient {
         uri: uri,
         cause: error,
       );
+    } finally {
+      await chunks.cancel();
     }
   }
 
+  // Transfers get a size-aware total deadline as well as an inactivity limit.
+  // Small metadata/error drains use the ordinary request allowance.
+  Duration _bodyDeadline(int bytes, {Duration? allowance}) =>
+      (allowance ?? timeout) +
+      Duration(
+        microseconds:
+            (bytes *
+                    Duration.microsecondsPerSecond /
+                    _minimumBudgetedUploadBytesPerSecond)
+                .ceil(),
+      );
+
   Future<void> _discard(http.StreamedResponse response) async {
-    await _responseChunks(response).drain<void>();
+    var discarded = 0;
+    await for (final chunk in _responseChunks(response)) {
+      discarded += chunk.length;
+      if (discarded > 64 * 1024) break;
+    }
   }
 
   static bool _isSuccess(int status) => status >= 200 && status < 300;
