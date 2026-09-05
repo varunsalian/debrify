@@ -216,6 +216,7 @@ final class WebDavSyncScheduler {
         logicalKey != WebDavSyncHotMerge.explicitlyWatchedSeriesPreference &&
         logicalKey != ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey &&
         logicalKey != 'app_last_build_number' &&
+        logicalKey != 'app_last_version' &&
         logicalKey != 'discover_last_source' &&
         logicalKey != 'reddit_last_subreddit' &&
         logicalKey != 'iptv_last_live_channel' &&

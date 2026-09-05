@@ -108,6 +108,33 @@ void main() {
     });
   });
 
+  for (final key in ['app_last_version', 'app_last_build_number']) {
+    test('startup bookkeeping $key syncs without creating save feedback', () {
+      fakeAsync((async) {
+        final feedback = WebDavSyncSaveFeedback();
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          saveFeedback: feedback,
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange(key);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+        expect(feedback.revision, 0);
+        async.elapse(const Duration(seconds: 2));
+        expect(runner.runs, 1);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+        expect(feedback.hasPending, isFalse);
+        scheduler.notifyLocalChange('tracking_scrobble_targets');
+        expect(feedback.phase, WebDavSavePhase.syncing);
+        expect(feedback.hasPending, isTrue);
+        scheduler.dispose();
+        feedback.dispose();
+      });
+    });
+  }
+
   test('remembered navigation syncs silently while defaults show feedback', () {
     fakeAsync((async) {
       final feedback = WebDavSyncSaveFeedback();
