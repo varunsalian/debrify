@@ -357,6 +357,126 @@ void main() {
     );
   });
 
+  for (final republish in [false, true]) {
+    test(
+      'local edits remain pending during ${republish ? 'republish' : 'initial seed'} manifest I/O',
+      () async {
+        if (republish) {
+          final marker = await WebDavSyncCodec().sealRoot(
+            passphrase: 'circle-secret',
+            circleId: 'existing-circle',
+            createdAt: DateTime.utc(2026, 8, 31),
+            memoryKiB: 64,
+            iterations: 1,
+          );
+          final root = await WebDavSyncCodec().openRoot(
+            marker,
+            'circle-secret',
+            runInBackground: false,
+          );
+          binding = await bindingStore.markRootVerified(
+            bindingId: binding.id,
+            root: root.document,
+            markerBytes: marker,
+          );
+          binding = await bindingStore.setLifecycle(
+            binding.id,
+            WebDavSyncLifecycle.awaitingAdoption,
+          );
+          transport.marker = marker;
+          states.state = WebDavSyncEngineState(
+            circleToLocalProfiles: seeds.maps.circleToLocalProfiles,
+            circleToLocalResources: seeds.maps.circleToLocalResources,
+          );
+        }
+        final prefs = await ProfilePreferences.instance();
+        await prefs.setString('theme', 'old');
+        seeds.guardPreferences = true;
+        final baseline = WebDavSyncHotMerge.build(
+          WebDavSyncBuildInput(
+            circleProfileId: 'profile-circle',
+            deviceId: 'device-a',
+            rawPreferences: const {'theme': 'old'},
+            portablePreferences: const {'theme': 'old'},
+            identityMaps: seeds.maps,
+            localNowMs: 1000,
+            clockOffsetMs: 0,
+            serverNowMs: 1000,
+          ),
+        ).document;
+        seeds.profileStates = {
+          'profile-circle': WebDavSyncProfileEngineState(baseline: baseline),
+        };
+        final started = Completer<void>();
+        final release = Completer<void>();
+        transport.beforeManifestWrite = () async {
+          started.complete();
+          await release.future;
+        };
+        final publisher = WebDavSyncOwnManifestPublisher(
+          bindingStore: bindingStore,
+          stateRepository: states,
+          seedSource: seeds,
+          transportFactory: ({required binding, required secrets}) => transport,
+          clock: () => DateTime.utc(2026, 9, 1),
+        );
+        final operation = republish
+            ? publisher.publish(
+                bindingId: binding.id,
+                authorization: authorization,
+              )
+            : initializer().initialize(
+                bindingId: binding.id,
+                authorization: authorization,
+              );
+        await started.future.timeout(const Duration(seconds: 5));
+        const tombstone = WebDavSyncTombstone(
+          key: 'completion/movie/dHQx',
+          stamp: WebDavSyncStamp(
+            normalizedTimeMs: 2000,
+            originDeviceId: 'device-a',
+          ),
+        );
+        try {
+          // A real UI write in the caller's zone must finish while HTTP is pending.
+          await prefs
+              .setString('theme', 'new')
+              .timeout(const Duration(seconds: 1));
+          states.state = states.state.copyWith(
+            profiles: {
+              'profile-circle': WebDavSyncProfileEngineState(
+                tombstones: {tombstone.key: tombstone},
+              ),
+            },
+          );
+        } finally {
+          release.complete();
+          await operation;
+        }
+        expect(prefs.getString('theme'), 'new');
+        final saved = states.state.profiles['profile-circle']!;
+        expect(saved.baseline!.scalars.values['theme'], 'old');
+        expect(saved.tombstones[tombstone.key], tombstone);
+        final next = WebDavSyncHotMerge.build(
+          WebDavSyncBuildInput(
+            circleProfileId: 'profile-circle',
+            deviceId: 'device-a',
+            rawPreferences: {'theme': prefs.getString('theme')},
+            portablePreferences: {'theme': prefs.getString('theme')},
+            identityMaps: seeds.maps,
+            localNowMs: 3000,
+            clockOffsetMs: 0,
+            serverNowMs: 3000,
+            previous: saved.baseline,
+          ),
+        ).document;
+        expect(next.scalars.values['theme'], 'new');
+        expect(next.semanticDigest, isNot(saved.baseline!.semanticDigest));
+        expect(states.state.ownManifest, isNotNull);
+      },
+    );
+  }
+
   test(
     'seed state commit carries only tombstones changed during publication',
     () {
@@ -1091,6 +1211,7 @@ WebDavSyncManifest _manifest({
 final class _FakeSeedSource implements WebDavSyncSeedSource {
   List<String>? events;
   bool guardPreferences = false;
+  Map<String, WebDavSyncProfileEngineState> profileStates = {};
   String? omittedSection;
   String? seenCircleId;
   WebDavSyncCircleKey? seenCircleKey;
@@ -1177,7 +1298,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
           ),
         ].where((section) => section.name != omittedSection),
       ),
-      profileStates: const <String, WebDavSyncProfileEngineState>{},
+      profileStates: profileStates,
       bootstrapDatabaseDigest:
           '5555555555555555555555555555555555555555555555555555555555555555',
       beforeRootCommit: () async => events?.add('barrier'),
@@ -1226,6 +1347,7 @@ class _FakeActivationTransport implements WebDavSyncActivationTransport {
   bool createStoresThenThrows = false;
   List<String> deviceIds = const <String>[];
   Future<void> Function()? afterSectionWrite;
+  Future<void> Function()? beforeManifestWrite;
   Object? linearizabilityProbeError;
   int linearizabilityProbeCalls = 0;
 
@@ -1301,6 +1423,7 @@ class _FakeActivationTransport implements WebDavSyncActivationTransport {
     Uint8List bytes,
   ) async {
     events.add('write:manifest');
+    await beforeManifestWrite?.call();
     final error = manifestWriteError;
     if (error != null) throw error;
     manifest = Uint8List.fromList(bytes);

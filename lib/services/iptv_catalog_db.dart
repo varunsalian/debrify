@@ -20,6 +20,14 @@ import 'webdav_sync/webdav_sync_library_models.dart';
 import 'webdav_sync/webdav_sync_library_mutation.dart';
 import 'webdav_sync/webdav_sync_hot_models.dart';
 
+/// Pins an ingest to the connection that was open before its download began.
+/// Reopening even the same path retires pending downloads from that connection.
+final class IptvCatalogWriteTarget {
+  const IptvCatalogWriteTarget._(this.path, this._revision);
+  final String path;
+  final int _revision;
+}
+
 /// Worker entry for cold catalog initialization. The native handle is opened
 /// with FULLMUTEX because ownership moves to Flutter's isolate after this job;
 /// no Dart [Database] wrapper is created here, so no worker finalizer can close
@@ -673,6 +681,26 @@ class IptvCatalogDb {
 
   static bool get isOpen => _db != null;
 
+  static int _writeRevision = 0;
+  static final Set<String> _activeRevalidations = {};
+
+  static IptvCatalogWriteTarget? captureWriteTarget() =>
+      _db == null ? null : IptvCatalogWriteTarget._(path, _writeRevision);
+
+  /// Validate inside the queue, before launching a worker. A download must
+  /// never resolve the current singleton path after a profile switch.
+  static Future<T> runWithWriteTarget<T>(
+    IptvCatalogWriteTarget target,
+    Future<T> Function() action,
+  ) => runExclusive(() async {
+    if (_db == null ||
+        target._revision != _writeRevision ||
+        target.path != _path) {
+      throw StateError('IPTV catalog changed while downloading');
+    }
+    return action();
+  });
+
   /// Prepares and opens the catalog database. Idempotent and shared across
   /// concurrent callers.
   ///
@@ -1186,6 +1214,8 @@ class IptvCatalogDb {
 
   @visibleForTesting
   static void debugClose() {
+    _writeRevision++;
+    _activeRevalidations.clear();
     _db?.dispose();
     _db = null;
     _path = null;
@@ -1201,6 +1231,17 @@ class IptvCatalogDb {
 
   static Future<void> closeScope() => runExclusive(() async {
     await _opening;
+    // A deliberate scope close cancels this process's pending refreshes. Keep
+    // markers from a previous crash, but do not turn normal switching into a
+    // six-hour automatic-refresh backoff.
+    for (final key in _activeRevalidations.toList()) {
+      try {
+        markRevalidateFinished(key);
+      } catch (_) {
+        // A broken cache must not prevent retiring the connection.
+      }
+    }
+    _writeRevision++;
     _db?.dispose();
     _db = null;
     _path = null;
@@ -2325,9 +2366,11 @@ class IptvCatalogDb {
           _revalidateStartedKey(catalogKey),
           '${DateTime.now().millisecondsSinceEpoch}',
         ]);
+    _activeRevalidations.add(catalogKey);
   }
 
   static void markRevalidateFinished(String catalogKey) {
+    _activeRevalidations.remove(catalogKey);
     _requireDb().execute('DELETE FROM meta WHERE key = ?', [
       _revalidateStartedKey(catalogKey),
     ]);

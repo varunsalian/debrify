@@ -189,63 +189,60 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
         payload: manifest.toJson(),
         maxBytes: WebDavSyncLimits.maxManifestBytes,
       );
-      return await material.commitIfPreferencesUnchanged(() async {
-        // The marker is immutable by protocol, but re-read it at the actual
-        // manifest commit edge so an external replacement cannot make this
-        // device overwrite a manifest under a different root. The profile
-        // mutation token and registry barrier close the corresponding local
-        // TOCTOU window through the verified manifest and state commit.
-        final commitRootRead = await transport.readRootMarker();
-        _requireMarker(namespace.pinnedAuthorityHash!, commitRootRead.bytes);
-        await material.beforeRootCommit();
-        await transport.writeManifest(namespace.deviceId, manifestBytes);
-        final manifestReadBack = await transport.readManifest(
-          namespace.deviceId,
-        );
-        if (!_bytesEqual(manifestBytes, manifestReadBack.bytes)) {
-          throw StateError('WebDAV sync seed manifest verification failed');
-        }
-        final verifiedManifest = WebDavSyncManifest.fromJson(
-          await _codec.openDocument(
-            key: root.key,
-            encoded: manifestReadBack.bytes,
-            circleId: root.document.circleId,
-            deviceId: namespace.deviceId,
-            logicalName: 'manifest',
-            schemaVersion: WebDavSyncManifest.schemaVersion,
-            maxBytes: WebDavSyncLimits.maxManifestBytes,
-          ),
-        );
-        final finalRootRead = await transport.readRootMarker();
-        _requireMarker(namespace.pinnedAuthorityHash!, finalRootRead.bytes);
-        await _stateRepository.update(
-          namespace.id,
-          (current) => current.copyWith(
-            circleToLocalProfiles: material.identityMaps.circleToLocalProfiles,
-            circleToLocalResources:
-                material.identityMaps.circleToLocalResources,
-            clock: clockDecision.state,
-            profiles: material.profileStatesForCommit(current.profiles),
-            circleProfilesBaseline: material.circleProfiles,
-            circleResourcesBaseline: material.circleResources,
-            lastPushedProfilesDigest: material.circleProfiles?.semanticDigest,
-            lastPushedResourcesDigest: material.circleResources?.semanticDigest,
-            currentDeviceIds: Set<String>.unmodifiable(<String>{
-              ...current.currentDeviceIds,
-              namespace.deviceId,
-            }),
-            ownManifest: verifiedManifest,
-            lastBootstrapCheckMs: localNowMs,
-            publishedBootstrapDatabaseDigest: material.bootstrapDatabaseDigest,
-            lastSuccessfulSyncMs: clockDecision.serverNowMs!,
-          ),
-        );
-        return WebDavSyncPublishedSeed(
-          material: material,
-          manifest: verifiedManifest,
-          serverNowMs: clockDecision.serverNowMs!,
-        );
-      });
+      // The marker is immutable by protocol, but re-read it at the actual
+      // manifest commit edge so an external replacement cannot make this
+      // device overwrite a manifest under a different root. The profile
+      // mutation token rejects edits made while preparing. Subsequent local
+      // edits remain differences against this uploaded baseline; they must
+      // neither wait for the network nor be marked as already uploaded.
+      final commitRootRead = await transport.readRootMarker();
+      _requireMarker(namespace.pinnedAuthorityHash!, commitRootRead.bytes);
+      await material.beforeRootCommit();
+      await material.validatePreferencesUnchanged();
+      await transport.writeManifest(namespace.deviceId, manifestBytes);
+      final manifestReadBack = await transport.readManifest(namespace.deviceId);
+      if (!_bytesEqual(manifestBytes, manifestReadBack.bytes)) {
+        throw StateError('WebDAV sync seed manifest verification failed');
+      }
+      final verifiedManifest = WebDavSyncManifest.fromJson(
+        await _codec.openDocument(
+          key: root.key,
+          encoded: manifestReadBack.bytes,
+          circleId: root.document.circleId,
+          deviceId: namespace.deviceId,
+          logicalName: 'manifest',
+          schemaVersion: WebDavSyncManifest.schemaVersion,
+          maxBytes: WebDavSyncLimits.maxManifestBytes,
+        ),
+      );
+      final finalRootRead = await transport.readRootMarker();
+      _requireMarker(namespace.pinnedAuthorityHash!, finalRootRead.bytes);
+      await _stateRepository.update(
+        namespace.id,
+        (current) => current.copyWith(
+          circleToLocalProfiles: material.identityMaps.circleToLocalProfiles,
+          circleToLocalResources: material.identityMaps.circleToLocalResources,
+          clock: clockDecision.state,
+          profiles: material.profileStatesForCommit(current.profiles),
+          circleProfilesBaseline: material.circleProfiles,
+          circleResourcesBaseline: material.circleResources,
+          lastPushedProfilesDigest: material.circleProfiles?.semanticDigest,
+          lastPushedResourcesDigest: material.circleResources?.semanticDigest,
+          currentDeviceIds: Set<String>.unmodifiable(<String>{
+            ...current.currentDeviceIds,
+            namespace.deviceId,
+          }),
+          ownManifest: verifiedManifest,
+          lastBootstrapCheckMs: localNowMs,
+          publishedBootstrapDatabaseDigest: material.bootstrapDatabaseDigest,
+          lastSuccessfulSyncMs: clockDecision.serverNowMs!,
+        ),
+      );
+      return WebDavSyncPublishedSeed(
+        material: material,
+        manifest: verifiedManifest,
+        serverNowMs: clockDecision.serverNowMs!,
+      );
     } finally {
       transport.close();
     }

@@ -1756,7 +1756,10 @@ class IptvResultsViewState extends State<IptvResultsView>
     // decided inside the gate, against the database as it is by then — a
     // pipeline queued behind one that already did the work finds nothing to do
     // and costs a few indexed reads.
-    return IptvCatalogDb.runExclusive(() async {
+    final shouldRefresh = await IptvCatalogDb.runExclusive(() async {
+      if (!mounted || ticket != _loadTicket || !IptvCatalogDb.isOpen) {
+        return false;
+      }
       // Decided BEFORE the work so the chip can be scheduled up front, and so
       // a launch with nothing outstanding stays completely silent — this is
       // one-time work, and every subsequent launch must say nothing at all.
@@ -1774,13 +1777,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       var numbersMoved = await _runPendingMigrations(cacheKey, ticket);
       if (!mounted || ticket != _loadTicket) {
         _finishMaintenanceChip(narrate: narrate, numbersMoved: false);
-        return;
+        return false;
       }
 
       final snap = IptvCatalogDb.snapshot(cacheKey);
       if (snap == null || snap.channelCount == 0) {
         _finishMaintenanceChip(narrate: narrate, numbersMoved: numbersMoved);
-        return;
+        return false;
       }
 
       final needsNumbering =
@@ -1793,7 +1796,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             await _adoptNumbering(playlist, cacheKey, ticket) || numbersMoved;
         if (!mounted || ticket != _loadTicket) {
           _finishMaintenanceChip(narrate: narrate, numbersMoved: false);
-          return;
+          return false;
         }
       }
       _finishMaintenanceChip(narrate: narrate, numbersMoved: numbersMoved);
@@ -1808,10 +1811,17 @@ class IptvResultsViewState extends State<IptvResultsView>
         userRequested: userRequested,
         interrupted: IptvCatalogDb.revalidateInterrupted(cacheKey),
       )) {
-        return;
+        return false;
       }
-      await _revalidateDbCatalog(playlist, contentType, cacheKey, ticket);
+      return true;
     });
+    // Network work must not hold the maintenance queue that profile switches
+    // drain. The service pins the connection and checks ownership again inside
+    // the ingest queue before launching its worker.
+    if (shouldRefresh &&
+        !_revalidateSuperseded(playlist, contentType, ticket)) {
+      await _revalidateDbCatalog(playlist, contentType, cacheKey, ticket);
+    }
   }
 
   /// Narrate the guide download — the longest single background job, and
@@ -1908,8 +1918,8 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// visit until one refresh happened to succeed. Nothing about it needed the
   /// network: the rows were already on disk.
   ///
-  /// Only ever called from inside [_runCatalogMaintenance]'s exclusivity gate,
-  /// which also owns the refresh that may follow. It must not queue any
+  /// Only ever called from inside [_runCatalogMaintenance]'s exclusivity gate.
+  /// A network refresh may follow after that gate is released. It must not queue any
   /// further maintenance itself — that would wait on a gate its own caller is
   /// holding.
   Future<bool> _adoptNumbering(
@@ -1966,6 +1976,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     String cacheKey,
     int ticket,
   ) async {
+    final target = IptvCatalogDb.captureWriteTarget();
     IptvCatalogDb.markRevalidateStarted(cacheKey);
     try {
       await _revalidateDbCatalogInner(playlist, contentType, cacheKey, ticket);
@@ -1973,7 +1984,15 @@ class IptvResultsViewState extends State<IptvResultsView>
       // Cleared on EVERY outcome this code can see, so a surviving marker
       // means one thing only: the device died mid-refresh. See
       // IptvCatalogDb.revalidateInterrupted.
-      if (IptvCatalogDb.isOpen) IptvCatalogDb.markRevalidateFinished(cacheKey);
+      if (target != null) {
+        try {
+          await IptvCatalogDb.runWithWriteTarget(target, () async {
+            IptvCatalogDb.markRevalidateFinished(cacheKey);
+          });
+        } catch (_) {
+          // The old connection is retired; preserve its interrupted marker.
+        }
+      }
     }
   }
 
@@ -2207,6 +2226,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     void report(String phase, {int? bytes, int? totalBytes}) =>
         _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes);
 
+    bool isCurrent() =>
+        mounted &&
+        ticket == _loadTicket &&
+        _selectedPlaylist?.id == playlist.id &&
+        (!playlist.isXtreamCodes || _selectedContentType == contentType);
+
     if (playlist.isXtreamCodes) {
       final xcService = XtreamCodesService.instance;
       // `?? ''` and not `!`: isXtreamCodes only guarantees serverUrl.
@@ -2225,6 +2250,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           onPhase: report,
           connectionResourceId: playlist.connectionResourceId,
           connectionResourceRevision: playlist.connectionResourceRevision,
+          isCurrent: isCurrent,
         );
       }
       if (contentType == 'series') {
@@ -2235,6 +2261,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           onPhase: report,
           connectionResourceId: playlist.connectionResourceId,
           connectionResourceRevision: playlist.connectionResourceRevision,
+          isCurrent: isCurrent,
         );
       }
       return xcService.fetchLiveStreams(
@@ -2245,6 +2272,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         onPhase: report,
         connectionResourceId: playlist.connectionResourceId,
         connectionResourceRevision: playlist.connectionResourceRevision,
+        isCurrent: isCurrent,
       );
     }
     return _iptvService.fetchPlaylist(
@@ -2253,6 +2281,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       onPhase: report,
       connectionResourceId: playlist.connectionResourceId,
       connectionResourceRevision: playlist.connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 

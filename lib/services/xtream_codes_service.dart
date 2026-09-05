@@ -12,6 +12,7 @@ import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_load_phase.dart';
 import 'profiles/profile_collection_resource_facade.dart';
+import 'profiles/profile_runtime.dart';
 
 /// A panel response crossed the buffering cap — the server's real answer,
 /// deliberately NOT one of the transient network failures the retry loop
@@ -354,6 +355,7 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -364,6 +366,7 @@ class XtreamCodesService {
       onPhase: onPhase,
       connectionResourceId: connectionResourceId,
       connectionResourceRevision: connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 
@@ -375,6 +378,7 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -384,6 +388,7 @@ class XtreamCodesService {
       onPhase: onPhase,
       connectionResourceId: connectionResourceId,
       connectionResourceRevision: connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 
@@ -398,6 +403,7 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -407,6 +413,7 @@ class XtreamCodesService {
       onPhase: onPhase,
       connectionResourceId: connectionResourceId,
       connectionResourceRevision: connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 
@@ -420,11 +427,26 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) async {
-    Future<void> authorize() => _authorize(
-      resourceId: connectionResourceId,
-      resourceRevision: connectionResourceRevision,
-    );
+    final startingScope = ProfileRuntime.scope.value;
+    final ingestTarget = IptvCatalogDb.captureWriteTarget();
+    void assertCurrent() {
+      if (ProfileRuntime.scope.value != startingScope ||
+          isCurrent?.call() == false) {
+        throw StateError('IPTV request is no longer current');
+      }
+    }
+
+    Future<void> authorize() async {
+      assertCurrent();
+      await _authorize(
+        resourceId: connectionResourceId,
+        resourceRevision: connectionResourceRevision,
+      );
+      assertCurrent();
+    }
+
     await authorize();
     final result = await _fetchStreamsAuthorized(
       serverUrl,
@@ -433,6 +455,8 @@ class XtreamCodesService {
       contentType: contentType,
       numberingSourceKey: numberingSourceKey,
       onPhase: onPhase,
+      ingestTarget: ingestTarget,
+      beforeIngest: authorize,
     );
     await authorize();
     return result;
@@ -445,6 +469,8 @@ class XtreamCodesService {
     required String contentType,
     String? numberingSourceKey,
     IptvLoadPhase? onPhase,
+    required IptvCatalogWriteTarget? ingestTarget,
+    required Future<void> Function() beforeIngest,
   }) async {
     final isLive = contentType == 'live';
     final isSeries = contentType == 'series';
@@ -455,7 +481,7 @@ class XtreamCodesService {
     // the service's in-memory result cache is bypassed entirely — holding
     // three 55k-object catalogs on the heap is exactly what this mode
     // removes. Freshness policy moves to the caller (snapshot.ingestedAt).
-    final ingestToDb = IptvCatalogDb.isOpen;
+    final ingestToDb = ingestTarget != null;
 
     // Check cache
     if (!ingestToDb && _cache.containsKey(cacheKey)) {
@@ -563,6 +589,7 @@ class XtreamCodesService {
 
       // Decode AND build in one isolate hop (see [_buildXtreamStreams]).
       // Small panels skip the isolate: spawning one costs more than the work.
+      await beforeIngest();
       final job = _StreamsJob(
         // fromList copies once (a memcpy — cheap next to a UTF-8 decode) and
         // the transfer to the worker is then zero-copy. The source lists are
@@ -580,7 +607,7 @@ class XtreamCodesService {
         contentType: contentType,
         label: label,
         liveUrlForm: liveUrlForm,
-        ingestDbPath: ingestToDb ? IptvCatalogDb.path : null,
+        ingestDbPath: ingestTarget?.path,
         ingestCatalogKey: ingestToDb
             ? IptvCatalogKey.forXtream(serverUrl, username, contentType)
             : null,
@@ -608,11 +635,15 @@ class XtreamCodesService {
       // the gate across a slow panel fetch used to block settings deletions
       // and EPG work for up to the whole 90s timeout. Re-entrant: a caller
       // already inside the gate runs it inline.
-      Future<IptvParseResult> runBuild() async => useIsolate
-          ? await compute(_buildXtreamStreams, job)
-          : _buildXtreamStreams(job);
-      final built = job.ingestCatalogKey != null
-          ? await IptvCatalogDb.runExclusive(runBuild)
+      Future<IptvParseResult> runBuild() async {
+        await beforeIngest();
+        return useIsolate
+            ? await compute(_buildXtreamStreams, job)
+            : _buildXtreamStreams(job);
+      }
+
+      final built = ingestTarget != null
+          ? await IptvCatalogDb.runWithWriteTarget(ingestTarget, runBuild)
           : await runBuild();
 
       if (built.hasError) return built;

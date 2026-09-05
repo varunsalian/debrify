@@ -65,11 +65,15 @@ final class WebDavSyncSeedMaterial {
   final WebDavSyncProfilesDocument? circleProfiles;
   final WebDavSyncResourcesDocument? circleResources;
 
-  Future<T> commitIfPreferencesUnchanged<T>(Future<T> Function() operation) {
+  /// Reject a snapshot already stale before publication, without holding the
+  /// preference barrier across remote I/O. Edits made during publication stay
+  /// local: the journal records the uploaded snapshot (not a fresh local read)
+  /// as its baseline, so the next cycle observes and uploads those edits.
+  Future<void> validatePreferencesUnchanged() async {
     final token = preferenceMutationToken;
-    return token == null
-        ? operation()
-        : ProfilePreferences.runIfMutationSnapshotCurrent(token, operation);
+    if (token != null) {
+      await ProfilePreferences.runIfMutationSnapshotCurrent(token, () async {});
+    }
   }
 
   /// Applies the prepared baselines without erasing a tombstone journal entry
@@ -727,89 +731,86 @@ final class WebDavSyncNewRootInitializer {
         payload: manifest.toJson(),
         maxBytes: WebDavSyncLimits.maxManifestBytes,
       );
-      return await seed.commitIfPreferencesUnchanged(() async {
-        await transport.writeManifest(namespace.deviceId, manifestBytes);
-        final manifestReadBack = await transport.readManifest(
-          namespace.deviceId,
-        );
-        if (!_bytesEqual(manifestReadBack.bytes, manifestBytes)) {
-          throw StateError('WebDAV sync seed manifest verification failed');
-        }
-        final verifiedManifest = WebDavSyncManifest.fromJson(
-          await _codec.openDocument(
-            key: root.key,
-            encoded: manifestReadBack.bytes,
-            circleId: circleId,
-            deviceId: namespace.deviceId,
-            logicalName: 'manifest',
-            schemaVersion: WebDavSyncManifest.schemaVersion,
-            maxBytes: WebDavSyncLimits.maxManifestBytes,
-          ),
-        );
-        await seed.beforeRootCommit();
+      await seed.validatePreferencesUnchanged();
+      await transport.writeManifest(namespace.deviceId, manifestBytes);
+      final manifestReadBack = await transport.readManifest(namespace.deviceId);
+      if (!_bytesEqual(manifestReadBack.bytes, manifestBytes)) {
+        throw StateError('WebDAV sync seed manifest verification failed');
+      }
+      final verifiedManifest = WebDavSyncManifest.fromJson(
+        await _codec.openDocument(
+          key: root.key,
+          encoded: manifestReadBack.bytes,
+          circleId: circleId,
+          deviceId: namespace.deviceId,
+          logicalName: 'manifest',
+          schemaVersion: WebDavSyncManifest.schemaVersion,
+          maxBytes: WebDavSyncLimits.maxManifestBytes,
+        ),
+      );
+      await seed.beforeRootCommit();
 
-        final existing = await _readMarkerIfPresent(transport);
-        if (existing != null) {
-          if (_bytesEqual(existing.bytes, markerBytes)) {
-            return _finishCandidate(
-              binding: binding,
-              namespace: namespace,
-              root: root,
-              markerBytes: markerBytes,
-              seed: seed,
-              manifest: verifiedManifest,
-              clock: clockDecision.state,
-              serverNowMs: clockDecision.serverNowMs!,
-            );
-          }
-          return _followConcurrentRoot(
+      final existing = await _readMarkerIfPresent(transport);
+      if (existing != null) {
+        if (_bytesEqual(existing.bytes, markerBytes)) {
+          return _finishCandidate(
             binding: binding,
-            transport: transport,
-            markerBytes: existing.bytes,
+            namespace: namespace,
+            root: root,
+            markerBytes: markerBytes,
+            seed: seed,
+            manifest: verifiedManifest,
+            clock: clockDecision.state,
+            serverNowMs: clockDecision.serverNowMs!,
           );
         }
-
-        // A 2xx is not ownership. The single standing object returned by the
-        // mandatory read-back decides whether this candidate won or adopts.
-        await seed.beforeRootCommit();
-        Object? writeError;
-        try {
-          await transport.createRootMarker(markerBytes);
-        } on Object catch (error) {
-          writeError = error;
-        }
-        late final WebDavBytesResult? committed;
-        try {
-          committed = await _readMarkerIfPresent(transport);
-        } on WebDavException catch (error) {
-          _recordAuthorityFailure('marker-commit', error: error);
-          rethrow;
-        }
-        if (committed == null) {
-          _recordAuthorityFailure('marker-commit', error: writeError);
-          if (writeError case final WebDavException error) throw error;
-          throw const WebDavSyncAuthorityClaimException();
-        }
-        if (!_bytesEqual(committed.bytes, markerBytes)) {
-          return _followConcurrentRootAfterMarkerCommit(
-            binding: binding,
-            transport: transport,
-            markerBytes: committed.bytes,
-            error: writeError,
-            statusCode: committed.metadata.statusCode,
-          );
-        }
-        return _finishCandidate(
+        return _followConcurrentRoot(
           binding: binding,
-          namespace: namespace,
-          root: root,
-          markerBytes: markerBytes,
-          seed: seed,
-          manifest: verifiedManifest,
-          clock: clockDecision.state,
-          serverNowMs: clockDecision.serverNowMs!,
+          transport: transport,
+          markerBytes: existing.bytes,
         );
-      });
+      }
+
+      // A 2xx is not ownership. The single standing object returned by the
+      // mandatory read-back decides whether this candidate won or adopts.
+      await seed.beforeRootCommit();
+      Object? writeError;
+      try {
+        await transport.createRootMarker(markerBytes);
+      } on Object catch (error) {
+        writeError = error;
+      }
+      late final WebDavBytesResult? committed;
+      try {
+        committed = await _readMarkerIfPresent(transport);
+      } on WebDavException catch (error) {
+        _recordAuthorityFailure('marker-commit', error: error);
+        rethrow;
+      }
+      if (committed == null) {
+        _recordAuthorityFailure('marker-commit', error: writeError);
+        if (writeError case final WebDavException error) throw error;
+        throw const WebDavSyncAuthorityClaimException();
+      }
+      if (!_bytesEqual(committed.bytes, markerBytes)) {
+        return _followConcurrentRootAfterMarkerCommit(
+          binding: binding,
+          transport: transport,
+          markerBytes: committed.bytes,
+          error: writeError,
+          statusCode: committed.metadata.statusCode,
+        );
+      }
+      return _finishCandidate(
+        binding: binding,
+        namespace: namespace,
+        root: root,
+        markerBytes: markerBytes,
+        seed: seed,
+        manifest: verifiedManifest,
+        clock: clockDecision.state,
+        serverNowMs: clockDecision.serverNowMs!,
+      );
     } finally {
       transport.close();
     }

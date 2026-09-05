@@ -1356,6 +1356,8 @@ class ProfileRegistry {
         const <WebDavSyncRegistryRecordId>[],
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       final activeRows = await txn.rawQuery(
         'SELECT active_profile_id FROM device_state WHERE singleton_id = 1',
@@ -1390,6 +1392,7 @@ class ProfileRegistry {
       }
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         profileIds: <String>{id},
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -1711,6 +1714,8 @@ class ProfileRegistry {
   }) async {
     await authorityWillChangeCallback?.call();
     var revoked = 0;
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       await _assertManagingActor(
         txn,
@@ -1726,6 +1731,7 @@ class ProfileRegistry {
       );
       await _recordRegistryBorrowerRevocation(
         txn,
+        target: outboxTarget,
         ownerProfileId: ownerProfileId,
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -1769,6 +1775,8 @@ class ProfileRegistry {
     int? actingSessionEpoch,
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       await _assertManagingActor(
         txn,
@@ -1851,6 +1859,7 @@ class ProfileRegistry {
 
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         profileIds: <String>{id},
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -2242,6 +2251,8 @@ class ProfileRegistry {
     int? expectedResourceAuthorizationRevision,
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
           actingAuthorizationRevision != null ||
@@ -2304,6 +2315,7 @@ class ProfileRegistry {
 
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         resourceIds: <String>{resourceId},
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -2483,9 +2495,12 @@ class ProfileRegistry {
         const <WebDavSyncRegistryRecordId>[],
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         bindingKeys: <String>{_registryBindingKey(profileId, slot)},
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -3290,6 +3305,8 @@ class ProfileRegistry {
       throw ArgumentError('Replacement resource does not match collection');
     }
     final now = DateTime.now().millisecondsSinceEpoch;
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
           actingAuthorizationRevision != null ||
@@ -3361,6 +3378,7 @@ class ProfileRegistry {
       }
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         resourceIds: removedIds,
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -3830,6 +3848,8 @@ class ProfileRegistry {
     int? expectedResourceAuthorizationRevision,
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
           actingAuthorizationRevision != null ||
@@ -3852,6 +3872,7 @@ class ProfileRegistry {
       }
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         grantKeys: <String>{_registryGrantKey(profileId, resourceId)},
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -3892,6 +3913,8 @@ class ProfileRegistry {
         const <WebDavSyncRegistryRecordId>[],
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       final active = await txn.query(
         'device_state',
@@ -3933,6 +3956,7 @@ class ProfileRegistry {
       }
       await _recordRegistryDeleteCascade(
         txn,
+        target: outboxTarget,
         grantKeys: <String>{_registryGrantKey(profileId, resourceId)},
         mergedBaselineRecords: mergedBaselineRecords,
       );
@@ -4889,6 +4913,8 @@ class ProfileRegistry {
         throw ArgumentError('Invalid redundant default addon grant');
       }
     }
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       final journal = await txn.query(
         'profile_restore_journal',
@@ -4945,6 +4971,7 @@ class ProfileRegistry {
         }
         await _recordRegistryDeleteCascade(
           txn,
+          target: outboxTarget,
           grantKeys: <String>{
             _registryGrantKey(prune.profileId, prune.resourceId),
           },
@@ -5816,8 +5843,11 @@ class ProfileRegistry {
   /// Enqueues the complete deletion cascade in the same SQL transaction as
   /// the rows it describes. Unbound registries skip the outbox; once bound,
   /// an INSERT failure aborts the deletion transaction.
+  /// [target] must be captured before opening the transaction: its preference
+  /// barrier can wait for a sync snapshot that itself needs this registry.
   static Future<void> _recordRegistryDeleteCascade(
     DatabaseExecutor db, {
+    required WebDavSyncRegistryTombstoneOutboxTarget? target,
     Set<String> profileIds = const <String>{},
     Set<String> resourceIds = const <String>{},
     Set<String> grantKeys = const <String>{},
@@ -5831,7 +5861,6 @@ class ProfileRegistry {
         bindingKeys.isEmpty) {
       return;
     }
-    final target = await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     if (target == null) return;
     final records = <WebDavSyncRegistryRecordId>{
       ...await _registryRecordInventory(db),
@@ -5877,11 +5906,11 @@ class ProfileRegistry {
 
   static Future<void> _recordRegistryBorrowerRevocation(
     DatabaseExecutor db, {
+    required WebDavSyncRegistryTombstoneOutboxTarget? target,
     required String ownerProfileId,
     Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
         const <WebDavSyncRegistryRecordId>[],
   }) async {
-    final target = await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     if (target == null) return;
     final records = <WebDavSyncRegistryRecordId>{
       ...await _registryRecordInventory(db),

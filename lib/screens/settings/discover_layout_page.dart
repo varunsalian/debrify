@@ -1,3 +1,4 @@
+import 'widgets/settings_load_error.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
@@ -52,6 +53,8 @@ class DiscoverLayoutPage extends StatefulWidget {
 
 class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
   bool _loading = true;
+  bool _loadFailed = false;
+  int _loadGeneration = 0;
 
   /// Placeholder until [_load] lands — must match StorageService's unset
   /// default, or the checked row jumps on first paint.
@@ -79,20 +82,35 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
   }
 
   Future<void> _load() async {
-    final layout = await StorageService.getDiscoverLayout();
-    if (!mounted) return;
+    final generation = ++_loadGeneration;
     setState(() {
-      _layout = layout;
-      _loading = false;
+      _loading = true;
+      _loadFailed = false;
     });
-    if (PlatformUtil.isAndroidTvCached) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        // Don't yank focus if it already landed on a real node (only the
-        // route's FocusScope holds focus while nothing is focused yet).
-        final primary = FocusManager.instance.primaryFocus;
-        if (primary != null && primary is! FocusScopeNode) return;
-        _firstCardMarker.traversalDescendants.firstOrNull?.requestFocus();
+    try {
+      final layout = await StorageService.getDiscoverLayout().timeout(
+        const Duration(seconds: 5),
+      );
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _layout = layout;
+        _loading = false;
+      });
+      if (PlatformUtil.isAndroidTvCached) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || generation != _loadGeneration) return;
+          // Don't yank focus if it already landed on a real node (only the
+          // route's FocusScope holds focus while nothing is focused yet).
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary is! FocusScopeNode) return;
+          _firstCardMarker.traversalDescendants.firstOrNull?.requestFocus();
+        });
+      }
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
       });
     }
   }
@@ -115,6 +133,12 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
       return const SettingsPageScaffold(
         title: 'Discover Layout',
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadFailed) {
+      return SettingsPageScaffold(
+        title: 'Discover Layout',
+        body: SettingsLoadError(onRetry: _load),
       );
     }
 
@@ -152,11 +176,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
                   'tab to see it. Both layouts keep the same filter line, and '
                   'Stage shows the focused title on the whole screen instead '
                   'of in a side rail.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: t.dim,
-                  ),
+                  style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
                 ),
               ],
             ),
