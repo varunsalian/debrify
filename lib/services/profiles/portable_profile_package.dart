@@ -286,6 +286,22 @@ class PortableProfilePackage {
     allowMissingPreferences: false,
   );
 
+  /// Decode for the local archive format, whose database attachments are
+  /// `{encoding: file, entry, bytes, sha256}` references to archive entries
+  /// the caller has already extracted and verified. Every other structural
+  /// check and the integrity digest still run; base64 attachments remain
+  /// accepted. Local archives are unencrypted by product decision (the
+  /// creation dialog discloses it), so the passphrase requirement that
+  /// guards plain JSON packages does not apply here.
+  static Future<PortableProfilePackage> decodeFileBackedMap(
+    Map<String, dynamic> decoded,
+  ) => _decodeMap(
+    decoded,
+    authenticatedEncryption: true,
+    allowMissingPreferences: false,
+    allowFileBackedDatabases: true,
+  );
+
   /// Decode for transports that already provide authenticated encryption —
   /// the paired remote session's AEAD stands in for the passphrase layer.
   /// Every structural validation and the integrity digest still run.
@@ -474,6 +490,7 @@ class PortableProfilePackage {
     Map<String, dynamic> decoded, {
     required bool authenticatedEncryption,
     required bool allowMissingPreferences,
+    bool allowFileBackedDatabases = false,
   }) async {
     if (decoded['encrypted'] == true) {
       throw const FormatException('Encrypted package must be unlocked first');
@@ -549,6 +566,7 @@ class PortableProfilePackage {
       profileMaps,
       sections,
       allowMissingPreferences: allowMissingPreferences,
+      allowFileBackedDatabases: allowFileBackedDatabases,
     );
     return PortableProfilePackage(
       sourceVersion: body['version']! as int,
@@ -851,6 +869,7 @@ class PortableProfilePackage {
     List<Map<String, dynamic>> profiles,
     Map<String, dynamic> sections, {
     required bool allowMissingPreferences,
+    bool allowFileBackedDatabases = false,
   }) async {
     final referenced = <String>{};
     for (final profile in profiles) {
@@ -1047,6 +1066,26 @@ class PortableProfilePackage {
           throw const FormatException('Unknown database attachment');
         }
         final attachment = entry.value! as Map;
+        if (allowFileBackedDatabases && attachment['encoding'] == 'file') {
+          // The staged file's size and digest are verified by the archive
+          // reader before decode and again by the snapshot restore; here
+          // only the record shape and its disk-oriented bound are checked.
+          final reference = attachment['entry'];
+          final fileBytes = attachment['bytes'];
+          if (reference is! String ||
+              reference.isEmpty ||
+              reference.length > 240 ||
+              reference.contains('\u0000') ||
+              fileBytes is! int ||
+              fileBytes < 0 ||
+              fileBytes >
+                  ProfileDatabaseSnapshot.maxFileBackedAttachmentBytes ||
+              attachment['sha256'] is! String ||
+              attachment.containsKey('data')) {
+            throw const FormatException('Invalid database attachment');
+          }
+          continue;
+        }
         if (attachment['encoding'] != 'base64' ||
             attachment['bytes'] is! int ||
             attachment['sha256'] is! String ||

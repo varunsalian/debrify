@@ -2748,6 +2748,60 @@ class DownloadService {
     );
   }
 
+  /// File-path counterpart of [saveGeneratedFile] for artifacts that are
+  /// already on disk (local backup archives). The source is streamed or
+  /// handed to the native bridge by path; it is never loaded into memory.
+  /// The caller keeps ownership of [source] and deletes it afterwards. Same
+  /// destination policy as [saveGeneratedFile].
+  Future<GeneratedFileSaveResult> saveGeneratedFileFromPath({
+    required String fileName,
+    required File source,
+    String mimeType = 'application/octet-stream',
+  }) async {
+    final safeFileName = _sanitizeName(fileName);
+    final override = _generatedFileDirectoryOverride;
+    if (override != null) {
+      return _copyGeneratedFile(
+        directory: override,
+        fileName: safeFileName,
+        source: source,
+      );
+    }
+
+    if (Platform.isAndroid) {
+      final published = await _publishGeneratedPathOnAndroid(
+        fileName: safeFileName,
+        stagedFile: source,
+        mimeType: mimeType,
+      );
+      if (published != null) return published;
+      final external = await getExternalStorageDirectory().catchError(
+        (_) => null,
+      );
+      for (final directory in <Directory>[
+        Directory('/storage/emulated/0/Download/Debrify'),
+        if (external != null) external,
+      ]) {
+        try {
+          return await _copyGeneratedFile(
+            directory: directory,
+            fileName: safeFileName,
+            source: source,
+          );
+        } catch (_) {
+          // Try the next download-service destination.
+        }
+      }
+    }
+
+    final directory = Directory(await _appDownloadsSubdir());
+    return _copyGeneratedFile(
+      directory: directory,
+      fileName: safeFileName,
+      source: source,
+    );
+  }
+
   Future<GeneratedFileSaveResult?> _publishGeneratedFileOnAndroid({
     required String fileName,
     required Uint8List bytes,
@@ -2763,11 +2817,28 @@ class DownloadService {
         '${DateTime.now().microsecondsSinceEpoch}-$fileName',
       ),
     );
-
-    String? treeUri;
-    String? treeName;
     try {
       await stagedFile.writeAsBytes(bytes, flush: true);
+      return await _publishGeneratedPathOnAndroid(
+        fileName: fileName,
+        stagedFile: stagedFile,
+        mimeType: mimeType,
+      );
+    } finally {
+      try {
+        if (await stagedFile.exists()) await stagedFile.delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<GeneratedFileSaveResult?> _publishGeneratedPathOnAndroid({
+    required String fileName,
+    required File stagedFile,
+    required String mimeType,
+  }) async {
+    String? treeUri;
+    String? treeName;
+    {
       final savedTreeUri = await StorageService.getDownloadTreeUri();
       if (savedTreeUri != null && savedTreeUri.isNotEmpty) {
         if (await _validateTreeUriCached(savedTreeUri)) {
@@ -2810,11 +2881,46 @@ class DownloadService {
         reference: saved.reference,
         displayLocation: '$parent/${saved.displayName}',
       );
-    } finally {
-      try {
-        if (await stagedFile.exists()) await stagedFile.delete();
-      } catch (_) {}
     }
+  }
+
+  Future<GeneratedFileSaveResult> _copyGeneratedFile({
+    required Directory directory,
+    required String fileName,
+    required File source,
+  }) async {
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    final expected = await source.length();
+    final target = await _availableGeneratedFile(directory, fileName);
+    try {
+      final input = await source.open();
+      final output = await target.open(mode: FileMode.write);
+      try {
+        while (true) {
+          final chunk = await input.read(256 * 1024);
+          if (chunk.isEmpty) break;
+          await output.writeFrom(chunk);
+        }
+        await output.flush();
+      } finally {
+        await input.close();
+        await output.close();
+      }
+      if (!await target.exists() || await target.length() != expected) {
+        throw StateError('Generated download could not be written completely');
+      }
+    } catch (_) {
+      try {
+        if (await target.exists()) await target.delete();
+      } catch (_) {}
+      rethrow;
+    }
+    return GeneratedFileSaveResult(
+      reference: target.path,
+      displayLocation: target.path,
+    );
   }
 
   Future<GeneratedFileSaveResult> _writeGeneratedFile({

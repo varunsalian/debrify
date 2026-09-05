@@ -15,6 +15,9 @@ import '../../services/download_service.dart';
 import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/legacy_backup_adapter.dart';
+import '../../services/profiles/local_backup/local_backup_archive.dart';
+import '../../services/profiles/local_backup/local_backup_zip.dart'
+    show LocalBackupZip;
 import '../../services/profiles/portable_profile_package.dart';
 import '../../services/profiles/profile_app_lifecycle_participant.dart';
 import '../../services/profiles/profile_async_authorization.dart';
@@ -110,6 +113,10 @@ class ProfileBackupFlows {
           ),
         ),
       );
+      return;
+    }
+    if (destination == _ProfileBackupDestination.localFile) {
+      await _createLocalArchiveBackup();
       return;
     }
     if (destination == _ProfileBackupDestination.webDav &&
@@ -374,6 +381,162 @@ class ProfileBackupFlows {
     );
   }
 
+  /// Manual local backups use the streamed `.debrify` archive: databases and
+  /// imported playlists travel as files, never as base64 inside JSON, so a
+  /// large library does not need to fit in memory. Unencrypted by design;
+  /// the dialog says so and names what the file contains.
+  Future<void> _createLocalArchiveBackup() async {
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final actor = await authorization.validate(registry);
+    if (!actor.allows(ProfileFeature.backupRestore)) {
+      throw StateError('This profile is not allowed to create backups');
+    }
+    final canExportAll =
+        actor.role == UserProfileRole.admin &&
+        actor.allows(ProfileFeature.manageProfiles);
+    if (!context.mounted) return;
+    var allProfiles = false;
+    final confirmed = await showSettingsDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(allProfiles ? 'Back up all profiles' : 'Back up profile'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Creates a Debrify backup file (.debrify). It is not '
+                'encrypted and contains your account credentials and '
+                'connection passwords, so keep it private.\n\n'
+                'Included: settings, connections, Debrify TV channels with '
+                'their saved hashes, IPTV playlists, favorites, lists, '
+                'history, and ordering. Provider channel lists and TV guides '
+                'are rebuilt after restore, which may need network access. '
+                'Downloads, recordings, active jobs, device paths, and remote '
+                'pairings are not included.\n\n'
+                'Older Debrify versions cannot read this file.',
+              ),
+              const SizedBox(height: 12),
+              if (canExportAll)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('All profiles and shared connections'),
+                  subtitle: const Text(
+                    'Admin-only graph backup. Imported profile and resource IDs are remapped on restore.',
+                  ),
+                  value: allProfiles,
+                  onChanged: (value) =>
+                      setDialogState(() => allProfiles = value),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Create backup'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    if (allProfiles && !await reauthenticateSensitiveProfile(actor)) return;
+
+    final exporter = LocalBackupExporter(
+      service: ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: DeviceKeyProvider.cipher,
+        ),
+      ),
+    );
+    await LocalBackupOperationGuard.run(() async {
+      final staging = await LocalBackupScratch.create('export');
+      final cancellation = LocalBackupCancellation();
+      try {
+        final result = await _profileBackupProgress<LocalBackupExportResult>(
+          'Preparing backup…',
+          (setStage) => exporter.export(
+            context: authorization,
+            staging: staging,
+            allProfiles: allProfiles,
+            scope: allProfiles ? null : ProfileRuntime.capture(),
+            onStage: setStage,
+            onBytes: _byteStageReporter(setStage),
+            cancellation: cancellation,
+          ),
+          cancellation: cancellation,
+        );
+        final saved = await _profileBackupProgress<GeneratedFileSaveResult>(
+          'Saving backup…',
+          (_) => DownloadService.instance.saveGeneratedFileFromPath(
+            fileName: result.fileName,
+            source: result.archive,
+            mimeType: LocalBackupManifest.mimeType,
+          ),
+        );
+        if (!context.mounted) return;
+        await _showGeneratedFileSaved(saved, artifactLabel: 'backup');
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved'
+              '${result.cachesPruned ? '. Provider channel lists and TV guides will refresh after a restore.' : '.'}',
+            ),
+            duration: Duration(seconds: result.cachesPruned ? 7 : 4),
+          ),
+        );
+      } on LocalBackupCancelledException {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup cancelled; nothing was saved.')),
+        );
+      } finally {
+        await LocalBackupScratch.delete(staging);
+      }
+    });
+  }
+
+  /// Turns per-chunk byte callbacks into a stage label that only changes
+  /// when the displayed megabyte count changes, so the dialog is not rebuilt
+  /// hundreds of times per second on slow storage.
+  void Function(String, int, int) _byteStageReporter(
+    void Function(String) setStage,
+  ) {
+    String? lastLabel;
+    return (name, done, total) {
+      final label =
+          '${_stageVerbFor(name)} ${p.basename(name)}: '
+          '${_megabytes(done)} of ${_megabytes(total)}';
+      if (label == lastLabel) return;
+      lastLabel = label;
+      setStage(label);
+    };
+  }
+
+  static String _stageVerbFor(String entryName) =>
+      entryName.startsWith('databases/')
+      ? 'Library'
+      : entryName.startsWith('attachments/')
+      ? 'Playlist'
+      : 'File';
+
+  static String _megabytes(int bytes) {
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).ceil()} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB';
+  }
+
   Future<ProfileAsyncAuthorization?> _captureWebDavAuthorization(
     WebDavConfig config,
   ) async {
@@ -469,28 +632,35 @@ class ProfileBackupFlows {
       mimeType: mimeType,
     );
     if (context.mounted) {
-      final titleLabel = artifactLabel.isEmpty
-          ? 'File'
-          : '${artifactLabel[0].toUpperCase()}${artifactLabel.substring(1)}';
-      await showSettingsDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('$titleLabel saved'),
-          content: Text(
-            'The $artifactLabel was saved by Debrify’s download service:\n\n'
-            '${saved.displayLocation}\n\nYou can move or copy it with a file '
-            'manager, USB, or over the network.',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+      await _showGeneratedFileSaved(saved, artifactLabel: artifactLabel);
     }
     return saved.reference;
+  }
+
+  Future<void> _showGeneratedFileSaved(
+    GeneratedFileSaveResult saved, {
+    required String artifactLabel,
+  }) async {
+    final titleLabel = artifactLabel.isEmpty
+        ? 'File'
+        : '${artifactLabel[0].toUpperCase()}${artifactLabel.substring(1)}';
+    await showSettingsDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('$titleLabel saved'),
+        content: Text(
+          'The $artifactLabel was saved by Debrify’s download service:\n\n'
+          '${saved.displayLocation}\n\nYou can move or copy it with a file '
+          'manager, USB, or over the network.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Modal stage indicator for backup/restore work. The crypto and
@@ -501,15 +671,25 @@ class ProfileBackupFlows {
   /// on the root navigator if this State unmounts mid-run.
   Future<T> _profileBackupProgress<T>(
     String initialStage,
-    Future<T> Function(void Function(String) setStage) run,
-  ) async {
+    Future<T> Function(void Function(String) setStage) run, {
+    LocalBackupCancellation? cancellation,
+  }) async {
     final stage = ValueNotifier<String>(initialStage);
     final done = ValueNotifier<bool>(false);
     unawaited(
       showSettingsDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => _BackupProgressDialog(stage: stage, done: done),
+        builder: (_) => _BackupProgressDialog(
+          stage: stage,
+          done: done,
+          onCancel: cancellation == null
+              ? null
+              : () {
+                  cancellation.cancel();
+                  stage.value = 'Cancelling…';
+                },
+        ),
       ),
     );
     try {
@@ -548,6 +728,7 @@ class ProfileBackupFlows {
   }
 
   String _profileBackupError(Object error, {required bool creating}) {
+    if (error is LocalBackupStorageException) return error.message;
     if (error is FormatException) {
       return error.message;
     }
@@ -583,12 +764,17 @@ class ProfileBackupFlows {
       );
       if (pick == null || pick.files.isEmpty) return null;
       final file = pick.files.single;
-      if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
-        throw const FormatException('Backup exceeds the supported size limit');
-      }
       final path = file.path;
       if (path == null) {
         throw const FormatException('Selected backup is not locally readable');
+      }
+      // Route by header, not extension: a `.debrify` archive starts with the
+      // ZIP magic, legacy backups are JSON objects.
+      if (await LocalBackupZip.looksLikeArchive(File(path))) {
+        return _restoreLocalArchive(path);
+      }
+      if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
+        throw const FormatException('Backup exceeds the supported size limit');
       }
       return _restoreProfileBackupFromPath(path);
     }
@@ -674,7 +860,54 @@ class ProfileBackupFlows {
       }
       package = LegacyBackupAdapter.adapt(legacy);
     }
+    return _confirmAndRestorePackage(
+      package,
+      migrateAuthorization: migrateAuthorization,
+    );
+  }
 
+  /// Extracts a `.debrify` archive into private staging, verifies it, and
+  /// runs the ordinary confirm/restore path with a file resolver so the
+  /// coordinator copies databases from staging instead of decoding base64.
+  Future<ProfileBackupRestoreResult?> _restoreLocalArchive(String path) {
+    return LocalBackupOperationGuard.run(() async {
+      final staging = await LocalBackupScratch.create('restore');
+      final cancellation = LocalBackupCancellation();
+      LocalBackupRestoreStage? stage;
+      try {
+        stage = await _profileBackupProgress<LocalBackupRestoreStage>(
+          'Reading backup…',
+          (setStage) => LocalBackupRestorer.stage(
+            archive: File(path),
+            staging: staging,
+            onStage: setStage,
+            onBytes: _byteStageReporter(setStage),
+            cancellation: cancellation,
+          ),
+          cancellation: cancellation,
+        );
+        if (!context.mounted) return null;
+        return await _confirmAndRestorePackage(
+          stage.package,
+          databaseFileResolver: stage.resolveDatabase,
+        );
+      } on LocalBackupCancelledException {
+        return null;
+      } finally {
+        if (stage != null) {
+          await stage.dispose();
+        } else {
+          await LocalBackupScratch.delete(staging);
+        }
+      }
+    });
+  }
+
+  Future<ProfileBackupRestoreResult?> _confirmAndRestorePackage(
+    PortableProfilePackage package, {
+    ProfileAsyncAuthorization? migrateAuthorization,
+    ProfileDatabaseFileResolver? databaseFileResolver,
+  }) async {
     final registry = ProfileBootstrap.registry;
     final profile = await registry.getProfile(
       ProfileRuntime.capture().profileId,
@@ -763,6 +996,7 @@ class ProfileBackupFlows {
           () => coordinator.restoreDeviceGraph(
             package: package,
             authorization: authorization,
+            databaseFileResolver: databaseFileResolver,
           ),
         ),
       );
@@ -796,6 +1030,7 @@ class ProfileBackupFlows {
           destinationProfileId: profile.id,
           authorization: authorization,
           completeOnboarding: completingOnboarding,
+          databaseFileResolver: databaseFileResolver,
         ),
       ),
     );
@@ -1045,10 +1280,15 @@ class ProfileBackupFlows {
 /// may unmount mid-run, and an orphaned `canPop: false` modal on the root
 /// navigator would wedge the whole app.
 class _BackupProgressDialog extends StatefulWidget {
-  const _BackupProgressDialog({required this.stage, required this.done});
+  const _BackupProgressDialog({
+    required this.stage,
+    required this.done,
+    this.onCancel,
+  });
 
   final ValueNotifier<String> stage;
   final ValueNotifier<bool> done;
+  final VoidCallback? onCancel;
 
   @override
   State<_BackupProgressDialog> createState() => _BackupProgressDialogState();
@@ -1078,8 +1318,11 @@ class _BackupProgressDialogState extends State<_BackupProgressDialog> {
     }
   }
 
+  bool _cancelRequested = false;
+
   @override
   Widget build(BuildContext context) {
+    final onCancel = widget.onCancel;
     return PopScope(
       canPop: false,
       child: AlertDialog(
@@ -1099,6 +1342,20 @@ class _BackupProgressDialogState extends State<_BackupProgressDialog> {
             ),
           ],
         ),
+        actions: onCancel == null
+            ? null
+            : [
+                TextButton(
+                  autofocus: true,
+                  onPressed: _cancelRequested
+                      ? null
+                      : () {
+                          setState(() => _cancelRequested = true);
+                          onCancel();
+                        },
+                  child: const Text('Cancel'),
+                ),
+              ],
       ),
     );
   }

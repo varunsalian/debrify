@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,6 +24,61 @@ final class ProfileGraphPackageExport {
   final PortableProfilePackage package;
   final Map<String, String> profileBackupIdsByLocalId;
   final Map<String, String> resourceBackupIdsByLocalId;
+}
+
+/// Additive hooks for the local archive exporter. When supplied, database
+/// snapshots leave the package as file references instead of base64, and an
+/// IPTV resource's imported M3U text leaves its secret record as an attachment
+/// reference. Nothing else about the package changes; WebDAV and remote
+/// callers never pass this.
+final class ProfilePackageFileSinks {
+  const ProfilePackageFileSinks({
+    required this.databaseFile,
+    required this.resourceContent,
+    this.pruneRebuildableCaches = true,
+  });
+
+  /// Takes ownership of one finished snapshot file; returns the entry
+  /// reference stored in the package record.
+  final Future<String> Function(
+    String profileBackupId,
+    String databaseName,
+    File snapshot, {
+    required int bytes,
+    required String sha256,
+  })
+  databaseFile;
+
+  /// Stores one resource's imported M3U text; returns the reference record
+  /// stored under `secretConfig.contentAttachment` in place of `content`.
+  final Future<Map<String, Object?>> Function(
+    String resourceBackupId,
+    String content,
+  )
+  resourceContent;
+
+  /// Drop rebuildable IPTV catalog/EPG caches from the snapshots. Debrify TV
+  /// is never omitted on this path regardless of size.
+  final bool pruneRebuildableCaches;
+
+  /// Key that replaces `content` in an IPTV resource's secret record.
+  static const String contentAttachmentKey = 'contentAttachment';
+
+  /// Moves `secretConfig.content` into the attachment sink for resource
+  /// types that carry imported playlist text. Other records are untouched.
+  Future<void> externalizeContent(Map<String, dynamic> record) async {
+    final secret = record['secretConfig'];
+    if (secret is! Map) return;
+    final content = secret['content'];
+    if (content is! String || content.isEmpty) return;
+    final backupId = record['backupId'];
+    if (backupId is! String) return;
+    final reference = await resourceContent(backupId, content);
+    final replaced = Map<String, dynamic>.from(secret)
+      ..remove('content')
+      ..[contentAttachmentKey] = reference;
+    record['secretConfig'] = replaced;
+  }
 }
 
 class ProfilePackageService {
@@ -62,7 +118,14 @@ class ProfilePackageService {
     required bool includeSecrets,
     required bool sanitized,
     bool compactDatabaseSnapshots = false,
+    ProfilePackageFileSinks? fileSinks,
   }) async {
+    if (fileSinks != null && (sanitized || !includeSecrets)) {
+      throw ArgumentError('File-backed export requires a full profile export');
+    }
+    if (fileSinks != null && compactDatabaseSnapshots) {
+      throw ArgumentError('File-backed export never compacts Debrify TV');
+    }
     final profile = await context.validate(registry);
     if (profile.id != scope.profileId) {
       throw StateError('Export scope does not match authorization');
@@ -81,6 +144,18 @@ class ProfilePackageService {
         : await ProfileDatabaseSnapshot.export(
             scope,
             compact: compactDatabaseSnapshots,
+            fileSink: fileSinks == null
+                ? null
+                : (name, snapshot, {required bytes, required sha256}) =>
+                      fileSinks.databaseFile(
+                        'profile-0',
+                        name,
+                        snapshot,
+                        bytes: bytes,
+                        sha256: sha256,
+                      ),
+            pruneRebuildableCaches:
+                fileSinks != null && fileSinks.pruneRebuildableCaches,
           );
     final databaseSnapshots = databaseExport?.attachments ?? const {};
     final rebuildableCachesCompacted = databaseExport?.compacted
@@ -140,6 +215,7 @@ class ProfilePackageService {
                 context: context,
                 resourceId: resource.id,
               );
+          if (fileSinks != null) await fileSinks.externalizeContent(record);
         }
         exportedResources.add(record);
       }
@@ -221,13 +297,20 @@ class ProfilePackageService {
     bool compactDatabaseSnapshots = false,
     bool includeDatabases = true,
     bool includePreferences = true,
-  }) async => (await _exportAllProfiles(
-    context: context,
-    includeSecrets: includeSecrets,
-    compactDatabaseSnapshots: compactDatabaseSnapshots,
-    includeDatabases: includeDatabases,
-    includePreferences: includePreferences,
-  )).package;
+    ProfilePackageFileSinks? fileSinks,
+  }) async {
+    if (fileSinks != null && compactDatabaseSnapshots) {
+      throw ArgumentError('File-backed export never compacts Debrify TV');
+    }
+    return (await _exportAllProfiles(
+      context: context,
+      includeSecrets: includeSecrets,
+      compactDatabaseSnapshots: compactDatabaseSnapshots,
+      includeDatabases: includeDatabases,
+      includePreferences: includePreferences,
+      fileSinks: fileSinks,
+    )).package;
+  }
 
   /// Full graph export plus the local-to-backup identity correlation needed by
   /// WebDAV Sync. The optional projection rewrites resource IDs inside SQLite
@@ -256,6 +339,7 @@ class ProfilePackageService {
     required bool includePreferences,
     Map<String, String> profileIdProjection = const <String, String>{},
     Map<String, String> resourceIdProjection = const <String, String>{},
+    ProfilePackageFileSinks? fileSinks,
   }) async {
     final actor = await context.validate(registry);
     if (actor.role != UserProfileRole.admin ||
@@ -324,6 +408,18 @@ class ProfilePackageService {
           scope,
           compact: compactDatabaseSnapshots,
           resourceIdProjection: resourceIdProjection,
+          fileSink: fileSinks == null
+              ? null
+              : (name, snapshot, {required bytes, required sha256}) =>
+                    fileSinks.databaseFile(
+                      backupId,
+                      name,
+                      snapshot,
+                      bytes: bytes,
+                      sha256: sha256,
+                    ),
+          pruneRebuildableCaches:
+              fileSinks != null && fileSinks.pruneRebuildableCaches,
         );
         compactedDatabases.addAll(
           databaseExport.compacted
@@ -428,6 +524,9 @@ class ProfilePackageService {
         'bindings': resourceBindings,
         'profileSettings': resourceSettings,
       });
+      if (fileSinks != null) {
+        await fileSinks.externalizeContent(resourceRecords.last);
+      }
     }
     final package = PortableProfilePackage(
       mode: 'deviceGraph',

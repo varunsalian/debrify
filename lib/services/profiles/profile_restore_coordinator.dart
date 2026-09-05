@@ -82,6 +82,7 @@ class ProfileRestoreCoordinator {
   Future<ProfileGraphRestoreReport> restoreDeviceGraph({
     required PortableProfilePackage package,
     required ProfileAuthorizationContext authorization,
+    ProfileDatabaseFileResolver? databaseFileResolver,
   }) async {
     final actor = await authorization.validate(registry);
     if (actor.role != UserProfileRole.admin ||
@@ -223,6 +224,7 @@ class ProfileRestoreCoordinator {
           package,
           sourceRecord,
           stagingScope,
+          fileResolver: databaseFileResolver,
         );
         if (databasesRestored > 0) {
           await ProfileDatabaseSnapshot.remapResourceReferences(
@@ -579,12 +581,17 @@ class ProfileRestoreCoordinator {
   ///
   /// [completeOnboarding] is reserved for the first-run restore entry point;
   /// it makes setup completion part of the generation publication transaction.
+  /// [databaseFileResolver] is the local archive's additive staging hook: it
+  /// maps file-backed database attachment references to already-extracted,
+  /// verified files. Base64 packages ignore it. Authorization, ID remapping,
+  /// rollback, and publication are unchanged either way.
   Future<ProfileRestoreReport> restore({
     required PortableProfilePackage package,
     required String destinationProfileId,
     required ProfileAuthorizationContext authorization,
     bool replacePreferences = false,
     bool completeOnboarding = false,
+    ProfileDatabaseFileResolver? databaseFileResolver,
   }) async {
     final actor = await authorization.validate(registry);
     if (actor.id != destinationProfileId) {
@@ -662,6 +669,7 @@ class ProfileRestoreCoordinator {
         package,
         profileRecord,
         stagingScope,
+        fileResolver: databaseFileResolver,
       );
       if (databasesRestored > 0) {
         await ProfileDatabaseSnapshot.remapResourceReferences(
@@ -1126,8 +1134,9 @@ class ProfileRestoreCoordinator {
   static Future<int> _restoreDatabaseSection(
     PortableProfilePackage package,
     Map<String, dynamic> profileRecord,
-    ProfileScope destination,
-  ) async {
+    ProfileScope destination, {
+    ProfileDatabaseFileResolver? fileResolver,
+  }) async {
     final sectionId = profileRecord['databasesSection'];
     if (sectionId == null) return 0;
     if (sectionId is! String) {
@@ -1140,6 +1149,7 @@ class ProfileRestoreCoordinator {
     return ProfileDatabaseSnapshot.restore(
       destination,
       Map<Object?, Object?>.from(section['values'] as Map),
+      fileResolver: fileResolver,
     );
   }
 

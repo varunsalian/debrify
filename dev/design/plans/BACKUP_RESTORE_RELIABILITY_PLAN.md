@@ -1,8 +1,9 @@
 # Backup and restore reliability on TVs
 
-Status: Mac archive feasibility probe passed; implementation in progress on
-branch `local-backup-archive` (worktree `../debrify-backup-archive`, cut from
-`webdav-sync` at 65899f29). See [Mac validation results](BACKUP_RESTORE_MAC_VALIDATION.md).
+Status: Milestones 2-4 implemented on branch `local-backup-archive`
+(worktree `../debrify-backup-archive`, cut from `webdav-sync` at 65899f29).
+Mac test evidence below; physical TV, Android save bridge, iOS, Windows and
+Linux validation are PENDING. See "Implementation status" at the end. See [Mac validation results](BACKUP_RESTORE_MAC_VALIDATION.md).
 Baseline: `v0.9.0-beta.1` compared with the current `webdav-sync` branch.
 Date: 2026-09-05.
 
@@ -387,3 +388,56 @@ Initial estimate is provisionally 3–6 engineering days, subject to milestone 1
 The main uncertainty is a file-backed restore/save integration that preserves
 existing transactional semantics without altering sync consumers. Re-estimate
 after the end-to-end prototype, before committing to the full implementation.
+
+## Implementation status (2026-09-05, Mac only)
+
+Built:
+
+- `lib/services/profiles/local_backup/local_backup_zip.dart`: own stored-entry
+  ZIP writer/reader (ZIP64 offsets, UTF-8 names). The `archive` package's
+  encoder/decoder process a whole entry synchronously and buffer compressed
+  data, so the container is written and read in 256 KiB chunks with
+  streaming CRC-32 and SHA-256, cooperative cancellation, and bounded
+  central-directory parsing. Archives remain readable by the library's
+  decoder (tested).
+- `local_backup_archive.dart`: manifest (`manifest.json` + `manifest.sha256`),
+  `LocalBackupExporter` (staging inventory, file sinks, verification pass),
+  `LocalBackupRestorer` (extract with size/digest/name/unexpected-entry/
+  future-version checks, playlist re-inline, file-backed decode),
+  `LocalBackupScratch` (startup sweep from `main.dart`), operation guard,
+  diagnostics events (`local_backup` source, no paths or contents).
+- Additive shared hooks: `ProfileDatabaseSnapshot.export(fileSink:,
+  pruneRebuildableCaches:)` and `restore(fileResolver:)`;
+  `ProfilePackageFileSinks` on `ProfilePackageService.exportProfile/
+  exportAllProfiles`; `PortableProfilePackage.decodeFileBackedMap`;
+  `ProfileRestoreCoordinator.restore/restoreDeviceGraph(databaseFileResolver:)`;
+  `DownloadService.saveGeneratedFileFromPath`. Base64 and WebDAV callers are
+  untouched; the durable/rebuildable catalog table allowlist is enforced and an
+  unclassified table fails the export.
+- UI: local creation routes to the archive (disclosure dialog, no passphrase,
+  cancel button, stage + MB progress); local restore probes the ZIP header and
+  routes archives to staging, then the existing confirm/restore path.
+
+Evidence (Mac, `flutter test`, 302 MiB `debrify_tv.db`, one profile):
+
+| Stage | Time | Process RSS |
+| --- | ---: | ---: |
+| Baseline (test VM) | — | 199 MiB (peak 213) |
+| Export + verify | 5.6 s | peak 293 MiB |
+| Stage + coordinator restore | 10.5 s | peak 293 MiB |
+
+Peak growth of ~80 MiB is SQLite `VACUUM INTO`/copy working memory plus test
+harness; it did not scale with the database. Restore peak is bounded by the
+largest single imported playlist string, as decided above. Tests:
+`test/profiles/local_backup_zip_test.dart`,
+`test/profiles/local_backup_archive_test.dart`; existing snapshot, package,
+coordinator, encryption and resource-service suites pass unchanged (106).
+
+Not done / pending:
+
+- No physical Android TV, Fire TV, Shield, phone, iOS, Windows or Linux run.
+  The Android native save bridge is reused by path but has not been exercised
+  with a file outside the cache directory.
+- No disk-space preflight; ENOSPC is caught and surfaced at every stage.
+- Compression, encryption of the new format, and the legacy JSON memory
+  limits are unchanged by design.

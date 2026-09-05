@@ -40,6 +40,8 @@ import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/profiles/local_backup/local_backup_archive.dart'
+    show LocalBackupScratch;
 import 'services/profiles/profile_bootstrap.dart';
 import 'services/profiles/profile_database_adoption_gate.dart';
 import 'services/profiles/profile_migration_service.dart';
@@ -355,6 +357,10 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   // cache, route, or background service can observe application state.
   try {
     await ProfileBootstrap.initialize();
+    // Scratch left behind by an interrupted local backup/restore is only
+    // ever intermediate state; finished backups live in the download
+    // destination. Nothing can be running yet, so sweep it unconditionally.
+    unawaited(LocalBackupScratch.cleanAbandoned());
   } on ProfileBootstrapRecoveryRequired {
     runApp(
       MaterialApp(
