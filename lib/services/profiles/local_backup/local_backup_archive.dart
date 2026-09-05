@@ -445,17 +445,9 @@ class LocalBackupExporter {
       final manifestEntries = List<LocalBackupManifestEntry>.unmodifiable(
         entries,
       );
-      final mode = package.mode;
       final encoded = await _encodeManifestOffMain(
         package,
         createdAt: createdAt,
-        mode: mode,
-        entries: manifestEntries,
-      );
-      final manifest = LocalBackupManifest(
-        createdAt: createdAt,
-        mode: mode,
-        package: encoded.envelope,
         entries: manifestEntries,
       );
       final manifestBytes = encoded.bytes;
@@ -521,7 +513,7 @@ class LocalBackupExporter {
       stage('Checking backup…');
       await verifyArchive(
         archive,
-        expected: manifest,
+        expectedEntries: manifestEntries,
         onBytes: onBytes,
         cancellation: cancellation,
       );
@@ -554,7 +546,7 @@ class LocalBackupExporter {
   /// manifest that was just written, plus the manifest against its stamp.
   static Future<void> verifyArchive(
     File archive, {
-    required LocalBackupManifest expected,
+    required List<LocalBackupManifestEntry> expectedEntries,
     LocalBackupByteProgress? onBytes,
     LocalBackupCancellation? cancellation,
   }) async {
@@ -562,7 +554,7 @@ class LocalBackupExporter {
     try {
       final names = reader.entries.map((entry) => entry.name).toSet();
       final expectedNames = <String>{
-        for (final entry in expected.entries) entry.name,
+        for (final entry in expectedEntries) entry.name,
         LocalBackupManifest.manifestEntry,
         LocalBackupManifest.digestEntry,
       };
@@ -572,7 +564,7 @@ class LocalBackupExporter {
           'Written backup does not list the expected entries',
         );
       }
-      for (final entry in expected.entries) {
+      for (final entry in expectedEntries) {
         final stored = reader.find(entry.name)!;
         if (stored.bytes != entry.bytes) {
           throw LocalBackupFormatException(
@@ -598,26 +590,24 @@ class LocalBackupExporter {
 
   /// A closure passed to [Isolate.run] captures its whole enclosing scope,
   /// so this lives in a method whose only locals are sendable arguments.
-  static Future<
-    ({Map<String, dynamic> envelope, List<int> bytes, String digest})
-  >
-  _encodeManifestOffMain(
+  /// Only the serialized bytes and their digest come back; the envelope map
+  /// is never needed on the UI isolate.
+  static Future<({List<int> bytes, String digest})> _encodeManifestOffMain(
     PortableProfilePackage package, {
     required DateTime createdAt,
-    required String mode,
     required List<LocalBackupManifestEntry> entries,
   }) {
     return Isolate.run(() async {
       final envelope = await PortableProfilePackage.withIntegrity(package);
       final manifest = LocalBackupManifest(
         createdAt: createdAt,
-        mode: mode,
+        mode: package.mode,
         package: envelope,
         entries: entries,
       );
       final bytes = utf8.encode(jsonEncode(manifest.toJson()));
       final hasher = StreamedSha256()..add(bytes);
-      return (envelope: envelope, bytes: bytes, digest: hasher.finish());
+      return (bytes: bytes, digest: hasher.finish());
     });
   }
 
@@ -651,44 +641,66 @@ class LocalBackupExporter {
   }
 }
 
-/// Reads the manifest and its digest stamp from an open archive and returns
-/// the parsed, bounded manifest.
-Future<LocalBackupManifest> _readVerifiedManifest(
-  LocalBackupZipReader reader,
-) async {
-  final manifestEntry = reader.find(LocalBackupManifest.manifestEntry);
+/// A verified manifest plus the digest stamp it was checked against. The
+/// digest lets a later [LocalBackupRestorer.stage] prove it is unpacking the
+/// same archive without reading and hashing the manifest a second time.
+class LocalBackupInspection {
+  const LocalBackupInspection({required this.manifest, required this.digest});
+
+  final LocalBackupManifest manifest;
+  final String digest;
+}
+
+Future<String> _readManifestStamp(LocalBackupZipReader reader) async {
   final digestEntry = reader.find(LocalBackupManifest.digestEntry);
-  if (manifestEntry == null || digestEntry == null) {
+  if (digestEntry == null) {
     throw const LocalBackupFormatException(
       'Backup archive is missing its manifest',
     );
   }
-  final stamp = utf8
-      .decode(await reader.readSmall(digestEntry, maxBytes: 128))
-      .trim();
+  return utf8.decode(await reader.readSmall(digestEntry, maxBytes: 128)).trim();
+}
+
+/// Reads the manifest and its digest stamp from an open archive and returns
+/// the parsed, bounded manifest. Hashing and JSON parsing of a manifest that
+/// can reach [LocalBackupManifest.maxManifestBytes] run off the UI isolate.
+Future<LocalBackupInspection> _readVerifiedManifest(
+  LocalBackupZipReader reader,
+) async {
+  final manifestEntry = reader.find(LocalBackupManifest.manifestEntry);
+  if (manifestEntry == null) {
+    throw const LocalBackupFormatException(
+      'Backup archive is missing its manifest',
+    );
+  }
+  final stamp = await _readManifestStamp(reader);
   final manifestBytes = await reader.readSmall(
     manifestEntry,
     maxBytes: LocalBackupManifest.maxManifestBytes,
   );
+  final decoded = await _parseManifestOffMain(manifestBytes, stamp);
+  return LocalBackupInspection(
+    manifest: LocalBackupManifest.fromJson(decoded),
+    digest: stamp,
+  );
+}
+
+Future<Map<String, dynamic>> _parseManifestOffMain(
+  List<int> manifestBytes,
+  String stamp,
+) => Isolate.run(() {
   final hasher = StreamedSha256()..add(manifestBytes);
   if (hasher.finish() != stamp) {
     throw const LocalBackupFormatException(
       'Backup manifest failed its integrity check',
     );
   }
-  return LocalBackupManifest.fromJson(
-    await _parseManifestOffMain(manifestBytes),
-  );
-}
-
-Future<Map<String, dynamic>> _parseManifestOffMain(List<int> manifestBytes) =>
-    Isolate.run(() {
-      final value = jsonDecode(utf8.decode(manifestBytes));
-      if (value is! Map<String, dynamic>) {
-        throw const LocalBackupFormatException('Backup manifest is invalid');
-      }
-      return value;
-    });
+  final value = jsonDecode(utf8.decode(manifestBytes));
+  if (value is! Map<String, dynamic>) {
+    throw const LocalBackupFormatException('Backup manifest is invalid');
+  }
+  return value;
+});
 
 /// A verified, extracted archive ready for the restore coordinator.
 class LocalBackupRestoreStage {
@@ -718,20 +730,24 @@ class LocalBackupRestorer {
 
   /// Reads only the archive directory and manifest: enough to describe the
   /// backup for a confirmation dialog without extracting anything.
-  static Future<LocalBackupManifest> inspect(File archive) async {
+  static Future<LocalBackupInspection> inspect(File archive) async {
     final reader = await LocalBackupZipReader.open(archive);
     try {
-      final manifest = await _readVerifiedManifest(reader);
-      _checkEntriesAgainstManifest(reader, manifest);
-      return manifest;
+      final inspection = await _readVerifiedManifest(reader);
+      _checkEntriesAgainstManifest(reader, inspection.manifest);
+      return inspection;
     } finally {
       await reader.close();
     }
   }
 
+  /// [inspection] from a prior [inspect] skips the second manifest read: the
+  /// archive's digest stamp must still match it, which proves the file was
+  /// not swapped between the confirmation dialog and the unpack.
   static Future<LocalBackupRestoreStage> stage({
     required File archive,
     required Directory staging,
+    LocalBackupInspection? inspection,
     LocalBackupStageCallback? onStage,
     LocalBackupByteProgress? onBytes,
     LocalBackupCancellation? cancellation,
@@ -759,7 +775,16 @@ class LocalBackupRestorer {
       final attachmentFiles = <String, File>{};
       final LocalBackupManifest manifest;
       try {
-        manifest = await _readVerifiedManifest(reader);
+        if (inspection != null) {
+          if (await _readManifestStamp(reader) != inspection.digest) {
+            throw const LocalBackupFormatException(
+              'Backup changed while it was being read',
+            );
+          }
+          manifest = inspection.manifest;
+        } else {
+          manifest = (await _readVerifiedManifest(reader)).manifest;
+        }
         _checkEntriesAgainstManifest(reader, manifest);
         for (final entry in manifest.entries) {
           cancellation?.throwIfCancelled();

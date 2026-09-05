@@ -444,6 +444,17 @@ delegates to the one path-based destination ladder; `_compactSnapshot` derives
 its catalog list from the classification; `iptv_catalog_table_classification_
 test.dart` binds the allowlist to the live schema.
 
+Review round 2 applied: the generated-file ladder checks the test override
+before touching the cache dir (round 1 had broken
+`download_service_generated_file_test.dart`) and is one writer-parameterized
+ladder; `inspect` returns a digest that `stage` re-checks against the archive
+stamp so the manifest is read once and a swapped file is refused; manifest
+hashing joined parsing off-main and the envelope no longer crosses back to the
+UI isolate; the busy dialog removes its own route instead of popping whatever
+is on top; the inactivity lock is held off during unpack via
+`setPlaybackActive`; only the picker's own cached copy is deleted (the plugin's
+clearTemporaryFiles wipes iOS tmp wholesale).
+
 Not done / pending:
 
 - No physical Android TV, Fire TV, Shield, phone, iOS, Windows or Linux run.

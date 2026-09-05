@@ -2701,37 +2701,33 @@ class DownloadService {
   /// Saves bytes produced by Debrify itself beside normal downloads without
   /// creating a queue/history entry. This is for portable artifacts such as
   /// profile backups and Debrify TV channel archives, not remote URLs.
-  ///
-  /// The bytes are staged to a private temp file and handed to
-  /// [saveGeneratedFileFromPath], so both entry points share one destination
-  /// ladder.
   Future<GeneratedFileSaveResult> saveGeneratedFile({
     required String fileName,
     required Uint8List bytes,
     String mimeType = 'application/octet-stream',
-  }) async {
-    final stagingDirectory = Directory(
-      path.join((await AppStorage.cache()).path, 'generated_downloads'),
+  }) {
+    return _saveGenerated(
+      fileName: fileName,
+      mimeType: mimeType,
+      expectedBytes: bytes.length,
+      write: (target) => target.writeAsBytes(bytes, flush: true),
+      // MediaStore/SAF publication needs a path: stage once, privately.
+      androidSource: () async {
+        final stagingDirectory = Directory(
+          path.join((await AppStorage.cache()).path, 'generated_downloads'),
+        );
+        await stagingDirectory.create(recursive: true);
+        final staged = File(
+          path.join(
+            stagingDirectory.path,
+            '${DateTime.now().microsecondsSinceEpoch}-${_sanitizeName(fileName)}',
+          ),
+        );
+        await staged.writeAsBytes(bytes, flush: true);
+        return staged;
+      },
+      deleteAndroidSource: true,
     );
-    await stagingDirectory.create(recursive: true);
-    final stagedFile = File(
-      path.join(
-        stagingDirectory.path,
-        '${DateTime.now().microsecondsSinceEpoch}-${_sanitizeName(fileName)}',
-      ),
-    );
-    try {
-      await stagedFile.writeAsBytes(bytes, flush: true);
-      return await saveGeneratedFileFromPath(
-        fileName: fileName,
-        source: stagedFile,
-        mimeType: mimeType,
-      );
-    } finally {
-      try {
-        if (await stagedFile.exists()) await stagedFile.delete();
-      } catch (_) {}
-    }
   }
 
   /// File-path counterpart of [saveGeneratedFile] for artifacts that are
@@ -2742,32 +2738,62 @@ class DownloadService {
   /// after a successful copy; on every other path it is left in place. Callers
   /// must therefore not read [source] again after this returns and should
   /// delete it themselves tolerant of it already being gone.
-  ///
-  /// Destination order: test override, Android MediaStore/SAF, the legacy
-  /// Android TV download folder and app-external storage, then the app's own
-  /// downloads folder (desktop custom folder when configured).
   Future<GeneratedFileSaveResult> saveGeneratedFileFromPath({
     required String fileName,
     required File source,
     String mimeType = 'application/octet-stream',
   }) async {
+    return _saveGenerated(
+      fileName: fileName,
+      mimeType: mimeType,
+      expectedBytes: await source.length(),
+      write: (target) => copyFileStreamed(source, target),
+      androidSource: () async => source,
+      deleteAndroidSource: false,
+    );
+  }
+
+  /// The one destination ladder behind both generated-file entry points:
+  /// test override → Android MediaStore/SAF → legacy Android TV download
+  /// folder and app-external storage → the app's own downloads folder
+  /// (desktop custom folder when configured). [write] places the content at
+  /// a target the ladder chose; [androidSource] supplies the path the native
+  /// bridge copies from.
+  Future<GeneratedFileSaveResult> _saveGenerated({
+    required String fileName,
+    required String mimeType,
+    required int expectedBytes,
+    required Future<void> Function(File target) write,
+    required Future<File> Function() androidSource,
+    required bool deleteAndroidSource,
+  }) async {
     final safeFileName = _sanitizeName(fileName);
     final override = _generatedFileDirectoryOverride;
     if (override != null) {
-      return _copyGeneratedFile(
+      return _placeGeneratedFile(
         directory: override,
         fileName: safeFileName,
-        source: source,
+        expectedBytes: expectedBytes,
+        write: write,
       );
     }
 
     if (Platform.isAndroid) {
-      final published = await _publishGeneratedPathOnAndroid(
-        fileName: safeFileName,
-        stagedFile: source,
-        mimeType: mimeType,
-      );
-      if (published != null) return published;
+      final source = await androidSource();
+      try {
+        final published = await _publishGeneratedPathOnAndroid(
+          fileName: safeFileName,
+          stagedFile: source,
+          mimeType: mimeType,
+        );
+        if (published != null) return published;
+      } finally {
+        if (deleteAndroidSource) {
+          try {
+            if (await source.exists()) await source.delete();
+          } catch (_) {}
+        }
+      }
 
       // MediaStore.Downloads is unavailable before Android 10. Preserve the
       // legacy TV path when its storage grant is present, then try the app's
@@ -2775,22 +2801,29 @@ class DownloadService {
       final external = await getExternalStorageDirectory().catchError(
         (_) => null,
       );
-      final legacy = await _copyGeneratedFileToFirstWritable(
-        directories: <Directory>[
-          Directory('/storage/emulated/0/Download/Debrify'),
-          if (external != null) external,
-        ],
-        fileName: safeFileName,
-        source: source,
-      );
-      if (legacy != null) return legacy;
+      for (final directory in <Directory>[
+        Directory('/storage/emulated/0/Download/Debrify'),
+        if (external != null) external,
+      ]) {
+        try {
+          return await _placeGeneratedFile(
+            directory: directory,
+            fileName: safeFileName,
+            expectedBytes: expectedBytes,
+            write: write,
+          );
+        } catch (_) {
+          // Try the next download-service destination.
+        }
+      }
     }
 
     final directory = Directory(await _appDownloadsSubdir());
-    return _copyGeneratedFile(
+    return _placeGeneratedFile(
       directory: directory,
       fileName: safeFileName,
-      source: source,
+      expectedBytes: expectedBytes,
+      write: write,
     );
   }
 
@@ -2847,19 +2880,19 @@ class DownloadService {
     }
   }
 
-  Future<GeneratedFileSaveResult> _copyGeneratedFile({
+  Future<GeneratedFileSaveResult> _placeGeneratedFile({
     required Directory directory,
     required String fileName,
-    required File source,
+    required int expectedBytes,
+    required Future<void> Function(File target) write,
   }) async {
     if (!await directory.exists()) {
       await directory.create(recursive: true);
     }
-    final expected = await source.length();
     final target = await _availableGeneratedFile(directory, fileName);
     try {
-      await copyFileStreamed(source, target);
-      if (!await target.exists() || await target.length() != expected) {
+      await write(target);
+      if (!await target.exists() || await target.length() != expectedBytes) {
         throw StateError('Generated download could not be written completely');
       }
     } catch (_) {
@@ -2872,25 +2905,6 @@ class DownloadService {
       reference: target.path,
       displayLocation: target.path,
     );
-  }
-
-  Future<GeneratedFileSaveResult?> _copyGeneratedFileToFirstWritable({
-    required List<Directory> directories,
-    required String fileName,
-    required File source,
-  }) async {
-    for (final directory in directories) {
-      try {
-        return await _copyGeneratedFile(
-          directory: directory,
-          fileName: fileName,
-          source: source,
-        );
-      } catch (_) {
-        // Try the next download-service destination.
-      }
-    }
-    return null;
   }
 
   Future<File> _availableGeneratedFile(

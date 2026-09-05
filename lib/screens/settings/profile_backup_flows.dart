@@ -25,6 +25,7 @@ import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_database_snapshot.dart';
 import '../../services/profiles/profile_lifecycle.dart';
+import '../../services/profiles/profile_lock_controller.dart';
 import '../../services/profiles/profile_package_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_restore_coordinator.dart';
@@ -751,12 +752,9 @@ class ProfileBackupFlows {
       } finally {
         // On Android/iOS the picker copies a content:// pick into the app
         // cache; a multi-GB archive would otherwise sit there until the user
-        // clears app data.
-        if (Platform.isAndroid || Platform.isIOS) {
-          try {
-            await FilePicker.platform.clearTemporaryFiles();
-          } catch (_) {}
-        }
+        // clears app data. Only that copy is removed: the plugin's own
+        // clearTemporaryFiles wipes the whole temp directory on iOS.
+        await _deletePickerCopy(path);
       }
     }
 
@@ -847,17 +845,33 @@ class ProfileBackupFlows {
     );
   }
 
+  Future<void> _deletePickerCopy(String path) async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    try {
+      final temp = (await getTemporaryDirectory()).path;
+      final normalized = p.normalize(path);
+      final inPickerCache =
+          p.isWithin(temp, normalized) ||
+          normalized.contains('${p.separator}file_picker${p.separator}');
+      if (!inPickerCache) return;
+      final file = File(normalized);
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Best effort; the OS reclaims cache eventually.
+    }
+  }
+
   /// Reads only the archive directory and manifest, obtains confirmation and
   /// authorization, and only then extracts into private staging. A cancelled
   /// or unauthorized restore never pays for a multi-gigabyte extraction.
   Future<ProfileBackupRestoreResult?> _restoreLocalArchive(String path) {
     return LocalBackupOperationGuard.run(() async {
-      final manifest = await _profileBackupProgress<LocalBackupManifest>(
+      final inspection = await _profileBackupProgress<LocalBackupInspection>(
         'Reading backup…',
         (_) => LocalBackupRestorer.inspect(File(path)),
       );
       if (!context.mounted) return null;
-      final summary = _archiveSummary(manifest);
+      final summary = _archiveSummary(inspection.manifest);
       final confirmation = await _confirmRestore(
         mode: summary.mode,
         profileCount: summary.profileCount,
@@ -868,12 +882,17 @@ class ProfileBackupFlows {
       final staging = await LocalBackupScratch.create('restore');
       final cancellation = LocalBackupCancellation();
       LocalBackupRestoreStage? stage;
+      // Authorization and PIN re-auth were captured before a possibly long
+      // unpack; keep the inactivity lock from firing while the busy dialog
+      // is up, exactly as playback does.
+      ProfileLockController.instance.setPlaybackActive(true);
       try {
         stage = await _profileBackupProgress<LocalBackupRestoreStage>(
           'Unpacking backup…',
           (setStage) => LocalBackupRestorer.stage(
             archive: File(path),
             staging: staging,
+            inspection: inspection,
             onStage: setStage,
             onBytes: _byteStageReporter(setStage),
             cancellation: cancellation,
@@ -881,15 +900,6 @@ class ProfileBackupFlows {
           cancellation: cancellation,
         );
         if (!context.mounted) return null;
-        // The manifest summary was unverified; the decoded package is the
-        // authority. Refuse if the shape changed between the two reads.
-        if ((stage.package.mode == 'deviceGraph') !=
-                confirmation.graphRestore ||
-            stage.package.profiles.length != summary.profileCount) {
-          throw const FormatException(
-            'Backup contents changed while it was being read',
-          );
-        }
         return await _performRestore(
           stage.package,
           confirmation,
@@ -898,6 +908,7 @@ class ProfileBackupFlows {
       } on LocalBackupCancelledException {
         return null;
       } finally {
+        ProfileLockController.instance.setPlaybackActive(false);
         if (stage != null) {
           await stage.dispose();
         } else {
@@ -1342,10 +1353,6 @@ class ProfileBackupFlows {
   }
 }
 
-/// Busy dialog for [_profileBackupProgress]: undismissable while work runs,
-/// and closed through its OWN context when `done` fires — the caller's State
-/// may unmount mid-run, and an orphaned `canPop: false` modal on the root
-/// navigator would wedge the whole app.
 class _RestoreConfirmation {
   const _RestoreConfirmation({
     required this.actor,
@@ -1362,6 +1369,10 @@ class _RestoreConfirmation {
   final String databaseNotice;
 }
 
+/// Busy dialog for [_profileBackupProgress]: undismissable while work runs,
+/// and closed through its OWN context when `done` fires — the caller's State
+/// may unmount mid-run, and an orphaned `canPop: false` modal on the root
+/// navigator would wedge the whole app.
 class _BackupProgressDialog extends StatefulWidget {
   const _BackupProgressDialog({
     required this.stage,
@@ -1396,8 +1407,16 @@ class _BackupProgressDialogState extends State<_BackupProgressDialog> {
   }
 
   void _maybeClose() {
-    if (widget.done.value && mounted) {
+    if (!widget.done.value || !mounted) return;
+    // Remove THIS route, not whatever is on top: a fast stage can finish
+    // before the first frame, and the caller may already have pushed its
+    // confirm dialog above us by the time the post-frame callback runs.
+    final route = ModalRoute.of(context);
+    if (route == null) return;
+    if (route.isCurrent) {
       Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).removeRoute(route);
     }
   }
 

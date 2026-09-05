@@ -253,8 +253,10 @@ void main() {
       );
 
       // Independent read-back: the archive is a plain stored ZIP.
-      final manifest = await LocalBackupRestorer.inspect(result.archive);
+      final inspection = await LocalBackupRestorer.inspect(result.archive);
+      final manifest = inspection.manifest;
       expect(manifest.mode, 'singleProfile');
+      expect(inspection.digest, isNotEmpty);
       expect(
         manifest.entries.map((e) => e.name),
         unorderedEquals(<String>[
@@ -326,9 +328,27 @@ void main() {
       await scope.fileIn(documents, 'documents', 'iptv_catalog.db').delete();
 
       final restoreStaging = await LocalBackupScratch.create('restore');
+      final inspection = await LocalBackupRestorer.inspect(saved);
+      // A different archive swapped in under the same path must be refused
+      // when staging reuses an earlier inspection.
+      final other = File(p.join(temporaryDirectory.path, 'other.debrify'));
+      await LocalBackupZip.write(
+        output: other,
+        sources: const <LocalBackupZipSource>[],
+        modified: DateTime.utc(2026),
+      );
+      await expectLater(
+        LocalBackupRestorer.stage(
+          archive: other,
+          staging: restoreStaging,
+          inspection: inspection,
+        ),
+        throwsA(isA<LocalBackupFormatException>()),
+      );
       final stage = await LocalBackupRestorer.stage(
         archive: saved,
         staging: restoreStaging,
+        inspection: inspection,
       );
       try {
         final secret = stage.package.resources.single['secretConfig'] as Map;
