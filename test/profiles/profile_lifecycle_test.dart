@@ -56,6 +56,43 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
+  for (final sameProfile in [false, true]) {
+    test(
+      'abort checkpoint failure restores every participant (same ID: $sameProfile)',
+      () async {
+        final events = <String>[];
+        final original = StateError('precommit failed');
+        final before = ProfileRuntime.capture();
+        final lifecycle = ProfileLifecycleCoordinator(
+          registry: registry,
+          participants: [
+            _RollbackParticipant('first', events),
+            _RollbackParticipant('second', events, fail: true),
+            _RollbackParticipant('third', events),
+          ],
+        );
+        addTearDown(lifecycle.dispose);
+        await expectLater(
+          lifecycle.switchTo(
+            sameProfile ? firstId : secondId,
+            afterDeactivateBeforeCommit: () async {
+              registry.authorityChangedCallback = () async {
+                throw StateError('abort checkpoint failed');
+              };
+              throw original;
+            },
+          ),
+          throwsA(same(original)),
+        );
+        expect(events, ['third', 'second', 'first']);
+        expect(ProfileRuntime.capture(), before);
+        expect(await registry.getActiveProfileId(), firstId);
+        expect(await registry.activationInProgress(), isFalse);
+        expect(lifecycle.switching.value, isFalse);
+      },
+    );
+  }
+
   test('candidate work starts only after authoritative publication', () async {
     final participant = _RecordingParticipant();
     final lifecycle = ProfileLifecycleCoordinator(
@@ -376,4 +413,22 @@ class _OrderedParticipant implements ProfileLifecycleParticipant {
 
   @override
   Future<void> rollback(ProfileScope restored) async {}
+}
+
+class _RollbackParticipant implements ProfileLifecycleParticipant {
+  _RollbackParticipant(this.name, this.events, {this.fail = false});
+  final String name;
+  final List<String> events;
+  final bool fail;
+  @override
+  Future<void> prepareDeactivate(ProfileScope current) async {}
+  @override
+  Future<void> initializeCandidate(ProfileScope candidate) async {}
+  @override
+  Future<void> didActivate(ProfileScope active) async {}
+  @override
+  Future<void> rollback(ProfileScope restored) async {
+    events.add(name);
+    if (fail) throw StateError('participant rollback failed');
+  }
 }

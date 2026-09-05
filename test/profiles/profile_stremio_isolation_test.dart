@@ -77,6 +77,65 @@ void main() {
   });
 
   test(
+    'management rejects executable resource denial; display fallback is uncached',
+    () async {
+      final resources = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      const manifestUrl = 'https://addon.invalid/shared/manifest.json';
+      final shared = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Shared addon',
+        publicConfig: const {'addonName': 'Shared addon'},
+        secretConfig: const {
+          'id': 'shared-addon',
+          'name': 'Shared addon',
+          'manifest_url': manifestUrl,
+          'base_url': 'https://addon.invalid/shared',
+          'types': ['movie'],
+          'resources': ['stream'],
+        },
+      );
+      // The default use grant gives the borrower a redacted Settings entry.
+      await registry.setActiveProfile(secondId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: secondId, dataGeneration: 1, sessionEpoch: 2),
+      );
+      final rejectingCipher = _RotatingReadCipher(cipher, () async {
+        // Rotate between decryption and the service's strict revalidation.
+        final sealed = (await registry.getSealedResourceSecret(shared.id))!;
+        await registry.updateResourceSecret(
+          resourceId: shared.id,
+          sealedSecretPayload: sealed.envelope,
+          secretPayloadVersion: sealed.payloadVersion,
+        );
+      });
+      DeviceKeyProvider.debugInstallCipher(rejectingCipher);
+      expect(
+        (await service.getAddons(
+          forSettings: true,
+        )).single.connectionResourceCredentialsRedacted,
+        isTrue,
+      );
+      await expectLater(
+        service.getAddonsForManagement(),
+        throwsA(isA<ResourceAuthorizationException>()),
+      );
+      expect(await service.getAddons(), isEmpty);
+      expect(await service.getAddons(), isEmpty);
+      expect(rejectingCipher.reads, 3);
+      rejectingCipher.reject = false;
+      expect((await service.getAddons()).single.manifestUrl, manifestUrl);
+      expect(
+        (await service.getAddonsForManagement()).single.manifestUrl,
+        manifestUrl,
+      );
+    },
+  );
+
+  test(
     'delayed manifest from profile A cannot publish into profile B',
     () async {
       final started = Completer<void>();
@@ -451,4 +510,32 @@ void main() {
     );
     expect(await service.getAddons(forSettings: true), isEmpty);
   });
+}
+
+class _RotatingReadCipher implements DeviceSecretCipher {
+  _RotatingReadCipher(this.delegate, this.rotate);
+  final DeviceSecretCipher delegate;
+  final Future<void> Function() rotate;
+  bool reject = true;
+  int reads = 0;
+  @override
+  Future<void> initialize() => delegate.initialize();
+  @override
+  Future<String> seal(
+    List<int> plaintext, {
+    required List<int> associatedData,
+  }) => delegate.seal(plaintext, associatedData: associatedData);
+  @override
+  Future<List<int>> open(
+    String envelope, {
+    required List<int> associatedData,
+  }) async {
+    reads++;
+    final plaintext = await delegate.open(
+      envelope,
+      associatedData: associatedData,
+    );
+    if (reject) await rotate();
+    return plaintext;
+  }
 }

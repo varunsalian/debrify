@@ -1,3 +1,4 @@
+import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui show ImageFilter;
@@ -3750,6 +3751,21 @@ class _SearchScreenState extends State<SearchScreen>
   /// A collapsed series sentinel stored in a list: resolve its Xtream origin
   /// and open the merged series page (the episode list / Resume plays from
   /// there) — the sentinel URL itself is not a stream.
+  Future<List<IptvPlaylist>?> _readIptvPlaylistsForAction() async {
+    try {
+      return await StorageService.getIptvPlaylists(forSettings: false);
+    } on ResourceAuthorizationException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('IPTV is unavailable. Please retry or sign in.'),
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
   Future<void> _openIptvListSeries(IptvChannel channel) async {
     // xtream-series://<originId>/<seriesId>
     final rest = channel.url.substring('xtream-series://'.length);
@@ -3759,8 +3775,8 @@ class _SearchScreenState extends State<SearchScreen>
         : rest.substring(0, slash);
     final seriesId = slash < 0 ? rest : rest.substring(slash + 1);
     if (seriesId.isEmpty) return;
-    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
-    if (!mounted) return;
+    final playlists = await _readIptvPlaylistsForAction();
+    if (!mounted || playlists == null) return;
     IptvPlaylist? origin;
     for (final p in playlists) {
       if (p.id == originId && p.isXtreamCodes) {
@@ -3968,10 +3984,8 @@ class _SearchScreenState extends State<SearchScreen>
         return;
       }
 
-      final playlists = await StorageService.getIptvPlaylists(
-        forSettings: false,
-      );
-      if (!mounted) return;
+      final playlists = await _readIptvPlaylistsForAction();
+      if (!mounted || playlists == null) return;
       IptvPlaylist? playlist;
       for (final candidate in playlists) {
         if (candidate.id == xtream.playlistId && candidate.isXtreamCodes) {

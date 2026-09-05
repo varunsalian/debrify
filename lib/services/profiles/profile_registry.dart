@@ -1332,8 +1332,8 @@ class ProfileRegistry {
       }
     });
     // SQLite authority is durable at transaction return. Keep this callback
-    // synchronous and fast (callers only set handoff state) so failures from
-    // the recovery checkpoint below are classified as post-commit.
+    // synchronous and fast (publish runtime scope and handoff state) so
+    // recovery checkpoint failures below are classified as post-commit.
     onAuthorityCommitted?.call();
     await checkpointTvOsRecovery();
   }
@@ -5234,6 +5234,7 @@ class ProfileRegistry {
     required int baseGeneration,
     required int stagedGeneration,
     required String operationId,
+    void Function()? onAuthorityCommitted,
     bool? profileSetupComplete,
     bool? profileLockOnResume,
     bool updateInactivityTimeout = false,
@@ -5386,6 +5387,7 @@ class ProfileRegistry {
         whereArgs: <Object>[operationId, stagedGeneration],
       );
     });
+    onAuthorityCommitted?.call();
     await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }

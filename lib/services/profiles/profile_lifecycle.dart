@@ -35,40 +35,6 @@ class ProfileLifecycleCoordinator {
     Future<void> Function()? afterCommitBeforeInitialize,
   }) => _switchLock.synchronized(() async {
     final current = ProfileRuntime.capture();
-    if (current.profileId == targetProfileId) {
-      if (afterDeactivateBeforeCommit == null &&
-          afterAuthorityCommitted == null &&
-          afterCommitBeforeInitialize == null) {
-        return true;
-      }
-      switching.value = true;
-      try {
-        afterAuthorityCommitted?.call();
-        for (final participant in participants) {
-          await participant.prepareDeactivate(current);
-        }
-        await afterDeactivateBeforeCommit?.call();
-        await afterCommitBeforeInitialize?.call();
-        for (final participant in participants) {
-          await participant.initializeCandidate(current);
-        }
-        for (final participant in participants) {
-          await participant.didActivate(current);
-        }
-        return true;
-      } catch (_) {
-        for (final participant in participants.reversed) {
-          try {
-            await participant.rollback(current);
-          } catch (_) {
-            // Preserve the adoption/copy error while restoring every service.
-          }
-        }
-        rethrow;
-      } finally {
-        switching.value = false;
-      }
-    }
     final target = await registry.getProfile(targetProfileId);
     if (target == null ||
         !target.isEnabled ||
@@ -76,11 +42,22 @@ class ProfileLifecycleCoordinator {
         target.pinResetRequired) {
       return false;
     }
-    if (target.hasPin && (unlock == null || !await unlock(target))) {
+    final sameProfile = current.profileId == targetProfileId;
+    if (sameProfile &&
+        current.dataGeneration == target.visibleDataGeneration &&
+        !completeOnboarding &&
+        afterDeactivateBeforeCommit == null &&
+        afterAuthorityCommitted == null &&
+        afterCommitBeforeInitialize == null) {
+      return true;
+    }
+    if (!sameProfile &&
+        target.hasPin &&
+        (unlock == null || !await unlock(target))) {
       return false;
     }
 
-    final candidate = ProfileScope(
+    var candidate = ProfileScope(
       profileId: target.id,
       dataGeneration: target.visibleDataGeneration,
       sessionEpoch: ProfileRuntime.nextEpoch,
@@ -102,15 +79,29 @@ class ProfileLifecycleCoordinator {
       // the target's database bytes. A failure here can safely abort back to
       // the current profile rather than exposing a half-copied target.
       await afterDeactivateBeforeCommit?.call();
+      // The drained hook may have published a new generation for this same
+      // identity. Build the scope from the final registry row, not the picker.
+      final ready = await registry.getProfile(target.id);
+      if (ready == null ||
+          !ready.isEnabled ||
+          ready.lifecycle != UserProfileLifecycle.active ||
+          ready.pinResetRequired) {
+        throw StateError('Activation target is unavailable');
+      }
+      candidate = ProfileScope(
+        profileId: ready.id,
+        dataGeneration: ready.visibleDataGeneration,
+        sessionEpoch: candidate.sessionEpoch,
+      );
       await registry.commitActivation(
         targetProfileId: target.id,
         completeOnboarding: completeOnboarding,
         onAuthorityCommitted: () {
           committed = true;
+          ProfileRuntime.publish(candidate);
           afterAuthorityCommitted?.call();
         },
       );
-      ProfileRuntime.publish(candidate);
       await afterCommitBeforeInitialize?.call();
       // Candidate warming touches process-global caches and controllers. Do it
       // only after registry and runtime authority agree on the target; no
@@ -123,7 +114,19 @@ class ProfileLifecycleCoordinator {
       }
       return true;
     } catch (_) {
-      if (journalStarted && !committed) await registry.abortActivation();
+      if (journalStarted && !committed) {
+        try {
+          await registry.abortActivation();
+        } catch (abortError) {
+          // Cleanup is best effort; retain the initiating error and restore
+          // every participant even if the database/checkpoint is unavailable.
+          try {
+            debugPrint(
+              'Profile activation abort failed: ${abortError.runtimeType}',
+            );
+          } catch (_) {}
+        }
+      }
       // Once the registry commit succeeds, the target is authoritative. Never
       // warm the previous profile underneath that authority: roll the process
       // forward to the committed target and let fail-closed native readers stay

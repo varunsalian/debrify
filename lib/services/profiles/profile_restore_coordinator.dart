@@ -860,6 +860,10 @@ class ProfileRestoreCoordinator {
           try {
             publishedProfile = await registry.publishDataGeneration(
               profileId: destinationProfileId,
+              onAuthorityCommitted: () {
+                published = true;
+                if (restoringActive) ProfileRuntime.publish(candidate!);
+              },
               baseGeneration: staged.baseGeneration,
               stagedGeneration: staged.generation,
               operationId: operationId,
@@ -944,15 +948,15 @@ class ProfileRestoreCoordinator {
         }
       });
       if (restoringActive) {
-        ProfileRuntime.publish(candidate!);
         // Global caches/controllers may only warm after registry and runtime
         // publish the candidate. A post-commit failure rolls forward below.
+        final activeCandidate = candidate!;
         for (final participant in lifecycleParticipants) {
-          await participant.initializeCandidate(candidate);
+          await participant.initializeCandidate(activeCandidate);
         }
-        await NativeProfileProjection.publish(candidate);
+        await NativeProfileProjection.publish(activeCandidate);
         for (final participant in lifecycleParticipants) {
-          await participant.didActivate(candidate);
+          await participant.didActivate(activeCandidate);
         }
       }
 

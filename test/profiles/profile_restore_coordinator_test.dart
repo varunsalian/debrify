@@ -1,5 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:debrify/models/indexer_manager_config.dart';
+import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_adoption_operations.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_safety_backup.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -192,6 +203,207 @@ void main() {
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
   });
+
+  test(
+    'restored backup then circle adoption leaves every collection usable',
+    () async {
+      final resources = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      const types = {
+        ConnectionResourceType.iptvM3u,
+        ConnectionResourceType.iptvXtream,
+        ConnectionResourceType.stremioAddon,
+        ConnectionResourceType.webDav,
+        ConnectionResourceType.jackett,
+        ConnectionResourceType.prowlarr,
+      };
+      for (final type in types) {
+        final secret = <String, dynamic>{
+          'id': 'old-${type.name}',
+          'name': type.name,
+          'enabled': true,
+          // Deliberately retain old compatibility authority in the encrypted
+          // payload. Only registry readback may mint an executable model.
+          '_connectionResourceId': 'pre-backup-resource',
+          '_connectionResourceRevision': 73,
+          if (type == ConnectionResourceType.iptvM3u ||
+              type == ConnectionResourceType.iptvXtream) ...{
+            'url': type == ConnectionResourceType.iptvM3u
+                ? 'https://example.invalid/list.m3u'
+                : '',
+            'addedAt': '2026-08-01T00:00:00.000Z',
+            if (type == ConnectionResourceType.iptvXtream) ...{
+              'serverUrl': 'https://example.invalid',
+              'username': 'test-user',
+              'password': 'test-password',
+            },
+          },
+          if (type == ConnectionResourceType.stremioAddon) ...{
+            'manifest_url': 'https://example.invalid/manifest.json',
+            'base_url': 'https://example.invalid',
+            'types': ['movie'],
+            'resources': ['catalog'],
+            'catalogs': [],
+          },
+          if (type == ConnectionResourceType.webDav) ...{
+            'baseUrl': 'https://example.invalid/dav',
+            'username': 'test-user',
+            'password': 'test-password',
+          },
+          if (type == ConnectionResourceType.jackett ||
+              type == ConnectionResourceType.prowlarr) ...{
+            'type': type.name,
+            'base_url': 'https://example.invalid',
+            'api_key': 'test-key',
+          },
+        };
+        await resources.create(
+          context: await ProfileAuthorizationContext.capture(registry),
+          type: type,
+          label: type.name,
+          publicConfig: const {},
+          secretConfig: secret,
+        );
+      }
+      final packages = ProfilePackageService(
+        registry: registry,
+        resources: resources,
+      );
+      final circle = await packages.exportAllProfiles(
+        context: await ProfileAuthorizationContext.capture(registry),
+        includeSecrets: true,
+        includeDatabases: false,
+      );
+      final restore = ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      );
+      final restoredBackup = await restore.restoreDeviceGraph(
+        package: circle,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      );
+      final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+      addTearDown(lifecycle.dispose);
+      await lifecycle.switchTo(restoredBackup.importedProfileIds.single);
+
+      final operations = DefaultWebDavSyncAdoptionOperations(
+        registry: registry,
+        restoreCoordinator: restore,
+        lifecycleCoordinator: lifecycle,
+      );
+      // The backup source is not part of the restored phone. Remove it before
+      // seeding so the circle contains exactly the restored resource graph.
+      await operations.pruneProfile(profileId);
+      final localProfiles = await registry.listProfiles(includeDisabled: true);
+      final localResources = await registry.listAllResourcesIncludingDisabled();
+      final seedMaps = WebDavSyncGraphIdentityPlanner.ensure(
+        localProfileIds: localProfiles.map((profile) => profile.id),
+        localResourceIds: localResources.map((resource) => resource.id),
+      ).maps;
+      final retained = WebDavSyncGraphIdentityPlanner.ensure(
+        localProfileIds: localProfiles.map((profile) => profile.id),
+        localResourceIds: localResources.map((resource) => resource.id),
+        currentCircleToLocalProfiles: seedMaps.circleToLocalProfiles,
+        currentCircleToLocalResources: seedMaps.circleToLocalResources,
+      ).maps;
+      expect(retained.circleToLocalResources, seedMaps.circleToLocalResources);
+      final seed = await WebDavSyncGraphBuilder(packages).build(
+        kind: WebDavSyncGraphKind.bootstrap,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+        identityMaps: retained,
+      );
+
+      Future<List<Map<String, dynamic>>> read() =>
+          ProfileCollectionResourceFacade.read(
+            types: types,
+            feature: ProfileFeature.manageConnections,
+          );
+      final preJoinScope = ProfileRuntime.capture();
+      final oldModels = await read();
+      expect(oldModels.length, greaterThanOrEqualTo(types.length));
+      final states = _JoinStateRepository();
+      final adoption = WebDavSyncCircleAdoption(
+        stateRepository: states,
+        // Only the backup filesystem is substituted; restore, registry
+        // publication, handoff, resource remapping and predecessor prune are real.
+        safetyBackups: _JoinSafetyBackups(),
+        operations: operations,
+      );
+      final joined = await adoption.adopt(
+        WebDavSyncAdoptionRequest(
+          namespaceId: 'circle:regression',
+          mode: WebDavSyncAdoptionMode.firstJoin,
+          package: seed.package,
+          graphSemanticDigest: seed.semanticDigest,
+          profileMap: seed.profileMap,
+          resourceMap: seed.resourceMap,
+          passphrase: 'test-circle-passphrase',
+          authorization: await ProfileAuthorizationContext.capture(registry),
+          replacementConfirmed: true,
+        ),
+      );
+      expect(joined.phase, WebDavSyncAdoptionPhase.complete);
+      expect(states.state.adoption, isNull);
+      final current = await read();
+      expect(current, hasLength(types.length));
+      Future<void> authorize(Map<String, dynamic> row) =>
+          ProfileCollectionResourceFacade.authorizeExecution(
+            resourceId: row['_connectionResourceId'] as String?,
+            resourceRevision: row['_connectionResourceRevision'] as int?,
+            acceptedTypes: types,
+            feature: ProfileFeature.manageConnections,
+          );
+      for (final row in current) {
+        final resource = await registry.getResource(
+          row['_connectionResourceId'] as String,
+        );
+        expect(
+          row['_connectionResourceRevision'],
+          resource!.authorizationRevision,
+        );
+        await authorize(row);
+      }
+      for (final row in oldModels) {
+        await expectLater(
+          authorize(row),
+          throwsA(isA<ResourceAuthorizationException>()),
+        );
+      }
+      // Exercise the production model getters (not just raw facade records).
+      final List<IptvPlaylist> playlists =
+          await StorageService.getIptvPlaylists(forSettings: false);
+      expect(playlists.where((p) => !p.isVirtual), hasLength(2));
+      final List<WebDavConfig> servers = await StorageService.getWebDavServers(
+        forSettings: false,
+      );
+      expect(servers, hasLength(1));
+      final List<IndexerManagerConfig> managers =
+          await StorageService.getIndexerManagerConfigs(forSettings: false);
+      expect(managers, hasLength(2));
+      StremioService.instance.invalidateCache();
+      // A retired display read must fail soft, without caching an empty result
+      // over the new profile's catalog or reviving its old resource authority.
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          preJoinScope,
+          () => StremioService.instance.getAddons(),
+        ),
+        isEmpty,
+      );
+      final addons = await StremioService.instance.getAddons();
+      expect(addons, hasLength(1));
+      for (final row in [
+        ...playlists.where((p) => !p.isVirtual).map((p) => p.toJson()),
+        ...servers.map((p) => p.toJson()),
+        ...managers.map((p) => p.toJson()),
+        ...addons.map((p) => p.toJson()),
+      ]) {
+        await authorize(row);
+      }
+    },
+  );
 
   test('sanitized export emits only reviewed settings and values', () async {
     final prefs = await SharedPreferences.getInstance();
@@ -477,6 +689,39 @@ void main() {
     expect(prefs.getString('p.$profileId.g.2.theme_mode'), 'restored');
     expect(prefs.getString('p.$profileId.g.2.language'), 'en');
   });
+
+  test(
+    'active restore republishes generation before recovery checkpoint',
+    () async {
+      final original = ProfileRuntime.capture();
+      var observedPublication = false;
+      registry.authorityChangedCallback = () async {
+        final active = (await registry.getProfile(profileId))!;
+        if (active.visibleDataGeneration == original.dataGeneration) return;
+        observedPublication = true;
+        expect(
+          ProfileRuntime.capture().dataGeneration,
+          active.visibleDataGeneration,
+        );
+        expect(
+          ProfileRuntime.capture().sessionEpoch,
+          greaterThan(original.sessionEpoch),
+        );
+        await (await ProfileAuthorizationContext.capture(
+          registry,
+        )).validate(registry);
+      };
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: await _singleProfilePackage(setupComplete: false),
+        destinationProfileId: profileId,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      );
+      expect(observedPublication, isTrue);
+    },
+  );
 
   for (final importedSetupComplete in <bool?>[null, false]) {
     final sourceLabel = importedSetupComplete == null
@@ -1944,8 +2189,9 @@ void main() {
       context: authorization,
       includeSecrets: true,
     );
-    final originals =
-        (await registry.listProfiles()).map((profile) => profile.id).toSet();
+    final originals = (await registry.listProfiles())
+        .map((profile) => profile.id)
+        .toSet();
     await ProfileRestoreCoordinator(
       registry: registry,
       cipher: cipher,
@@ -1988,4 +2234,29 @@ void main() {
       greaterThanOrEqualTo(before),
     );
   });
+}
+
+final class _JoinStateRepository implements WebDavSyncEngineStateRepository {
+  WebDavSyncEngineState state = const WebDavSyncEngineState();
+  @override
+  Future<WebDavSyncEngineState> load(String namespaceId) async => state;
+  @override
+  Future<WebDavSyncEngineState> update(
+    String namespaceId,
+    WebDavSyncEngineState Function(WebDavSyncEngineState) update,
+  ) async => state = update(state);
+}
+
+final class _JoinSafetyBackups implements WebDavSyncSafetyBackupStore {
+  @override
+  Future<WebDavSyncSafetyBackup> createVerified({
+    required String adoptionId,
+    required String passphrase,
+    required ProfileAuthorizationContext authorization,
+  }) async => WebDavSyncSafetyBackup(
+    path: '/test-backup/$adoptionId',
+    sha256Hex: 'b' * 64,
+  );
+  @override
+  Future<bool> verifyRetained(WebDavSyncSafetyBackup backup) async => true;
 }

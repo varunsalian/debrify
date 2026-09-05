@@ -182,7 +182,10 @@ final class DefaultWebDavSyncAdoptionOperations
     required Future<void> Function() beforeCommit,
     required Future<void> Function() beforeTargetInitialize,
   }) async {
-    var authorityCommitted = false;
+    // A resumed handoff can already own authority from its earlier durable
+    // activation. Failures while draining that target are still post-handoff.
+    var authorityCommitted =
+        await registry.getActiveProfileId() == targetProfileId;
     try {
       return await lifecycleCoordinator.switchTo(
         targetProfileId,

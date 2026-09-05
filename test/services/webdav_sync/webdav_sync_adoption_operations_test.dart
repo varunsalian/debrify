@@ -4,6 +4,10 @@ import 'dart:io';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_data_generation.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
@@ -90,6 +94,137 @@ void main() {
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
   });
+
+  test(
+    'same-ID Settings handoff refreshes a stale generation before checkpoint',
+    () async {
+      ProfileBootstrap.debugInstallRegistry(registry);
+      addTearDown(() => ProfileBootstrap.debugInstallRegistry(null));
+      final original = ProfileRuntime.capture();
+      final generationManager = ProfileDataGenerationManager(registry);
+      final staged = await generationManager.finalize(
+        await generationManager.stage(
+          operationId: 'same-id-handoff',
+          profileId: oldId,
+          preferenceOverlay: const {},
+          copyDurableAreas: false,
+        ),
+      );
+      await registry.publishDataGeneration(
+        profileId: oldId,
+        baseGeneration: staged.baseGeneration,
+        stagedGeneration: staged.generation,
+        operationId: staged.operationId,
+      );
+      // Pin the actual generation check, without claiming validate checks it.
+      await expectLater(
+        StorageService.isInitialSetupComplete(),
+        throwsStateError,
+      );
+      await (await ProfileAuthorizationContext.capture(
+        registry,
+      )).validate(registry);
+      final retiredAuthorization = await ProfileAuthorizationContext.capture(
+        registry,
+      );
+      var publications = 0;
+      void published() => publications++;
+      ProfileRuntime.scope.addListener(published);
+      addTearDown(() => ProfileRuntime.scope.removeListener(published));
+      var sawCommittedCheckpoint = false;
+      registry.authorityChangedCallback = () async {
+        if (await registry.activationInProgress()) return;
+        sawCommittedCheckpoint = true;
+        expect(ProfileRuntime.capture().dataGeneration, staged.generation);
+        expect(
+          ProfileRuntime.capture().sessionEpoch,
+          greaterThan(original.sessionEpoch),
+        );
+      };
+      expect(
+        await operations.handoff(
+          targetProfileId: oldId,
+          completeOnboarding: false,
+          beforeCommit: () async {},
+          beforeTargetInitialize: () async {
+            await (await ProfileAuthorizationContext.capture(
+              registry,
+            )).validate(registry);
+            expect(await StorageService.isInitialSetupComplete(), isFalse);
+          },
+        ),
+        isTrue,
+      );
+      expect(sawCommittedCheckpoint, isTrue);
+      expect(publications, 1);
+      await expectLater(
+        retiredAuthorization.validate(registry),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'same-ID onboarding completion is durable before initialization',
+    () async {
+      expect(
+        await operations.handoff(
+          targetProfileId: oldId,
+          completeOnboarding: true,
+          beforeCommit: () async {},
+          beforeTargetInitialize: () async {
+            expect((await registry.getProfile(oldId))!.setupComplete, isTrue);
+            expect(ProfileRuntime.capture().sessionEpoch, greaterThan(1));
+          },
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test('resumed same-ID drain failure remains post-handoff', () async {
+    await expectLater(
+      operations.handoff(
+        targetProfileId: oldId,
+        completeOnboarding: false,
+        beforeCommit: () async => throw StateError('drain failed'),
+        beforeTargetInitialize: () async {},
+      ),
+      throwsA(isA<WebDavSyncPostHandoffException>()),
+    );
+    expect(ProfileRuntime.capture().profileId, oldId);
+  });
+
+  test(
+    'Settings handoff selects imported Admin from a graph containing a member',
+    () async {
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      final member = await registry.createProfile(
+        name: 'Imported Member',
+        role: UserProfileRole.member,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+      await lifecycle.switchTo(member.id);
+      final target = await operations.selectTargetAdmin({member.id, newId});
+      expect(target, newId);
+      expect(
+        await operations.handoff(
+          targetProfileId: target,
+          completeOnboarding: false,
+          beforeCommit: () async {},
+          beforeTargetInitialize: () async {
+            expect(await registry.getActiveProfileId(), newId);
+            expect(ProfileRuntime.capture().profileId, newId);
+          },
+        ),
+        isTrue,
+      );
+      expect(await registry.getActiveProfileId(), newId);
+      expect((await registry.getProfile(newId))!.setupComplete, isFalse);
+    },
+  );
 
   test('tvOS refresh refuses an unsafe whole-graph preference carry', () async {
     final prefs = await SharedPreferences.getInstance();

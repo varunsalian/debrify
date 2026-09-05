@@ -8,6 +8,7 @@ import '../utils/concurrency.dart';
 import '../utils/json_isolate.dart';
 import '../utils/stremio_url.dart';
 import 'profiles/profile_preferences.dart';
+import 'profiles/profile_runtime.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'profiles/connection_resource_service.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -196,6 +197,36 @@ class StremioService {
     bool forSettings = false,
     bool forRemoteTransfer = false,
   }) async {
+    final startingScope =
+        ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+        ? ProfileRuntime.capture()
+        : null;
+    try {
+      return await _getAddons(
+        forSettings: forSettings,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+    } on ResourceAuthorizationException {
+      // Display readers can race a graph replacement or resource revocation.
+      // Keep management/transfer errors actionable and never cache a fallback.
+      if (forSettings || forRemoteTransfer) rethrow;
+      return [];
+    } on StateError {
+      // Only suppress a retired session. A stable-session storage failure
+      // must remain visible rather than masquerading as an empty collection.
+      if (forSettings ||
+          forRemoteTransfer ||
+          ProfileRuntime.scope.value == startingScope) {
+        rethrow;
+      }
+      return [];
+    }
+  }
+
+  Future<List<StremioAddon>> _getAddons({
+    required bool forSettings,
+    required bool forRemoteTransfer,
+  }) async {
     // READING addons is an operation every profile keeps ([ProfileFeature
     // .addonUse]) — Home shelves and catalog search must survive "Manage own
     // sources" being off. The management entry points (add/remove/import/
@@ -296,7 +327,12 @@ class StremioService {
             // management callers retain disabled rows. Re-read through the
             // execution path here; a playback caller must never receive that
             // settings representation (including redacted shared addons).
-            return await getAddons();
+            return await _getAddons(
+              forSettings: false,
+              forRemoteTransfer: false,
+            );
+          } on ResourceAuthorizationException {
+            rethrow;
           } catch (_) {
             debugPrint(
               'StremioService: could not persist hydrated addons; '
@@ -346,7 +382,10 @@ class StremioService {
     final settings = await getAddons(forSettings: true);
     if (!ProfileCollectionResourceFacade.active) return settings;
 
-    final executable = await getAddons();
+    final executable = await _getAddons(
+      forSettings: false,
+      forRemoteTransfer: false,
+    );
     if (authorization != null && !authorization.isCurrentlyActive) {
       throw StateError('Profile session changed while loading addons');
     }
