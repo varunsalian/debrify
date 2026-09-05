@@ -2711,22 +2711,6 @@ class DownloadService {
       mimeType: mimeType,
       expectedBytes: bytes.length,
       write: (target) => target.writeAsBytes(bytes, flush: true),
-      // MediaStore/SAF publication needs a path: stage once, privately.
-      androidSource: () async {
-        final stagingDirectory = Directory(
-          path.join((await AppStorage.cache()).path, 'generated_downloads'),
-        );
-        await stagingDirectory.create(recursive: true);
-        final staged = File(
-          path.join(
-            stagingDirectory.path,
-            '${DateTime.now().microsecondsSinceEpoch}-${_sanitizeName(fileName)}',
-          ),
-        );
-        await staged.writeAsBytes(bytes, flush: true);
-        return staged;
-      },
-      deleteAndroidSource: true,
     );
   }
 
@@ -2748,8 +2732,7 @@ class DownloadService {
       mimeType: mimeType,
       expectedBytes: await source.length(),
       write: (target) => copyFileStreamed(source, target),
-      androidSource: () async => source,
-      deleteAndroidSource: false,
+      androidSource: source,
     );
   }
 
@@ -2757,15 +2740,16 @@ class DownloadService {
   /// test override → Android MediaStore/SAF → legacy Android TV download
   /// folder and app-external storage → the app's own downloads folder
   /// (desktop custom folder when configured). [write] places the content at
-  /// a target the ladder chose; [androidSource] supplies the path the native
-  /// bridge copies from.
+  /// a target the ladder chose. The native Android bridge copies from a path:
+  /// [androidSource] when the artifact already exists on disk (the caller
+  /// owns it), otherwise the ladder stages via [write] into private cache and
+  /// deletes that staging file itself.
   Future<GeneratedFileSaveResult> _saveGenerated({
     required String fileName,
     required String mimeType,
     required int expectedBytes,
     required Future<void> Function(File target) write,
-    required Future<File> Function() androidSource,
-    required bool deleteAndroidSource,
+    File? androidSource,
   }) async {
     final safeFileName = _sanitizeName(fileName);
     final override = _generatedFileDirectoryOverride;
@@ -2779,7 +2763,13 @@ class DownloadService {
     }
 
     if (Platform.isAndroid) {
-      final source = await androidSource();
+      File? staged;
+      final source =
+          androidSource ??
+          (staged = await _stageForAndroid(
+            fileName: safeFileName,
+            write: write,
+          ));
       try {
         final published = await _publishGeneratedPathOnAndroid(
           fileName: safeFileName,
@@ -2788,9 +2778,9 @@ class DownloadService {
         );
         if (published != null) return published;
       } finally {
-        if (deleteAndroidSource) {
+        if (staged != null) {
           try {
-            if (await source.exists()) await source.delete();
+            if (await staged.exists()) await staged.delete();
           } catch (_) {}
         }
       }
@@ -2878,6 +2868,31 @@ class DownloadService {
         displayLocation: '$parent/${saved.displayName}',
       );
     }
+  }
+
+  Future<File> _stageForAndroid({
+    required String fileName,
+    required Future<void> Function(File target) write,
+  }) async {
+    final stagingDirectory = Directory(
+      path.join((await AppStorage.cache()).path, 'generated_downloads'),
+    );
+    await stagingDirectory.create(recursive: true);
+    final staged = File(
+      path.join(
+        stagingDirectory.path,
+        '${DateTime.now().microsecondsSinceEpoch}-$fileName',
+      ),
+    );
+    try {
+      await write(staged);
+    } catch (_) {
+      try {
+        if (await staged.exists()) await staged.delete();
+      } catch (_) {}
+      rethrow;
+    }
+    return staged;
   }
 
   Future<GeneratedFileSaveResult> _placeGeneratedFile({

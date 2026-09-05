@@ -435,10 +435,14 @@ void main() {
       Future<void> expectRefused(File archive, Matcher matcher) async {
         final staging = await LocalBackupScratch.create('restore');
         try {
-          await expectLater(
-            LocalBackupRestorer.stage(archive: archive, staging: staging),
-            throwsA(matcher),
-          );
+          await expectLater(() async {
+            final inspection = await LocalBackupRestorer.inspect(archive);
+            return LocalBackupRestorer.stage(
+              archive: archive,
+              staging: staging,
+              inspection: inspection,
+            );
+          }(), throwsA(matcher));
           expect(
             staging.listSync(recursive: true).whereType<File>(),
             isEmpty,

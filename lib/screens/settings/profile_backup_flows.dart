@@ -661,9 +661,15 @@ class ProfileBackupFlows {
         ),
       ),
     );
+    // The undismissable modal sits above the profile gate's activity
+    // listeners, so no user activity reaches the inactivity lock while a
+    // long stage runs. Hold the lock off for the dialog's lifetime, as
+    // playback does; re-auth captured before the stage stays valid.
+    ProfileLockController.instance.setPlaybackActive(true);
     try {
       return await run((value) => stage.value = value);
     } finally {
+      ProfileLockController.instance.setPlaybackActive(false);
       done.value = true;
     }
   }
@@ -845,17 +851,32 @@ class ProfileBackupFlows {
     );
   }
 
+  /// Removes the file picker's cached copy of a pick. Android copies into
+  /// `cacheDir/file_picker/<millis>/`; iOS moves into `NSTemporaryDirectory`,
+  /// which is `Directory.systemTemp`, not path_provider's Caches directory.
+  /// Symlinks are resolved because iOS reports `/private/var/...` for one
+  /// side and `/var/...` for the other.
   Future<void> _deletePickerCopy(String path) async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
-      final temp = (await getTemporaryDirectory()).path;
-      final normalized = p.normalize(path);
+      final file = File(path);
+      if (!await file.exists()) return;
+      final resolved = p.normalize(await file.resolveSymbolicLinks());
+      final temp = p.normalize(
+        await Directory.systemTemp.resolveSymbolicLinks(),
+      );
+      final pickerSegment = '${p.separator}file_picker${p.separator}';
       final inPickerCache =
-          p.isWithin(temp, normalized) ||
-          normalized.contains('${p.separator}file_picker${p.separator}');
+          resolved.contains(pickerSegment) || p.isWithin(temp, resolved);
       if (!inPickerCache) return;
-      final file = File(normalized);
-      if (await file.exists()) await file.delete();
+      await file.delete();
+      // Android nests each pick in its own timestamped directory; drop it
+      // once empty so cache does not fill with empty folders.
+      final parent = Directory(p.dirname(resolved));
+      if (p.basename(p.dirname(parent.path)) == 'file_picker' &&
+          await parent.list().isEmpty) {
+        await parent.delete();
+      }
     } catch (_) {
       // Best effort; the OS reclaims cache eventually.
     }
@@ -882,10 +903,6 @@ class ProfileBackupFlows {
       final staging = await LocalBackupScratch.create('restore');
       final cancellation = LocalBackupCancellation();
       LocalBackupRestoreStage? stage;
-      // Authorization and PIN re-auth were captured before a possibly long
-      // unpack; keep the inactivity lock from firing while the busy dialog
-      // is up, exactly as playback does.
-      ProfileLockController.instance.setPlaybackActive(true);
       try {
         stage = await _profileBackupProgress<LocalBackupRestoreStage>(
           'Unpacking backup…',
@@ -908,7 +925,6 @@ class ProfileBackupFlows {
       } on LocalBackupCancelledException {
         return null;
       } finally {
-        ProfileLockController.instance.setPlaybackActive(false);
         if (stage != null) {
           await stage.dispose();
         } else {

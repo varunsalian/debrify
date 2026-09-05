@@ -455,6 +455,16 @@ is on top; the inactivity lock is held off during unpack via
 `setPlaybackActive`; only the picker's own cached copy is deleted (the plugin's
 clearTemporaryFiles wipes iOS tmp wholesale).
 
+Review round 3 (low effort, last commit only) applied: the inactivity-lock
+hold lives in the shared busy dialog so every long stage is covered; the
+picker copy is found via `Directory.systemTemp` with symlinks resolved (iOS
+picks live in NSTemporaryDirectory, not Caches) and Android's timestamped
+parent folder is dropped when empty; `stage()` requires an inspection, so no
+unpack path skips the swap check; export verification compares the stored
+manifest stamp and streamed digest instead of re-parsing the envelope; the
+generated-file ladder stages for Android itself, so callers pass only a writer.
+Three review rounds converged; remaining findings were nits.
+
 Not done / pending:
 
 - No physical Android TV, Fire TV, Shield, phone, iOS, Windows or Linux run.

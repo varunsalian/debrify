@@ -514,6 +514,7 @@ class LocalBackupExporter {
       await verifyArchive(
         archive,
         expectedEntries: manifestEntries,
+        expectedManifestDigest: encoded.digest,
         onBytes: onBytes,
         cancellation: cancellation,
       );
@@ -547,6 +548,7 @@ class LocalBackupExporter {
   static Future<void> verifyArchive(
     File archive, {
     required List<LocalBackupManifestEntry> expectedEntries,
+    required String expectedManifestDigest,
     LocalBackupByteProgress? onBytes,
     LocalBackupCancellation? cancellation,
   }) async {
@@ -582,7 +584,17 @@ class LocalBackupExporter {
           );
         }
       }
-      await _readVerifiedManifest(reader);
+      // The manifest was hashed when it was encoded; verify the stored copy
+      // by streaming it, without parsing the whole envelope again.
+      final manifestEntry = reader.find(LocalBackupManifest.manifestEntry);
+      if (manifestEntry == null ||
+          await _readManifestStamp(reader) != expectedManifestDigest ||
+          await reader.digest(manifestEntry, cancellation: cancellation) !=
+              expectedManifestDigest) {
+        throw const LocalBackupFormatException(
+          'Written backup manifest failed verification',
+        );
+      }
     } finally {
       await reader.close();
     }
@@ -741,13 +753,14 @@ class LocalBackupRestorer {
     }
   }
 
-  /// [inspection] from a prior [inspect] skips the second manifest read: the
-  /// archive's digest stamp must still match it, which proves the file was
-  /// not swapped between the confirmation dialog and the unpack.
+  /// [inspection] comes from a prior [inspect] of the same file; the archive's
+  /// digest stamp must still match it, which proves the file was not swapped
+  /// between the confirmation dialog and the unpack. There is deliberately no
+  /// path that unpacks without an inspection.
   static Future<LocalBackupRestoreStage> stage({
     required File archive,
     required Directory staging,
-    LocalBackupInspection? inspection,
+    required LocalBackupInspection inspection,
     LocalBackupStageCallback? onStage,
     LocalBackupByteProgress? onBytes,
     LocalBackupCancellation? cancellation,
@@ -775,16 +788,12 @@ class LocalBackupRestorer {
       final attachmentFiles = <String, File>{};
       final LocalBackupManifest manifest;
       try {
-        if (inspection != null) {
-          if (await _readManifestStamp(reader) != inspection.digest) {
-            throw const LocalBackupFormatException(
-              'Backup changed while it was being read',
-            );
-          }
-          manifest = inspection.manifest;
-        } else {
-          manifest = (await _readVerifiedManifest(reader)).manifest;
+        if (await _readManifestStamp(reader) != inspection.digest) {
+          throw const LocalBackupFormatException(
+            'Backup changed while it was being read',
+          );
         }
+        manifest = inspection.manifest;
         _checkEntriesAgainstManifest(reader, manifest);
         for (final entry in manifest.entries) {
           cancellation?.throwIfCancelled();
