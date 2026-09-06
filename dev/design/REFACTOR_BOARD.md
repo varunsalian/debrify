@@ -12,7 +12,7 @@
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
 - **Settings:** 7,905 → **2,908** (4,997 fewer)
 
-Physical lines, not whole-project deletions. Last full gate: **b6a71b0e PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #216/#217/#218 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
+Physical lines, not whole-project deletions. Last full gate: **d7cdffb7 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #219/#220/#221 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
 
 ### Do next — actual execution order
 
@@ -21,7 +21,7 @@ Physical lines, not whole-project deletions. Last full gate: **b6a71b0e PASSED**
 - [x] **Merge #219, public Atrium stage, after the passing integrated gate.** Exact56ff union and allCI passed.
 - [x] **Merge Sources #220.** Merged9d4cf518: exacta2e4 union independently accepted; all three CI checks passed. Independent145PASS/one existing known shape failure retained. Counter2 sinceb6a; next production merge triggers full gate.
 - [x] **Merge player verification lifetime correction #221.** Merged d7cdffb7 after independent26PASS, unchanged analyzer/layering and exact-head CI passed. Production+98/host+4, zero extraction credit; original tracker experiment remains stopped.
-- [ ] **Run full integrated gate at exact d7cdffb7.** Cicero owns exclusive runtime; third production merge sinceb6a. Hero independent production run waits for gate terminal.
+- [x] **Run full integrated gate at exact d7cdffb7 — PASSED.** Generic6155PASS/12exactknown/2skip; goldens21known, no unexpected/unused; nativefirstpair, Windows/ARM64, analyzer/Python/layer/AST passed. Counterreset0. Hero independent8 production batch released.
 
 ### 1. Finish Search stage layouts and final shared composition — OPEN
 
@@ -77,15 +77,17 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### Who owns the next action
 
-- **Cicero:** full integrated gate at frozen d7cdffb7; exclusive runtime. Hero author evidence and docs accepted, independent production run remains pending.
+- **Cicero:** d7cd gate passed; running the independent hero eight-suite production batch.
 - **Locke:** hero draft PR and current-main union proof. Product8827/docs454f; author136PASS/one unchanged known sidebar failure, three negative probes caught and pristine guards passed. No runtime during gate.
 - **Arendt:** re-pin unapplied renderer OS-admission proposal against merged d7cdffb7; no application/runtime.
 - **Confucius:** independent review of that exact seam proposal; renderer async choreography remains unrun, no held experiment restart.
-- **Parent:** merges, grants, board/notes. #221 merged; counter3 sinceb6a, gate pending. No user blocker.
+- **Parent:** merges, grants, board/notes. #221 merged; d7cd gate passed, counterreset0. No user blocker.
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- **Full d7cdffb7 gate PASSED:**6155PASS/12exactknown/2skip;goldens21known/configured2retries/no unexpected or unused/helper0; nativeFIRSTPAIRPASS. Analyzer431/449zeroNew/Python55/layer56→56+0/-0 cap77. AST204/133/161/23/0 identitydelta0/0; physical1741/6387/11539/3322/2908. WindowsZIP ad63f723085b5bce97b20038893b3d1ab584920be64fcedeba6e993524db177a; ARM64APK0f04d940552d70af6aa315aedd69aac2a0791bec070dfba56cec018032f9552f. ABI verified; exact source/tree manifests. Counterreset0. Did we make a difference? Three integrated slices pass the established safety gate; final architecture and new-device acceptance are not claimed.
 
 - #221 merged **d7cdffb7**, exacta691/treecad540 independent26PASS and union accepted, allCI passed. Author initial24PASS2ERROR fixture guard conflict retained; one expectSync correction yielded26PASS. Analyzer431 unchanged/scoped61 unchanged/layer56 unchanged. Production+98/host+4, Leaves0. Did we make a difference? Resume verification jobs now have explicit cancellation and retirement ownership; full player separation remains open. Third merge triggers frozen d7cd full gate; no new device proof.
 
