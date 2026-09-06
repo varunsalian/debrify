@@ -44,7 +44,7 @@ void main() {
     await root.delete(recursive: true);
   });
 
-  testWidgets('one selection notification coalesces host and keyword builds', (
+  testWidgets('one selection notification rebuilds keyword without rebuilding host', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -165,12 +165,12 @@ void main() {
       if (element.widget is KeywordSearchScreen) childBuilds++;
     };
     try {
-      // One synchronous lib notification reaches both existing subscriptions.
+      // One synchronous lib notification reaches the child paint subscription.
       // Measure actual builds, not setState calls or listener registrations.
       controller.toggleSelection(controller.kwResults.single);
       expect(notifications, 1);
       await tester.pump();
-      expect(hostBuilds, 1);
+      expect(hostBuilds, 0);
       expect(childBuilds, 1);
       expect(find.text('Add · 1'), findsOneWidget);
       expect(find.text('None'), findsOneWidget);
@@ -180,7 +180,7 @@ void main() {
 
       // The same notification must not cause a second build next frame.
       await tester.pump(const Duration(milliseconds: 16));
-      expect(hostBuilds, 1);
+      expect(hostBuilds, 0);
       expect(childBuilds, 1);
       expect(notifications, 1);
       expect(focusedNode.hasFocus, isTrue);

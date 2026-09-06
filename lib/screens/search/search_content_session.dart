@@ -175,7 +175,6 @@ class SearchContentSession {
       onCompleteSubmitFocus: completeSearchSubmitFocus,
       onRestoreQuery: (q) => searchController.text = q,
     );
-    keyword.addListener(onKeywordChanged);
     cwNodes.onRequestRowFocus = (nodes, index) =>
         boardRuntime.requestRowFocus(nodes, index);
     cw = ContinueWatchingController(
@@ -330,10 +329,6 @@ class SearchContentSession {
   }
 
   void onCatalogSearchChanged() {
-    if (mounted) surface.commit(() {});
-  }
-
-  void onKeywordChanged() {
     if (mounted) surface.commit(() {});
   }
 

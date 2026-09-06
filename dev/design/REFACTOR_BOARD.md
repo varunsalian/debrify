@@ -1,12 +1,12 @@
 # Refactor board
 
-## Current roadmap — September 6, merged production main 9e809c97
+## Current roadmap — September 6, merged production main 161637b1
 
 **Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
 
 ### God-file line counts — original → merged main
 
-- **Search:** 19,070 → **6,388** (12,682 fewer)
+- **Search:** 19,070 → **6,387** (12,683 fewer)
 - **Player:** 16,278 → **11,539** (4,739 fewer)
 - **Magic TV:** 10,716 → **3,322** (7,394 fewer)
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
@@ -77,15 +77,17 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### Who owns the next action
 
-- **Cicero:** d7cd gate passed; running the independent hero eight-suite production batch.
-- **Locke:** hero draft PR and current-main union proof. Product8827/docs454f; author136PASS/one unchanged known sidebar failure, three negative probes caught and pristine guards passed. No runtime during gate.
-- **Arendt:** re-pin unapplied renderer OS-admission proposal against merged d7cdffb7; no application/runtime.
-- **Confucius:** independent review of that exact seam proposal; renderer async choreography remains unrun, no held experiment restart.
-- **Parent:** merges, grants, board/notes. #221 merged; d7cd gate passed, counterreset0. No user blocker.
+- **Locke:** preparing Canvas tab-window origin tests; no production move yet.
+- **Cicero:** Canvas source/behavior review checklist, then independent fixture review.
+- **Arendt:** read-only admission audit for retained Storage getVideoPlaybackState ownership and evidence.
+- **Confucius:** read-only candidate review for one substantive remaining Q1 dependency boundary.
+- **Parent:** #223 merged161637b1 after independent88PASS and allCI; counter2 since d7cd gate. Renderer tracing remains HOLD after three failed attempts; no new renderer run authorized. No user blocker.
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- #223 merged **161637b1**, exact9cde unionaccepted/independent88PASS/allCIgreen. Keyword child still rebuilds once while redundant host rebuild is removed; other live focus/mode/filter behavior preserved. Source8originPASS and first4/4fixture failures retained; naturalstartup/Discoverlatedefault gaps explicit. Host6388→6387/production-7/zero638credit. Did we make a difference? One whole-host notification edge is removed, not relocated. Canvas layout preparation addresses next substantive slice; counter2 sinced7cd.
 
 - #222 merged **9e809c97**, exacte5cb independent136PASS/one exactknownsidebar failure, sourceunionaccepted/allCIpassed. Hero part1993→947, independentowner1060,16inputs0callbacks, preservedmemo/nativeboundaries. Host6387→6388/production+15/Leaves0; shapeallowance162 unchanged with3negativeprobes caught. Did we make a difference? Passive hero ownership no longer depends on the host library; keyword dual notification and638shortfall remain OPEN. Counter1 sinced7cd. Keywordorigin68d5678casesgreen awaitingreadonlyreview; renderer seam9add6green, hostadmissionred beforefallback on clientconstruction.
 

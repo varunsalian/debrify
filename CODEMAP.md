@@ -113,6 +113,8 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   override/dispatch wrapper over its own private Stateful composition, with no legacy Search State.
   Home/Search and Discover both own a `search/search_content_session.dart` (`SearchContentSession`)
   instance: board/catalog/keyword/CW/full Fav construction, shared data, auth and refresh ordering.
+  KeywordSearchScreen owns keyword notification repaint; the session no longer forwards it to
+  surface.commit. Other session listeners and live host focus reads remain unchanged.
   Actions are `search/search_content_actions.dart` (`SearchContentActions`), not session UI policy.
   Direct legacy Discover constructors use a compatibility State; Home State identity is retained. Shell contracts
   live in `lib/screens/search/search_screen_shells.dart`.
