@@ -1045,7 +1045,6 @@ class _SearchScreenState extends State<SearchScreenHost>
       _variantKey,
       modeIsKeyword: _mode == SearchBoardMode.keyword,
     );
-    _keyword.removeListener(_content.onKeywordChanged);
     _keyword.dispose();
     _cw.removeListener(_content.onContinueWatchingChanged);
     _cw.dispose();

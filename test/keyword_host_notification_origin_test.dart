@@ -28,13 +28,14 @@ import 'discover_screen_origin_test.dart'
 import 'favourites_rows_origin_test.dart'
     show prepareFavourites, pumpFavourites;
 
-// PREP ONLY. Origin main545f18c0. Defaults cases explicitly re-invoke the
+// Origin68d5670d pins host1/child1; retirement expects host0/child1.
+// Defaults cases explicitly re-invoke the
 // public controller after real results; neither is natural-startup evidence.
 // Eight tests separate lifetimes within the six approved scenario groups.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('origin held submission mounts toolbar; notification builds both',
+  testWidgets('held submission mounts toolbar; notification rebuilds child only',
       (tester) async {
     await _prepare(tester);
     final transport = _SearchTransport();
@@ -77,13 +78,13 @@ void main() {
         c.toggleSelection(c.kwResults.first);
         expect(notifications, 1);
         await tester.pump();
-        expect(host, 1); // Origin, NOT the future retirement expectation.
+        expect(host, 0); // Intended retirement delta; origin commit remains 1.
         expect(child, 1);
         expect(find.text('Add · 1'), findsOneWidget);
         expect(node.hasFocus, isTrue);
         expect(c.kwToolbarNodes.first, same(node));
         await tester.pump(const Duration(milliseconds: 16));
-        expect(host, 1);
+        expect(host, 0);
         expect(child, 1);
         expect(transport.requests, hasLength(1));
       } finally {

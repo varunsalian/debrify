@@ -267,7 +267,6 @@ class _DiscoverScreenState extends State<_DiscoverComposition>
       widget.variantKey,
       modeIsKeyword: _content.mode == SearchBoardMode.keyword,
     );
-    _content.keyword.removeListener(_content.onKeywordChanged);
     _content.keyword.dispose();
     _content.cw.removeListener(_content.onContinueWatchingChanged);
     _content.cw.dispose();
