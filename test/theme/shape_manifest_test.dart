@@ -62,6 +62,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/search/search_stage_widgets.dart': 0,
   'lib/screens/search/stages/tonight_stage_widgets.dart': 0,
   'lib/screens/search_screen.dart': 0,
+  'lib/screens/search/stages/canvas_board_stage.dart': 0,
   'lib/screens/see_all/catalog_see_all_screen.dart': 0,
   'lib/screens/settings/app_theme_page.dart': 1,
   'lib/screens/settings/debrify_tv_settings_page.dart': 0,
@@ -148,6 +149,12 @@ void main() {
           reason: '${entry.key}: ${entry.value} -> $found; use shape tokens');
     });
   }
+
+  test('Canvas tab owner remains swept with its moved token', () {
+    const path = 'lib/screens/search/stages/canvas_board_stage.dart';
+    expect(kShapeResidue[path], 0);
+    expect('app.shape.br(2)'.allMatches(File(path).readAsStringSync()), hasLength(1));
+  });
 
   test('Hero radius-only owner remains explicitly inventoried', () {
     expect(kRadiusOnlyResidue, {
