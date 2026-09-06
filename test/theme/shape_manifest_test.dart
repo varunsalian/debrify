@@ -56,7 +56,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/search/search_card_widgets.dart': 0,
   'lib/screens/search/favourite_art_cell.dart': 0,
   'lib/screens/search/board_cell.dart': 0,
-  'lib/screens/search/search_hero_widgets.dart': 1,
+  'lib/screens/search/search_hero_widgets.dart': 0,
   'lib/screens/search/trailer_status_chips.dart': 1,
   'lib/screens/search/search_sources.dart': 3,
   'lib/screens/search/search_stage_widgets.dart': 0,
@@ -120,6 +120,11 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/youtube/youtube_video_card.dart': 0,
 };
 
+// Moved literal-only owner: guarded for radius growth, not claimed as swept.
+const Map<String, int> kRadiusOnlyResidue = {
+  'lib/screens/search/hero_spotlight.dart': 1,
+};
+
 /// Both spellings of a literal circular radius. `BorderRadius.all(
 /// Radius.circular(8))` is the same site wearing a different constructor, and
 /// counting only the short form would let a conversion be undone by rewriting
@@ -130,7 +135,10 @@ final _radius = RegExp(
 );
 
 void main() {
-  for (final entry in kShapeResidue.entries) {
+  for (final entry in [
+    ...kShapeResidue.entries,
+    ...kRadiusOnlyResidue.entries,
+  ]) {
     test('no swept file grows a new bare radius: ${entry.key}', () {
       final file = File(entry.key);
       expect(file.existsSync(), isTrue,
@@ -140,6 +148,15 @@ void main() {
           reason: '${entry.key}: ${entry.value} -> $found; use shape tokens');
     });
   }
+
+  test('Hero radius-only owner remains explicitly inventoried', () {
+    expect(kRadiusOnlyResidue, {
+      'lib/screens/search/hero_spotlight.dart': 1,
+    });
+    expect(kShapeResidue['lib/screens/search/search_hero_widgets.dart'], 0);
+    expect(kShapeResidue.containsKey('lib/screens/search/hero_spotlight.dart'),
+        isFalse);
+  });
 
   test('sidebar bare radius debt does not grow beyond one existing site', () {
     // The sidebar's zero-residue case remains an exact allowlisted failure.

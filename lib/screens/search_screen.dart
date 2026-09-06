@@ -55,6 +55,7 @@ import 'search/fav_row.dart';
 import 'search/hero_presenter.dart';
 import 'search/discover_lifecycle.dart';
 import 'search/trailer_status_chips.dart';
+import 'search/hero_spotlight.dart';
 import '../services/filtered_catalog_pager.dart';
 import '../services/hide_watched_prefs.dart';
 import '../services/watched_status_service.dart';
@@ -5283,7 +5284,7 @@ class _SearchScreenState extends State<SearchScreenHost>
                         return ValueListenableBuilder<StremioMeta?>(
                           valueListenable: _heroEnriched,
                           builder: (context, enriched, __) {
-                            return _HeroSpotlight(
+                            return HeroSpotlight(
                               item: item,
                               background: item.background?.isNotEmpty == true
                                   ? item.background
@@ -5347,7 +5348,7 @@ class _SearchScreenState extends State<SearchScreenHost>
                               // An IPTV favourite took the boxed region — this
                               // item's colour field/identity text describe
                               // something that isn't playing anymore, so hide
-                              // them (see [_HeroSpotlight.liveTakeover]).
+                              // them (see [HeroSpotlight.liveTakeover]).
                               liveTakeover: _heroTrailerActive
                                   ? _heroLiveTakeover
                                   : null,

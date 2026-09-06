@@ -25,7 +25,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 | `lib/services/remote_control/remote_command_router.dart` | 5 100 |
 
 Sources is an independent library: `lib/screens/search/search_sources.dart` (2 804).
-Search `part` files: `lib/screens/search/search_hero_widgets.dart` (2 261),
+Search `part` files: `lib/screens/search/search_hero_widgets.dart` (947; retained native Hero layers),
 `lib/screens/search/search_stage_widgets.dart` (1 699),
 `lib/screens/search/search_card_widgets.dart` (1 198).
 TV Home stage parts (5 files, 1 311): `lib/screens/search/stages/*_board_stage.dart`
@@ -196,6 +196,10 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   `lib/screens/search/trailer_status_chips.dart`, also used by existing Home consumers.
   No view/chip import of the legacy host. The earlier presentation prerequisite was
   419 host Leaves / production +37; standalone ownership now comes from composition adoption.
+  Passive `HeroSpotlight` lives in `search/hero_spotlight.dart` (1 060): unchanged
+  16 inputs, private title-art memo and single shared region/feather helpers.
+  Native trailer/live layers remain in `search_hero_widgets.dart`; no engine move.
+  Host +1 / whole production +15, zero Leaves/638 credit; strict composition remains open.
   Hero state, focus-rest/enrichment timers, ambient trailers/live IPTV and shell
   art/tint/chrome relays live in `lib/screens/search/hero_presenter.dart`
   (`HeroPresenter`, `HeroEnvironment`). This remains screen/UI presentation,
