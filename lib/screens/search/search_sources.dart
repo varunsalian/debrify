@@ -1,7 +1,34 @@
-part of '../search_screen.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../models/advanced_search_selection.dart';
+import '../../models/torrent.dart';
+import '../../models/torrent_filter_state.dart';
+import '../../models/stremio_addon.dart';
+import '../../services/storage/quick_play_policy_prefs.dart';
+import '../../services/storage/provider_credential_prefs.dart';
+import '../../services/cloud/cloud_provider_registry.dart';
+import '../../services/engine/dynamic_engine.dart';
+import '../../services/engine/settings_manager.dart';
+import '../../services/local_series_completion_service.dart';
+import '../../models/profiles/profile_policy.dart';
+import '../../services/profiles/profile_policy_guard.dart';
+import '../../services/series_source_service.dart';
+import '../../services/source_priority.dart';
+import '../../services/stremio_service.dart';
+import '../../services/storage_service.dart';
+import '../../services/torrent_playback_service.dart';
+import '../../services/torrent_service.dart';
+import '../../theme/app_theme_scope.dart';
+import '../../utils/dialog_tap_guard.dart';
+import '../../utils/format_tag_detector.dart';
+import '../../utils/torrent_filter_matcher.dart';
+import '../../utils/tv_keys.dart';
+import '../../widgets/source_row.dart';
+import '../../widgets/torrent_filters_sheet.dart';
+import '../../widgets/tv_text_field.dart';
 
-/// Temporary public entry to the existing private Sources widget. This remains
-/// part of the legacy search library until real G17 owns the route independently.
+/// Public entry to the private Sources route owned by this library.
 Widget buildSearchSources({
   required AdvancedSearchSelection selection,
   required PlaybackMeta meta,
@@ -2595,14 +2622,15 @@ Widget _srcDialogLoading(BuildContext context) => SizedBox(
 
 /// Enable/disable the search-capable Stremio addons queried by catalog search.
 /// Stores the DISABLED set (empty = all on) via StorageService so it sticks.
-class _CatalogSourcesDialog extends StatefulWidget {
-  const _CatalogSourcesDialog();
+class CatalogSourcesDialog extends StatefulWidget {
+  // ignore: use_key_in_widget_constructors
+  const CatalogSourcesDialog();
 
   @override
-  State<_CatalogSourcesDialog> createState() => _CatalogSourcesDialogState();
+  State<CatalogSourcesDialog> createState() => _CatalogSourcesDialogState();
 }
 
-class _CatalogSourcesDialogState extends State<_CatalogSourcesDialog> {
+class _CatalogSourcesDialogState extends State<CatalogSourcesDialog> {
   List<StremioAddon> _addons = [];
   Set<String> _disabled = {};
   bool _loading = true;
@@ -2686,14 +2714,15 @@ class _CatalogSourcesDialogState extends State<_CatalogSourcesDialog> {
   }
 }
 
-class _KeywordSourcesDialog extends StatefulWidget {
-  const _KeywordSourcesDialog();
+class KeywordSourcesDialog extends StatefulWidget {
+  // ignore: use_key_in_widget_constructors
+  const KeywordSourcesDialog();
 
   @override
-  State<_KeywordSourcesDialog> createState() => _KeywordSourcesDialogState();
+  State<KeywordSourcesDialog> createState() => _KeywordSourcesDialogState();
 }
 
-class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
+class _KeywordSourcesDialogState extends State<KeywordSourcesDialog> {
   final SettingsManager _settings = SettingsManager();
   List<DynamicEngine> _engines = [];
   final Map<String, bool> _enabled = {};

@@ -1,26 +1,27 @@
 # Refactor board
 
-## Current roadmap — September 6, merged production main 13cd4029
+## Current roadmap — September 6, merged production main d7cdffb7
 
 **Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
 
 ### God-file line counts — original → merged main
 
-- **Search:** 19,070 → **6,403** (12,667 fewer)
-- **Player:** 16,278 → **11,535** (4,743 fewer)
+- **Search:** 19,070 → **6,387** (12,683 fewer)
+- **Player:** 16,278 → **11,539** (4,739 fewer)
 - **Magic TV:** 10,716 → **3,322** (7,394 fewer)
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
 - **Settings:** 7,905 → **2,908** (4,997 fewer)
 
-Physical lines, not whole-project deletions. Last full gate: **b6a71b0e PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #216/#217/#218 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
+Physical lines, not whole-project deletions. Last full gate: **d7cdffb7 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #219/#220/#221 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
 
 ### Do next — actual execution order
 
 - [x] **Merge #218, shared TV focus owner.** Merged b6a71b0e after independent22 tests, exact union review and all CI checks passed.
 - [x] **Run full integrated gate at b6a71b0e — PASSED.** #216/#217/#218 are three production merges sincebc017. Actual-main full tests, goldens, analysis, layering/forwarder ledger, native pair, Windows and ARM64 builds. Record known failures separately.
 - [x] **Merge #219, public Atrium stage, after the passing integrated gate.** Exact56ff union and allCI passed.
-- [ ] **Locke + parent: integrate and merge Sources #220.** Independent145PASS/one existing known shape failure, no new analyzer issues; final docs accepted. Integrate latest main after #219, preserve both changes, then fresh exact-head CI.
-- [ ] **Parent + reviewers: choose the next player/native ownership step from recorded evidence.** Tracker terminal experiment is stopped after four failed runs; no automatic fifth attempt or timer/pump workaround.
+- [x] **Merge Sources #220.** Merged9d4cf518: exacta2e4 union independently accepted; all three CI checks passed. Independent145PASS/one existing known shape failure retained. Counter2 sinceb6a; next production merge triggers full gate.
+- [x] **Merge player verification lifetime correction #221.** Merged d7cdffb7 after independent26PASS, unchanged analyzer/layering and exact-head CI passed. Production+98/host+4, zero extraction credit; original tracker experiment remains stopped.
+- [x] **Run full integrated gate at exact d7cdffb7 — PASSED.** Generic6155PASS/12exactknown/2skip; goldens21known, no unexpected/unused; nativefirstpair, Windows/ARM64, analyzer/Python/layer/AST passed. Counterreset0. Hero independent8 production batch released.
 
 ### 1. Finish Search stage layouts and final shared composition — OPEN
 
@@ -28,7 +29,7 @@ Physical lines, not whole-project deletions. Last full gate: **b6a71b0e PASSED**
 - [x] Diagnose and fix Atrium overflow in #216; independent geometry tests and CI passed.
 - [x] Pin Atrium navigation on the fixed original path: three cases passed before the move.
 - [x] **Merge seventh public stage in #219.** Merged13cd4029 after independent28 checks and exact CI passed. Its seven explicit callbacks remain; +60 host/+35 production lines are growth, not extraction credit.
-- [ ] **Finish Sources route/library ownership.** Current 2,775-line part and two consumers importing the legacy host remain. Proposed four-file boundary uses the existing public route API; inspect closure and pin lifecycle before approval.
+- [x] **Finish Sources route/library ownership.** #220 makes the existing owner a standalone library and redirects two consumers, preserving seven original behavior pins. Host-16/production+12; no 2,775-line extraction or stage-target credit.
 - [ ] **Resolve the 1,993-line hero part against the existing part-size criterion.** Native-bearing content remains; no extraction grant or blanket waiver.
 - [ ] **Close final shared-composition and original rebuild obligations with evidence.** Retained callback inventories are not automatically unused forwarders. Preserve accepted Mosaic focus/prefetch policy.
 - [ ] **Reconcile the existing 1,400-line stage target.** Recorded762 leaves /638 short remains explicit. Do not count already-external part lines, wrapper growth or the overflow fix toward it.
@@ -76,16 +77,21 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### Who owns the next action
 
-- **Locke:** #219 merged; #220 integrating with reviewed Sources behavior preserved. No edits to Q1 lanes.
-- **Cicero:** #219 independent review complete; next full integrated gate after #218. Tracker experiment stopped and documented.
-- **Arendt:** #218 merged; icon/subtitle proposals held for explicit compatibility/guard limitations, no implementation assigned.
-- **Confucius:** #217/#218 review complete; assigned read-only Sources origin evidence review while Cicero runs the gate. Upstream stays local.
-- **Parent:** merge queue, grants, coordination, this board and NOTES. **No task is waiting on the user.** CI/gate dependencies are stated above; available reviewers are not mislabeled as actively coding.
-
+- **Cicero:** d7cd gate passed; running the independent hero eight-suite production batch.
+- **Locke:** hero draft PR and current-main union proof. Product8827/docs454f; author136PASS/one unchanged known sidebar failure, three negative probes caught and pristine guards passed. No runtime during gate.
+- **Arendt:** re-pin unapplied renderer OS-admission proposal against merged d7cdffb7; no application/runtime.
+- **Confucius:** independent review of that exact seam proposal; renderer async choreography remains unrun, no held experiment restart.
+- **Parent:** merges, grants, board/notes. #221 merged; d7cd gate passed, counterreset0. No user blocker.
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- **Full d7cdffb7 gate PASSED:**6155PASS/12exactknown/2skip;goldens21known/configured2retries/no unexpected or unused/helper0; nativeFIRSTPAIRPASS. Analyzer431/449zeroNew/Python55/layer56→56+0/-0 cap77. AST204/133/161/23/0 identitydelta0/0; physical1741/6387/11539/3322/2908. WindowsZIP ad63f723085b5bce97b20038893b3d1ab584920be64fcedeba6e993524db177a; ARM64APK0f04d940552d70af6aa315aedd69aac2a0791bec070dfba56cec018032f9552f. ABI verified; exact source/tree manifests. Counterreset0. Did we make a difference? Three integrated slices pass the established safety gate; final architecture and new-device acceptance are not claimed.
+
+- #221 merged **d7cdffb7**, exacta691/treecad540 independent26PASS and union accepted, allCI passed. Author initial24PASS2ERROR fixture guard conflict retained; one expectSync correction yielded26PASS. Analyzer431 unchanged/scoped61 unchanged/layer56 unchanged. Production+98/host+4, Leaves0. Did we make a difference? Resume verification jobs now have explicit cancellation and retirement ownership; full player separation remains open. Third merge triggers frozen d7cd full gate; no new device proof.
+
+- #220 merged **9d4cf518**, exacta2e4 independent union accepted and allCI passed. Independent145PASS/one existing known shape failure retained. Search6403→6387; production+12, zero stage-target credit. Did we make a difference? Sources owns its standalone library and two consumers no longer import the host. Hero/final composition remain open. Counter2 sinceb6a.
 
 - #219 merged **13cd4029**, exact56ff944d, independent28PASS/unionaccepted/allCIgreen afterb6agate. Allsevenstages nowpublicwidgets; Atrium actualLayoutBuilder/measurement ownership with7retainedcallbacks. Host+60whole+35 ZERO250credit; strictfinalcomposition/638target remainopen. Did we make a difference? Last stage/privatehostpart dependency removed; growth countedhonestly. Counter1sinceb6a. #220 independent145PASS+1existingknownshapeFAIL/docsaccepted nowintegratesmain, no rawgreenclaim.
 

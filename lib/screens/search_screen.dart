@@ -1,4 +1,3 @@
-import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
 import 'search/favourite_art_cell.dart';
 import 'search/stages/stage_favourite_cells.dart';
 import 'search/board_cell.dart';
@@ -12,7 +11,6 @@ import 'search/stages/tonight_board_stage.dart';
 import 'search/stages/tonight_stage_content.dart';
 import 'search/stages/stage_shelf_content.dart';
 import 'search/stages/tonight_stage_widgets.dart';
-import 'package:debrify/services/storage/provider_credential_prefs.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui show ImageFilter;
@@ -23,7 +21,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
 import '../utils/home_rail_metrics.dart';
 import '../utils/platform_util.dart';
@@ -31,12 +28,8 @@ import '../models/home_collection.dart';
 import '../models/iptv_playlist.dart';
 import '../models/stremio_addon.dart';
 import '../models/stremio_tv/stremio_tv_channel.dart';
-import '../models/torrent.dart';
-import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
 import '../services/discover_prefs.dart';
-import '../services/engine/dynamic_engine.dart';
-import '../services/engine/settings_manager.dart';
 import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
 import '../services/home_list_rows.dart';
@@ -68,27 +61,19 @@ import '../services/hide_watched_prefs.dart';
 import '../services/watched_status_service.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
-import '../services/cloud/cloud_provider_registry.dart';
 import '../services/main_page_bridge.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/profiles/profile_session_memory.dart';
-import '../services/series_source_service.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
-import '../services/local_series_completion_service.dart';
-import '../services/source_priority.dart';
 import 'package:debrify/services/storage/home_prefs.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
-import '../services/torrent_service.dart';
 import '../services/playback/catalog_play_resolver.dart';
-import '../utils/dialog_tap_guard.dart';
-import '../utils/format_tag_detector.dart';
-import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/app_route_observer.dart';
@@ -100,8 +85,6 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/skeleton_poster.dart';
-import '../widgets/source_row.dart';
-import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/tv_text_field.dart';
 import 'collections/collection_folder_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
@@ -122,7 +105,8 @@ import 'settings/tv_home_style_page.dart'
 export 'search/fav_row_ref.dart' show FavKind, FavRowRef;
 export 'search/favourite_art_cell.dart' show ArtPoster, FavArtCell;
 
-part 'search/search_sources.dart';
+import 'search/search_sources.dart' show CatalogSourcesDialog, KeywordSourcesDialog;
+export 'search/search_sources.dart' show buildSearchSources;
 part 'search/search_card_widgets.dart';
 part 'search/search_hero_widgets.dart';
 part 'search/search_stage_widgets.dart';
@@ -4672,7 +4656,7 @@ class _SearchScreenState extends State<SearchScreenHost>
             ),
         onOpenSources: () => showDialog<void>(
           context: context,
-          builder: (_) => const _KeywordSourcesDialog(),
+          builder: (_) => const KeywordSourcesDialog(),
         ),
         onFocusSearchField: _focusSearchFieldAtEnd,
         onFocusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
@@ -5056,7 +5040,7 @@ class _SearchScreenState extends State<SearchScreenHost>
   Future<void> _openCatalogSources() async {
     await showDialog<void>(
       context: context,
-      builder: (_) => const _CatalogSourcesDialog(),
+      builder: (_) => const CatalogSourcesDialog(),
     );
     if (!mounted) return;
     if (_catalogQuery.isNotEmpty) {

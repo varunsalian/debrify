@@ -24,8 +24,8 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 | `lib/services/torrent_playback_service.dart` | 5 340 |
 | `lib/services/remote_control/remote_command_router.dart` | 5 100 |
 
-Search `part` files: `lib/screens/search/search_sources.dart` (3 163),
-`lib/screens/search/search_hero_widgets.dart` (947; retained native Hero layers),
+Sources is an independent library: `lib/screens/search/search_sources.dart` (2 804).
+Search `part` files: `lib/screens/search/search_hero_widgets.dart` (947; retained native Hero layers),
 `lib/screens/search/search_stage_widgets.dart` (1 699),
 `lib/screens/search/search_card_widgets.dart` (1 198).
 TV Home stage parts (5 files, 1 311): `lib/screens/search/stages/*_board_stage.dart`
@@ -123,9 +123,15 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   Selection metadata/art, addon identity, service launch and Sources navigation are
   `lib/screens/search/selection_playback_owner.dart` (`SelectionPlaybackOwner`,
   `SelectionPlaybackRoutes`: live TV read, bound refresh, full refresh).
-  `buildSearchSources` in `lib/screens/search/search_sources.dart` forwards to the
-  unchanged private Sources widget. Owner → legacy host library → owner remains
-  a legal library dependency despite standalone Discover State ownership.
+  `lib/screens/search/search_sources.dart` independently owns the unchanged private
+  Sources route, `buildSearchSources`, `CatalogSourcesDialog` and `KeywordSourcesDialog`.
+  `SearchContentActions` and `SelectionPlaybackOwner` import the factory directly;
+  the host re-exports it for existing callers and imports the two dialog widgets.
+  Repository-local import/export/part traversal finds no Sources-to-host or
+  Sources-to-itself backpath; this is not a whole-project acyclicity claim.
+  Host **−16**, whole production **+12** (product `daaec36c`); no 2 775-line host
+  credit. Strict Search composition remains OPEN. The compatibility re-export
+  expires only with separately reviewed public caller migration at phase completion.
   `SearchContentActions.playSelection` retains async entry/listener try/finally and delegated
   actual State.mounted; `browseSelection` keeps logging/empty-ID guard before lazy context.
   Source edit/add dialogs are `lib/widgets/sources/source_binding_dialogs.dart`

@@ -106,6 +106,34 @@ class ResumeController {
   ResumeController(this.session);
 
   final ResumeSession session;
+  final Set<_ResumeVerificationJob> _resumeVerificationJobs = {};
+  bool _resumeVerificationDisposed = false;
+
+  /// Stops the current jobs synchronously; acknowledges their final retirement.
+  /// An already-issued seek must settle before its job can retire.
+  Future<void> cancelResumeVerification() {
+    final jobs = _resumeVerificationJobs.toList(growable: false);
+    for (final job in jobs) {
+      job.cancel();
+    }
+    return Future.wait<void>(jobs.map((job) => job.settled)).then<void>((_) {});
+  }
+
+  /// Prevents later verifier admission, including after a held initial seek.
+  Future<void> dispose() {
+    _resumeVerificationDisposed = true;
+    return cancelResumeVerification();
+  }
+
+  Future<void> _runResumeVerification(_ResumeVerificationJob job) async {
+    try {
+      await _verifyResumeLanding(job.targetMs, job.epoch, job);
+    } finally {
+      // A retiring job must never remove or cancel a newer job.
+      _resumeVerificationJobs.remove(job);
+      job.finish();
+    }
+  }
 
   ResumeContext get context {
     PlaylistEntry? entry;
@@ -465,7 +493,10 @@ class ResumeController {
     // "Checking stream…" gate does not come down until it returns. Blocking
     // here would hold that overlay over the video for the whole verification
     // window on exactly the runs that already went wrong.
-    unawaited(_verifyResumeLanding(targetMs, session.resumeVerifyEpoch));
+    if (_resumeVerificationDisposed) return;
+    final job = _ResumeVerificationJob(targetMs, session.resumeVerifyEpoch);
+    _resumeVerificationJobs.add(job);
+    unawaited(_runResumeVerification(job));
   }
 
   /// Confirms a startup resume seek took, re-issuing it once if it did not.
@@ -475,7 +506,12 @@ class ResumeController {
   /// seek), or the position reached the target — so a late retry can never
   /// yank playback away from where the user put it or seek a replacement
   /// stream it was never watching.
-  Future<void> _verifyResumeLanding(int targetMs, int epoch) async {
+  Future<void> _verifyResumeLanding(
+    int targetMs,
+    int epoch,
+    _ResumeVerificationJob job,
+  ) async {
+    if (job.cancelled) return;
     // A viewer who sees playback start from 0 decides "broken" within a couple
     // of seconds — a single retry after 5s (the first version of this) lost
     // the race against the user's own quit on the observed phone repro. Check
@@ -489,9 +525,10 @@ class ResumeController {
       Duration(seconds: 3),
     ];
     for (var attempt = 0; attempt < waits.length; attempt++) {
-      if (await _resumeSeekLanded(targetMs, epoch, timeout: waits[attempt])) {
+      if (await _resumeSeekLanded(targetMs, epoch, job, timeout: waits[attempt])) {
         return;
       }
+      if (job.cancelled) return;
       if (!session.isMounted || session.screenDisposed) return;
       if (epoch != session.resumeVerifyEpoch) return;
       if (session.writeGuard.pendingTargetMs != targetMs) return;
@@ -501,8 +538,10 @@ class ResumeController {
         'target=${targetMs}ms) — re-issuing (${attempt + 1}/${waits.length})',
       );
       await session.seek(Duration(milliseconds: targetMs));
+      if (job.cancelled) return;
     }
-    if (await _resumeSeekLanded(targetMs, epoch)) return;
+    if (await _resumeSeekLanded(targetMs, epoch, job)) return;
+    if (job.cancelled) return;
     // Still adrift: leave playback where it is rather than fighting the stream.
     // The write guard keeps the stored resume point intact either way.
     debugPrint(
@@ -519,9 +558,11 @@ class ResumeController {
   /// epoch moved on, the user seeked, or another item loaded.
   Future<bool> _resumeSeekLanded(
     int targetMs,
-    int epoch, {
+    int epoch,
+    _ResumeVerificationJob job, {
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    if (job.cancelled) return true;
     const interval = Duration(milliseconds: 200);
     // mpv can MASK a seek: it reports the target position for a moment, then
     // a cold debrid stream answers the actual seek by restarting at 0 — the
@@ -534,11 +575,13 @@ class ResumeController {
         targetMs - session.writeGuard.toleranceMs;
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
+      if (job.cancelled) return true;
       if (!session.isMounted || session.screenDisposed) return true;
       if (epoch != session.resumeVerifyEpoch) return true;
       if (session.writeGuard.pendingTargetMs != targetMs) return true;
       if (atTarget()) {
-        await Future<void>.delayed(confirmDelay);
+        final confirmation = await job.wait(confirmDelay);
+        if (job.cancelled || confirmation == _ResumeWaitOutcome.stop) return true;
         if (!session.isMounted || session.screenDisposed) return true;
         if (epoch != session.resumeVerifyEpoch) return true;
         if (session.writeGuard.pendingTargetMs != targetMs) return true;
@@ -549,8 +592,10 @@ class ResumeController {
         );
         continue;
       }
-      await Future<void>.delayed(interval);
+      final poll = await job.wait(interval);
+      if (job.cancelled || poll == _ResumeWaitOutcome.stop) return true;
     }
+    if (job.cancelled) return true;
     return false;
   }
 
@@ -866,5 +911,54 @@ class ResumeController {
       'durationMs': dur.inMilliseconds,
       'updatedAt': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+}
+
+enum _ResumeWaitOutcome { elapsed, stop }
+
+/// One verification run owns its waits through completion or cancellation.
+class _ResumeVerificationJob {
+  _ResumeVerificationJob(this.targetMs, this.epoch);
+
+  final int targetMs;
+  final int epoch;
+  bool _cancelled = false;
+  Timer? _timer;
+  Completer<_ResumeWaitOutcome>? _waiting;
+  final Completer<void> _settled = Completer<void>();
+
+  bool get cancelled => _cancelled;
+  Future<void> get settled => _settled.future;
+
+  Future<_ResumeWaitOutcome> wait(Duration duration) async {
+    if (_cancelled) return _ResumeWaitOutcome.stop;
+    final waiting = Completer<_ResumeWaitOutcome>();
+    _waiting = waiting;
+    _timer = Timer(duration, () {
+      if (!waiting.isCompleted) waiting.complete(_ResumeWaitOutcome.elapsed);
+    });
+    try {
+      final outcome = await waiting.future;
+      // Cancellation wins even if the timer fired before this continuation.
+      return _cancelled ? _ResumeWaitOutcome.stop : outcome;
+    } finally {
+      if (identical(_waiting, waiting)) {
+        _waiting = null;
+        _timer = null;
+      }
+    }
+  }
+
+  void cancel() {
+    _cancelled = true;
+    _timer?.cancel();
+    final waiting = _waiting;
+    if (waiting != null && !waiting.isCompleted) {
+      waiting.complete(_ResumeWaitOutcome.stop);
+    }
+  }
+
+  void finish() {
+    if (!_settled.isCompleted) _settled.complete();
   }
 }

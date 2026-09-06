@@ -3262,6 +3262,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // every outgoing checkpoint save runs BEFORE its new open, and every path
     // that re-protects (_seekForResume) re-arms AFTER it.
     _resumeVerifyEpoch++;
+    unawaited(_resume.cancelResumeVerification());
     _resumeWriteGuard.clear();
     _activeOpenedMedia = media;
     _activeMediaShouldPlay = desiredPlay ?? play;
@@ -5876,6 +5877,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // switch paths below checkpoint the outgoing position, and that save must
     // still be protected (they substitute the held target where needed).
     _resumeVerifyEpoch++;
+    unawaited(_resume.cancelResumeVerification());
     // Live IPTV channel: the movie pipeline below seeks to the previous
     // position and reloads subtitles — both meaningless (and harmful) for a
     // live stream. Route to the dedicated live switch instead.
@@ -7085,6 +7087,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _tvScrubGeneration++;
     _tvAbandonScrub();
     _resumeVerifyEpoch++;
+    unawaited(_resume.cancelResumeVerification());
     if (_activePlaylist == null ||
         index < 0 ||
         index >= _activePlaylist!.length) {
@@ -8142,6 +8145,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
     _screenDisposed = true;
+    unawaited(_resume.dispose());
     final subtitleAutoSync = _subtitleAutoSync;
     _subtitleAutoSync = null;
     if (_playerCreated) {

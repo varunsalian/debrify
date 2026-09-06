@@ -18,7 +18,7 @@ import '../../widgets/trakt/trakt_menu_helpers.dart';
 import '../../services/simkl/simkl_menu_helpers.dart';
 import '../episodes_screen.dart';
 import '../stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
-import '../search_screen.dart' show buildSearchSources;
+import 'search_sources.dart' show buildSearchSources;
 import 'search_content_session.dart';
 
 /// Shared content actions; controller data comes from the session, not State.

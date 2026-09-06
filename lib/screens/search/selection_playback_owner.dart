@@ -5,8 +5,7 @@ import '../../models/play_loader_art.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/torrent_playback_service.dart';
 import '../../utils/tv_keys.dart';
-// Temporary legacy library cycle: the Sources part still belongs to this library.
-import '../search_screen.dart' show buildSearchSources;
+import 'search_sources.dart' show buildSearchSources;
 
 /// Explicit live routing/refresh dependencies; no host State or stored context.
 class SelectionPlaybackRoutes {
