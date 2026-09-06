@@ -1,12 +1,12 @@
 # Refactor board
 
-## Current roadmap — September 6, merged production main d7cdffb7
+## Current roadmap — September 6, merged production main 9e809c97
 
 **Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
 
 ### God-file line counts — original → merged main
 
-- **Search:** 19,070 → **6,387** (12,683 fewer)
+- **Search:** 19,070 → **6,388** (12,682 fewer)
 - **Player:** 16,278 → **11,539** (4,739 fewer)
 - **Magic TV:** 10,716 → **3,322** (7,394 fewer)
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
@@ -30,7 +30,7 @@ Physical lines, not whole-project deletions. Last full gate: **d7cdffb7 PASSED**
 - [x] Pin Atrium navigation on the fixed original path: three cases passed before the move.
 - [x] **Merge seventh public stage in #219.** Merged13cd4029 after independent28 checks and exact CI passed. Its seven explicit callbacks remain; +60 host/+35 production lines are growth, not extraction credit.
 - [x] **Finish Sources route/library ownership.** #220 makes the existing owner a standalone library and redirects two consumers, preserving seven original behavior pins. Host-16/production+12; no 2,775-line extraction or stage-target credit.
-- [ ] **Resolve the 1,993-line hero part against the existing part-size criterion.** Native-bearing content remains; no extraction grant or blanket waiver.
+- [x] **Resolve the oversized hero part in #222.** Merged9e809c97 after independent136PASS/one existing known failure and allCI passed. Retained part947, passive owner1060; host+1/production+15, zero638-target credit.
 - [ ] **Close final shared-composition and original rebuild obligations with evidence.** Retained callback inventories are not automatically unused forwarders. Preserve accepted Mosaic focus/prefetch policy.
 - [ ] **Reconcile the existing 1,400-line stage target.** Recorded762 leaves /638 short remains explicit. Do not count already-external part lines, wrapper growth or the overflow fix toward it.
 
@@ -86,6 +86,8 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- #222 merged **9e809c97**, exacte5cb independent136PASS/one exactknownsidebar failure, sourceunionaccepted/allCIpassed. Hero part1993→947, independentowner1060,16inputs0callbacks, preservedmemo/nativeboundaries. Host6387→6388/production+15/Leaves0; shapeallowance162 unchanged with3negativeprobes caught. Did we make a difference? Passive hero ownership no longer depends on the host library; keyword dual notification and638shortfall remain OPEN. Counter1 sinced7cd. Keywordorigin68d5678casesgreen awaitingreadonlyreview; renderer seam9add6green, hostadmissionred beforefallback on clientconstruction.
 
 - **Full d7cdffb7 gate PASSED:**6155PASS/12exactknown/2skip;goldens21known/configured2retries/no unexpected or unused/helper0; nativeFIRSTPAIRPASS. Analyzer431/449zeroNew/Python55/layer56→56+0/-0 cap77. AST204/133/161/23/0 identitydelta0/0; physical1741/6387/11539/3322/2908. WindowsZIP ad63f723085b5bce97b20038893b3d1ab584920be64fcedeba6e993524db177a; ARM64APK0f04d940552d70af6aa315aedd69aac2a0791bec070dfba56cec018032f9552f. ABI verified; exact source/tree manifests. Counterreset0. Did we make a difference? Three integrated slices pass the established safety gate; final architecture and new-device acceptance are not claimed.
 
