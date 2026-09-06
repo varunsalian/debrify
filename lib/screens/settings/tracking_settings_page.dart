@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/tracking_source.dart';
 import '../../services/analytics_service.dart';
+import '../../services/hide_watched_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/simkl/simkl_service.dart';
@@ -23,6 +24,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
   WatchProgressSource _progress = WatchProgressSource.smart;
   Set<TrackingSource> _ticks = Set<TrackingSource>.of(TrackingSource.values);
   Set<TrackingSource> _connected = {};
+  bool _hideWatched = HideWatchedPrefs.enabled;
   int _selectedSection = 0;
 
   @override
@@ -41,6 +43,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
       SimklService.instance.isAuthenticated(),
       MdblistService.instance.isAuthenticated(),
       StorageService.takeTrackingProgressFallbackNotice(),
+      HideWatchedPrefs.read(),
     ]);
     if (!mounted) return;
     final connected = <TrackingSource>{
@@ -64,6 +67,7 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
       _progress = progress;
       _ticks = Set<TrackingSource>.of(values[2] as Set<TrackingSource>);
       _connected = connected;
+      _hideWatched = values[7] as bool;
       _loading = false;
     });
     if (fellBack || values[6] as bool) {
@@ -126,6 +130,13 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
     enabled ? next.add(source) : next.remove(source);
     setState(() => _ticks = next);
     await StorageService.setHomeTickSources(next);
+    MainPageBridge.notifyHomeSettingsChanged();
+  }
+
+  Future<void> _setHideWatched(bool enabled) async {
+    setState(() => _hideWatched = enabled);
+    await HideWatchedPrefs.setEnabled(enabled);
+    // Membership change: Home rebuilds its rows through the board reload.
     MainPageBridge.notifyHomeSettingsChanged();
   }
 
@@ -237,6 +248,25 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
     ],
   );
 
+  Widget _hideWatchedSection() => SettingsSection(
+    title: 'Hide watched',
+    blurb:
+        'Remove finished movies and shows from Home rows, Search, Discover '
+        'and See All. Uses the same histories as the ✓ ticks above. Continue '
+        'Watching and your own lists are never hidden.',
+    children: [
+      SettingsToggleTile(
+        icon: Icons.visibility_off_rounded,
+        title: 'Hide watched titles',
+        subtitle: _hideWatched
+            ? 'Watched movies and finished shows are hidden from catalogs'
+            : 'Watched titles stay visible with a ✓',
+        value: _hideWatched,
+        onChanged: _setHideWatched,
+      ),
+    ],
+  );
+
   Widget _mobileBody() => ListView(
     padding: const EdgeInsets.all(16),
     children: [
@@ -245,21 +275,30 @@ class _TrackingSettingsPageState extends State<TrackingSettingsPage> {
       _progressSection(),
       const SizedBox(height: 18),
       _ticksSection(),
+      const SizedBox(height: 18),
+      _hideWatchedSection(),
       const SizedBox(height: 24),
     ],
   );
 
   Widget _tvBody() {
-    const labels = ['Scrobble', 'Progress source', 'Watched ticks'];
+    const labels = [
+      'Scrobble',
+      'Progress source',
+      'Watched ticks',
+      'Hide watched',
+    ];
     const icons = [
       Icons.sync_alt_rounded,
       Icons.play_circle_outline_rounded,
       Icons.check_circle_outline_rounded,
+      Icons.visibility_off_rounded,
     ];
     final selected = switch (_selectedSection) {
       0 => _scrobbleSection(),
       1 => _progressSection(),
-      _ => _ticksSection(),
+      2 => _ticksSection(),
+      _ => _hideWatchedSection(),
     };
     return Row(
       children: [

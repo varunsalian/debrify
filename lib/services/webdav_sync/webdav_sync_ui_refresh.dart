@@ -1,4 +1,5 @@
 import '../home_row_refresh.dart';
+import '../hide_watched_prefs.dart';
 import '../iptv_channel_order.dart';
 import '../iptv_media_store.dart';
 import '../main_page_bridge.dart';
@@ -31,6 +32,7 @@ enum _WebDavSyncUiRefreshTarget {
 /// awaited `notifyPlaylistChanged` path in the active-profile refresher.
 abstract final class WebDavSyncUiRefresh {
   static const Map<String, Set<_WebDavSyncUiRefreshTarget>> _targetsByKey = {
+    HideWatchedPrefs.key: {_WebDavSyncUiRefreshTarget.homeSettings},
     'tv/ch': {_WebDavSyncUiRefreshTarget.debrifyTvLibrary},
     'tv/pool': {_WebDavSyncUiRefreshTarget.debrifyTvLibrary},
     'catalog/hidden': {_WebDavSyncUiRefreshTarget.iptvCatalog},

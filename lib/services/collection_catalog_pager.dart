@@ -18,12 +18,14 @@ class CollectionCatalogPager {
     required this.catalog,
     required this.fetch,
     this.genre,
+    this.hides,
   });
   static const int maxEmptyWindows = 8;
   final StremioAddon addon;
   final StremioAddonCatalog catalog;
   final CatalogFetch fetch;
   final String? genre;
+  final bool Function(StremioMeta)? hides;
   final Set<String> _seen = {};
   int skip = 0;
   bool exhausted = false;
@@ -67,7 +69,7 @@ class CollectionCatalogPager {
         skip += count;
         final fresh = [
           for (final m in items)
-            if (_seen.add(itemKey(m)))
+            if (_seen.add(itemKey(m)) && !(hides?.call(m) ?? false))
               m.sourceAddon == null ? m.withSourceAddon(addon) : m,
         ];
         if (fresh.isNotEmpty) return fresh;

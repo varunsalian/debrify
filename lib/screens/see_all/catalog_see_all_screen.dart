@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/discover_prefs.dart';
+import '../../services/filtered_catalog_pager.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/watched_filter.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
@@ -29,6 +31,9 @@ import '../../widgets/see_all/stremio_dropdown.dart';
 /// `extra`. The addon itself is fixed to the originating rail.
 class CatalogSeeAllScreen extends StatefulWidget {
   final StremioAddon addon;
+
+  /// Optional catalog transport for deterministic pagination tests.
+  final PageFetch? fetchPage;
   final StremioAddonCatalog initialCatalog;
 
   /// When set, this See-All is a SEARCH result: reload / load-more query the
@@ -73,6 +78,7 @@ class CatalogSeeAllScreen extends StatefulWidget {
   const CatalogSeeAllScreen({
     super.key,
     required this.addon,
+    this.fetchPage,
     required this.initialCatalog,
     required this.onOpenItem,
     this.query,
@@ -119,6 +125,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
   bool _loadingInitial = true;
   bool _loadingMore = false;
   bool _exhausted = false;
+  bool _pagingPaused = false;
 
   // Random (Discover): true while the random-page probe is in flight — the
   // button shows a spinner and further presses are ignored.
@@ -160,8 +167,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
         _sort = saved!;
       }
     }
-    if (widget.seedItems.isNotEmpty) {
-      _items.addAll(widget.seedItems);
+    if (widget.seedItems.isNotEmpty || widget.seedNextSkip > 0) {
+      _items.addAll(WatchedFilter.apply(widget.seedItems));
+      _pagingPaused = _items.isEmpty;
       _nextSkip = widget.seedNextSkip;
       _loadingInitial = false;
       // Embedded (Discover): the host focuses the Source dropdown; a source swap
@@ -236,6 +244,8 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     int skip,
     void Function(int rawCount) onRawCount,
   ) {
+    final fetch = widget.fetchPage;
+    if (fetch != null) return fetch(skip, onRawCount);
     if (_searching) {
       return _stremio.searchSingleCatalog(
         widget.addon,
@@ -265,19 +275,24 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       _items.clear();
       _nextSkip = 0;
       _exhausted = false;
+      _pagingPaused = false;
       _loadingMore = false;
     });
     try {
-      var rawCount = 0;
-      final page = await _fetchPage(0, (c) => rawCount = c);
+      final page = await fetchFilteredPage(
+        _fetchPage,
+        skip: 0,
+        hides: WatchedFilter.predicate,
+      );
       if (!mounted || token != _reqToken) return;
       setState(() {
-        _items.addAll(page);
-        _nextSkip = rawCount > 0 ? rawCount : page.length;
-        _exhausted = page.isEmpty;
+        _items.addAll(page.items);
+        _nextSkip = page.nextSkip;
+        _exhausted = page.exhausted;
+        _pagingPaused = !page.exhausted && page.items.isEmpty;
         _loadingInitial = false;
       });
-      if (autoFocus && widget.isTelevision && page.isNotEmpty) {
+      if (autoFocus && widget.isTelevision && page.items.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _gridKey.currentState?.focusFirst(),
         );
@@ -291,32 +306,32 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     }
   }
 
-  Future<void> _loadMore() async {
+  Future<void> _loadMore({bool resume = false}) async {
+    if (_pagingPaused && !resume) return;
     if (_loadingInitial || _loadingMore || _exhausted) return;
     final token = _reqToken;
     setState(() => _loadingMore = true);
     try {
-      var rawCount = 0;
-      final page = await _fetchPage(_nextSkip, (c) => rawCount = c);
-      if (!mounted || token != _reqToken) return;
-      if (page.isEmpty) {
-        setState(() {
-          _exhausted = true;
-          _loadingMore = false;
-        });
-        return;
-      }
       final seen = _items.map((m) => m.id).toSet();
-      final fresh = page.where((m) => seen.add(m.id)).toList();
+      final page = await fetchFilteredPage(
+        _fetchPage,
+        skip: _nextSkip,
+        hides: WatchedFilter.predicate,
+        seenIds: seen,
+      );
+      if (!mounted || token != _reqToken) return;
       setState(() {
-        _nextSkip += rawCount > 0 ? rawCount : page.length;
-        if (fresh.isEmpty) {
-          _exhausted = true;
-        } else {
-          _items.addAll(fresh);
-        }
+        _nextSkip = page.nextSkip;
+        _items.addAll(page.items);
+        _exhausted = page.exhausted;
+        _pagingPaused = !page.exhausted && page.items.isEmpty;
         _loadingMore = false;
       });
+      if (resume && widget.isTelevision && page.items.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _gridKey.currentState?.focusFirst();
+        });
+      }
     } catch (_) {
       if (!mounted || token != _reqToken) return;
       setState(() => _loadingMore = false);
@@ -348,7 +363,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
     StremioMeta? pick;
     try {
       for (final depth in const [400, 60]) {
-        final page = await _fetchPage(_random.nextInt(depth), (_) {});
+        final page = WatchedFilter.apply(
+          await _fetchPage(_random.nextInt(depth), (_) {}),
+        );
         // A filter changed mid-probe — the page (and any fallback below) no
         // longer matches what's on screen, so drop the press entirely.
         if (!mounted || token != _reqToken) return;
@@ -611,7 +628,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                _searching
+                !_exhausted
+                    ? 'No new titles loaded yet'
+                    : _searching
                     ? 'No matches for “$_searchQuery”'
                     : 'Nothing in this catalog',
                 style: TextStyle(
@@ -625,7 +644,9 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                 // fetch swallows errors and returns [], so an empty result can
                 // also be a transient failure — offer a retry rather than
                 // dead-ending (re-selecting the same filter is a no-op).
-                _searching
+                !_exhausted
+                    ? 'Continue browsing to check more titles.'
+                    : _searching
                     ? 'No results for this query — try another catalog or genre.'
                     : 'This may be empty, or the addon failed to respond.',
                 textAlign: TextAlign.center,
@@ -649,9 +670,19 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                 },
                 child: OutlinedButton.icon(
                   focusNode: _retryNode,
-                  onPressed: () => _reload(autoFocus: true),
+                  onPressed: _loadingMore
+                      ? null
+                      : () => _exhausted
+                            ? _reload(autoFocus: true)
+                            : _loadMore(resume: true),
                   icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text('Retry'),
+                  label: Text(
+                    _loadingMore
+                        ? 'Loading…'
+                        : _exhausted
+                        ? 'Retry'
+                        : 'Continue loading',
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: app.core.tx,
                     side: BorderSide(color: app.seeAll.accentBorder),
@@ -670,22 +701,47 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
         ),
       );
     }
-    return SeeAllPosterGrid(
+    final grid = SeeAllPosterGrid(
       key: _gridKey,
       items: _sortedItems,
       isTelevision: widget.isTelevision,
       loadingMore: _loadingMore,
-      exhausted: _exhausted,
+      exhausted: _exhausted || _pagingPaused,
       onOpen: widget.onOpenItem,
       onQuickPlay: widget.onQuickPlay,
       onItemFocused: widget.onItemFocused,
       isBound: widget.isBound,
-      onLoadMore: _loadMore,
+      onLoadMore: () => _loadMore(),
+      onExitBottom: _pagingPaused ? _retryNode.requestFocus : null,
       onExitTop: widget.isTelevision ? () => _typeNode.requestFocus() : null,
       // Embedded: Left at grid column 0 escapes to the TV sidebar.
       onExitLeft: widget.embedded
           ? () => MainPageBridge.focusTvSidebar?.call()
           : null,
+    );
+    return Column(
+      children: [
+        Expanded(child: grid),
+        if (_pagingPaused)
+          SafeArea(
+            top: false,
+            child: Focus(
+              onKeyEvent: (_, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                  _gridKey.currentState?.focusFirst();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: TextButton(
+                focusNode: _retryNode,
+                onPressed: _loadingMore ? null : () => _loadMore(resume: true),
+                child: Text(_loadingMore ? 'Loading…' : 'Continue loading'),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

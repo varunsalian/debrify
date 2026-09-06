@@ -1,5 +1,6 @@
 import '../../theme/app_theme_controller.dart';
 import '../discover_prefs.dart';
+import '../hide_watched_prefs.dart';
 import '../engine/engine_profile_lifecycle.dart';
 import '../engine/local_engine_storage.dart';
 import '../main_page_bridge.dart';
@@ -94,6 +95,11 @@ final class DefaultWebDavSyncActiveProfileRefresher
       await guarded(StreamBadgesService.instance.refreshFromPreferences);
     }
 
+    if (changedKeys.contains(HideWatchedPrefs.key)) {
+      await HideWatchedPrefs.refreshFromPreferences(
+        authorizationBarrier: authorizationBarrier,
+      );
+    }
     final discoverChanged = changedKeys.any(
       (key) => key.startsWith('discover_'),
     );

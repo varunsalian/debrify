@@ -98,6 +98,11 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 ## Settings · storage · misc infra
 - Settings: `screens/settings/*` (+ `home_sections_filter_page.dart` = show/hide home rows,
   `home_page_settings_page.dart`). Metrics/format helpers: `utils/*`.
+- Hide watched (Settings › Tracking): `services/hide_watched_prefs.dart` (sync flag),
+  `services/watched_filter.dart` (predicate over `WatchedStatusService`),
+  `services/filtered_catalog_pager.dart` (`fetchFilteredPage` top-up paging). Wired in
+  `search_screen.dart` (`_fetchBoardBatch`, `_loadMoreRow`, catalog search, hero source),
+  `see_all/catalog_see_all_screen.dart`, `services/home_list_rows.dart`, Trakt/MDBList See-All.
 - Collections (imported Nuvio/Xperience-style folder groups → Home rows of folder tiles):
   `models/home_collection.dart` (schema + parser + `collection:<id>` row ids),
   `services/home_collections_store.dart` (`home_collections_v1`, file/URL/paste import, addon

@@ -457,9 +457,11 @@ class CatalogSection {
   /// True while a page fetch is in flight (re-entrancy guard).
   bool loadingMore;
 
-  /// True once the addon stops returning new items (empty or all-duplicate
-  /// page), so we stop asking.
+  /// True once the catalog has ended, so we stop asking.
   bool exhausted;
+
+  /// A bounded fetch found no visible titles; the cursor can be resumed.
+  bool pagingPaused;
 
   /// The search query that produced these items, when this section is a
   /// per-catalog SEARCH result (Search tab) rather than a browsed catalog
@@ -476,6 +478,7 @@ class CatalogSection {
     int? nextSkip,
     this.loadingMore = false,
     this.exhausted = false,
+    this.pagingPaused = false,
     this.query,
   }) : nextSkip = nextSkip ?? items.length;
 

@@ -3414,6 +3414,7 @@ class RemoteCommandRouter {
       final decoded = jsonDecode(data);
       if (decoded is! Map) throw const FormatException();
       await StorageService.applyTrackingPreferencesPayload(decoded);
+      MainPageBridge.notifyHomeSettingsChanged();
       final requested = decoded['progress_source']?.toString();
       final effective = await TrackingSourcePolicy.load();
       final fellBack =

@@ -23,6 +23,57 @@ void main() {
     fetch: fetch,
   );
   test(
+    'watched-only collection windows remain resumable in rails and All',
+    () async {
+      Future<List<StremioMeta>> fetch(
+        StremioAddon a,
+        StremioAddonCatalog c, {
+        int skip = 0,
+        String? genre,
+        void Function(int)? onRawCount,
+      }) async {
+        onRawCount?.call(skip < 10 ? 1 : 0);
+        return skip < 10 ? [meta('$skip')] : [];
+      }
+
+      bool hides(StremioMeta m) => int.parse(m.id) < 8;
+      final rail = CollectionCatalogPager(
+        addon: addon,
+        catalog: addon.catalogs.single,
+        fetch: fetch,
+        hides: hides,
+      );
+      expect(await rail.nextPage(), isEmpty);
+      expect(rail.exhausted, isFalse);
+      expect(rail.skip, 8);
+      expect((await rail.nextPage()).single.id, '8');
+      final folder = HomeCollectionFolder(
+        id: 'filtered',
+        title: 'Filtered',
+        sources: [
+          CollectionCatalogSource(
+            addonId: addon.id,
+            catalogId: addon.catalogs.single.id,
+            type: 'movie',
+          ),
+        ],
+      );
+      final all = CollectionFolderLoader(
+        folder: folder,
+        installedAddons: [addon],
+        fetch: fetch,
+        hides: hides,
+      );
+      expect(await all.nextPage(), isEmpty);
+      expect(all.exhausted, isFalse);
+      expect(all.hasErrors, isTrue);
+      expect(all.hasLoadFailures, isFalse);
+      expect((await all.nextPage()).single.id, '8');
+      expect(all.hasErrors, isFalse);
+    },
+  );
+
+  test(
     'transport failure preserves cursor and successful retry preserves source',
     () async {
       var failed = true;
@@ -157,6 +208,7 @@ void main() {
     );
     expect(await loader.nextPage(), isEmpty);
     expect(loader.hasErrors, true);
+    expect(loader.hasLoadFailures, true);
     expect(loader.exhausted, false);
   });
 

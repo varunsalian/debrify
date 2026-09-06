@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import '../models/stremio_addon.dart';
+import 'filtered_catalog_pager.dart';
 
 /// Reuses unchanged rows, including their paging state and any in-flight page.
 /// Changed definitions reload the old raw paging extent before replacing a row.
@@ -13,6 +14,7 @@ Future<CatalogSection?> loadHomeCatalogSection({
   )
   fetch,
   required bool Function() isCurrent,
+  bool Function(StremioMeta)? hides,
 }) async {
   final sameIdentity =
       previous != null &&
@@ -35,24 +37,25 @@ Future<CatalogSection?> loadHomeCatalogSection({
   final seen = <String>{};
   var skip = 0;
   var exhausted = false;
+  var paused = false;
   do {
     if (!isCurrent()) return null;
-    var rawCount = 0;
-    final page = await fetch(skip, (count) => rawCount = count);
+    final page = await fetchFilteredPage(
+      (cursor, raw) => isCurrent()
+          ? fetch(cursor, raw)
+          : Future.value(const <StremioMeta>[]),
+      skip: skip,
+      hides: hides,
+      seenIds: seen,
+    );
     if (!isCurrent()) return null;
-    if (page.isEmpty) {
-      exhausted = true;
-      break;
-    }
-    skip += rawCount > 0 ? rawCount : page.length;
-    final fresh = page.where((item) => seen.add(item.id)).toList();
-    items.addAll(fresh);
-    if (fresh.isEmpty) {
-      exhausted = true;
-      break;
-    }
+    skip = page.nextSkip;
+    exhausted = page.exhausted;
+    items.addAll(page.items);
+    paused = !exhausted && page.items.isEmpty;
+    if (exhausted || paused) break;
   } while (skip < targetSkip);
-  if (items.isEmpty) return null;
+  if (items.isEmpty && exhausted) return null;
   return CatalogSection(
     title: CatalogSection.rowTitle(catalog),
     addon: addon,
@@ -60,5 +63,6 @@ Future<CatalogSection?> loadHomeCatalogSection({
     items: items,
     nextSkip: skip,
     exhausted: exhausted,
+    pagingPaused: paused,
   );
 }

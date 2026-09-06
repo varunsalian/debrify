@@ -382,6 +382,8 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
         _nodes[target].requestFocus();
         // Prefetch when stepping into the last two rows.
         if (target >= last - cols) widget.onLoadMore();
+      } else {
+        widget.onExitBottom?.call();
       }
       return KeyEventResult.handled;
     }

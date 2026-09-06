@@ -2,6 +2,8 @@ import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_catalog_refresh.dart';
 import '../services/home_load_deadline.dart';
 import '../widgets/home/home_row_focus.dart';
+import '../widgets/home/home_continuation_focus.dart';
+import '../widgets/home/catalog_continuation_button.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
@@ -41,6 +43,10 @@ import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
 import '../services/home_list_rows.dart';
 import '../services/home_row_order.dart';
+import '../services/filtered_catalog_pager.dart';
+import '../services/hide_watched_prefs.dart';
+import '../services/watched_filter.dart';
+import '../services/watched_status_service.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
 import '../services/local_bound_source_service.dart';
@@ -682,6 +688,11 @@ class _SearchScreenState extends State<SearchScreen>
   // Board state. [_homeSections] is the homepage cache; [_sections] is whatever
   // is currently shown (homepage OR per-addon catalog search results). Both the
   // board and catalog search render through the same horizontal-row layout.
+  final _catalogContinueNode = FocusNode(debugLabel: 'catalog_continue');
+  final _catalogMoreNode = FocusNode(debugLabel: 'catalog_more');
+  FocusNode? _catalogReturnFocus;
+  bool _catalogContinuing = false;
+  int _catalogContinueCursor = 0;
   bool _loading = true;
   String? _error;
   List<CatalogSection> _homeSections = [];
@@ -715,6 +726,10 @@ class _SearchScreenState extends State<SearchScreen>
   // of the board in [_load]; `iptvlist:` ids drive the IPTV list favourites
   // rows. Refreshed by [_reloadForHomeSettings].
   List<HomeExtraRow> _homeExtras = const [];
+
+  /// The hide-watched switch as of the last board load. Flipping it changes
+  /// row membership, so [_reloadForHomeSettings] diffs it like a row toggle.
+  bool _hideWatched = HideWatchedPrefs.enabled;
 
   /// Imported collections — each enabled one is a [HomeCollectionSection] row
   /// of folder tiles. [_homeCollectionsSig] is the store's change token the
@@ -2134,6 +2149,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   @override
   void dispose() {
+    _catalogContinueNode.dispose();
+    _catalogMoreNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _mdblistRevisionRefreshToken++;
     _spotlightHeroNode.dispose();
@@ -2486,6 +2503,8 @@ class _SearchScreenState extends State<SearchScreen>
     final heroSource = await StorageService.getHomeHeroSource();
     final collections = await _readHomeCollections();
     if (!mounted) return;
+    final hideWatched = HideWatchedPrefs.enabled;
+    final hideWatchedUnchanged = hideWatched == _hideWatched;
     final collectionsSig = HomeCollectionsStore.signatureOf(collections);
     final collectionsUnchanged = collectionsSig == _homeCollectionsSig;
     final disabledUnchanged =
@@ -2523,6 +2542,7 @@ class _SearchScreenState extends State<SearchScreen>
         iptvExtrasUnchanged &&
         rowOrderUnchanged &&
         heroSourceUnchanged &&
+        hideWatchedUnchanged &&
         collectionsUnchanged) {
       return;
     }
@@ -2531,11 +2551,14 @@ class _SearchScreenState extends State<SearchScreen>
       _homeExtras = extras;
       _homeRowOrder = rowOrder;
       _heroSource = heroSource;
+      _hideWatched = hideWatched;
       _homeCollections = collections;
       _homeCollectionsSig = collectionsSig;
     });
+    // Hide-watched changes row MEMBERSHIP, so it takes the full reload path.
     if (!disabledUnchanged ||
         !boardExtrasUnchanged ||
+        !hideWatchedUnchanged ||
         !collectionsUnchanged ||
         (!rowOrderUnchanged && !widget.searchMode && !widget.discoverMode)) {
       _requestBoardReload();
@@ -2639,6 +2662,7 @@ class _SearchScreenState extends State<SearchScreen>
           _homeExtras = extras;
           _homeRowOrder = rowOrder;
           _heroSource = heroSource;
+          _hideWatched = HideWatchedPrefs.enabled;
           _homeCollections = collections;
           _homeCollectionsSig = HomeCollectionsStore.signatureOf(collections);
           // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
@@ -2657,6 +2681,18 @@ class _SearchScreenState extends State<SearchScreen>
               : HomeListRowsService.instance
                     .resolve(_homeExtras, deadline: const Duration(seconds: 5))
                     .catchError((_) => const <HomeListSection>[]);
+          // With hide-watched on, wait briefly for the local watched snapshot so
+          // the first rows paint already filtered instead of losing titles a beat
+          // later. Tracker histories fold in asynchronously and apply from the
+          // next load; the timeout keeps a slow disk from stalling first paint.
+          if (HideWatchedPrefs.enabled) {
+            WatchedStatusService.instance.ensureStarted();
+            await WatchedStatusService.instance.firstSnapshot.timeout(
+              const Duration(milliseconds: 1500),
+              onTimeout: () {},
+            );
+            if (!mounted || gen != _boardLoadGen) return;
+          }
           final addons = await _stremio.getCatalogAddons();
           if (!mounted || gen != _boardLoadGen) return;
           // Enumerate every BROWSABLE catalog across all addons — no global row cap.
@@ -2814,6 +2850,7 @@ class _SearchScreenState extends State<SearchScreen>
             catalog: catalog,
             previous: previousRows[_catalogRefRowId(ref)],
             isCurrent: () => mounted && gen == _boardLoadGen,
+            hides: WatchedFilter.predicate,
             fetch: (skip, onRawCount) => _stremio.fetchCatalog(
               addon, catalog, skip: skip, onRawCount: onRawCount,
             ),
@@ -2912,12 +2949,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// board rows paginate; search-result rows are single-shot. Safe to call
   /// repeatedly — [CatalogSection.loadingMore]/[CatalogSection.exhausted] guard
   /// re-entrancy and the end of the catalog.
-  Future<void> _loadMoreRow(int rowIndex) async {
+  Future<void> _loadMoreRow(int rowIndex, {bool resume = false}) async {
     // While a catalog search is active, `_sections` holds search results, which
     // don't paginate — leave them alone.
     if (_catalogQuery.isNotEmpty || _catalogSearching) return;
     if (rowIndex < 0 || rowIndex >= _sections.length) return;
     final section = _sections[rowIndex];
+    if (section.pagingPaused && !resume) return;
     if (section.loadingMore || section.exhausted) return;
     // Android TV: flip the guard silently. The setState exists to show the
     // classic row's tail spinner, but it fires on the exact keypress that
@@ -2925,21 +2963,28 @@ class _SearchScreenState extends State<SearchScreen>
     // input frame, which an Amlogic box renders as the cursor hitching every
     // time a row pages. The spinner is a nicety; the page landing repaints
     // either way.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isAndroidTvCached && !resume) {
       section.loadingMore = true;
     } else {
       setState(() => section.loadingMore = true);
     }
     try {
-      // Advance `skip` by the addon's RAW returned count (via onRawCount), not
-      // the post-filter `page.length`, so we stay aligned with the addon's own
-      // paging window and don't slowly under-advance into a false "exhausted".
-      var rawCount = 0;
-      final page = await _stremio.fetchCatalog(
-        section.addon,
-        section.catalog,
+      // Dedup against what we already have: some addons return valid ids but
+      // repeat entries, and some ignore `skip` entirely. The pager advances
+      // `skip` by the addon's RAW counts so paging never under-advances into a
+      // false "exhausted", and with hide-watched on it tops the window up so a
+      // page of watched titles doesn't end the row early.
+      final seen = section.items.map((m) => m.id).toSet();
+      final page = await fetchFilteredPage(
+        (skip, onRaw) => _stremio.fetchCatalog(
+          section.addon,
+          section.catalog,
+          skip: skip,
+          onRawCount: onRaw,
+        ),
         skip: section.nextSkip,
-        onRawCount: (c) => rawCount = c,
+        hides: WatchedFilter.predicate,
+        seenIds: seen,
       );
       if (!mounted) return;
       // The row may have been swapped out (a search started) while in flight.
@@ -2947,23 +2992,11 @@ class _SearchScreenState extends State<SearchScreen>
           !identical(_sections[rowIndex], section)) {
         return;
       }
-      if (page.isEmpty) {
-        section.exhausted = true;
-        return;
-      }
-      // Dedup against what we already have; some addons return valid ids but
-      // repeat entries, and some ignore `skip` entirely.
-      final seen = section.items.map((m) => m.id).toSet();
-      final fresh = page.where((m) => seen.add(m.id)).toList();
-      // Advance by the raw window size (falls back to the filtered count only
-      // if the addon somehow didn't report), so the next skip lands past what
-      // this window already covered.
-      section.nextSkip += rawCount > 0 ? rawCount : page.length;
-      if (fresh.isEmpty) {
-        // Addon returned only duplicates (or ignores skip) — nothing new to add.
-        section.exhausted = true;
-        return;
-      }
+      section.nextSkip = page.nextSkip;
+      if (page.exhausted) section.exhausted = true;
+      final fresh = page.items;
+      section.pagingPaused = fresh.isEmpty && !page.exhausted;
+      if (fresh.isEmpty) return;
       // Grow this row's focus nodes in lockstep with the new items.
       final nodes = _rowNodes[rowIndex];
       final base = nodes.length;
@@ -3510,6 +3543,7 @@ class _SearchScreenState extends State<SearchScreen>
     String? homeRowId,
     required int column,
   }) {
+    if (!_boardHasMore && !_boardLoadingMore && _focusCatalogContinuation()) return;
     _pendingDownOrigin = FocusManager.instance.primaryFocus;
     if (_pendingDownOrigin == null) return;
     _pendingDownRowIndex = rowIndex;
@@ -5748,6 +5782,9 @@ class _SearchScreenState extends State<SearchScreen>
           return null;
         }
         if (!mounted || token != _catalogSearchToken) return null;
+        // Search rows are single-shot (no top-up): a match that's been
+        // watched simply doesn't show.
+        items = WatchedFilter.apply(items);
         if (items.isEmpty) return null;
         final section = CatalogSection(
           title: CatalogSection.rowTitle(entry.catalog),
@@ -6157,7 +6194,9 @@ class _SearchScreenState extends State<SearchScreen>
   /// [_focusCwRow], so DPAD wiring can defer the move instead of eating it.
   bool _focusRow(int row, int column) {
     if (row >= _rowNodes.length) {
-      // DPAD-down past the last loaded row on TV: pull the next board batch.
+      // Reach visible actions before starting another batch. When no action
+      // is mounted, retain the existing deferred move into the next row.
+      if (!_boardLoadingMore && _focusCatalogContinuation()) return true;
       if (_boardHasMore) _loadMoreBoard();
       return false;
     }
@@ -6999,21 +7038,26 @@ class _SearchScreenState extends State<SearchScreen>
         if (attempts++ >= maxAttempts) break;
         if (!mounted || gen != _heroSourceResolveGen) return;
         try {
-          var rawCount = 0;
-          final items = await _stremio.fetchCatalog(
-            addon,
-            catalog,
-            onRawCount: (c) => rawCount = c,
+          final page = await fetchFilteredPage(
+            (skip, onRaw) => _stremio.fetchCatalog(
+              addon,
+              catalog,
+              skip: skip,
+              onRawCount: onRaw,
+            ),
+            skip: 0,
+            hides: WatchedFilter.predicate,
+            minItems: 8,
           );
           if (!mounted || gen != _heroSourceResolveGen) return;
-          if (items.isEmpty) continue;
+          if (page.items.isEmpty) continue;
           setState(() {
             _spotlightHeroOverride = CatalogSection(
               title: CatalogSection.rowTitle(catalog),
               addon: addon,
               catalog: catalog,
-              items: items.toList(),
-              nextSkip: rawCount > 0 ? rawCount : items.length,
+              items: page.items.toList(),
+              nextSkip: page.nextSkip,
             );
           });
           _publishTopShelfSpotlight();
@@ -7595,6 +7639,7 @@ class _SearchScreenState extends State<SearchScreen>
       _leaveBoardTop();
       return;
     }
+    if (!_boardLoadingMore && _focusCatalogContinuation()) return;
     if (_boardHasMore) _loadMoreBoard();
     _deferDownMove(homeRowId: rowId, column: column);
   }
@@ -7745,11 +7790,16 @@ class _SearchScreenState extends State<SearchScreen>
     final current = _resolveCanvasRailIndex(rails);
     final next = (current + delta).clamp(0, rails.length - 1);
     if (next == current) {
+      if (delta > 0 && !_boardLoadingMore && _focusCatalogContinuation()) {
+        return;
+      }
       if (delta > 0 && _boardHasMore) {
         // Remember the move so it COMPLETES when the batch lands — otherwise
         // the keypress is silently eaten and the user has to press again.
         _deferStageAdvance(_canvasRailKeyOf(rails[current]));
         _loadMoreBoard();
+      } else if (delta > 0) {
+        _focusCatalogContinuation();
       }
       return;
     }
@@ -17589,7 +17639,153 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
+  bool _focusCatalogContinuation() {
+    final target = [_catalogContinueNode, _catalogMoreNode]
+        .where(
+          (node) => node.parent != null && (node.context?.mounted ?? false),
+        )
+        .firstOrNull;
+    if (target == null) return false;
+    final origin = FocusManager.instance.primaryFocus;
+    if (!identical(origin, target)) _catalogReturnFocus = origin;
+    target.requestFocus();
+    return true;
+  }
+
+  void _restoreCatalogContinuationFocus() {
+    if (focusMountedHomeNode([
+      _catalogReturnFocus,
+      _stageFocusTarget(),
+      for (final rail in _canvasRails) ..._canvasRailNodes(rail),
+    ])) {
+      return;
+    }
+    MainPageBridge.focusTvSidebar?.call();
+  }
+
+  Future<void> _continueHomeCatalogs({required bool moreCatalogs}) async {
+    if (_catalogContinuing || _boardLoadingMore) return;
+    final pending = _sections
+        .where((s) => s.pagingPaused && !s.exhausted)
+        .toList();
+    if (pending.any((s) => s.loadingMore)) return;
+    final gen = _boardLoadGen;
+    final actionNode = moreCatalogs ? _catalogMoreNode : _catalogContinueNode;
+    final ownedFocus = actionNode.hasFocus;
+    setState(() => _catalogContinuing = true);
+    try {
+      if (moreCatalogs) {
+        if (_boardHasMore) await _loadMoreBoard();
+      } else if (pending.isNotEmpty) {
+        final offset = _catalogContinueCursor % pending.length;
+        final batch = [
+          ...pending.skip(offset),
+          ...pending.take(offset),
+        ].take(4);
+        _catalogContinueCursor = (offset + 4) % pending.length;
+        for (final section in batch) {
+          if (!mounted || gen != _boardLoadGen) return;
+          final i = _sections.indexOf(section);
+          if (i >= 0) await _loadMoreRow(i, resume: true);
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _catalogContinuing = false);
+      if (mounted && gen == _boardLoadGen && ownedFocus) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || gen != _boardLoadGen) return;
+          // Busy buttons retain focus. Restore only when the completed action
+          // disappeared, and do not override a user's move to another card.
+          if (actionNode.parent != null &&
+              (actionNode.context?.mounted ?? false)) {
+            return;
+          }
+          final focused = FocusManager.instance.primaryFocus;
+          if (focused != null && focused is! FocusScopeNode) return;
+          _restoreCatalogContinuationFocus();
+        });
+      }
+    }
+  }
+
   Widget _buildBoard() {
+    final pending = [
+      for (var i = 0; i < _sections.length; i++)
+        if (_sections[i].pagingPaused && !_sections[i].exhausted) i,
+    ];
+    final hasMoreCatalogs = _boardHasMore;
+    final showContinuation =
+        pending.isNotEmpty ||
+        (hasMoreCatalogs && _sections.every((s) => s.items.isEmpty));
+    final busy =
+        _catalogContinuing ||
+        _boardLoadingMore ||
+        pending.any((i) => _sections[i].loadingMore);
+    return Column(
+      children: [
+        Expanded(
+          child:
+              !_loading &&
+                  _error == null &&
+                  _sections.isNotEmpty &&
+                  _sections.every((s) => s.items.isEmpty) &&
+                  !_cwVisible &&
+                  !_anyFavVisible
+              ? _message(
+                  Icons.movie_filter_rounded,
+                  !showContinuation
+                      ? 'No unwatched titles found'
+                      : 'No new titles loaded yet',
+                  !showContinuation
+                      ? 'Try another catalog or turn off Hide watched titles in Tracking settings.'
+                      : 'Continue browsing to check more titles in these catalogs.',
+                )
+              : _buildBoardContent(),
+        ),
+        if (!_loading && showContinuation)
+          SafeArea(
+            top: false,
+            child: Focus(
+              onKeyEvent: (_, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                  _restoreCatalogContinuationFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                children: [
+                  if (pending.isNotEmpty)
+                    CatalogContinuationButton(
+                      focusNode: _catalogContinueNode,
+                      autofocus: _sections.every((s) => s.items.isEmpty),
+                      busy: busy,
+                      label: 'Continue paused rows',
+                      onPressed: () =>
+                          _continueHomeCatalogs(moreCatalogs: false),
+                    ),
+                  if (hasMoreCatalogs)
+                    CatalogContinuationButton(
+                      focusNode: _catalogMoreNode,
+                      autofocus:
+                          pending.isEmpty &&
+                          _sections.every((s) => s.items.isEmpty),
+                      busy: busy,
+                      label: 'Load more catalogs',
+                      onPressed: () =>
+                          _continueHomeCatalogs(moreCatalogs: true),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBoardContent() {
     if (_loading) {
       // The brand moment: DEBRIFY centred on the ink while catalogs load —
       // replaces the old skeleton-rail wall, which read as a broken app.
@@ -18391,6 +18587,9 @@ class _SearchScreenState extends State<SearchScreen>
     } else if (section.isMdblist) {
       screen = MdblistSeeAllScreen(
         initialList: section.mdblistList,
+        initialListIsPublic: section.rowId.startsWith(
+          HomeExtraRowIds.mdblistTopPrefix,
+        ),
         onOpen: (item) => _openItem(
           item,
           _addonForContinue(item.sourceAddon?.id),

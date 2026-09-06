@@ -9,6 +9,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/collection_folder_loader.dart';
 import '../../services/collection_catalog_pager.dart';
+import '../../services/watched_filter.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/home_collections_store.dart';
 import '../../services/storage_service.dart';
@@ -90,6 +91,7 @@ class _Rail {
       addon: addon,
       catalog: catalog,
       genre: source.genre,
+      hides: WatchedFilter.predicate,
       fetch: (a, c, {skip = 0, genre, onRawCount}) {
         final refresh = forceRefresh;
         forceRefresh = false;
@@ -759,7 +761,9 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   focusNode: _retryNode,
                   onPressed: _retryCurrent,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Some lists could not load · Retry'),
+                  label: Text(_hasVisibleLoadFailure
+                      ? 'Some lists could not load · Retry'
+                      : 'No new titles loaded · Continue'),
                 ),
               ),
             Expanded(child: _buildBody()),
@@ -851,6 +855,15 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       isTelevision: widget.isTelevision,
     );
     return DiscoverShelfMetrics(cardHeight: posterW * 1.5, hPad: 24);
+  }
+
+  bool get _hasVisibleLoadFailure {
+    if (_showingAll) return _loader?.hasLoadFailures ?? false;
+    if (_tabs) {
+      final pager = _tabRail?.pager;
+      return pager != null && pager.error != null && !pager.noProgress;
+    }
+    return _rails.any((r) => r.error != null && !r.pager.noProgress);
   }
 
   bool get _hasVisibleLoadError {

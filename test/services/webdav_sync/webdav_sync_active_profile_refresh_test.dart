@@ -1,3 +1,6 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/services/hide_watched_prefs.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_active_profile_refresh.dart';
@@ -7,6 +10,54 @@ import 'package:debrify/services/stremio_service.dart';
 
 void main() {
   const refresher = DefaultWebDavSyncActiveProfileRefresher();
+
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('synced hide-watched is refreshed before Home is notified', () async {
+    SharedPreferences.setMockInitialValues({});
+    HideWatchedPrefs.debugReset();
+    await HideWatchedPrefs.warmUp();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(HideWatchedPrefs.key, true);
+    expect(HideWatchedPrefs.enabled, isFalse);
+    final observed = <bool>[];
+    void listener() => observed.add(HideWatchedPrefs.enabled);
+    MainPageBridge.addHomeSettingsListener(listener);
+    addTearDown(() {
+      MainPageBridge.removeHomeSettingsListener(listener);
+      HideWatchedPrefs.debugReset();
+    });
+    await refresher.refresh({
+      HideWatchedPrefs.key,
+    }, authorizationBarrier: () {});
+    WebDavSyncUiRefresh.dispatch({HideWatchedPrefs.key});
+    expect(observed, [true]);
+    await prefs.remove(HideWatchedPrefs.key);
+    await refresher.refresh({
+      HideWatchedPrefs.key,
+    }, authorizationBarrier: () {});
+    WebDavSyncUiRefresh.dispatch({HideWatchedPrefs.key});
+    expect(observed, [true, false]);
+  });
+
+  test(
+    'profile switch during hide-watched read prevents cache publication',
+    () async {
+      SharedPreferences.setMockInitialValues({HideWatchedPrefs.key: true});
+      HideWatchedPrefs.debugReset();
+      var barriers = 0;
+      await expectLater(
+        refresher.refresh(
+          {HideWatchedPrefs.key},
+          authorizationBarrier: () {
+            if (++barriers == 2) throw StateError('profile switched');
+          },
+        ),
+        throwsStateError,
+      );
+      expect(HideWatchedPrefs.enabled, isFalse);
+    },
+  );
 
   test('unrelated keys and stale sessions cannot notify addon views', () async {
     var calls = 0;
