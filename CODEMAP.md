@@ -280,12 +280,14 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   remain open.
   Actual `CanvasStage` owns its complete layout and inline cell policy, removing
   its State extension/part. Host 6506 -> 6539 (**+33**); whole production **+52**,
-  not deletion credit. Nineteen top-level bindings plus nine reused shelf-policy
+  not deletion credit. Eighteen top-level bindings plus nine reused shelf-policy
   operations and the existing board/map remain explicit dependencies, for removal/
   review at final composition / phase completion. No `shelf.cell()` call or extra
   focused-column write is introduced. The shelf already initializes in `initState`;
   there is no earlier-allocation delta. Two native constructors and one shared-scrim
   boundary retain their owners; only the held Atrium part and host target remain.
+  Local tab rendering/height replace two binding slots with one live host title
+  resolver; Promenade reads the single public `canvasTabChevronColumn` metric.
   Actual `AtriumStage` (product `ea62d4e5`) is the seventh public widget: layout,
   positioning and same-Text measurement have no private Search State dependency.
   Seven explicit composition callbacks (frame entry, four wall, two visual) retain
