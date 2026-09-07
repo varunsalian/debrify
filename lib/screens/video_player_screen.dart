@@ -27,6 +27,7 @@ import '../services/startup_stream_policy.dart';
 import '../services/resume_write_guard.dart';
 import '../services/skip_segment_service.dart';
 import '../services/playback/skip_segment_session.dart';
+import '../services/playback/playlist_metadata_persistence.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
@@ -6559,10 +6560,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             setState(() {});
 
             // Save discovered IMDB ID back to playlist item for future direct plays
-            await _saveImdbIdToPlaylist(seriesPlaylist);
+            await PlaylistMetadataPersistence.saveImdbId(
+              seriesPlaylist,
+              launchContentImdbId: config.contentImdbId,
+              rdTorrentId: config.rdTorrentId,
+              torboxTorrentId: config.torboxTorrentId,
+              pikpakCollectionId: config.pikpakCollectionId,
+            );
 
             // Extract poster URL from series data and save to playlist
-            await _saveSeriesPosterToPlaylist(seriesPlaylist);
+            await PlaylistMetadataPersistence.saveSeriesPoster(
+              seriesPlaylist,
+              rdTorrentId: config.rdTorrentId,
+              torboxTorrentId: config.torboxTorrentId,
+              pikpakCollectionId: config.pikpakCollectionId,
+            );
           })
           .catchError((error) {
             // Silently handle errors - this is just preloading
@@ -6664,79 +6676,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     } catch (e) {
       debugPrint('MovieMetadata: Error during single-file lookup: $e');
-    }
-  }
-
-  Future<void> _saveImdbIdToPlaylist(SeriesPlaylist seriesPlaylist) async {
-    final imdbId = seriesPlaylist.imdbId;
-    if (imdbId == null || !imdbId.startsWith('tt')) return;
-    if (widget.contentImdbId != null) return;
-
-    await PlaybackProgressStore.updatePlaylistItemImdbId(
-      imdbId,
-      rdTorrentId: widget.rdTorrentId,
-      torboxTorrentId: widget.torboxTorrentId,
-      pikpakCollectionId: widget.pikpakCollectionId,
-    );
-  }
-
-  /// Save series poster URL to playlist item
-  Future<void> _saveSeriesPosterToPlaylist(
-    SeriesPlaylist seriesPlaylist,
-  ) async {
-    print('🎬 _saveSeriesPosterToPlaylist called');
-    print('  seriesTitle: ${seriesPlaylist.seriesTitle}');
-
-    if (seriesPlaylist.seriesTitle == null) {
-      print('  ⚠️ No series title, skipping poster save');
-      return;
-    }
-
-    // Get identifiers from widget parameters
-    final rdTorrentId = widget.rdTorrentId;
-    final torboxTorrentId = widget.torboxTorrentId;
-    final pikpakCollectionId = widget.pikpakCollectionId;
-
-    print('  rdTorrentId: $rdTorrentId');
-    print('  torboxTorrentId: $torboxTorrentId');
-    print('  pikpakCollectionId: $pikpakCollectionId');
-
-    // Need at least one identifier to save poster
-    if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
-        (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
-        (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
-      print('  ⚠️ No valid identifier found, skipping poster save');
-      return;
-    }
-
-    final posterUrl = seriesPlaylist.showPosterUrl;
-    if (posterUrl == null || posterUrl.isEmpty) {
-      print('  ⚠️ No poster URL from fetchEpisodeInfo');
-      return;
-    }
-
-    print('  Poster URL: $posterUrl');
-    try {
-      if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-        await PlaybackProgressStore.updatePlaylistItemPoster(
-          posterUrl,
-          rdTorrentId: rdTorrentId,
-        );
-      }
-      if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-        await PlaybackProgressStore.updatePlaylistItemPoster(
-          posterUrl,
-          torboxTorrentId: torboxTorrentId,
-        );
-      }
-      if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-        await PlaybackProgressStore.updatePlaylistItemPoster(
-          posterUrl,
-          pikpakCollectionId: pikpakCollectionId,
-        );
-      }
-    } catch (e) {
-      print('  ❌ Error saving poster: $e');
     }
   }
 
