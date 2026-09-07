@@ -538,6 +538,10 @@ is an editor mirror, not the source of truth. How to add a provider:
   `VideoPlayerScreen` public constructor stays). Resume:
   `lib/screens/video_player/resume_controller.dart` (`ResumeController` +
   `ResumeContext` / `ResumeSession`; host keeps `_ResumeSession` adapter).
+  Renderer startup/fallback: `lib/screens/video_player/services/renderer_coordinator.dart`
+  owns mode, validation state and sequential fallback; host retains construction,
+  UI effects and fire-and-forget route retirement. Partial ownership retains
+  18 live reads/21 commands; host -178, whole production +127.
   Shared player dialog: `lib/widgets/player/spotlight_dialog.dart`
   (`showSpotlightDialog`, `SpotlightDialogCard`).
   Identify-title sheet: `lib/widgets/player/identify_title_sheet.dart`
