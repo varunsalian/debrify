@@ -805,3 +805,16 @@ PR232 Decisions2/3 are excluded from the sorting deduplication. Dead series-arra
 ## G4-3 landing provenance
 
 PR232 merged ab4e8323 after user authorized landing. Pin-before-move ancestry28db8762→e89c54a9 and independent old-origin2PASS/current66PASS are verified. Historical pre-move execution and mutation excerpts remain author-reported, not independently timestamp-proven. Case-fold/non-Season regex/unnumbered-folder comparisons are source-preserved rather than adversarially pinned. Exact final merge tree a56df4d6 preserves all four accepted payload blobs and all outside main paths. No additional runtime was repeated.
+
+
+## Reviewer wave preserved quirks and clearing lanes — September 7
+
+These are author-reported preserved behaviors pending independent source/pin review, not new fixes:
+
+- R1: malformed live-transfer chunk failure before `failedBuffer` assignment leaves the buffer until stall deadline; failure notices surface after batch idle gap. Keep unchanged.
+- R2: request outcome cache keeps first answer, including early rejection, for five minutes; process-wide authorization timestamp makes refusal-test ordering significant. Keep unchanged; no reset seam silently added.
+- D1: `DetailCastTile` can overflow the92px rail by2px on wrapped names; single-word fixture does not pin overflow. `DetailAmbientStill` is dead in shipped layouts but reachable via model hook. Scroll anchor toTop runs on descendant focus with active gate. Preserve and label finite coverage.
+- D2: MDBList sheet uses default Material chrome unlike themed Trakt/Simkl. Null Simkl/MDBList status still resolves via finally; null Trakt result retains earlier status. Listed mechanical rewrite needs per-body lifecycle/notification verification, not automatic acceptance.
+- T3: smallest ranking sinks unknown sizes; directValidationBudgetForRules ignores argument and returns5; pack curation strict while ordinary curation falls back.18 test-facing forwards (~44lines) explicitly expire in queued T3-F owning service plus quick_play_rules_test/filter_ladder_test/torrent_playback_service_strings_test and origin pin. No lib callers claimed; verify before deletion.
+- I1/I2:111-line target shortfall is accepted with clearing slice I3 Phase3. Retained dead classes are described as208lines in I1; these are different accounting measures. I2 unreachable railTV/non-touch branches and focus-stage callback plumbing join I3 after reachability verification; no revived layout. Live stage getters preserve startup suppression/rearm semantics.
+- R3 afterR2 clears busy and legacy-consent dialog layering together; not part of R1/R2. T3 CODEMAP hunk accepted within lane scope.
