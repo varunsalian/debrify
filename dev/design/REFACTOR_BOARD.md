@@ -1,12 +1,12 @@
-# Refactor board
+  # Refactor board
 
-## Current roadmap — September 6, merged production main d282889d
+## Current roadmap — September 6, merged production main 52e8da5b
 
 **Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
 
 ### God-file line counts — original → merged main
 
-- **Search:** 19,070 → **6,161** (12,909 fewer)
+- **Search:** 19,070 → **6,102** (12,968 fewer)
 - **Player:** 16,278 → **11,539** (4,739 fewer)
 - **Magic TV:** 10,716 → **3,322** (7,394 fewer)
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
@@ -16,12 +16,11 @@ Physical lines, not whole-project deletions. Last full gate: **31e360f6 PASSED**
 
 ### Do next — actual execution order
 
-- [x] **Merge #218, shared TV focus owner.** Merged b6a71b0e after independent22 tests, exact union review and all CI checks passed.
-- [x] **Run full integrated gate at b6a71b0e — PASSED.** #216/#217/#218 are three production merges sincebc017. Actual-main full tests, goldens, analysis, layering/forwarder ledger, native pair, Windows and ARM64 builds. Record known failures separately.
-- [x] **Merge #219, public Atrium stage, after the passing integrated gate.** Exact56ff union and allCI passed.
-- [x] **Merge Sources #220.** Merged9d4cf518: exacta2e4 union independently accepted; all three CI checks passed. Independent145PASS/one existing known shape failure retained. Counter2 sinceb6a; next production merge triggers full gate.
-- [x] **Merge player verification lifetime correction #221.** Merged d7cdffb7 after independent26PASS, unchanged analyzer/layering and exact-head CI passed. Production+98/host+4, zero extraction credit; original tracker experiment remains stopped.
-- [x] **Run full integrated gate at exact d7cdffb7 — PASSED.** Generic6155PASS/12exactknown/2skip; goldens21known, no unexpected/unused; nativefirstpair, Windows/ARM64, analyzer/Python/layer/AST passed. Counterreset0. Hero independent8 production batch released.
+- [x] **Merge #225 shared rail labels and #226 Atrium text ownership.** Both independently reviewed and all three CI jobs passed. Search now6,102;353 lines remain against the stage target.
+- [ ] **Finish metadata PR #227.** Author and independent35-case runs passed; candidate analyzer430/449 and layering53. Updating its branch with merged #226, preserving tested payloads; require final union review and fresh exact-head CI before merge.
+- [ ] **Run the next integrated gate after #227 merges.** Counter2 since full31e360; the next production merge triggers full actual-main verification and builds.
+- [ ] **Verify the Home overlay origin test.** Four-case draft corrected after static-only theme API failure; first behavioral run authorized. This work earns zero seven-stage target credit.
+- [ ] **Prepare IPTV behavior tests.** Six-test/eight-scenario scope, real SQLite and actual series navigation. No runtime yet; successful native movie launch remains an unresolved production-move constraint.
 
 ### 1. Finish Search stage layouts and final shared composition — OPEN
 
@@ -32,7 +31,7 @@ Physical lines, not whole-project deletions. Last full gate: **31e360f6 PASSED**
 - [x] **Finish Sources route/library ownership.** #220 makes the existing owner a standalone library and redirects two consumers, preserving seven original behavior pins. Host-16/production+12; no 2,775-line extraction or stage-target credit.
 - [x] **Resolve the oversized hero part in #222.** Merged9e809c97 after independent136PASS/one existing known failure and allCI passed. Retained part947, passive owner1060; host+1/production+15, zero638-target credit.
 - [ ] **Close final shared-composition and original rebuild obligations with evidence.** Retained callback inventories are not automatically unused forwarders. Preserve accepted Mosaic focus/prefetch policy.
-- [ ] **Reconcile the existing 1,400-line stage target.** Recorded988 leaves /412 short remains explicit after Canvas #224 (146) and rail-label #225 (80). Do not count already-external part lines, wrapper growth or the overflow fix toward it.
+- [ ] **Reconcile the existing 1,400-line stage target.** Recorded1,047 leaves /353 short remains explicit after Canvas #224 (146), rail-label #225 (80), and Atrium text #226 (59). Do not count already-external part lines, wrapper growth or the overflow fix toward it.
 
 ### 2. Complete player decoder/state/UI separation — OPEN
 
@@ -70,22 +69,25 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### 6. Final integrated acceptance of completed architecture — PENDING
 
-- [x] Pass the latest completed intermediate gateb6a71b0e:6,118 tests passed /12 exact known exceptions /2 skips; goldens21 known; native first pair, Windows and ARM64 passed; analyzer431/449; layering56 at that gate.
+- [x] Pass the latest completed intermediate gate31e360f6:6,174 tests passed /12 exact known exceptions /2 skips; goldens21 known; native first pair, Windows and ARM64 passed; analyzer431/449; layering56 at that gate.
 - [ ] Finish or explicitly disposition the remaining contractual outcomes above without quietly changing their meaning.
 - [ ] Run final integrated acceptance on the resulting actual main and record exact source/artifact hashes, complete failures, dependency count and god-file/forwarder ledger.
 - [ ] Report final accepted outcomes and retained debt. Prior phone/TV acceptance stays historical; do not label it new-build device proof. Manual smoke does not block authorized progress.
 
 ### Who owns the next action
 
-- **Cicero:** #225 final review accepted; reviews the next Atrium origin-test draft.
-- **Locke:** preparing one-file Atrium text origin tests; production and runtime await exact draft review.
-- **Confucius:** preparing six additional metadata tests covering nine scenarios; prior thirteen tests remain frozen and green.
-- **Arendt:** reviewing metadata failure order and the forthcoming exact test draft.
-- **Parent:** #225 merged; board and integration coordination. Production counter1 since full31e360 gate. Renderer remains HOLD. No user blocker.
+- **Cicero:** reviews Home overlay origin results; #226 independent and CI acceptance complete.
+- **Locke:** runs the corrected Home overlay origin test, stopping on any failure.
+- **Confucius:** updates #227 against merged #226, then continues IPTV test preparation.
+- **Arendt:** checks #227 union evidence and IPTV fixture design.
+- **Parent:** #226 merged; counter2 since full31e360. Next production merge triggers integrated gate. No user blocker.
+
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- **#226 merged52e8da5b:** all three CI jobs passed on exacte415 head; independent129PASS/one exact known sidebar failure, scoped4 inherited/full431449zeroNew/layer56 unchanged. Search6161→6102 (-59), existing Atrium owner+80, whole production+21. Stage credit988→1047 of1400,353 remaining. Two whole-widget callbacks replaced by local text composition and a live title reader; callables7→6 but leaf inputs10→14, so no overall interface-size reduction claimed. Did we make a difference? Yes: Atrium now owns its text composition. Is more needed? Yes:353-line stage shortfall and broader Search/Player/Storage/Q acceptance remain open. Counter2; no new-device proof.
 
 - **#225 merged d282889d:** shared rail-label composition now belongs to stage owners; exact ff526635 head independently accepted and all three CI checks passed (run34071413658). Origin8PASS before move; author and independent production suites each132PASS/one exact known sidebar failure, not raw green. Search6241→6161 (-80); whole production+9. Stage credit908→988 of1400;412 remain. Counter1 since full31e360. Other god counts remain Storage1741/Player11539/Magic3322/Settings2908; forwarder ledger is the last full-gate measurement, not rerun here. Did we make a difference? Yes: shared label composition leaves the host and one opaque callback is removed. Is more needed? Yes: Atrium and remaining shared composition, plus Player/Storage/Q acceptance stay open.
 
