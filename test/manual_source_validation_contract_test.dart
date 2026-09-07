@@ -53,7 +53,7 @@ void main() {
     final ended = _between(
       flutterPlayer,
       'Future<void> _onPlaybackEnded()',
-      'void _startTransitionOverlay()',
+      'String _getCurrentEpisodeTitle()',
     );
     final resumeSource = File(
       'lib/screens/video_player/resume_controller.dart',

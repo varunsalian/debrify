@@ -1,3 +1,4 @@
+import 'video_player/player_transition_session.dart';
 import '../services/series_playlist_metadata_loader.dart';
 import 'video_player/services/renderer_startup_environment.dart';
 import 'video_player/services/renderer_coordinator.dart';
@@ -937,7 +938,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       PlaybackUiClockController();
   final SkipSegmentUiController _activeSkipSegmentUi =
       SkipSegmentUiController();
-  bool _isTransitioning = false; // Show black screen during transitions
+  late final PlayerTransitionSession _transition = PlayerTransitionSession(
+    isMounted: () => mounted,
+    commit: _runTransitionSetState,
+  );
+  void _runTransitionSetState(VoidCallback updates) => setState(updates);
 
   /// One-shot guard set the moment we pop to hand the next episode back to the
   /// host for Quick Play. End-of-video auto-advance (_onPlaybackEnded) and a
@@ -1031,28 +1036,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       PlatformUtil.isPhone && StorageService.playerStartPortraitCached;
 
   // Rainbow next animation
-  late AnimationController _rainbowController;
-  late Animation<double> _rainbowOpacity;
-  bool _rainbowActive = false;
-  bool _transitionRunning = false;
-  Timer? _transitionStopTimer;
-  Timer? _transitionPhaseTimer;
-  int _transitionPhase = 1; // 1 = static, 2 = reveal
-  DateTime? _transitionPhase2Started;
-
-  // Retro TV static loading messages
-  String _tvStaticMessage = '📺 TUNING...';
-  String _tvStaticSubtext = ''; // Second line for video title
-  final List<String> _tvStaticMessages = [
-    '📺 BUFFERING... JUST KIDDING',
-    '📺 RETICULATING SPLINES...',
-    '📺 SUMMONING VIDEO GODS...',
-    '📺 ENGAGING HYPERDRIVE...',
-    '📺 CALIBRATING FLUX CAPACITOR',
-    '📺 CONSULTING THE ALGORITHMS',
-    '📺 WARMING UP THE PIXELS',
-    '📺 BRIBING THE SERVERS...',
-  ];
 
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
@@ -1260,14 +1243,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playerInitializationFuture = _initializePlayer();
 
     // Init rainbow animation
-    _rainbowController = AnimationController(
-      vsync: this,
-      duration: VideoPlayerTimingConstants.rainbowAnimationDuration,
-    );
-    _rainbowOpacity = CurvedAnimation(
-      parent: _rainbowController,
-      curve: Curves.easeInOut,
-    );
+    _transition.initializeAnimation(this);
 
     // Check if Trakt/Simkl/MDBList scrobbling should be enabled for this playback
     final scrobblePlayback = ScrobblePlayback(
@@ -1368,13 +1344,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     //   inside a segment, so the button flashes on the moment next-episode is
     //   pressed. It also asks the provider for the new episode at the old
     //   episode's duration, which can select or validate the wrong release.
-    // * _isTransitioning covers an IPTV zap / source switch, where the key
+    // * _transition.blocking covers an IPTV zap / source switch, where the key
     //   flips before the incoming stream opens (the same window _saveResume
     //   guards against).
     if (!_skipSegmentSettingsLoaded ||
         !_skipSegmentsEnabled ||
         !_skipSegmentsMediaReady ||
-        _isTransitioning ||
+        _transition.blocking ||
         _duration <= Duration.zero) {
       return null;
     }
@@ -2538,32 +2514,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _scrobble.onPlaying(
         p,
         wasPlaying: wasPlaying,
-        isTransitioning: _isTransitioning,
+        isTransitioning: _transition.blocking,
       );
-      if (p && _transitionRunning) {
-        _transitionStopTimer?.cancel();
-        _transitionPhaseTimer?.cancel();
-        _transitionPhase = 1;
-        _transitionPhase2Started = null;
-        debugPrint(
-          'Player: Playback started; overlay phase 1 (static) 1500ms.',
-        );
-        _transitionPhaseTimer = Timer(const Duration(milliseconds: 1500), () {
-          if (!isCurrent()) return;
-          _transitionPhase = 2;
-          _transitionPhase2Started = DateTime.now();
-          setState(() {});
-          debugPrint('Player: Overlay phase 2 (cinematic bars) 1500ms.');
-        });
-        _transitionStopTimer = Timer(const Duration(milliseconds: 3000), () {
-          if (!isCurrent()) return;
-          _rainbowController.stop();
-          _transitionRunning = false;
-          _rainbowActive = false;
-          setState(() {});
-          debugPrint('Player: Transition overlay stopped (3s complete).');
-        });
-      }
+      if (p) _transition.onPlaybackStarted(isCurrent);
       setState(() {});
     });
     _completedSub = player.stream.completed.listen((done) {
@@ -2574,7 +2527,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _bufferingSub = player.stream.buffering.listen((isBuffering) {
       if (isCurrent()) _iptvDiag.onBuffering(isBuffering, _position);
-      if (!isCurrent() || !_isReady || _isTransitioning) return;
+      if (!isCurrent() || !_isReady || _transition.blocking) return;
       if (isBuffering) {
         _bufferingDebounceTimer?.cancel();
         _bufferingDebounceTimer = Timer(
@@ -2583,7 +2536,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             if (isCurrent() &&
                 player.state.buffering &&
                 _isReady &&
-                !_isTransitioning &&
+                !_transition.blocking &&
                 !_isPikPakRetrying) {
               _showBufferingIndicator.value = true;
             }
@@ -3085,24 +3038,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _handleSeriesNextEpisode();
   }
 
-  void _startTransitionOverlay() {
-    if (!mounted) return;
-    _rainbowActive = true;
-    _transitionRunning = true;
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 1;
-    // Pick a random retro TV message and reset subtext
-    _tvStaticMessage =
-        _tvStaticMessages[math.Random().nextInt(_tvStaticMessages.length)];
-    _tvStaticSubtext = ''; // Clear subtext until video is ready
-    debugPrint('Player: Transition overlay started.');
-    // Match Android TV: update every 50ms for smooth static effect
-    _rainbowController.repeat(
-      period: VideoPlayerTimingConstants.rainbowRepeatPeriod,
-    );
-    if (mounted) setState(() {});
-  }
 
   /// Get the current episode title for display
   String _getCurrentEpisodeTitle() => _getCurrentEpisodeTitleInfo().title;
@@ -3686,14 +3621,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Show black screen during transition to hide previous frame
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
     });
 
     // Only show transition overlay for Debrify TV content (when requestMagicNext is available)
     final isDebrifyTV = config.requestMagicNext != null;
     if (isDebrifyTV) {
-      _startTransitionOverlay();
+      _transition.startOverlay();
     }
     try {
       await _player.pause();
@@ -3774,8 +3709,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Update TV static overlay to show signal acquired
           if (title.isNotEmpty && mounted) {
             setState(() {
-              _tvStaticMessage = '📺 SIGNAL ACQUIRED';
-              _tvStaticSubtext = '▶ ${title.toUpperCase()}';
+              _transition.showSignal(title);
             });
           }
 
@@ -3829,7 +3763,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // Clear transition state when video is ready
           if (mounted) {
             setState(() {
-              _isTransitioning = false;
+              _transition.setBlocking(false);
             });
           }
           return;
@@ -3842,7 +3776,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Clear transition state if no next episode found
     if (mounted) {
       setState(() {
-        _isTransitioning = false;
+        _transition.setBlocking(false);
       });
     }
   }
@@ -4538,7 +4472,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // A quiet recovery re-tune is not a zap: no transition overlay, no
       // zap banner — the reconnect pill is the only narration (plan
       // invariant "retune ≠ zap"; codex round 2, finding 14).
-      _isTransitioning = !quietRecovery;
+      _transition.setBlocking(!quietRecovery);
       _scrub.invalidateAndAbandon();
       _currentIptvIndex = index;
       _currentChannelNumber = channel.channelNumber ?? (index + 1);
@@ -4546,7 +4480,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // showing the launch channel under the new channel's number.
       _currentChannelName = channel.name;
     });
-    if (!quietRecovery) _startTransitionOverlay();
+    if (!quietRecovery) _transition.startOverlay();
     // Identity paints from the channel itself, so it is correct before a
     // single byte of the new stream has arrived; the guide fills in behind it.
     // Zapping to on-demand retires the panel outright — it has no live
@@ -4677,19 +4611,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // resolved so we skip phase 1 and go straight to the reveal phase.
     // This prevents the overlay from getting stuck if the playing event
     // doesn't fire reliably for HLS/live streams.
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
+    _transition.finishResolvedOpen();
 
     // The NEW channel may itself already be recording (engine captures keep
     // running across zaps) — repaint the Record button from native truth.
@@ -5435,11 +5357,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final previousIndex = _currentSourceIndex;
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
       _currentSourceIndex = index;
     });
-    _startTransitionOverlay();
+    _transition.startOverlay();
     // A deliberate source pick is a fresh tune: any recovery episode (and
     // its pill) belonged to the link being abandoned.
     _iptvLiveRecovery.onTuneStarted();
@@ -5464,19 +5386,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     // Same direct transition-overlay cleanup as _switchToIptvChannel — the
     // 'playing' event is unreliable for HLS/live streams.
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
+    _transition.finishResolvedOpen();
   }
 
   Future<void> _switchToSourcePlaylist(
@@ -5525,11 +5435,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _resume.saveResume();
     if (!mounted) return;
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
       _currentSourceIndex = sourceIndex;
     });
-    _startTransitionOverlay();
+    _transition.startOverlay();
     try {
       await _player.pause();
     } catch (_) {}
@@ -5723,19 +5633,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // End transition (same pattern as _switchToStremioSource)
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
+    _transition.finishResolvedOpen();
   }
 
   Future<void> _switchToStremioSource(int index, String url) async {
@@ -5763,11 +5661,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
       _currentSourceIndex = index;
     });
-    _startTransitionOverlay();
+    _transition.startOverlay();
 
     try {
       await _player.pause();
@@ -5894,19 +5792,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
     }
 
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
+    _transition.finishResolvedOpen();
   }
 
   // ─── Stremio TV Guide ─────────────────────────────────────────────
@@ -6005,7 +5891,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _hideStremioTvGuide();
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
       _currentStremioTvChannelId = channelId;
       _dynamicTitle = title;
@@ -6027,7 +5913,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _resolveStremioSourceOverride = sourceResolver;
       }
     });
-    _startTransitionOverlay();
+    _transition.startOverlay();
 
     try {
       await _player.pause();
@@ -6064,19 +5950,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
 
     // End transition
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _transitionPhase = 2;
-    _transitionPhase2Started = DateTime.now();
-    setState(() {
-      _isTransitioning = false;
-    });
-    _transitionStopTimer = Timer(const Duration(milliseconds: 1500), () {
-      _rainbowController.stop();
-      _transitionRunning = false;
-      _rainbowActive = false;
-      if (mounted) setState(() {});
-    });
+    _transition.finishResolvedOpen();
   }
 
   Future<bool> _goToNextStremioTvSlot({
@@ -6103,7 +5977,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _setStremioTvNextLoading(false);
 
     if (result == null) {
-      setState(() => _isTransitioning = false);
+      setState(() => _transition.setBlocking(false));
       if (!resumeCurrentOnFailure) return false;
       try {
         await _player.play();
@@ -6114,7 +5988,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final url = result['url'] as String?;
     final title = result['title'] as String? ?? _dynamicTitle;
     if (url == null || url.isEmpty) {
-      setState(() => _isTransitioning = false);
+      setState(() => _transition.setBlocking(false));
       if (!resumeCurrentOnFailure) return false;
       try {
         await _player.play();
@@ -6160,7 +6034,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
       _currentChannelId = channel.id;
       _currentChannelName = channel.name;
@@ -6168,7 +6042,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _currentChannelNumber = channel.number;
       }
     });
-    _startTransitionOverlay();
+    _transition.startOverlay();
 
     try {
       await _player.pause();
@@ -6185,9 +6059,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (payload == null) {
       setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
+        _transition.showChannelFailure(noStreams: false);
+        _transition.setBlocking(false);
       });
       return;
     }
@@ -6226,17 +6099,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (nextUrl.isEmpty) {
       setState(() {
-        _tvStaticMessage = '⚠ CHANNEL HAS NO STREAMS';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
+        _transition.showChannelFailure(noStreams: true);
+        _transition.setBlocking(false);
       });
       return;
     }
 
     if (nextTitle.isNotEmpty) {
       setState(() {
-        _tvStaticMessage = '📺 SIGNAL ACQUIRED';
-        _tvStaticSubtext = '▶ ${nextTitle.toUpperCase()}';
+        _transition.showSignal(nextTitle);
       });
     }
 
@@ -6260,16 +6131,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {
       debugPrint('Player: Failed to open channel stream: $e');
       setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
+        _transition.showChannelFailure(noStreams: false);
+        _transition.setBlocking(false);
       });
       return;
     }
 
     if (mounted) {
       setState(() {
-        _isTransitioning = false;
+        _transition.setBlocking(false);
         if (nextTitle.isNotEmpty) {
           _dynamicTitle = nextTitle;
         }
@@ -6286,10 +6156,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
     });
-    _startTransitionOverlay();
+    _transition.startOverlay();
 
     try {
       await _player.pause();
@@ -6308,9 +6178,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (payload == null) {
       setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
+        _transition.showChannelFailure(noStreams: false);
+        _transition.setBlocking(false);
       });
       return;
     }
@@ -6353,17 +6222,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (nextUrl.isEmpty) {
       setState(() {
-        _tvStaticMessage = '⚠ CHANNEL HAS NO STREAMS';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
+        _transition.showChannelFailure(noStreams: true);
+        _transition.setBlocking(false);
       });
       return;
     }
 
     if (nextTitle.isNotEmpty) {
       setState(() {
-        _tvStaticMessage = '📺 SIGNAL ACQUIRED';
-        _tvStaticSubtext = '▶ ${nextTitle.toUpperCase()}';
+        _transition.showSignal(nextTitle);
       });
     }
 
@@ -6388,9 +6255,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {
       debugPrint('Player: Failed to open next channel stream: $e');
       setState(() {
-        _tvStaticMessage = '⚠ CHANNEL SWITCH FAILED';
-        _tvStaticSubtext = '';
-        _isTransitioning = false;
+        _transition.showChannelFailure(noStreams: false);
+        _transition.setBlocking(false);
       });
       return;
     }
@@ -6414,7 +6280,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (nextTitle.isNotEmpty) {
           _dynamicTitle = nextTitle;
         }
-        _isTransitioning = false;
+        _transition.setBlocking(false);
       });
     }
   }
@@ -6424,7 +6290,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Show black screen during transition to hide previous frame
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      _transition.setBlocking(true);
       _scrub.invalidateAndAbandon();
     });
 
@@ -6448,7 +6314,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Clear transition state if no previous episode found
       if (mounted) {
         setState(() {
-          _isTransitioning = false;
+          _transition.setBlocking(false);
         });
       }
     }
@@ -6566,21 +6432,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// clears transition state itself, so this only rescues the other callers
   /// (`_goToNextEpisode`, shuffle). Safe to call redundantly.
   void _clearTransitionOnFailure() {
-    _transitionStopTimer?.cancel();
-    _transitionPhaseTimer?.cancel();
-    _rainbowController.stop();
-    _transitionRunning = false;
-    _rainbowActive = false;
+    _transition.stopVisualsForFailedLoad();
     // No new media will open, so the duration emit that normally re-arms the
     // skip lookup never comes. Leaving it disarmed would silently cost the
     // skip button for the rest of whatever is still playing.
     _skipSegmentsMediaReady = true;
     if (mounted) {
       setState(() {
-        _isTransitioning = false;
+        _transition.setBlocking(false);
       });
     } else {
-      _isTransitioning = false;
+      _transition.setBlocking(false);
     }
   }
 
@@ -6765,7 +6627,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Clear transition state when video is ready
     if (mounted) {
       setState(() {
-        _isTransitioning = false;
+        _transition.setBlocking(false);
       });
     }
     return true;
@@ -7512,12 +7374,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (_playerCreated) unawaited(_player.pause());
       return;
     }
-    // _isTransitioning too, not just _isPlaying: mid-switch (next episode, a
+    // _transition.blocking too, not just _isPlaying: mid-switch (next episode, a
     // zap) `playing` is briefly false while an open(play: true) is in flight.
     // Backgrounding in that window must still arm the flag, or the open lands
     // moments later and plays behind the backgrounded app with the guard in
     // the playing listener disarmed. A user's own pause has neither set.
-    if (!_playerCreated || (!_isPlaying && !_isTransitioning)) return;
+    if (!_playerCreated || (!_isPlaying && !_transition.blocking)) return;
     // A recovery in flight must not re-open streams behind a backgrounded
     // app; the resume path below re-arms recovery when it matters.
     _backgroundedAt = DateTime.now();
@@ -7672,8 +7534,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       unawaited(subtitleAutoSync.dispose());
       _releaseVideoOutput();
     }
-    _transitionStopTimer?.cancel();
-    _rainbowController.dispose();
+    _transition.retireAtRouteDispose();
     // Restore system brightness when exiting the player
     try {
       ScreenBrightness().resetScreenBrightness();
@@ -7787,7 +7648,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               clock: _playbackUiClock,
               isPlaying: _isPlaying,
               isLive: isLive,
-              isTransitioning: _isTransitioning,
+              isTransitioning: _transition.blocking,
               scopeNode: _tvBarScope,
               playPauseFocusNode: _tvPlayPauseFocus,
               progressFocusNode: _tvProgressFocus,
@@ -7950,7 +7811,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // BACK must always get you out (a tune can hang on the network), and
     // LEFT/RIGHT must still zap, because a newer switch is allowed to
     // supersede a slow one (_iptvSwitchTicket).
-    if (!_isReady || _isTransitioning) {
+    if (!_isReady || _transition.blocking) {
       if (isBack) return null;
       // Zap directly rather than falling through: the mapping below only zaps
       // when the bar is hidden, so with it up the press would reach the seek
@@ -8439,9 +8300,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Fullscreen transition overlay: retro TV static effect (matches Android TV)
   Widget _buildTransitionOverlay() {
     return TransitionOverlay(
-      rainbowController: _rainbowController,
-      tvStaticMessage: _tvStaticMessage,
-      tvStaticSubtext: _tvStaticSubtext,
+      rainbowController: _transition.animationController,
+      tvStaticMessage: _transition.message,
+      tvStaticSubtext: _transition.subtext,
     );
   }
 
@@ -8546,14 +8407,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _armDebrifyBannerTimer() {
     // While resolving, poll fast — so the FULL display window is granted
     // from (roughly) the moment the new stream lands, not from zap start.
-    final resolving = _isTransitioning;
+    final resolving = _transition.blocking;
     _debrifyBannerTimer = Timer(
       resolving
           ? const Duration(milliseconds: 400)
           : VideoPlayerTimingConstants.badgeDisplayDuration,
       () {
         if (!mounted) return;
-        if (resolving || _isTransitioning) {
+        if (resolving || _transition.blocking) {
           // Either this was a resolve-poll, or a new switch began
           // mid-window: keep the identity up and re-evaluate.
           _armDebrifyBannerTimer();
@@ -8660,8 +8521,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!_canFetchEpisodes || _episodeFetchInProgress) {
       // A next/prev press may have raised the transition curtain already;
       // never leave it up when the request can't run.
-      if (mounted && _isTransitioning) {
-        setState(() => _isTransitioning = false);
+      if (mounted && _transition.blocking) {
+        setState(() => _transition.setBlocking(false));
       }
       return;
     }
@@ -8756,8 +8617,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (mounted && token == _playlistIdentityToken) {
         // A next/prev press raised the transition curtain before calling in
         // here — drop it, or a failed fetch leaves the screen black.
-        if (_isTransitioning) {
-          setState(() => _isTransitioning = false);
+        if (_transition.blocking) {
+          setState(() => _transition.setBlocking(false));
         }
         messenger.showSnackBar(
           SnackBar(content: Text('No playable source found for $label')),
@@ -9234,7 +9095,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               fit: StackFit.expand,
               children: [
                 // Video texture (media_kit renderer)
-                if (isReady && !_isTransitioning)
+                if (isReady && !_transition.blocking)
                   _getCustomAspectRatio() != null
                       ? _buildCustomAspectRatioVideo()
                       : mkv.Video(
@@ -9246,7 +9107,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           fit: _currentFit(),
                           subtitleViewConfiguration: _buildSubtitleViewConfig(),
                         )
-                else if (_isTransitioning)
+                else if (_transition.blocking)
                   // Black screen during transitions to hide previous frame
                   Container(color: Colors.black)
                 else
@@ -9328,7 +9189,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     ),
                   ),
                 // Transition overlay above video
-                if (_rainbowActive) _buildTransitionOverlay(),
+                if (_transition.overlayActive) _buildTransitionOverlay(),
                 if (_showStremioTvNextLoading)
                   _buildStremioTvNextLoadingOverlay(),
                 // Double-tap ripple
@@ -10669,7 +10530,7 @@ class _RendererSession implements RendererSession {
   @override bool get pausedByLifecycle => _s._pausedByLifecycle;
   @override bool get isTeeRecording => _s._recording.isTeeRecording;
   @override bool get errorsMuted => _s._iptvErrorsMuted;
-  @override bool get isTransitioning => _s._isTransitioning;
+  @override bool get isTransitioning => _s._transition.blocking;
   @override bool get fallbackPlatformIsAndroid => RendererStartupEnvironment.isAndroid;
   @override bool get probePlatformIsAndroid => Platform.isAndroid;
   @override bool get isAndroidTv => PlatformUtil.isAndroidTvCached;
@@ -10769,7 +10630,7 @@ class _ResumeSession implements ResumeSession {
   @override String? get currentStreamUrl => _s._currentStreamUrl;
   @override bool get validationGateActive => _s._validationGateActive;
   @override bool get isReady => _s._isReady;
-  @override bool get isTransitioning => _s._isTransitioning;
+  @override bool get isTransitioning => _s._transition.blocking;
   @override bool get currentMovieMarkedAsFinished => _s._currentMovieMarkedAsFinished;
   @override double? get speedBeforeHold => _s._presentation.speedBeforeHold;
   @override bool get isMounted => _s.mounted;
