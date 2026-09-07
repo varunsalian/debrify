@@ -546,6 +546,10 @@ is an editor mirror, not the source of truth. How to add a provider:
   owns provider progress caches, launch-percent flags, coordinator setup and
   heartbeat; nine live session reads retain host coupling. Media ordering and
   native lifetime stay in host. Host -164 / whole production +55.
+  Renderer startup/fallback: `lib/screens/video_player/services/renderer_coordinator.dart`
+  owns mode, validation state and sequential fallback; host retains construction,
+  UI effects and fire-and-forget route retirement. Partial ownership retains
+  18 live reads/21 commands; host -178, whole production +127.
   Shared player dialog: `lib/widgets/player/spotlight_dialog.dart`
   (`showSpotlightDialog`, `SpotlightDialogCard`).
   Identify-title sheet: `lib/widgets/player/identify_title_sheet.dart`
