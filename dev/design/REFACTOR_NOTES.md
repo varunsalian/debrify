@@ -800,3 +800,8 @@ Green origin pin982e24dd (four public-host mocked-terminal cases) retained. Unap
 ## G4-3 reviewer follow-ups — September 7
 
 PR232 Decisions2/3 are excluded from the sorting deduplication. Dead series-arrange methods/arms are proposed for a separately evidenced Phase3 deletion, retaining the enum compatibility value; reachability still requires verification. Diverged PikPak/Premiumize/playlist sort variants remain unchanged and require per-host pins and explicit difference accounting before any G4-4 convergence. #227 is already merged. Neither follow-up is currently assigned or credited to the player target.
+
+
+## G4-3 landing provenance
+
+PR232 merged ab4e8323 after user authorized landing. Pin-before-move ancestry28db8762→e89c54a9 and independent old-origin2PASS/current66PASS are verified. Historical pre-move execution and mutation excerpts remain author-reported, not independently timestamp-proven. Case-fold/non-Season regex/unnumbered-folder comparisons are source-preserved rather than adversarially pinned. Exact final merge tree a56df4d6 preserves all four accepted payload blobs and all outside main paths. No additional runtime was repeated.
