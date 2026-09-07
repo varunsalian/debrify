@@ -102,7 +102,7 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/iptv/iptv_filters.dart': 4,
   'lib/widgets/iptv/iptv_list_name_dialog.dart': 0,
   'lib/widgets/iptv/iptv_list_picker_dialog.dart': 0,
-  'lib/widgets/iptv/iptv_results_view.dart': 1,
+  'lib/widgets/iptv/iptv_results_view.dart': 0,
   'lib/widgets/iptv/stage/iptv_cockpit_stage.dart': 0,
   'lib/widgets/iptv/stage/iptv_preview_rail.dart': 0,
   'lib/widgets/iptv/stage/iptv_rail_info.dart': 0,
@@ -129,6 +129,8 @@ const Map<String, int> kShapeResidue = {
 // Moved literal-only owner: guarded for radius growth, not claimed as swept.
 const Map<String, int> kRadiusOnlyResidue = {
   'lib/screens/search/hero_spotlight.dart': 1,
+  // I2 moved iptv_results_view's only bare radius into the stage shell.
+  'lib/widgets/iptv/stage/iptv_preview_stage.dart': 1,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(
@@ -170,6 +172,7 @@ void main() {
   test('Hero radius-only owner remains explicitly inventoried', () {
     expect(kRadiusOnlyResidue, {
       'lib/screens/search/hero_spotlight.dart': 1,
+      'lib/widgets/iptv/stage/iptv_preview_stage.dart': 1,
     });
     expect(kShapeResidue['lib/screens/search/search_hero_widgets.dart'], 0);
     expect(kShapeResidue.containsKey('lib/screens/search/hero_spotlight.dart'),
