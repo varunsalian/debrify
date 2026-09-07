@@ -1,5 +1,4 @@
 import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
-import 'package:debrify/services/storage/ambient_trailer_prefs.dart' show AmbientTrailerPrefs;
 import 'package:debrify/services/storage/my_watchlist_store.dart';
 import 'package:debrify/services/storage/playback_progress_store.dart';
 import 'dart:async';
@@ -11,7 +10,6 @@ import 'package:flutter/services.dart';
 import '../utils/platform_util.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
-import '../models/playlist_view_mode.dart';
 import '../services/analytics_service.dart';
 import '../services/series_source_service.dart';
 import '../services/app_route_observer.dart';
@@ -19,9 +17,6 @@ import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
-import '../services/video_player_launcher.dart';
-import '../services/imdb_trailer_service.dart';
-import '../services/youtube_service.dart';
 import '../widgets/detail/detail_episode_cells.dart';
 import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
@@ -33,7 +28,6 @@ import '../widgets/detail/detail_action_buttons.dart';
 import '../widgets/detail/detail_focus_chrome.dart';
 import '../widgets/detail/detail_primary_sources.dart';
 import '../widgets/detail/detail_rail_cards.dart';
-import '../widgets/detail/detail_tracker_sheets.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
 import '../theme/app_theme_scope.dart';
@@ -51,6 +45,8 @@ import '../services/simkl/simkl_menu_helpers.dart';
 import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/tracker_brand_marks.dart';
+import 'merged_detail/detail_tracker_controller.dart';
+import 'merged_detail/detail_trailer_controller.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
 import '../theme/app_theme_controller.dart';
@@ -245,12 +241,18 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   List<StremioMeta>? _recommendations;
   StremioMeta? _enriched;
 
-  /// Trailer YouTube ID, resolved from Cinemeta meta. Null until loaded / when
-  /// the title has no trailer — the Trailer button only shows once this is set.
-  String? _trailerYtId;
-
-  /// Guards against a double-launch while a trailer's streams resolve.
-  bool _trailerLoading = false;
+  /// The trailer lifecycle: Cinemeta id resolution, the OTT ambient-autoplay
+  /// pipeline behind the backdrop, fullscreen promotion and the standalone
+  /// fallback launch.
+  late final DetailTrailerController _trailer = DetailTrailerController(
+    read: () => DetailTrailerInputs(
+      routeItem: widget.item,
+      item: _item,
+      isTelevision: widget.isTelevision,
+      leftEntryFocusNode: _leftEntryFocusNode,
+      metaEnricher: widget.metaEnricher,
+    ),
+  );
 
   /// One playback launch at a time for the whole merged page. Every visual
   /// theme delegates its primary action here, and the hosted episode panel is
@@ -258,35 +260,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// a second tap, but it is presentation rather than synchronization: two OK
   /// events can otherwise enter the async resume/source resolution together.
   bool _playLaunching = false;
-
-  /// Whether OTT-style trailer autoplay behind the backdrop is on (settings).
-  /// Always false on Android TV — the Home hero owns ambient trailers there.
-  bool _trailerAutoplayEnabled = false;
-
-  /// Ambient loop volume (0–100) from settings; 0 when the sound toggle is off.
-  /// Read alongside [_trailerAutoplayEnabled] and applied when the backdrop
-  /// opens its engine (which can't happen before the streams resolve), so it's
-  /// always in place by then. Promoting to fullscreen still plays at full
-  /// volume — the backdrop handles that, muted ambient or not.
-  double _trailerAmbientVolume = 70;
-
-  /// Resolved trailer streams, pre-fetched for the ambient backdrop.
-  YoutubeResolvedStreams? _trailerStreams;
-
-  /// Handle to the backdrop so the Trailer button can promote the *same* player
-  /// to fullscreen in place (seamless — no second decoder, no re-buffer).
-  final GlobalKey<HeroTrailerBackdropState> _backdropKey = GlobalKey();
-
-  /// Whether the trailer is currently brought forward to fullscreen.
-  bool _trailerForeground = false;
-
-  /// The ambient backdrop trailer is live with frames on screen — the Trailer
-  /// button reads "Watch Trailer" to say "it's playing, tap to view".
-  bool _trailerAmbientPlaying = false;
-
-  /// Autoplay pipeline in flight (stream resolve → buffer → first frame) — the
-  /// Trailer button shows a spinner.
-  bool _trailerResolving = false;
 
   /// Scrolls the left info column. Focus-anchored (see [DetailScrollAnchor]) so that
   /// focusing the top action row snaps to the very top (revealing the
@@ -425,52 +398,31 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// "merged progress beats Start Watching").
   bool _resumeLoaderInFlight = false;
 
-  /// The user's live Trakt relationship to this title (watchlist / collection /
-  /// watched / rating). Null until [traktStatusLoader] resolves — the menu then
-  /// falls back to the add-only [traktMenuOptions]. Re-read after a quick action
-  /// and when the player pops back.
-  TraktTitleStatus? _traktStatus;
+  /// The tracker-status engine: the live Trakt / Simkl / MDBList relationships
+  /// to this title, the pill labels compressed out of them, the app-vs-tracker
+  /// split of the one incoming Trakt option list, and the sheets that change
+  /// any of it.
+  late final DetailTrackerController _tracker = DetailTrackerController(
+    read: () => DetailTrackerInputs(
+      title: _item.name,
+      isTelevision: widget.isTelevision,
+      traktMenuOptions: widget.traktMenuOptions,
+      traktMenuBuilder: widget.traktMenuBuilder,
+      onTraktAction: widget.onTraktAction,
+      traktStatusLoader: widget.traktStatusLoader,
+      onTraktRate: widget.onTraktRate,
+      simklMenuOptions: widget.simklMenuOptions,
+      simklMenuBuilder: widget.simklMenuBuilder,
+      onSimklAction: widget.onSimklAction,
+      simklStatusLoader: widget.simklStatusLoader,
+      onSimklRate: widget.onSimklRate,
+      mdblistMenuOptions: widget.mdblistMenuOptions,
+      mdblistMenuBuilder: widget.mdblistMenuBuilder,
+      onMdblistAction: widget.onMdblistAction,
+      mdblistStatusLoader: widget.mdblistStatusLoader,
+    ),
+  );
 
-  /// Whether the status loaders have answered at least once. A null status
-  /// means "untracked" only *after* this flips — before it, the answer simply
-  /// isn't in yet, and the pill must not claim the title is untracked.
-  bool _traktStatusResolved = false;
-  bool _simklStatusResolved = false;
-  bool _mdblistStatusResolved = false;
-
-  /// The quick-actions strip to render: rebuilt against [_traktStatus] when a
-  /// builder was supplied, else the static list passed in.
-  List<TraktMenuOption> get _menuOptions =>
-      widget.traktMenuBuilder?.call(_traktStatus) ?? widget.traktMenuOptions;
-
-  /// Debrify's own actions. They arrive inside the Trakt option list (that list
-  /// has always carried both), but none of them touch Trakt — so they get the
-  /// neutral "More" sheet and the Trakt sheet stays purely Trakt. Being app
-  /// actions they're also available when Trakt is disconnected, which the old
-  /// single-menu arrangement only managed by keeping an always-present Trakt
-  /// button.
-  static const Set<TraktItemMenuAction> _appOwnedActions = {
-    TraktItemMenuAction.selectSource,
-    TraktItemMenuAction.addToStremioTv,
-    TraktItemMenuAction.playRandomEpisode,
-    TraktItemMenuAction.searchPacks,
-    TraktItemMenuAction.removeFromPlayback,
-  };
-
-  List<TraktMenuOption> get _appMenuOptions => [
-    for (final o in _menuOptions)
-      if (_appOwnedActions.contains(o.action)) o,
-  ];
-
-  List<TraktMenuOption> get _traktOnlyMenuOptions => [
-    for (final o in _menuOptions)
-      if (!_appOwnedActions.contains(o.action)) o,
-  ];
-
-  /// The user's live Simkl relationship to this title. Null until
-  /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
-  SimklTitleStatus? _simklStatus;
-  MdblistTitleStatus? _mdblistStatus;
   bool _localMovieFinished = false;
   bool _showcaseOpeningDataReady = false;
 
@@ -483,31 +435,29 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     widget.item.sourceAddon ?? widget.addon,
   );
 
-  /// The Simkl quick-actions strip to render: rebuilt against [_simklStatus]
-  /// when a builder was supplied, else the static list passed in.
-  List<SimklMenuOption> get _menuOptionsSimkl =>
-      widget.simklMenuBuilder?.call(_simklStatus) ?? widget.simklMenuOptions;
-  List<MdblistMenuOption> get _menuOptionsMdblist =>
-      widget.mdblistMenuBuilder?.call(_mdblistStatus) ??
-      widget.mdblistMenuOptions;
-
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('series_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
+    // Both controllers stand in for the setState calls their state used to
+    // make: one listener each, and the page rebuilds exactly as before.
+    _tracker.addListener(_onControllerChanged);
+    _trailer.addListener(_onControllerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loadShowcaseOpeningData();
-      _loadTrailer();
+      _trailer.load(context);
       _loadAccent();
       _loadResumeInfo();
-      _loadTraktStatus();
-      _loadSimklStatus();
-      _loadMdblistStatus();
+      _tracker.loadAll();
       _loadLocalMovieFinished();
       _loadMyWatchlistState();
     });
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _guardPlay(Future<void> Function() launch) async {
@@ -596,7 +546,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
     final canBrowsePacks =
         widget.onTraktAction != null &&
-        _appMenuOptions.any(
+        _tracker.appMenuOptions.any(
           (option) => option.action == TraktItemMenuAction.searchPacks,
         );
     if (!rules.preferSeriesPacks || !canBrowsePacks) {
@@ -694,9 +644,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     _loadResumeInfo();
     // Watched state (and thus the resume label / badges) may have changed while
     // away — re-read the Trakt status too.
-    _loadTraktStatus();
-    _loadSimklStatus();
-    _loadMdblistStatus();
+    _tracker.loadAll();
     _loadLocalMovieFinished();
     _loadMyWatchlistState();
     // And the episode list's ticks/progress: episode quick-play now plays on
@@ -739,59 +687,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Couldn\'t update My Watchlist')),
       );
-    }
-  }
-
-  /// Resolve the user's Trakt relationship to this title so the menu shows
-  /// Add ↔ Remove toggles and the hero can badge Watchlist/Collection/Watched/
-  /// rating. Silent on failure — the menu just stays add-only.
-  Future<void> _loadTraktStatus() async {
-    final loader = widget.traktStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = (await loader())?.preserveWatchedFrom(_traktStatus);
-      if (!mounted || status == null) return;
-      setState(() => _traktStatus = status);
-    } catch (_) {
-    } finally {
-      // Resolved either way: a failed read is still an answered question as
-      // far as the pill is concerned — it stops saying "Checking…" and falls
-      // back to the untracked form rather than spinning forever.
-      if (mounted && !_traktStatusResolved) {
-        setState(() => _traktStatusResolved = true);
-      }
-    }
-  }
-
-  /// Resolve the user's Simkl relationship to this title — mirrors
-  /// [_loadTraktStatus] exactly.
-  Future<void> _loadSimklStatus() async {
-    final loader = widget.simklStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = await loader();
-      if (!mounted || status == null) return;
-      setState(() => _simklStatus = status);
-    } catch (_) {
-    } finally {
-      if (mounted && !_simklStatusResolved) {
-        setState(() => _simklStatusResolved = true);
-      }
-    }
-  }
-
-  Future<void> _loadMdblistStatus() async {
-    final loader = widget.mdblistStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = await loader();
-      if (!mounted || status == null) return;
-      setState(() => _mdblistStatus = status);
-    } catch (_) {
-    } finally {
-      if (mounted && !_mdblistStatusResolved) {
-        setState(() => _mdblistStatusResolved = true);
-      }
     }
   }
 
@@ -994,7 +889,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Keep the rewatch affordance visible for movie routes that omit one.
     if (!_resumeLoaded) {
       if (_isMovie &&
-          (_localMovieFinished || _simklStatus?.currentStatus == 'completed')) {
+          (_localMovieFinished || _tracker.simklStatus?.currentStatus == 'completed')) {
         return 'Rewatch';
       }
       return _isMovie ? 'Play' : 'Resume';
@@ -1004,7 +899,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // session; its Play un-marks it watched so the rewatch re-enters
       // Continue Watching — surface that intent as "Rewatch".
       if (_isMovie &&
-          (_localMovieFinished || _simklStatus?.currentStatus == 'completed')) {
+          (_localMovieFinished || _tracker.simklStatus?.currentStatus == 'completed')) {
         return 'Rewatch';
       }
       return _isMovie ? 'Play' : 'Start Watching';
@@ -1047,6 +942,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     _infoPaneScope.dispose();
     _episodesPaneScope.dispose();
     _backButtonFocusNode.dispose();
+    _tracker.dispose();
+    _trailer.dispose();
     super.dispose();
   }
 
@@ -1091,187 +988,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         );
       });
     } catch (_) {}
-  }
-
-  /// Resolve the trailer's YouTube ID from Cinemeta. Runs independently of
-  /// [_loadEnrichedMeta] (which short-circuits for already-rich items and so
-  /// can't be relied on to carry the trailer). The `fetchMetaDetails` result is
-  /// cached in [StremioService], so this shares that fetch rather than doubling
-  /// network. Silent on failure — the button simply never appears.
-  Future<void> _loadTrailer() async {
-    // Resolve the trailer id: prefer what the item arrived with, else ask the
-    // metadata addon (Cinemeta).
-    String? ytId = widget.item.trailerYtId;
-    if (ytId == null || ytId.isEmpty) {
-      final enrich = widget.metaEnricher;
-      final imdbId = widget.item.effectiveImdbId;
-      if (enrich != null && imdbId != null) {
-        try {
-          final full = await enrich(imdbId, widget.item.type);
-          ytId = full?.trailerYtId;
-        } catch (_) {}
-      }
-    }
-    if (ytId == null || ytId.isEmpty || !mounted) return;
-    setState(() => _trailerYtId = ytId);
-
-    // OTT autoplay: honour the setting, then pre-resolve the stream (also reused
-    // by the Trailer button). Silent on failure — the poster simply stays.
-    final autoplay = await StorageService.getDetailTrailerAutoplayEnabled();
-    // The ambient sound pair is shared with the TV hero (one live surface per
-    // platform), so off-TV it governs this backdrop. Read unconditionally so
-    // all three land in the one setState below — [autoplay] is false on TV
-    // anyway, and these are two prefs reads.
-    final soundOn = await AmbientTrailerPrefs.getAmbientTrailerAudioEnabled(
-      AmbientTrailerSurface.detail,
-    );
-    final volume = await AmbientTrailerPrefs.getAmbientTrailerVolume(
-      AmbientTrailerSurface.detail,
-    );
-    if (!mounted) return;
-    // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
-    // pipeline (no resolve, no spinner) rather than spin forever waiting for a
-    // player that will never start.
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final willAutoplay = autoplay && !reduceMotion;
-    setState(() {
-      _trailerAutoplayEnabled = autoplay;
-      _trailerAmbientVolume = soundOn ? volume.toDouble() : 0;
-      // Spinner from here until the backdrop reports first frames (or fails).
-      _trailerResolving = willAutoplay;
-    });
-    if (!willAutoplay) return;
-    YoutubeResolvedStreams? streams;
-    try {
-      streams = await YoutubeService.resolveStreams(ytId);
-    } catch (_) {
-      streams = null;
-    }
-    // Backup source: IMDb's own trailer MP4s, for when YouTube resolution is
-    // blocked (regional client kills) — the backdrop still gets to move.
-    if (streams == null || !(streams.playUrl?.isNotEmpty ?? false)) {
-      final imdbId = _item.effectiveImdbId;
-      if (imdbId != null) {
-        streams = await ImdbTrailerService.resolveTrailer(imdbId);
-      }
-    }
-    if (!mounted) return;
-    final playable = streams?.playUrl?.isNotEmpty ?? false;
-    setState(() {
-      _trailerStreams = streams;
-      // No playable stream → the backdrop never starts, so stop the spinner
-      // here; on success the backdrop's onPlayingChanged(true) clears it once
-      // frames actually flow.
-      if (!playable) _trailerResolving = false;
-    });
-    if (!playable) return;
-    // Safety net: a stream that opens but never renders a first frame would
-    // otherwise leave the spinner up forever.
-    Future.delayed(const Duration(seconds: 25), () {
-      if (mounted && _trailerResolving) {
-        setState(() => _trailerResolving = false);
-      }
-    });
-  }
-
-  void _exitTrailerForeground() {
-    if (!_trailerForeground) return;
-    setState(() => _trailerForeground = false);
-    // TV: the page content was focus-excluded while the trailer was fullscreen,
-    // so nothing holds focus now — re-anchor the remote on the primary action.
-    if (widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        // The left-entry node only has a holder when Play or the source pill is
-        // present; if neither is (edge config), fall back to traversal so the
-        // remote isn't stranded rather than no-op on an unattached node.
-        if (detailNodeMounted(_leftEntryFocusNode)) {
-          _leftEntryFocusNode.requestFocus();
-        } else {
-          FocusScope.of(context).nextFocus();
-        }
-      });
-    }
-  }
-
-  /// Trailer button. Seamless path: if the ambient backdrop trailer is already
-  /// playing, bring that *same* player forward (unmute + controls) in place — no
-  /// second decoder, no re-buffer. Fallback path (autoplay off / not resolved /
-  /// reduced motion): resolve fresh and launch the standalone player as before.
-  Future<void> _playTrailer() async {
-    if (_backdropKey.currentState?.canPromote ?? false) {
-      setState(() => _trailerForeground = true);
-      return;
-    }
-
-    final ytId = _trailerYtId;
-    if (ytId == null || _trailerLoading) return;
-
-    // Always resolve fresh on tap. The autoplay-prefetched [_trailerStreams] is
-    // deliberately NOT reused here: googlevideo URLs carry an `expire` param and
-    // go dead after a few hours, so a page left open would hand the player a
-    // stale URL. Re-resolving costs one request and keeps playback reliable.
-    setState(() => _trailerLoading = true);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              SizedBox(width: 12),
-              Text('Loading trailer…'),
-            ],
-          ),
-          duration: Duration(seconds: 4),
-        ),
-      );
-    }
-
-    YoutubeResolvedStreams? streams;
-    try {
-      streams = await YoutubeService.resolveStreams(ytId);
-    } catch (_) {
-      streams = null;
-    }
-    // Same backup as the ambient path: a blocked YouTube must not reduce the
-    // Trailer button to a "Couldn't load trailer" snackbar when IMDb hosts
-    // the same trailer as a plain MP4.
-    if (streams == null || !(streams.playUrl?.isNotEmpty ?? false)) {
-      final imdbId = _item.effectiveImdbId;
-      if (imdbId != null) {
-        streams = await ImdbTrailerService.resolveTrailer(imdbId);
-      }
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    setState(() => _trailerLoading = false);
-
-    final playUrl = streams?.playUrl;
-    if (playUrl == null || playUrl.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Couldn\'t load trailer')));
-      return;
-    }
-
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: playUrl,
-        audioUrl: streams?.audioUrl,
-        fallbackUrl: streams?.muxedPlaybackFallback,
-        title: '${_item.name} — Trailer',
-        viewMode: PlaylistViewMode.sorted,
-      ),
-      // Watching the trailer must not suppress the ambient trailer backdrop.
-      isTrailer: true,
-    );
   }
 
   Future<void> _loadImdbEnrichment() async {
@@ -1323,7 +1039,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   bool get _trailerClearView =>
       _style == 'showcase' &&
       !widget.isTelevision &&
-      _trailerAmbientPlaying &&
+      _trailer.ambientPlaying &&
       !_bodyDeep;
 
   @override
@@ -1339,9 +1055,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return PopScope(
       // While the trailer is fullscreen, Back closes it instead of leaving the
       // page — the same player stays alive and settles back into the backdrop.
-      canPop: !_trailerForeground,
+      canPop: !_trailer.foreground,
       onPopInvoked: (didPop) {
-        if (!didPop) _exitTrailerForeground();
+        if (!didPop) _trailer.exitForeground(context);
       },
       child: Scaffold(
         backgroundColor: _bg,
@@ -1354,7 +1070,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             // Non-focusable and behind all content, so DPAD is unaffected.
             Positioned.fill(
               child: HeroTrailerBackdrop(
-                key: _backdropKey,
+                key: _trailer.backdropKey,
                 heroTag: widget.heroTag,
                 imageUrl: backdropUrl,
                 // Weak-TV GPU: sigma 0 swaps the runtime gaussian for a tiny
@@ -1380,11 +1096,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 // one under a blurred field is a decoder held for nothing. It
                 // also frees the process's single video output for whatever the
                 // user opens next.
-                videoUrl: _trailerAutoplayEnabled && !_bodyDeep
-                    ? _trailerStreams?.playUrl
+                videoUrl: _trailer.autoplayEnabled && !_bodyDeep
+                    ? _trailer.streams?.playUrl
                     : null,
-                audioUrl: _trailerAutoplayEnabled && !_bodyDeep
-                    ? _trailerStreams?.audioUrl
+                audioUrl: _trailer.autoplayEnabled && !_bodyDeep
+                    ? _trailer.streams?.audioUrl
                     : null,
                 // Resolution and decoder startup already provide a natural
                 // poster dwell. Do not stack an artificial wait on top of that.
@@ -1392,17 +1108,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 // Suspend at the Play press, before source/resume resolution.
                 // The pipeline loader is a PopupRoute rather than a PageRoute,
                 // so RouteAware.didPushNext cannot provide this lifecycle beat.
-                enabled: _trailerAutoplayEnabled && !_playLaunching,
-                ambientVolume: _trailerAmbientVolume,
-                foreground: _trailerForeground,
-                onRequestClose: _exitTrailerForeground,
-                onPlayingChanged: (playing) {
-                  if (!mounted) return;
-                  setState(() {
-                    _trailerAmbientPlaying = playing;
-                    _trailerResolving = false;
-                  });
-                },
+                enabled: _trailer.autoplayEnabled && !_playLaunching,
+                ambientVolume: _trailer.ambientVolume,
+                foreground: _trailer.foreground,
+                onRequestClose: () => _trailer.exitForeground(context),
+                onPlayingChanged: _trailer.setAmbientPlaying,
               ),
             ),
             // Page content (tint + panes + back button). Fades out and stops
@@ -1413,11 +1123,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             // fullscreen trailer.
             Positioned.fill(
               child: ExcludeFocus(
-                excluding: _trailerForeground,
+                excluding: _trailer.foreground,
                 child: IgnorePointer(
-                  ignoring: _trailerForeground,
+                  ignoring: _trailer.foreground,
                   child: AnimatedOpacity(
-                    opacity: _trailerForeground ? 0 : 1,
+                    opacity: _trailer.foreground ? 0 : 1,
                     duration: const Duration(milliseconds: 420),
                     curve: Curves.easeInOut,
                     child: Stack(
@@ -1430,8 +1140,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // promoted, and suppressed outright while it is —
                         // otherwise it would cover the fullscreen video.
                         if (_focusedStillUrl != null &&
-                            !_trailerForeground &&
-                            !_trailerAmbientPlaying)
+                            !_trailer.foreground &&
+                            !_trailer.ambientPlaying)
                           Positioned.fill(
                             child: DetailAmbientStill(
                               url: _focusedStillUrl!,
@@ -1546,7 +1256,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             // Small "trailer playing in background" hint — only while the
             // ambient trailer is actually playing and not promoted. Tapping it
             // brings the trailer forward (same as the Trailer button).
-            if (_trailerAmbientPlaying && !_trailerForeground)
+            if (_trailer.ambientPlaying && !_trailer.foreground)
               Positioned(
                 left: 0,
                 bottom: 0,
@@ -1554,7 +1264,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                   child: Padding(
                     padding: EdgeInsets.all(widget.isTelevision ? 20 : 12),
                     child: DetailTrailerPlayingChip(
-                      onTap: _playTrailer,
+                      onTap: () => _trailer.play(context),
                       theme: _themedBody ? _theme : null,
                     ),
                   ),
@@ -1606,21 +1316,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       primaryBusy: _primaryBusy,
       sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
       boundSources: _boundSources,
-      hasTrailer: _trailerYtId != null,
-      trailerBusy: _trailerResolving || _trailerLoading,
-      trailerPlaying: _trailerAmbientPlaying,
-      hasTrakt: _traktOnlyMenuOptions.isNotEmpty,
-      traktTracked: _traktTracked,
-      traktLabel: _traktPillLabel,
-      traktRating: _traktStatus?.rating,
-      hasSimkl: _menuOptionsSimkl.isNotEmpty,
-      simklTracked: _simklTracked,
-      simklLabel: _simklPillLabel,
-      simklRating: _simklStatus?.rating,
-      hasMdblist: _menuOptionsMdblist.isNotEmpty,
-      mdblistTracked: _mdblistTracked,
-      mdblistLabel: _mdblistPillLabel,
-      mdblistRating: _mdblistStatus?.rating,
+      hasTrailer: _trailer.ytId != null,
+      trailerBusy: _trailer.resolving || _trailer.loading,
+      trailerPlaying: _trailer.ambientPlaying,
+      hasTrakt: _tracker.traktOnlyMenuOptions.isNotEmpty,
+      traktTracked: _tracker.traktTracked,
+      traktLabel: _tracker.traktPillLabel,
+      traktRating: _tracker.traktStatus?.rating,
+      hasSimkl: _tracker.menuOptionsSimkl.isNotEmpty,
+      simklTracked: _tracker.simklTracked,
+      simklLabel: _tracker.simklPillLabel,
+      simklRating: _tracker.simklStatus?.rating,
+      hasMdblist: _tracker.menuOptionsMdblist.isNotEmpty,
+      mdblistTracked: _tracker.mdblistTracked,
+      mdblistLabel: _tracker.mdblistPillLabel,
+      mdblistRating: _tracker.mdblistStatus?.rating,
       showPrimary: widget.showQuickPlay,
       onPrimary: _playPrimary,
       onPrimaryLongPress:
@@ -1636,27 +1346,27 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onBrowse: _isMovie
           ? widget.onBrowse
           : (widget.onTraktAction != null &&
-                _appMenuOptions.any(
+                _tracker.appMenuOptions.any(
                   (o) => o.action == TraktItemMenuAction.searchPacks,
                 ))
           ? () => widget.onTraktAction!(TraktItemMenuAction.searchPacks)
           : null,
-      onTrailer: _playTrailer,
+      onTrailer: () => _trailer.play(context),
       onSelectSource: widget.onSelectSource == null
           ? null
           : () async {
               await widget.onSelectSource!(_item);
               if (mounted) setState(() {});
             },
-      onAppMenu: (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
-          ? _showAppActionsMenu
+      onAppMenu: (_tracker.appMenuOptions.isNotEmpty && widget.onTraktAction != null)
+          ? () => _tracker.showAppActionsMenu(context)
           : null,
-      onTraktMenu: widget.onTraktAction != null ? _showQuickActionsMenu : null,
+      onTraktMenu: widget.onTraktAction != null ? () => _tracker.showTraktQuickActionsMenu(context) : null,
       onSimklMenu: widget.onSimklAction != null
-          ? _showSimklQuickActionsMenu
+          ? () => _tracker.showSimklQuickActionsMenu(context)
           : null,
       onMdblistMenu: widget.onMdblistAction != null
-          ? _showMdblistQuickActionsMenu
+          ? () => _tracker.showMdblistQuickActionsMenu(context)
           : null,
       inMyWatchlist: _inMyWatchlist,
       onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
@@ -1666,7 +1376,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // lists them.
       // Null when neither service is configured, or the layout mounts a `+`
       // that focuses and does nothing. There is no combined sheet to open —
-      // `_showAppActionsMenu` is the APP-action list, not a tracker chooser —
+      // `DetailTrackerController.showAppActionsMenu` is the APP-action list, not a tracker chooser —
       // so with both configured this opens Trakt's, and Simkl stays reachable
       // through the More button beside it.
       // Gated on whether a tracker is actually CONNECTED, not on whether the
@@ -1676,40 +1386,40 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       //
       // With both connected this opens Trakt's sheet and Simkl stays reachable
       // from the More button beside it; there is no combined sheet to open,
-      // and `_showAppActionsMenu` is the APP-action list, not a chooser.
+      // and `DetailTrackerController.showAppActionsMenu` is the APP-action list, not a chooser.
       onTrackers:
-          (_traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
-          ? _showQuickActionsMenu
-          : (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null
-                ? _showSimklQuickActionsMenu
-                : (_menuOptionsMdblist.isNotEmpty &&
+          (_tracker.traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
+          ? () => _tracker.showTraktQuickActionsMenu(context)
+          : (_tracker.menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null
+                ? () => _tracker.showSimklQuickActionsMenu(context)
+                : (_tracker.menuOptionsMdblist.isNotEmpty &&
                           widget.onMdblistAction != null
-                      ? _showMdblistQuickActionsMenu
+                      ? () => _tracker.showMdblistQuickActionsMenu(context)
                       : null)),
       // Only when Trakt already took the first slot; otherwise Simkl IS the
       // first slot above and this would mount the same sheet twice.
       onTrackersSecondary:
-          (_traktOnlyMenuOptions.isNotEmpty &&
+          (_tracker.traktOnlyMenuOptions.isNotEmpty &&
               widget.onTraktAction != null &&
-              _menuOptionsSimkl.isNotEmpty &&
+              _tracker.menuOptionsSimkl.isNotEmpty &&
               widget.onSimklAction != null)
-          ? _showSimklQuickActionsMenu
-          : (((_traktOnlyMenuOptions.isNotEmpty &&
+          ? () => _tracker.showSimklQuickActionsMenu(context)
+          : (((_tracker.traktOnlyMenuOptions.isNotEmpty &&
                         widget.onTraktAction != null) ||
-                    (_menuOptionsSimkl.isNotEmpty &&
+                    (_tracker.menuOptionsSimkl.isNotEmpty &&
                         widget.onSimklAction != null)) &&
-                _menuOptionsMdblist.isNotEmpty &&
+                _tracker.menuOptionsMdblist.isNotEmpty &&
                 widget.onMdblistAction != null)
-          ? _showMdblistQuickActionsMenu
+          ? () => _tracker.showMdblistQuickActionsMenu(context)
           : null,
       onTrackersTertiary:
-          (_traktOnlyMenuOptions.isNotEmpty &&
+          (_tracker.traktOnlyMenuOptions.isNotEmpty &&
               widget.onTraktAction != null &&
-              _menuOptionsSimkl.isNotEmpty &&
+              _tracker.menuOptionsSimkl.isNotEmpty &&
               widget.onSimklAction != null &&
-              _menuOptionsMdblist.isNotEmpty &&
+              _tracker.menuOptionsMdblist.isNotEmpty &&
               widget.onMdblistAction != null)
-          ? _showMdblistQuickActionsMenu
+          ? () => _tracker.showMdblistQuickActionsMenu(context)
           : null,
       // There is no per-source host API, so a card in the Sources band and the
       // "Find sources" tile both land on the title-level manager — and the
@@ -2303,106 +2013,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: parts);
   }
 
-  /// Whether Trakt holds any relationship to this title. Drives the pill's
-  /// tinted (tracked) vs. outline (untracked) form.
-  bool get _traktTracked {
-    final s = _traktStatus;
-    return s != null &&
-        (s.inWatchlist ||
-            s.inCollection ||
-            s.titleWatched == true ||
-            s.rating != null);
-  }
-
-  bool get _simklTracked =>
-      _simklStatus?.currentStatus != null || _simklStatus?.rating != null;
-
-  bool get _mdblistTracked {
-    final s = _mdblistStatus;
-    return s != null &&
-        (s.inWatchlist ||
-            s.collected ||
-            s.watched ||
-            s.completed == true ||
-            s.dropped == true ||
-            s.rating != null);
-  }
-
-  /// The live Trakt state, compressed to fit inside the pill. Trakt allows
-  /// several relationships at once, so they're joined with "·" and capped at
-  /// two — the rating rides in the pill's own compartment, not here.
-  ///
-  /// While the loader is still out this reads "Checking…" rather than "Not
-  /// tracked": the row keeps its geometry either way, and asserting the title
-  /// *isn't* on your watchlist when it is — for however long the call takes —
-  /// is worse than admitting we don't know yet.
-  String get _traktPillLabel {
-    final s = _traktStatus;
-    if (s == null &&
-        !_traktStatusResolved &&
-        widget.traktStatusLoader != null) {
-      return 'Checking…';
-    }
-    if (s == null) return 'Not tracked';
-    final parts = <String>[
-      if (s.inWatchlist) 'Watchlist',
-      if (s.inCollection) 'Collected',
-      if (s.titleWatched == true) 'Watched',
-    ];
-    if (parts.isEmpty) {
-      if (s.rating != null) return 'Rated';
-      return s.titleWatched == null ? 'Status unavailable' : 'Not tracked';
-    }
-    return parts.take(2).join(' · ');
-  }
-
-  /// Simkl is single-state by definition, so its pill never needs to join
-  /// anything — it's the one watchlist status, or nothing.
-  String get _simklPillLabel {
-    final status = _simklStatus?.currentStatus;
-    if (status != null) return _simklStatusLabel(status);
-    if (_simklStatus?.rating != null) return 'Rated';
-    if (!_simklStatusResolved && widget.simklStatusLoader != null) {
-      return 'Checking…';
-    }
-    return 'Not tracked';
-  }
-
-  String get _mdblistPillLabel {
-    final s = _mdblistStatus;
-    if (s == null &&
-        !_mdblistStatusResolved &&
-        widget.mdblistStatusLoader != null) {
-      return 'Checking…';
-    }
-    if (s == null) return 'Not tracked';
-    final parts = <String>[
-      if (s.inWatchlist) 'Watchlist',
-      if (s.collected) 'Collected',
-      if (s.completed == true || s.watched) 'Watched',
-      if (s.dropped == true) 'Dropped',
-    ];
-    if (parts.isEmpty) return s.rating == null ? 'Not tracked' : 'Rated';
-    return parts.take(2).join(' · ');
-  }
-
-  static String _simklStatusLabel(String status) {
-    switch (status) {
-      case 'plantowatch':
-        return 'Plan to Watch';
-      case 'watching':
-        return 'Watching';
-      case 'hold':
-        return 'On Hold';
-      case 'completed':
-        return 'Completed';
-      case 'dropped':
-        return 'Dropped';
-      default:
-        return status;
-    }
-  }
-
   Widget _metaText(String s) => Text(
     s,
     style: TextStyle(
@@ -2499,14 +2109,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // trailer id. Reflects the ambient backdrop's state: spinner while the
         // trailer loads, "Watch Trailer" once it's playing (tap = fullscreen),
         // plain "Trailer" otherwise (tap = resolve & play).
-        if (_trailerYtId != null)
+        if (_trailer.ytId != null)
           DetailGhostButton(
-            label: _trailerAmbientPlaying ? 'Watch Trailer' : 'Trailer',
-            icon: _trailerAmbientPlaying
+            label: _trailer.ambientPlaying ? 'Watch Trailer' : 'Trailer',
+            icon: _trailer.ambientPlaying
                 ? Icons.play_circle_outline_rounded
                 : Icons.movie_outlined,
-            busy: _trailerResolving || _trailerLoading,
-            onTap: _playTrailer,
+            busy: _trailer.resolving || _trailer.loading,
+            onTap: () => _trailer.play(context),
           ),
         // Movie: a Sources (manual list) button — the episode list is the
         // picker for series, so this is movie-only.
@@ -2541,195 +2151,51 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // Debrify's own actions (bind source, Stremio TV, random episode,
         // season packs, local Continue Watching) — no tracker involved, so a
         // neutral button rather than a branded one.
-        if (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
+        if (_tracker.appMenuOptions.isNotEmpty && widget.onTraktAction != null)
           DetailRoundIconButton(
             icon: Icons.more_horiz_rounded,
             tooltip: 'More',
-            onTap: _showAppActionsMenu,
+            onTap: () => _tracker.showAppActionsMenu(context),
           ),
         // Trakt — a branded pill that *carries* the live status (the status
         // chips that used to sit under the title are folded into it, so one
         // control both shows and changes the relationship).
-        if (_traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
+        if (_tracker.traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
           DetailTrackerPill(
-            mark: TraktMark(size: 21, opacity: _traktTracked ? 1 : 0.55),
+            mark: TraktMark(size: 21, opacity: _tracker.traktTracked ? 1 : 0.55),
             brand: 'TRAKT',
-            state: _traktPillLabel,
-            rating: _traktStatus?.rating,
+            state: _tracker.traktPillLabel,
+            rating: _tracker.traktStatus?.rating,
             accent: kTraktRed,
-            tracked: _traktTracked,
+            tracked: _tracker.traktTracked,
             tooltip: 'Trakt options',
-            onTap: _showQuickActionsMenu,
+            onTap: () => _tracker.showTraktQuickActionsMenu(context),
           ),
         // Simkl's own pill — a separate button/sheet, not merged with Trakt's,
         // so nothing here touches the button above.
-        if (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null)
+        if (_tracker.menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null)
           DetailTrackerPill(
-            mark: SimklMark(size: 21, opacity: _simklTracked ? 1 : 0.55),
+            mark: SimklMark(size: 21, opacity: _tracker.simklTracked ? 1 : 0.55),
             brand: 'SIMKL',
-            state: _simklPillLabel,
-            rating: _simklStatus?.rating,
+            state: _tracker.simklPillLabel,
+            rating: _tracker.simklStatus?.rating,
             accent: kSimklCyan,
-            tracked: _simklTracked,
+            tracked: _tracker.simklTracked,
             tooltip: 'Simkl options',
-            onTap: _showSimklQuickActionsMenu,
+            onTap: () => _tracker.showSimklQuickActionsMenu(context),
           ),
-        if (_menuOptionsMdblist.isNotEmpty && widget.onMdblistAction != null)
+        if (_tracker.menuOptionsMdblist.isNotEmpty && widget.onMdblistAction != null)
           DetailTrackerPill(
-            mark: MdblistMark(size: 21, opacity: _mdblistTracked ? 1 : 0.55),
+            mark: MdblistMark(size: 21, opacity: _tracker.mdblistTracked ? 1 : 0.55),
             brand: 'MDBLIST',
-            state: _mdblistPillLabel,
-            rating: _mdblistStatus?.rating,
+            state: _tracker.mdblistPillLabel,
+            rating: _tracker.mdblistStatus?.rating,
             accent: kMdblistPurple,
-            tracked: _mdblistTracked,
+            tracked: _tracker.mdblistTracked,
             tooltip: 'MDBList options',
-            onTap: _showMdblistQuickActionsMenu,
+            onTap: () => _tracker.showMdblistQuickActionsMenu(context),
           ),
       ],
-    );
-  }
-
-  /// Debrify's own actions, in a plain labelled list. Closes on selection —
-  /// each of these leaves the sheet anyway (a picker, a search, playback).
-  void _showAppActionsMenu() {
-    final options = _appMenuOptions;
-    if (options.isEmpty || widget.onTraktAction == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      // Same standard sheet chrome as the per-episode ⋮ menu.
-      backgroundColor: AppThemeScope.of(context).sheetSurface,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetCtx) => DetailQuickActionsMenu(
-        title: _item.name,
-        options: options,
-        isTelevision: widget.isTelevision,
-        onSelected: (action) async {
-          Navigator.of(sheetCtx).pop();
-          await widget.onTraktAction?.call(action);
-          // Binding a source changes the pill's count, and "Remove from
-          // Continue Watching" changes the resume label.
-          if (mounted) setState(() {});
-        },
-      ),
-    );
-  }
-
-  /// The Trakt sheet: watchlist / collection / watched as switches, plus an
-  /// inline rating strip and the list actions.
-  ///
-  /// Unlike the app sheet this one stays open — a tracker sheet is somewhere
-  /// you set several things at once, and each row re-reads the live status so
-  /// the switches show the truth rather than an optimistic guess.
-  void _showQuickActionsMenu() {
-    if (_traktOnlyMenuOptions.isEmpty || widget.onTraktAction == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppThemeScope.of(context).sheetSurface,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetCtx) => DetailTraktSheet(
-        title: _item.name,
-        isTelevision: widget.isTelevision,
-        status: _traktStatus,
-        optionsFor: (status) => [
-          for (final o
-              in widget.traktMenuBuilder?.call(status) ??
-                  widget.traktMenuOptions)
-            if (!_appOwnedActions.contains(o.action)) o,
-        ],
-        onAction: (action) async {
-          await widget.onTraktAction?.call(action);
-        },
-        onRate: widget.onTraktRate,
-        statusLoader: widget.traktStatusLoader,
-        // Keep the pill in sync with whatever the sheet did while it was open.
-        onChanged: (status) {
-          if (mounted) {
-            setState(() {
-              _traktStatus = status;
-              _traktStatusResolved = true;
-            });
-          }
-        },
-      ),
-    );
-  }
-
-  /// Simkl's own sheet — mirrors [_showQuickActionsMenu], but Simkl's five
-  /// statuses are mutually exclusive, so they render as an exclusive toggle
-  /// group instead of a list of "Move to X" commands.
-  void _showSimklQuickActionsMenu() {
-    if (_menuOptionsSimkl.isEmpty || widget.onSimklAction == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppThemeScope.of(context).sheetSurface,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetCtx) => DetailSimklSheet(
-        title: _item.name,
-        isTelevision: widget.isTelevision,
-        status: _simklStatus,
-        optionsFor: (status) =>
-            widget.simklMenuBuilder?.call(status) ?? widget.simklMenuOptions,
-        onAction: (action) async {
-          await widget.onSimklAction?.call(action);
-        },
-        onRate: widget.onSimklRate,
-        statusLoader: widget.simklStatusLoader,
-        onChanged: (status) {
-          if (mounted) {
-            setState(() {
-              _simklStatus = status;
-              _simklStatusResolved = true;
-            });
-          }
-        },
-      ),
-    );
-  }
-
-  void _showMdblistQuickActionsMenu() {
-    if (_menuOptionsMdblist.isEmpty || widget.onMdblistAction == null) return;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppThemeScope.of(context).sheetSurface,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 620),
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-            children: [
-              Text(
-                _item.name,
-                style: Theme.of(sheetContext).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'MDBList',
-                style: TextStyle(
-                  color: kMdblistPurple,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              for (final option in _menuOptionsMdblist)
-                ListTile(
-                  leading: Icon(option.icon, color: option.color),
-                  title: Text(option.label),
-                  onTap: () async {
-                    await widget.onMdblistAction?.call(option.action);
-                    await _loadMdblistStatus();
-                    if (sheetContext.mounted) Navigator.pop(sheetContext);
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
