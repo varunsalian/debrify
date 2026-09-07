@@ -62,6 +62,7 @@ import 'video_player/utils/language_mapping.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/player_presentation_controls.dart';
 import 'video_player/player_transport_visibility.dart';
+import 'video_player/player_scrub_session.dart';
 import 'video_player/constants/timing_constants.dart';
 import 'video_player/widgets/auto_sync_pill.dart';
 import 'video_player/widgets/seek_hud.dart';
@@ -461,25 +462,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       widget.hideSeekbar ||
       _duration <= Duration.zero;
 
-  /// Cinema scrub, matching the native TV player: holding LEFT/RIGHT pauses
-  /// playback and previews a destination that OK confirms and BACK cancels.
-  /// [_tvScrubTarget] non-null means a scrub is in flight.
-  Duration? _tvScrubTarget;
-
-  /// When the last LEFT/RIGHT arrived, so a held key (fast repeats) can be
-  /// told from deliberate taps without needing key-up, which the tvOS fork
-  /// does not reliably deliver.
-  DateTime? _tvLastArrowAt;
-  bool _tvScrubWasPlaying = false;
-  int _tvScrubRepeats = 0;
-
-  /// Bumped on every transition and on dispose. A confirm carrying a stale
-  /// generation is dropped, so a scrub started before a source switch can
-  /// never seek the item that replaced it.
-  int _tvScrubGeneration = 0;
-
-  /// The generation in force when the current scrub began.
-  int _tvScrubStartedAtGeneration = 0;
+  late final PlayerScrubSession _scrub;
 
   // Text subtitles stay in MediaKit's Flutter renderer. Bitmap subtitles are
   // the narrow exception: their decoded image cues cannot enter a text widget,
@@ -1128,12 +1111,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       anyOverlayOpen: () => _anyPlayerOverlayOpen,
       readAutoHideBlocker: () {
         final route = ModalRoute.of(context);
-        return _tvScrubTarget != null ||
+        return _scrub.preview != null ||
             !_isPlaying ||
             (route != null && !route.isCurrent) ||
             _anyPlayerOverlayOpen;
       },
       commit: setState,
+    );
+    _scrub = PlayerScrubSession(
+      readPlayer: () => _player,
+      readPosition: () => _position,
+      readDuration: () => _duration,
+      readIsPlaying: () => _isPlaying,
+      readNoTimeline: () => _tvNoTimeline,
+      isMounted: () => mounted,
+      anyOverlayOpen: () => _anyPlayerOverlayOpen,
+      commitState: setState,
+      onSeek: _scrobbleSeek,
+      transport: _transportVisibility,
+      progressFocus: _tvProgressFocus,
+      playPauseFocus: _tvPlayPauseFocus,
     );
     _presentation.bind(
       readPlayer: () => _player,
@@ -4160,8 +4157,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
     });
 
     // Only show transition overlay for Debrify TV content (when requestMagicNext is available)
@@ -5013,8 +5009,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // zap banner — the reconnect pill is the only narration (plan
       // invariant "retune ≠ zap"; codex round 2, finding 14).
       _isTransitioning = !quietRecovery;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentIptvIndex = index;
       _currentChannelNumber = channel.channelNumber ?? (index + 1);
       // The corner badge is painted from this pair; without the name it kept
@@ -5911,8 +5906,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
@@ -6002,8 +5996,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentSourceIndex = sourceIndex;
     });
     _startTransitionOverlay();
@@ -6241,8 +6234,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
@@ -6484,8 +6476,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentStremioTvChannelId = channelId;
       _dynamicTitle = title;
       _currentStremioTvContentImdbId = contentImdbId;
@@ -6640,8 +6631,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentChannelId = channel.id;
       _currentChannelName = channel.name;
       if (channel.number != null) {
@@ -6767,8 +6757,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
     });
     _startTransitionOverlay();
 
@@ -6906,8 +6895,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
     });
 
     final previousIndex = _findPreviousEpisodeIndex();
@@ -7084,8 +7072,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // the armed guard, or an unlanded resume's ~0 position would be filed over
     // that item's bookmark by the very switch that abandons it. The clear sits
     // immediately after that save.
-    _tvScrubGeneration++;
-    _tvAbandonScrub();
+    _scrub.invalidateAndAbandon();
     _resumeVerifyEpoch++;
     unawaited(_resume.cancelResumeVerification());
     if (_activePlaylist == null ||
@@ -8106,7 +8093,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
     _debrifyBannerTimer?.cancel();
-    _tvScrubGeneration++; // invalidate any scrub still in flight
+    _scrub.invalidateOnly(); // invalidate any scrub still in flight
     _tvBarScope.dispose();
     _dockExtent.dispose();
     _tvPlayPauseFocus.dispose();
@@ -8208,81 +8195,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Lower the bar and take focus back to the player root. Without the second
   /// half the focused control is excluded from the tree and the remote dies.
 
-  /// Cinema scrub: hold LEFT/RIGHT to pause and preview a destination, OK to
-  /// confirm, BACK/DOWN to cancel. One seek on confirm, so the trackers and
-  /// resume see a single jump instead of a burst.
-  void _tvScrubBegin(int direction) {
-    if (_tvNoTimeline) return;
-    _tvScrubStartedAtGeneration = _tvScrubGeneration;
-    _tvScrubWasPlaying = _isPlaying;
-    if (_isPlaying) _player.pause();
-    _tvScrubTarget = _position;
-    _transportVisibility.showBar();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _tvScrubTarget != null) _tvProgressFocus.requestFocus();
-    });
-    _tvScrubStep(direction);
-  }
-
-  void _tvScrubStep(int direction) {
-    final base = _tvScrubTarget;
-    if (base == null) return;
-    // Accelerate with the hold: fine control at first, then long strides so a
-    // two-hour remux is crossable without holding the key for a minute.
-    final step = _tvScrubRepeats < 8
-        ? 10
-        : _tvScrubRepeats < 16
-        ? 30
-        : 60;
-    _tvScrubRepeats++;
-    final next = base + Duration(seconds: step * direction);
-    setState(() {
-      _tvScrubTarget = next < Duration.zero
-          ? Duration.zero
-          : (next > _duration ? _duration : next);
-    });
-    _transportVisibility.scheduleAutoHide();
-  }
-
-  void _tvScrubCommit() {
-    final target = _tvScrubTarget;
-    // Captured when the scrub STARTED. Reading it here would always match and
-    // the guard would never fire — a scrub begun before a source switch would
-    // happily seek whatever replaced it.
-    final generation = _tvScrubStartedAtGeneration;
-    if (target == null) return;
-    setState(() => _tvScrubTarget = null);
-    _tvScrubRepeats = 0;
-    // A source switch or dispose bumps the generation; a confirm that lands
-    // afterwards must not seek whatever replaced the item being scrubbed.
-    if (generation != _tvScrubGeneration || !mounted) return;
-    _player.seek(target);
-    _scrobbleSeek(target);
-    if (_tvScrubWasPlaying) _player.play();
-    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
-    // Fresh interval: the countdown that was running belonged to the scrub,
-    // and inheriting its remainder could drop the bar the instant OK lands.
-    _transportVisibility.scheduleAutoHide();
-  }
-
-  /// Drop a scrub without seeking and without touching playback — the item it
-  /// belonged to is going away. Restoring "was playing" here would fight the
-  /// transition, which drives play/pause itself.
-  void _tvAbandonScrub() {
-    if (_tvScrubTarget == null) return;
-    _tvScrubTarget = null;
-    _tvScrubRepeats = 0;
-  }
-
-  void _tvScrubCancel() {
-    if (_tvScrubTarget == null) return;
-    setState(() => _tvScrubTarget = null);
-    _tvScrubRepeats = 0;
-    if (_tvScrubWasPlaying) _player.play();
-    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
-    _transportVisibility.scheduleAutoHide();
-  }
-
   /// The television bar. Reuses every flag the touch call site already
   /// computes, so the two stay in step: live comes from the same
   /// zap-banner signal, sources/guide/record from the same capability checks.
@@ -8306,13 +8218,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // so this — not the key handler — is what makes BACK behave.
     return PopScope(
       canPop:
-          _tvScrubTarget == null &&
+          _scrub.preview == null &&
           !_controlsVisible.value &&
           !_anyPlayerOverlayOpen,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || !mounted) return;
-        if (_tvScrubTarget != null) {
-          _tvScrubCancel();
+        if (_scrub.preview != null) {
+          _scrub.cancel();
           return;
         }
         if (_anyPlayerOverlayOpen) {
@@ -8360,7 +8272,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // OK is claimed by the dock's own buttons, so those presses never
               // reach _handleTvKey and never restarted the countdown.
               onInteract: _transportVisibility.scheduleAutoHide,
-              scrubPreview: _tvScrubTarget,
+              scrubPreview: _scrub.preview,
               onPlayPause: _togglePlay,
               onShowTracks: () => _showTracksSheet(context),
               onSpeed: _onSpeedButton,
@@ -8503,16 +8415,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
 
     // A scrub in flight owns the remote completely.
-    if (_tvScrubTarget != null) {
-      if (isLeft || isRight) {
-        _tvScrubStep(isRight ? 1 : -1);
-      } else if (activate.contains(key)) {
-        _tvScrubCommit();
-      } else if (isBack || key == LogicalKeyboardKey.arrowDown) {
-        _tvScrubCancel();
-      }
-      return KeyEventResult.handled;
-    }
+    if (_scrub.handleActiveKey(key)) return KeyEventResult.handled;
 
     // Nothing is actionable until the first frame, and acting during a
     // transition would drive the OUTGOING item.
@@ -8569,19 +8472,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return _zap.canZap ? null : KeyEventResult.handled;
       }
       if ((isLeft || isRight) && !_zap.canZap) {
-        // Repeats arriving in quick succession mean the key is held; the third
-        // one enters scrub. Slower taps stay 10s nudges, so a single press
-        // still does the obvious thing.
-        final now = DateTime.now();
-        final last = _tvLastArrowAt;
-        _tvScrubRepeats =
-            (last != null && now.difference(last).inMilliseconds < 400)
-            ? _tvScrubRepeats + 1
-            : 0;
-        _tvLastArrowAt = now;
-        if (_tvScrubRepeats >= 2 && _duration > Duration.zero) {
-          _tvScrubRepeats = 0;
-          _tvScrubBegin(isRight ? 1 : -1);
+        if (_scrub.handleHiddenArrow(isRight ? 1 : -1)) {
           return KeyEventResult.handled;
         }
       }
@@ -8597,7 +8488,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if ((isLeft || isRight) && _tvProgressFocus.hasFocus) {
       if (!_tvNoTimeline) {
-        _tvScrubBegin(isRight ? 1 : -1);
+        _scrub.begin(isRight ? 1 : -1);
         return KeyEventResult.handled;
       }
       return KeyEventResult.handled; // nothing to scrub; don't fall through
