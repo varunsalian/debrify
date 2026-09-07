@@ -2,9 +2,9 @@
 
 ## Phase 2 — player finish (user direction, September 6)
 
-**Player now: 11,088 lines. Lines remaining to remove: 1,588.**
+**Player now: 11,034 lines. Lines remaining to remove: 1,534.**
 
-Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is ab4e8323 after #232; player unchanged. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is f371decc after #236. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
 ### Current to-do list
 
@@ -18,7 +18,9 @@ Stopping target: **9,500 lines or fewer on merged main**. No overall percentage.
 - [x] **Scrub — #230 merged65b3a69b.** Author13PASS, independent13PASS and exact final union accepted; all three CI jobs passed. Player-109, owner192, whole production+83. Eight source-only sites remain explicitly limited.
 - [x] **Full integrated gate65b3 — PASS with authorized Windows path recovery.** Generic6224PASS/12known/2skip; goldens21known, both helpers0/no unexpected/unused. Native first pairPASS, analyzer430/4490new, Python55, layer53/77 unchanged. Windows initial260-character path failure retained; same-SHA shorter-path buildPASS, ARM64PASS. No new-device smoke inferred.
 - [x] **Renderer — #231 merged a7df8f13.** Author20PASS/independent20PASS, exact union accepted and allCI passed. Player11265→11088 (-177 including seam+1; move-178), owner305, move net+127. Partial ownership and18-read/21-command coupling remain explicit.
-- [ ] **Player remainder — Cicero / Confucius:** Media59-member candidate and72-member loader expansion rejected/deferred to Phase3; green origin pin retained. Active source design: skip fetch/cache generation ownership, forecast only50–75 host lines; no product/test draft grant yet. Remaining1588 is not solved by this small slice.
+- [x] **Skip cache — #236 merged f371decc.** Origin pin242ae95 green before cfbad move; author20PASS/independent20PASS, exact union accepted/allCIgreen. Player-54, owner104, net+50; four inputs/four operations. Two earlier fixture failures and finite coverage limits retained; one facade expires with Phase3 caller migration.
+- [ ] **Integrated gate — Locke running exact f371decc.** Third production merge since full65b3; short isolated build paths, actualnative firstpair and full checks.
+- [ ] **Player overlay — Arendt source candidate / Confucius review.** 57-input composition and standalone menu candidates rejected; no extraction credit. Actual command/acquisition candidate has -219host/+192whole forecast measured on unapplied source, pending final architectural verdict and origin admission. No production/test grant. Full V1-10 remains open;1534 remaining not yet covered by an accepted design.
 - [x] **Reviewer PR232 / G4-3 merged ab4e8323.** Independent origin2PASS/current66PASS, analyzer72 unchanged/layer53 unchanged, allCIgreen. User authorized landing with author-reported historical timing limitation; exact final tree verified. No player target credit.
 - [ ] Merge reviewed player slices, updating this board once per merged PR. Parent serializes edits/integration into the shared player host; isolated disjoint pin tests may run concurrently.
 - [ ] At player <=9,500: stop Phase 2 extraction, run final full gate, map upstream PRs #54/#55/#56 against current seams, and issue the closing report.
@@ -55,6 +57,8 @@ Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fa
 One board commit per merged PR. Status refreshes remain in the working board until that commit; the direction change and Gate 5 are already committed. Historical sections below remain evidence, not active assignments or current targets.
 
 ### Latest completed milestones
+
+- **#236 merged f371decc:** exactfa4 allCIgreen, author20PASS/independent20PASS and four-blob final union accepted. Player11088→11034 (-54), owner104, wholeproduction+50. Analyzer430/4490new/layer53unchanged on candidate; third merge triggers fullactualf371 gate. Positive real-button origin green before move; initial two fixture REDs preserved, early Controls clock assertions replaced with legitimate mounted-video admission and final Controls proof. Stale/error/reset/latefuture paths source-preserved, not runtime-covered. Did we make a difference? Skip fetch/cache lifecycle now has one cohesive owner with8 collaboration members. Is more needed? Overlay ownership and1534player lines plus final gate remain. One host facade retained withPhase3 caller-migration expiry.
 
 - **#232 / G4-3 merged ab4e8323:** reviewer-authored exception; exact e89 allCIgreen, origin2PASS/current66PASS, analyzer72→72 incl newtest0, layering53→53. Actual merge tree a56df4d6 equals independently constructed union: four accepted payload blobs unchanged, every other path exact prior main. RD6481→6387 andTorBox7109→7015 (-94 each), owner107, netproduction-81, zero forwarders. Historical pre-move green/mutation timing author-reported, independent origin reproduction verified; user authorized landing with limitation. Decisions2/3 remainPhase3. Did we make a difference? One shared sort replaces identical copies. Is more needed? Per-variant behavior pins and separately reviewed dead-code removal, not this PR. Player11088/remaining1588 unchanged. Productioncounter2 since full65b3.
 
