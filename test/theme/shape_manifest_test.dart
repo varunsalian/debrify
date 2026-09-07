@@ -134,6 +134,8 @@ const Map<String, int> kRadiusOnlyResidue = {
   'lib/screens/search/hero_spotlight.dart': 1,
   // I2 moved iptv_results_view's only bare radius into the stage shell.
   'lib/widgets/iptv/stage/iptv_preview_stage.dart': 1,
+  'lib/widgets/cloud/cloud_search_result_card.dart': 2,
+  'lib/widgets/cloud/cloud_view_mode_dropdown.dart': 1,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(
@@ -176,6 +178,8 @@ void main() {
     expect(kRadiusOnlyResidue, {
       'lib/screens/search/hero_spotlight.dart': 1,
       'lib/widgets/iptv/stage/iptv_preview_stage.dart': 1,
+      'lib/widgets/cloud/cloud_search_result_card.dart': 2,
+      'lib/widgets/cloud/cloud_view_mode_dropdown.dart': 1,
     });
     expect(kShapeResidue['lib/screens/search/search_hero_widgets.dart'], 0);
     expect(kShapeResidue.containsKey('lib/screens/search/hero_spotlight.dart'),
