@@ -21,7 +21,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 | `lib/screens/torbox/torbox_downloads_screen.dart` | 7 069 |
 | `lib/screens/debrid_downloads_screen.dart` | 6 444 |
 | `lib/services/video_player_launcher.dart` | 5 769 |
-| `lib/services/torrent_playback_service.dart` | 5 340 |
+| `lib/services/torrent_playback_service.dart` | 4 521 |
 | `lib/services/remote_control/remote_command_router.dart` | 5 100 |
 
 Sources is an independent library: `lib/screens/search/search_sources.dart` (2 804).
@@ -59,7 +59,7 @@ using `search_content_session.dart` and `search_content_actions.dart` shared wit
 `lib/screens/torbox/torbox_downloads_screen.dart` (7 069) ·
 `lib/screens/debrid_downloads_screen.dart` (6 444) ·
 `lib/services/video_player_launcher.dart` (5 769) ·
-`lib/services/torrent_playback_service.dart` (5 340) ·
+`lib/services/torrent_playback_service.dart` (4 521) ·
 `lib/services/remote_control/remote_command_router.dart` (5 100).
 
 `lib/widgets/initial_setup_flow.dart` is a 4-line export of
@@ -385,6 +385,17 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   `lib/services/cloud/` (`CloudProviderPort` + `CloudProviderRegistry`).
   See **Debrid providers & cloud** below. Playback still exposes one-line
   delegates onto the registry so god-file call sites do not change.
+- **`lib/services/torrent_playback/`** — extracted out of that god file (T3).
+  `playback_candidate_ranking.dart` (`PlaybackCandidateRanking`) owns the pure
+  ordering/probing surface: `orderCandidatesForRules`,
+  `orderCacheCheckedCandidatesForRules`, `mergePreparedTorrentOrder`,
+  `selectDirect`, `probeAttemptCount`, `packTopSafety`, `loadLadder`,
+  `ladderNote`, `warmSourceAliases`, `hasAcquisition` and the Quick Play rule
+  predicates. `playback_source_search.dart` (`PlaybackSourceSearch`) owns the
+  fetchers: `searchSeriesPackSources`, `searchCuratedSources`, the per-engine
+  listing/fetch helpers and the private candidate/pack curation. Both are
+  widget-free. `TorrentPlaybackService` keeps `@visibleForTesting` constant
+  tear-offs for the public names until the test suites are repointed.
 - **`lib/main.dart`** — app shell + nav branch (TV rail / desktop rail / `MobileFloatingNav`), tab indices.
 
 ## Search, sources & addons
