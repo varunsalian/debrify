@@ -1,5 +1,3 @@
-import 'dart:ui' show Color;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,15 +38,15 @@ void main() {
     test('reads groups, rules, colours and styles', () {
       final set = StreamBadgeRuleset.parse(_sample);
       expect(set.groups.map((g) => g.name), ['Quality', 'Resolution']);
-      expect(set.groups.first.color, const Color(0xFF27C04F));
+      expect(set.groups.first.color, 0xFF27C04F);
       expect(set.rules, hasLength(6));
       expect(set.enabledCount, 5);
 
       final remux = set.rules.first;
       expect(remux.name, 'Remux');
       expect(remux.style, StreamBadgeStyle.filled);
-      expect(remux.tagColor, const Color(0xE600E932));
-      expect(remux.textColor, const Color(0xFF27C04F));
+      expect(remux.tagColor, 0xE600E932);
+      expect(remux.textColor, 0xFF27C04F);
       expect(remux.imageUrl, 'https://x/remux.png');
 
       final fourK = set.rules[1];
@@ -104,12 +102,12 @@ void main() {
 
   group('parseBadgeColor', () {
     test('accepts RGB and ARGB, rejects junk and transparent', () {
-      expect(parseBadgeColor('#FFBE01'), const Color(0xFFFFBE01));
-      expect(parseBadgeColor('#E600E932'), const Color(0xE600E932));
+      expect(parseBadgeColor('#FFBE01'), 0xFFFFBE01);
+      expect(parseBadgeColor('#E600E932'), 0xE600E932);
       expect(parseBadgeColor('#00000000'), isNull);
       expect(parseBadgeColor('red'), isNull);
       expect(parseBadgeColor(42), isNull);
-      expect(encodeBadgeColor(const Color(0xE600E932)), '#E600E932');
+      expect(encodeBadgeColor(0xE600E932), '#E600E932');
     });
   });
 

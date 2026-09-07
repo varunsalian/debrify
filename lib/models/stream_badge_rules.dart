@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' show Color;
 
 /// A Nuvio-compatible stream badge ruleset (`badges.json`): regex rules that
 /// decorate a stream entry with small labelled chips — provider, release
@@ -10,6 +9,10 @@ import 'dart:ui' show Color;
 /// `(?i)` selects case-insensitive matching, as the Nuvio Badge Studio does.
 /// Invalid patterns are kept in the ruleset (so they round-trip) but never
 /// match.
+///
+/// Colours are kept as ARGB ints (`0xAARRGGBB`), exactly as `#AARRGGBB`
+/// decodes; the widget that paints a badge wraps them in a `Color`. The model
+/// stays free of `dart:ui`.
 class StreamBadgeRuleset {
   final List<StreamBadgeGroup> groups;
   final List<StreamBadgeRule> rules;
@@ -83,7 +86,8 @@ class StreamBadgeRuleset {
 class StreamBadgeGroup {
   final String id;
   final String name;
-  final Color? color;
+  /// ARGB, or null when the file gives no (or a transparent) colour.
+  final int? color;
 
   const StreamBadgeGroup({required this.id, required this.name, this.color});
 
@@ -135,9 +139,11 @@ class StreamBadgeRule {
   final String pattern;
   final bool enabled;
   final String? imageUrl;
-  final Color? tagColor;
-  final Color? textColor;
-  final Color? borderColor;
+
+  /// ARGB colours; null means "unset".
+  final int? tagColor;
+  final int? textColor;
+  final int? borderColor;
   final StreamBadgeStyle style;
 
   /// Compiled [pattern], or null when it isn't a valid regular expression.
@@ -213,9 +219,10 @@ RegExp? compileBadgePattern(String pattern) {
   }
 }
 
-/// `#RRGGBB` or `#AARRGGBB` (Nuvio's Android-style ARGB). Null for anything
-/// else, including the fully transparent placeholders some presets use.
-Color? parseBadgeColor(Object? raw) {
+/// `#RRGGBB` or `#AARRGGBB` (Nuvio's Android-style ARGB) as an ARGB int.
+/// Null for anything else, including the fully transparent placeholders
+/// some presets use.
+int? parseBadgeColor(Object? raw) {
   if (raw is! String) return null;
   var hex = raw.trim();
   if (hex.startsWith('#')) hex = hex.substring(1);
@@ -224,13 +231,12 @@ Color? parseBadgeColor(Object? raw) {
   final value = int.tryParse(hex, radix: 16);
   if (value == null) return null;
   if ((value >> 24) & 0xFF == 0) return null;
-  return Color(value);
+  return value;
 }
 
-String encodeBadgeColor(Color c) {
-  final v = c.toARGB32();
-  return '#${v.toRadixString(16).padLeft(8, '0').toUpperCase()}';
-}
+/// `#AARRGGBB`, the inverse of [parseBadgeColor].
+String encodeBadgeColor(int argb) =>
+    '#${(argb & 0xFFFFFFFF).toRadixString(16).padLeft(8, '0').toUpperCase()}';
 
 String? _str(Object? v) {
   if (v is! String) return null;

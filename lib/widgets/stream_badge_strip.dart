@@ -98,6 +98,9 @@ class StreamBadgeChip extends StatelessWidget {
   /// colour gets white rather than the theme's foreground.
   static const Color _fallbackTextColor = Colors.white;
 
+  /// The ruleset stores ARGB ints (see `StreamBadgeRule`); paint them here.
+  static Color? _color(int? argb) => argb == null ? null : Color(argb);
+
   @override
   Widget build(BuildContext context) {
     final image = rule.imageUrl;
@@ -131,8 +134,10 @@ class StreamBadgeChip extends StatelessWidget {
 
   Widget _textChip() {
     final style = rule.style;
-    final fill = style.fills ? rule.tagColor : null;
-    final border = style.borders ? (rule.borderColor ?? rule.tagColor) : null;
+    final fill = style.fills ? _color(rule.tagColor) : null;
+    final border = style.borders
+        ? _color(rule.borderColor ?? rule.tagColor)
+        : null;
     return Container(
       height: height,
       padding: EdgeInsets.symmetric(horizontal: height * 0.35),
@@ -152,7 +157,7 @@ class StreamBadgeChip extends StatelessWidget {
     softWrap: false,
     overflow: TextOverflow.clip,
     style: TextStyle(
-      color: rule.textColor ?? _fallbackTextColor,
+      color: _color(rule.textColor) ?? _fallbackTextColor,
       fontSize: fontSize,
       fontWeight: FontWeight.w800,
       height: 1,
