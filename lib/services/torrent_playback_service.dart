@@ -11,7 +11,6 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/play_loader_art.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/quick_play_rules.dart';
@@ -51,7 +50,6 @@ import 'pikpak_api_service.dart';
 import 'play_loader_style.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
-import 'source_priority.dart';
 import 'stremio_service.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
@@ -59,76 +57,12 @@ import 'stream_url_validator.dart';
 import 'torrent_file_service.dart';
 import 'torrent_service.dart';
 import 'video_player_launcher.dart';
+import 'torrent_playback/playback_meta.dart';
+export 'torrent_playback/playback_meta.dart';
 import 'torrent_playback/playback_candidate_ranking.dart';
+import 'torrent_playback/playback_provider_resolution.dart';
+import 'torrent_playback/playback_source_fetchers.dart';
 import 'torrent_playback/playback_source_search.dart';
-
-/// Content identity for a playback, so the player can record Continue Watching,
-/// fetch subtitles, and drive the Episodes button (matching Home).
-class PlaybackMeta {
-  final String? imdbId;
-  final String? contentType; // 'movie' | 'series'
-  final int? season;
-  final int? episode;
-  final String? title; // clean display title
-  final String? posterUrl;
-  final String? year;
-  final String? addonId; // originating Stremio addon (resume / next-episode)
-  final double? traktProgressPercent; // Trakt watch position, if known
-  // Play came from a Trakt row → scrobble to Trakt instead of saving a local
-  // Continue Watching entry (mirrors Home passing selection.traktSource).
-  final bool traktScrobble;
-  // Simkl parallel pair (see the Simkl integration plan).
-  final double? simklProgressPercent;
-  final bool simklScrobble;
-  final double? mdblistProgressPercent;
-  final bool mdblistScrobble;
-
-  /// Catalog launches have authoritative content identity, so their local
-  /// resume position follows IMDb (plus S/E for episodes) across sources.
-  /// Generic keyword/debrid playback leaves this source-specific.
-  final PlaybackResumePolicy resumePolicy;
-
-  /// Presentation-only artwork + meta line for the play loader (Marquee).
-  /// Null on every path that doesn't have it — the loader falls back to the
-  /// poster, exactly as it did before this existed.
-  final PlayLoaderArt? art;
-  const PlaybackMeta({
-    this.imdbId,
-    this.contentType,
-    this.season,
-    this.episode,
-    this.title,
-    this.posterUrl,
-    this.year,
-    this.addonId,
-    this.traktProgressPercent,
-    this.traktScrobble = false,
-    this.simklProgressPercent,
-    this.simklScrobble = false,
-    this.mdblistProgressPercent,
-    this.mdblistScrobble = false,
-    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
-    this.art,
-  });
-
-  const PlaybackMeta.catalog({
-    this.imdbId,
-    this.contentType,
-    this.season,
-    this.episode,
-    this.title,
-    this.posterUrl,
-    this.year,
-    this.addonId,
-    this.traktProgressPercent,
-    this.traktScrobble = false,
-    this.simklProgressPercent,
-    this.simklScrobble = false,
-    this.mdblistProgressPercent,
-    this.mdblistScrobble = false,
-    this.art,
-  }) : resumePolicy = PlaybackResumePolicy.catalogCanonical;
-}
 
 /// Isolated "add a chosen torrent to debrid → do the configured post-torrent
 /// action" flow, composed ONLY from service-layer primitives.
@@ -148,6 +82,19 @@ class TorrentPlaybackService {
   /// Distinguishes "user dismissed the provider picker" (silent) from
   /// "no provider configured" (null → prompt to add one in Settings).
   static const String _cancelled = '__cancelled__';
+
+  // ── Moved to lib/services/torrent_playback/ ────────────────────────────────
+  // The two "Load more sources" factories now live in PlaybackSourceFetchers.
+  // These constant tear-offs exist ONLY because
+  // test/playback_provider_resolution_origin_pin_test.dart,
+  // test/playback_source_search_origin_pin_test.dart and
+  // test/quick_play_rules_test.dart still address them through this class and
+  // must keep passing unedited across the move. Retained as closeout debt; no
+  // lib caller depends on them.
+  @visibleForTesting
+  static const seriesFetcherFor = PlaybackSourceFetchers.seriesFetcherFor;
+  @visibleForTesting
+  static const movieFetcherFor = PlaybackSourceFetchers.movieFetcherFor;
 
   static bool _recentlyNoPack(
     String imdbId,
@@ -194,11 +141,15 @@ class TorrentPlaybackService {
     // involved, so the advance goes bound-sources → addon-stream flow.
     if (torrent.streamType == StreamType.directUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
-      final resolverProvider = await _defaultConfiguredProvider();
+      final resolverProvider =
+          await PlaybackProviderResolution.defaultConfiguredProvider();
       if (!context.mounted) return;
       final fetcher = meta?.contentType == 'movie'
-          ? movieFetcherFor(meta: meta)
-          : seriesFetcherFor(meta: meta, episodesFetched: sources != null);
+          ? PlaybackSourceFetchers.movieFetcherFor(meta: meta)
+          : PlaybackSourceFetchers.seriesFetcherFor(
+              meta: meta,
+              episodesFetched: sources != null,
+            );
       // Even a one-row launch carries its source descriptor into the player:
       // the validated-source callback is deliberately downstream of the
       // decoder gate, so this binds the link that ACTUALLY rendered rather
@@ -455,7 +406,9 @@ class TorrentPlaybackService {
       final loader = ov;
       var handedToLauncher = false;
       try {
-        final resolverProvider = provider ?? await _defaultConfiguredProvider();
+        final resolverProvider =
+            provider ??
+            await PlaybackProviderResolution.defaultConfiguredProvider();
         if (!context.mounted) return;
         final args = _playerArgs(
           videoUrl: direct.directUrl!,
@@ -1390,7 +1343,7 @@ class TorrentPlaybackService {
             meta: meta,
             sources: packs,
             sourceIndex: idx < 0 ? 0 : idx,
-            seriesFetcher: seriesFetcherFor(
+            seriesFetcher: PlaybackSourceFetchers.seriesFetcherFor(
               meta: meta,
               provider: provider,
               packsFetched: true,
@@ -1497,7 +1450,7 @@ class TorrentPlaybackService {
       // even when the pack-first search ran earlier — its results were
       // discarded (nothing instantly playable), so "Load more" re-lists
       // them for a manual pick.
-      seriesFetcher: seriesFetcherFor(
+      seriesFetcher: PlaybackSourceFetchers.seriesFetcherFor(
         meta: meta,
         provider: provider,
         episodesFetched: true,
@@ -1512,279 +1465,6 @@ class TorrentPlaybackService {
   ) {
     final note = PlaybackCandidateRanking.ladderNote(ladder, ordered);
     if (note != null) overlay.setNote(note);
-  }
-
-  /// Builds the [SeriesSourceFetcher] a series play hands to the player: the
-  /// "Load more sources" backend for the pack/episode source tabs. Returns
-  /// null when the play isn't fetchable-series-shaped (movies, no concrete
-  /// season+episode, non-`tt` ids the torrent engines can't search).
-  /// [provider] is the launch's debrid provider; a non-debrid launch (bound
-  /// 'local' source, addon 'stream') resolves the default configured provider
-  /// at fetch time instead. Without one, episode fetches can still return
-  /// direct addon links; torrent and pack fetches fail soft.
-  static SeriesSourceFetcher? seriesFetcherFor({
-    required PlaybackMeta? meta,
-    String? provider,
-    bool packsFetched = false,
-    bool episodesFetched = false,
-  }) {
-    final imdbId = meta?.imdbId;
-    final season = meta?.season;
-    final episode = meta?.episode;
-    if (meta == null ||
-        imdbId == null ||
-        !imdbId.startsWith('tt') ||
-        meta.contentType == 'movie' ||
-        season == null ||
-        episode == null) {
-      return null;
-    }
-    final label = meta.title ?? '';
-    Future<String?> effectiveProvider() => _effectiveFetchProvider(provider);
-    final directValidationCache = <String, bool>{};
-
-    return SeriesSourceFetcher(
-      season: season,
-      episode: episode,
-      packsFetched: packsFetched,
-      episodesFetched: episodesFetched,
-      validateCandidate: (source) async {
-        if (source.streamType != StreamType.directUrl) return true;
-        final url = source.directUrl;
-        if (url == null || url.isEmpty) return false;
-        final cached = directValidationCache[url];
-        if (cached != null) return cached;
-        final rules = await QuickPlayPolicyPrefs.getQuickPlayRules(isMovie: false);
-        if (!rules.validateDirectLinks) return true;
-        if (!PlaybackCandidateRanking.shouldPreflightDirectStream(source)) return true;
-        // Match initial series Quick Play: lenient HEAD validation rejects
-        // positive evidence of death without penalising HEAD-hostile CDNs.
-        final alive = await StreamUrlValidator.isPlayableVideoUrl(
-          url,
-          minBytes: 10 * 1024 * 1024,
-          lenient: true,
-        );
-        directValidationCache[url] = alive;
-        return alive;
-      },
-      // The (s, e) the fetch passes in is the episode CURRENTLY playing — a
-      // season-pack playlist auto-advances inside one player session, so the
-      // launch episode captured above is only the fallback.
-      searchPacks: (s, e) async {
-        final prov = await effectiveProvider();
-        if (prov == null) return null;
-        final rules = await QuickPlayPolicyPrefs.getQuickPlayRules(isMovie: false);
-        if (rules.sourcePriority.isNotEmpty) {
-          await PlaybackCandidateRanking.warmSourceAliases();
-        }
-        final ladder = await PlaybackCandidateRanking.loadLadder(includeSize: false, rules: rules);
-        // This feeds the manual Sources drawer, not automatic selection. Keep
-        // every candidate visible while retaining the user's ordering. Strict
-        // filtering remains enforced by the actual Quick Play path.
-        final manualRules = rules.copyWith(relaxFilters: true);
-        return PlaybackSourceSearch.searchSeriesPackSources(
-          imdbId: imdbId,
-          label: label,
-          season: s,
-          provider: prov,
-          ladder: ladder,
-          rules: manualRules,
-        );
-      },
-      searchEpisodes: (s, e) async {
-        final rules = await QuickPlayPolicyPrefs.getQuickPlayRules(isMovie: false);
-        if (rules.sourcePriority.isNotEmpty) {
-          await PlaybackCandidateRanking.warmSourceAliases();
-        }
-        final ladder = await PlaybackCandidateRanking.loadLadder(includeSize: false, rules: rules);
-        try {
-          final prov = await effectiveProvider();
-          final List<Torrent> list;
-          if (prov == null) {
-            // A direct-addon episode can launch without a Debrify debrid
-            // provider. Keep that contract when Next crosses a one-entry
-            // playlist: query the episode-scoped addon endpoints and retain
-            // only links this provider-free resolver can actually open.
-            if (!PlaybackCandidateRanking.allowsAddonSearch(rules) || !rules.allowDirectLinks) {
-              return const <Torrent>[];
-            }
-            final addonTimeout = rules.addonTimeoutSeconds == 15
-                ? null
-                : Duration(seconds: rules.addonTimeoutSeconds);
-            final result = await TorrentService.searchStremioAddonsOnly(
-              imdbId: imdbId,
-              isMovie: false,
-              season: s,
-              episode: e,
-              timeout: addonTimeout,
-              preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
-            );
-            list = (result['torrents'] as List).cast<Torrent>().where((t) {
-              return t.streamType == StreamType.directUrl &&
-                  (t.directUrl?.isNotEmpty ?? false);
-            }).toList();
-            if (list.isEmpty &&
-                ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)) {
-              // Addon failures are reported in-band. Keep the fetch retryable
-              // when they leave this provider-free path no playable rows.
-              return null;
-            }
-          } else {
-            list = await PlaybackSourceSearch.searchCuratedSources(
-              imdbId: imdbId,
-              label: label,
-              isMovie: false,
-              season: s,
-              episode: e,
-              provider: prov,
-              rules: rules,
-            );
-          }
-          return PlaybackCandidateRanking.orderCandidatesForRules(
-            list,
-            rules: rules.copyWith(relaxFilters: true),
-            ladder: ladder,
-          );
-        } catch (_) {
-          // Source search failed — null keeps the tab's "Load more" for retry.
-          return null;
-        }
-      },
-      listAddons: () async => [
-        for (final addon
-            in await StremioService.instance.applicableStreamingAddons(
-              type: 'series',
-              contentId: imdbId,
-            ))
-          if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
-            SourceAddonRef(addon.id, addon.name),
-      ],
-      listEngines: PlaybackSourceSearch.sourceEngineListing,
-      fetchEngine: (engineId, s, e) => PlaybackSourceSearch.fetchOneEngine(
-        engineId,
-        imdbId: imdbId,
-        isMovie: false,
-        season: s,
-        episode: e,
-      ),
-      fetchAddonEpisodes: (addonId, s, e) async {
-        try {
-          return await StremioService.instance.retryAddonStreams(
-            addonId: addonId,
-            type: 'series',
-            imdbId: imdbId,
-            season: s,
-            episode: e,
-            timeout: StremioService.manualRetryTimeout,
-          );
-        } catch (_) {
-          // Null = fetch failed; the sheet keeps the Fetch row for a retry.
-          return null;
-        }
-      },
-      fetchAddonPacks: (addonId, s) async {
-        try {
-          return await StremioService.instance.fetchAddonSeasonPacks(
-            addonId: addonId,
-            imdbId: imdbId,
-            season: s,
-            timeout: StremioService.manualRetryTimeout,
-          );
-        } catch (_) {
-          return null;
-        }
-      },
-    );
-  }
-
-  /// The provider a "Load more sources" fetch should search with: the
-  /// launch's own debrid provider, except non-debrid launches (bound 'local'
-  /// source, addon 'stream') resolve the default configured one instead.
-  /// Null (nothing configured) fails the fetch soft.
-  static Future<String?> _effectiveFetchProvider(String? provider) async {
-    if (provider != null &&
-        provider != SeriesSource.localService &&
-        provider != SeriesSource.addonDirectService &&
-        provider != 'stream') {
-      return provider;
-    }
-    return _defaultConfiguredProvider();
-  }
-
-  /// Movie counterpart of [seriesFetcherFor]: a bound movie play launches
-  /// with just the pinned torrent, so its flat Torrent tab offers one "Load
-  /// more sources" that runs the normal movie search chain. Null when the
-  /// play isn't a searchable movie. Non-bound movie plays already carry the
-  /// full search results, so their launch sites simply don't build one.
-  static SeriesSourceFetcher? movieFetcherFor({
-    required PlaybackMeta? meta,
-    String? provider,
-  }) {
-    final imdbId = meta?.imdbId;
-    if (meta == null ||
-        imdbId == null ||
-        !imdbId.startsWith('tt') ||
-        meta.contentType != 'movie') {
-      return null;
-    }
-    final label = meta.title ?? '';
-    return SeriesSourceFetcher.movie(
-      searchMovie: () async {
-        final prov = await _effectiveFetchProvider(provider);
-        if (prov == null) return null;
-        // Size buckets are movie-meaningful — keep them (unlike series).
-        final rules = await QuickPlayPolicyPrefs.getQuickPlayRules(isMovie: true);
-        if (rules.sourcePriority.isNotEmpty) {
-          await PlaybackCandidateRanking.warmSourceAliases();
-        }
-        final ladder = await PlaybackCandidateRanking.loadLadder(rules: rules);
-        try {
-          final list = await PlaybackSourceSearch.searchCuratedSources(
-            imdbId: imdbId,
-            label: label,
-            isMovie: true,
-            provider: prov,
-            rules: rules,
-          );
-          return PlaybackCandidateRanking.orderCandidatesForRules(
-            list,
-            rules: rules.copyWith(relaxFilters: true),
-            ladder: ladder,
-          );
-        } catch (_) {
-          // Engine search failed — null keeps "Load more" for retry.
-          return null;
-        }
-      },
-      listAddons: () async => [
-        for (final addon
-            in await StremioService.instance.applicableStreamingAddons(
-              type: 'movie',
-              contentId: imdbId,
-            ))
-          if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
-            SourceAddonRef(addon.id, addon.name),
-      ],
-      listEngines: PlaybackSourceSearch.sourceEngineListing,
-      fetchEngine: (engineId, _, __) =>
-          PlaybackSourceSearch.fetchOneEngine(
-            engineId,
-            imdbId: imdbId,
-            isMovie: true,
-          ),
-      fetchAddonEpisodes: (addonId, _, __) async {
-        try {
-          return await StremioService.instance.retryAddonStreams(
-            addonId: addonId,
-            type: 'movie',
-            imdbId: imdbId,
-            timeout: StremioService.manualRetryTimeout,
-          );
-        } catch (_) {
-          return null;
-        }
-      },
-    );
   }
 
   /// Play non-IMDb catalog content (IPTV / TV channels) straight from the
@@ -2006,8 +1686,11 @@ class TorrentPlaybackService {
       ladder: ladder,
       rules: rules,
       seriesFetcher: isMovie
-          ? movieFetcherFor(meta: meta)
-          : seriesFetcherFor(meta: meta, episodesFetched: true),
+          ? PlaybackSourceFetchers.movieFetcherFor(meta: meta)
+          : PlaybackSourceFetchers.seriesFetcherFor(
+              meta: meta,
+              episodesFetched: true,
+            ),
     );
     return true;
   }
@@ -2366,7 +2049,8 @@ class TorrentPlaybackService {
               sources: [fresh],
               sourceIndex: 0,
               seriesFetcher:
-                  seriesFetcherFor(meta: meta) ?? movieFetcherFor(meta: meta),
+                  PlaybackSourceFetchers.seriesFetcherFor(meta: meta) ??
+                  PlaybackSourceFetchers.movieFetcherFor(meta: meta),
               overlay: overlay,
               startupFailoverEnabled: true,
               onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
@@ -2540,8 +2224,14 @@ class TorrentPlaybackService {
           // (or neither, for non-tt ids) is non-null.
           seriesFetcher: nativeCloud
               ? null
-              : (seriesFetcherFor(meta: meta, provider: prov) ??
-                    movieFetcherFor(meta: meta, provider: prov)),
+              : (PlaybackSourceFetchers.seriesFetcherFor(
+                      meta: meta,
+                      provider: prov,
+                    ) ??
+                    PlaybackSourceFetchers.movieFetcherFor(
+                      meta: meta,
+                      provider: prov,
+                    )),
           overlay: overlay,
           startupFailoverEnabled: true,
           onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
@@ -3001,34 +2691,6 @@ class TorrentPlaybackService {
   static VideoPlayerLaunchArgs playerArgsForTesting(PlaybackMeta? meta) =>
       _playerArgs(videoUrl: 'video', title: 'Title', meta: meta);
 
-  /// Providers with credentials configured (in this service's precedence
-  /// order) plus the user's saved default when it's still configured — the
-  /// single source of truth shared by [_pickProvider] and
-  /// [_defaultConfiguredProvider], so adding a provider is a one-list edit.
-  static Future<(List<String>, String?)> _configuredProviders() async {
-    final configured = <String>[];
-    for (final p in CloudProviderId.playbackPrecedence) {
-      if (await _isConfigured(p.playbackId)) configured.add(p.playbackId);
-    }
-    if (configured.isEmpty) return (configured, null);
-    final def = await ProviderCredentialPrefs.getDefaultTorrentProvider();
-    final defaultProvider = (def != 'none' && configured.contains(def))
-        ? def
-        : null;
-    return (configured, defaultProvider);
-  }
-
-  /// The provider a silent (no-dialog) resolution should use: the configured
-  /// default, else the first configured one, else null. Uses this service's
-  /// _pickProvider precedence (Premiumize before PikPak) — deliberately NOT
-  /// Home's resolver order, which prefers PikPak; a silent PikPak fallback
-  /// would queue real downloads on the account.
-  static Future<String?> _defaultConfiguredProvider() async {
-    final (configured, def) = await _configuredProviders();
-    if (configured.isEmpty) return null;
-    return def ?? configured.first;
-  }
-
   /// In-player Sources-switcher resolver for launches that didn't go through a
   /// debrid provider (direct addon streams). Direct streams resolve without
   /// one; a torrent switch silently uses the default/first-configured provider
@@ -3041,7 +2703,8 @@ class TorrentPlaybackService {
           (t.directUrl?.isNotEmpty ?? false)) {
         return [PlaylistEntry(url: t.directUrl!, title: t.displayTitle)];
       }
-      final provider = await _defaultConfiguredProvider();
+      final provider =
+          await PlaybackProviderResolution.defaultConfiguredProvider();
       if (provider == null) return null;
       return _resolverFor(provider)(t);
     };
@@ -3606,7 +3269,8 @@ class TorrentPlaybackService {
         if (t.streamType == StreamType.torrent &&
             bindingProvider == SeriesSource.addonDirectService) {
           bindingProvider =
-              await _defaultConfiguredProvider() ?? bindingProvider;
+              await PlaybackProviderResolution.defaultConfiguredProvider() ??
+              bindingProvider;
         }
         if (isInitial) {
           await _autoBindMovieOnPlay(meta, t, bindingProvider);
@@ -3642,7 +3306,8 @@ class TorrentPlaybackService {
           await _rebindOnSourceSwitch(meta, t, SeriesSource.addonDirectService);
           return;
         }
-        final provider = await _defaultConfiguredProvider();
+        final provider =
+            await PlaybackProviderResolution.defaultConfiguredProvider();
         if (provider == null) return;
         await _rebindOnSourceSwitch(meta, t, provider);
       });
@@ -4311,7 +3976,8 @@ class TorrentPlaybackService {
   /// Resolves which provider to use. Honours the default; when none is set and
   /// more than one is configured, asks the user (mirrors Home's behaviour).
   static Future<String?> _pickProvider(BuildContext context) async {
-    final (configured, def) = await _configuredProviders();
+    final (configured, def) =
+        await PlaybackProviderResolution.configuredProviders();
     if (configured.isEmpty) return null;
     if (def != null) return def;
     if (configured.length == 1) return configured.first;
@@ -4332,9 +3998,6 @@ class TorrentPlaybackService {
     }
     return result.provider;
   }
-
-  static Future<bool> _isConfigured(String provider) =>
-      CloudProviderRegistry.instance.isConfigured(provider);
 
   static Future<String> _postAction(String provider) async {
     final id = CloudProviderId.tryParse(provider);
