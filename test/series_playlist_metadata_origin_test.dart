@@ -334,4 +334,192 @@ void main() {
       // Service handles the transport error; does not pin model outer-catch.
     });
   });
+
+  // Additive cache contract pins below; the original eight cases are unchanged.
+  test('successful index cache precedes bounds and belongs to one playlist', () async {
+    await _withFixture((fixture) async {
+      final first = _movies();
+      final other = _movies();
+      fixture.get('$_cinemeta/manifest.json', {});
+      fixture.get('$_cinemeta/catalog/movie/top/search=second%20film.json',
+          _movie('Second Film', '2021', 'tt9100001'));
+      expect(await first.fetchMovieMetadataForIndex(1), 'tt9100001');
+      MovieMetadataService.clearCache();
+      first.allEpisodes.removeLast(); // Public mutable list makes index1 invalid.
+      expect(first.allEpisodes, hasLength(1));
+      final before = fixture.observed.length;
+      expect(await first.fetchMovieMetadataForIndex(1), 'tt9100001');
+      expect(fixture.observed.length, before);
+      // Same title/index on a different playlist must not reuse first's cache.
+      fixture.get('$_cinemeta/manifest.json', {});
+      fixture.get('$_cinemeta/catalog/movie/top/search=second%20film.json',
+          _movie('Second Film', '2021', 'tt9100002'));
+      expect(await other.fetchMovieMetadataForIndex(1), 'tt9100002');
+      expect(await first.fetchMovieMetadataForIndex(1), 'tt9100001');
+      expect(first.imdbId, 'tt9100001');
+      expect(other.imdbId, 'tt9100002');
+    });
+  });
+
+  test('successful movie lookup preserves nonnull empty shared IMDb', () async {
+    await _withFixture((fixture) async {
+      final playlist = _movies()..imdbId = '';
+      fixture.get('$_cinemeta/manifest.json', {});
+      fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json',
+          _movie('Origin Film', '2020', 'tt9200001'));
+      expect(await playlist.fetchMovieMetadataForIndex(0), 'tt9200001');
+      expect(playlist.imdbId, '');
+      expect(playlist.getImdbIdForIndex(0), 'tt9200001');
+      expect(playlist.getImdbIdForIndex(99), '');
+    });
+  });
+
+  test('distinct indices retain their IDs while first successful completion wins shared', () async {
+    await _withFixture((fixture) async {
+      await _primeMovieAvailability(fixture);
+      final playlist = _movies();
+      final first = _HeldMovieGet(fixture,
+          '$_cinemeta/catalog/movie/top/search=origin%20film.json',
+          _movie('Origin Film', '2020', 'tt9300001'));
+      final second = _HeldMovieGet(fixture,
+          '$_cinemeta/catalog/movie/top/search=second%20film.json',
+          _movie('Second Film', '2021', 'tt9300002'));
+      final firstOperation = playlist.fetchMovieMetadataForIndex(0);
+      Future<String?>? secondOperation;
+      Object? primary;
+      StackTrace? primaryStack;
+      try {
+        await first.entered.future.timeout(const Duration(seconds: 2));
+        secondOperation = playlist.fetchMovieMetadataForIndex(1);
+        await second.entered.future.timeout(const Duration(seconds: 2));
+        expect(playlist.imdbId, isNull);
+        second.release();
+        expect(await secondOperation, 'tt9300002');
+        expect(playlist.imdbId, 'tt9300002');
+        expect(first.response.isCompleted, isFalse);
+        first.release();
+        expect(await firstOperation, 'tt9300001');
+        expect(playlist.getImdbIdForIndex(0), 'tt9300001');
+        expect(playlist.getImdbIdForIndex(1), 'tt9300002');
+        expect(playlist.imdbId, 'tt9300002');
+      } catch (error, stack) {
+        primary = error;
+        primaryStack = stack;
+      } finally {
+        await _releaseAndJoinPair(first, second, firstOperation, secondOperation,
+            primary, primaryStack);
+      }
+    });
+  });
+
+  test('same index permits two overlapping requests and last completion overwrites index', () async {
+    await _withFixture((fixture) async {
+      await _primeMovieAvailability(fixture);
+      final playlist = _movies();
+      final first = _HeldMovieGet(fixture,
+          '$_cinemeta/catalog/movie/top/search=origin%20film.json',
+          _movie('Origin Film', '2020', 'tt9400001'));
+      final second = _HeldMovieGet(fixture,
+          '$_cinemeta/catalog/movie/top/search=origin%20film.json',
+          _movie('Origin Film', '2020', 'tt9400002'));
+      final firstOperation = playlist.fetchMovieMetadataForIndex(0);
+      Future<String?>? secondOperation;
+      Object? primary;
+      StackTrace? primaryStack;
+      try {
+        await first.entered.future.timeout(const Duration(seconds: 2));
+        secondOperation = playlist.fetchMovieMetadataForIndex(0);
+        await second.entered.future.timeout(const Duration(seconds: 2));
+        expect(first.response.isCompleted, isFalse);
+        expect(playlist.imdbId, isNull);
+        second.release();
+        expect(await secondOperation, 'tt9400002');
+        expect(playlist.getImdbIdForIndex(0), 'tt9400002');
+        expect(playlist.imdbId, 'tt9400002');
+        first.release();
+        expect(await firstOperation, 'tt9400001');
+        expect(playlist.getImdbIdForIndex(0), 'tt9400001');
+        expect(playlist.imdbId, 'tt9400002');
+      } catch (error, stack) {
+        primary = error;
+        primaryStack = stack;
+      } finally {
+        await _releaseAndJoinPair(first, second, firstOperation, secondOperation,
+            primary, primaryStack);
+      }
+    });
+  });
+
+  test('unsuccessful movie result is not stored in the model index cache', () async {
+    await _withFixture((fixture) async {
+      final playlist = _movies();
+      fixture.get('$_cinemeta/manifest.json', {});
+      fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json', {'metas': []});
+      expect(await playlist.fetchMovieMetadataForIndex(0), isNull);
+      expect(playlist.imdbId, isNull);
+      // Discard the downstream service's negative cache before probing the model.
+      MovieMetadataService.clearCache();
+      fixture.get('$_cinemeta/manifest.json', {});
+      fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json',
+          _movie('Origin Film', '2020', 'tt9500001'));
+      expect(await playlist.fetchMovieMetadataForIndex(0), 'tt9500001');
+      expect(playlist.getImdbIdForIndex(0), 'tt9500001');
+      expect(playlist.imdbId, 'tt9500001');
+    });
+  });
+}
+
+// Minimal additive transport helpers; no model injection or completion observer.
+Future<void> _primeMovieAvailability(_Fixture fixture) async {
+  fixture.get('$_cinemeta/manifest.json', {});
+  fixture.get('$_cinemeta/catalog/movie/top/search=warmup%20film.json',
+      _movie('Warmup Film', '2019', 'tt9000000'));
+  // Existing public service call primes only availability and a distinct key.
+  // It avoids racing two incidental availability probes in the overlap cases.
+  final warmup = await MovieMetadataService.lookupMovie('Warmup Film', 2019);
+  expect(warmup!.imdbId, 'tt9000000');
+}
+
+class _HeldMovieGet {
+  _HeldMovieGet(_Fixture fixture, String url, this.payload) {
+    fixture.planned.add(_PlannedGet(url, () {
+      entered.complete();
+      return response.future;
+    }));
+  }
+  final Object payload;
+  final entered = Completer<void>();
+  final response = Completer<http.Response>();
+
+  void release() {
+    if (!response.isCompleted) response.complete(_json(payload));
+  }
+}
+
+Future<void> _releaseAndJoinPair(
+  _HeldMovieGet first,
+  _HeldMovieGet second,
+  Future<String?> firstOperation,
+  Future<String?>? secondOperation,
+  Object? primary,
+  StackTrace? primaryStack,
+) async {
+  // Release BOTH before either join, including when entry assertion failed.
+  first.release();
+  second.release();
+  try {
+    await firstOperation;
+  } catch (error, stack) {
+    debugPrintSynchronously('SERIES_ORIGIN_FIRST_JOIN $error\n$stack');
+    primary ??= error;
+    primaryStack ??= stack;
+  }
+  try {
+    if (secondOperation != null) await secondOperation;
+  } catch (error, stack) {
+    debugPrintSynchronously('SERIES_ORIGIN_SECOND_JOIN $error\n$stack');
+    primary ??= error;
+    primaryStack ??= stack;
+  }
+  if (primary != null) Error.throwWithStackTrace(primary, primaryStack!);
 }
