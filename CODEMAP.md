@@ -834,6 +834,7 @@ is an editor mirror, not the source of truth. How to add a provider:
   Migration: `lib/services/app_migration_service.dart`.
 
 ## Metadata
+- `lib/services/series_playlist_metadata_loader.dart` owns SeriesPlaylist episode/movie metadata loading. Callers use its four static operations; the model retains per-playlist movie-ID cache ownership through typed cached-read/record-success methods. Preserve nullable IMDb parameters, pre-await assignment, cache-before-bounds and cache-write-before-shared-ID order; the former model metadata methods are explicitly migrated.
 - `lib/services/tvmaze_service.dart`, `lib/services/movie_metadata_service.dart`,
   `lib/services/imdb_enrichment_service.dart`, `lib/services/episode_info_service.dart`,
   `lib/services/catalog_repo_service.dart`.
