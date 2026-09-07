@@ -775,3 +775,23 @@ Origin tests preserve the existing held ninth-row focus behavior: keyed Promenad
 ## #226 merged52e8da5b: Atrium text ownership
 
 Origin e8c759 five tests green before product b58fc1; independent129PASS and one exact known sidebar failure. Wall theme dependency moves into the inner stage; borrowed notifier references are stable, values remain lazy. Same Text measurement, conditional second-row read, dossier builder context and row/native bodies are preserved. Host -59, owner +80, whole production +21; callables7 to6 but leaf inputs10 to14. Stage shortfall353 after merge. Full gate remains31e360, production counter2; #227 would trigger next gate. Home takeover proposal has zero seven-stage credit.
+
+
+## User direction: Phase 2 player finish and Gate 5
+
+Gate 5 user report at d2cbea19 Windows Flutter3.47.2:6187pass/33exactallowlisted,0unexpected/0unused; analyzer0errors449issues,layer56/77,WindowsbuildPASS/launched. Not an independent rerun; no Android/new-device result inferred. Search/Magic/Storage/Settings accepted at target and frozen. Prior353 Search target remainder is superseded by user scope decision, not silently completed. Player11539->9500 is the Phase2 stopping rule,2039lines remaining. Renderer coordinator and whole scrub-session ownership decisions are written at board top; tracker fake-clock harness cleanup authorized, actual green pin still required. All four workers redirected to disjoint player preparation/pins, parent serializes sharedhost production integration. PR228 and227 parked for Phase3; IPTV admission and Indexer static-stop evidence retained, no further retries. Final full gate/upstream54/55/56 mapping/closing report follow player threshold; upstream publication remains local-only. One board commit per mergedPR; this note staged only with next such update.
+
+
+## Explicit exception: finish227 and228
+
+User requested both after the player-only direction. #227 merged1e4128ae with reviewed5f3 head and allCIpassing. #228 authorized pending currentunion/CI and full227 gate. This exception does not reopen broader Search/Q work. Player count refreshed from actual merged source; no extraction credit for metadata wiring.
+
+
+## Exceptions227/228 complete
+
+Full1e4128 actual-main gate passed with exact known failures and both native builds; #228 merged408cd894 after exactfreshCI and union acceptance. Search5879, player11538:2038remaining to9500. Takeover -223host/+29wholeproduction earns zero player/stage credit. Freeze resumes; onlyplayerPhase2 work. Gate evidence in debrify-c0-post-225-226-227-gate/.dart_tool/main-gate/REPORT.md. Counter1 aftergate.
+
+
+## Media candidate b220 rejected — September 7
+
+Green origin pin982e24dd (four public-host mocked-terminal cases) retained. Unapplied two-transaction design b220 preserved as rejected evidence: host-341, owner575, whole production+234;36 inbound and23 outward interface members, including10 single-field compatibility bridges. Source body/notification refinements and57-writer/24-group accounting accepted, but coupling cost failed simplicity review. No production change applied. Next work is loader/identity boundary and additional origin admission, not callback regrouping or an automatic broader move.

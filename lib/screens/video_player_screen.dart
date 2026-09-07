@@ -1,3 +1,4 @@
+import '../services/series_playlist_metadata_loader.dart';
 import 'video_player/services/renderer_startup_environment.dart';
 import 'video_player/services/renderer_coordinator.dart';
 import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
@@ -52,6 +53,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'video_player/models/playlist_entry.dart';
 import 'video_player/player_launch_config.dart';
 import 'video_player/resume_controller.dart';
+import 'video_player/player_tracker_lifecycle.dart';
 import 'video_player/subtitle_track_controller.dart';
 import '../services/playback/iptv_recording_controller.dart';
 import 'video_player/iptv_zap_controller.dart';
@@ -64,6 +66,7 @@ import 'video_player/utils/language_mapping.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/player_presentation_controls.dart';
 import 'video_player/player_transport_visibility.dart';
+import 'video_player/player_scrub_session.dart';
 import 'video_player/constants/timing_constants.dart';
 import 'video_player/widgets/auto_sync_pill.dart';
 import 'video_player/widgets/seek_hud.dart';
@@ -459,25 +462,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       widget.hideSeekbar ||
       _duration <= Duration.zero;
 
-  /// Cinema scrub, matching the native TV player: holding LEFT/RIGHT pauses
-  /// playback and previews a destination that OK confirms and BACK cancels.
-  /// [_tvScrubTarget] non-null means a scrub is in flight.
-  Duration? _tvScrubTarget;
-
-  /// When the last LEFT/RIGHT arrived, so a held key (fast repeats) can be
-  /// told from deliberate taps without needing key-up, which the tvOS fork
-  /// does not reliably deliver.
-  DateTime? _tvLastArrowAt;
-  bool _tvScrubWasPlaying = false;
-  int _tvScrubRepeats = 0;
-
-  /// Bumped on every transition and on dispose. A confirm carrying a stale
-  /// generation is dropped, so a scrub started before a source switch can
-  /// never seek the item that replaced it.
-  int _tvScrubGeneration = 0;
-
-  /// The generation in force when the current scrub began.
-  int _tvScrubStartedAtGeneration = 0;
+  late final PlayerScrubSession _scrub;
 
   // Text subtitles stay in MediaKit's Flutter renderer. Bitmap subtitles are
   // the narrow exception: their decoded image cues cannot enter a text widget,
@@ -1069,23 +1054,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
 
-  // Scrobble: one coordinator drives Trakt, Simkl, and MDBList targets.
-  late final ScrobbleCoordinator _scrobble;
-  // The launched item's widget.traktProgressPercent is a first-load-only
-  // signal; once spent it must not apply to a later switched-to episode.
-  bool _launchTraktPercentSpent = false;
-  // Per-episode Trakt cross-device progress ("season_episode" → 0-100), loaded
-  // once per series; drives resume for episodes switched to in-session.
-  Map<String, double>? _traktEpisodeProgress;
-  bool _launchSimklPercentSpent = false;
-  // Per-episode Simkl cross-device snapshot ("season_episode" → 0-100),
-  // refreshed by the launcher and used when switching episodes in-session.
-  Map<String, double>? _simklEpisodeProgress;
-  Map<String, double>? _mdblistEpisodeProgress;
-  String? _episodeTrackerProgressImdbId;
-  bool _launchMdblistPercentSpent = false;
-  // Keeps the analytics session alive during long, interaction-free playback.
-  Timer? _analyticsHeartbeatTimer;
+  late final PlayerTrackerLifecycle _tracker =
+      PlayerTrackerLifecycle(_PlayerTrackerSession(this));
+  ScrobbleCoordinator get _scrobble => _tracker.coordinator;
 
   Duration? _randomStartOffset(Duration duration) {
     final num clampedPercent = config.randomStartMaxPercent.clamp(0, 99);
@@ -1126,12 +1097,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       anyOverlayOpen: () => _anyPlayerOverlayOpen,
       readAutoHideBlocker: () {
         final route = ModalRoute.of(context);
-        return _tvScrubTarget != null ||
+        return _scrub.preview != null ||
             !_isPlaying ||
             (route != null && !route.isCurrent) ||
             _anyPlayerOverlayOpen;
       },
       commit: setState,
+    );
+    _scrub = PlayerScrubSession(
+      readPlayer: () => _player,
+      readPosition: () => _position,
+      readDuration: () => _duration,
+      readIsPlaying: () => _isPlaying,
+      readNoTimeline: () => _tvNoTimeline,
+      isMounted: () => mounted,
+      anyOverlayOpen: () => _anyPlayerOverlayOpen,
+      commitState: setState,
+      onSeek: _scrobbleSeek,
+      transport: _transportVisibility,
+      progressFocus: _tvProgressFocus,
+      playPauseFocus: _tvPlayPauseFocus,
     );
     _presentation.bind(
       readPlayer: () => _player,
@@ -1149,7 +1134,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       emit: _releasePlayerDiagnostic,
     );
     AnalyticsService.screenView('video_player');
-    _startAnalyticsHeartbeat();
+    _tracker.startHeartbeat();
     _activePlaylist = config.playlist;
     _seriesImdbKnownAtLaunch = config.contentImdbId?.trim().isNotEmpty == true;
     // The dock and the zap banner share the bottom strip, and the dock is
@@ -1293,25 +1278,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       mountedOf: () => mounted,
       seasonEpisodeOf: _traktSeasonEpisode,
     );
-    _scrobble = ScrobbleCoordinator(
+    _tracker.initializeScrobble(
       playback: scrobblePlayback,
-      targets: [
-        TraktScrobbleTarget.production(
-          requested: config.traktScrobble,
-          playback: scrobblePlayback,
-        ),
-        SimklScrobbleTarget.production(
-          requested: config.simklScrobble,
-          playback: scrobblePlayback,
-        ),
-        MdblistScrobbleSessionTarget.production(
-          requested: config.mdblistScrobble,
-          playback: scrobblePlayback,
-          playerReady: _playerInitializationFuture,
-        ),
-      ],
+      traktRequested: config.traktScrobble,
+      simklRequested: config.simklScrobble,
+      mdblistRequested: config.mdblistScrobble,
+      playerReady: _playerInitializationFuture,
     );
-    _scrobble.init();
   }
 
   Future<void> _loadSkipSegmentSettings() async {
@@ -1599,21 +1572,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return (season: info.season, episode: info.episode);
   }
 
-  /// Periodic analytics ping so a long, interaction-free watch keeps the
-  /// analytics session alive. Independent of Trakt (fires regardless of Trakt
-  /// auth); only emits while actually playing. No content details are sent.
-  void _startAnalyticsHeartbeat() {
-    _analyticsHeartbeatTimer?.cancel();
-    _analyticsHeartbeatTimer = Timer.periodic(
-      AnalyticsService.heartbeatInterval,
-      (_) {
-        if (_isPlaying) {
-          AnalyticsService.playbackHeartbeat('dart');
-        }
-      },
-    );
-  }
-
   /// Shared funnel every user-initiated seek passes through (scrubber,
   /// tap/DPAD seek, pan, skip-segment). The resume write guard learns the
   /// user has taken over the position before any tracker-specific early
@@ -1625,145 +1583,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _resumeTrackingAfterValidationGate() {
     _scrobble.resumeAfterValidationGate();
-  }
-
-  /// The current episode's cross-device Trakt progress percent (0-100), or null.
-  /// Loaded once per series from the dedicated store (kept apart from the
-  /// ms-based resume state) and looked up by the current episode's season/episode.
-  void _bindEpisodeTrackerProgressIdentity(String imdbId) {
-    if (_episodeTrackerProgressImdbId == imdbId) return;
-    _episodeTrackerProgressImdbId = imdbId;
-    _traktEpisodeProgress = null;
-    _simklEpisodeProgress = null;
-    _mdblistEpisodeProgress = null;
-  }
-
-  Future<double?> _currentEpisodeTraktPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
-    if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-
-    // Await BEFORE reading _currentIndex/season/episode below, so that if the
-    // user advances to a different episode while this is in flight, we key
-    // off the episode that's actually current when the fetch resolves.
-    if (_traktEpisodeProgress == null) {
-      final loaded = await PlaybackProgressStore.getEpisodeTraktProgress(
-        imdbId: imdbId,
-      );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _traktEpisodeProgress = loaded;
-    }
-
-    int? season;
-    int? episode;
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final playlist = _activePlaylist;
-      if (playlist == null ||
-          _currentIndex < 0 ||
-          _currentIndex >= playlist.length) {
-        return null;
-      }
-      // Must be the CURRENT episode — no orElse-to-first fallback, or we'd seek to
-      // an unrelated episode's Trakt position on filtered/reordered playlists.
-      SeriesEpisode? ep;
-      for (final e in seriesPlaylist.allEpisodes) {
-        if (e.originalIndex == _currentIndex) {
-          ep = e;
-          break;
-        }
-      }
-      if (ep == null) return null;
-      season = ep.seriesInfo.season;
-      episode = ep.seriesInfo.episode;
-    } else if (_effectiveContentType == 'series') {
-      // Single-file episode (e.g. a direct-link stream) — no playlist to derive
-      // season/episode from; fall back to the same launch args the local
-      // resume-state lookup uses.
-      season = _effectiveContentSeason;
-      episode = _effectiveContentEpisode;
-    }
-    if (season == null || episode == null) return null;
-
-    final percent = _traktEpisodeProgress!['${season}_$episode'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.trakt, percent)
-        : percent;
-  }
-
-  /// Current episode's Simkl snapshot percent. This mirrors the Trakt lookup
-  /// above but remains independently stored so remote unwatch changes never
-  /// mutate local playback history.
-  Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
-    if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-
-    // Await before resolving the episode identity for the same race-safety as
-    // [_currentEpisodeTraktPercent].
-    if (_simklEpisodeProgress == null) {
-      final loaded = await PlaybackProgressStore.getEpisodeSimklProgress(
-        imdbId: imdbId,
-      );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _simklEpisodeProgress = loaded;
-    }
-
-    int? season;
-    int? episode;
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final playlist = _activePlaylist;
-      if (playlist == null ||
-          _currentIndex < 0 ||
-          _currentIndex >= playlist.length) {
-        return null;
-      }
-      SeriesEpisode? currentEpisode;
-      for (final candidate in seriesPlaylist.allEpisodes) {
-        if (candidate.originalIndex == _currentIndex) {
-          currentEpisode = candidate;
-          break;
-        }
-      }
-      if (currentEpisode == null) return null;
-      season = currentEpisode.seriesInfo.season;
-      episode = currentEpisode.seriesInfo.episode;
-    } else if (_effectiveContentType == 'series') {
-      season = _effectiveContentSeason;
-      episode = _effectiveContentEpisode;
-    }
-    if (season == null || episode == null) return null;
-
-    final percent = _simklEpisodeProgress!['${season}_$episode'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.simkl, percent)
-        : percent;
-  }
-
-  Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
-    if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-    if (_mdblistEpisodeProgress == null) {
-      final loaded = await PlaybackProgressStore.getEpisodeMdblistProgress(
-        imdbId: imdbId,
-      );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _mdblistEpisodeProgress = loaded;
-    }
-    final se = _traktSeasonEpisode();
-    if (se.season == null || se.episode == null) return null;
-    final percent = _mdblistEpisodeProgress!['${se.season}_${se.episode}'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.mdblist, percent)
-        : percent;
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -3920,8 +3739,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
     });
 
     // Only show transition overlay for Debrify TV content (when requestMagicNext is available)
@@ -4773,8 +4591,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // zap banner — the reconnect pill is the only narration (plan
       // invariant "retune ≠ zap"; codex round 2, finding 14).
       _isTransitioning = !quietRecovery;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentIptvIndex = index;
       _currentChannelNumber = channel.channelNumber ?? (index + 1);
       // The corner badge is painted from this pair; without the name it kept
@@ -5671,8 +5488,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
@@ -5762,8 +5578,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentSourceIndex = sourceIndex;
     });
     _startTransitionOverlay();
@@ -6001,8 +5816,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
@@ -6244,8 +6058,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentStremioTvChannelId = channelId;
       _dynamicTitle = title;
       _currentStremioTvContentImdbId = contentImdbId;
@@ -6400,8 +6213,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
       _currentChannelId = channel.id;
       _currentChannelName = channel.name;
       if (channel.number != null) {
@@ -6527,8 +6339,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
     });
     _startTransitionOverlay();
 
@@ -6666,8 +6477,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
-      _tvScrubGeneration++;
-      _tvAbandonScrub();
+      _scrub.invalidateAndAbandon();
     });
 
     final previousIndex = _findPreviousEpisodeIndex();
@@ -6844,8 +6654,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // the armed guard, or an unlanded resume's ~0 position would be filed over
     // that item's bookmark by the very switch that abandons it. The clear sits
     // immediately after that save.
-    _tvScrubGeneration++;
-    _tvAbandonScrub();
+    _scrub.invalidateAndAbandon();
     _resumeVerifyEpoch++;
     unawaited(_resume.cancelResumeVerification());
     if (_activePlaylist == null ||
@@ -6904,7 +6713,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // This runs in background so subtitles are ready when user opens TracksSheet
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
-      seriesPlaylist.fetchMovieMetadataForIndex(index).catchError((e) {
+      SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist, index).catchError((e) {
         // Silently ignore errors - metadata is optional
         return null;
       });
@@ -7475,8 +7284,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final playlistIdentityToken = _playlistIdentityToken;
       // Preload episode information in the background
       // Pass IMDB ID from catalog for faster, more accurate lookup
-      await seriesPlaylist
-          .fetchEpisodeInfo(
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(seriesPlaylist,
             playlistItem: _constructPlaylistItemData(),
             imdbId: widget.contentImdbId,
           )
@@ -7510,8 +7318,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
       // For non-series content (movie collections), fetch movie metadata for current index
       // This enables subtitles for movies from Debrid/Torbox/PikPak
-      await seriesPlaylist
-          .fetchMovieMetadataForIndex(_currentIndex)
+      await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist, _currentIndex)
           .then((imdbId) {
             // Trigger UI update if IMDB ID was discovered
             if (mounted && imdbId != null) {
@@ -7846,7 +7653,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // took ownership, so route replacement can't disarm the incoming screen.
     PipService.detach(this);
     // Scrobble stop to Trakt when user exits player
-    _analyticsHeartbeatTimer?.cancel();
+    _tracker.cancelHeartbeat();
     _scrobble.onDispose();
 
     // Save the current state before disposing
@@ -7866,7 +7673,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
     _debrifyBannerTimer?.cancel();
-    _tvScrubGeneration++; // invalidate any scrub still in flight
+    _scrub.invalidateOnly(); // invalidate any scrub still in flight
     _tvBarScope.dispose();
     _dockExtent.dispose();
     _tvPlayPauseFocus.dispose();
@@ -7968,81 +7775,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Lower the bar and take focus back to the player root. Without the second
   /// half the focused control is excluded from the tree and the remote dies.
 
-  /// Cinema scrub: hold LEFT/RIGHT to pause and preview a destination, OK to
-  /// confirm, BACK/DOWN to cancel. One seek on confirm, so the trackers and
-  /// resume see a single jump instead of a burst.
-  void _tvScrubBegin(int direction) {
-    if (_tvNoTimeline) return;
-    _tvScrubStartedAtGeneration = _tvScrubGeneration;
-    _tvScrubWasPlaying = _isPlaying;
-    if (_isPlaying) _player.pause();
-    _tvScrubTarget = _position;
-    _transportVisibility.showBar();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _tvScrubTarget != null) _tvProgressFocus.requestFocus();
-    });
-    _tvScrubStep(direction);
-  }
-
-  void _tvScrubStep(int direction) {
-    final base = _tvScrubTarget;
-    if (base == null) return;
-    // Accelerate with the hold: fine control at first, then long strides so a
-    // two-hour remux is crossable without holding the key for a minute.
-    final step = _tvScrubRepeats < 8
-        ? 10
-        : _tvScrubRepeats < 16
-        ? 30
-        : 60;
-    _tvScrubRepeats++;
-    final next = base + Duration(seconds: step * direction);
-    setState(() {
-      _tvScrubTarget = next < Duration.zero
-          ? Duration.zero
-          : (next > _duration ? _duration : next);
-    });
-    _transportVisibility.scheduleAutoHide();
-  }
-
-  void _tvScrubCommit() {
-    final target = _tvScrubTarget;
-    // Captured when the scrub STARTED. Reading it here would always match and
-    // the guard would never fire — a scrub begun before a source switch would
-    // happily seek whatever replaced it.
-    final generation = _tvScrubStartedAtGeneration;
-    if (target == null) return;
-    setState(() => _tvScrubTarget = null);
-    _tvScrubRepeats = 0;
-    // A source switch or dispose bumps the generation; a confirm that lands
-    // afterwards must not seek whatever replaced the item being scrubbed.
-    if (generation != _tvScrubGeneration || !mounted) return;
-    _player.seek(target);
-    _scrobbleSeek(target);
-    if (_tvScrubWasPlaying) _player.play();
-    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
-    // Fresh interval: the countdown that was running belonged to the scrub,
-    // and inheriting its remainder could drop the bar the instant OK lands.
-    _transportVisibility.scheduleAutoHide();
-  }
-
-  /// Drop a scrub without seeking and without touching playback — the item it
-  /// belonged to is going away. Restoring "was playing" here would fight the
-  /// transition, which drives play/pause itself.
-  void _tvAbandonScrub() {
-    if (_tvScrubTarget == null) return;
-    _tvScrubTarget = null;
-    _tvScrubRepeats = 0;
-  }
-
-  void _tvScrubCancel() {
-    if (_tvScrubTarget == null) return;
-    setState(() => _tvScrubTarget = null);
-    _tvScrubRepeats = 0;
-    if (_tvScrubWasPlaying) _player.play();
-    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
-    _transportVisibility.scheduleAutoHide();
-  }
-
   /// The television bar. Reuses every flag the touch call site already
   /// computes, so the two stay in step: live comes from the same
   /// zap-banner signal, sources/guide/record from the same capability checks.
@@ -8066,13 +7798,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // so this — not the key handler — is what makes BACK behave.
     return PopScope(
       canPop:
-          _tvScrubTarget == null &&
+          _scrub.preview == null &&
           !_controlsVisible.value &&
           !_anyPlayerOverlayOpen,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || !mounted) return;
-        if (_tvScrubTarget != null) {
-          _tvScrubCancel();
+        if (_scrub.preview != null) {
+          _scrub.cancel();
           return;
         }
         if (_anyPlayerOverlayOpen) {
@@ -8120,7 +7852,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               // OK is claimed by the dock's own buttons, so those presses never
               // reach _handleTvKey and never restarted the countdown.
               onInteract: _transportVisibility.scheduleAutoHide,
-              scrubPreview: _tvScrubTarget,
+              scrubPreview: _scrub.preview,
               onPlayPause: _togglePlay,
               onShowTracks: () => _showTracksSheet(context),
               onSpeed: _onSpeedButton,
@@ -8263,16 +7995,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
 
     // A scrub in flight owns the remote completely.
-    if (_tvScrubTarget != null) {
-      if (isLeft || isRight) {
-        _tvScrubStep(isRight ? 1 : -1);
-      } else if (activate.contains(key)) {
-        _tvScrubCommit();
-      } else if (isBack || key == LogicalKeyboardKey.arrowDown) {
-        _tvScrubCancel();
-      }
-      return KeyEventResult.handled;
-    }
+    if (_scrub.handleActiveKey(key)) return KeyEventResult.handled;
 
     // Nothing is actionable until the first frame, and acting during a
     // transition would drive the OUTGOING item.
@@ -8329,19 +8052,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return _zap.canZap ? null : KeyEventResult.handled;
       }
       if ((isLeft || isRight) && !_zap.canZap) {
-        // Repeats arriving in quick succession mean the key is held; the third
-        // one enters scrub. Slower taps stay 10s nudges, so a single press
-        // still does the obvious thing.
-        final now = DateTime.now();
-        final last = _tvLastArrowAt;
-        _tvScrubRepeats =
-            (last != null && now.difference(last).inMilliseconds < 400)
-            ? _tvScrubRepeats + 1
-            : 0;
-        _tvLastArrowAt = now;
-        if (_tvScrubRepeats >= 2 && _duration > Duration.zero) {
-          _tvScrubRepeats = 0;
-          _tvScrubBegin(isRight ? 1 : -1);
+        if (_scrub.handleHiddenArrow(isRight ? 1 : -1)) {
           return KeyEventResult.handled;
         }
       }
@@ -8357,7 +8068,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if ((isLeft || isRight) && _tvProgressFocus.hasFocus) {
       if (!_tvNoTimeline) {
-        _tvScrubBegin(isRight ? 1 : -1);
+        _scrub.begin(isRight ? 1 : -1);
         return KeyEventResult.handled;
       }
       return KeyEventResult.handled; // nothing to scrub; don't fall through
@@ -10508,7 +10219,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           debugPrint(
             'VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks',
           );
-          effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex(
+          effectiveImdbId = await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist,
             _currentIndex,
           );
         }
@@ -10980,6 +10691,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 }
 
 
+class _PlayerTrackerSession implements PlayerTrackerSession {
+  const _PlayerTrackerSession(this._s);
+  final _VideoPlayerScreenState _s;
+  @override String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override int get currentIndex => _s._currentIndex;
+  @override String? get effectiveContentType => _s._effectiveContentType;
+  @override int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override bool get isPlaying => _s._isPlaying;
+  @override ({int? season, int? episode}) trackerSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+}
+
 class _RendererSession implements RendererSession {
   const _RendererSession(this._s);
   final _VideoPlayerScreenState _s;
@@ -11063,12 +10789,12 @@ class _ResumeSession implements ResumeSession {
   @override set isAutoAdvancing(bool value) => _s._isAutoAdvancing = value;
   @override bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
   @override bool get allowResumeForManualSelection => _s._allowResumeForManualSelection;
-  @override bool get launchTraktPercentSpent => _s._launchTraktPercentSpent;
-  @override set launchTraktPercentSpent(bool value) => _s._launchTraktPercentSpent = value;
-  @override bool get launchSimklPercentSpent => _s._launchSimklPercentSpent;
-  @override set launchSimklPercentSpent(bool value) => _s._launchSimklPercentSpent = value;
-  @override bool get launchMdblistPercentSpent => _s._launchMdblistPercentSpent;
-  @override set launchMdblistPercentSpent(bool value) => _s._launchMdblistPercentSpent = value;
+  @override bool get launchTraktPercentSpent => _s._tracker.launchTraktPercentSpent;
+  @override set launchTraktPercentSpent(bool value) => _s._tracker.launchTraktPercentSpent = value;
+  @override bool get launchSimklPercentSpent => _s._tracker.launchSimklPercentSpent;
+  @override set launchSimklPercentSpent(bool value) => _s._tracker.launchSimklPercentSpent = value;
+  @override bool get launchMdblistPercentSpent => _s._tracker.launchMdblistPercentSpent;
+  @override set launchMdblistPercentSpent(bool value) => _s._tracker.launchMdblistPercentSpent = value;
   @override Duration get position => _s._position;
   @override Duration get duration => _s._duration;
   @override Duration get playerPosition => _s._player.state.position;
@@ -11081,11 +10807,11 @@ class _ResumeSession implements ResumeSession {
   @override Future<void> applyAspectVideoZoom() => _s._presentation.applyAspectVideoZoom();
   @override Future<void> waitForDuration() => _s._waitForDuration();
   @override Future<double?> currentEpisodeTraktPercent({bool forGuide = false}) =>
-      _s._currentEpisodeTraktPercent(forGuide: forGuide);
+      _s._tracker.currentEpisodeTraktPercent(forGuide: forGuide);
   @override Future<double?> currentEpisodeSimklPercent({bool forGuide = false}) =>
-      _s._currentEpisodeSimklPercent(forGuide: forGuide);
+      _s._tracker.currentEpisodeSimklPercent(forGuide: forGuide);
   @override Future<double?> currentEpisodeMdblistPercent({bool forGuide = false}) =>
-      _s._currentEpisodeMdblistPercent(forGuide: forGuide);
+      _s._tracker.currentEpisodeMdblistPercent(forGuide: forGuide);
   @override String? get currentLocalMovieImdbId => _s._currentLocalMovieImdbId;
   @override SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
   @override String? get effectiveContentImdbId => _s._effectiveContentImdbId;

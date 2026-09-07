@@ -1,91 +1,62 @@
-  # Refactor board
+# Refactor board
 
-## Current roadmap — September 6, merged production main 52e8da5b
+## Phase 2 — player finish (user direction, September 6)
 
-**Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
+**Player now: 11,265 lines. Lines remaining to remove: 1,765.**
 
-### God-file line counts — original → merged main
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is 65b3a69b after #230. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
-- **Search:** 19,070 → **6,102** (12,968 fewer)
-- **Player:** 16,278 → **11,539** (4,739 fewer)
-- **Magic TV:** 10,716 → **3,322** (7,394 fewer)
-- **Storage:** 9,963 → **1,741** (8,222 fewer)
-- **Settings:** 7,905 → **2,908** (4,997 fewer)
+### Current to-do list
 
-Physical lines, not whole-project deletions. Last full gate: **31e360f6 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #222/#223/#224 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
+- [x] Record user-reported Gate 5 at d2cbea19 (details below).
+- [x] Freeze Search, Magic TV, Storage and Settings under the new user acceptance. Previous Search stage shortfall is superseded, not another Phase 2 requirement.
+- [x] Redirect all four workers to player work; parallel disjoint V1 pin runs are authorized.
+- [x] **Tracker origin pin:** harness cleanup fixed; actual current-main pin passed and committed before the move.
+- [x] **Scrub origin pins:** all11 cases passed before the move; finite3/11 runtime sites and8 source-only sites recorded.
+- [x] **Renderer origin pin:** actual old-host fallback passed with reviewed testability seam; mock-terminal/Live-binding limits retained.
+- [x] **Tracker — PR #229 merged aa2834e3.** Author56PASS, independent56PASS, repaired source guard11PASS; all three CI jobs passed on exact e0ad938. Player reduction164 lines; owner219, whole production+55.
+- [x] **Scrub — #230 merged65b3a69b.** Author13PASS, independent13PASS and exact final union accepted; all three CI jobs passed. Player-109, owner192, whole production+83. Eight source-only sites remain explicitly limited.
+- [ ] **Integrated gate — Locke executing at exact65b3a69b.** Third production merge since full1e4128; renderer merge waits for this gate.
+- [ ] **Renderer — Arendt integrating and publishing on actual main.** Author20PASS and independent20PASS; expected union accepted. Full branch reduction177 includes seam+1 and move-178; no merged credit yet.
+- [ ] **Media — Cicero author / Confucius reviewer.** Four origin tests passed and committed982e24dd before any move. Proposed b220 extraction REJECTED: host-341 but net+234 and59 interface members are disproportionate. Production unchanged. Active next step: source-only loader/identity boundary and additional origin-admission proposal to remove actual reentry dependencies.
+- [ ] Merge reviewed player slices, updating this board once per merged PR. Parent serializes edits/integration into the shared player host; isolated disjoint pin tests may run concurrently.
+- [ ] At player <=9,500: stop Phase 2 extraction, run final full gate, map upstream PRs #54/#55/#56 against current seams, and issue the closing report.
 
-### Do next — actual execution order
+### Ownership decisions — effective now
 
-- [x] **Merge #225 shared rail labels and #226 Atrium text ownership.** Both independently reviewed and all three CI jobs passed. Search now6,102;353 lines remain against the stage target.
-- [ ] **Finish metadata PR #227.** Author and independent35-case runs passed; candidate analyzer430/449 and layering53. Updating its branch with merged #226, preserving tested payloads; require final union review and fresh exact-head CI before merge.
-- [ ] **Run the next integrated gate after #227 merges.** Counter2 since full31e360; the next production merge triggers full actual-main verification and builds.
-- [ ] **Verify the Home overlay origin test.** Four-case draft corrected after static-only theme API failure; first behavioral run authorized. This work earns zero seven-stage target credit.
-- [ ] **Prepare IPTV behavior tests.** Six-test/eight-scenario scope, real SQLite and actual series navigation. No runtime yet; successful native movie launch remains an unresolved production-move constraint.
+**Renderer:** one coordinator owns renderer startup validation state, guard token/generation, error subscription, validation scheduling, fallback admission and completion/retirement ordering. Starting host symbols: _scheduleRendererStartupValidation, _validateRendererStartup, _fallbackExplicitRendererToAutomatic and their renderer state. Actual player/platform creation and widget rendering stay behind a narrow explicit host command boundary; do not move only an OS predicate or create a host-State proxy. Preserve source epoch checks, single-fallback rules and cancellation ordering. Existing failed diagnostic evidence informs the new pins and remains recorded; the prior HOLD instruction is superseded. Exact symbol manifest and any necessary test seam require source review before production edits.
 
-### 1. Finish Search stage layouts and final shared composition — OPEN
+**Scrub:** one session owns _tvScrubTarget, prior-playing state, repeats, generation/started-generation and begin/step/commit/abandon/cancel behavior, including all eleven external invalidation/input transitions. Host keeps key dispatch, seek execution and rendering bindings; no five-helper extraction that leaves session policy scattered. Do not independently change renderer/tracker regions. Reviewer verifies every transition before the move.
 
-- [x] Merge standalone Discover, Spotlight, Tonight, Deck, Mosaic, Promenade and Canvas work; shared BoardCell and favourites #203.
-- [x] Diagnose and fix Atrium overflow in #216; independent geometry tests and CI passed.
-- [x] Pin Atrium navigation on the fixed original path: three cases passed before the move.
-- [x] **Merge seventh public stage in #219.** Merged13cd4029 after independent28 checks and exact CI passed. Its seven explicit callbacks remain; +60 host/+35 production lines are growth, not extraction credit.
-- [x] **Finish Sources route/library ownership.** #220 makes the existing owner a standalone library and redirects two consumers, preserving seven original behavior pins. Host-16/production+12; no 2,775-line extraction or stage-target credit.
-- [x] **Resolve the oversized hero part in #222.** Merged9e809c97 after independent136PASS/one existing known failure and allCI passed. Retained part947, passive owner1060; host+1/production+15, zero638-target credit.
-- [ ] **Close final shared-composition and original rebuild obligations with evidence.** Retained callback inventories are not automatically unused forwarders. Preserve accepted Mosaic focus/prefetch policy.
-- [ ] **Reconcile the existing 1,400-line stage target.** Recorded1,047 leaves /353 short remains explicit after Canvas #224 (146), rail-label #225 (80), and Atrium text #226 (59). Do not count already-external part lines, wrapper growth or the overflow fix toward it.
+**Tracker:** fix and drain the actual fake-clock harness cleanup after disposal using the documented guarded delayed work. Preserve assertions and primary errors; do not blanket-clear timers or mark a failed pin accepted. The user has explicitly authorized revisiting the previous stopped experiment. Pin must actually pass before its move commit.
 
-### 2. Complete player decoder/state/UI separation — OPEN
+### Gate 5 — user-reported, accepted with exact attribution
 
-- [x] Merge terminal seam #190, diagnostic ownership #193, presentation #201 and transport #205; retain existing overlay/guide pins.
-- [ ] **Obtain a fully passing tracker origin pin before moving tracker ownership.** Real selected21s resume was observed, but the final test still failed on an initial-resume delayed Future/fake-clock cleanup obligation. No green-pin credit. Four failures and attribution are retained in NOTES.
-- [ ] **Resolve remaining cohesive decoder/state/UI ownership.** Propose exact ownership boundaries and actual origin entry before code changes; no new callback bag.
-- [ ] **Disposition renderer and scrub evidence gaps under existing criteria.** Renderer attempts remain held. Scrub's eleven invalidation transitions make an isolated helper move insufficient; retention is explicit, not completion of the broader player outcome.
+Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fail**, exact allowlist, **0 unexpected /0 unused**. Analyzer **0 errors /449 issues**. Layering **56/77**. Windows build **PASS**, launched. These are the user's results, not an independent rerun. Android build, new-device smoke and a fresh forwarder recount were not supplied for this gate and are not implied. Last separately measured AST forwarder ledger: Storage204 / Search133 / Player161 / Magic23 / Settings0 at31e360.
 
-### 3. Finish storage business-logic ownership and eligible temporary facade removal — OPEN, MAJOR MILESTONE ACCEPTED
+### Frozen work and Phase 3 backlog
 
-- [x] Reach the host-size target and extract domain owners with key-compatible origin/restore evidence.
-- [x] Merge eligible routing/forwarder retirements through #215.
-- [x] Accept the bounded extraction/key-compatibility/eligible-Q2 milestone at full gatebc017.
-- [ ] **Resolve separately deferred native/render ownership evidence.** Six policy methods42 lines plus debug3 remain deferred; this is distinct from nine already-owned native-sensitive forwarding APIs.
-- [ ] **Close strict Storage acceptance only against its existing contract.** Five coordinators74 lines and battery/fixed14 lines are already accepted retentions, not newly assigned cleanup. Native-sensitive retirement requires its named evidence.
+- Search5,879; MagicTV3,322; Storage1,741; Settings2,908 — accepted at target by user direction. No further extraction/stage/shared-visual work. Q2 facade removal only if it deletes lines; no worker assigned to it during the player finish.
+- **PR #228 merged408cd894: explicit user exception complete.** Exact1a70 source/union and fresh CI passed after full227 gate. Search is now5,879; no broader Search work is reopened.
+- **PR #227 merged1e4128ae by explicit user exception.** Independent35 tests and exact-head CI passed. Full integrated gate at1e4128 passed before #228. This is the third production merge since31e360; no player extraction credit.
+- IPTV origin-admission gap, indexer export test (static stopped, no test executed), remaining Q/Storage cleanup and all other outstanding outcomes move to Phase 3. No further work on those lanes now.
+- Upstream mapping is required at closure. Publication remains local-only under the existing user decision; mapping is not permission to publish upstream.
 
-Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer export, adult held lookup, Android-positive and lifetime gaps remain recorded. No more tiny forwarding batches are assigned merely to lower line counts.
+### Board update rule
 
-### 4. Finish M1-7 genuine common-flow dedup and dependency cleanup — COMPLETE
+One board commit per merged PR. Status refreshes remain in the working board until that commit; the direction change and Gate 5 are already committed. Historical sections below remain evidence, not active assignments or current targets.
 
-- [x] Meet the provider-leaf target:627 lines versus under800.
-- [x] Merge common programmes and captured-provider operations; remove the two cached-entry wrappers.
-- [x] Pass independent88-case verification and integrated gatee78d100e.
-- [x] Record finite Windowed/UI retention decisions. No new zero-callback or autonomous-provider requirement.
-
-### 5. Q-phase dependency/rule cleanup, compatibility expiry and upstream contribution work — OPEN
-
-- [x] Complete canonical-rule migration #188 and provider guide #192.
-- [x] Merge neutral PlaylistEntry owner #217:15 forbidden imports removed, old import compatibility preserved.
-- [x] **Merge shared focus-wrapper owner #218:** six additional forbidden imports removed and verified.
-- [ ] **Close remaining strict Q1 dependencies through separately owned lanes.** Main currently56. Ceiling77/no-growth is not strict zero-violation acceptance. Do not loosen the checker or hide dependencies behind exports.
-- [ ] **Finish compatibility expiry accounting.** Distinguish still-used exports and accepted/native-sensitive APIs from genuinely obsolete facades; do not delete all aliases blindly.
-- [x] Prepare and independently verify the two-commit upstream catalog candidate locally,24 tests before/after/independent.
-- [x] **Honor user decision: keep upstream contribution local.** Publication is intentionally parked, not awaiting an answer. Do not publish or repeatedly ask. This is not an upstream-merged contribution claim.
-
-### 6. Final integrated acceptance of completed architecture — PENDING
-
-- [x] Pass the latest completed intermediate gate31e360f6:6,174 tests passed /12 exact known exceptions /2 skips; goldens21 known; native first pair, Windows and ARM64 passed; analyzer431/449; layering56 at that gate.
-- [ ] Finish or explicitly disposition the remaining contractual outcomes above without quietly changing their meaning.
-- [ ] Run final integrated acceptance on the resulting actual main and record exact source/artifact hashes, complete failures, dependency count and god-file/forwarder ledger.
-- [ ] Report final accepted outcomes and retained debt. Prior phone/TV acceptance stays historical; do not label it new-build device proof. Manual smoke does not block authorized progress.
-
-### Who owns the next action
-
-- **Cicero:** reviews Home overlay origin results; #226 independent and CI acceptance complete.
-- **Locke:** runs the corrected Home overlay origin test, stopping on any failure.
-- **Confucius:** updates #227 against merged #226, then continues IPTV test preparation.
-- **Arendt:** checks #227 union evidence and IPTV fixture design.
-- **Parent:** #226 merged; counter2 since full31e360. Next production merge triggers integrated gate. No user blocker.
-
-### Update rules for this checklist
-
-Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- **#230 merged65b3a69b:** exactcc9 allCIgreen and independent union accepted; author13PASS/independent13PASS. Player11374→11265 (-109), owner192, net+83. Did we make a difference? Scrub session state and input policy have one owner; ten original invalidation slots preserved. Is more needed? Yes: renderer and cohesive Media ownership, then final acceptance. Counter3 triggers full65b3gate; no newdevice proof.
+
+- **#229 merged aa2834e3:** exact e0ad938 all three CI jobs passed; author56PASS, independent56PASS, source-guard repair11PASS. Player11538→11374 (-164), owner219, whole production+55. Did we make a difference? Tracker lifecycle state and heartbeat now have an explicit owner. Is more needed? Yes: scrub, renderer and Media ownership plus the final gate; 1874 player lines remain. Production counter2 since full1e4128. No new-device proof.
+
+- **#228 merged408cd894; both exceptions finished.** Exact1a70 CI allpassed after full227 gate. Independent105PASS/one exact known sidebar failure; three shape probes caught intended mutations, allowances unchanged. Search6102→5879 (-223), owner252, wholeproduction+29, zero player/stage credit. Did we make a difference? Passive Home presentation has its own owner. Is more needed? Only the active player finish for Phase2; other work remains Phase3. Production counter1 since full1e4128.
+
+- **Full1e4128 gate PASS:**6206PASS/12exactknown/2skip, goldens21known with configuredretries, both actualhelpers0/zero unexpected/unused; nativebc46/current FIRSTPAIR passed. Analyzer430/449/zeroerrors/zeroNew, Python55, layering56→53 exact3removed, AST204/133/161/23/0. Windows68fileZIP f153b15e0b4f097cfca57a74174d73ca80a05a17247635b8a436f83438ad35ed; ARM64APK7166f741dd2714c74172ced304a7a56b5235f0bbc6f39d1ef9df6ce9a5d2ebeb, ABIverified. No newdevice smoke inferred. Separate from userGate5/Flutter3.47.2.
+
+- **#227 merged1e4128ae:** user explicitly requested finishing227/228 despite the freeze. Exact5f3 CI allgreen, independent35PASS; metadata ownership removes three model-to-service violations in measured candidate56→53, analyzer431→430. Production net+20; no player extraction credit. Full actual-main gate pending. Did we make a difference? Yes, model no longer owns metadata-service calls. Is more needed? Finish228 as the second exception, then player-only target.
 
 - **#226 merged52e8da5b:** all three CI jobs passed on exacte415 head; independent129PASS/one exact known sidebar failure, scoped4 inherited/full431449zeroNew/layer56 unchanged. Search6161→6102 (-59), existing Atrium owner+80, whole production+21. Stage credit988→1047 of1400,353 remaining. Two whole-widget callbacks replaced by local text composition and a live title reader; callables7→6 but leaf inputs10→14, so no overall interface-size reduction claimed. Did we make a difference? Yes: Atrium now owns its text composition. Is more needed? Yes:353-line stage shortfall and broader Search/Player/Storage/Q acceptance remain open. Counter2; no new-device proof.
 

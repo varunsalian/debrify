@@ -202,6 +202,10 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   16 inputs, private title-art memo and single shared region/feather helpers.
   Native trailer/live layers remain in `search_hero_widgets.dart`; no engine move.
   Host +1 / whole production +15, zero Leaves/638 credit; strict composition remains open.
+  Passive `HeroTakeoverInfo` in `search/hero_takeover_info.dart` owns classic Home
+  lower-third metadata and staggered paint with three borrowed signals, no callbacks.
+  Host -223 / whole production +29; zero seven-stage credit. Native layers,
+  recede/veil, focus and shell lifetimes retain their owners; strict composition OPEN.
   Hero state, focus-rest/enrichment timers, ambient trailers/live IPTV and shell
   art/tint/chrome relays live in `lib/screens/search/hero_presenter.dart`
   (`HeroPresenter`, `HeroEnvironment`). This remains screen/UI presentation,
@@ -538,6 +542,10 @@ is an editor mirror, not the source of truth. How to add a provider:
   `VideoPlayerScreen` public constructor stays). Resume:
   `lib/screens/video_player/resume_controller.dart` (`ResumeController` +
   `ResumeContext` / `ResumeSession`; host keeps `_ResumeSession` adapter).
+  Tracker lifecycle: `lib/screens/video_player/player_tracker_lifecycle.dart`
+  owns provider progress caches, launch-percent flags, coordinator setup and
+  heartbeat; nine live session reads retain host coupling. Media ordering and
+  native lifetime stay in host. Host -164 / whole production +55.
   Renderer startup/fallback: `lib/screens/video_player/services/renderer_coordinator.dart`
   owns mode, validation state and sequential fallback; host retains construction,
   UI effects and fire-and-forget route retirement. Partial ownership retains
@@ -570,8 +578,14 @@ is an editor mirror, not the source of truth. How to add a provider:
   and menu-visible state. Four lazy capabilities retain live host guards/commit;
   visibility notifier and three focus resources are borrowed, with construction,
   listeners and ordered disposal retained in host. Clock/banner/recording effects,
-  route/scrub guards and overlay priority remain host; no native or full transport
+  route wiring and overlay priority remain host; no native or full transport
   closure claim. Host -80 lines / whole production +53; partial ownership only.
+  TV scrub state/input: `lib/screens/video_player/player_scrub_session.dart`
+  (`PlayerScrubSession`) owns six fields, repeat admission and active-key policy.
+  Ten media slots invalidate-and-abandon; disposal invalidates only, in place.
+  Nine lazy/effect bindings and three borrowed transport/focus resources remain;
+  host retains event/render wiring. Host -109 / whole production +83; eight
+  invalidation sites have source-only proof, not complete native/lifecycle proof.
   IPTV recording (libmpv tee, Android engine, desktop capture):
   `lib/services/playback/iptv_recording_controller.dart`
   (`IptvRecordingController` + `IptvRecordingSession`; host keeps
@@ -844,6 +858,7 @@ is an editor mirror, not the source of truth. How to add a provider:
   Migration: `lib/services/app_migration_service.dart`.
 
 ## Metadata
+- `lib/services/series_playlist_metadata_loader.dart` owns SeriesPlaylist episode/movie metadata loading. Callers use its four static operations; the model retains per-playlist movie-ID cache ownership through typed cached-read/record-success methods. Preserve nullable IMDb parameters, pre-await assignment, cache-before-bounds and cache-write-before-shared-ID order; the former model metadata methods are explicitly migrated.
 - `lib/services/tvmaze_service.dart`, `lib/services/movie_metadata_service.dart`,
   `lib/services/imdb_enrichment_service.dart`, `lib/services/episode_info_service.dart`,
   `lib/services/catalog_repo_service.dart`.

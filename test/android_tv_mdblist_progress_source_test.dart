@@ -137,15 +137,19 @@ void main() {
       'Future<void> _switchToSourcePlaylist(',
       '// Resume the SAME episode from the new source',
     );
+    final tracker = File(
+      'lib/screens/video_player/player_tracker_lifecycle.dart',
+    ).readAsStringSync();
     final resumeGetters = _between(
-      player,
+      tracker,
       'void _bindEpisodeTrackerProgressIdentity',
-      '/// Load an external audio track',
+      'final se = session.trackerSeasonEpisode();',
     );
 
     expect(sourceSwitch, contains('final carriedImdbId'));
     expect(sourceSwitch, contains('rebuilt.imdbId ??= carriedImdbId'));
-    expect(resumeGetters, contains('final imdbId = _currentSeriesImdbId'));
+    expect(resumeGetters, contains('final imdbId = session.currentSeriesImdbId'));
+    expect(player, contains('get currentSeriesImdbId => _s._currentSeriesImdbId'));
     expect(player, contains('metadataReady: _episodeMetadataReady'));
 
     final resumeSource = File(
