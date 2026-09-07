@@ -1,11 +1,15 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../theme/app_theme.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../widgets/home/card_focus_rise.dart' show kCardFocusRing;
+import '../stage_visuals.dart';
 import '../../../widgets/skeleton_poster.dart';
 
 // Borrowed composition slots; this widget owns no focus/notifier/native lifetime.
 typedef AtriumWallContent = ({
-  Text Function(int offset) label,
   double Function() captionBand,
   double Function(BuildContext, double, {required double maxH}) rowBoxHeight,
   Widget Function(int offset, double height, Text label,
@@ -13,19 +17,30 @@ typedef AtriumWallContent = ({
 });
 typedef AtriumVisualContent = ({
   Widget Function(double boardHeight) backdrop,
-  Widget Function(double boardHeight, double splitX) dossier,
+});
+
+// Borrowed text inputs only; this stage creates/disposes no notifier.
+typedef AtriumTextContent = ({
+  ValueListenable<String?> focusedRailKey,
+  ValueListenable<CanvasFavFocus?> favourite,
+  ValueListenable<StremioMeta?> item,
+  ValueListenable<StremioMeta?> enriched,
+  ValueListenable<bool> trailerShowing,
+  String Function(int offset, {String? focusedRailKey}) readTitle,
 });
 
 class AtriumStageFrame {
   const AtriumStageFrame({required this.app, required this.minimumPosterHeight, required this.hasSecondRow,
-      required this.wall, required this.visuals});
+      required this.wall, required this.visuals, required this.text});
   final AppTheme app;
   final double minimumPosterHeight;
   final bool hasSecondRow;
   final AtriumWallContent wall;
   final AtriumVisualContent visuals;
+  final AtriumTextContent text;
 }
 
+const double atriumLabelFontSize = 12.0;
 const double _kAtriumSplit = 0.38;
 const double atriumPanelPad = 48;
 const double _kAtriumWallPad = 40;
@@ -60,8 +75,8 @@ class AtriumStage extends StatelessWidget {
         // derived from what fits inside it, so two scaled labels and a large
         // text scale can shrink the rows instead of running off the board.
         final labelWidth = boardW - splitX - _kAtriumWallPad * 2;
-        final topLabel = frame.wall.label(0);
-        final bottomLabel = hasSecondRow ? frame.wall.label(1) : null;
+        final topLabel = _buildWallLabel(context, frame.text, 0);
+        final bottomLabel = hasSecondRow ? _buildWallLabel(context, frame.text, 1) : null;
         final topLabelH = _measureLabel(context, topLabel, labelWidth);
         final bottomLabelH = bottomLabel == null
             ? 0.0
@@ -136,7 +151,7 @@ class AtriumStage extends StatelessWidget {
                     horizontal: atriumPanelPad,
                     vertical: 32,
                   ),
-                  child: frame.visuals.dossier(boardH, splitX),
+                  child: _buildDossier(frame.text, boardH, splitX),
                 ),
               ),
             ),
@@ -176,6 +191,71 @@ class AtriumStage extends StatelessWidget {
       },
     );
   }
+
+  /// One row of Atrium's wall: a quiet rail label over a horizontal strip of
+  /// the SAME cells every other board uses.
+  Text _buildWallLabel(BuildContext context, AtriumTextContent text, int offset) {
+    final app = AppThemeScope.of(context);
+    return Text(
+      text.readTitle(offset).toUpperCase(),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: atriumLabelFontSize,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.6,
+        color: app.fade(app.core.tx, 0.86),
+        shadows: const [Shadow(color: Color(0x99000000), blurRadius: 6)],
+      ),
+    );
+  }
+
+  Widget _buildDossier(AtriumTextContent text, double boardH, double splitX) => Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ValueListenableBuilder<String?>(
+          valueListenable: text.focusedRailKey,
+          builder: (context, key, _) {
+            final title = text.readTitle(0, focusedRailKey: key);
+            return Text(
+              title.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.6,
+                color: kCardFocusRing,
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 22),
+        ValueListenableBuilder<CanvasFavFocus?>(
+          valueListenable: text.favourite,
+          builder: (context, fav, _) => fav != null
+              ? StageFavIdentity(fav: fav)
+              : CanvasIdentity(
+                  item: text.item,
+                  enriched: text.enriched,
+                  trailerShowing: text.trailerShowing,
+                  // Drop the synopsis rather than clip it when
+                  // the column is short (small board / large
+                  // text scale).
+                  variant:
+                      boardH - 64 >=
+                          stageNarrowIdentityH(context) + 90
+                      ? StageIdentityVariant.narrow
+                      : StageIdentityVariant.headline,
+                  maxWidth: (splitX - atriumPanelPad * 2).clamp(
+                    120.0,
+                    520.0,
+                  ),
+                ),
+        ),
+      ],
+    );
 
   // Atrium plain labels only: measure the same inherited Text configuration,
   // without changing the legacy metric used by Deck and Tonight.
