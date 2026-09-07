@@ -294,9 +294,11 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   resolver; Promenade reads the single public `canvasTabChevronColumn` metric.
   Actual `AtriumStage` (product `ea62d4e5`) is the seventh public widget: layout,
   positioning and same-Text measurement have no private Search State dependency.
-  Seven explicit composition callbacks (frame entry, four wall, two visual) retain
-  host row/focus/deferral and lazy native/dossier ownership for final composition /
-  phase-completion review. Host **+60**, whole production **+35**; zero 250-line
+  Atrium owns wall-label and dossier assembly, borrowing five stable notifier
+  references plus one live title reader. Six composition callbacks retain host
+  row/focus/deferral and native ownership for final composition/phase-completion
+  review; callable count 7->6, leaf inputs 10->14. Text move: host **-59**, whole
+  production **+21**. Original stage move: host **+60**, whole **+35**; zero 250-line
   host credit. This closes the last stage part only; strict composition and the
   aggregate host target remain OPEN. The separate #216 geometry fix is not
   extraction credit; shared Deck/Tonight metric behavior remains unchanged.
