@@ -19,6 +19,7 @@ import '../../services/remote_control/remote_constants.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/profiles/profile_async_authorization.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../transfer/transfer_category_chrome.dart';
 
 /// Widget for exporting setup/credentials to TV
 class RemoteConfigExport extends StatefulWidget {

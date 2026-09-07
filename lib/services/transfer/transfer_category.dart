@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' show Color;
 
 import '../cloud/cloud_credentials.dart';
 import '../iptv_transfer_payload.dart';
@@ -14,18 +14,47 @@ enum TransferWireEncoding {
   json,
 }
 
+/// Which glyph a category shows in transfer / backup pickers.
+///
+/// A semantic id rather than an `IconData`, so the service layer stays free of
+/// Flutter widgets; `lib/widgets/transfer/transfer_category_chrome.dart` maps
+/// each value to its Material icon. Names follow the Material icon they map to.
+enum TransferCategoryGlyph {
+  speed,
+  inventory2,
+  workspacePremium,
+  allInclusive,
+  cloud,
+  history,
+  movieFilter,
+  listAlt,
+  search,
+  extension,
+  dns,
+  manageSearch,
+  liveTv,
+  star,
+  playlistPlay,
+  folderSpecial,
+  sell,
+  syncAlt,
+}
+
 /// One backup / remote-transfer / profile-restore category.
 ///
 /// Built-ins are const so [BackupSelection]'s named constructor can stay
 /// const for unowned callers. Tests register extra instances via
 /// [TransferCategoryRegistry.register].
+///
+/// [glyph] and [color] are pure presentation data; the `icon` getter lives in
+/// the widgets layer (`TransferCategoryChrome`).
 class TransferCategory {
   final String key;
   final String payloadKey;
   final String? wireCommand;
   final String label;
   final String? summarizeLabel;
-  final IconData icon;
+  final TransferCategoryGlyph glyph;
   final Color color;
   final TransferWireEncoding? wireEncoding;
   final bool remoteBatch;
@@ -43,7 +72,7 @@ class TransferCategory {
     this.wireCommand,
     required this.label,
     this.summarizeLabel,
-    required this.icon,
+    required this.glyph,
     required this.color,
     this.wireEncoding,
     this.remoteBatch = false,

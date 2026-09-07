@@ -91,7 +91,7 @@ void main() {
       wireCommand: 'fake_cat',
       label: 'Fake',
       summarizeLabel: 'Fake thing',
-      icon: Icons.science,
+      glyph: TransferCategoryGlyph.extension,
       color: const Color(0xFF123456),
       wireEncoding: TransferWireEncoding.json,
       remoteBatch: true,

@@ -32,6 +32,7 @@ import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/portable_profile_package.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../transfer/transfer_category_chrome.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
 /// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
