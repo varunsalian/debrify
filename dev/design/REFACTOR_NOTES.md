@@ -790,3 +790,8 @@ User requested both after the player-only direction. #227 merged1e4128ae with re
 ## Exceptions227/228 complete
 
 Full1e4128 actual-main gate passed with exact known failures and both native builds; #228 merged408cd894 after exactfreshCI and union acceptance. Search5879, player11538:2038remaining to9500. Takeover -223host/+29wholeproduction earns zero player/stage credit. Freeze resumes; onlyplayerPhase2 work. Gate evidence in debrify-c0-post-225-226-227-gate/.dart_tool/main-gate/REPORT.md. Counter1 aftergate.
+
+
+## Media candidate b220 rejected — September 7
+
+Green origin pin982e24dd (four public-host mocked-terminal cases) retained. Unapplied two-transaction design b220 preserved as rejected evidence: host-341, owner575, whole production+234;36 inbound and23 outward interface members, including10 single-field compatibility bridges. Source body/notification refinements and57-writer/24-group accounting accepted, but coupling cost failed simplicity review. No production change applied. Next work is loader/identity boundary and additional origin admission, not callback regrouping or an automatic broader move.

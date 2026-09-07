@@ -2,9 +2,9 @@
 
 ## Phase 2 — player finish (user direction, September 6)
 
-**Player now: 11,374 lines. Lines remaining to remove: 1,874.**
+**Player now: 11,265 lines. Lines remaining to remove: 1,765.**
 
-Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is aa2834e3 after #229. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is 65b3a69b after #230. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
 ### Current to-do list
 
@@ -15,9 +15,10 @@ Stopping target: **9,500 lines or fewer on merged main**. No overall percentage.
 - [x] **Scrub origin pins:** all11 cases passed before the move; finite3/11 runtime sites and8 source-only sites recorded.
 - [x] **Renderer origin pin:** actual old-host fallback passed with reviewed testability seam; mock-terminal/Live-binding limits retained.
 - [x] **Tracker — PR #229 merged aa2834e3.** Author56PASS, independent56PASS, repaired source guard11PASS; all three CI jobs passed on exact e0ad938. Player reduction164 lines; owner219, whole production+55.
-- [ ] **Scrub — Locke: actual-main integration and PR publication assigned now.** Author13PASS and independent13PASS; accepted b829 plus docs68107. Arendt reviews the final union; preserve tracker guard repair. Proposed reduction109 lines, not merged.
-- [ ] **Renderer — Arendt: author20PASS and independent20PASS; production and docs frozen.** Final serial integration follows scrub. Currently reviewing scrub union; proposed renderer reduction178 against seam baseline, partial ownership/high coupling explicit.
-- [ ] **Media/episode switching — Cicero author, Confucius peer reviewer.** Latest origin run1PASS/3ERROR. Narrow fixture migration-cache reset under review: reused prior-case Future may explain second-case stall. No changed expectations or extra waits; remaining origin cases not yet green.
+- [x] **Scrub — #230 merged65b3a69b.** Author13PASS, independent13PASS and exact final union accepted; all three CI jobs passed. Player-109, owner192, whole production+83. Eight source-only sites remain explicitly limited.
+- [ ] **Integrated gate — Locke executing at exact65b3a69b.** Third production merge since full1e4128; renderer merge waits for this gate.
+- [ ] **Renderer — Arendt integrating and publishing on actual main.** Author20PASS and independent20PASS; expected union accepted. Full branch reduction177 includes seam+1 and move-178; no merged credit yet.
+- [ ] **Media — Cicero author / Confucius reviewer.** Four origin tests passed and committed982e24dd before any move. Proposed b220 extraction REJECTED: host-341 but net+234 and59 interface members are disproportionate. Production unchanged. Active next step: source-only loader/identity boundary and additional origin-admission proposal to remove actual reentry dependencies.
 - [ ] Merge reviewed player slices, updating this board once per merged PR. Parent serializes edits/integration into the shared player host; isolated disjoint pin tests may run concurrently.
 - [ ] At player <=9,500: stop Phase 2 extraction, run final full gate, map upstream PRs #54/#55/#56 against current seams, and issue the closing report.
 
@@ -46,6 +47,8 @@ Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fa
 One board commit per merged PR. Status refreshes remain in the working board until that commit; the direction change and Gate 5 are already committed. Historical sections below remain evidence, not active assignments or current targets.
 
 ### Latest completed milestones
+
+- **#230 merged65b3a69b:** exactcc9 allCIgreen and independent union accepted; author13PASS/independent13PASS. Player11374→11265 (-109), owner192, net+83. Did we make a difference? Scrub session state and input policy have one owner; ten original invalidation slots preserved. Is more needed? Yes: renderer and cohesive Media ownership, then final acceptance. Counter3 triggers full65b3gate; no newdevice proof.
 
 - **#229 merged aa2834e3:** exact e0ad938 all three CI jobs passed; author56PASS, independent56PASS, source-guard repair11PASS. Player11538→11374 (-164), owner219, whole production+55. Did we make a difference? Tracker lifecycle state and heartbeat now have an explicit owner. Is more needed? Yes: scrub, renderer and Media ownership plus the final gate; 1874 player lines remain. Production counter2 since full1e4128. No new-device proof.
 
