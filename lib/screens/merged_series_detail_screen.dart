@@ -15,7 +15,6 @@ import '../models/playlist_view_mode.dart';
 import '../services/analytics_service.dart';
 import '../services/series_source_service.dart';
 import '../services/app_route_observer.dart';
-import '../services/debrify_image_cache.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
@@ -30,7 +29,11 @@ import '../widgets/detail/detail_layout_marquee.dart';
 import '../widgets/detail/detail_layout_premium.dart';
 import '../widgets/detail/detail_layout_showcase.dart';
 import '../widgets/detail/detail_layout_stage.dart';
+import '../widgets/detail/detail_action_buttons.dart';
+import '../widgets/detail/detail_focus_chrome.dart';
 import '../widgets/detail/detail_primary_sources.dart';
+import '../widgets/detail/detail_rail_cards.dart';
+import '../widgets/detail/detail_tracker_sheets.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
 import '../theme/app_theme_scope.dart';
@@ -39,9 +42,7 @@ import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/horizontal_mouse_wheel.dart';
-import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
-import '../widgets/movie_watched_badge.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -58,7 +59,6 @@ import '../theme/theme_overrides.dart';
 import '../theme/shipped_themes.dart' show effectiveDetailTheme;
 import '../utils/artwork_url.dart';
 import '../utils/episode_progress_merge.dart';
-import '../utils/tv_keys.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -228,7 +228,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     with RouteAware {
   // ── Stremio-flat palette (neutral glass + gold state) ──
   static const Color _bg = Color(0xFF0B0B0E);
-  static const Color _gold = Color(0xFFF5B942);
+  static const Color _gold = kDetailGold;
   static const Color _imdb = Color(0xFFF5C518);
   static Color get _glass2 => Colors.white.withValues(alpha: 0.07);
   static Color get _hair => Colors.white.withValues(alpha: 0.09);
@@ -288,7 +288,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// Trailer button shows a spinner.
   bool _trailerResolving = false;
 
-  /// Scrolls the left info column. Focus-anchored (see [_ScrollAnchor]) so that
+  /// Scrolls the left info column. Focus-anchored (see [DetailScrollAnchor]) so that
   /// focusing the top action row snaps to the very top (revealing the
   /// title/meta/summary above it), and focusing a lower section brings it fully
   /// into view — fixing the "can't scroll back up to the details" DPAD bug.
@@ -1433,7 +1433,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                             !_trailerForeground &&
                             !_trailerAmbientPlaying)
                           Positioned.fill(
-                            child: _AmbientStill(
+                            child: DetailAmbientStill(
                               url: _focusedStillUrl!,
                               isTelevision: widget.isTelevision,
                             ),
@@ -1553,7 +1553,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 child: SafeArea(
                   child: Padding(
                     padding: EdgeInsets.all(widget.isTelevision ? 20 : 12),
-                    child: _TrailerPlayingChip(
+                    child: DetailTrailerPlayingChip(
                       onTap: _playTrailer,
                       theme: _themedBody ? _theme : null,
                     ),
@@ -2030,7 +2030,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ? item.description
         : extra?.plot;
 
-    // No entrance stagger on TV: each _StaggerReveal animates Opacity (a
+    // No entrance stagger on TV: each DetailStaggerReveal animates Opacity (a
     // saveLayer per element per frame) during the exact window the page is
     // also hero-flying and resolving the trailer — the weak TV GPU pays for
     // polish nobody perceives at 3m. Same gate as the Home hero's motion.
@@ -2050,7 +2050,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-eyebrow'),
             delayMs: 0,
             enabled: animate,
@@ -2065,7 +2065,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             ),
           ),
           SizedBox(height: t ? 5 : 8),
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-title'),
             delayMs: 55,
             enabled: animate,
@@ -2083,7 +2083,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             ),
           ),
           SizedBox(height: t ? 8 : 10),
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-meta'),
             delayMs: 110,
             enabled: animate,
@@ -2094,7 +2094,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           // the same fact twice.
           if (genres.isNotEmpty) ...[
             SizedBox(height: t ? 8 : 10),
-            _StaggerReveal(
+            DetailStaggerReveal(
               key: const ValueKey('rev-genres'),
               delayMs: 165,
               enabled: animate,
@@ -2109,11 +2109,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           // Focusing the action row snaps the column to the very top so the
           // title / meta / genres above it are revealed (fixes "can't scroll
           // back up to details").
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-actions'),
             delayMs: 220,
             enabled: animate,
-            child: _ScrollAnchor(
+            child: DetailScrollAnchor(
               toTop: true,
               active: widget.isTelevision,
               child: _buildActionRow(),
@@ -2174,7 +2174,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-h-eyebrow'),
             delayMs: 0,
             enabled: animate,
@@ -2189,7 +2189,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             ),
           ),
           const SizedBox(height: 8),
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-h-title'),
             delayMs: 55,
             enabled: animate,
@@ -2212,7 +2212,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             ),
           ),
           const SizedBox(height: 10),
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-h-meta'),
             delayMs: 110,
             enabled: animate,
@@ -2221,7 +2221,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           // Tracker state lives in the action-row pills (see the info pane).
           if (genres.isNotEmpty) ...[
             const SizedBox(height: 10),
-            _StaggerReveal(
+            DetailStaggerReveal(
               key: const ValueKey('rev-h-genres'),
               delayMs: 165,
               enabled: animate,
@@ -2233,7 +2233,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             ),
           ],
           const SizedBox(height: 14),
-          _StaggerReveal(
+          DetailStaggerReveal(
             key: const ValueKey('rev-h-actions'),
             delayMs: 220,
             enabled: animate,
@@ -2481,7 +2481,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // LEFT-entry focus node when present; movies autofocus it on TV (a movie
         // has no episode list to auto-focus).
         if (widget.showQuickPlay)
-          _PrimaryButton(
+          DetailPrimaryButton(
             label: _primaryLabel,
             busy: _primaryBusy,
             icon: Icons.play_arrow_rounded,
@@ -2500,7 +2500,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // trailer loads, "Watch Trailer" once it's playing (tap = fullscreen),
         // plain "Trailer" otherwise (tap = resolve & play).
         if (_trailerYtId != null)
-          _GhostButton(
+          DetailGhostButton(
             label: _trailerAmbientPlaying ? 'Watch Trailer' : 'Trailer',
             icon: _trailerAmbientPlaying
                 ? Icons.play_circle_outline_rounded
@@ -2511,13 +2511,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // Movie: a Sources (manual list) button — the episode list is the
         // picker for series, so this is movie-only.
         if (_isMovie && widget.onBrowse != null)
-          _GhostButton(
+          DetailGhostButton(
             label: 'Sources',
             icon: Icons.layers_rounded,
             onTap: widget.onBrowse!,
           ),
         if (_supportsMyWatchlist)
-          _GhostButton(
+          DetailGhostButton(
             label: _inMyWatchlist ? 'In My Watchlist' : 'My Watchlist',
             icon: _inMyWatchlist
                 ? Icons.bookmark_rounded
@@ -2527,7 +2527,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // Source binding. Takes the LEFT-entry focus node only when Play is
         // hidden (PikPak), so LEFT from an episode always lands on a live target.
         if (widget.onSelectSource != null)
-          _SourcePill(
+          DetailSourcePill(
             count: count,
             focusNode: widget.showQuickPlay ? null : _leftEntryFocusNode,
             // A movie with Play hidden (PikPak-only) has no episode list to
@@ -2542,7 +2542,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // season packs, local Continue Watching) — no tracker involved, so a
         // neutral button rather than a branded one.
         if (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
-          _RoundIconButton(
+          DetailRoundIconButton(
             icon: Icons.more_horiz_rounded,
             tooltip: 'More',
             onTap: _showAppActionsMenu,
@@ -2551,7 +2551,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // chips that used to sit under the title are folded into it, so one
         // control both shows and changes the relationship).
         if (_traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
-          _TrackerPill(
+          DetailTrackerPill(
             mark: TraktMark(size: 21, opacity: _traktTracked ? 1 : 0.55),
             brand: 'TRAKT',
             state: _traktPillLabel,
@@ -2564,7 +2564,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // Simkl's own pill — a separate button/sheet, not merged with Trakt's,
         // so nothing here touches the button above.
         if (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null)
-          _TrackerPill(
+          DetailTrackerPill(
             mark: SimklMark(size: 21, opacity: _simklTracked ? 1 : 0.55),
             brand: 'SIMKL',
             state: _simklPillLabel,
@@ -2575,7 +2575,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             onTap: _showSimklQuickActionsMenu,
           ),
         if (_menuOptionsMdblist.isNotEmpty && widget.onMdblistAction != null)
-          _TrackerPill(
+          DetailTrackerPill(
             mark: MdblistMark(size: 21, opacity: _mdblistTracked ? 1 : 0.55),
             brand: 'MDBLIST',
             state: _mdblistPillLabel,
@@ -2589,90 +2589,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     );
   }
 
-  /// Human-readable description of each quick action, shown in the More menu.
-  static String _descriptionFor(TraktItemMenuAction a) {
-    switch (a) {
-      case TraktItemMenuAction.selectSource:
-        return 'Pin a specific torrent or file as this title\'s source so every '
-            'play uses it — no re-searching each time. Change or clear it here.';
-      case TraktItemMenuAction.addToStremioTv:
-        return 'Add this to your Stremio TV channel so it plays in your '
-            'always-on rotation alongside your other picks.';
-      case TraktItemMenuAction.playRandomEpisode:
-        return 'Skip the browsing and jump straight into a random episode from '
-            'this series — handy for background or comfort watching.';
-      case TraktItemMenuAction.searchPacks:
-        return 'Open a search for full-season and complete-series packs, then '
-            'do whatever you want with a result — play it, download it, and more.';
-      case TraktItemMenuAction.addToWatchlist:
-        return 'Save this to your Trakt watchlist so you can find it later, '
-            'synced across every device signed into your account.';
-      case TraktItemMenuAction.removeFromWatchlist:
-        return 'Take this off your Trakt watchlist — it won\'t appear in your '
-            '"to watch" list anymore.';
-      case TraktItemMenuAction.addToCollection:
-        return 'Mark this as part of your Trakt collection — your library of '
-            'everything you own or keep track of.';
-      case TraktItemMenuAction.removeFromCollection:
-        return 'Remove this from your Trakt collection.';
-      case TraktItemMenuAction.markWatched:
-        return 'Mark every episode of this title as watched on Trakt and sync '
-            'that history across all your devices.';
-      case TraktItemMenuAction.markUnwatched:
-        return 'Clear this title from your Trakt history so it counts as '
-            'unwatched again and can resurface in "up next".';
-      case TraktItemMenuAction.rate:
-        return 'Give this a 1–10 rating on Trakt. Your ratings sync everywhere '
-            'and help shape your recommendations.';
-      case TraktItemMenuAction.removeRating:
-        return 'Remove the rating you previously gave this on Trakt.';
-      case TraktItemMenuAction.addToList:
-        return 'Add this to one of your custom Trakt lists — like "Weekend", '
-            '"With friends" or anything you\'ve made.';
-      case TraktItemMenuAction.removeFromList:
-        return 'Remove this from one of your custom Trakt lists.';
-      case TraktItemMenuAction.removeFromPlayback:
-        return 'Remove this from Continue Watching so it stops showing on your '
-            'home rows and resume list.';
-      case TraktItemMenuAction.removeFromTraktPlayback:
-        return 'Delete this title\'s playback progress (and watch history) on '
-            'Trakt so it leaves the Trakt Continue Watching rows.';
-    }
-  }
-
-  /// Human-readable description of each Simkl quick action, shown in its
-  /// own More menu — mirrors [_descriptionFor].
-  static String _descriptionForSimkl(SimklItemMenuAction a) {
-    switch (a) {
-      case SimklItemMenuAction.moveToPlanToWatch:
-        return 'Move this to your Simkl "Plan to Watch" list — a personal '
-            'watch queue synced across every device signed into your account.';
-      case SimklItemMenuAction.moveToWatching:
-        return 'Mark this as currently watching on Simkl, without changing '
-            'any episode watched state.';
-      case SimklItemMenuAction.moveToOnHold:
-        return 'Pause this on Simkl — keeps it out of Plan to Watch and '
-            'Watching until you\'re ready to pick it back up.';
-      case SimklItemMenuAction.moveToCompleted:
-        return 'Mark this completed on Simkl and sync that history across '
-            'all your devices.';
-      case SimklItemMenuAction.moveToDropped:
-        return 'Mark this dropped on Simkl so it stops showing up as '
-            'something you\'re meaning to finish.';
-      case SimklItemMenuAction.removeFromList:
-        return 'Remove this title from your Simkl library, including its '
-            'active status, watched history, rating and saved playback progress.';
-      case SimklItemMenuAction.removeFromContinueWatching:
-        return 'Take this off your Simkl Continue Watching rows. A movie just '
-            'clears its paused position; a series is moved to On Hold so its '
-            'next episode doesn\'t re-surface as an "up next" card.';
-      case SimklItemMenuAction.rate:
-        return 'Give this a 1–10 rating on Simkl.';
-      case SimklItemMenuAction.removeRating:
-        return 'Remove the rating you previously gave this on Simkl.';
-    }
-  }
-
   /// Debrify's own actions, in a plain labelled list. Closes on selection —
   /// each of these leaves the sheet anyway (a picker, a search, playback).
   void _showAppActionsMenu() {
@@ -2684,7 +2600,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetCtx) => _QuickActionsMenu(
+      builder: (sheetCtx) => DetailQuickActionsMenu(
         title: _item.name,
         options: options,
         isTelevision: widget.isTelevision,
@@ -2712,7 +2628,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetCtx) => _TraktSheet(
+      builder: (sheetCtx) => DetailTraktSheet(
         title: _item.name,
         isTelevision: widget.isTelevision,
         status: _traktStatus,
@@ -2750,7 +2666,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetCtx) => _SimklSheet(
+      builder: (sheetCtx) => DetailSimklSheet(
         title: _item.name,
         isTelevision: widget.isTelevision,
         status: _simklStatus,
@@ -3053,7 +2969,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ..add(_sectionLabel('Cast'))
         ..add(const SizedBox(height: 12))
         ..add(
-          _ScrollAnchor(
+          DetailScrollAnchor(
             active: widget.isTelevision,
             alignment: 0.35,
             child: SizedBox(
@@ -3077,7 +2993,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ..add(_sectionLabel('More Like This'))
         ..add(const SizedBox(height: 12))
         ..add(
-          _ScrollAnchor(
+          DetailScrollAnchor(
             active: widget.isTelevision,
             alignment: 0.5,
             child: SizedBox(
@@ -3135,7 +3051,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           children: [
             for (var i = 0; i < cards.length; i++) ...[
               if (i > 0) SizedBox(width: gap),
-              _RailEdgeTrap(
+              DetailRailEdgeTrap(
                 trapLeft: i == 0,
                 trapRight: i == cards.length - 1,
                 onTrapRight: crossRight,
@@ -3148,9 +3064,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     );
   }
 
-  Widget _castTile(CastMember m) => _CastTile(member: m, fallback: _glass2);
+  Widget _castTile(CastMember m) => DetailCastTile(member: m, fallback: _glass2);
 
-  Widget _recCard(StremioMeta rec) => _RecCard(
+  Widget _recCard(StremioMeta rec) => DetailRecCard(
     rec: rec,
     fallback: _glass2,
     onTap: () => widget.onRecommendationTap?.call(rec),
@@ -3213,7 +3129,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     FocusNode? focusNode,
     DetailTheme? theme,
   }) {
-    return _RoundIconButton(
+    return DetailRoundIconButton(
       icon: icon,
       onTap: onTap,
       tooltip: tooltip,
@@ -3222,2067 +3138,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ? Colors.black.withValues(alpha: 0.35)
           : theme.ground.withValues(alpha: 0.55),
       theme: theme,
-    );
-  }
-}
-
-// ── Small presentational widgets ───────────────────────────────────────────
-
-/// One-shot entrance for a hero-block item: after [delayMs], fades up from
-/// transparent while rising 12px, so the detail header assembles itself around
-/// the shared-element poster flight instead of popping in fully formed.
-///
-/// Cheap and TV-safe: a single 340ms opacity+translate on a small widget, run
-/// once on mount (the controller never resets, so metadata-load rebuilds don't
-/// replay it). [enabled] is false under OS reduced-motion — the child shows
-/// immediately with no controller. Late-arriving sections (their own first
-/// mount happens when enrichment lands) simply fade in on arrival.
-class _StaggerReveal extends StatefulWidget {
-  final Widget child;
-  final int delayMs;
-  final bool enabled;
-
-  const _StaggerReveal({
-    super.key,
-    required this.child,
-    this.delayMs = 0,
-    this.enabled = true,
-  });
-
-  @override
-  State<_StaggerReveal> createState() => _StaggerRevealState();
-}
-
-class _StaggerRevealState extends State<_StaggerReveal>
-    with SingleTickerProviderStateMixin {
-  AnimationController? _controller;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    if (!widget.enabled) return;
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 340),
-    );
-    _timer = Timer(Duration(milliseconds: widget.delayMs), () {
-      if (mounted) _controller?.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = _controller;
-    if (c == null) return widget.child;
-    return AnimatedBuilder(
-      animation: c,
-      builder: (_, child) {
-        final t = Curves.easeOutCubic.transform(c.value);
-        return Opacity(
-          opacity: t,
-          child: Transform.translate(
-            offset: Offset(0, (1 - t) * 12),
-            child: child,
-          ),
-        );
-      },
-      child: widget.child,
-    );
-  }
-}
-
-/// Gold DPAD focus ring — an in-bounds *foreground* border, exactly like the
-/// episode rows in the right pane (and the same [HomeTheme.focusGold] hue, so
-/// the cursor doesn't shift color crossing panes). Every interactive element on
-/// this screen wraps itself in one — the default InkWell focus overlay is
-/// invisible on both the white Play pill and dark glass surfaces, which made
-/// the remote cursor untrackable on TV.
-///
-/// Deliberately NOT a shadow ring: spread shadows paint a *filled* rect behind
-/// the child (they bleed through translucent glass surfaces as a solid gold
-/// fill), and they paint outside bounds (forcing rails to un-clip and leak
-/// scrolled-out tiles). A foreground border stays crisp on any surface, keeps
-/// the glass translucency, and never needs `Clip.none`.
-class _FocusHalo extends StatelessWidget {
-  final bool focused;
-  final BorderRadius? radius; // null → circle
-  final Widget child;
-
-  /// Null keeps Classic's gold.
-  final Color? ringColor;
-
-  const _FocusHalo({
-    required this.focused,
-    required this.child,
-    this.radius,
-    this.ringColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      // Snap on TV (house focus idiom): a 140ms ring fade per DPAD move makes
-      // held-key surfing repaint every element in flight on the weak GPU.
-      duration: PlatformUtil.isTelevision
-          ? Duration.zero
-          : const Duration(milliseconds: 140),
-      foregroundDecoration: BoxDecoration(
-        shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
-        borderRadius: radius,
-        border: focused
-            ? Border.all(color: ringColor ?? HomeTheme.focusGold, width: 2.5)
-            : null,
-      ),
-      child: child,
-    );
-  }
-}
-
-/// Wraps a rail's end cards: consumes LEFT on the first / RIGHT on the last so
-/// the DPAD cursor stops at the rail's edge instead of escaping to whatever is
-/// geometrically nearest (the episodes pane, the back button). A non-focusable
-/// ancestor node sees the key on its way up from the focused card, before the
-/// app-level shortcuts turn it into a traversal move.
-class _RailEdgeTrap extends StatelessWidget {
-  final bool trapLeft;
-  final bool trapRight;
-  final Widget child;
-
-  /// When set, RIGHT on the last card invokes this (pane crossing) instead of
-  /// dead-stopping.
-  final VoidCallback? onTrapRight;
-
-  const _RailEdgeTrap({
-    required this.trapLeft,
-    required this.trapRight,
-    required this.child,
-    this.onTrapRight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!trapLeft && !trapRight) return child;
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        final key = event.logicalKey;
-        if (trapLeft && key == LogicalKeyboardKey.arrowLeft) {
-          return KeyEventResult.handled;
-        }
-        if (trapRight && key == LogicalKeyboardKey.arrowRight) {
-          onTrapRight?.call();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: child,
-    );
-  }
-}
-
-/// Cast avatar — focusable (no-op tap) so DPAD-down can walk the info column
-/// through it, with a visible gold ring while focused.
-class _CastTile extends StatefulWidget {
-  final CastMember member;
-  final Color fallback;
-  const _CastTile({required this.member, required this.fallback});
-
-  @override
-  State<_CastTile> createState() => _CastTileState();
-}
-
-class _CastTileState extends State<_CastTile> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final m = widget.member;
-    return SizedBox(
-      width: 64,
-      child: Column(
-        children: [
-          _FocusHalo(
-            focused: _focused,
-            child: Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () {},
-                onFocusChange: (f) => setState(() => _focused = f),
-                customBorder: const CircleBorder(),
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: (m.imageUrl != null && m.imageUrl!.isNotEmpty)
-                      ? CachedNetworkImage(
-                          imageUrl: m.imageUrl!,
-                          fit: BoxFit.cover,
-                          cacheManager: DebrifyImageCache.manager,
-                          // 56 logical px avatar (up to dpr 3 on phones) —
-                          // never decode a full-res headshot.
-                          memCacheWidth: 180,
-                          placeholder: (_, __) =>
-                              Container(color: widget.fallback),
-                          errorWidget: (_, __, ___) =>
-                              Container(color: widget.fallback),
-                        )
-                      : Container(
-                          color: widget.fallback,
-                          child: Icon(Icons.person, color: Colors.white38),
-                        ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            m.name,
-            maxLines: 2,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: _focused ? Colors.white : Colors.white54,
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// "More Like This" poster card — gold ring + slight scale while focused so the
-/// DPAD cursor is unmistakable over artwork.
-class _RecCard extends StatefulWidget {
-  final StremioMeta rec;
-  final Color fallback;
-  final VoidCallback onTap;
-  const _RecCard({
-    required this.rec,
-    required this.fallback,
-    required this.onTap,
-  });
-
-  @override
-  State<_RecCard> createState() => _RecCardState();
-}
-
-class _RecCardState extends State<_RecCard> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final rec = widget.rec;
-    return SizedBox(
-      width: 100,
-      child: _FocusHalo(
-        focused: _focused,
-        radius: BorderRadius.circular(10),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: widget.onTap,
-            onFocusChange: (f) => setState(() => _focused = f),
-            child: AspectRatio(
-              aspectRatio: 2 / 3,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (rec.poster != null && rec.poster!.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: rec.poster!,
-                      fit: BoxFit.cover,
-                      cacheManager: DebrifyImageCache.manager,
-                      // 100 logical px card (up to dpr 3 on phones) — decode
-                      // small so ten posters at once don't lean on a 2GB box.
-                      memCacheWidth: 300,
-                      placeholder: (_, __) => Container(color: widget.fallback),
-                      errorWidget: (_, __, ___) =>
-                          Container(color: widget.fallback),
-                    )
-                  else
-                    Container(color: widget.fallback),
-                  if (rec.type == 'movie' || rec.type == 'series')
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: MovieWatchedBadge(
-                        imdbId: rec.effectiveImdbId ?? rec.id,
-                        contentType: rec.type,
-                        compact: true,
-                        tickPolicyScoped: true,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PrimaryButton extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-  final FocusNode? focusNode;
-  final bool autofocus;
-
-  /// Resume state still resolving — spinner instead of the label so the pill
-  /// never flashes a wrong status. Stays tappable (plays from the top).
-  final bool busy;
-
-  /// Per-title accent used for the soft glow behind the white pill, so the
-  /// primary CTA reads as belonging to this title.
-  final Color glow;
-
-  const _PrimaryButton({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.onLongPress,
-    this.focusNode,
-    this.autofocus = false,
-    this.busy = false,
-    this.glow = _MergedDetailScreenState._gold,
-  });
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _focused = false;
-  late final TvHoldOk _hold;
-
-  @override
-  void initState() {
-    super.initState();
-    _hold = TvHoldOk(
-      onTap: () => widget.onTap(),
-      onHold: () => widget.onLongPress?.call(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _hold.reset();
-    super.dispose();
-  }
-
-  KeyEventResult _onKey(KeyEvent event) {
-    if (widget.onLongPress == null || !isActivateOrSpaceKey(event.logicalKey)) {
-      return KeyEventResult.ignored;
-    }
-    return _hold.handle(event);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final button = AnimatedScale(
-      // Snap on TV: every frame of the scale pop re-rasters the pill AND its
-      // blur-18 glow shadow; instant scale keeps the glow a one-time paint.
-      duration: PlatformUtil.isTelevision
-          ? Duration.zero
-          : const Duration(milliseconds: 140),
-      scale: _focused ? 1.05 : 1.0,
-      child: _FocusHalo(
-        focused: _focused,
-        radius: BorderRadius.circular(999),
-        // Soft accent glow behind the pill. A static drop shadow (rasterised
-        // once, carried by the AnimatedScale transform) — not a per-frame
-        // backdrop blur — so it's safe on the weak TV GPU. Animates its color
-        // to the title accent when it resolves.
-        child: TweenAnimationBuilder<Color?>(
-          duration: const Duration(milliseconds: 500),
-          tween: ColorTween(end: widget.glow.withValues(alpha: 0.45)),
-          builder: (_, color, child) => DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                BoxShadow(
-                  color: color ?? Colors.transparent,
-                  blurRadius: 18,
-                  spreadRadius: -2,
-                ),
-              ],
-            ),
-            child: child,
-          ),
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(999),
-            child: InkWell(
-              focusNode: widget.focusNode,
-              autofocus: widget.autofocus,
-              onFocusChange: (f) {
-                setState(() => _focused = f);
-                if (!f) _hold.reset();
-              },
-              borderRadius: BorderRadius.circular(999),
-              onTap: widget.onTap,
-              // InkWell supplies the platform long-press feedback itself.
-              onLongPress: widget.onLongPress,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 11,
-                ),
-                child: widget.busy
-                    ? const SizedBox(
-                        width: 48,
-                        height: 20,
-                        child: Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF0D0D10),
-                            ),
-                          ),
-                        ),
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            widget.icon,
-                            color: const Color(0xFF0D0D10),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 7),
-                          Text(
-                            widget.label,
-                            style: const TextStyle(
-                              color: Color(0xFF0D0D10),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    if (widget.onLongPress == null) return button;
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (_, event) => _onKey(event),
-      child: button,
-    );
-  }
-}
-
-/// Subtle "trailer playing in background" hint pill. An informational hint, not
-/// a primary control (the focusable "Watch Trailer" button is the DPAD way to
-/// promote), so it's pointer/touch-tappable only — `canRequestFocus: false`
-/// keeps it out of DPAD traversal entirely, so it can never steal focus or
-/// strand the remote when it appears/disappears as the trailer plays/pauses.
-class _TrailerPlayingChip extends StatelessWidget {
-  final VoidCallback onTap;
-
-  /// Null for Classic.
-  final DetailTheme? theme;
-
-  const _TrailerPlayingChip({required this.onTap, this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = theme;
-    final radius = t?.brBtn ?? BorderRadius.circular(999);
-    return Material(
-      color:
-          t?.ground.withValues(alpha: 0.6) ??
-          Colors.black.withValues(alpha: 0.42),
-      borderRadius: radius,
-      child: InkWell(
-        borderRadius: radius,
-        canRequestFocus: false,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.all(
-              color: t?.hair ?? Colors.white.withValues(alpha: 0.14),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.graphic_eq_rounded,
-                size: 14,
-                color: t?.tx ?? Colors.white.withValues(alpha: 0.85),
-              ),
-              const SizedBox(width: 7),
-              Text(
-                'Trailer playing',
-                style: TextStyle(
-                  color: t?.tx ?? Colors.white.withValues(alpha: 0.85),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GhostButton extends StatefulWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  /// Shows a small spinner in place of the icon (e.g. trailer resolving).
-  final bool busy;
-
-  const _GhostButton({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-    this.busy = false,
-  });
-
-  @override
-  State<_GhostButton> createState() => _GhostButtonState();
-}
-
-class _GhostButtonState extends State<_GhostButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return _FocusHalo(
-      focused: _focused,
-      radius: BorderRadius.circular(999),
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: widget.onTap,
-          onFocusChange: (f) => setState(() => _focused = f),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.busy)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white70,
-                    ),
-                  )
-                else
-                  Icon(widget.icon, color: Colors.white, size: 18),
-                const SizedBox(width: 7),
-                Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SourcePill extends StatefulWidget {
-  final int count;
-  final VoidCallback onTap;
-  final FocusNode? focusNode;
-  final bool autofocus;
-  const _SourcePill({
-    required this.count,
-    required this.onTap,
-    this.focusNode,
-    this.autofocus = false,
-  });
-
-  @override
-  State<_SourcePill> createState() => _SourcePillState();
-}
-
-class _SourcePillState extends State<_SourcePill> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bound = widget.count > 0;
-    const gold = _MergedDetailScreenState._gold;
-    final label = bound
-        ? (widget.count > 1 ? '${widget.count} sources' : '1 source')
-        : 'Bind source';
-    return _FocusHalo(
-      focused: _focused,
-      radius: BorderRadius.circular(999),
-      child: Material(
-        color: bound
-            ? gold.withValues(alpha: 0.13)
-            : Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(999),
-        child: InkWell(
-          focusNode: widget.focusNode,
-          autofocus: widget.autofocus,
-          borderRadius: BorderRadius.circular(999),
-          onTap: widget.onTap,
-          onFocusChange: (f) => setState(() => _focused = f),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: bound
-                    ? gold.withValues(alpha: 0.30)
-                    : Colors.white.withValues(alpha: 0.14),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  bound ? Icons.link_rounded : Icons.link_off_rounded,
-                  color: bound ? gold : Colors.white70,
-                  size: 16,
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: bound ? gold : Colors.white70,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Auto-scrolls the enclosing scrollable when any descendant gains focus.
-///
-/// [Focus.onFocusChange] fires when this node *or a descendant* changes focus,
-/// so wrapping a section with this (non-focusable, traversal-skipping) node
-/// lets us react to a child button/tile being focused via DPAD:
-///  • [toTop] snaps the column to offset 0 (reveals the header above the first
-///    focusable — the "can't scroll back up to the details" fix);
-///  • otherwise it `ensureVisible`s the wrapped section at [alignment].
-class _ScrollAnchor extends StatelessWidget {
-  final Widget child;
-  final bool toTop;
-  final double alignment;
-
-  /// Only meaningful on TV (DPAD focus scroll). On pointer/desktop this is a
-  /// passthrough so a mouse click doesn't yank the column around.
-  final bool active;
-
-  const _ScrollAnchor({
-    required this.child,
-    this.toTop = false,
-    this.alignment = 0.5,
-    this.active = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!active) return child;
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onFocusChange: (hasFocus) {
-        if (!hasFocus) return;
-        // Defer so it wins over the framework's own focus-ensureVisible and
-        // runs after layout settles.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!context.mounted) return;
-          if (toTop) {
-            Scrollable.maybeOf(context)?.position.animateTo(
-              0,
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-            );
-          } else {
-            Scrollable.ensureVisible(
-              context,
-              alignment: alignment,
-              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-            );
-          }
-        });
-      },
-      child: child,
-    );
-  }
-}
-
-/// A tracker's identity in the action row: its brand mark, its name, and the
-/// live relationship it holds to this title, in one control that opens that
-/// tracker's sheet.
-///
-/// This replaces the pair of anonymous round icon buttons *and* the status
-/// chip rows under the title — the chips rendered exactly the state these
-/// pills now carry, so the hero showed every fact twice.
-///
-/// [tracked] drives the two forms: brand-tinted when the tracker holds the
-/// title, plain outline when it doesn't (and while the status loads, so the
-/// row keeps its geometry).
-class _TrackerPill extends StatefulWidget {
-  final Widget mark;
-
-  /// Short brand name, drawn as the pill's uppercase eyebrow.
-  final String brand;
-
-  /// The live state line — "Watchlist · Collected", "Watching", "Not tracked".
-  final String state;
-
-  /// 1–10 tracker rating, shown in its own compartment when set.
-  final int? rating;
-
-  /// The tracker's brand colour, used for the tint, border and rating.
-  final Color accent;
-  final bool tracked;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  const _TrackerPill({
-    required this.mark,
-    required this.brand,
-    required this.state,
-    required this.rating,
-    required this.accent,
-    required this.tracked,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  @override
-  State<_TrackerPill> createState() => _TrackerPillState();
-}
-
-class _TrackerPillState extends State<_TrackerPill> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = widget.accent;
-    final tracked = widget.tracked;
-    final radius = BorderRadius.circular(999);
-    final pill = _FocusHalo(
-      focused: _focused,
-      radius: radius,
-      child: Material(
-        color: tracked
-            ? accent.withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.07),
-        borderRadius: radius,
-        child: InkWell(
-          borderRadius: radius,
-          onTap: widget.onTap,
-          onFocusChange: (f) => setState(() => _focused = f),
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(11, 8, 15, 8),
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              border: Border.all(
-                color: tracked
-                    ? accent.withValues(alpha: 0.42)
-                    : Colors.white.withValues(alpha: 0.14),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                widget.mark,
-                const SizedBox(width: 9),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.brand,
-                      style: TextStyle(
-                        color: tracked
-                            ? accent
-                            : Colors.white.withValues(alpha: 0.5),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.3,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.state,
-                      style: TextStyle(
-                        color: tracked
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.62),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-                if (widget.rating != null) ...[
-                  const SizedBox(width: 10),
-                  Container(
-                    height: 20,
-                    width: 1,
-                    color: accent.withValues(alpha: 0.45),
-                  ),
-                  const SizedBox(width: 9),
-                  Text(
-                    '${widget.rating}',
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    return Tooltip(message: widget.tooltip, child: pill);
-  }
-}
-
-/// Circular translucent icon button used for the hero "More" (⋮) affordance.
-class _RoundIconButton extends StatefulWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final String? tooltip;
-  final Color? background;
-  final FocusNode? focusNode;
-
-  /// Null for Classic, which keeps its circle and its gold ring exactly.
-  final DetailTheme? theme;
-
-  const _RoundIconButton({
-    required this.icon,
-    required this.onTap,
-    this.tooltip,
-    this.background,
-    this.focusNode,
-    this.theme,
-  });
-
-  @override
-  State<_RoundIconButton> createState() => _RoundIconButtonState();
-}
-
-class _RoundIconButtonState extends State<_RoundIconButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = widget.theme;
-    final circular = t == null || t.radiusBtn >= 999;
-    final side = BorderSide(
-      color: t?.ghostBorder ?? Colors.white.withValues(alpha: 0.16),
-    );
-    final shape = circular
-        ? CircleBorder(side: side)
-        : RoundedRectangleBorder(borderRadius: t.brBtn, side: side);
-    final btn = _FocusHalo(
-      focused: _focused,
-      radius: circular ? null : t.brBtn,
-      ringColor: t?.focus,
-      child: Material(
-        color: widget.background ?? Colors.white.withValues(alpha: 0.08),
-        shape: shape,
-        child: InkWell(
-          customBorder: shape,
-          focusNode: widget.focusNode,
-          onTap: widget.onTap,
-          onFocusChange: (f) => setState(() => _focused = f),
-          child: SizedBox(
-            width: 46,
-            height: 46,
-            child: Icon(widget.icon, color: t?.tx ?? Colors.white, size: 22),
-          ),
-        ),
-      ),
-    );
-    return widget.tooltip == null
-        ? btn
-        : Tooltip(message: widget.tooltip!, child: btn);
-  }
-}
-
-/// The "More" quick-actions menu — a labelled sheet with an icon, name and a
-/// one-line description for every action, so users know what each one does.
-class _QuickActionsMenu extends StatelessWidget {
-  final String title;
-  final List<TraktMenuOption> options;
-  final bool isTelevision;
-  final void Function(TraktItemMenuAction action) onSelected;
-
-  const _QuickActionsMenu({
-    required this.title,
-    required this.options,
-    required this.isTelevision,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Standard sheet chrome (background + drag handle) is provided by
-    // showModalBottomSheet — this widget is just the header + clean list, so it
-    // reads the same as the per-episode ⋮ menu.
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 2, 20, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'More',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.only(bottom: 8),
-                itemCount: options.length,
-                itemBuilder: (context, i) => _item(options[i], i),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _item(TraktMenuOption o, int index) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        autofocus: isTelevision && index == 0,
-        // The default focus overlay is invisible on the dark sheet — make the
-        // DPAD cursor obvious.
-        focusColor: Colors.white.withValues(alpha: 0.12),
-        onTap: () => onSelected(o.action),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 13, 18, 13),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(o.icon, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      o.label,
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _MergedDetailScreenState._descriptionFor(o.action),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shared chrome for a tracker sheet: the brand lockup, the title it applies
-/// to, and a hairline progress line while an action is in flight.
-///
-/// Only the chrome is shared — the two sheets' bodies stay fully independent,
-/// per the "no shared type between the trackers" rule this screen follows.
-class _TrackerSheetHeader extends StatelessWidget {
-  final Widget mark;
-  final String brand;
-  final String title;
-  final Color accent;
-  final bool busy;
-
-  const _TrackerSheetHeader({
-    required this.mark,
-    required this.brand,
-    required this.title,
-    required this.accent,
-    required this.busy,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.centerRight,
-              colors: [accent.withValues(alpha: 0.18), Colors.transparent],
-            ),
-          ),
-          child: Row(
-            children: [
-              mark,
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      brand,
-                      style: TextStyle(
-                        fontSize: 16.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 2,
-          child: busy
-              ? LinearProgressIndicator(
-                  minHeight: 2,
-                  color: accent,
-                  backgroundColor: Colors.white.withValues(alpha: 0.06),
-                )
-              : Container(color: Colors.white.withValues(alpha: 0.07)),
-        ),
-      ],
-    );
-  }
-}
-
-/// Section label inside a tracker sheet.
-class _SheetGroupLabel extends StatelessWidget {
-  final String label;
-  const _SheetGroupLabel(this.label);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-    child: Text(
-      label.toUpperCase(),
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.38),
-        fontSize: 10,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.4,
-      ),
-    ),
-  );
-}
-
-/// A relationship the tracker either holds or doesn't — rendered as a switch
-/// so the current state is readable without parsing an "Add…"/"Remove…" verb.
-class _SheetSwitchRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final bool value;
-  final Color accent;
-  final bool autofocus;
-  final VoidCallback onTap;
-
-  const _SheetSwitchRow({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.value,
-    required this.accent,
-    required this.onTap,
-    this.autofocus = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        autofocus: autofocus,
-        focusColor: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 18, 12),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 21,
-                color: value ? accent : Colors.white.withValues(alpha: 0.5),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.42),
-                        fontSize: 12.5,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              // A drawn switch rather than a Material Switch: this is a
-              // command that round-trips to an API, so it must not animate to
-              // the new position before the call lands — the parent re-reads
-              // the status and rebuilds with the truth.
-              Container(
-                width: 42,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: value ? accent : Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: AnimatedAlign(
-                  duration: const Duration(milliseconds: 160),
-                  curve: Curves.easeOut,
-                  alignment: value
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A plain icon + label + description row, for actions that aren't a state
-/// (list management, playback removal).
-class _SheetActionRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String description;
-  final Color? color;
-  final bool autofocus;
-  final VoidCallback onTap;
-
-  const _SheetActionRow({
-    required this.icon,
-    required this.label,
-    required this.description,
-    required this.onTap,
-    this.color,
-    this.autofocus = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tint = color ?? Colors.white;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        autofocus: autofocus,
-        focusColor: Colors.white.withValues(alpha: 0.12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 18, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(icon, size: 21, color: tint),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: tint,
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        fontSize: 12.5,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The 1–10 rating strip. Ten focusable cells beat a modal dialog on both
-/// inputs: one tap on touch, a LEFT/RIGHT run and OK on a remote.
-class _SheetRatingStrip extends StatelessWidget {
-  final int? rating;
-  final Color accent;
-  final Color onAccent;
-  final void Function(int rating) onRate;
-  final VoidCallback? onClear;
-
-  /// Puts the DPAD cursor on the current score (or 1 when unrated) — used when
-  /// the strip is the first thing in the sheet.
-  final bool autofocus;
-
-  const _SheetRatingStrip({
-    required this.rating,
-    required this.accent,
-    required this.onAccent,
-    required this.onRate,
-    this.onClear,
-    this.autofocus = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final current = rating;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              for (var i = 1; i <= 10; i++) ...[
-                if (i > 1) const SizedBox(width: 5),
-                Expanded(
-                  child: Material(
-                    color: current == null || i > current
-                        ? Colors.white.withValues(alpha: 0.07)
-                        : (i == current
-                              ? accent
-                              : accent.withValues(alpha: 0.22)),
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      autofocus: autofocus && i == (current ?? 1),
-                      borderRadius: BorderRadius.circular(8),
-                      focusColor: Colors.white.withValues(alpha: 0.18),
-                      onTap: () => onRate(i),
-                      child: SizedBox(
-                        height: 32,
-                        child: Center(
-                          child: Text(
-                            '$i',
-                            style: TextStyle(
-                              color: current != null && i == current
-                                  ? onAccent
-                                  : Colors.white.withValues(
-                                      alpha: current != null && i < current
-                                          ? 0.85
-                                          : 0.5,
-                                    ),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                current != null ? 'Rated $current/10' : 'Not rated',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
-                  fontSize: 12.5,
-                ),
-              ),
-              const Spacer(),
-              if (onClear != null)
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    focusColor: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: onClear,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Text(
-                        'Clear rating',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Trakt's sheet.
-///
-/// Takes the same option list the old menu did — so every availability rule
-/// (connected? has an IMDb id? on a Trakt Continue Watching row?) still lives
-/// in `buildTraktAddOnlyMenuOptions` — but renders the add/remove pairs as
-/// switches, since each pair is really one on/off relationship.
-///
-/// Stays open across actions: after each one it re-reads the live status via
-/// [statusLoader] and rebuilds its options from it, so the switches always
-/// show what Trakt actually holds rather than an optimistic guess.
-class _TraktSheet extends StatefulWidget {
-  final String title;
-  final bool isTelevision;
-  final TraktTitleStatus? status;
-  final List<TraktMenuOption> Function(TraktTitleStatus? status) optionsFor;
-  final Future<void> Function(TraktItemMenuAction action) onAction;
-  final Future<void> Function(int rating)? onRate;
-  final Future<TraktTitleStatus?> Function()? statusLoader;
-  final void Function(TraktTitleStatus? status) onChanged;
-
-  const _TraktSheet({
-    required this.title,
-    required this.isTelevision,
-    required this.status,
-    required this.optionsFor,
-    required this.onAction,
-    required this.onRate,
-    required this.statusLoader,
-    required this.onChanged,
-  });
-
-  @override
-  State<_TraktSheet> createState() => _TraktSheetState();
-}
-
-class _TraktSheetState extends State<_TraktSheet> {
-  late TraktTitleStatus? _status = widget.status;
-  bool _busy = false;
-
-  /// Runs one action, then re-reads the status so the sheet (and the pill
-  /// behind it, via [onChanged]) reflect the result. Serialised: a second tap
-  /// while a call is in flight is dropped rather than racing it.
-  Future<void> _run(Future<void> Function() body) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await body();
-      final loader = widget.statusLoader;
-      if (loader != null) {
-        final fresh = await loader();
-        // Null means "couldn't be trusted" (disconnected, or the library fetch
-        // failed), NOT "nothing tracked" — both services document that, and a
-        // genuine empty answer comes back as a non-null all-false status. So
-        // keep showing the last known state rather than fabricating one.
-        if (fresh == null) return;
-        // Publish first: the sheet may already be gone (dismissed mid-call),
-        // and the screen behind it still needs the result for its pill.
-        widget.onChanged(fresh);
-        if (!mounted) return;
-        setState(() => _status = fresh);
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final options = widget.optionsFor(_status);
-    TraktMenuOption? opt(TraktItemMenuAction a) {
-      for (final o in options) {
-        if (o.action == a) return o;
-      }
-      return null;
-    }
-
-    final watchlistOn = opt(TraktItemMenuAction.removeFromWatchlist);
-    final watchlistOff = opt(TraktItemMenuAction.addToWatchlist);
-    final collectionOn = opt(TraktItemMenuAction.removeFromCollection);
-    final collectionOff = opt(TraktItemMenuAction.addToCollection);
-    final markWatched = opt(TraktItemMenuAction.markWatched);
-    final markUnwatched = opt(TraktItemMenuAction.markUnwatched);
-    // Only `addToList` is ever emitted (and `handleTraktMenuAction` returns
-    // early on removeFromList — there's no context for *which* list), so this
-    // section is add-only by design.
-    final addToList = opt(TraktItemMenuAction.addToList);
-    final removePlayback = opt(TraktItemMenuAction.removeFromTraktPlayback);
-    final canRate = opt(TraktItemMenuAction.rate) != null;
-    final canUnrate = opt(TraktItemMenuAction.removeRating) != null;
-
-    // A series' whole-title watched state is unknown (the episode list owns
-    // it), so Trakt offers BOTH mark actions — that can't be a switch, and
-    // shows as two explicit commands instead.
-    final watchedIsAmbiguous = markWatched != null && markUnwatched != null;
-
-    // TV: whichever row renders first takes the cursor. Which sections exist
-    // depends on the live status, so this is claimed in build order rather
-    // than hard-coded to one row.
-    var focusClaimed = false;
-    bool claimFocus() {
-      if (!widget.isTelevision || focusClaimed) return false;
-      return focusClaimed = true;
-    }
-
-    final libraryRows = <Widget>[
-      if (watchlistOn != null || watchlistOff != null)
-        _SheetSwitchRow(
-          icon: Icons.bookmark_rounded,
-          label: 'Watchlist',
-          subtitle: 'Synced to every device on your Trakt account',
-          value: watchlistOn != null,
-          accent: kTraktRed,
-          autofocus: claimFocus(),
-          onTap: () => _run(
-            () => widget.onAction((watchlistOn ?? watchlistOff)!.action),
-          ),
-        ),
-      if (collectionOn != null || collectionOff != null)
-        _SheetSwitchRow(
-          icon: Icons.video_library_rounded,
-          label: 'Collection',
-          subtitle: 'Your library of everything you own or keep track of',
-          value: collectionOn != null,
-          accent: kTraktRed,
-          autofocus: claimFocus(),
-          onTap: () => _run(
-            () => widget.onAction((collectionOn ?? collectionOff)!.action),
-          ),
-        ),
-      if (!watchedIsAmbiguous && (markWatched != null || markUnwatched != null))
-        _SheetSwitchRow(
-          icon: Icons.visibility_rounded,
-          label: 'Watched',
-          subtitle: 'Syncs your history across all your devices',
-          value: markUnwatched != null,
-          accent: kTraktRed,
-          autofocus: claimFocus(),
-          onTap: () => _run(
-            () => widget.onAction((markUnwatched ?? markWatched)!.action),
-          ),
-        ),
-    ];
-
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _TrackerSheetHeader(
-              mark: const TraktMark(size: 30),
-              brand: 'Trakt',
-              title: widget.title,
-              accent: kTraktRed,
-              busy: _busy,
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (libraryRows.isNotEmpty) ...[
-                      const _SheetGroupLabel('Your library'),
-                      ...libraryRows,
-                    ],
-                    if (watchedIsAmbiguous) ...[
-                      const _SheetGroupLabel('History'),
-                      _SheetActionRow(
-                        icon: markWatched.icon,
-                        label: markWatched.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          markWatched.action,
-                        ),
-                        autofocus: claimFocus(),
-                        onTap: () =>
-                            _run(() => widget.onAction(markWatched.action)),
-                      ),
-                      _SheetActionRow(
-                        icon: markUnwatched.icon,
-                        label: markUnwatched.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          markUnwatched.action,
-                        ),
-                        autofocus: claimFocus(),
-                        onTap: () =>
-                            _run(() => widget.onAction(markUnwatched.action)),
-                      ),
-                    ],
-                    if (canRate) ...[
-                      const _SheetGroupLabel('Rating'),
-                      _SheetRatingStrip(
-                        rating: _status?.rating,
-                        accent: kTraktRed,
-                        onAccent: Colors.white,
-                        autofocus: claimFocus(),
-                        onRate: (r) => _run(() async {
-                          final rate = widget.onRate;
-                          // No inline-rate callback wired (e.g. the IPTV
-                          // caller) — fall back to the tracker's own dialog.
-                          if (rate == null) {
-                            await widget.onAction(TraktItemMenuAction.rate);
-                          } else {
-                            await rate(r);
-                          }
-                        }),
-                        onClear: canUnrate
-                            ? () => _run(
-                                () => widget.onAction(
-                                  TraktItemMenuAction.removeRating,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ],
-                    if (addToList != null) ...[
-                      const _SheetGroupLabel('Lists'),
-                      _SheetActionRow(
-                        icon: addToList.icon,
-                        label: addToList.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          addToList.action,
-                        ),
-                        autofocus: claimFocus(),
-                        onTap: () =>
-                            _run(() => widget.onAction(addToList.action)),
-                      ),
-                    ],
-                    if (removePlayback != null) ...[
-                      const _SheetGroupLabel('Playback'),
-                      _SheetActionRow(
-                        icon: removePlayback.icon,
-                        label: removePlayback.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          removePlayback.action,
-                        ),
-                        color: const Color(0xFFFF8B8B),
-                        autofocus: claimFocus(),
-                        // Closes the sheet: whether this title is still on a
-                        // Trakt Continue Watching row was decided when the
-                        // screen opened, so the row can't refresh itself.
-                        onTap: () async {
-                          Navigator.of(context).pop();
-                          await widget.onAction(removePlayback.action);
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Simkl's sheet — the same job as [_TraktSheet], deliberately not sharing a
-/// type with it (Trakt and Simkl stay independent everywhere in this screen).
-///
-/// A title sits in at most one of five lists. Turning on a different switch
-/// moves it; turning off the active switch removes it from the Simkl library.
-class _SimklSheet extends StatefulWidget {
-  final String title;
-  final bool isTelevision;
-  final SimklTitleStatus? status;
-  final List<SimklMenuOption> Function(SimklTitleStatus? status) optionsFor;
-  final Future<void> Function(SimklItemMenuAction action) onAction;
-  final Future<void> Function(int rating)? onRate;
-  final Future<SimklTitleStatus?> Function()? statusLoader;
-  final void Function(SimklTitleStatus? status) onChanged;
-
-  const _SimklSheet({
-    required this.title,
-    required this.isTelevision,
-    required this.status,
-    required this.optionsFor,
-    required this.onAction,
-    required this.onRate,
-    required this.statusLoader,
-    required this.onChanged,
-  });
-
-  @override
-  State<_SimklSheet> createState() => _SimklSheetState();
-}
-
-class _SimklSheetState extends State<_SimklSheet> {
-  late SimklTitleStatus? _status = widget.status;
-  bool _busy = false;
-
-  /// Simkl's five lists, in the order the service presents them.
-  static const _statuses = <(String, String, SimklItemMenuAction, IconData)>[
-    (
-      'plantowatch',
-      'Plan to Watch',
-      SimklItemMenuAction.moveToPlanToWatch,
-      Icons.bookmark_add_rounded,
-    ),
-    (
-      'watching',
-      'Watching',
-      SimklItemMenuAction.moveToWatching,
-      Icons.visibility_rounded,
-    ),
-    (
-      'hold',
-      'On Hold',
-      SimklItemMenuAction.moveToOnHold,
-      Icons.pause_circle_rounded,
-    ),
-    (
-      'completed',
-      'Completed',
-      SimklItemMenuAction.moveToCompleted,
-      Icons.check_circle_rounded,
-    ),
-    (
-      'dropped',
-      'Dropped',
-      SimklItemMenuAction.moveToDropped,
-      Icons.cancel_rounded,
-    ),
-  ];
-
-  Future<void> _run(Future<void> Function() body) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await body();
-      final loader = widget.statusLoader;
-      if (loader != null) {
-        final fresh = await loader();
-        // Null means "couldn't be trusted" (disconnected, or the library fetch
-        // failed), NOT "nothing tracked" — both services document that, and a
-        // genuine empty answer comes back as a non-null all-false status. So
-        // keep showing the last known state rather than fabricating one.
-        if (fresh == null) return;
-        // Publish first: the sheet may already be gone (dismissed mid-call),
-        // and the screen behind it still needs the result for its pill.
-        widget.onChanged(fresh);
-        if (!mounted) return;
-        setState(() => _status = fresh);
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final options = widget.optionsFor(_status);
-    SimklMenuOption? opt(SimklItemMenuAction a) {
-      for (final o in options) {
-        if (o.action == a) return o;
-      }
-      return null;
-    }
-
-    final current = _status?.currentStatus;
-    final canRemove = opt(SimklItemMenuAction.removeFromList) != null;
-    final removeCw = opt(SimklItemMenuAction.removeFromContinueWatching);
-    final canRate = opt(SimklItemMenuAction.rate) != null;
-    final canUnrate = opt(SimklItemMenuAction.removeRating) != null;
-
-    // A status row is offered when its move action is available, and the
-    // current one is always shown even though the builder omits it (there's
-    // nowhere to move it to). Movies therefore keep hiding Watching and On
-    // Hold — Simkl treats them as a single session — with no rule duplicated
-    // here: it falls out of what the builder offered.
-    final visible = [
-      for (final (value, label, action, icon) in _statuses)
-        if (opt(action) != null || value == current)
-          (value, label, action, icon),
-    ];
-    // TV: start on the current status when there is one — that's where the
-    // user's attention already is, and moving from it is the whole point.
-    final currentIndex = visible.indexWhere((s) => s.$1 == current);
-    final focusIndex = currentIndex >= 0 ? currentIndex : 0;
-    final rows = <Widget>[
-      for (final (i, (value, label, action, icon)) in visible.indexed)
-        _SimklStatusRow(
-          icon: icon,
-          label: label,
-          selected: value == current,
-          autofocus: widget.isTelevision && i == focusIndex,
-          // These switches form one exclusive group. Turning another one on
-          // moves the title; turning the active one off removes it entirely.
-          // Keep every row focusable so a successful move doesn't strand DPAD.
-          onTap: value == current
-              ? (canRemove
-                    ? () => _run(
-                        () =>
-                            widget.onAction(SimklItemMenuAction.removeFromList),
-                      )
-                    : () {})
-              : () => _run(() => widget.onAction(action)),
-        ),
-    ];
-
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _TrackerSheetHeader(
-              mark: const SimklMark(size: 30),
-              brand: 'Simkl',
-              title: widget.title,
-              accent: kSimklCyan,
-              busy: _busy,
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (rows.isNotEmpty) ...[
-                      const _SheetGroupLabel('Status'),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: rows,
-                        ),
-                      ),
-                    ],
-                    if (canRate) ...[
-                      const _SheetGroupLabel('Rating'),
-                      _SheetRatingStrip(
-                        rating: _status?.rating,
-                        accent: kSimklCyan,
-                        onAccent: const Color(0xFF04262C),
-                        autofocus: widget.isTelevision && rows.isEmpty,
-                        onRate: (r) => _run(() async {
-                          final rate = widget.onRate;
-                          if (rate == null) {
-                            await widget.onAction(SimklItemMenuAction.rate);
-                          } else {
-                            await rate(r);
-                          }
-                        }),
-                        onClear: canUnrate
-                            ? () => _run(
-                                () => widget.onAction(
-                                  SimklItemMenuAction.removeRating,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ],
-                    if (removeCw != null) ...[
-                      const _SheetGroupLabel('Playback'),
-                      _SheetActionRow(
-                        icon: removeCw.icon,
-                        label: removeCw.label,
-                        description:
-                            _MergedDetailScreenState._descriptionForSimkl(
-                              removeCw.action,
-                            ),
-                        color: const Color(0xFFFF8B8B),
-                        autofocus:
-                            widget.isTelevision && rows.isEmpty && !canRate,
-                        // Closes for the same reason as Trakt's: whether the
-                        // title has a paused session was decided when the
-                        // screen opened.
-                        onTap: () async {
-                          Navigator.of(context).pop();
-                          await widget.onAction(removeCw.action);
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One of Simkl's five mutually-exclusive list switches. The whole row is the
-/// DPAD stop; the nested switch is excluded from focus so TV navigation still
-/// costs one press per status.
-class _SimklStatusRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final bool autofocus;
-
-  /// Never null so every row remains focusable after a state transition.
-  final VoidCallback onTap;
-
-  const _SimklStatusRow({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.autofocus = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(11);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Material(
-        color: selected
-            ? kSimklCyan.withValues(alpha: 0.13)
-            : Colors.transparent,
-        borderRadius: radius,
-        child: InkWell(
-          autofocus: autofocus,
-          borderRadius: radius,
-          focusColor: Colors.white.withValues(alpha: 0.12),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              border: Border.all(
-                color: selected
-                    ? kSimklCyan.withValues(alpha: 0.35)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 19,
-                  color: selected
-                      ? kSimklCyan
-                      : Colors.white.withValues(alpha: 0.55),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? kSimklCyan : Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ExcludeFocus(
-                  child: Switch.adaptive(
-                    value: selected,
-                    activeThumbColor: kSimklCyan,
-                    activeTrackColor: kSimklCyan.withValues(alpha: 0.42),
-                    onChanged: (_) => onTap(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The focused episode's frame, painted over the title artwork.
-///
-/// Switches instantly on TV: a fullscreen animated opacity per DPAD move is
-/// exactly what the TV cost budget forbids. Off-TV it cross-fades.
-class _AmbientStill extends StatelessWidget {
-  final String url;
-  final bool isTelevision;
-
-  const _AmbientStill({required this.url, required this.isTelevision});
-
-  @override
-  Widget build(BuildContext context) {
-    final image = CachedNetworkImage(
-      key: ValueKey(url),
-      imageUrl: url,
-      fit: BoxFit.cover,
-      cacheManager: DebrifyImageCache.manager,
-      memCacheWidth: 1280,
-      fadeInDuration: Duration.zero,
-      fadeOutDuration: Duration.zero,
-      placeholder: (_, __) => const SizedBox.shrink(),
-      errorWidget: (_, __, ___) => const SizedBox.shrink(),
-    );
-    if (isTelevision) return image;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 260),
-      // The default layout centres children under LOOSE constraints, so a
-      // BoxFit.cover image would size itself to its own aspect and letterbox.
-      layoutBuilder: (current, previous) => Stack(
-        fit: StackFit.expand,
-        children: [...previous, if (current != null) current],
-      ),
-      child: image,
     );
   }
 }
