@@ -1,3 +1,4 @@
+import 'package:debrify/services/series_playlist_metadata_loader.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -185,7 +186,7 @@ void main() {
       );
       fixture.get('$_tv/shows/4101', _show(4101));
       fixture.get('$_tv/shows/4101/episodes', [_episode(1), _episode(3)]);
-      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: 'tt1111111');
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, playlistItem: item, imdbId: 'tt1111111');
       expect(playlist.seasons.single, same(season));
       for (var i = 0; i < episodes.length; i++) {
         expect(playlist.allEpisodes[i], same(episodes[i]));
@@ -207,7 +208,7 @@ void main() {
       fixture.get('$_tv/lookup/shows?imdb=tt2222222', {}, 404);
       fixture.get('$_tv/search/shows?q=origin%20show', [{'score': 1, 'show': _show(4102)}]);
       fixture.get('$_tv/shows/4102/episodes', [_episode(1), _episode(2)]);
-      await playlist.fetchEpisodeInfo(imdbId: 'tt2222222');
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt2222222');
       expect(playlist.tvmazeShowId, 4102);
       expect(playlist.imdbId, 'tt2222222');
       expect(playlist.allEpisodes.map((e) => e.episodeInfo!.title), ['Episode 1', 'Episode 2']);
@@ -224,7 +225,7 @@ void main() {
         return response.future;
       }));
       fixture.get('$_tv/shows/4103/episodes', [_episode(1), _episode(2)]);
-      final operation = playlist.fetchEpisodeInfo(imdbId: 'tt3333333');
+      final operation = SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt3333333');
       Object? primary;
       StackTrace? primaryStack;
       try {
@@ -256,7 +257,7 @@ void main() {
       final original = playlist.allEpisodes.first;
       fixture.get('$_tv/search/shows?q=Origin%20Show', [{'show': _show(4104)}]);
       fixture.get('$_tv/shows/4104/episodes', [_episode(1)]);
-      final result = await playlist.getEpisodeInfoForEpisode('Origin Show', 1, 1);
+      final result = await SeriesPlaylistMetadataLoader.getEpisodeInfoForEpisode('Origin Show', 1, 1);
       expect(result!.title, 'Episode 1');
       expect(result.plot, 'Plot 1');
       expect(result.genres, ['Drama']);
@@ -273,15 +274,15 @@ void main() {
       final playlist = _movies();
       fixture.get('$_cinemeta/manifest.json', {});
       fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json', _movie('Origin Film', '2020', 'tt4444444'));
-      await playlist.fetchMovieMetadata();
+      await SeriesPlaylistMetadataLoader.fetchMovieMetadata(playlist);
       expect(playlist.getImdbIdForIndex(0), 'tt4444444');
       fixture.get('$_cinemeta/catalog/movie/top/search=second%20film.json', _movie('Second Film', '2021', 'tt5555555'));
-      expect(await playlist.fetchMovieMetadataForIndex(1), 'tt5555555');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 1), 'tt5555555');
       expect(playlist.imdbId, 'tt4444444'); // Serial first success only.
       expect(playlist.getImdbIdForIndex(1), 'tt5555555');
       MovieMetadataService.clearCache();
       final before = fixture.observed.length;
-      expect(await playlist.fetchMovieMetadataForIndex(1), 'tt5555555');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 1), 'tt5555555');
       expect(fixture.observed.length, before);
       expect(playlist.getImdbIdForIndex(99), 'tt4444444'); // Getter shared fallback.
     });
@@ -291,16 +292,16 @@ void main() {
     await _withFixture((fixture) async {
       final before = fixture.observed.length;
       final movies = _movies();
-      await movies.fetchEpisodeInfo(imdbId: 'tt6666666');
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(movies, imdbId: 'tt6666666');
       expect(movies.imdbId, isNull);
-      expect(await movies.fetchMovieMetadataForIndex(-1), isNull);
-      expect(await movies.fetchMovieMetadataForIndex(99), isNull);
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(movies, -1), isNull);
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(movies, 99), isNull);
       final series = _series()..imdbId = 'tt7777777';
-      expect(await series.fetchMovieMetadataForIndex(-1), 'tt7777777');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(series, -1), 'tt7777777');
       final noYear = SeriesPlaylist.fromPlaylistEntries([
         const PlaylistEntry(url: 'https://fixture.invalid/no-year', title: 'Undated.Film.mkv'),
       ], forceSeries: false);
-      expect(await noYear.fetchMovieMetadataForIndex(0), isNull);
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(noYear, 0), isNull);
       expect(fixture.observed.length, before);
     });
   });
@@ -313,12 +314,12 @@ void main() {
       original.episodeInfo = prior;
       fixture.get('$_tv/lookup/shows?imdb=tt8888888', _show(4107));
       fixture.get('$_tv/shows/4107/episodes', [_episode(1, airdate: '')]);
-      await playlist.fetchEpisodeInfo(imdbId: 'tt8888888');
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt8888888');
       expect(original.episodeInfo, same(prior));
       expect(playlist.tvmazeShowId, 4107); // Earlier mutations are not rolled back.
       expect(playlist.fullTvmazeEpisodes, hasLength(1));
       fixture.get('$_tv/search/shows?q=Origin%20Show', [{'show': _show(4107)}]);
-      expect(await playlist.getEpisodeInfoForEpisode('Origin Show', 1, 1), isNull);
+      expect(await SeriesPlaylistMetadataLoader.getEpisodeInfoForEpisode('Origin Show', 1, 1), isNull);
       // Episode list is legitimately cached; no generic model-cache claim.
     });
   });
@@ -330,7 +331,7 @@ void main() {
       fixture.planned.add(_PlannedGet('$_cinemeta/catalog/movie/top/search=origin%20film.json', () {
         throw const SocketException('planned Cinemeta failure');
       }));
-      expect(await playlist.fetchMovieMetadataForIndex(0), isNull);
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0), isNull);
       expect(playlist.imdbId, isNull);
       expect(playlist.getImdbIdForIndex(0), isNull);
       // Service handles the transport error; does not pin model outer-catch.
@@ -345,19 +346,19 @@ void main() {
       fixture.get('$_cinemeta/manifest.json', {});
       fixture.get('$_cinemeta/catalog/movie/top/search=second%20film.json',
           _movie('Second Film', '2021', 'tt9100001'));
-      expect(await first.fetchMovieMetadataForIndex(1), 'tt9100001');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(first, 1), 'tt9100001');
       MovieMetadataService.clearCache();
       first.allEpisodes.removeLast(); // Public mutable list makes index1 invalid.
       expect(first.allEpisodes, hasLength(1));
       final before = fixture.observed.length;
-      expect(await first.fetchMovieMetadataForIndex(1), 'tt9100001');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(first, 1), 'tt9100001');
       expect(fixture.observed.length, before);
       // Same title/index on a different playlist must not reuse first's cache.
       fixture.get('$_cinemeta/manifest.json', {});
       fixture.get('$_cinemeta/catalog/movie/top/search=second%20film.json',
           _movie('Second Film', '2021', 'tt9100002'));
-      expect(await other.fetchMovieMetadataForIndex(1), 'tt9100002');
-      expect(await first.fetchMovieMetadataForIndex(1), 'tt9100001');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(other, 1), 'tt9100002');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(first, 1), 'tt9100001');
       expect(first.imdbId, 'tt9100001');
       expect(other.imdbId, 'tt9100002');
     });
@@ -369,7 +370,7 @@ void main() {
       fixture.get('$_cinemeta/manifest.json', {});
       fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json',
           _movie('Origin Film', '2020', 'tt9200001'));
-      expect(await playlist.fetchMovieMetadataForIndex(0), 'tt9200001');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0), 'tt9200001');
       expect(playlist.imdbId, '');
       expect(playlist.getImdbIdForIndex(0), 'tt9200001');
       expect(playlist.getImdbIdForIndex(99), '');
@@ -386,13 +387,13 @@ void main() {
       final second = _HeldMovieGet(fixture,
           '$_cinemeta/catalog/movie/top/search=second%20film.json',
           _movie('Second Film', '2021', 'tt9300002'));
-      final firstOperation = playlist.fetchMovieMetadataForIndex(0);
+      final firstOperation = SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0);
       Future<String?>? secondOperation;
       Object? primary;
       StackTrace? primaryStack;
       try {
         await first.entered.future.timeout(const Duration(seconds: 2));
-        secondOperation = playlist.fetchMovieMetadataForIndex(1);
+        secondOperation = SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 1);
         await second.entered.future.timeout(const Duration(seconds: 2));
         expect(playlist.imdbId, isNull);
         second.release();
@@ -424,13 +425,13 @@ void main() {
       final second = _HeldMovieGet(fixture,
           '$_cinemeta/catalog/movie/top/search=origin%20film.json',
           _movie('Origin Film', '2020', 'tt9400002'));
-      final firstOperation = playlist.fetchMovieMetadataForIndex(0);
+      final firstOperation = SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0);
       Future<String?>? secondOperation;
       Object? primary;
       StackTrace? primaryStack;
       try {
         await first.entered.future.timeout(const Duration(seconds: 2));
-        secondOperation = playlist.fetchMovieMetadataForIndex(0);
+        secondOperation = SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0);
         await second.entered.future.timeout(const Duration(seconds: 2));
         expect(first.response.isCompleted, isFalse);
         expect(playlist.imdbId, isNull);
@@ -457,14 +458,14 @@ void main() {
       final playlist = _movies();
       fixture.get('$_cinemeta/manifest.json', {});
       fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json', {'metas': []});
-      expect(await playlist.fetchMovieMetadataForIndex(0), isNull);
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0), isNull);
       expect(playlist.imdbId, isNull);
       // Discard the downstream service's negative cache before probing the model.
       MovieMetadataService.clearCache();
       fixture.get('$_cinemeta/manifest.json', {});
       fixture.get('$_cinemeta/catalog/movie/top/search=origin%20film.json',
           _movie('Origin Film', '2020', 'tt9500001'));
-      expect(await playlist.fetchMovieMetadataForIndex(0), 'tt9500001');
+      expect(await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(playlist, 0), 'tt9500001');
       expect(playlist.getImdbIdForIndex(0), 'tt9500001');
       expect(playlist.imdbId, 'tt9500001');
     });
@@ -483,7 +484,7 @@ void main() {
       fixture.get('$_tv/shows/4101', {}, 404);
       fixture.get('$_tv/search/shows?q=origin%20show', [{'show': _show(4102)}]);
       fixture.get('$_tv/shows/4102/episodes', [_episode(1), _episode(2)]);
-      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: 'tt1111111');
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, playlistItem: item, imdbId: 'tt1111111');
       expect(playlist.allEpisodes[0], same(first));
       expect(playlist.allEpisodes[1], same(second));
       expect(first.episodeInfo!.title, 'Episode 1');
@@ -502,7 +503,7 @@ void main() {
       final playlist = _series()..imdbId = 'tt0000000';
       fixture.get('$_tv/search/shows?q=origin%20show', [{'show': _show(4201)}]);
       fixture.get('$_tv/shows/4201/episodes', [_episode(1), _episode(2)]);
-      await playlist.fetchEpisodeInfo(); // Omitted PARAM, no saved mapping.
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist); // Omitted PARAM, no saved mapping.
       expect(playlist.imdbId, 'tt0000000');
       expect(playlist.tvmazeShowId, 4201);
       expect(playlist.allEpisodes.first.episodeInfo!.title, 'Episode 1');
@@ -511,7 +512,7 @@ void main() {
       final playlist = _series()..imdbId = 'tt0000000';
       fixture.get('$_tv/search/shows?q=origin%20show', [{'show': _show(4202)}]);
       fixture.get('$_tv/shows/4202/episodes', [_episode(1), _episode(2)]);
-      await playlist.fetchEpisodeInfo(imdbId: 'invalid'); // No saved mapping.
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'invalid'); // No saved mapping.
       expect(playlist.imdbId, 'tt0000000');
       expect(playlist.tvmazeShowId, 4202);
       expect(playlist.allEpisodes.first.episodeInfo!.title, 'Episode 1');
@@ -527,7 +528,7 @@ void main() {
         playlistItem: item, tvmazeShowId: 4203, showName: 'Mapped',
       );
       final before = fixture.observed.length;
-      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: null);
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, playlistItem: item, imdbId: null);
       expect(fixture.observed.length, before);
       expect(playlist.imdbId, 'tt0000000');
       expect(playlist.tvmazeShowId, isNull);
@@ -548,7 +549,7 @@ void main() {
       );
       fixture.get('$_tv/shows/4204', _show(4204));
       fixture.get('$_tv/shows/4204/episodes', [_episode(1), _episode(2)]);
-      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: 'invalid');
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, playlistItem: item, imdbId: 'invalid');
       expect(playlist.imdbId, 'tt0000000');
       expect(playlist.tvmazeShowId, 4204);
       expect(playlist.allEpisodes.first.episodeInfo!.title, 'Episode 1');
@@ -562,7 +563,7 @@ void main() {
       final firstInfo = first.seriesInfo;
       final response = _show(4301)..['image'] = {'original': 123, 'medium': 'valid-medium'};
       fixture.get('$_tv/lookup/shows?imdb=tt3333333', response);
-      final operation = playlist.fetchEpisodeInfo(imdbId: 'tt3333333');
+      final operation = SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt3333333');
       expect(playlist.imdbId, 'tt3333333');
       await expectLater(operation, throwsA(isA<TypeError>()));
       expect(playlist.imdbId, 'tt3333333');
@@ -596,7 +597,7 @@ void main() {
         _episode(7)..['name'] = 12345,
         _episode(9)..['name'] = 'Last Orchard',
       ]);
-      await expectLater(playlist.fetchEpisodeInfo(imdbId: 'tt4400001'), throwsA(isA<TypeError>()));
+      await expectLater(SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt4400001'), throwsA(isA<TypeError>()));
       expect(playlist.allEpisodes, same(all));
       expect(playlist.seasons, same(seasons));
       expect(playlist.seasons.single, same(season));
@@ -641,7 +642,7 @@ void main() {
           ..['season'] = '2',
         _episode(9)..['name'] = 'Last Orchard',
       ]);
-      await expectLater(playlist.fetchEpisodeInfo(imdbId: 'tt4500001'), throwsA(isA<TypeError>()));
+      await expectLater(SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt4500001'), throwsA(isA<TypeError>()));
       expect(playlist.allEpisodes, same(all));
       expect(playlist.seasons, same(seasons));
       expect(playlist.seasons.single, same(season));
@@ -689,7 +690,7 @@ void main() {
           ..['number'] = '7',
         _episode(9)..['name'] = 'Last Orchard',
       ]);
-      await expectLater(playlist.fetchEpisodeInfo(imdbId: 'tt4600001'), throwsA(isA<TypeError>()));
+      await expectLater(SeriesPlaylistMetadataLoader.fetchEpisodeInfo(playlist, imdbId: 'tt4600001'), throwsA(isA<TypeError>()));
       expect(playlist.allEpisodes, same(all));
       expect(playlist.seasons, same(seasons));
       expect(playlist.seasons.single, same(season));
