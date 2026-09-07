@@ -153,6 +153,9 @@ dependencies:
 # tvOS fallback — flutter_cache_manager, google_fonts, background_downloader.
 # Everything else is stock 0.0.3 — diff it before upgrading.
 dependency_overrides:
+  # Correct disk eviction and bound image cache bytes; see PATCHES.md.
+  flutter_cache_manager:
+    path: packages/flutter_cache_manager_patched
   # Engine-owned Android database handles; see the package PATCHES.md.
   sqflite_android:
     path: packages/sqflite_android_patched

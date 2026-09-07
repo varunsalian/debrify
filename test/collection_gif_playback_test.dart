@@ -1,3 +1,5 @@
+import 'support/image_cache_widget_test.dart';
+
 import 'package:debrify/screens/settings/collections_settings_page.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -84,7 +86,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('automatic GIFs require visibility and pause in background', (
+  testWidgetsWithImageCache('automatic GIFs require visibility and pause in background', (
     tester,
   ) async {
     await CollectionGifSettings.write(CollectionGifMode.visible);
@@ -107,7 +109,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('focus mode and live Off setting suppress GIFs', (tester) async {
+  testWidgetsWithImageCache('focus mode and live Off setting suppress GIFs', (tester) async {
     await CollectionGifSettings.write(CollectionGifMode.focused);
     await mount(tester);
     expect(find.byType(CachedNetworkImage), findsNothing);
@@ -122,7 +124,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('settings shows one GIF dropdown and saves its selection', (
+  testWidgetsWithImageCache('settings shows one GIF dropdown and saves its selection', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -148,7 +150,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('automatic GIF mode never starts an unfocused video', (
+  testWidgetsWithImageCache('automatic GIF mode never starts an unfocused video', (
     tester,
   ) async {
     await CollectionGifSettings.write(CollectionGifMode.visible);

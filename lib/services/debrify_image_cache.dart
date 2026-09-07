@@ -14,13 +14,19 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 class DebrifyImageCache {
   DebrifyImageCache._();
 
+  /// Runs after the first frame, including stores not visited this session.
+  /// Keep the legacy default store in the repair sweep as it held artwork too.
+  static void scheduleMaintenance() {
+    manager.store.scheduleCleanup();
+    iptvLogos.store.scheduleCleanup();
+    DefaultCacheManager().store.scheduleCleanup();
+  }
+
   static final CacheManager manager = CacheManager(
     Config(
       'debrifyImageCache',
-      // flutter_cache_manager caps object COUNT, not bytes. On TV this store
-      // was reaching ~600 MB at 2000 objects because full-size backdrops
-      // (~2.6 MB each) share the slots with posters. Halving the slot count
-      // roughly halves the on-disk footprint — a proxy, not a hard byte cap.
+      // Byte high-water mark; background LRU cleanup trims to 180 MiB.
+      maxCacheBytes: 200 * 1024 * 1024,
       maxNrOfCacheObjects: 1000,
       stalePeriod: const Duration(days: 30),
     ),
@@ -31,11 +37,12 @@ class DebrifyImageCache {
   /// a big guide re-downloaded every logo continuously; and sharing
   /// [manager] instead would let one 50k-channel scroll evict every Home
   /// backdrop and poster. A dedicated store keeps each surface's churn to
-  /// itself — 2000 logos at the typical 10-50 KB is tens of MB of disk, cap.
+  /// itself. The separate 30 MiB budget trims to 27 MiB when exceeded.
   static final CacheManager iptvLogos = CacheManager(
     Config(
       'debrifyIptvLogoCache',
       maxNrOfCacheObjects: 2000,
+      maxCacheBytes: 30 * 1024 * 1024,
       stalePeriod: const Duration(days: 30),
     ),
   );

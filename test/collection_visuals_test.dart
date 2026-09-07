@@ -1,3 +1,5 @@
+import 'support/image_cache_widget_test.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -42,7 +44,7 @@ void main() {
     }
   }
 
-  testWidgets('mixed Spotlight folder shapes retain emoji covers', (
+  testWidgetsWithImageCache('mixed Spotlight folder shapes retain emoji covers', (
     tester,
   ) async {
     await loadFonts();
@@ -118,7 +120,7 @@ void main() {
     await capture(tester, 'collection-shapes');
   });
 
-  testWidgets('phone editor renders imported visual settings', (tester) async {
+  testWidgetsWithImageCache('phone editor renders imported visual settings', (tester) async {
     await loadFonts();
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -152,7 +154,7 @@ void main() {
     await capture(tester, 'collection-editor');
   });
 
-  testWidgets(
+  testWidgetsWithImageCache(
     'folder hero uses collection backdrop and accepts background video',
     (tester) async {
       await tester.pumpWidget(

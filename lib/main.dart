@@ -1,3 +1,4 @@
+import 'services/debrify_image_cache.dart';
 import 'services/webdav_sync/webdav_log_upload.dart';
 import 'widgets/webdav_sync/webdav_save_status.dart';
 import 'services/local_validation_diagnostics.dart';
@@ -752,6 +753,9 @@ Future<void> _continueApplicationStartup() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    DebrifyImageCache.scheduleMaintenance();
+  });
   applicationReady.complete();
   // Desktop scheduled recordings (Tier 1: fire while the app is running).
   // Arms stored timers + late-joins anything already in its window; no-op on
