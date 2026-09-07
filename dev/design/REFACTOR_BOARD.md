@@ -1,12 +1,12 @@
 # Refactor board
 
-## Current roadmap — September 6, merged production main 161637b1
+## Current roadmap — September 6, merged production main 31e360f6
 
 **Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
 
 ### God-file line counts — original → merged main
 
-- **Search:** 19,070 → **6,387** (12,683 fewer)
+- **Search:** 19,070 → **6,241** (12,829 fewer)
 - **Player:** 16,278 → **11,539** (4,739 fewer)
 - **Magic TV:** 10,716 → **3,322** (7,394 fewer)
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
@@ -77,15 +77,17 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### Who owns the next action
 
-- **Locke:** preparing Canvas tab-window origin tests; no production move yet.
-- **Cicero:** Canvas source/behavior review checklist, then independent fixture review.
-- **Arendt:** read-only admission audit for retained Storage getVideoPlaybackState ownership and evidence.
-- **Confucius:** read-only candidate review for one substantive remaining Q1 dependency boundary.
-- **Parent:** #223 merged161637b1 after independent88PASS and allCI; counter2 since d7cd gate. Renderer tracing remains HOLD after three failed attempts; no new renderer run authorized. No user blocker.
+- **Cicero:** full integrated gate at frozen31e360f6 after #224 merge; exclusive runtime.
+- **Locke:** next cohesive Search ownership proposal against remaining492-line shortfall.
+- **Confucius:** metadata13-case execution/evidence preparation; tests wait for gate terminal.
+- **Arendt:** read-only plan for remaining metadata parameter/mapping/exception origin gaps.
+- **Parent:** merge/gates/board. #224 merged after exact CI and independent review; third merge since d7cd triggers gate. Renderer remains HOLD. No user blocker.
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- #224 merged **31e360f6**, exact7ff528 unionaccepted/allCIpassed/independent120PASS+one exactknownsidebar failure. Canvas owns tabs/height with live resolver; Search6387→6241 (-146physical=129span+17other), wholeproduction+3. Credit146 against existing638shortfall: remaining492, strictoutcomeOPEN. Shapeallowance162/floor490 unchanged and negativeprobe caught. Did we make a difference? Actual layout ownership moved into the existing stage; no netdeletion or completeSearch claim. Thirdmerge triggers exact31e360fullgate; newdeviceproof absent.
 
 - #223 merged **161637b1**, exact9cde unionaccepted/independent88PASS/allCIgreen. Keyword child still rebuilds once while redundant host rebuild is removed; other live focus/mode/filter behavior preserved. Source8originPASS and first4/4fixture failures retained; naturalstartup/Discoverlatedefault gaps explicit. Host6388→6387/production-7/zero638credit. Did we make a difference? One whole-host notification edge is removed, not relocated. Canvas layout preparation addresses next substantive slice; counter2 sinced7cd.
 
