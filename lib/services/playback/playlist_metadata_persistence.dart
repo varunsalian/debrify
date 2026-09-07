@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../models/series_playlist.dart';
 import '../storage/playback_progress_store.dart';
 
@@ -6,7 +8,9 @@ import '../storage/playback_progress_store.dart';
 ///
 /// Moved from `_VideoPlayerScreenState` (`_saveImdbIdToPlaylist`,
 /// `_saveSeriesPosterToPlaylist`); the bodies are unchanged apart from taking
-/// the launch identifiers as arguments instead of reading `widget.*`.
+/// the launch identifiers as arguments instead of reading `widget.*`, and
+/// logging through `debugPrint` so the service layer stays behind the
+/// redacting sink that `PrivacyLog.install()` provides.
 class PlaylistMetadataPersistence {
   const PlaylistMetadataPersistence._();
 
@@ -36,35 +40,35 @@ class PlaylistMetadataPersistence {
     required String? torboxTorrentId,
     required String? pikpakCollectionId,
   }) async {
-    print('🎬 _saveSeriesPosterToPlaylist called');
-    print('  seriesTitle: ${seriesPlaylist.seriesTitle}');
+    debugPrint('🎬 _saveSeriesPosterToPlaylist called');
+    debugPrint('  seriesTitle: ${seriesPlaylist.seriesTitle}');
 
     if (seriesPlaylist.seriesTitle == null) {
-      print('  ⚠️ No series title, skipping poster save');
+      debugPrint('  ⚠️ No series title, skipping poster save');
       return;
     }
 
     // Get identifiers from widget parameters
 
-    print('  rdTorrentId: $rdTorrentId');
-    print('  torboxTorrentId: $torboxTorrentId');
-    print('  pikpakCollectionId: $pikpakCollectionId');
+    debugPrint('  rdTorrentId: $rdTorrentId');
+    debugPrint('  torboxTorrentId: $torboxTorrentId');
+    debugPrint('  pikpakCollectionId: $pikpakCollectionId');
 
     // Need at least one identifier to save poster
     if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
         (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
         (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
-      print('  ⚠️ No valid identifier found, skipping poster save');
+      debugPrint('  ⚠️ No valid identifier found, skipping poster save');
       return;
     }
 
     final posterUrl = seriesPlaylist.showPosterUrl;
     if (posterUrl == null || posterUrl.isEmpty) {
-      print('  ⚠️ No poster URL from fetchEpisodeInfo');
+      debugPrint('  ⚠️ No poster URL from fetchEpisodeInfo');
       return;
     }
 
-    print('  Poster URL: $posterUrl');
+    debugPrint('  Poster URL: $posterUrl');
     try {
       if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
         await PlaybackProgressStore.updatePlaylistItemPoster(
@@ -85,7 +89,7 @@ class PlaylistMetadataPersistence {
         );
       }
     } catch (e) {
-      print('  ❌ Error saving poster: $e');
+      debugPrint('  ❌ Error saving poster: $e');
     }
   }
 }
