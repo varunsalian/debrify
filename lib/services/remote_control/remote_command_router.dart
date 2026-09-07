@@ -22,7 +22,6 @@ import 'remote_stale_source_notice.dart';
 import 'remote_transfer_bookkeeping.dart';
 import 'remote_transfer_diagnostics.dart';
 import 'udp_command_service.dart';
-import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import 'package:debrify/services/storage/tracking_prefs.dart';
@@ -160,12 +159,28 @@ class RemoteCommandRouter {
   // Callback to restart app flow (set by main.dart)
   VoidCallback? _onRestartApp;
 
+  // Widgets-side presenter for the three dialogs the router raises through
+  // the navigator key above (set by main.dart, beside that key).
+  RouterDialogs? _dialogs;
+
   @visibleForTesting
   List<ProfileLifecycleParticipant>? debugOnboardingLifecycleParticipants;
 
   /// Set the navigator key for back navigation
   void setNavigatorKey(GlobalKey<NavigatorState> key) {
     _navigatorKey = key;
+  }
+
+  /// Set the presenter that owns the router's dialog routes. Registered from
+  /// `main.dart` alongside [setNavigatorKey]. Missing-presenter policy, one
+  /// rule at every site: an unregistered presenter means "no UI to present
+  /// on", decided at the same point where the origin tested its navigator
+  /// and before any state changes. The consent queue takes its headless
+  /// branch and latches nothing; a profile-graph import is refused to the
+  /// sender before the confirmation and before any restore work; the pairing
+  /// fallback is skipped while the gate keeps the code it already issued.
+  void setDialogs(RouterDialogs dialogs) {
+    _dialogs = dialogs;
   }
 
   /// Set the scaffold messenger key for showing snackbars
@@ -1282,6 +1297,24 @@ class RemoteCommandRouter {
       );
       return;
     }
+    // The busy dialog that covers the restore comes from the registered
+    // presenter. Without one the import is refused here, before the
+    // confirmation is shown and before any restore work, as with no screen.
+    final dialogs = _dialogs;
+    if (dialogs == null) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_presenter_unavailable',
+        fields: <String, Object?>{'trace': trace},
+      );
+      _showSnackBar('Profile import needs the app screen open', isError: true);
+      await _transfers.reportProfileGraphResult(
+        remoteContext,
+        requestId: requestId,
+        ok: false,
+        message: 'Open the Debrify screen on the TV, then resend',
+      );
+      return;
+    }
     final sender =
         remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
     final rebuildableCachesOmitted = package.omissions.containsKey(
@@ -1362,11 +1395,10 @@ class RemoteCommandRouter {
     final done = ValueNotifier<bool>(false);
     if (context.mounted) {
       unawaited(
-        showDialog<void>(
+        dialogs.showBusy(
           context: context,
-          barrierDismissible: false,
-          builder: (_) =>
-              _RouterBusyDialog(message: 'Importing profiles…', done: done),
+          message: 'Importing profiles…',
+          done: done,
         ),
       );
     }
@@ -2551,44 +2583,27 @@ class RemoteCommandRouter {
 
   /// Raises the v1 consent question. The dialog is the only part of the
   /// legacy gate that needs a `BuildContext`, so it stays here; the queue
-  /// owns everything else. False means there is no UI to ask on.
-  bool _canPresentLegacyConsent() => _navigatorKey?.currentState != null;
+  /// owns everything else. False means there is no UI to ask on: no
+  /// navigator, or no registered presenter. The queue checks this before it
+  /// flips `_legacyDialogShowing`, so neither case latches the queue.
+  bool _canPresentLegacyConsent() =>
+      _navigatorKey?.currentState != null && _dialogs != null;
 
   void _presentLegacyConsent(String peer) {
     final navigator = _navigatorKey?.currentState;
     if (navigator == null) return;
-    showDialog<bool>(
-      context: navigator.context,
-      barrierDismissible: false,
-      builder: (context) {
-        // Retained so buffer expiry can dismiss the dialog — an answer given
-        // after the buffer died must not grant anything.
-        _legacyDialogContext = context;
-        return AlertDialog(
-          title: const Text('Incoming settings'),
-          content: Text(
-            'The device at $peer wants to send settings and account '
-            'credentials to this TV over an UNENCRYPTED connection (its app '
-            'version predates encryption).\n\nOnly allow this if it is your '
-            'own phone and you started the transfer yourself.',
-          ),
-          actions: [
-            FilledButton(
-              autofocus: true,
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Deny'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Allow'),
-            ),
-          ],
-        );
-      },
-    ).then((allowed) {
-      _legacyDialogContext = null;
-      _legacyConsent.onConsentAnswer(allowed == true);
-    });
+    final dialogs = _dialogs;
+    if (dialogs == null) return;
+    dialogs
+        .showLegacyConsent(
+          context: navigator.context,
+          peer: peer,
+          onDialogContext: (context) => _legacyDialogContext = context,
+        )
+        .then((allowed) {
+          _legacyDialogContext = null;
+          _legacyConsent.onConsentAnswer(allowed == true);
+        });
   }
 
   void _dismissLegacyConsent() {
@@ -3593,13 +3608,19 @@ class RemoteCommandRouter {
   /// When no pairing presenter is mounted (TV sitting on Home with its
   /// always-on listener), raise the fallback code dialog.
   void _ensurePairingUi(PairingGate gate) {
-    if (gate.hasPresenter) return;
-    final navigator = _navigatorKey?.currentState;
-    if (navigator == null) {
-      debugPrint('RemoteCommandRouter: No navigator for pairing dialog');
+    final dialogs = _dialogs;
+    if (dialogs == null) {
+      // No presenter registered: the gate keeps the code it already issued,
+      // there is just nowhere to draw it, as with no navigator.
+      debugPrint('RemoteCommandRouter: No dialog presenter for pairing UI');
       return;
     }
-    showRemotePairingDialog(navigator.context, gate);
+    // The key is handed over as a getter, not as its current state: the
+    // presenter must look it up at the moment it presents, as the origin did.
+    dialogs.showPairingFallback(
+      navigatorKey: () => _navigatorKey,
+      gate: gate,
+    );
   }
 
   /// Try to handle navigation commands via platform key injection (Android) or focus system (other platforms)
@@ -3831,59 +3852,32 @@ class _ProfileCommandBinding {
   int get hashCode => Object.hash(scope, authorizationRevision);
 }
 
-/// Busy dialog for long-running remote imports: undismissable while work
-/// runs, closed through its OWN context when `done` fires — the initiating
-/// State may be anywhere, and an orphaned `canPop: false` modal on the root
-/// navigator would wedge the app.
-class _RouterBusyDialog extends StatefulWidget {
-  const _RouterBusyDialog({required this.message, required this.done});
+/// The router's side of its dialog layering: the three routes it decides to
+/// raise, without the widgets that draw them. `RemoteRouterDialogs` in
+/// `lib/widgets/remote/remote_router_dialogs.dart` is the production
+/// implementation, registered from `main.dart`.
+abstract interface class RouterDialogs {
+  /// Undismissable cover over a long-running import; closes itself when
+  /// [done] fires.
+  Future<void> showBusy({
+    required BuildContext context,
+    required String message,
+    required ValueNotifier<bool> done,
+  });
 
-  final String message;
-  final ValueNotifier<bool> done;
+  /// The v1 (plaintext) consent question for [peer]. [onDialogContext] hands
+  /// back the dialog's own context so buffer expiry can pop it unanswered.
+  Future<bool?> showLegacyConsent({
+    required BuildContext context,
+    required String peer,
+    required ValueChanged<BuildContext> onDialogContext,
+  });
 
-  @override
-  State<_RouterBusyDialog> createState() => _RouterBusyDialogState();
-}
-
-class _RouterBusyDialogState extends State<_RouterBusyDialog> {
-  @override
-  void initState() {
-    super.initState();
-    widget.done.addListener(_maybeClose);
-    if (widget.done.value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeClose());
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.done.removeListener(_maybeClose);
-    super.dispose();
-  }
-
-  void _maybeClose() {
-    if (widget.done.value && mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      child: AlertDialog(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-            const SizedBox(width: 16),
-            Expanded(child: Text(widget.message)),
-          ],
-        ),
-      ),
-    );
-  }
+  /// The fallback pairing-code dialog, raised only when [gate] has no
+  /// presenter. [navigatorKey] is a getter so the key is read at the moment
+  /// of presentation, never captured early.
+  void showPairingFallback({
+    required GlobalKey<NavigatorState>? Function() navigatorKey,
+    required PairingGate gate,
+  });
 }
