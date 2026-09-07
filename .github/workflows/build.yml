@@ -32,6 +32,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
@@ -101,7 +114,7 @@ jobs:
     - name: Build APK
       env:
         ORG_GRADLE_PROJECT_debrifyLocalDiagnostics: "false"
-      run: flutter build apk --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false
+      run: flutter build apk --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     - name: Reject debuggable release APK
       shell: bash
@@ -140,6 +153,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
@@ -165,7 +191,7 @@ jobs:
       run: dev/scripts/build_macos_media_kit_frameworks.sh packages/media_kit_libs_macos_video_patched/macos/Frameworks
 
     - name: Build macOS app
-      run: flutter build macos --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false
+      run: flutter build macos --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     - name: Verify packaged subtitle decoders
       run: dev/scripts/verify_macos_subtitle_decoders.sh build/macos/Build/Products/Release/debrify.app/Contents/Frameworks
@@ -230,6 +256,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
@@ -243,7 +282,7 @@ jobs:
       run: flutter pub get
 
     - name: Build Windows app
-      run: flutter build windows --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false
+      run: flutter build windows --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     - name: Install Inno Setup
       run: choco install innosetup --no-progress --yes
@@ -276,6 +315,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
@@ -286,7 +338,7 @@ jobs:
       run: flutter pub get
 
     - name: Build iOS (unsigned)
-      run: flutter build ios --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --no-codesign
+      run: flutter build ios --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --no-codesign --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     # --no-codesign emits Mach-Os with no LC_CODE_SIGNATURE, so __LINKEDIT has no
     # room reserved for a signature. Sideloaders (AltStore/ldid, Sideloadly) abort
@@ -367,6 +419,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     # tvOS can't use subosito/flutter-action. The build needs the
     # fluttertv/flutter-tvos CLI, which clones its own pinned stock Flutter
     # (bin/internal/flutter.version, currently the 3.44.8 commit) and downloads
@@ -416,7 +481,7 @@ jobs:
         CODE_SIGNING_ALLOWED = NO
         EOF
         export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/unsigned.xcconfig"
-        flutter-tvos build tvos --release
+        flutter-tvos build tvos --release --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     # Same reason as the iOS job: an unsigned Mach-O reserves no __LINKEDIT
     # room for a signature, so Sideloadly/atvloadly abort in ldid before they
@@ -515,6 +580,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
@@ -559,7 +637,7 @@ jobs:
       # media_kit_video uses pkg-config at CMake time. Point it at the same
       # private mpv SDK that will be installed into the AppImage so the plugin
       # records DT_NEEDED=libmpv.so.2 instead of Ubuntu 22.04's libmpv.so.1.
-      run: PKG_CONFIG_PATH="$PWD/build/private-libmpv/pkgconfig" flutter build linux --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false
+      run: PKG_CONFIG_PATH="$PWD/build/private-libmpv/pkgconfig" flutter build linux --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     # media_kit ships no Linux libmpv. Install our statically consolidated mpv
     # in a plugin-private directory; never expose it through LD_LIBRARY_PATH.
@@ -629,6 +707,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Configure TMDB build token
+      shell: python
+      env:
+        TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+      run: |
+        import json, os
+        from pathlib import Path
+        token = os.environ.get("TMDB_READ_ACCESS_TOKEN", "").strip()
+        if not token:
+            raise SystemExit("Missing repository secret: TMDB_READ_ACCESS_TOKEN")
+        config = Path(os.environ["RUNNER_TEMP"]) / "debrify-build-config.json"
+        config.write_text(json.dumps({"TMDB_READ_ACCESS_TOKEN": token}), encoding="utf-8")
+
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
@@ -679,7 +770,7 @@ jobs:
       run: flutter pub get
 
     - name: Build Linux app
-      run: PKG_CONFIG_PATH="$PWD/build/private-libmpv/pkgconfig" flutter build linux --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false
+      run: PKG_CONFIG_PATH="$PWD/build/private-libmpv/pkgconfig" flutter build linux --release --dart-define=DEBRIFY_LOCAL_VALIDATION=false --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
     # See the x64 job — same reason, same script, arm64 bundle path.
     - name: Install private libmpv into the app bundle
