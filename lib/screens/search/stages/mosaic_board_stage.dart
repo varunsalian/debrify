@@ -8,6 +8,7 @@ import '../../../widgets/skeleton_poster.dart';
 import '../fav_row_ref.dart';
 import '../search_board_runtime.dart';
 import '../stage_visuals.dart';
+import 'promenade_board_stage.dart' show buildPromenadeRailLabel;
 
 typedef MosaicStageBindings = ({
   AppTheme Function() readTheme,
@@ -25,7 +26,7 @@ typedef MosaicStageBindings = ({
   ValueListenable<IptvChannel?> liveChannel,
   bool Function() readTrailerActive,
   Widget Function(double) buildLive,
-  Widget Function(StageRailView, {MainAxisAlignment align}) railLabel,
+  String Function(StageRailView) readTitle,
   Widget Function(CanvasRail, String, List<StremioMeta>, List<FocusNode>, int, int, int, double) cell,
 });
 
@@ -200,8 +201,10 @@ class MosaicStage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                bindings.railLabel(
+                                buildPromenadeRailLabel(
+                                  context,
                                   view,
+                                  readTitle: bindings.readTitle,
                                   align: MainAxisAlignment.end,
                                 ),
                                 if (view.rails.length > 1) ...[
