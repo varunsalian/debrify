@@ -1,5 +1,8 @@
   # Refactor board
 
+## Gate10 84f81806 PASS with notes
+Gate10 on 84f81806b1f19c1d04f58e71c8890fcdf0d39744 (after 252/253/255): generic 6,493 passed / 33 exact known / 3 skipped, zero new; analyzer 447 with identical 18 NEW / 19 UNUSED drift (local Dart 3.13 vs CI 3.44.8); layering 52/77 unchanged; Python 55/55; Windows release fresh (105 KiB) with uncommitted MSVC-2026 workaround (build only). Video player 9,829 lines (−501 since gate9's 10,330, project −505 total expected vs observed +4). Evidence C:/Users/hunth/source/gate10-main/REPORT.md. Production merges since gate10: 0 (#254 awaits verdict fix, #256 awaiting CI).
+
 ## #255 merged (V1-E episode ladder)
 Merged at $(git rev-parse HEAD), exact reviewed 40f29a50; independent verdict ADMIT WITH NOTES (C:/Users/hunth/source/review-255/VERDICT.md): pin 020cdaa5 precedes move, 3/3 pass with controller absent, 14-member session adapter via orchestrator decision (option b: pad2 becomes a static), origin diff empty after renames, five mutations caught and restored, 28 suites pass, analyzer 24/24, layering 52, baseline untouched, shape manifest untouched, CODEMAP unchanged. Host 10,137 to 9,984 (-153), controller 262, net +109. Did we make a difference? Episode ladder has a real owner with a screen-pin and a matrix mutation test. More? The two unpinned pills, the TV menu path, and the stale-token ladder termination. Player 9,763 - 153 = 9,610 / 9,500 (110 remaining).
 
