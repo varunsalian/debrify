@@ -271,23 +271,27 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   Host 6457 -> 6468 (**+11**); whole production **+45**, not deletion credit.
   Seventeen live/reference bindings include one lazy native constructor boundary,
   retained for removal/review at final composition / phase completion. Existing
-  host cell/deferred-focus/label policy is unchanged; the held Mosaic cell/content
+  host cell/deferred-focus policy is unchanged; the held Mosaic cell/content
   owner is not closed by this slice, nor is the aggregate host target.
   Actual `PromenadeStage` now owns its full layout and three exclusive constants;
   its State extension/part is removed. Host 6468 -> 6506 (**+38**); whole production
-  **+49**, not deletion credit. Twenty live/reference bindings retain two lazy
+  **+49**, not deletion credit. Nineteen live/reference bindings retain two lazy
   native constructors and one existing shared-scrim constructor, for removal/review
-  at final composition / phase completion. Cell/label policy and shared visual/native
+  at final composition / phase completion. Cell policy and shared visual/native
   implementations stay with their current owners; Atrium and the host target
   remain open.
+  Promenade owns the shared synchronous label/font/height; Mosaic calls the label
+  with end alignment. Both label slots read live host titles; height is local.
   Actual `CanvasStage` owns its complete layout and inline cell policy, removing
   its State extension/part. Host 6506 -> 6539 (**+33**); whole production **+52**,
-  not deletion credit. Nineteen top-level bindings plus nine reused shelf-policy
+  not deletion credit. Eighteen top-level bindings plus nine reused shelf-policy
   operations and the existing board/map remain explicit dependencies, for removal/
   review at final composition / phase completion. No `shelf.cell()` call or extra
   focused-column write is introduced. The shelf already initializes in `initState`;
   there is no earlier-allocation delta. Two native constructors and one shared-scrim
   boundary retain their owners; only the held Atrium part and host target remain.
+  Local tab rendering/height replace two binding slots with one live host title
+  resolver; Promenade reads the single public `canvasTabChevronColumn` metric.
   Actual `AtriumStage` (product `ea62d4e5`) is the seventh public widget: layout,
   positioning and same-Text measurement have no private Search State dependency.
   Seven explicit composition callbacks (frame entry, four wall, two visual) retain

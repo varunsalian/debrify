@@ -1,18 +1,18 @@
 # Refactor board
 
-## Current roadmap — September 6, merged production main 161637b1
+## Current roadmap — September 6, merged production main d282889d
 
 **Overall estimate: approximately 75%.** Architectural judgment, not a measured checklist percentage. Open PRs are not completed work. This checklist preserves the same six outcomes; historical evidence follows below.
 
 ### God-file line counts — original → merged main
 
-- **Search:** 19,070 → **6,387** (12,683 fewer)
+- **Search:** 19,070 → **6,161** (12,909 fewer)
 - **Player:** 16,278 → **11,539** (4,739 fewer)
 - **Magic TV:** 10,716 → **3,322** (7,394 fewer)
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
 - **Settings:** 7,905 → **2,908** (4,997 fewer)
 
-Physical lines, not whole-project deletions. Last full gate: **d7cdffb7 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #219/#220/#221 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
+Physical lines, not whole-project deletions. Last full gate: **31e360f6 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #222/#223/#224 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
 
 ### Do next — actual execution order
 
@@ -32,7 +32,7 @@ Physical lines, not whole-project deletions. Last full gate: **d7cdffb7 PASSED**
 - [x] **Finish Sources route/library ownership.** #220 makes the existing owner a standalone library and redirects two consumers, preserving seven original behavior pins. Host-16/production+12; no 2,775-line extraction or stage-target credit.
 - [x] **Resolve the oversized hero part in #222.** Merged9e809c97 after independent136PASS/one existing known failure and allCI passed. Retained part947, passive owner1060; host+1/production+15, zero638-target credit.
 - [ ] **Close final shared-composition and original rebuild obligations with evidence.** Retained callback inventories are not automatically unused forwarders. Preserve accepted Mosaic focus/prefetch policy.
-- [ ] **Reconcile the existing 1,400-line stage target.** Recorded762 leaves /638 short remains explicit. Do not count already-external part lines, wrapper growth or the overflow fix toward it.
+- [ ] **Reconcile the existing 1,400-line stage target.** Recorded988 leaves /412 short remains explicit after Canvas #224 (146) and rail-label #225 (80). Do not count already-external part lines, wrapper growth or the overflow fix toward it.
 
 ### 2. Complete player decoder/state/UI separation — OPEN
 
@@ -77,15 +77,21 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### Who owns the next action
 
-- **Locke:** preparing Canvas tab-window origin tests; no production move yet.
-- **Cicero:** Canvas source/behavior review checklist, then independent fixture review.
-- **Arendt:** read-only admission audit for retained Storage getVideoPlaybackState ownership and evidence.
-- **Confucius:** read-only candidate review for one substantive remaining Q1 dependency boundary.
-- **Parent:** #223 merged161637b1 after independent88PASS and allCI; counter2 since d7cd gate. Renderer tracing remains HOLD after three failed attempts; no new renderer run authorized. No user blocker.
+- **Cicero:** #225 final review accepted; reviews the next Atrium origin-test draft.
+- **Locke:** preparing one-file Atrium text origin tests; production and runtime await exact draft review.
+- **Confucius:** preparing six additional metadata tests covering nine scenarios; prior thirteen tests remain frozen and green.
+- **Arendt:** reviewing metadata failure order and the forthcoming exact test draft.
+- **Parent:** #225 merged; board and integration coordination. Production counter1 since full31e360 gate. Renderer remains HOLD. No user blocker.
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- **#225 merged d282889d:** shared rail-label composition now belongs to stage owners; exact ff526635 head independently accepted and all three CI checks passed (run34071413658). Origin8PASS before move; author and independent production suites each132PASS/one exact known sidebar failure, not raw green. Search6241→6161 (-80); whole production+9. Stage credit908→988 of1400;412 remain. Counter1 since full31e360. Other god counts remain Storage1741/Player11539/Magic3322/Settings2908; forwarder ledger is the last full-gate measurement, not rerun here. Did we make a difference? Yes: shared label composition leaves the host and one opaque callback is removed. Is more needed? Yes: Atrium and remaining shared composition, plus Player/Storage/Q acceptance stay open.
+
+- **Full31e360f6 gate PASSED:**6174PASS/12exactknown/2skip;goldens21known/configured2retries/actualhelpers0/no unexpected or unused. NativeFIRSTPAIRPASS; analyzer431/449zeroNew/Python55/layer56→56delta0cap77. AST204/133/161/23/0 unchangedidentities; physical1741/6241/11539/3322/2908. WindowsZIPf7a60321172ef1ac23eaa927693ce58ab42f5a3405de6ded3d669bfd2fb34cef; ARM64APK2ffa8838347adb6bf980c97eb1363b6d9d64c162b68604b48d1d493e86d8e2b1, ABIverified/exactheadmanifests. Counterreset0; no newdevice/completearchitecture claim. Did we make a difference? Integrated Hero/keyword/Canvas changes pass the established gate; remainingSearch492 and metadata/Player/Q obligations stay open.
+
+- #224 merged **31e360f6**, exact7ff528 unionaccepted/allCIpassed/independent120PASS+one exactknownsidebar failure. Canvas owns tabs/height with live resolver; Search6387→6241 (-146physical=129span+17other), wholeproduction+3. Credit146 against existing638shortfall: remaining492, strictoutcomeOPEN. Shapeallowance162/floor490 unchanged and negativeprobe caught. Did we make a difference? Actual layout ownership moved into the existing stage; no netdeletion or completeSearch claim. Thirdmerge triggers exact31e360fullgate; newdeviceproof absent.
 
 - #223 merged **161637b1**, exact9cde unionaccepted/independent88PASS/allCIgreen. Keyword child still rebuilds once while redundant host rebuild is removed; other live focus/mode/filter behavior preserved. Source8originPASS and first4/4fixture failures retained; naturalstartup/Discoverlatedefault gaps explicit. Host6388→6387/production-7/zero638credit. Did we make a difference? One whole-host notification edge is removed, not relocated. Canvas layout preparation addresses next substantive slice; counter2 sinced7cd.
 
