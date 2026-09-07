@@ -166,6 +166,33 @@ then. Same class of debt on S2-1 (869) and S2-2 (325) — also S2-7.
   failed `test/theme/shape_manifest_test.dart` (out of lane). Keep the bar on
   `RealDebridCloudFilesHost` / `TorboxCloudFilesHost` until that test lists
   the new file (and possibly lowers the 490 floor).
+  *Resolved by G4-5*: `CloudSelectionBar`, `CloudTorrentSearchBar` and
+  `CloudSearchBar` are now listed in `kShapeResidue` and the floor is 484.
+  De-duplicating twelve identical sites down to six is what moved it; the
+  floor is a revert tripwire, not a site budget.
+- **TorBox's in-folder file search can never return a hit.** `_performSearch`
+  reads `_navigationStack.first.node`, but the first entry is always the
+  state pushed on the way *into* the torrent — `node: null` — so the search
+  short-circuits to an empty list at every depth. Real-Debrid reads
+  `_currentFolderTree` and works. Preserved as-is and pinned by
+  `test/cloud_files_shared_chrome_origin_pin_test.dart`
+  (`resultsReachable: false`); fixing it is a behaviour change, not a
+  refactor. Consequence: TorBox's copy of `_buildSearchResultCard` was
+  unreachable, so `CloudSearchResultCard` is pinned through Real-Debrid only.
+- **`_showDeleteSelectedProgressDialog` was not converged** (G4-5). The two
+  copies differ in the id type (`int` vs `String`), the delete service calls,
+  the list/selection fields they mutate, the snackbar helpers, and the dialog
+  title ("Web Downloads" vs "Downloads"). No single provider-label parameter
+  makes the bodies verbatim; a shared version needs a generic id plus four
+  callbacks, which is a rewrite. Same for `_buildTorrentSearchResults`
+  (TorBox computes its result list *after* the empty-query check, RD before,
+  and RD's empty copy omits the query) and `_buildViewSelectorBar` (TorBox
+  suspends the torrent search and clears selection inline; RD calls
+  `_exitSelectionMode`).
+- **`_toggleSearch` stays on both hosts** (G4-5) even though the 13 lines are
+  byte-identical. It is pure host-`State` mutation over four private fields;
+  the only home that does not put a Flutter-dependent mutator in `services/`
+  leaves a stub of nearly the same size in each host, i.e. a forwarder.
 - **Premiumize / AllDebrid / PikPak routed** onto `CloudFilesScreen` (G4
   step 2). Selection bars stay on those hosts (PM/AD still use
   `BorderRadius.circular(12)`; PikPak already uses `app.shape.br(12)`).
