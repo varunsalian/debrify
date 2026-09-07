@@ -2,19 +2,22 @@
 
 ## Phase 2 — player finish (user direction, September 6)
 
-**Player now: 11,538 lines. Lines remaining to remove: 2,038.**
+**Player now: 11,374 lines. Lines remaining to remove: 1,874.**
 
-Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is408cd894 after #228. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is aa2834e3 after #229. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
 ### Current to-do list
 
 - [x] Record user-reported Gate 5 at d2cbea19 (details below).
 - [x] Freeze Search, Magic TV, Storage and Settings under the new user acceptance. Previous Search stage shortfall is superseded, not another Phase 2 requirement.
 - [x] Redirect all four workers to player work; parallel disjoint V1 pin runs are authorized.
-- [ ] **Renderer — Arendt:** extract startup validation/fallback lifecycle into a cohesive coordinator; exact ownership decision below. No indefinite held lane.
-- [ ] **Scrub — Locke:** move scrub session state and all eleven invalidation/input transitions together; retain only host event/render wiring.
-- [ ] **Tracker — Confucius:** fix the fake-clock cleanup in the origin harness, obtain an actual green pin, then move the tracker lifecycle ownership.
-- [ ] **Player fourth region and integration review — Cicero:** inventory a disjoint cohesive region, review ownership overlaps and coordinate pin/production acceptance. Aggregate net reductions must cover 2,039 lines; forecasts are not earned credit.
+- [x] **Tracker origin pin:** harness cleanup fixed; actual current-main pin passed and committed before the move.
+- [x] **Scrub origin pins:** all11 cases passed before the move; finite3/11 runtime sites and8 source-only sites recorded.
+- [x] **Renderer origin pin:** actual old-host fallback passed with reviewed testability seam; mock-terminal/Live-binding limits retained.
+- [x] **Tracker — PR #229 merged aa2834e3.** Author56PASS, independent56PASS, repaired source guard11PASS; all three CI jobs passed on exact e0ad938. Player reduction164 lines; owner219, whole production+55.
+- [ ] **Scrub — Locke: actual-main integration and PR publication assigned now.** Author13PASS and independent13PASS; accepted b829 plus docs68107. Arendt reviews the final union; preserve tracker guard repair. Proposed reduction109 lines, not merged.
+- [ ] **Renderer — Arendt: author20PASS and independent20PASS; production and docs frozen.** Final serial integration follows scrub. Currently reviewing scrub union; proposed renderer reduction178 against seam baseline, partial ownership/high coupling explicit.
+- [ ] **Media/episode switching — Cicero author, Confucius peer reviewer.** Latest origin run1PASS/3ERROR. Narrow fixture migration-cache reset under review: reused prior-case Future may explain second-case stall. No changed expectations or extra waits; remaining origin cases not yet green.
 - [ ] Merge reviewed player slices, updating this board once per merged PR. Parent serializes edits/integration into the shared player host; isolated disjoint pin tests may run concurrently.
 - [ ] At player <=9,500: stop Phase 2 extraction, run final full gate, map upstream PRs #54/#55/#56 against current seams, and issue the closing report.
 
@@ -40,9 +43,11 @@ Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fa
 
 ### Board update rule
 
-One board commit per merged PR. This direction change and Gate 5 are recorded in the working board now and will be included in the next merged-PR board commit. Historical sections below remain evidence, not active assignments or current targets.
+One board commit per merged PR. Status refreshes remain in the working board until that commit; the direction change and Gate 5 are already committed. Historical sections below remain evidence, not active assignments or current targets.
 
 ### Latest completed milestones
+
+- **#229 merged aa2834e3:** exact e0ad938 all three CI jobs passed; author56PASS, independent56PASS, source-guard repair11PASS. Player11538→11374 (-164), owner219, whole production+55. Did we make a difference? Tracker lifecycle state and heartbeat now have an explicit owner. Is more needed? Yes: scrub, renderer and Media ownership plus the final gate; 1874 player lines remain. Production counter2 since full1e4128. No new-device proof.
 
 - **#228 merged408cd894; both exceptions finished.** Exact1a70 CI allpassed after full227 gate. Independent105PASS/one exact known sidebar failure; three shape probes caught intended mutations, allowances unchanged. Search6102→5879 (-223), owner252, wholeproduction+29, zero player/stage credit. Did we make a difference? Passive Home presentation has its own owner. Is more needed? Only the active player finish for Phase2; other work remains Phase3. Production counter1 since full1e4128.
 
