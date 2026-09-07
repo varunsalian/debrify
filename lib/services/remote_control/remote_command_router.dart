@@ -16,8 +16,10 @@ import 'remote_control_state.dart';
 import 'remote_pairing_store.dart';
 import 'remote_chunk_transfer.dart';
 import 'remote_chunked_send.dart';
+import 'remote_legacy_consent.dart';
 import 'remote_session.dart';
 import 'remote_stale_source_notice.dart';
+import 'remote_transfer_bookkeeping.dart';
 import 'remote_transfer_diagnostics.dart';
 import 'udp_command_service.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
@@ -112,9 +114,28 @@ class RemoteCommandRouter {
         showSnackBar: _showSnackBar,
         dispatchCommand: _dispatchCommandAndWait,
         peerKeyOf: _profilePeerKey,
-        reportProfileGraphResult: _reportProfileGraphResultBestEffort,
-        reportRemoteTransferResult: _reportRemoteTransferResultBestEffort,
+        reportProfileGraphResult: _transfers.reportProfileGraphResultBestEffort,
+        reportRemoteTransferResult:
+            _transfers.reportRemoteTransferResultBestEffort,
       );
+
+  // Receiver-side v4 bookkeeping: the open transaction and the retained
+  // outcomes, with the best-effort result reports that feed them.
+  late final RemoteTransferBookkeeper _transfers = RemoteTransferBookkeeper(
+    peerKeyOf: _profilePeerKey,
+  );
+
+  // The consent gate in front of plaintext (v1) traffic; owns its own buffer.
+  late final RemoteLegacyConsentQueue _legacyConsent = RemoteLegacyConsentQueue(
+    approvalWindow: _authorizedActivityWindow,
+    canPresentConsent: _canPresentLegacyConsent,
+    presentConsent: _presentLegacyConsent,
+    dismissConsent: _dismissLegacyConsent,
+    dispatchCommand: _dispatchCommandAndWait,
+    showSnackBar: _showSnackBar,
+    beginBatch: _beginOrExtendBatch,
+    markAuthorizedActivity: _markAuthorizedConfigActivity,
+  );
 
   // The "update your phone app" notice behind silently dropped plaintext.
   late final RemoteStaleSourceNotice _staleRemoteNotices =
@@ -128,19 +149,7 @@ class RemoteCommandRouter {
       kMaxRemoteTransferPayloadBytes;
   static const Duration _profileRemotePayloadLifetime = Duration(minutes: 10);
 
-  // Completed v4 requests are retained briefly so a sender can safely retry
-  // a lost UDP completion packet without applying the same payload twice.
-  final Map<String, ({bool ok, String message, DateTime completedAt})>
-  _remoteTransferOutcomes = {};
   final Set<String> _remoteTransfersInFlight = {};
-  String? _activeRemoteTransferRequestId;
-  String? _activeRemoteTransferPeer;
-  final Map<String, int> _activeRemoteTransferReceived = {};
-  static Set<String> get _remoteBatchCommands => <String>{
-    RemoteAction.addon,
-    ...TransferCategoryRegistry.instance.remoteBatchCommands,
-  };
-  static const Duration _remoteTransferOutcomeLifetime = Duration(minutes: 5);
 
   // Navigator key for back navigation
   GlobalKey<NavigatorState>? _navigatorKey;
@@ -483,7 +492,7 @@ class RemoteCommandRouter {
       debugPrint('RemoteCommandRouter: local profile authorization required');
       final completeRequestId = command == ConfigCommand.complete
           ? parseRemoteTransferRequestBody(data)?.requestId ??
-                _addonTransferRequestId(data)
+                RemoteTransferBookkeeper.addonTransferRequestId(data)
           : null;
       final channelRequestId = command == ConfigCommand.debrifyChannel
           ? parseRemoteChannelTransferBody(data ?? '')?.requestId
@@ -523,7 +532,7 @@ class RemoteCommandRouter {
       }
       if (action == RemoteAction.config && profileGraphRequestId != null) {
         unawaited(
-          _reportProfileGraphResultBestEffort(
+          _transfers.reportProfileGraphResultBestEffort(
             context,
             requestId: profileGraphRequestId,
             ok: false,
@@ -532,7 +541,7 @@ class RemoteCommandRouter {
         );
       } else if (action == RemoteAction.config && completeRequestId != null) {
         unawaited(
-          _reportCompleteTransferResultBestEffort(
+          _transfers.reportCompleteTransferResultBestEffort(
             context,
             data,
             ok: false,
@@ -541,7 +550,7 @@ class RemoteCommandRouter {
         );
       } else if (action == RemoteAction.config && channelRequestId != null) {
         unawaited(
-          _reportRemoteTransferResultBestEffort(
+          _transfers.reportRemoteTransferResultBestEffort(
             context,
             requestId: channelRequestId,
             ok: false,
@@ -550,7 +559,7 @@ class RemoteCommandRouter {
         );
       } else if (action == RemoteAction.config && startRequestId != null) {
         unawaited(
-          _reportRemoteTransferResultBestEffort(
+          _transfers.reportRemoteTransferResultBestEffort(
             context,
             requestId: startRequestId,
             ok: false,
@@ -635,7 +644,7 @@ class RemoteCommandRouter {
     _ProfileCommandBinding? profileBinding,
   }) async {
     if (command == AddonCommand.install && data != null) {
-      final manifestUrl = _remoteTransferItemPayload(
+      final manifestUrl = _transfers.remoteTransferItemPayload(
         RemoteAction.addon,
         data,
         context,
@@ -645,18 +654,18 @@ class RemoteCommandRouter {
       // bounced at the session layer; plaintext (v1 phone) needs the user to
       // approve it on this screen first.
       if (!context.authorized) {
-        if (_legacyApprovedFor(context.sourceIp)) {
+        if (_legacyConsent.approvedFor(context.sourceIp)) {
           _markAuthorizedConfigActivity();
         } else {
-          _enqueueLegacy(
-            _LegacyItem.addon(command, manifestUrl),
+          _legacyConsent.enqueue(
+            LegacyConsentItem.addon(command, manifestUrl),
             context.sourceIp,
           );
           return;
         }
       }
       _markAuthorizedConfigActivity();
-      _recordRemoteTransferCommand(RemoteAction.addon, context);
+      _transfers.recordRemoteTransferCommand(RemoteAction.addon, context);
       if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
         final payload = _profilePayload(context, profileBinding);
         if (payload == null) return;
@@ -738,21 +747,11 @@ class RemoteCommandRouter {
   // rest of the burst.
 
   static const Duration _authorizedActivityWindow = Duration(minutes: 10);
-  static const Duration _legacyBufferExpiry = Duration(seconds: 60);
-  static const int _legacyBufferCap = 200;
 
   DateTime? _lastAuthorizedConfigAt;
-  DateTime? _legacyApprovedAt;
 
-  /// Both the pending buffer and a granted approval belong to ONE datagram
-  /// source. Anything else on the LAN that talks while a consent is pending
-  /// (or approved) is a different device and gets its own gate — approving
-  /// your old phone must never blanket every host on the network.
-  String? _legacyApprovedIp;
-  String? _legacyPeerIp;
-  final List<_LegacyItem> _legacyBuffer = [];
-  Timer? _legacyExpiryTimer;
-  bool _legacyDialogShowing = false;
+  /// Retained so buffer expiry can dismiss the consent dialog — an answer
+  /// given after the buffer died must not grant anything.
   BuildContext? _legacyDialogContext;
 
   void _markAuthorizedConfigActivity() {
@@ -763,14 +762,6 @@ class RemoteCommandRouter {
   /// precede it in the real flow — this stands in for those packets.
   @visibleForTesting
   void debugMarkAuthorizedConfigActivity() => _markAuthorizedConfigActivity();
-
-  bool _legacyApprovedFor(String? sourceIp) {
-    final approvedAt = _legacyApprovedAt;
-    return sourceIp != null &&
-        sourceIp == _legacyApprovedIp &&
-        approvedAt != null &&
-        DateTime.now().difference(approvedAt) < _authorizedActivityWindow;
-  }
 
   /// One-time banner when a remembered phone was silently re-authorized.
   void notifyRememberedAutoAuth(String peerName) {
@@ -791,7 +782,7 @@ class RemoteCommandRouter {
     if (command == ConfigCommand.remoteTransferStart) {
       if (data == null || !_openRemoteTransfer(data, context)) {
         final requestId = parseRemoteTransferRequestBody(data)?.requestId;
-        await _reportRemoteTransferResultBestEffort(
+        await _transfers.reportRemoteTransferResultBestEffort(
           context,
           requestId: requestId,
           ok: false,
@@ -806,11 +797,11 @@ class RemoteCommandRouter {
       final transferRequest = parseRemoteTransferRequestBody(data);
       final cachedOutcome = transferRequest == null
           ? null
-          : _remoteTransferOutcomes[transferRequest.requestId];
+          : _transfers.outcomeFor(transferRequest.requestId);
       if (cachedOutcome != null &&
           DateTime.now().difference(cachedOutcome.completedAt) <=
-              _remoteTransferOutcomeLifetime) {
-        await _reportRemoteTransferResultBestEffort(
+              RemoteTransferBookkeeper.remoteTransferOutcomeLifetime) {
+        await _transfers.reportRemoteTransferResultBestEffort(
           context,
           requestId: transferRequest!.requestId,
           ok: cachedOutcome.ok,
@@ -828,7 +819,7 @@ class RemoteCommandRouter {
         // unsolicited one is a LAN denial-of-service. It only counts after
         // authorized config work landed recently over an approved transport.
         final approvedTransport =
-            context.authorized || _legacyApprovedFor(context.sourceIp);
+            context.authorized || _legacyConsent.approvedFor(context.sourceIp);
         final lastWork = _lastAuthorizedConfigAt;
         final recentWork =
             lastWork != null &&
@@ -839,16 +830,19 @@ class RemoteCommandRouter {
           // the burst; Allow replays it after the items, Deny drops it. Only a
           // complete from the SAME source as the pending burst qualifies —
           // anything else is unsolicited.
-          if ((_legacyBuffer.isNotEmpty || _legacyDialogShowing) &&
+          if (_legacyConsent.hasPending &&
               context.sourceIp != null &&
-              context.sourceIp == _legacyPeerIp) {
-            _enqueueLegacy(const _LegacyItem.complete(), context.sourceIp);
+              context.sourceIp == _legacyConsent.peerIp) {
+            _legacyConsent.enqueue(
+              const LegacyConsentItem.complete(),
+              context.sourceIp,
+            );
             return;
           }
           debugPrint(
             'RemoteCommandRouter: Ignoring unsolicited complete signal',
           );
-          await _reportCompleteTransferResultBestEffort(
+          await _transfers.reportCompleteTransferResultBestEffort(
             context,
             data,
             ok: false,
@@ -862,20 +856,20 @@ class RemoteCommandRouter {
         // both phases before deciding whether the manifest is incomplete.
         await _awaitInFlightConfigWork();
         if (transferRequest != null &&
-            !_activeRemoteTransferContainsExpected(
+            !_transfers.activeRemoteTransferContainsExpected(
               transferRequest.requestId,
               transferRequest.expected,
               context,
             )) {
           // A delayed completion from an interrupted request must not erase
           // the newer transaction that currently owns the staging buffer.
-          if (_activeRemoteTransferMatches(
+          if (_transfers.activeRemoteTransferMatches(
             transferRequest.requestId,
             context,
           )) {
             clearProfileTransferBuffer();
           }
-          await _reportRemoteTransferResultBestEffort(
+          await _transfers.reportRemoteTransferResultBestEffort(
             context,
             requestId: transferRequest.requestId,
             ok: false,
@@ -891,7 +885,7 @@ class RemoteCommandRouter {
           if (transferRequest != null &&
               !_profilePayloadContainsExpected(transferRequest.expected)) {
             clearProfileTransferBuffer();
-            await _reportRemoteTransferResultBestEffort(
+            await _transfers.reportRemoteTransferResultBestEffort(
               context,
               requestId: transferRequest.requestId,
               ok: false,
@@ -909,7 +903,7 @@ class RemoteCommandRouter {
             context,
             profileBinding,
           );
-          await _reportCompleteTransferResultBestEffort(
+          await _transfers.reportCompleteTransferResultBestEffort(
             context,
             data,
             ok: applied,
@@ -928,7 +922,7 @@ class RemoteCommandRouter {
         // moments later. A large IPTV list is hundreds of SQLite writes, so
         // restarting without waiting would leave it half-imported.
         final applied = _batchFailed.isEmpty && _batchOk.isNotEmpty;
-        await _reportCompleteTransferResultBestEffort(
+        await _transfers.reportCompleteTransferResultBestEffort(
           context,
           data,
           ok: applied,
@@ -940,8 +934,8 @@ class RemoteCommandRouter {
       } finally {
         if (transferRequestId != null) {
           _remoteTransfersInFlight.remove(transferRequestId);
-          if (_activeRemoteTransferRequestId == transferRequestId) {
-            _clearActiveRemoteTransfer();
+          if (_transfers.isActiveRequest(transferRequestId)) {
+            _transfers.clearActiveRemoteTransfer();
           }
         }
       }
@@ -975,7 +969,11 @@ class RemoteCommandRouter {
       return;
     }
 
-    final commandData = _remoteTransferItemPayload(command, data, context);
+    final commandData = _transfers.remoteTransferItemPayload(
+      command,
+      data,
+      context,
+    );
     if (commandData == null) return;
 
     // Chunk-transport packets only file bytes into a buffer — the payload
@@ -984,11 +982,11 @@ class RemoteCommandRouter {
         command == ConfigCommand.debrifyChannelStart ||
         command == ConfigCommand.debrifyChannelChunk;
     if (!isTransport && !context.authorized) {
-      if (_legacyApprovedFor(context.sourceIp)) {
+      if (_legacyConsent.approvedFor(context.sourceIp)) {
         _markAuthorizedConfigActivity();
       } else {
-        _enqueueLegacy(
-          _LegacyItem.config(command, commandData),
+        _legacyConsent.enqueue(
+          LegacyConsentItem.config(command, commandData),
           context.sourceIp,
         );
         return;
@@ -997,7 +995,7 @@ class RemoteCommandRouter {
       _markAuthorizedConfigActivity();
     }
 
-    _recordRemoteTransferCommand(command, context);
+    _transfers.recordRemoteTransferCommand(command, context);
 
     if (ProfileRuntime.isInitialized &&
         ProfileRuntime.isProfileCommitted &&
@@ -1044,228 +1042,10 @@ class RemoteCommandRouter {
     );
   }
 
-  /// A complete profile graph pushed from a paired Admin phone — the file
-  /// restore's deviceGraph path over the wire. The session AEAD stands in
-  /// for the backup passphrase, the ACTIVE TV profile must hold the same
-  /// authority a file restore demands, and the user confirms on-screen
-  /// before anything is created. Never staged: it applies atomically through
-  /// [ProfileRestoreCoordinator.restoreDeviceGraph] or not at all.
-  /// Reports a profile-graph transfer's real outcome back to the sender —
-  /// delivery is not application, and without this the phone's "sent" toast
-  /// was a lie whenever the TV refused or the user declined.
-  Future<bool> _reportProfileGraphResult(
-    RemoteCommandContext remoteContext, {
-    required String? requestId,
-    required bool ok,
-    required String message,
-  }) async {
-    final trace = RemoteTransferDiagnostics.traceToken(requestId);
-    final sidB64 = remoteContext.sidB64;
-    if (sidB64 == null) {
-      RemoteTransferDiagnostics.record(
-        'receiver_result_send_unavailable',
-        fields: <String, Object?>{'trace': trace, 'reason': 'missing_sid'},
-      );
-      return false;
-    }
-    final state = RemoteControlState();
-    final session = state.sessionManager?.sessionBySid(sidB64);
-    if (session == null || !session.authorized) {
-      RemoteTransferDiagnostics.record(
-        'receiver_result_send_unavailable',
-        fields: <String, Object?>{
-          'trace': trace,
-          'reason': session == null ? 'missing_session' : 'unauthorized',
-        },
-      );
-      return false;
-    }
-    var sent = false;
-    for (var attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 120));
-      }
-      try {
-        sent =
-            await state.sendEncryptedCommand(
-              session,
-              RemoteCommand(
-                action: RemoteAction.config,
-                command: ConfigCommand.profileGraphResult,
-                data: profileGraphResultBody(
-                  requestId: requestId,
-                  ok: ok,
-                  message: message,
-                ),
-              ),
-            ) ||
-            sent;
-      } catch (_) {
-        // A later attempt can still reach the sender if the profile/session
-        // authorization race that rejected this one settles safely.
-      }
-    }
-    RemoteTransferDiagnostics.record(
-      'receiver_result_send_finished',
-      fields: <String, Object?>{'trace': trace, 'resultOk': ok, 'sent': sent},
-    );
-    return sent;
-  }
-
-  Future<bool> _runBestEffortProfileGraphResult(
-    Future<bool> Function() send,
-  ) async {
-    try {
-      return await send();
-    } catch (_) {
-      return false;
-    }
-  }
-
   @visibleForTesting
   Future<bool> debugRunBestEffortProfileGraphResult(
     Future<bool> Function() send,
-  ) => _runBestEffortProfileGraphResult(send);
-
-  Future<bool> _reportProfileGraphResultBestEffort(
-    RemoteCommandContext remoteContext, {
-    required String? requestId,
-    required bool ok,
-    required String message,
-  }) {
-    return _runBestEffortProfileGraphResult(
-      () => _reportProfileGraphResult(
-        remoteContext,
-        requestId: requestId,
-        ok: ok,
-        message: message,
-      ),
-    );
-  }
-
-  String? _addonTransferRequestId(String? data) {
-    if (data == null || data.isEmpty || data.length > 128) return null;
-    return data;
-  }
-
-  Future<bool> _reportAddonTransferResultBestEffort(
-    RemoteCommandContext remoteContext, {
-    required String? requestId,
-    required bool ok,
-  }) async {
-    if (requestId == null) return false;
-    try {
-      final sidB64 = remoteContext.sidB64;
-      if (sidB64 == null) return false;
-      final state = RemoteControlState();
-      final session = state.sessionManager?.sessionBySid(sidB64);
-      if (session == null || !session.authorized) return false;
-      var sent = false;
-      for (var attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) {
-          await Future<void>.delayed(const Duration(milliseconds: 120));
-        }
-        try {
-          sent =
-              await state.sendEncryptedCommand(
-                session,
-                RemoteCommand(
-                  action: RemoteAction.config,
-                  command: ConfigCommand.addonTransferResult,
-                  data: addonTransferResultBody(requestId: requestId, ok: ok),
-                ),
-              ) ||
-              sent;
-        } catch (_) {
-          // Best effort; retain an earlier success and keep retrying.
-        }
-      }
-      return sent;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> _reportRemoteTransferResultBestEffort(
-    RemoteCommandContext remoteContext, {
-    required String? requestId,
-    required bool ok,
-    required String message,
-  }) async {
-    if (requestId == null) return false;
-    final now = DateTime.now();
-    _remoteTransferOutcomes.removeWhere(
-      (_, outcome) =>
-          now.difference(outcome.completedAt) > _remoteTransferOutcomeLifetime,
-    );
-    while (_remoteTransferOutcomes.length >= 256) {
-      _remoteTransferOutcomes.remove(_remoteTransferOutcomes.keys.first);
-    }
-    _remoteTransferOutcomes[requestId] = (
-      ok: ok,
-      message: message,
-      completedAt: now,
-    );
-    try {
-      final sidB64 = remoteContext.sidB64;
-      if (sidB64 == null) return false;
-      final state = RemoteControlState();
-      final session = state.sessionManager?.sessionBySid(sidB64);
-      if (session == null || !session.authorized) return false;
-      var sent = false;
-      // The result is also UDP. Repeat it with fresh encrypted counters so a
-      // single lost datagram cannot turn an applied transfer into a timeout
-      // on the phone; request correlation makes duplicates harmless.
-      for (var attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) {
-          await Future<void>.delayed(const Duration(milliseconds: 120));
-        }
-        try {
-          sent =
-              await state.sendEncryptedCommand(
-                session,
-                RemoteCommand(
-                  action: RemoteAction.config,
-                  command: ConfigCommand.remoteTransferResult,
-                  data: remoteTransferResultBody(
-                    requestId: requestId,
-                    ok: ok,
-                    message: message,
-                  ),
-                ),
-              ) ||
-              sent;
-        } catch (_) {
-          // Best effort; retain an earlier success and keep retrying.
-        }
-      }
-      return sent;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> _reportCompleteTransferResultBestEffort(
-    RemoteCommandContext remoteContext,
-    String? data, {
-    required bool ok,
-    required String message,
-  }) {
-    final remoteRequest = parseRemoteTransferRequestBody(data);
-    if (remoteRequest != null) {
-      return _reportRemoteTransferResultBestEffort(
-        remoteContext,
-        requestId: remoteRequest.requestId,
-        ok: ok,
-        message: message,
-      );
-    }
-    return _reportAddonTransferResultBestEffort(
-      remoteContext,
-      requestId: _addonTransferRequestId(data),
-      ok: ok,
-    );
-  }
+  ) => _transfers.runBestEffortProfileGraphResult(send);
 
   static String? _profileGraphRequestId(String data) {
     try {
@@ -1291,6 +1071,12 @@ class RemoteCommandRouter {
     }
   }
 
+  /// A complete profile graph pushed from a paired Admin phone — the file
+  /// restore's deviceGraph path over the wire. The session AEAD stands in
+  /// for the backup passphrase, the ACTIVE TV profile must hold the same
+  /// authority a file restore demands, and the user confirms on-screen
+  /// before anything is created. Never staged: it applies atomically through
+  /// [ProfileRestoreCoordinator.restoreDeviceGraph] or not at all.
   Future<void> _handleProfileGraphConfig(
     String data,
     RemoteCommandContext remoteContext,
@@ -1327,7 +1113,7 @@ class RemoteCommandRouter {
         fields: <String, Object?>{'trace': trace},
       );
       _showSnackBar('A profile import is already in progress', isError: true);
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1373,7 +1159,7 @@ class RemoteCommandRouter {
         'Profiles are not set up on this device yet — finish setup first',
         isError: true,
       );
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1410,7 +1196,7 @@ class RemoteCommandRouter {
         'Profile transfer rejected: ${error.message}',
         isError: true,
       );
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1452,7 +1238,7 @@ class RemoteCommandRouter {
         },
       );
       _showSnackBar('Profile import authorization expired', isError: true);
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1471,7 +1257,7 @@ class RemoteCommandRouter {
         'Switch this TV to an Admin profile to receive profiles',
         isError: true,
       );
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1488,7 +1274,7 @@ class RemoteCommandRouter {
         fields: <String, Object?>{'trace': trace},
       );
       _showSnackBar('Profile import needs the app screen open', isError: true);
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1559,7 +1345,7 @@ class RemoteCommandRouter {
         fields: <String, Object?>{'trace': trace},
       );
       _showSnackBar('Profile import declined');
-      await _reportProfileGraphResult(
+      await _transfers.reportProfileGraphResult(
         remoteContext,
         requestId: requestId,
         ok: false,
@@ -1613,7 +1399,7 @@ class RemoteCommandRouter {
           'Profile import failed; existing data is unchanged',
           isError: true,
         );
-        await _reportProfileGraphResultBestEffort(
+        await _transfers.reportProfileGraphResultBestEffort(
           remoteContext,
           requestId: requestId,
           ok: false,
@@ -1637,7 +1423,7 @@ class RemoteCommandRouter {
       // and invite the sender to create a duplicate graph. Acknowledge while
       // the Admin that authorized the inbound transfer is still active; an
       // imported Admin may legitimately have remote features disabled.
-      final acknowledged = await _reportProfileGraphResultBestEffort(
+      final acknowledged = await _transfers.reportProfileGraphResultBestEffort(
         remoteContext,
         requestId: requestId,
         ok: true,
@@ -2383,8 +2169,7 @@ class RemoteCommandRouter {
     final request = parseRemoteTransferRequestBody(data);
     final peer = _profilePeerKey(context);
     if (request == null || peer == null) return false;
-    if (_activeRemoteTransferRequestId == request.requestId &&
-        _activeRemoteTransferPeer == peer) {
+    if (_transfers.isOpenFor(request.requestId, peer)) {
       _markAuthorizedConfigActivity();
       return true;
     }
@@ -2401,78 +2186,9 @@ class RemoteCommandRouter {
     _batching = false;
     _batchOk.clear();
     _batchFailed.clear();
-    _activeRemoteTransferRequestId = request.requestId;
-    _activeRemoteTransferPeer = peer;
-    _activeRemoteTransferReceived.clear();
+    _transfers.open(request.requestId, peer);
     _markAuthorizedConfigActivity();
     return true;
-  }
-
-  void _recordRemoteTransferCommand(
-    String command,
-    RemoteCommandContext context,
-  ) {
-    if (!_remoteBatchCommands.contains(command) ||
-        _activeRemoteTransferPeer != _profilePeerKey(context)) {
-      return;
-    }
-    _activeRemoteTransferReceived.update(
-      command,
-      (count) => count + 1,
-      ifAbsent: () => 1,
-    );
-  }
-
-  String? _remoteTransferItemPayload(
-    String command,
-    String data,
-    RemoteCommandContext context,
-  ) {
-    if (!_remoteBatchCommands.contains(command)) return data;
-    final item = parseRemoteTransferItemBody(data);
-    final activeRequestId = _activeRemoteTransferRequestId;
-    final activePeer = _activeRemoteTransferPeer;
-
-    // Raw item bodies remain valid for older, non-transactional senders. A
-    // wrapped item is meaningful only while its matching transaction is open.
-    if (activeRequestId == null || activePeer == null) {
-      return item == null ? data : null;
-    }
-    if (item == null ||
-        item.requestId != activeRequestId ||
-        activePeer != _profilePeerKey(context)) {
-      return null;
-    }
-    return item.payload;
-  }
-
-  bool _activeRemoteTransferContainsExpected(
-    String requestId,
-    Map<String, int> expected,
-    RemoteCommandContext context,
-  ) {
-    if (!_activeRemoteTransferMatches(requestId, context) || expected.isEmpty) {
-      return false;
-    }
-    for (final entry in expected.entries) {
-      if ((_activeRemoteTransferReceived[entry.key] ?? 0) < entry.value) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool _activeRemoteTransferMatches(
-    String requestId,
-    RemoteCommandContext context,
-  ) =>
-      _activeRemoteTransferRequestId == requestId &&
-      _activeRemoteTransferPeer == _profilePeerKey(context);
-
-  void _clearActiveRemoteTransfer() {
-    _activeRemoteTransferRequestId = null;
-    _activeRemoteTransferPeer = null;
-    _activeRemoteTransferReceived.clear();
   }
 
   static String? _profilePeerKey(RemoteCommandContext context) {
@@ -2494,7 +2210,7 @@ class RemoteCommandRouter {
     _profileRemotePayload = null;
     _profileRemoteBinding = null;
     _profileRemotePeer = null;
-    _clearActiveRemoteTransfer();
+    _transfers.clearActiveRemoteTransfer();
   }
 
   void clearProfileSessionState() {
@@ -2833,41 +2549,14 @@ class RemoteCommandRouter {
         );
   }
 
-  void _enqueueLegacy(_LegacyItem item, String? sourceIp) {
-    // First packet claims the pending consent for its source; anything from
-    // a DIFFERENT host while it's pending is a separate device and must not
-    // ride this user's answer.
-    if (_legacyPeerIp == null) {
-      _legacyPeerIp = sourceIp;
-    } else if (sourceIp != _legacyPeerIp) {
-      debugPrint('RemoteCommandRouter: Dropping packet from another peer');
-      return;
-    }
-    if (_legacyBuffer.length >= _legacyBufferCap) {
-      debugPrint('RemoteCommandRouter: Legacy buffer full, dropping packet');
-      return;
-    }
-    _legacyBuffer.add(item);
-    _legacyExpiryTimer ??= Timer(_legacyBufferExpiry, () {
-      debugPrint('RemoteCommandRouter: Legacy consent expired');
-      _denyLegacy();
-    });
-    _maybeShowLegacyConsentDialog();
-  }
+  /// Raises the v1 consent question. The dialog is the only part of the
+  /// legacy gate that needs a `BuildContext`, so it stays here; the queue
+  /// owns everything else. False means there is no UI to ask on.
+  bool _canPresentLegacyConsent() => _navigatorKey?.currentState != null;
 
-  void _maybeShowLegacyConsentDialog() {
-    if (_legacyDialogShowing) return;
+  void _presentLegacyConsent(String peer) {
     final navigator = _navigatorKey?.currentState;
-    if (navigator == null) {
-      // Headless (no UI mounted yet): nothing to ask — the expiry timer
-      // drops the buffer and the sender sees nothing applied.
-      debugPrint(
-        'RemoteCommandRouter: No navigator for consent dialog, will drop',
-      );
-      return;
-    }
-    _legacyDialogShowing = true;
-    final peer = _legacyPeerIp ?? 'unknown address';
+    if (navigator == null) return;
     showDialog<bool>(
       context: navigator.context,
       barrierDismissible: false,
@@ -2897,94 +2586,15 @@ class RemoteCommandRouter {
         );
       },
     ).then((allowed) {
-      _legacyDialogShowing = false;
       _legacyDialogContext = null;
-      if (allowed == true) {
-        _allowLegacy();
-      } else {
-        _denyLegacy(showMessage: true);
-      }
+      _legacyConsent.onConsentAnswer(allowed == true);
     });
   }
 
-  Future<void> _allowLegacy() async {
-    _legacyExpiryTimer?.cancel();
-    _legacyExpiryTimer = null;
-    final approvedIp = _legacyPeerIp;
-    _legacyPeerIp = null;
-    final items = List<_LegacyItem>.from(_legacyBuffer);
-    _legacyBuffer.clear();
-    if (items.isEmpty) {
-      // The buffer expired (or was denied) while the dialog sat open — an
-      // Allow with nothing behind it must not open the approval window or
-      // count as authorized activity.
-      debugPrint(
-        'RemoteCommandRouter: Legacy approval with empty buffer, '
-        'ignoring',
-      );
-      return;
-    }
-    _legacyApprovedAt = DateTime.now();
-    _legacyApprovedIp = approvedIp;
-    _markAuthorizedConfigActivity();
-    debugPrint(
-      'RemoteCommandRouter: Legacy transfer approved (${items.length} buffered)',
-    );
-    _beginOrExtendBatch();
-    final approvedContext = RemoteCommandContext(
-      encrypted: false,
-      authorized: true,
-      sourceIp: approvedIp,
-    );
-    var sawComplete = false;
-    for (final item in items) {
-      if (item.isComplete) {
-        sawComplete = true;
-      } else if (item.isAddon) {
-        await _dispatchCommandAndWait(
-          RemoteAction.addon,
-          item.command,
-          item.data,
-          approvedContext,
-        );
-      } else {
-        await _dispatchCommandAndWait(
-          RemoteAction.config,
-          item.command,
-          item.data,
-          approvedContext,
-        );
-      }
-    }
-    if (sawComplete) {
-      // Replayed LAST: its handler waits for the just-registered in-flight
-      // work (and any live chunk buffers) before finalizing/restarting.
-      await _dispatchCommandAndWait(
-        RemoteAction.config,
-        ConfigCommand.complete,
-        null,
-        approvedContext,
-      );
-    }
-  }
-
-  void _denyLegacy({bool showMessage = false}) {
-    _legacyExpiryTimer?.cancel();
-    _legacyExpiryTimer = null;
-    _legacyPeerIp = null;
-    final dropped = _legacyBuffer.length;
-    _legacyBuffer.clear();
-    // A consent dialog that outlived its buffer is answering a dead question
-    // — take it down with the buffer.
+  void _dismissLegacyConsent() {
     final dialogContext = _legacyDialogContext;
     if (dialogContext != null && dialogContext.mounted) {
       Navigator.of(dialogContext).pop(false);
-    }
-    if (dropped > 0) {
-      debugPrint('RemoteCommandRouter: Dropped $dropped unapproved packet(s)');
-      if (showMessage) {
-        _showSnackBar('Incoming settings were blocked', isError: true);
-      }
     }
   }
 
@@ -3815,11 +3425,11 @@ class RemoteCommandRouter {
     final debrifyUri = request?.uri ?? data;
     final cachedOutcome = requestId == null
         ? null
-        : _remoteTransferOutcomes[requestId];
+        : _transfers.outcomeFor(requestId);
     if (cachedOutcome != null &&
         DateTime.now().difference(cachedOutcome.completedAt) <=
-            _remoteTransferOutcomeLifetime) {
-      await _reportRemoteTransferResultBestEffort(
+            RemoteTransferBookkeeper.remoteTransferOutcomeLifetime) {
+      await _transfers.reportRemoteTransferResultBestEffort(
         context,
         requestId: requestId,
         ok: cachedOutcome.ok,
@@ -3891,7 +3501,7 @@ class RemoteCommandRouter {
 
       debugPrint('RemoteCommandRouter: channel imported');
       _showSnackBar('Channel imported: ${parsed.channelName}');
-      await _reportRemoteTransferResultBestEffort(
+      await _transfers.reportRemoteTransferResultBestEffort(
         context,
         requestId: requestId,
         ok: true,
@@ -3900,7 +3510,7 @@ class RemoteCommandRouter {
     } catch (_) {
       debugPrint('RemoteCommandRouter: channel import failed');
       _showSnackBar('Failed to import channel', isError: true);
-      await _reportRemoteTransferResultBestEffort(
+      await _transfers.reportRemoteTransferResultBestEffort(
         context,
         requestId: requestId,
         ok: false,
@@ -4219,27 +3829,6 @@ class _ProfileCommandBinding {
 
   @override
   int get hashCode => Object.hash(scope, authorizationRevision);
-}
-
-/// A plaintext credential packet from a v1 sender, parked until the user
-/// answers the consent dialog.
-class _LegacyItem {
-  final bool isAddon;
-  final bool isComplete;
-  final String command;
-  final String data;
-
-  const _LegacyItem.config(this.command, this.data)
-    : isAddon = false,
-      isComplete = false;
-  const _LegacyItem.addon(this.command, this.data)
-    : isAddon = true,
-      isComplete = false;
-  const _LegacyItem.complete()
-    : isAddon = false,
-      isComplete = true,
-      command = ConfigCommand.complete,
-      data = '';
 }
 
 /// Busy dialog for long-running remote imports: undismissable while work
