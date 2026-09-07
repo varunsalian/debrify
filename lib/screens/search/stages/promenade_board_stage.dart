@@ -1,10 +1,14 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../models/stremio_addon.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/skeleton_poster.dart';
 import '../fav_row_ref.dart';
 import '../search_board_runtime.dart';
 import '../stage_visuals.dart';
+import 'canvas_board_stage.dart' show canvasTabChevronColumn;
 
 typedef PromenadeStageBindings = ({
   StageRailView? Function() resolveRail,
@@ -23,11 +27,93 @@ typedef PromenadeStageBindings = ({
   Widget Function(bool) buildScrims,
   double Function(BuildContext, double, {required double maxH}) railBoxHeight,
   double Function(BuildContext, double) favouriteWidth,
-  double Function(BuildContext) labelHeight,
-  Widget Function(StageRailView) railLabel,
+  String Function(StageRailView) readTitle,
   Widget Function(FavRowRef, String, int) favouriteCell,
   Widget Function(CanvasRail, String, List<StremioMeta>, List<FocusNode>, int) cell,
 });
+
+// Metrics for the PROMENADE bottom column (centred rail label + strip). Same
+// single-source-of-truth contract as the shared Canvas metric: the widgets and
+// the identity block that must stay clear of them read the same numbers.
+const double _kPromLabelFontSize = 12.0;
+
+/// Height of Promenade's centred label row at the current text scale (the
+/// chevron column is the floor, exactly as in [canvasTabChevronColumn]).
+double _promenadeLabelHeight(BuildContext context) => max(
+  canvasTabChevronColumn,
+  MediaQuery.textScalerOf(context).scale(_kPromLabelFontSize) * 1.35,
+);
+
+/// Promenade's centred rail label. The stacked chevron pair is the same
+/// affordance Canvas's tabs carry, and for the same reason: UP/DOWN is what
+/// changes rails, and nothing else on this screen says so.
+Widget buildPromenadeRailLabel(
+  BuildContext context,
+  StageRailView view, {
+  required String Function(StageRailView) readTitle,
+  MainAxisAlignment align = MainAxisAlignment.center,
+}) {
+  final app = AppThemeScope.of(context);
+  final title = readTitle(view);
+  return Row(
+    mainAxisAlignment: align,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.keyboard_arrow_up_rounded,
+            size: 13,
+            color: app.fade(app.core.tx, 0.45),
+          ),
+          Transform.translate(
+            offset: const Offset(0, -5),
+            child: Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 13,
+              color: app.fade(app.core.tx, 0.45),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(width: 12),
+      Flexible(
+        child: Text(
+          title.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: _kPromLabelFontSize,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.4,
+            color: app.fade(app.core.tx, 0.82),
+          ),
+        ),
+      ),
+      if (view.rails.length > 1) ...[
+        const SizedBox(width: 14),
+        // Flexible as well as the title: on a narrow header (Mosaic shares
+        // its row with the identity) a rigid counter is what tips the Row
+        // into an overflow.
+        Flexible(
+          child: Text(
+            '${view.index + 1}/${view.rails.length}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: _kPromLabelFontSize,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: app.fade(app.core.tx, 0.32),
+            ),
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
 
 /// Gap between the centred rail label and the strip below it.
 const double _kPromLabelGap = 14;
@@ -84,7 +170,7 @@ class PromenadeStage extends StatelessWidget {
             _kPromStripTail +
             stripBoxH +
             _kPromLabelGap +
-            bindings.labelHeight(context);
+            _promenadeLabelHeight(context);
         // Half-viewport pads: without them the list clamps at its ends and
         // the first/last cell can never reach the centre lock.
         final double sidePad = ((boardW - cellW) / 2).clamp(0.0, boardW / 2);
@@ -189,7 +275,7 @@ class PromenadeStage extends StatelessWidget {
                           right: 48,
                           bottom: _kPromLabelGap,
                         ),
-                        child: bindings.railLabel(view),
+                        child: buildPromenadeRailLabel(context, view, readTitle: bindings.readTitle),
                       ),
                       SizedBox(
                         height: stripBoxH,
