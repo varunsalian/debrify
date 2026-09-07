@@ -795,3 +795,8 @@ Full1e4128 actual-main gate passed with exact known failures and both native bui
 ## Media candidate b220 rejected — September 7
 
 Green origin pin982e24dd (four public-host mocked-terminal cases) retained. Unapplied two-transaction design b220 preserved as rejected evidence: host-341, owner575, whole production+234;36 inbound and23 outward interface members, including10 single-field compatibility bridges. Source body/notification refinements and57-writer/24-group accounting accepted, but coupling cost failed simplicity review. No production change applied. Next work is loader/identity boundary and additional origin admission, not callback regrouping or an automatic broader move.
+
+
+## G4-3 reviewer follow-ups — September 7
+
+PR232 Decisions2/3 are excluded from the sorting deduplication. Dead series-arrange methods/arms are proposed for a separately evidenced Phase3 deletion, retaining the enum compatibility value; reachability still requires verification. Diverged PikPak/Premiumize/playlist sort variants remain unchanged and require per-host pins and explicit difference accounting before any G4-4 convergence. #227 is already merged. Neither follow-up is currently assigned or credited to the player target.

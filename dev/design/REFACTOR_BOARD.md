@@ -2,9 +2,9 @@
 
 ## Phase 2 — player finish (user direction, September 6)
 
-**Player now: 11,265 lines. Lines remaining to remove: 1,765.**
+**Player now: 11,088 lines. Lines remaining to remove: 1,588.**
 
-Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is 65b3a69b after #230. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is a7df8f13 after #231. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
 ### Current to-do list
 
@@ -16,11 +16,19 @@ Stopping target: **9,500 lines or fewer on merged main**. No overall percentage.
 - [x] **Renderer origin pin:** actual old-host fallback passed with reviewed testability seam; mock-terminal/Live-binding limits retained.
 - [x] **Tracker — PR #229 merged aa2834e3.** Author56PASS, independent56PASS, repaired source guard11PASS; all three CI jobs passed on exact e0ad938. Player reduction164 lines; owner219, whole production+55.
 - [x] **Scrub — #230 merged65b3a69b.** Author13PASS, independent13PASS and exact final union accepted; all three CI jobs passed. Player-109, owner192, whole production+83. Eight source-only sites remain explicitly limited.
-- [ ] **Integrated gate — Locke executing at exact65b3a69b.** Third production merge since full1e4128; renderer merge waits for this gate.
-- [ ] **Renderer — Arendt integrating and publishing on actual main.** Author20PASS and independent20PASS; expected union accepted. Full branch reduction177 includes seam+1 and move-178; no merged credit yet.
-- [ ] **Media — Cicero author / Confucius reviewer.** Four origin tests passed and committed982e24dd before any move. Proposed b220 extraction REJECTED: host-341 but net+234 and59 interface members are disproportionate. Production unchanged. Active next step: source-only loader/identity boundary and additional origin-admission proposal to remove actual reentry dependencies.
+- [x] **Full integrated gate65b3 — PASS with authorized Windows path recovery.** Generic6224PASS/12known/2skip; goldens21known, both helpers0/no unexpected/unused. Native first pairPASS, analyzer430/4490new, Python55, layer53/77 unchanged. Windows initial260-character path failure retained; same-SHA shorter-path buildPASS, ARM64PASS. No new-device smoke inferred.
+- [x] **Renderer — #231 merged a7df8f13.** Author20PASS/independent20PASS, exact union accepted and allCI passed. Player11265→11088 (-177 including seam+1; move-178), owner305, move net+127. Partial ownership and18-read/21-command coupling remain explicit.
+- [ ] **Player remainder — Cicero / Confucius:** Media59-member candidate and72-member loader expansion rejected/deferred to Phase3; green origin pin retained. Active source design: skip fetch/cache generation ownership, forecast only50–75 host lines; no product/test draft grant yet. Remaining1588 is not solved by this small slice.
+- [ ] **Reviewer PR232 / G4-3 — Arendt independent gates(a)-(i), registered below.** No player target credit; user-authorized separate reviewer intake.
 - [ ] Merge reviewed player slices, updating this board once per merged PR. Parent serializes edits/integration into the shared player host; isolated disjoint pin tests may run concurrently.
 - [ ] At player <=9,500: stop Phase 2 extraction, run final full gate, map upstream PRs #54/#55/#56 against current seams, and issue the closing report.
+
+### Reviewer lane — explicit user authorization, September 7
+
+- **G4-3 / PR #232 — review.** Author: user's reviewer, not a worker. Branch `refactor/g4-3-cloud-folder-sort`; head `e89c54a931479c46dcd8941b3908383d15cc7901`. Owned hosts: `lib/screens/torbox/torbox_downloads_screen.dart`, `lib/screens/debrid_downloads_screen.dart`. Exact supporting scope: new `lib/services/cloud/cloud_folder_sort.dart` and `test/cloud_folder_sort_origin_pin_test.dart`. Other workers must not edit these files. Arendt performs independent gates (a)-(i); no merge until evidence passes. Pin chronology28db8762→e89c54a9 to verify; claimed Leaves94 per host, net production-81, zero forwarders. No player target credit.
+- **Decisions 1:** lane registered with exclusive scope above; this is a user-requested exception to player-only intake.
+- **Decision 2 — dead series-arrange code:** approve as a separately scoped Phase3 deletion proposal, NOT part of #232 and not assigned now. Establish all assignments/callers and compatibility before deletion; retain enum value as proposed unless separately justified. Record unreachable behavior explicitly; do not invent executable origin coverage for unreachable paths.
+- **Decision 3 — diverged PikPak/Premiumize/playlist variants:** defer G4-4 to Phase3; per-host origin pins and a complete behavior-difference inventory precede any convergence. No authorization to normalize quirks. #227 already merged; its old pending status is not a current blocker. Exact ownership must be checked when assigning the follow-up.
 
 ### Ownership decisions — effective now
 
@@ -47,6 +55,9 @@ Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fa
 One board commit per merged PR. Status refreshes remain in the working board until that commit; the direction change and Gate 5 are already committed. Historical sections below remain evidence, not active assignments or current targets.
 
 ### Latest completed milestones
+
+- **#231 merged a7df8f13:** exactcbf9 allCIgreen and independently reconstructed union accepted after full65b3gate. Player11265→11088 (-177), moveowner305/net+127; renderer startup/fallback lifecycle has explicit ownership, but18-read/21-command coupling remains debt. Did we make a difference? Yes, state and retirement ordering have one owner; not complete player separation. Is more needed?1588 player lines and final acceptance remain. Production counter1 since full65b3.
+- **Full65b3 gate PASS with Windows recovery:**6224PASS/12known/2skip, goldens21known/configured retries; helpers0/no new or unused. Nativebc46/current FIRSTPAIRPASS; analyzer430/4490new/Python55/layer53→53. SameAST Storage204/Search133/Player170/Magic23/Settings0; Player+9net (18added/9removed identities). Physical1741/5879/11265/3322/2908. Original Windows MSB3491 at260chars preserved; one authorized shorter219char build passed on same65b3/tree945a. ZIP a63544affea0b1f515d3aac23f2c6db06fd09c73717d18436bdfd543755130db; ARM64APK3b7b6875c430906725e856a8edfe3ee638e29385ac3f69727218f61e1a834749. No native/test repeat, baseline growth or device claim.
 
 - **#230 merged65b3a69b:** exactcc9 allCIgreen and independent union accepted; author13PASS/independent13PASS. Player11374→11265 (-109), owner192, net+83. Did we make a difference? Scrub session state and input policy have one owner; ten original invalidation slots preserved. Is more needed? Yes: renderer and cohesive Media ownership, then final acceptance. Counter3 triggers full65b3gate; no newdevice proof.
 
