@@ -5578,6 +5578,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               isTelevision: widget.isTelevision,
               onPointerInStage: (inStage) => _pointerInStage = inStage,
               favoriteUrls: _favoriteUrls,
+              isFavoriteNow: (url) => _favoriteUrls.contains(url),
               canRecord: _pageCanRecord,
               desktopCaptureFor: _desktopCaptureFor,
               androidEngineTaskFor: _androidEngineTaskFor,

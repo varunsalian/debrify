@@ -30,6 +30,7 @@ class IptvCockpitStage extends StatelessWidget {
     required this.isTelevision,
     required this.onPointerInStage,
     required this.favoriteUrls,
+    required this.isFavoriteNow,
     required this.canRecord,
     required this.desktopCaptureFor,
     required this.androidEngineTaskFor,
@@ -57,8 +58,14 @@ class IptvCockpitStage extends StatelessWidget {
   /// action. See [iptvStageHoverGuard].
   final ValueChanged<bool> onPointerInStage;
 
-  /// Live view of the page's favourites; read at build time.
+  /// The page's favourites as they were at build time; drives the row's
+  /// `isFavorited` display exactly as the origin's build-time read did.
   final Set<String> favoriteUrls;
+
+  /// Event-time membership check. The origin's toggle closure read the host's
+  /// live `_favoriteUrls` when the row fired, not the build-time set, and
+  /// `_loadFavorites` can replace that set between frames.
+  final bool Function(String url) isFavoriteNow;
 
   /// Recording availability for the whole page (engine on Android 10+,
   /// desktop capture elsewhere) — false hides Record + REC rows.
@@ -191,7 +198,7 @@ class IptvCockpitStage extends StatelessWidget {
                                           ? null
                                           : () => onToggleFavorite(
                                               ch,
-                                              !favoriteUrls.contains(ch.url),
+                                              !isFavoriteNow(ch.url),
                                             ),
                                       // Only when a guide can exist — otherwise
                                       // the pane could only say "No guide data".
