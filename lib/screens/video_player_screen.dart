@@ -64,7 +64,6 @@ import 'video_player/iptv_zap_controller.dart';
 import 'video_player/services/subtitle_track_utils.dart';
 import 'video_player/models/gesture_state.dart';
 import 'video_player/models/hud_state.dart';
-import 'video_player/painters/double_tap_ripple_painter.dart';
 import 'video_player/utils/gesture_helpers.dart';
 import 'video_player/utils/language_mapping.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
@@ -73,16 +72,14 @@ import 'video_player/player_transport_visibility.dart';
 import 'video_player/player_scrub_session.dart';
 import 'video_player/constants/timing_constants.dart';
 import 'video_player/widgets/auto_sync_pill.dart';
-import 'video_player/widgets/seek_hud.dart';
-import 'video_player/widgets/vertical_hud.dart';
-import 'video_player/widgets/aspect_ratio_hud.dart';
 import 'video_player/widgets/controls.dart';
 import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
-import 'video_player/widgets/buffering_indicator.dart';
+import 'video_player/widgets/player_hud_layer.dart';
+import 'video_player/widgets/stremio_tv_next_loading_overlay.dart';
 import 'video_player/widgets/tracks_sheet.dart';
 import 'video_player/widgets/player_menu_panel.dart';
 import 'video_player/widgets/playlist_sheet.dart';
@@ -924,8 +921,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _autoSyncWindowActive = false;
   Timer? _autoSyncPillHold; // result auto-hide
   Timer? _autoSyncPillPhaseTimer; // announce auto-dismiss
-  // Last non-null model, kept so the dismiss fade has content to fade out.
-  AutoSyncPillModel? _autoSyncPillLastShown;
 
   // media_kit state
   bool _isReady = false;
@@ -7492,8 +7487,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
-  String _format(Duration d) => formatDuration(d);
-
   void _togglePlay() {
     if (!_isReady) return;
     if (_isPlaying) {
@@ -7742,50 +7735,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       rainbowController: _transition.animationController,
       tvStaticMessage: _transition.message,
       tvStaticSubtext: _transition.subtext,
-    );
-  }
-
-  Widget _buildStremioTvNextLoadingOverlay() {
-    return IgnorePointer(
-      child: AnimatedOpacity(
-        opacity: _showStremioTvNextLoading ? 1 : 0,
-        duration: const Duration(milliseconds: 160),
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.55),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.6,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 14),
-                  Text(
-                    'Loading next...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -8630,221 +8579,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 // Transition overlay above video
                 if (_transition.overlayActive) _buildTransitionOverlay(),
                 if (_showStremioTvNextLoading)
-                  _buildStremioTvNextLoadingOverlay(),
-                // Double-tap ripple
-                if (_ripple != null)
-                  IgnorePointer(
-                    child: CustomPaint(
-                      painter: DoubleTapRipplePainter(_ripple!),
-                    ),
+                  StremioTvNextLoadingOverlay(
+                    visible: _showStremioTvNextLoading,
                   ),
-                // HUDs
-                ValueListenableBuilder<SeekHudState?>(
-                  valueListenable: _seekHud,
-                  builder: (context, hud, _) {
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: hud == null ? 0 : 1,
-                        duration: const Duration(milliseconds: 120),
-                        child: Center(
-                          child: hud == null
-                              ? const SizedBox.shrink()
-                              : SeekHud(hud: hud, format: _format),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                ValueListenableBuilder<VerticalHudState?>(
-                  valueListenable: _verticalHud,
-                  builder: (context, hud, _) {
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: hud == null ? 0 : 1,
-                        duration: const Duration(milliseconds: 120),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 24),
-                            child: hud == null
-                                ? const SizedBox.shrink()
-                                : VerticalHud(hud: hud),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                ValueListenableBuilder<AspectRatioHudState?>(
-                  valueListenable: _presentation.aspectRatioHud,
-                  builder: (context, hud, _) {
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: hud == null ? 0 : 1,
-                        duration: const Duration(milliseconds: 200),
-                        child: Align(
-                          alignment: Alignment.topRight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 80, right: 24),
-                            child: hud == null
-                                ? const SizedBox.shrink()
-                                : AspectRatioHud(hud: hud),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: _presentation.speedHoldHud,
-                  builder: (context, active, _) {
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: active ? 1 : 0,
-                        duration: const Duration(milliseconds: 150),
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 80),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.fast_forward_rounded,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    '2× Speed',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                // Subtitle auto-sync countdown pill: quiet bottom-right glass,
-                // display-only, outside the subtitle reading zone. TV keeps it
-                // inside the overscan safe area.
-                ValueListenableBuilder<AutoSyncPillModel?>(
-                  valueListenable: _autoSyncPill,
-                  builder: (context, model, _) {
-                    if (model != null) _autoSyncPillLastShown = model;
-                    // Fade out over the LAST shown model — swapping to an
-                    // empty box here would make the dismiss fade invisible.
-                    final display = model ?? _autoSyncPillLastShown;
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: model == null ? 0 : 1,
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeOutCubic,
-                        child: Align(
-                          alignment: Alignment.bottomRight,
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right: AutoSyncPill.cornerInset,
-                              bottom: AutoSyncPill.cornerInset,
-                            ),
-                            child: display == null
-                                ? const SizedBox.shrink()
-                                : AutoSyncPill(model: display),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                // IPTV live reconnect pill (Phase 5 of the resilience plan):
-                // only a recovery episode that has run >2s shows it — the
-                // invisible fast reconnects stay invisible.
-                ValueListenableBuilder<String?>(
-                  valueListenable: _iptvReconnectText,
-                  builder: (context, text, _) {
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: text != null ? 1 : 0,
-                        duration: const Duration(milliseconds: 150),
-                        child: Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 56),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: Text(
-                                text ?? '',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                // Buffering indicator (OTT-style centered spinner)
-                ValueListenableBuilder<bool>(
-                  valueListenable: _showBufferingIndicator,
-                  builder: (context, show, _) {
-                    // The startup gate has its own spinner and explanatory
-                    // status. Keeping the ordinary buffering indicator above
-                    // it produces two overlapping loaders while candidates
-                    // are being rejected and retried.
-                    if (_startupGateActive && !_startupGateOverlayHidden) {
-                      return const SizedBox.shrink();
-                    }
-                    return IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: show ? 1 : 0,
-                        duration: show
-                            ? const Duration(milliseconds: 250)
-                            : const Duration(milliseconds: 200),
-                        child: const Center(child: BufferingIndicator()),
-                      ),
-                    );
-                  },
+                // Double-tap ripple and the HUD band
+                ...buildPlayerHudLayer(
+                  ripple: _ripple,
+                  seekHud: _seekHud,
+                  verticalHud: _verticalHud,
+                  aspectRatioHud: _presentation.aspectRatioHud,
+                  speedHoldHud: _presentation.speedHoldHud,
+                  autoSyncPill: _autoSyncPill,
+                  iptvReconnectText: _iptvReconnectText,
+                  showBufferingIndicator: _showBufferingIndicator,
+                  startupGateShowing:
+                      _startupGateActive && !_startupGateOverlayHidden,
+                  format: formatDuration,
                 ),
                 // Full-screen gesture layer (placed below controls)
                 if (!inPip)
