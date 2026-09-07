@@ -1,4 +1,5 @@
 import 'video_player/services/renderer_startup_environment.dart';
+import 'video_player/services/renderer_coordinator.dart';
 import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
 import '../services/playback/decoder_diagnostics.dart';
 import 'video_player/services/player_terminal_backend.dart';
@@ -317,8 +318,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// [_attachAudioEffectSession] / [_releaseAudioEffectSession].
   int? _audioEffectSessionId;
   late mkv.VideoController _videoController;
-  AndroidVideoRendererMode _androidVideoRendererMode =
-      AndroidVideoRendererMode.automatic;
+  late final RendererCoordinator _renderer =
+      RendererCoordinator(_RendererSession(this));
 
   /// Apple TV blue-screen ladder (PLAYER_TVOS_10BIT_PLAN.md): watches what
   /// the decoder produced and re-routes high-bit VideoToolbox surfaces the
@@ -346,10 +347,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // limited to the first successfully decoded item in this screen: once the
   // output has attached, later network/media failures must not be blamed on the
   // renderer. A confirmed renderer failure recreates the whole player once.
-  bool _rendererValidatedForSession = false;
-  bool _rendererFallbackInProgress = false;
-  int _rendererStartupGuardToken = 0;
-  int _rendererStartupValidationGeneration = -1;
   mk.Media? _activeOpenedMedia;
   bool _activeMediaShouldPlay = false;
   bool _activeMediaUserPaused = false;
@@ -1147,7 +1144,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       readPlatform: () => _player.platform,
       isMounted: () => mounted,
       generation: () => _decoderProbeGeneration,
-      rendererMode: () => _androidVideoRendererMode,
+      rendererMode: () => _renderer.mode,
       remedy: () => _tvosDecodeRemedy,
       emit: _releasePlayerDiagnostic,
     );
@@ -2277,9 +2274,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Load default player settings
     await _loadPlayerDefaults();
     unawaited(_loadDockPrefs());
-    if (RendererStartupEnvironment.isAndroid && !PlatformUtil.isAndroidTvCached) {
-      _androidVideoRendererMode =
-          await StorageService.getAndroidVideoRendererMode();
+    final rendererModeLoad = _renderer.loadRequestedMode();
+    if (rendererModeLoad != null) {
+      _renderer.mode = await rendererModeLoad;
     }
 
     // Determine the initial URL and index
@@ -2438,7 +2435,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _dynamicTitle = config.title;
     await _claimVideoOutput();
     if (!mounted) return;
-    _createPlayerInstance(_androidVideoRendererMode);
+    _createPlayerInstance(_renderer.mode);
     await _configurePlayerAudio(_player);
     _installSubtitleAutoSyncForPlayer(_player);
     _recording.probeSupport();
@@ -2707,7 +2704,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       unawaited(
-        _fallbackExplicitRendererToAutomatic(
+        _renderer.fallbackToAutomatic(
           instanceGeneration: instanceGeneration,
           mediaGeneration: _decoderProbeGeneration,
           reason: 'renderer_error',
@@ -2837,7 +2834,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  Future<void> _cancelPlayerInstanceSubscriptions() async {
+  void _notifyRendererStateChanged() => setState(() {});
+  List<StreamSubscription?> _takeRendererSubscriptions() {
     final subscriptions = <StreamSubscription?>[
       _posSub,
       _durSub,
@@ -2860,15 +2858,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvErrorSub = null;
     _rendererStartupErrorSub = null;
     _subtitleDiagnosticLogSub = null;
-    for (final subscription in subscriptions) {
-      if (subscription == null) continue;
-      try {
-        await subscription.cancel();
-      } catch (_) {
-        // A broken listener must not strand the old native player during the
-        // compatibility restart.
-      }
-    }
+    return subscriptions;
   }
 
   void _handleDecoderProbeParams(mk.VideoParams params) {
@@ -2879,12 +2869,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Treat it as an extra invalidation signal, but do not require it: the
       // app-owned generation started in _openMedia is the session boundary.
       _decoderDiagnostics.invalidateParams();
-      _rendererStartupGuardToken++;
-      _rendererStartupValidationGeneration = -1;
+      _renderer.invalidateStartup();
       return;
     }
     _decoderDiagnostics.updateParams(params);
-    _scheduleRendererStartupValidation();
+    _renderer.scheduleStartupValidation();
     final remedy = _tvosDecodeRemedy;
     if (remedy != null) {
       // Only ever STARTS the ladder (from idle, on a triggering format) —
@@ -2903,7 +2892,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // ANDROID ONLY, deliberately.
     //
     // These observers exist to feed the Android explicit-renderer fallback
-    // (`_scheduleRendererStartupValidation`), which is itself
+    // (`_renderer.scheduleStartupValidation`), which is itself
     // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
     //
     // They are also `mpv_observe_property` calls issued unawaited, at the same
@@ -2936,240 +2925,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  void _scheduleRendererStartupValidation() {
-    if (!AndroidRendererStartupFallback.shouldArm(
-          isAndroid: Platform.isAndroid,
-          isAndroidTv: PlatformUtil.isAndroidTvCached,
-          mode: _androidVideoRendererMode,
-          alreadyValidated: _rendererValidatedForSession,
-          fallbackInProgress: _rendererFallbackInProgress,
-        ) ||
-        _iptvErrorsMuted ||
-        _rendererStartupValidationGeneration == _decoderProbeGeneration) {
-      return;
-    }
-    _rendererStartupValidationGeneration = _decoderProbeGeneration;
-    final guardToken = ++_rendererStartupGuardToken;
-    final instanceGeneration = _playerInstanceGeneration;
-    final mediaGeneration = _decoderProbeGeneration;
-    final player = _player;
-    unawaited(
-      _validateRendererStartup(
-        guardToken: guardToken,
-        instanceGeneration: instanceGeneration,
-        mediaGeneration: mediaGeneration,
-        player: player,
-      ),
-    );
-  }
-
-  Future<void> _validateRendererStartup({
-    required int guardToken,
-    required int instanceGeneration,
-    required int mediaGeneration,
-    required mk.Player player,
-  }) async {
-    final platform = player.platform;
-    if (platform is! mk.NativePlayer) return;
-
-    // VideoParams is already positive at this point, so this is not a network
-    // startup timeout. Give Android's SurfaceProducer/codec bridge three seconds
-    // to attach the requested output and require two matching reads.
-    var previousOutput = '';
-    for (var attempt = 0; attempt < 12; attempt++) {
-      if (!mounted ||
-          guardToken != _rendererStartupGuardToken ||
-          instanceGeneration != _playerInstanceGeneration ||
-          mediaGeneration != _decoderProbeGeneration) {
-        return;
-      }
-      try {
-        final output = await platform.getProperty('current-vo');
-        if (AndroidRendererStartupFallback.isExpectedOutput(
-              mode: _androidVideoRendererMode,
-              value: output,
-            ) &&
-            output == previousOutput) {
-          _rendererValidatedForSession = true;
-          _rendererStartupGuardToken++;
-          return;
-        }
-        previousOutput = output;
-      } catch (_) {
-        // A transient property-query failure gets the remainder of the window.
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-
-    await _fallbackExplicitRendererToAutomatic(
-      instanceGeneration: instanceGeneration,
-      mediaGeneration: mediaGeneration,
-      reason: 'requested_output_not_ready',
-    );
-  }
-
-  Future<void> _fallbackExplicitRendererToAutomatic({
-    required int instanceGeneration,
-    required int mediaGeneration,
-    required String reason,
-  }) async {
-    if (!AndroidRendererStartupFallback.shouldArm(
-          isAndroid: RendererStartupEnvironment.isAndroid,
-          isAndroidTv: PlatformUtil.isAndroidTvCached,
-          mode: _androidVideoRendererMode,
-          alreadyValidated: _rendererValidatedForSession,
-          fallbackInProgress: _rendererFallbackInProgress,
-        ) ||
-        !mounted ||
-        instanceGeneration != _playerInstanceGeneration ||
-        mediaGeneration != _decoderProbeGeneration ||
-        _activeOpenedMedia == null ||
-        _recording.isTeeRecording ||
-        _iptvErrorsMuted ||
-        _isTransitioning) {
-      return;
-    }
-
-    _rendererFallbackInProgress = true;
-    _rendererStartupGuardToken++;
-    final media = _activeOpenedMedia!;
-    final oldPlayer = _player;
-    final oldState = oldPlayer.state;
-    // A renderer rebuild mid-startup can race an unlanded resume seek: the
-    // live position is then a restart artifact, and the rebuilt player must
-    // come back at the promised target, not ~0. (Pure query — the guard stays
-    // armed for the rebuilt player's own landing.)
-    final livePosition = _position > Duration.zero
-        ? _position
-        : oldState.position;
-    final heldMs = _resumeWriteGuard.heldTargetIfBlocked(
-      livePosition.inMilliseconds,
-    );
-    final resumePosition = heldMs != null
-        ? Duration(milliseconds: heldMs)
-        : livePosition;
-    final shouldResumePlayback =
-        _activeMediaShouldPlay && !_activeMediaUserPaused && !_sleepStopLatched;
-    final rate = oldState.rate;
-    final volume = oldState.volume;
-    final isLive = _currentIptvChannel?.isLive == true;
-    final externalAudio = widget.audioUrl;
-    final hasExternalAudio = externalAudio != null && externalAudio.isNotEmpty;
-
-    final failedRenderer = _androidVideoRendererMode.storageKey;
-    _releasePlayerDiagnostic(
-      'generation=$mediaGeneration phase=fallback '
-      'status=renderer_startup_failed platform=android backend=libmpv '
-      'requested_renderer=$failedRenderer fallback=automatic reason=$reason',
-    );
-
-    // Invalidate every old callback before the first await. Only one native
-    // player may own audio and the Android surface during the restart.
-    _playerInstanceGeneration++;
-    _playerCreated = false;
-    _isReady = false;
-    _isPlaying = false;
-    _showBufferingIndicator.value = false;
-    setState(() {});
-
-    try {
-      await _cancelPlayerInstanceSubscriptions();
-      await _disposeSubtitleAutoSync();
-      _activeExternalSubtitlePath = null;
-      _releaseAudioEffectSession();
-      try {
-        await oldPlayer.pause();
-      } catch (_) {}
-      try {
-        await oldPlayer.dispose();
-      } catch (_) {
-        // Disposal normally succeeds, but retain ownership if the native
-        // backend throws so route teardown can make one final cleanup attempt.
-        _playerCreated = true;
-        rethrow;
-      }
-      if (!mounted) return;
-
-      // Remember the compatibility result. The setting now visibly reads
-      // Automatic, and choosing an explicit renderer again retries it.
-      _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
-      try {
-        await StorageService.setAndroidVideoRendererMode(
-          AndroidVideoRendererMode.automatic,
-        );
-      } catch (_) {
-        // Playback can still recover for this session if preferences are full
-        // or unavailable.
-      }
-      if (!mounted) return;
-
-      _duration = Duration.zero;
-      _position = Duration.zero;
-      await _claimVideoOutput();
-      if (!mounted) return;
-      _createPlayerInstance(AndroidVideoRendererMode.automatic);
-      await _configurePlayerAudio(_player);
-      _installSubtitleAutoSyncForPlayer(_player);
-      await _attachAudioEffectSession();
-      if (!mounted) return;
-      setState(() {});
-
-      final needsPreparation =
-          hasExternalAudio || (!isLive && resumePosition > Duration.zero);
-      final playOnOpen =
-          shouldResumePlayback && !_pausedByLifecycle && !needsPreparation;
-      await _openMedia(
-        media,
-        play: playOnOpen,
-        desiredPlay: shouldResumePlayback,
-        // The recreated player starts with a clean property set — without
-        // this a live channel would silently lose its ffmpeg reconnect
-        // options at the renderer fallback (codex round 2, finding 16).
-        liveStream: isLive,
-      );
-      if (needsPreparation) await _waitForVideoReady();
-      if (!mounted) return;
-      await _player.setRate(rate);
-      await _player.setVolume(volume);
-      if (hasExternalAudio) {
-        await _setExternalAudioTrack(externalAudio);
-      }
-      if (!isLive && resumePosition > Duration.zero) {
-        // Re-ARMS the guard at the carried position: the rebuilt player gets
-        // its own protected landing instead of an unguarded raw seek.
-        await _resume.seekForResume(resumePosition.inMilliseconds);
-      }
-      unawaited(_subs.restoreTrackPreferences());
-      if (shouldResumePlayback && !_pausedByLifecycle && !playOnOpen) {
-        await _player.play();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Direct Surface was unavailable. Using Automatic renderer.',
-            ),
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
-    } catch (_) {
-      _releasePlayerDiagnostic(
-        'generation=$mediaGeneration phase=fallback '
-        'status=failed platform=android backend=libmpv '
-        'requested_renderer=direct_surface fallback=automatic',
-      );
-    } finally {
-      _rendererFallbackInProgress = false;
-    }
-  }
-
   void _beginMediaGeneration() {
     _decoderProbeGeneration++;
     _decoderDiagnostics.invalidateToken();
-    _rendererStartupGuardToken++;
-    _rendererStartupValidationGeneration = -1;
+    _renderer.invalidateStartup();
     _decoderDiagnostics.clearForMedia();
     _playbackUiClock.beginMedia();
     _activeSkipSegmentUi.clear();
@@ -5283,9 +5042,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             AndroidRendererStartupFallback.shouldArm(
               isAndroid: Platform.isAndroid,
               isAndroidTv: PlatformUtil.isAndroidTvCached,
-              mode: _androidVideoRendererMode,
-              alreadyValidated: _rendererValidatedForSession,
-              fallbackInProgress: _rendererFallbackInProgress,
+              mode: _renderer.mode,
+              alreadyValidated: _renderer.validatedForSession,
+              fallbackInProgress: _renderer.fallbackInProgress,
             )) {
           // Renderer-bound failure, owned by the renderer fallback — same
           // contract as the probe path (see _tryOpenStartupVod).
@@ -5458,9 +5217,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             AndroidRendererStartupFallback.shouldArm(
               isAndroid: Platform.isAndroid,
               isAndroidTv: PlatformUtil.isAndroidTvCached,
-              mode: _androidVideoRendererMode,
-              alreadyValidated: _rendererValidatedForSession,
-              fallbackInProgress: _rendererFallbackInProgress,
+              mode: _renderer.mode,
+              alreadyValidated: _renderer.validatedForSession,
+              fallbackInProgress: _renderer.fallbackInProgress,
             )) {
           finish(true, 'renderer_fallback_deferred');
           return;
@@ -7993,7 +7752,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // A renderer restart has intentionally invalidated the old player and may
     // not have created the replacement yet. Preserve playback intent without
     // requiring either instance to be live at this exact lifecycle callback.
-    if (_rendererFallbackInProgress) {
+    if (_renderer.fallbackInProgress) {
       _pausedByLifecycle = true;
       if (_playerCreated) unawaited(_player.pause());
       return;
@@ -8025,7 +7784,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // The replacement player will read the cleared lifecycle flag immediately
     // before open/play. Calling play on the disposing instance would race the
     // one-player ownership guarantee.
-    if (_rendererFallbackInProgress) return;
+    if (_renderer.fallbackInProgress) return;
     if (!_playerCreated || !mounted) return;
     // Coming back from the background is not a request to un-stop the night:
     // if the sleep timer fired while we were away, stay paused until someone
@@ -8125,7 +7884,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _activeSubtitleApplyAttempt = null;
     _decoderProbeGeneration++;
     _decoderDiagnostics.invalidateToken();
-    _rendererStartupGuardToken++;
+    _renderer.invalidateGuard();
     _playerInstanceGeneration++;
     _decoderDiagnostics.cancelTimer();
     _posSub?.cancel();
@@ -11221,6 +10980,69 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 }
 
 
+class _RendererSession implements RendererSession {
+  const _RendererSession(this._s);
+  final _VideoPlayerScreenState _s;
+  @override bool get mounted => _s.mounted;
+  @override int get playerInstanceGeneration => _s._playerInstanceGeneration;
+  @override int get mediaGeneration => _s._decoderProbeGeneration;
+  @override mk.Player get player => _s._player;
+  @override mk.Media? get activeOpenedMedia => _s._activeOpenedMedia;
+  @override Duration get position => _s._position;
+  @override bool get activeMediaShouldPlay => _s._activeMediaShouldPlay;
+  @override bool get activeMediaUserPaused => _s._activeMediaUserPaused;
+  @override bool get sleepStopLatched => _s._sleepStopLatched;
+  @override bool get isLive => _s._currentIptvChannel?.isLive == true;
+  @override String? get externalAudio => _s.widget.audioUrl;
+  @override bool get pausedByLifecycle => _s._pausedByLifecycle;
+  @override bool get isTeeRecording => _s._recording.isTeeRecording;
+  @override bool get errorsMuted => _s._iptvErrorsMuted;
+  @override bool get isTransitioning => _s._isTransitioning;
+  @override bool get fallbackPlatformIsAndroid => RendererStartupEnvironment.isAndroid;
+  @override bool get probePlatformIsAndroid => Platform.isAndroid;
+  @override bool get isAndroidTv => PlatformUtil.isAndroidTvCached;
+  @override List<StreamSubscription?> takeSubscriptions() => _s._takeRendererSubscriptions();
+  @override int? heldResumeTarget(int positionMs) => _s._resumeWriteGuard.heldTargetIfBlocked(positionMs);
+  @override Future<void> disposeSubtitleAutoSync() => _s._disposeSubtitleAutoSync();
+  @override void clearExternalSubtitlePath() => _s._activeExternalSubtitlePath = null;
+  @override void releaseAudioEffectSession() => _s._releaseAudioEffectSession();
+  @override void retainPlayerOwnership() => _s._playerCreated = true;
+  @override Future<void> claimVideoOutput() => _s._claimVideoOutput();
+  @override void createPlayerInstance(AndroidVideoRendererMode mode) => _s._createPlayerInstance(mode);
+  @override Future<void> configurePlayerAudio(mk.Player player) => _s._configurePlayerAudio(player);
+  @override void installSubtitleAutoSync(mk.Player player) => _s._installSubtitleAutoSyncForPlayer(player);
+  @override Future<void> attachAudioEffectSession() => _s._attachAudioEffectSession();
+  @override void notifyStateChanged() => _s._notifyRendererStateChanged();
+  @override Future<void> openMedia(mk.Media media, {required bool play, required bool desiredPlay, required bool liveStream}) => _s._openMedia(media, play: play, desiredPlay: desiredPlay, liveStream: liveStream);
+  @override Future<void> waitForVideoReady() => _s._waitForVideoReady();
+  @override Future<void> setExternalAudioTrack(String url) => _s._setExternalAudioTrack(url);
+  @override Future<void> seekForResume(int targetMs) => _s._resume.seekForResume(targetMs);
+  @override Future<void> restoreTrackPreferences() => _s._subs.restoreTrackPreferences();
+  @override void diagnostic(String fields) => _s._releasePlayerDiagnostic(fields);
+  @override void invalidatePlayerForFallback() {
+    _s._playerInstanceGeneration++;
+    _s._playerCreated = false;
+    _s._isReady = false;
+    _s._isPlaying = false;
+    _s._showBufferingIndicator.value = false;
+    _s._notifyRendererStateChanged();
+  }
+  @override void resetPlaybackPosition() {
+    _s._duration = Duration.zero;
+    _s._position = Duration.zero;
+  }
+  @override void showAutomaticNotice() {
+        ScaffoldMessenger.of(_s.context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Direct Surface was unavailable. Using Automatic renderer.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+  }
+}
+
 class _ResumeSession implements ResumeSession {
   _ResumeSession(this._s);
   final _VideoPlayerScreenState _s;
@@ -11304,7 +11126,7 @@ class _SubtitleTrackSession implements SubtitleTrackSession {
   @override int? get launchContentSeason => _s.config.contentSeason;
   @override int? get launchContentEpisode => _s.config.contentEpisode;
   @override AndroidVideoRendererMode get androidVideoRendererMode =>
-      _s._androidVideoRendererMode;
+      _s._renderer.mode;
   @override bool get isIptvSeriesContext => _s._isIptvSeriesContext;
   @override int get iptvSwitchTicket => _s._iptvSwitchTicket;
   @override int get addonSubtitleFetchToken => _s._addonSubtitleFetchToken;
