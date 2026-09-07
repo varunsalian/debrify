@@ -2,19 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/tv_keys.dart';
+import 'cloud_provider_chrome.dart';
 
 /// One selectable provider in [showProviderPickerDialog].
 class ProviderPickerOption {
   final String id;
   final String label;
   final List<Color> gradient;
-  final IconData icon;
+
+  /// Explicit glyph; when null the dialog draws [CloudProviderChrome.icon]
+  /// for [id], so service callers never need an [IconData].
+  final IconData? icon;
   const ProviderPickerOption({
     required this.id,
     required this.label,
     required this.gradient,
-    required this.icon,
+    this.icon,
   });
+
+  IconData get resolvedIcon => icon ?? CloudProviderChrome.icon(id);
 }
 
 /// The user's pick plus whether to persist it as the default provider.
@@ -174,7 +180,11 @@ class _ProviderRowState extends State<_ProviderRow> {
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(widget.option.icon, color: Colors.white, size: 22),
+                child: Icon(
+                  widget.option.resolvedIcon,
+                  color: Colors.white,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(

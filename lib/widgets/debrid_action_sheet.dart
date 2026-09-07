@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_surface.dart';
 import '../theme/widgets/glass_surface.dart';
 import '../utils/tv_keys.dart';
+import 'cloud_provider_chrome.dart';
 
 /// One action row in [showDebridActionSheet].
 class DebridActionItem {
@@ -41,10 +42,14 @@ Future<void> showDebridActionSheet(
   required String providerLabel,
   required String torrentName,
   required List<Color> gradient,
-  required IconData providerIcon,
+  IconData? providerIcon,
+  String? provider,
   required String subtitle,
   required List<DebridActionItem> actions,
 }) {
+  // Callers pass either a glyph or a playback provider id; the id resolves to
+  // its chrome here so the service layer never needs an IconData.
+  final icon = providerIcon ?? CloudProviderChrome.icon(provider ?? '');
   final isPhone = MediaQuery.of(context).size.width < 600;
   if (isPhone) {
     return showModalBottomSheet<void>(
@@ -57,7 +62,7 @@ Future<void> showDebridActionSheet(
         providerLabel: providerLabel,
         torrentName: torrentName,
         gradient: gradient,
-        providerIcon: providerIcon,
+        providerIcon: icon,
         subtitle: subtitle,
         actions: actions,
         asBottomSheet: true,
@@ -76,7 +81,7 @@ Future<void> showDebridActionSheet(
           providerLabel: providerLabel,
           torrentName: torrentName,
           gradient: gradient,
-          providerIcon: providerIcon,
+          providerIcon: icon,
           subtitle: subtitle,
           actions: actions,
           asBottomSheet: false,

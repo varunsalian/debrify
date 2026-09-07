@@ -35,8 +35,8 @@ import 'cloud/cloud_exceptions.dart';
 import 'cloud/cloud_playback_helpers.dart';
 import 'cloud/cloud_playback_result.dart';
 import 'cloud/cloud_playlist_payload.dart';
-import '../widgets/cloud_provider_chrome.dart';
 import 'cloud/cloud_provider_id.dart';
+import 'cloud/cloud_provider_presentation.dart';
 import 'cloud/cloud_provider_registry.dart';
 import 'cloud/pack_negative_cache.dart';
 import 'cloud/playback_cache_first.dart';
@@ -3675,7 +3675,7 @@ class TorrentPlaybackService {
       providerLabel: _label(provider),
       torrentName: name,
       gradient: _providerGradient(provider),
-      providerIcon: _providerIcon(provider),
+      provider: provider,
       subtitle: hasVideo
           ? 'Ready on ${_label(provider)}. Choose your next step.'
           : 'Added to ${_label(provider)}.',
@@ -3928,10 +3928,7 @@ class TorrentPlaybackService {
   }
 
   static List<Color> _providerGradient(String provider) =>
-      CloudProviderChrome.gradient(provider);
-
-  static IconData _providerIcon(String provider) =>
-      CloudProviderChrome.icon(provider);
+      CloudProviderPresentation.gradient(provider);
 
   // ── Not-cached handling (mirrors Home UX: warn, then keep-downloading) ──────
 
@@ -3988,7 +3985,6 @@ class TorrentPlaybackService {
           id: p,
           label: _label(p),
           gradient: _providerGradient(p),
-          icon: _providerIcon(p),
         ),
     ]);
     if (result == null) return _cancelled; // dismissed
@@ -4051,11 +4047,12 @@ class TorrentPlaybackService {
     return null;
   }
 
-  static String _label(String provider) => CloudProviderChrome.label(provider);
+  static String _label(String provider) =>
+      CloudProviderPresentation.label(provider);
 
   /// Two-letter provider glyph for the Pipeline loader's provider chip.
   static String _providerCode(String provider) =>
-      CloudProviderChrome.code(provider);
+      CloudProviderPresentation.code(provider);
 
   /// Show the Pipeline play loader, wired to this provider. [bound] uses the
   /// short (prepare → start) checklist; otherwise it's the full search flow.
