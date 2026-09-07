@@ -51,6 +51,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 import 'video_player/models/playlist_entry.dart';
 import 'video_player/player_launch_config.dart';
 import 'video_player/resume_controller.dart';
+import 'video_player/player_tracker_lifecycle.dart';
 import 'video_player/subtitle_track_controller.dart';
 import '../services/playback/iptv_recording_controller.dart';
 import 'video_player/iptv_zap_controller.dart';
@@ -1072,23 +1073,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Dynamic title for Debrify TV (no-playlist) flow
   String _dynamicTitle = '';
 
-  // Scrobble: one coordinator drives Trakt, Simkl, and MDBList targets.
-  late final ScrobbleCoordinator _scrobble;
-  // The launched item's widget.traktProgressPercent is a first-load-only
-  // signal; once spent it must not apply to a later switched-to episode.
-  bool _launchTraktPercentSpent = false;
-  // Per-episode Trakt cross-device progress ("season_episode" → 0-100), loaded
-  // once per series; drives resume for episodes switched to in-session.
-  Map<String, double>? _traktEpisodeProgress;
-  bool _launchSimklPercentSpent = false;
-  // Per-episode Simkl cross-device snapshot ("season_episode" → 0-100),
-  // refreshed by the launcher and used when switching episodes in-session.
-  Map<String, double>? _simklEpisodeProgress;
-  Map<String, double>? _mdblistEpisodeProgress;
-  String? _episodeTrackerProgressImdbId;
-  bool _launchMdblistPercentSpent = false;
-  // Keeps the analytics session alive during long, interaction-free playback.
-  Timer? _analyticsHeartbeatTimer;
+  late final PlayerTrackerLifecycle _tracker =
+      PlayerTrackerLifecycle(_PlayerTrackerSession(this));
+  ScrobbleCoordinator get _scrobble => _tracker.coordinator;
 
   Duration? _randomStartOffset(Duration duration) {
     final num clampedPercent = config.randomStartMaxPercent.clamp(0, 99);
@@ -1152,7 +1139,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       emit: _releasePlayerDiagnostic,
     );
     AnalyticsService.screenView('video_player');
-    _startAnalyticsHeartbeat();
+    _tracker.startHeartbeat();
     _activePlaylist = config.playlist;
     _seriesImdbKnownAtLaunch = config.contentImdbId?.trim().isNotEmpty == true;
     // The dock and the zap banner share the bottom strip, and the dock is
@@ -1296,25 +1283,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       mountedOf: () => mounted,
       seasonEpisodeOf: _traktSeasonEpisode,
     );
-    _scrobble = ScrobbleCoordinator(
+    _tracker.initializeScrobble(
       playback: scrobblePlayback,
-      targets: [
-        TraktScrobbleTarget.production(
-          requested: config.traktScrobble,
-          playback: scrobblePlayback,
-        ),
-        SimklScrobbleTarget.production(
-          requested: config.simklScrobble,
-          playback: scrobblePlayback,
-        ),
-        MdblistScrobbleSessionTarget.production(
-          requested: config.mdblistScrobble,
-          playback: scrobblePlayback,
-          playerReady: _playerInitializationFuture,
-        ),
-      ],
+      traktRequested: config.traktScrobble,
+      simklRequested: config.simklScrobble,
+      mdblistRequested: config.mdblistScrobble,
+      playerReady: _playerInitializationFuture,
     );
-    _scrobble.init();
   }
 
   Future<void> _loadSkipSegmentSettings() async {
@@ -1602,21 +1577,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return (season: info.season, episode: info.episode);
   }
 
-  /// Periodic analytics ping so a long, interaction-free watch keeps the
-  /// analytics session alive. Independent of Trakt (fires regardless of Trakt
-  /// auth); only emits while actually playing. No content details are sent.
-  void _startAnalyticsHeartbeat() {
-    _analyticsHeartbeatTimer?.cancel();
-    _analyticsHeartbeatTimer = Timer.periodic(
-      AnalyticsService.heartbeatInterval,
-      (_) {
-        if (_isPlaying) {
-          AnalyticsService.playbackHeartbeat('dart');
-        }
-      },
-    );
-  }
-
   /// Shared funnel every user-initiated seek passes through (scrubber,
   /// tap/DPAD seek, pan, skip-segment). The resume write guard learns the
   /// user has taken over the position before any tracker-specific early
@@ -1628,145 +1588,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   void _resumeTrackingAfterValidationGate() {
     _scrobble.resumeAfterValidationGate();
-  }
-
-  /// The current episode's cross-device Trakt progress percent (0-100), or null.
-  /// Loaded once per series from the dedicated store (kept apart from the
-  /// ms-based resume state) and looked up by the current episode's season/episode.
-  void _bindEpisodeTrackerProgressIdentity(String imdbId) {
-    if (_episodeTrackerProgressImdbId == imdbId) return;
-    _episodeTrackerProgressImdbId = imdbId;
-    _traktEpisodeProgress = null;
-    _simklEpisodeProgress = null;
-    _mdblistEpisodeProgress = null;
-  }
-
-  Future<double?> _currentEpisodeTraktPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
-    if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-
-    // Await BEFORE reading _currentIndex/season/episode below, so that if the
-    // user advances to a different episode while this is in flight, we key
-    // off the episode that's actually current when the fetch resolves.
-    if (_traktEpisodeProgress == null) {
-      final loaded = await PlaybackProgressStore.getEpisodeTraktProgress(
-        imdbId: imdbId,
-      );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _traktEpisodeProgress = loaded;
-    }
-
-    int? season;
-    int? episode;
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final playlist = _activePlaylist;
-      if (playlist == null ||
-          _currentIndex < 0 ||
-          _currentIndex >= playlist.length) {
-        return null;
-      }
-      // Must be the CURRENT episode — no orElse-to-first fallback, or we'd seek to
-      // an unrelated episode's Trakt position on filtered/reordered playlists.
-      SeriesEpisode? ep;
-      for (final e in seriesPlaylist.allEpisodes) {
-        if (e.originalIndex == _currentIndex) {
-          ep = e;
-          break;
-        }
-      }
-      if (ep == null) return null;
-      season = ep.seriesInfo.season;
-      episode = ep.seriesInfo.episode;
-    } else if (_effectiveContentType == 'series') {
-      // Single-file episode (e.g. a direct-link stream) — no playlist to derive
-      // season/episode from; fall back to the same launch args the local
-      // resume-state lookup uses.
-      season = _effectiveContentSeason;
-      episode = _effectiveContentEpisode;
-    }
-    if (season == null || episode == null) return null;
-
-    final percent = _traktEpisodeProgress!['${season}_$episode'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.trakt, percent)
-        : percent;
-  }
-
-  /// Current episode's Simkl snapshot percent. This mirrors the Trakt lookup
-  /// above but remains independently stored so remote unwatch changes never
-  /// mutate local playback history.
-  Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
-    if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-
-    // Await before resolving the episode identity for the same race-safety as
-    // [_currentEpisodeTraktPercent].
-    if (_simklEpisodeProgress == null) {
-      final loaded = await PlaybackProgressStore.getEpisodeSimklProgress(
-        imdbId: imdbId,
-      );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _simklEpisodeProgress = loaded;
-    }
-
-    int? season;
-    int? episode;
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final playlist = _activePlaylist;
-      if (playlist == null ||
-          _currentIndex < 0 ||
-          _currentIndex >= playlist.length) {
-        return null;
-      }
-      SeriesEpisode? currentEpisode;
-      for (final candidate in seriesPlaylist.allEpisodes) {
-        if (candidate.originalIndex == _currentIndex) {
-          currentEpisode = candidate;
-          break;
-        }
-      }
-      if (currentEpisode == null) return null;
-      season = currentEpisode.seriesInfo.season;
-      episode = currentEpisode.seriesInfo.episode;
-    } else if (_effectiveContentType == 'series') {
-      season = _effectiveContentSeason;
-      episode = _effectiveContentEpisode;
-    }
-    if (season == null || episode == null) return null;
-
-    final percent = _simklEpisodeProgress!['${season}_$episode'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.simkl, percent)
-        : percent;
-  }
-
-  Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
-    if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
-    final imdbId = _currentSeriesImdbId;
-    if (imdbId == null) return null;
-    _bindEpisodeTrackerProgressIdentity(imdbId);
-    if (_mdblistEpisodeProgress == null) {
-      final loaded = await PlaybackProgressStore.getEpisodeMdblistProgress(
-        imdbId: imdbId,
-      );
-      if (_episodeTrackerProgressImdbId != imdbId) return null;
-      _mdblistEpisodeProgress = loaded;
-    }
-    final se = _traktSeasonEpisode();
-    if (se.season == null || se.episode == null) return null;
-    final percent = _mdblistEpisodeProgress!['${se.season}_${se.episode}'];
-    return forGuide
-        ? policy.guideProgressFrom(TrackingSource.mdblist, percent)
-        : percent;
   }
 
   /// Load an external audio track to play alongside a video-only stream
@@ -8085,7 +7906,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // took ownership, so route replacement can't disarm the incoming screen.
     PipService.detach(this);
     // Scrobble stop to Trakt when user exits player
-    _analyticsHeartbeatTimer?.cancel();
+    _tracker.cancelHeartbeat();
     _scrobble.onDispose();
 
     // Save the current state before disposing
@@ -11219,6 +11040,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 }
 
 
+class _PlayerTrackerSession implements PlayerTrackerSession {
+  const _PlayerTrackerSession(this._s);
+  final _VideoPlayerScreenState _s;
+  @override String? get currentSeriesImdbId => _s._currentSeriesImdbId;
+  @override SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
+  @override List<PlaylistEntry>? get activePlaylist => _s._activePlaylist;
+  @override int get currentIndex => _s._currentIndex;
+  @override String? get effectiveContentType => _s._effectiveContentType;
+  @override int? get effectiveContentSeason => _s._effectiveContentSeason;
+  @override int? get effectiveContentEpisode => _s._effectiveContentEpisode;
+  @override bool get isPlaying => _s._isPlaying;
+  @override ({int? season, int? episode}) trackerSeasonEpisode() =>
+      _s._traktSeasonEpisode();
+}
+
 class _ResumeSession implements ResumeSession {
   _ResumeSession(this._s);
   final _VideoPlayerScreenState _s;
@@ -11239,12 +11075,12 @@ class _ResumeSession implements ResumeSession {
   @override set isAutoAdvancing(bool value) => _s._isAutoAdvancing = value;
   @override bool get isManualEpisodeSelection => _s._isManualEpisodeSelection;
   @override bool get allowResumeForManualSelection => _s._allowResumeForManualSelection;
-  @override bool get launchTraktPercentSpent => _s._launchTraktPercentSpent;
-  @override set launchTraktPercentSpent(bool value) => _s._launchTraktPercentSpent = value;
-  @override bool get launchSimklPercentSpent => _s._launchSimklPercentSpent;
-  @override set launchSimklPercentSpent(bool value) => _s._launchSimklPercentSpent = value;
-  @override bool get launchMdblistPercentSpent => _s._launchMdblistPercentSpent;
-  @override set launchMdblistPercentSpent(bool value) => _s._launchMdblistPercentSpent = value;
+  @override bool get launchTraktPercentSpent => _s._tracker.launchTraktPercentSpent;
+  @override set launchTraktPercentSpent(bool value) => _s._tracker.launchTraktPercentSpent = value;
+  @override bool get launchSimklPercentSpent => _s._tracker.launchSimklPercentSpent;
+  @override set launchSimklPercentSpent(bool value) => _s._tracker.launchSimklPercentSpent = value;
+  @override bool get launchMdblistPercentSpent => _s._tracker.launchMdblistPercentSpent;
+  @override set launchMdblistPercentSpent(bool value) => _s._tracker.launchMdblistPercentSpent = value;
   @override Duration get position => _s._position;
   @override Duration get duration => _s._duration;
   @override Duration get playerPosition => _s._player.state.position;
@@ -11257,11 +11093,11 @@ class _ResumeSession implements ResumeSession {
   @override Future<void> applyAspectVideoZoom() => _s._presentation.applyAspectVideoZoom();
   @override Future<void> waitForDuration() => _s._waitForDuration();
   @override Future<double?> currentEpisodeTraktPercent({bool forGuide = false}) =>
-      _s._currentEpisodeTraktPercent(forGuide: forGuide);
+      _s._tracker.currentEpisodeTraktPercent(forGuide: forGuide);
   @override Future<double?> currentEpisodeSimklPercent({bool forGuide = false}) =>
-      _s._currentEpisodeSimklPercent(forGuide: forGuide);
+      _s._tracker.currentEpisodeSimklPercent(forGuide: forGuide);
   @override Future<double?> currentEpisodeMdblistPercent({bool forGuide = false}) =>
-      _s._currentEpisodeMdblistPercent(forGuide: forGuide);
+      _s._tracker.currentEpisodeMdblistPercent(forGuide: forGuide);
   @override String? get currentLocalMovieImdbId => _s._currentLocalMovieImdbId;
   @override SeriesPlaylist? get seriesPlaylist => _s._seriesPlaylist;
   @override String? get effectiveContentImdbId => _s._effectiveContentImdbId;

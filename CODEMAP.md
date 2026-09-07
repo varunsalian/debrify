@@ -542,6 +542,10 @@ is an editor mirror, not the source of truth. How to add a provider:
   `VideoPlayerScreen` public constructor stays). Resume:
   `lib/screens/video_player/resume_controller.dart` (`ResumeController` +
   `ResumeContext` / `ResumeSession`; host keeps `_ResumeSession` adapter).
+  Tracker lifecycle: `lib/screens/video_player/player_tracker_lifecycle.dart`
+  owns provider progress caches, launch-percent flags, coordinator setup and
+  heartbeat; nine live session reads retain host coupling. Media ordering and
+  native lifetime stay in host. Host -164 / whole production +55.
   Shared player dialog: `lib/widgets/player/spotlight_dialog.dart`
   (`showSpotlightDialog`, `SpotlightDialogCard`).
   Identify-title sheet: `lib/widgets/player/identify_title_sheet.dart`
