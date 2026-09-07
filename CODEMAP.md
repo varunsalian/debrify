@@ -566,8 +566,14 @@ is an editor mirror, not the source of truth. How to add a provider:
   and menu-visible state. Four lazy capabilities retain live host guards/commit;
   visibility notifier and three focus resources are borrowed, with construction,
   listeners and ordered disposal retained in host. Clock/banner/recording effects,
-  route/scrub guards and overlay priority remain host; no native or full transport
+  route wiring and overlay priority remain host; no native or full transport
   closure claim. Host -80 lines / whole production +53; partial ownership only.
+  TV scrub state/input: `lib/screens/video_player/player_scrub_session.dart`
+  (`PlayerScrubSession`) owns six fields, repeat admission and active-key policy.
+  Ten media slots invalidate-and-abandon; disposal invalidates only, in place.
+  Nine lazy/effect bindings and three borrowed transport/focus resources remain;
+  host retains event/render wiring. Host -109 / whole production +83; eight
+  invalidation sites have source-only proof, not complete native/lifecycle proof.
   IPTV recording (libmpv tee, Android engine, desktop capture):
   `lib/services/playback/iptv_recording_controller.dart`
   (`IptvRecordingController` + `IptvRecordingSession`; host keeps
