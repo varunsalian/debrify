@@ -73,6 +73,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stremio_service.dart';
+import 'package:debrify/services/torrent_playback/playback_source_search.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/utils/app_storage.dart';
@@ -290,7 +291,7 @@ void main() {
         await boot();
         await importEngines(['alpha']);
         final result = await withEngineHttp(
-          () => TorrentPlaybackService.searchCuratedSources(
+          () => PlaybackSourceSearch.searchCuratedSources(
             imdbId: 'tt3322110',
             label: 'Pin Show',
             isMovie: false,
@@ -324,7 +325,7 @@ void main() {
       await boot();
       await importEngines(['alpha']);
       final result = await withEngineHttp(
-        () => TorrentPlaybackService.searchCuratedSources(
+        () => PlaybackSourceSearch.searchCuratedSources(
           imdbId: 'tt3322110',
           label: 'Pin Show',
           isMovie: false,
@@ -349,7 +350,7 @@ void main() {
         await boot(const {'rd_skip_blocked_torrents': false});
         await importEngines(['alpha']);
         final result = await withEngineHttp(
-          () => TorrentPlaybackService.searchCuratedSources(
+          () => PlaybackSourceSearch.searchCuratedSources(
             imdbId: 'tt3322110',
             label: 'Pin Show',
             isMovie: false,
@@ -375,7 +376,7 @@ void main() {
         await boot();
         await importEngines(['alpha']);
         final result = await withEngineHttp(
-          () => TorrentPlaybackService.searchCuratedSources(
+          () => PlaybackSourceSearch.searchCuratedSources(
             imdbId: 'tt3322110',
             label: 'Nothing Matches This Label',
             isMovie: true,
@@ -399,7 +400,7 @@ void main() {
         await boot();
         await importEngines(['alpha']);
         final result = await withEngineHttp(
-          () => TorrentPlaybackService.searchCuratedSources(
+          () => PlaybackSourceSearch.searchCuratedSources(
             imdbId: 'tt3322111',
             label: 'Pin Film',
             isMovie: true,
@@ -422,7 +423,7 @@ void main() {
       await importEngines(['alpha']);
       final counts = <int>[];
       final result = await withEngineHttp(
-        () => TorrentPlaybackService.searchCuratedSources(
+        () => PlaybackSourceSearch.searchCuratedSources(
           imdbId: 'tt3322111',
           label: 'Pin Film',
           isMovie: true,
@@ -446,7 +447,7 @@ void main() {
       await boot();
       await importEngines(['alpha']);
       final result = await withEngineHttp(
-        () => TorrentPlaybackService.searchCuratedSources(
+        () => PlaybackSourceSearch.searchCuratedSources(
           imdbId: 'tt3322111',
           label: 'Pin Film',
           isMovie: true,
@@ -499,7 +500,7 @@ void main() {
       await importEngines(['alpha']);
       mockAddon(oneDirectOneTorrent);
       final result = await withEngineHttp(
-        () => TorrentPlaybackService.searchCuratedSources(
+        () => PlaybackSourceSearch.searchCuratedSources(
           imdbId: 'tt3322110',
           label: 'Pin Show',
           isMovie: false,
@@ -521,7 +522,7 @@ void main() {
       await importEngines(['alpha']);
       mockAddon('', status: 500);
       final result = await withEngineHttp(
-        () => TorrentPlaybackService.searchCuratedSources(
+        () => PlaybackSourceSearch.searchCuratedSources(
           imdbId: 'tt3322110',
           label: 'Pin Show',
           isMovie: false,
@@ -551,7 +552,7 @@ void main() {
         // the addon contributes nothing.
         Future<List<Torrent>> run(List<Map<String, dynamic>> engineRows) =>
             withEngineHttp(
-              () => TorrentPlaybackService.searchCuratedSources(
+              () => PlaybackSourceSearch.searchCuratedSources(
                 imdbId: 'tt3322110',
                 label: 'Pin Show',
                 isMovie: false,
@@ -581,7 +582,7 @@ void main() {
       () async {
         await boot(addonPrefs());
         mockAddon(oneDirectOneTorrent);
-        final result = await TorrentPlaybackService.searchCuratedSources(
+        final result = await PlaybackSourceSearch.searchCuratedSources(
           imdbId: 'tt3322110',
           label: 'Pin Show',
           isMovie: false,
@@ -610,7 +611,7 @@ void main() {
       QuickPlayPackPreference preference = QuickPlayPackPreference.widestFirst,
       void Function()? onCacheCheck,
     }) => withEngineHttp(
-      () => TorrentPlaybackService.searchSeriesPackSources(
+      () => PlaybackSourceSearch.searchSeriesPackSources(
         imdbId: 'tt3322110',
         label: label,
         season: 2,
@@ -727,7 +728,7 @@ void main() {
     test('a stage that reported an engine error yields null', () async {
       await boot(indexerPrefs(id: '77', name: 'Pin Jackett'));
       final result = await withEngineHttp(
-        () => TorrentPlaybackService.searchSeriesPackSources(
+        () => PlaybackSourceSearch.searchSeriesPackSources(
           imdbId: 'tt3322110',
           label: 'Pin Show',
           season: 2,
