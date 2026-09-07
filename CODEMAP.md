@@ -202,6 +202,10 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   16 inputs, private title-art memo and single shared region/feather helpers.
   Native trailer/live layers remain in `search_hero_widgets.dart`; no engine move.
   Host +1 / whole production +15, zero Leaves/638 credit; strict composition remains open.
+  Passive `HeroTakeoverInfo` in `search/hero_takeover_info.dart` owns classic Home
+  lower-third metadata and staggered paint with three borrowed signals, no callbacks.
+  Host -223 / whole production +29; zero seven-stage credit. Native layers,
+  recede/veil, focus and shell lifetimes retain their owners; strict composition OPEN.
   Hero state, focus-rest/enrichment timers, ambient trailers/live IPTV and shell
   art/tint/chrome relays live in `lib/screens/search/hero_presenter.dart`
   (`HeroPresenter`, `HeroEnvironment`). This remains screen/UI presentation,
@@ -538,6 +542,10 @@ is an editor mirror, not the source of truth. How to add a provider:
   `VideoPlayerScreen` public constructor stays). Resume:
   `lib/screens/video_player/resume_controller.dart` (`ResumeController` +
   `ResumeContext` / `ResumeSession`; host keeps `_ResumeSession` adapter).
+  Tracker lifecycle: `lib/screens/video_player/player_tracker_lifecycle.dart`
+  owns provider progress caches, launch-percent flags, coordinator setup and
+  heartbeat; nine live session reads retain host coupling. Media ordering and
+  native lifetime stay in host. Host -164 / whole production +55.
   Shared player dialog: `lib/widgets/player/spotlight_dialog.dart`
   (`showSpotlightDialog`, `SpotlightDialogCard`).
   Identify-title sheet: `lib/widgets/player/identify_title_sheet.dart`
@@ -846,6 +854,7 @@ is an editor mirror, not the source of truth. How to add a provider:
   Migration: `lib/services/app_migration_service.dart`.
 
 ## Metadata
+- `lib/services/series_playlist_metadata_loader.dart` owns SeriesPlaylist episode/movie metadata loading. Callers use its four static operations; the model retains per-playlist movie-ID cache ownership through typed cached-read/record-success methods. Preserve nullable IMDb parameters, pre-await assignment, cache-before-bounds and cache-write-before-shared-ID order; the former model metadata methods are explicitly migrated.
 - `lib/services/tvmaze_service.dart`, `lib/services/movie_metadata_service.dart`,
   `lib/services/imdb_enrichment_service.dart`, `lib/services/episode_info_service.dart`,
   `lib/services/catalog_repo_service.dart`.
