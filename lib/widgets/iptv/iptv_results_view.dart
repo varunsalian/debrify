@@ -2,8 +2,6 @@ import 'package:debrify/services/storage/iptv_prefs.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io' show Platform;
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
@@ -51,6 +49,9 @@ import 'iptv_empty_state.dart';
 import 'iptv_epg_panel.dart';
 import 'iptv_command_rail.dart';
 import 'iptv_stage_panel.dart';
+import 'stage/iptv_rail_info.dart';
+import 'stage/iptv_stage_chip.dart';
+import 'stage/iptv_stage_floor.dart';
 import 'styles/iptv_console_widgets.dart';
 import 'styles/iptv_edition_hero.dart';
 import 'styles/iptv_style.dart';
@@ -71,10 +72,6 @@ typedef _TabletChannelIdentity = ({
   String? contentType,
 });
 
-/// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)"
-/// — pulled out of the rail's big title into its sub-line (the channel rows do
-/// the same split for themselves).
-final RegExp _railResExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
 
 /// State of the bottom-right background-refresh chip.
 enum _CatalogChipState { hidden, updating, success, failure }
@@ -5757,7 +5754,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final isConsole = _iptvStyle == IptvStyle.console;
     // Styled looks never paint the brand color.
     final brand = t == null ? brandAccentFor(channel.name) : Colors.transparent;
-    final resMatch = _railResExp.firstMatch(channel.name);
+    final resMatch = iptvRailResolutionExp.firstMatch(channel.name);
     final resolution = resMatch?.group(1)?.toLowerCase();
     final displayName = resMatch == null
         ? channel.name
@@ -6214,7 +6211,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 children: [
                   _buildPreviewStage(ch, epoch),
                   const SizedBox(height: 16),
-                  Expanded(child: _IptvRailInfo(channel: ch)),
+                  Expanded(child: IptvRailInfo(channel: ch)),
                   if (touchSelector) ...[
                     SizedBox(
                       width: double.infinity,
@@ -6344,7 +6341,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             // repainting under a playing video.
             ValueListenableBuilder<bool>(
               valueListenable: _previewShowing,
-              builder: (context, showing, _) => _IptvStageFloor(
+              builder: (context, showing, _) => IptvStageFloor(
                 channel: ch,
                 tuning: _channelPreviewEnabled && ch != null && !showing,
               ),
@@ -6399,7 +6396,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               top: 10,
               child: ValueListenableBuilder<bool>(
                 valueListenable: _previewShowing,
-                builder: (context, showing, _) => _IptvStageChip(
+                builder: (context, showing, _) => IptvStageChip(
                   channel: ch,
                   showing: showing,
                   previewEnabled: _channelPreviewEnabled,
@@ -6874,369 +6871,6 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 // ── TV preview rail widgets ─────────────────────────────────────────────────
 
-/// The stage's resting surface: a brand-tinted glass slab with the channel's
-/// logo (or a placeholder mark). Sits UNDER the embedded player — the video
-/// covers/wipes it once frames arrive, so it needs no fade of its own.
-///
-/// While [tuning] (a channel is focused but no frames yet) it runs a light
-/// broadcast ambience: signal rings rippling out from the logo, a breathing
-/// brand glow, a diagonal sheen sweep and a gentle logo breathe. Everything is
-/// direct canvas paint / matrix transform — this widget shares a layer with
-/// the underlay's punched hole, so Opacity/saveLayer wrappers stay banned.
-/// The controller stops the moment frames arrive (or focus clears), so
-/// nothing keeps repainting under a playing video.
-class _IptvStageFloor extends StatefulWidget {
-  final IptvChannel? channel;
-  final bool tuning;
-  const _IptvStageFloor({required this.channel, required this.tuning});
-
-  @override
-  State<_IptvStageFloor> createState() => _IptvStageFloorState();
-}
-
-class _IptvStageFloorState extends State<_IptvStageFloor>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _syncAnimation();
-  }
-
-  @override
-  void didUpdateWidget(_IptvStageFloor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncAnimation();
-  }
-
-  void _syncAnimation() {
-    final animate = widget.tuning && widget.channel != null;
-    if (animate) {
-      if (!_ctrl.isAnimating) _ctrl.repeat();
-    } else if (_ctrl.isAnimating || _ctrl.value != 0) {
-      _ctrl.stop();
-      _ctrl.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final ch = widget.channel;
-    final brand = ch != null ? brandAccentFor(ch.name) : app.seeAll.accent;
-    final logo = ch?.logoUrl;
-    final animate = widget.tuning && ch != null;
-
-    Widget mark = ch == null
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.live_tv_rounded,
-                size: 42,
-                color: app.core.tx.withValues(alpha: 0.22),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Browse channels to preview',
-                style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.45),
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          )
-        : (logo != null && logo.isNotEmpty)
-        ? Padding(
-            padding: const EdgeInsets.all(38),
-            child: CachedNetworkImage(
-              imageUrl: logo,
-              cacheManager: DebrifyImageCache.iptvLogos,
-              fit: BoxFit.contain,
-              // Cap the decode — see the row logo chip's rationale.
-              memCacheHeight: 240,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              errorWidget: (_, __, ___) => Icon(
-                Icons.live_tv_rounded,
-                size: 42,
-                color: brand.withValues(alpha: 0.75),
-              ),
-            ),
-          )
-        : Icon(
-            Icons.live_tv_rounded,
-            size: 42,
-            color: brand.withValues(alpha: 0.75),
-          );
-
-    if (animate) {
-      // Transform is a canvas matrix, not a compositing layer — hole-safe.
-      mark = AnimatedBuilder(
-        animation: _ctrl,
-        builder: (context, child) => Transform.scale(
-          scale: 1 + 0.015 * math.sin(2 * math.pi * _ctrl.value),
-          child: child,
-        ),
-        child: mark,
-      );
-    }
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(
-              brand.withValues(alpha: 0.18),
-              const Color(0xFF171430),
-            ),
-            const Color(0xFF0F0D20),
-          ],
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (animate)
-            CustomPaint(
-              painter: _TuningWavesPainter(brand: brand, t: _ctrl),
-            ),
-          Center(child: mark),
-        ],
-      ),
-    );
-  }
-}
-
-/// The tuning ambience: staggered signal rings expanding from the stage
-/// centre, a soft breathing glow behind the logo, and a slow diagonal sheen
-/// sweeping the slab. Plain canvas paints only — this layer is the one the
-/// video punch-through wipes, so no saveLayer/Opacity is allowed here.
-class _TuningWavesPainter extends CustomPainter {
-  final Color brand;
-  final Animation<double> t;
-  _TuningWavesPainter({required this.brand, required this.t})
-    : super(repaint: t);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final v = t.value;
-    final center = size.center(Offset.zero);
-
-    // Breathing glow behind the logo.
-    final glowAlpha = 0.10 + 0.05 * math.sin(2 * math.pi * v);
-    final glowRadius = size.shortestSide * 0.42;
-    canvas.drawCircle(
-      center,
-      glowRadius,
-      Paint()
-        ..shader = ui.Gradient.radial(center, glowRadius, [
-          brand.withValues(alpha: glowAlpha),
-          brand.withValues(alpha: 0),
-        ]),
-    );
-
-    // Signal rings rippling outward from behind the logo.
-    final ringColor = Color.lerp(brand, Colors.white, 0.35)!;
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-    final maxGrow = size.shortestSide * 0.62;
-    for (int i = 0; i < 3; i++) {
-      final phase = (v + i / 3) % 1.0;
-      final eased = Curves.easeOut.transform(phase);
-      final fade = (1 - phase) * (1 - phase);
-      ring.color = ringColor.withValues(alpha: 0.16 * fade);
-      canvas.drawCircle(center, 30 + eased * maxGrow, ring);
-    }
-
-    // Diagonal sheen sweeping across the slab once per cycle.
-    final sweep = Curves.easeInOut.transform(v);
-    final x = size.width * (-0.35 + 1.7 * sweep);
-    final band = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(x - 70, 0),
-        Offset(x + 70, size.height),
-        [
-          Colors.white.withValues(alpha: 0),
-          Colors.white.withValues(alpha: 0.06),
-          Colors.white.withValues(alpha: 0),
-        ],
-        const [0.0, 0.5, 1.0],
-      );
-    canvas.drawRect(Offset.zero & size, band);
-  }
-
-  @override
-  bool shouldRepaint(_TuningWavesPainter oldDelegate) =>
-      oldDelegate.brand != brand;
-}
-
-/// Status chip on the stage: LIVE (emerald dot) once the preview has frames,
-/// TUNING (tiny animated amber signal bars) while a channel is selected but
-/// the stream hasn't opened yet, PREVIEW for on-demand items, or PREVIEW OFF
-/// when automatic tuning is disabled. Conditional swaps and direct paint only
-/// — no fades over the stage, and only the TUNING state animates so nothing
-/// repaints while video is playing.
-class _IptvStageChip extends StatefulWidget {
-  final IptvChannel? channel;
-  final bool showing;
-  final bool previewEnabled;
-  const _IptvStageChip({
-    required this.channel,
-    required this.showing,
-    required this.previewEnabled,
-  });
-
-  @override
-  State<_IptvStageChip> createState() => _IptvStageChipState();
-}
-
-class _IptvStageChipState extends State<_IptvStageChip>
-    with SingleTickerProviderStateMixin {
-  static const Color _amber = Color(0xFFFBBF24);
-
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  );
-
-  bool get _tuning =>
-      widget.previewEnabled && widget.channel != null && !widget.showing;
-
-  @override
-  void initState() {
-    super.initState();
-    _syncAnimation();
-  }
-
-  @override
-  void didUpdateWidget(_IptvStageChip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncAnimation();
-  }
-
-  void _syncAnimation() {
-    if (_tuning) {
-      if (!_ctrl.isAnimating) _ctrl.repeat();
-    } else if (_ctrl.isAnimating) {
-      _ctrl.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final ch = widget.channel;
-    if (ch == null) return const SizedBox.shrink();
-    final isLive = ch.isLive;
-    final label = !widget.previewEnabled
-        ? 'PREVIEW OFF'
-        : widget.showing
-        ? (isLive ? 'LIVE' : 'PREVIEW')
-        : 'TUNING';
-    final dot = !widget.previewEnabled
-        ? app.iptv.inkFaint
-        : isLive
-        ? app.iptv.liveDot
-        : app.seeAll.accent2;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
-      decoration: BoxDecoration(
-        // Deliberately NOT iptv.chipSurface: this chip floats over LIVE
-        // VIDEO, so it must stay black glass and legible over an arbitrary
-        // picture rather than follow the page (see the token's doc).
-        color: const Color(0xB00B0918),
-        borderRadius: app.shape.brPill,
-        // `onGlass`, not `core.tx`: the fill above is black on EVERY theme by
-        // design, so its ink must be what reads on black — a paper theme's
-        // near-black page ink would draw an invisible edge here. Same reason
-        // the label below uses it.
-        border: Border.all(color: app.onGlass.withValues(alpha: 0.10)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 9,
-            height: 9,
-            child: _tuning
-                ? CustomPaint(painter: _TuningBarsPainter(t: _ctrl))
-                : Center(
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: dot,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: app.onGlass,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Tiny equalizer-style signal bars for the TUNING chip — direct paint over
-/// the stage (same no-saveLayer rule as everything else on it).
-class _TuningBarsPainter extends CustomPainter {
-  final Animation<double> t;
-  _TuningBarsPainter({required this.t}) : super(repaint: t);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = _IptvStageChipState._amber;
-    const barW = 2.0;
-    const gap = 1.5;
-    for (int i = 0; i < 3; i++) {
-      final v = 0.5 + 0.5 * math.sin(2 * math.pi * (t.value + i * 0.32));
-      final h = 3.0 + (size.height - 3.0) * v;
-      final x = i * (barW + gap);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, size.height - h, barW, h),
-          const Radius.circular(1),
-        ),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TuningBarsPainter oldDelegate) => false;
-}
-
 /// TV focus-stage identity and programme overlay. The solid lower stop keeps
 /// text legible on bright channels without a blur/filter pass.
 class _IptvFocusStageInfo extends StatelessWidget {
@@ -7249,7 +6883,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final brand = brandAccentFor(channel.name);
-    final resMatch = _railResExp.firstMatch(channel.name);
+    final resMatch = iptvRailResolutionExp.firstMatch(channel.name);
     final resolution = resMatch?.group(1)?.toLowerCase();
     final displayName = resMatch == null
         ? channel.name
@@ -7376,129 +7010,6 @@ class _IptvFocusStageInfo extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// Identity block under the stage: logo chip, channel name (resolution pulled
-/// out into the sub-line), group. Empty when nothing is focused yet.
-class _IptvRailInfo extends StatelessWidget {
-  final IptvChannel? channel;
-  const _IptvRailInfo({required this.channel});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final ch = channel;
-    if (ch == null) return const SizedBox.shrink();
-    final brand = brandAccentFor(ch.name);
-
-    final resMatch = _railResExp.firstMatch(ch.name);
-    final resolution = resMatch?.group(1)?.toLowerCase();
-    final cleanName = resMatch == null
-        ? ch.name
-        : ch.name
-              .replaceRange(resMatch.start, resMatch.end, '')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-    final displayName = ch.channelNumber == null
-        ? cleanName
-        : 'CH ${ch.channelNumber}  $cleanName';
-    final group = ch.group?.trim();
-    final subParts = <String>[
-      if (group != null && group.isNotEmpty) group,
-      if (resolution != null) resolution,
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                borderRadius: app.shape.br(11),
-                border: Border.all(color: app.core.tx.withValues(alpha: 0.06)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color.alphaBlend(
-                      brand.withValues(alpha: 0.16),
-                      app.iptv.logoPlate,
-                    ),
-                    // The plate's lower stop — value-equal to iptv.modalBg,
-                    // but that role is a dialog ground and must not repaint
-                    // logos when a theme moves its sheets.
-                    const Color(0xFF14141D),
-                  ],
-                ),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: (ch.logoUrl != null && ch.logoUrl!.isNotEmpty)
-                    ? CachedNetworkImage(
-                        imageUrl: ch.logoUrl!,
-                        cacheManager: DebrifyImageCache.iptvLogos,
-                        fit: BoxFit.contain,
-                        // Cap the decode — see the row logo chip's rationale.
-                        memCacheHeight: 96,
-                        errorWidget: (_, __, ___) => Icon(
-                          Icons.live_tv_rounded,
-                          size: 20,
-                          color: brand.withValues(alpha: 0.85),
-                        ),
-                      )
-                    : Icon(
-                        Icons.live_tv_rounded,
-                        size: 20,
-                        color: brand.withValues(alpha: 0.85),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: app.core.tx,
-                      fontSize: 16.5,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
-                    ),
-                  ),
-                  if (subParts.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subParts.join('  •  '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: app.core.tx.withValues(alpha: 0.52),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-        // What's on: now/next for the focused channel. Renders nothing for
-        // channels without guide data, so the rail is unchanged for those.
-        const SizedBox(height: 14),
-        Flexible(child: IptvRailEpgCard(channel: ch)),
-      ],
     );
   }
 }
