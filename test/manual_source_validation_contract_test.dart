@@ -91,10 +91,19 @@ void main() {
       'Future<bool> _loadPlaylistIndex(',
       'Future<String> _resolvePlaylistEntryUrl(',
     );
-    final pikPakRetry = _between(
+    final pikPakFacade = _between(
       flutterPlayer,
       'Future<bool> _playPikPakVideoWithRetry(',
       'Future<void> _preloadEpisodeInfo(',
+    );
+    final retryOwner = File(
+      'lib/screens/video_player/pikpak_retry_session.dart',
+    ).readAsStringSync();
+    final pikPakRetry = _between(retryOwner, 'Future<bool> play(', '\n}');
+    expect(pikPakFacade, contains('}) => _pikPakRetry.play('));
+    expect(
+      flutterPlayer,
+      contains('late final _pikPakRetry = PikPakRetrySession('),
     );
 
     expect(playlistLoad, contains('final pikPakLoaded'));
